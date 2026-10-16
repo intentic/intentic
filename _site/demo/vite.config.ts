@@ -41,7 +41,7 @@ export default defineConfig({
             // Extensions this build compiled in; read from the app so the fixture's list can't drift out of sync.
             "@intentic/web/builtins": fromRoot(`_editor/web/src/extension-host/builtins.ts`),
             // How the app persists open chat tabs; sharing its shape turns a format change into a build error.
-            "@intentic/web/chat-tabs": fromRoot(`_editor/web/src/features/chat/tabs/tabSnapshot.ts`),
+            "@intentic/web/chat-tabs": fromRoot(`_editor/web/src/models/conversations/tabs/tabSnapshot.ts`),
         },
     },
     // The app's list, with monaco's worker reached through the app: the demo has no monaco of its own to resolve it from.

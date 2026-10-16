@@ -1,7 +1,7 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { effectScope, ref, shallowRef } from "vue";
-import { noteArriving } from "../../files/provisionalEntries";
+import { noteArriving } from "../../../../models/workspace/files/provisionalEntries";
 import { barrenChainOf, barrenChildren } from "../emptyDirs";
 import type { Row } from "./treeRows";
 import { useTreeRows } from "./useTreeRows";

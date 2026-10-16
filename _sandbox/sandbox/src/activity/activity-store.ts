@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { type ActivityEvent, ActivityEventSchema } from "@intentic/sandbox-contract";
+import { type ActivityEvent, ActivityEventSchema } from "@intentic/sandbox-contract/schemas/activity";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openLedger } from "../store/open-document.js";

@@ -6,7 +6,7 @@ import {
     cloudflareCall,
     cloudflarePages,
 } from "@intentic/base/cloudflare";
-import { hostOwnerId, LOCAL_ADDRESS, LOCAL_LABEL, localWildcardHostname } from "@intentic/sandbox-contract";
+import { hostOwnerId, LOCAL_ADDRESS, LOCAL_LABEL, localWildcardHostname } from "@intentic/sandbox-contract/ids/hostnames";
 import { z } from "zod";
 
 // Cloudflare zone listing for the setup screen (user's token) and DNS for sandboxes' loopback certs (intentic's token);
@@ -96,7 +96,7 @@ export const setAcmeChallenge = async (apiToken: string, zone: string, recordNam
         z.array(z.object({ id: z.string() })),
     );
     for (const record of existing) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Records are checked in sequence so stale state is deterministic.
+        // Records are checked in sequence so stale state is deterministic.
         await cfCall(apiToken, `/zones/${encodeURIComponent(zoneId)}/dns_records/${encodeURIComponent(record.id)}`, z.unknown(), {
             method: "DELETE",
         });
@@ -224,7 +224,7 @@ export const reapOrphanDnsRecords = async (args: {
     const { zoneId } = await resolveZone(apiToken, zone);
     const records: z.infer<typeof zoneRecordSchema>[] = [];
     for (let page = 1; page <= MAX_RECORD_PAGES; page += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- pagination
+        // pagination
         const batch = await cfCall(
             apiToken,
             `/zones/${encodeURIComponent(zoneId)}/dns_records?per_page=${RECORD_PAGE}&page=${page}`,
@@ -255,7 +255,7 @@ export const reapOrphanDnsRecords = async (args: {
             continue;
         }
         try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- sequenced deletes keep Cloudflare rate limits comfortable
+            // sequenced deletes keep Cloudflare rate limits comfortable
             await cfCall(apiToken, `/zones/${encodeURIComponent(zoneId)}/dns_records/${encodeURIComponent(record.id)}`, z.unknown(), {
                 method: "DELETE",
             });

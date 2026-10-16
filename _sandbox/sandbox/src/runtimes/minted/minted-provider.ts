@@ -1,12 +1,6 @@
 import { join } from "node:path";
-import {
-    MINTED_PROVIDERS,
-    type MintedProvider,
-    type Model,
-    ModelSchema,
-    mintedVariants,
-    providerSpec,
-} from "@intentic/sandbox-contract";
+import { MINTED_PROVIDERS, type MintedProvider, mintedVariants, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
+import { type Model, ModelSchema } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import { z } from "zod";

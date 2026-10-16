@@ -1,6 +1,6 @@
 import { nextTick, onBeforeUpdate, onMounted, onUpdated, type Ref } from "vue";
-import type { FleetLane } from "../../fleet/agentStatus";
-import type { FleetAgent } from "../../fleet/useAgents-fleet";
+import type { FleetLane } from "../../../../models/agent-status/agentStatus-lanes";
+import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import { lessMotion, slideFrom, stopSlide } from "@intentic/ui/motion";
 
 // Where the cards stand on screen and how they move between renders: a card changing lanes flies from where it stood,

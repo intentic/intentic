@@ -1,12 +1,13 @@
 <!-- The loop axis: one chip per loop the daemon offers this provider on, the default's first. Picks, never applies (prop in, event out). -->
 <script setup lang="ts">
 import { computed } from "vue";
-import { type AgentHarness, type AgentLoop, type AgentProvider, capabilitiesOf, loopLabel, providerLoops, termsOf } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentLoop, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { capabilitiesOf, loopLabel, providerLoops, termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { useT } from "@intentic/ui/i18n";
-import { providerDisplayLabel } from "../accounts/providerCatalog";
-import { harnessOfLoop, offeredLoops, selectedLoop } from "./offeredLoops";
+import { providerDisplayLabel } from "../../../models/providers/providerCatalog";
+import { harnessOfLoop, offeredLoops, selectedLoop } from "../../../models/providers/offeredLoops";
 import LoopTermsHint from "./LoopTermsHint.vue";
-import { useSandboxVersion } from "../../sandbox/overview/version/useSandboxVersion";
+import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
 
 const t = useT();
 

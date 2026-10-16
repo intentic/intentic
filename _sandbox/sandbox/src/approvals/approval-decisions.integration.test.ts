@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ActionApprovalSummary } from "@intentic/sandbox-contract";
+import type { ActionApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
 import { type ApprovalRoots, approvalStandings, recordApproval, spendApprovals } from "./approval-decisions.js";
 
 // Spending a yes is the claim whoever acts on it makes: it removes the yes only when the yes covers the item as it stands

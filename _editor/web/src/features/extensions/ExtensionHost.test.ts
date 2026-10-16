@@ -16,11 +16,11 @@ jest.mock(`vue-router`, () => ({
     useRoute: () => ({ params: { ext: `deployments`, key: `komodo` }, query: {} }) as never,
 }));
 jest.mock(`../../workbench/views/extensionStatuses`, () => ({ extensionsLoaded: loaded, extensionStatuses: shallowRef([]) }));
-jest.mock(`./usePanels`, () => ({ usePanels: () => ({ panels: ref([]), settled: panelsSettled }) }));
-jest.mock(`../capabilities/connect/useCapabilities`, () => ({
+jest.mock(`../../models/extensions/usePanels`, () => ({ usePanels: () => ({ panels: ref([]), settled: panelsSettled }) }));
+jest.mock(`../../models/capabilities/useCapabilities`, () => ({
     useCapabilities: () => ({ capabilities: ref([]), settled: capabilitiesSettled }),
 }));
-jest.mock(`./useExtensions`, () => ({ useExtensions: () => ({ extensions: ref([]) }) }));
+jest.mock(`../../models/extensions/useExtensions`, () => ({ useExtensions: () => ({ extensions: ref([]) }) }));
 // No extension contributes the view: the page is either still waiting or, once settled, empty.
 jest.mock(`../../workbench/views/registry`, () => ({ detectActivations: () => [], registeredViews: () => [] }));
 jest.mock(`../../app/clientDiagnostics`, () => ({ describeError: () => ({ message: ``, fields: {} }), reportClient: () => undefined }));

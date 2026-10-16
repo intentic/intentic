@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { MODEL_ROLES, type ModelPin, type ModelRole, type ModelRoleSpec } from "@intentic/sandbox-contract";
+import { MODEL_ROLES, type ModelRole, type ModelRoleSpec } from "@intentic/sandbox-contract/models/model-roles";
+import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { type ActionItem, InlineRename, OverflowActions, StatusBadge } from "@intentic/ui";
 import { computed, onMounted, useTemplateRef, watch } from "vue";
 import AddModelButton from "./AddModelButton.vue";

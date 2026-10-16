@@ -1,8 +1,8 @@
 // Pins the catalog's slices: which rail rows exist and what they count, the slice an unknown key falls back to, which
 // tiles a slice and a filter leave on the grid, and the sentence the page describes each slice with.
-import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { CAPABILITY_CATEGORIES, type CapabilityCatalogEntry, type CapabilityCategory } from "@intentic/capability-catalog";
-import { entryHaystack } from "./tiles";
+import { entryHaystack } from "../../../models/capabilities/tiles";
 import {
     ALL,
     activeScopeOf,

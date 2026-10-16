@@ -12,9 +12,9 @@ const currentRoute = ref({ matched: [{ path: `/` }, { path: `/workspace/:path(.*
 const started: string[] = [];
 const said: { kind: string; text: string }[] = [];
 jest.mock("../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId: ref(`box-1`), reachable }) }));
-jest.mock("../run/chatEcho", () => ({ drawsChat }));
-jest.mock("../../../router", () => ({ router: { currentRoute } }));
-jest.mock("../../agents/fleet/agentActions", () => ({
+jest.mock("../../../models/conversations/run/chatEcho", () => ({ drawsChat }));
+jest.mock("../../../workbench/navigation/navigation", () => ({ navigation: () => ({ currentRoute }) }));
+jest.mock("../../../models/fleet/agentActions", () => ({
     startAgent: () => {
         started.push(`c-${started.length + 1}`);
         return `c-${started.length}`;

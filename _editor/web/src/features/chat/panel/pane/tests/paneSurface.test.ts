@@ -1,9 +1,9 @@
 import { STATE_DIR } from "@intentic/constants";
-import type { SubagentSession } from "@intentic/sandbox-contract";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
 import "@intentic/testing/dom";
 import { unstubbed } from "@intentic/testing";
 import type { Router } from "vue-router";
-import { Conversation } from "../../../session/conversation";
+import { Conversation } from "../../../../../models/conversations/session/conversation";
 
 // Pins what a pane's tool cards are handed: the picture a turn's strip holds opens in the pane's own viewer and any
 // other as the file, in the chat's own checkout; the terminal and browser are the chat's; a route goes to the app.
@@ -11,7 +11,7 @@ import { Conversation } from "../../../session/conversation";
 const openWorkspaceRef = jest.fn<(path: string, line?: number, asked?: { readonly agent: string | undefined }) => Promise<void>>(
     async () => undefined,
 );
-jest.mock("../../../../workspace/files/refs/openFileRef", () => ({ openWorkspaceRef, openFileRefFromEvent: jest.fn() }));
+jest.mock("../../../../../models/workspace/files/openFileRef", () => ({ openWorkspaceRef, openFileRefFromEvent: jest.fn() }));
 const { paneSurface, viewingIn } = await import("../paneSurface");
 
 const push = jest.fn<(to: string) => Promise<undefined>>(async () => undefined);

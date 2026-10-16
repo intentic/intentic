@@ -1,6 +1,6 @@
 import type { ExtensionContext, IntenticApi, ViewBadge } from "@intentic/extension-api";
 import { sandboxPoll } from "@intentic/extension-api";
-import { roleAtLeast } from "@intentic/sandbox-contract";
+import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { owedBadge, type QueueSnapshot } from "./owed";
 import { bindHost, host } from "./host";
 import { approvalsQuery } from "./useApprovals";

@@ -1,8 +1,15 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import type { WorkspaceComponent, WorkspaceDepEdge, WorkspaceDepType, WorkspaceGraph, WorkspacePackage } from "@intentic/sandbox-contract";
+import type {
+    WorkspaceComponent,
+    WorkspaceDepEdge,
+    WorkspaceDepType,
+    WorkspaceGraph,
+    WorkspacePackage,
+} from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
 import { parse } from "yaml";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Workspace package dependency graph of a pnpm monorepo, read straight from the filesystem: pnpm-workspace.yaml's globs
 // name package dirs, each package.json is a node, its dependency blocks are edges. Edges match by the dep name being a
@@ -91,14 +98,9 @@ const readRepoMap = (repoDir: string): RepoMap | undefined => {
     } catch (error) {
         return undefinedIfMissing(error);
     }
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(text);
-    } catch {
-        // allow(silent-catch): a map caught mid-write draws the graph by folder, as a repository without docs gets it.
-        return undefined;
-    }
-    const listed = (parsed as { components?: unknown } | null)?.components;
+    // A map caught mid-write draws the graph by folder, as a repository without docs gets it.
+    const parsed = parseJsonOr(text, undefined);
+    const listed = (parsed as { components?: unknown } | null | undefined)?.components;
     if (!Array.isArray(listed)) {
         return undefined;
     }

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
+import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
 import { LEGACY_ADDED_HEADING, LEGACY_ADDED_NOTE } from "../safety/safety-policy-store.js";
 import { stateRelPath } from "../state-paths.js";
 import { defineStep } from "../store/evolution/state-steps.js";

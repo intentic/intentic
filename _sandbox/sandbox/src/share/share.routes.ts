@@ -1,6 +1,7 @@
 import { conversationReader, registryProvenance } from "../auth/scope/conversation-reader.js";
 import { randomBytes } from "node:crypto";
-import { type SharedConversation, shareContract, type ShareDetail } from "@intentic/sandbox-contract";
+import type { SharedConversation, ShareDetail } from "@intentic/sandbox-contract/schemas/share";
+import { shareContract } from "@intentic/sandbox-contract/contracts/share.contract";
 import { SHARE_DIR, SHARE_ID, shareId } from "@intentic/sandbox-contract/share-paths";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";

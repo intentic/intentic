@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { useChat } from "../run/useChat";
-import { usePaneView } from "../panel/useChat-view";
-import { openAgentConversation } from "../panel/useChat-reveal";
+import { useAgents } from "../../../models/fleet/useAgents";
+import { useChat } from "../../../models/conversations/run/useChat";
+import { usePaneView } from "../../../models/conversations/panel/useChat-view";
+import { openAgentConversation } from "../../../models/conversations/panel/useChat-reveal";
 import { useT } from "@intentic/ui/i18n";
 
 // Banner at the top of a forked transcript linking back to the chat it inherited turns from, so the two stay

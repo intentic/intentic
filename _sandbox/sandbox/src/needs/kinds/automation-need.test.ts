@@ -1,4 +1,5 @@
-import type { Automation, Need } from "@intentic/sandbox-contract";
+import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
+import type { Need } from "@intentic/sandbox-contract/schemas/needs";
 import { ORPCError } from "@orpc/server";
 import { automationNeed } from "./automation-need.js";
 

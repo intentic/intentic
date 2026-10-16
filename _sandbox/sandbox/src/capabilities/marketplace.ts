@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { gitAuthHeader } from "@intentic/base/git";
 import { compareEntries, REGISTRY_FACTS_FILE, REGISTRY_FILE, RegistryFactsSchema, RegistryFileSchema, resolveRegistry } from "@intentic/registry";
-import type { Marketplace } from "@intentic/sandbox-contract";
+import type { Marketplace } from "@intentic/sandbox-contract/schemas/marketplace";
 import { pluginsRoot } from "./plugin-dirs.js";
 
 // The daemon surface a registry read needs: a structural subset of both CapabilityCtx and Services, so either can be

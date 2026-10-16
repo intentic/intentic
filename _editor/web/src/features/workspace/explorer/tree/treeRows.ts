@@ -1,9 +1,9 @@
-import type { WorkspaceLink, WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceLink, WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { parentDir } from "@intentic/ui/path";
-import { opensAsFolder } from "../../files/archiveEntries";
-import type { Provisional } from "../../files/provisionalEntries";
+import { opensAsFolder } from "../../../../models/workspace/files/archiveEntries";
+import type { Provisional } from "../../../../models/workspace/files/provisionalEntries";
 import type { BarrenChain } from "../emptyDirs";
 import { type ExplorerFilters, explorerShows } from "../explorerFilter";
 import { nestSiblings, type NestedEntry } from "../fileNesting";

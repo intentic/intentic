@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { MemberRole } from "@intentic/sandbox-contract";
+import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import { unstubbed } from "@intentic/testing";
 import { createApp } from "../app.js";
 import type { ProvenCaller } from "../auth/auth.js";

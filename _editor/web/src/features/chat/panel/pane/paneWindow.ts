@@ -1,7 +1,7 @@
 import { useDevice } from "@intentic/ui";
 import { type InjectionKey, nextTick, onScopeDispose, type Ref, ref, watch } from "vue";
 import { whenIdle } from "../../../../lib/whenIdle";
-import type { ChatMessage, ChatTurn } from "../../transcript/transcript";
+import type { ChatMessage, ChatTurn } from "../../../../models/conversations/transcript/transcript";
 
 // HOW MANY ROWS OF A CHAT ARE DRAWN, newest first. Opening a chat mounted every row it held in one task: each row's
 // component, its markdown parsed and sanitised, its box laid out, before the chat could answer a tap. Profiled at 4× CPU

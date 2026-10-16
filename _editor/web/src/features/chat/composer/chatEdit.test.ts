@@ -2,16 +2,16 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
-import type { Conversation } from "../session/conversation";
-import { providerAccounts } from "../accounts/providerAccounts";
-import { useChat } from "../run/useChat";
+import type { Conversation } from "../../../models/conversations/session/conversation";
+import { providerAccounts } from "../../../models/providers/providerAccounts";
+import { useChat } from "../../../models/conversations/run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
 import { useLayout } from "../../../workbench/window/useLayout";
 import { router } from "../../../router";
 import ChatPanel from "../panel/ChatPanel.vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as useSandboxOriginal from "../../../client/sandbox/useSandbox";
-import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
+import * as useWorkflowRunsOriginal from "../../../models/fleet/useWorkflowRuns";
 
 // Asserted through the real composer and DOM, since editing is a mode with no value unless a surface
 // offers it. Arming commits nothing (doomed turns stay struck through until retyped); Send is the
@@ -25,7 +25,7 @@ import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 })();
 
-jest.mock(`../../agents/fleet/useAgents`, () => {
+jest.mock(`../../../models/fleet/useAgents`, () => {
     return {
         useAgents: () => ({
             fleet: computed(() => []),
@@ -37,7 +37,7 @@ jest.mock(`../../agents/fleet/useAgents`, () => {
         }),
     };
 });
-jest.mock(`../../agents/fleet/useWorkflowRuns`, () => ({
+jest.mock(`../../../models/fleet/useWorkflowRuns`, () => ({
     ...useWorkflowRunsOriginal,
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));

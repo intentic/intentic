@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { isMissing } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
 import { type ExtensionManifest, extensionIdOf } from "@intentic/extension-manifest";
-import { extensionCacheDir, extensionStateDir, legacyExtensionStateDir } from "@intentic/sandbox-contract";
+import { extensionCacheDir, extensionStateDir, legacyExtensionStateDir } from "@intentic/sandbox-contract/state/workspace-state";
 
 // The two directories an extension's own code keeps things in, `api.stateDir` and `api.cacheDir`: keyed by its identity
 // (`publisher.name`) like its settings and its switch, so they survive an update, a re-install and dev mode, and go only

@@ -4,10 +4,15 @@ import { createCredentialGrants } from "../../../../secrets/credential-grants.js
 import { REACH_ALL } from "../../../../secrets/credential-reach.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentTurn, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../../composition.js";
-import { conversationAfter, testConfig, memoryFleet, testTurnMounts } from "../../../../testing.js";
+import { conversationAfter } from "../../../../conversations/registry/agents-store.testing.js";
+import { testConfig } from "../../../../env.config.testing.js";
+import { memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
+import { testTurnMounts } from "../../../tools/turn-mounts.testing.js";
 import { SKILL_CATALOG_NOTE_HEADER } from "../../../../store/loaded-skills.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER, workspaceSetup } from "../../../../workspace/layout/workspace-setup.js";
 import { LANDING_CHECKS_NOTE } from "../../../prompt/checks-note.js";

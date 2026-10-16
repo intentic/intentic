@@ -1,11 +1,13 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { type PermissionMode, type RunnerSummary, RunnerSummarySchema, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
+import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
+import { type RunnerSummary, RunnerSummarySchema } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import { TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
 import { computed, createApp, h, nextTick, ref } from "vue";
-import * as useAgentsOriginal from "../../../../agents/fleet/useAgents";
-import * as useRunnersOriginal from "../../../../sandbox/devices/runners/useRunners";
+import * as useAgentsOriginal from "../../../../../models/fleet/useAgents";
+import * as useRunnersOriginal from "../../../../../models/sandbox/devices/useRunners";
 import type { RunThroughState } from "../../../models/run-settings/useRunThrough";
-import type { ChatMessage } from "../../../transcript/transcript";
+import type { ChatMessage } from "../../../../../models/conversations/transcript/transcript";
 
 // Pins the composer's row: a control waits in the overflow while it is at this chat's default and rides the row once
 // set, the overflow hands off to the picker that owns the choice, and an armed edit or a workflow badge takes back
@@ -18,14 +20,14 @@ const { runners, rostered } = await (async () => {
 })();
 // Held before the mocks replace the modules' bindings, which would otherwise answer with the mocks themselves.
 const { useAgents } = useAgentsOriginal;
-jest.mock("../../../../agents/fleet/useAgents", () => ({
+jest.mock("../../../../../models/fleet/useAgents", () => ({
     ...useAgentsOriginal,
     useAgents: () => ({ ...useAgents(), agentById: (id: string) => (rostered.value.includes(id) ? { id, status: `idle` } : undefined) }),
 }));
-jest.mock("../../../../sandbox/devices/runners/useRunners", () => ({ ...useRunnersOriginal, useRunners: () => ({ runners }) }));
+jest.mock("../../../../../models/sandbox/devices/useRunners", () => ({ ...useRunnersOriginal, useRunners: () => ({ runners }) }));
 
 const { useComposerControls } = await import("../composerControls");
-const { Conversation } = await import("../../../session/conversation");
+const { Conversation } = await import("../../../../../models/conversations/session/conversation");
 
 let unmount: (() => void) | undefined;
 const rowOf = () => {

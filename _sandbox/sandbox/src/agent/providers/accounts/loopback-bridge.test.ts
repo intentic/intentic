@@ -1,7 +1,8 @@
 import pino from "pino";
 import { armLoopbackCatch, type LoopbackBridgeDeps, type LoopbackTarget } from "./loopback-bridge.js";
 import { CATCHING_BROWSER as BROWSER, CATCHING_DEVICE as CAN_CATCH, catchingHub, type FakePeers, fakeCatcher } from "./loopback-bridge.testing.js";
-import type { DeviceFacts, WebExtFacts } from "@intentic/sandbox-contract";
+import type { DeviceFacts } from "@intentic/sandbox-contract/schemas/hosts";
+import type { WebExtFacts } from "@intentic/sandbox-contract/schemas/webext";
 
 // The bridge against fake peers (loopback-bridge.testing.ts): each records what it was asked to watch and streams what
 // the test pushes, ending when the bridge aborts it, exactly as a device agent's stream does over the socket.

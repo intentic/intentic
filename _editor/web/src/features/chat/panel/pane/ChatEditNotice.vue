@@ -2,7 +2,7 @@
 import { Button } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { usePaneView } from "../useChat-view";
+import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 
 /* An armed edit, said over the composer: which message it replaces and what goes with it, and the two ways out of it. */
 

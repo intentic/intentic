@@ -1,4 +1,4 @@
-import type { BrowserConfig, Capability } from "@intentic/sandbox-contract";
+import type { BrowserConfig, Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { unstubbed } from "@intentic/testing";
 import type { Keyboard, Page } from "playwright";
 import { accountSites, type AccountsDeps, generatePassword, siteLabel, typeCredential } from "./accounts-tools.js";

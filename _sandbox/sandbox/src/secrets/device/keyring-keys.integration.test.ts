@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { KeyringSandboxKeysSchema } from "@intentic/sandbox-contract";
+import { KeyringSandboxKeysSchema } from "@intentic/sandbox-contract/schemas/keyring";
 import { signGrant, verifyGrant } from "@intentic/sandbox-contract/keyring-seal";
 import { Hono } from "hono";
 import { createKeyringKeysRoute, fileSandboxKeyringKeys } from "./keyring-keys.js";

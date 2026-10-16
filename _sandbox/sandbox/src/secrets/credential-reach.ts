@@ -1,6 +1,9 @@
-import { type CapabilityKind, type CredentialGateKind, type CredentialReach, REACHABLE_CREDENTIAL_KINDS } from "@intentic/sandbox-contract";
+import type { CapabilityKind } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { CredentialGateKind } from "@intentic/sandbox-contract/schemas/secrets";
+import { type CredentialReach, REACHABLE_CREDENTIAL_KINDS } from "@intentic/sandbox-contract/schemas/members";
 import type { Member } from "../auth/auth.js";
 import { parentOfActor } from "../auth/principal.js";
+import { errorMessage } from "@intentic/base/errors";
 
 // WHAT A CONVERSATION MAY SPEND, as the people it works for may. The owner grants each member a reach (the capabilities
 // and stored secrets their conversations may use, auth.ts `Member.credentials`), and a conversation holds only what
@@ -140,7 +143,7 @@ export const createConversationReach =
             }
             roster = await deps.members.list();
         } catch (error) {
-            const detail = error instanceof Error ? error.message : String(error);
+            const detail = errorMessage(error);
             return { kind: "some", capabilities: new Set(), secrets: new Set(), who: people, unreadable: detail };
         }
         return reachOfPeople(people, roster, owner);

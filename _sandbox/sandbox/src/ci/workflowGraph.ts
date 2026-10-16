@@ -1,5 +1,5 @@
 import { escapeRegExp, isRecord } from "@intentic/base/escape";
-import type { PipelineStatus } from "@intentic/sandbox-contract";
+import type { PipelineStatus } from "@intentic/sandbox-contract/schemas/ci";
 import { parse } from "yaml";
 
 // Builds the job graph the CI API doesn't expose, by reading `needs` from the workflow file and matching it to the API's

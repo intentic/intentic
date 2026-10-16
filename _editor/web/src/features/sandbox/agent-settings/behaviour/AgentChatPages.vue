@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
-import { useSandboxSettings } from "../../overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
 // Whether the agent may answer with a page drawn in the chat (`show_page`) and ask on one (`ask_page`). Off, a turn is

@@ -1,5 +1,5 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { PresenceUser } from "@intentic/sandbox-contract";
+import type { PresenceUser } from "@intentic/sandbox-contract/events/system-events";
 import { runAllTimersAsync } from "@intentic/testing/bun";
 import { ref } from "vue";
 import type { ProcedureInput } from "../../client/sandbox/sandboxRpc";

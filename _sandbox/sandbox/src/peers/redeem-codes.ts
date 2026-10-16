@@ -1,5 +1,7 @@
 import { createHash, randomInt } from "node:crypto";
-import { INVENTORY_NAME_MAX, SHORT_CODE_ALPHABET, zoneFromUrl } from "@intentic/sandbox-contract";
+import { INVENTORY_NAME_MAX } from "@intentic/sandbox-contract/schemas/inventory";
+import { SHORT_CODE_ALPHABET } from "@intentic/sandbox-contract/schemas/short-codes";
+import { zoneFromUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import type { Context } from "hono";
 import type { AppEnv } from "../app-env.js";
 import { remoteIpOf } from "../http/remote-ip.js";

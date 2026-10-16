@@ -1,4 +1,4 @@
-import type { TranscriptTool } from "@intentic/sandbox-contract";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { summarizeRun } from "./toolRun";
 
 let next = 0;

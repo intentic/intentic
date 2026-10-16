@@ -3,14 +3,14 @@ import {
     type SyncEnrollmentAnswer,
     type SyncEnrollmentRequest,
     SyncEnrollmentRequestSchema,
-    SyncPairRequestSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/devices";
+import { SyncPairRequestSchema } from "@intentic/sandbox-contract/schemas/short-codes";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Context } from "hono";
 import { ownerDenied, unavailableIfUnreadable } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import { revokeCardlessHost } from "./host-peer.js";
-import { sshdHostKey } from "./desktop-sync-ssh.js";
+import { sshdHostKey,createSyncSshRoute } from "./desktop-sync-ssh.js";
 import type { AppEnv } from "../app-env.js";
 import {
     deviceReports,
@@ -23,6 +23,7 @@ import {
     revokeEnrollmentByToken,
     type SyncMode,
 } from "../peers/desktop-sync.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // Desktop sync's enrollment surface: a browser-minted pairing token is redeemed at /system/authorized-key to land an SSH
 // key, once per machine key. The pairing carries the mode: a maintainer or the owner gets sync, anyone below only ever
@@ -198,4 +199,21 @@ export const createSyncRoutes = (services: Services, redeemed = reenrollments())
             return c.json({ ok: true });
         });
     },
+});
+
+// Desktop sync: its transport (this container's sshd as a byte stream, authorized via the ordinary grant table), the
+// pairing the browser mints here and the agent redeems at /system/authorized-key, and its enrollment surface, whose
+// exact-path doors are the agent's. The merged devices view is a contract route (system.devices), so it arrives
+// through the oRPC handler.
+export const desktopSyncRawRoutes = defineRawRoutes((services: Services) => {
+    const sync = createSyncRoutes(services);
+    return {
+        "GET /system/sync/ssh": createSyncSshRoute(services),
+        "POST /system/sync/pair": sync.pair,
+        "POST /system/authorized-key": sync.enrollKey,
+        "GET /system/sync": sync.state,
+        "POST /system/sync/report": sync.report,
+        "DELETE /system/authorized-key": sync.revokeOwn,
+        "DELETE /system/authorized-key/{machine}": sync.revokeMachine,
+    };
 });

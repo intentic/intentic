@@ -1,4 +1,4 @@
-import type { WebExtConfig } from "@intentic/sandbox-contract";
+import type { WebExtConfig } from "@intentic/sandbox-contract/schemas/webext";
 import { peerHandler } from "./peer.handler.js";
 import { WEBEXT_TOOLS_NOTE } from "./webext-skills.js";
 

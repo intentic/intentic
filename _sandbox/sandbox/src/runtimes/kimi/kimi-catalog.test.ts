@@ -1,4 +1,4 @@
-import type { Model } from "@intentic/sandbox-contract";
+import type { Model } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { createKimiCatalog } from "./kimi-catalog.js";
 
 test("uses CLIProxyAPI's provider-scoped Kimi definitions and ranks the frontier first", async () => {

@@ -1,7 +1,7 @@
 import type { Services } from "../../composition.js";
 import { isIsolated, type PersistedAgent } from "../../conversations/registry/agents-store.js";
 import { checkpointWorktree } from "./checkpoint-worktree.js";
-import type { TurnCheckpoint } from "./turn-checkpoints.js";
+import type { TurnCheckpoint } from "../../store/journals/turn-checkpoints.js";
 
 // A steered message's before-state checkpoint is reserved as an empty box the instant the turn accepts it; it fills in
 // once the capture resolves. The boxes are the conversation's actor's (`steer-reserved`, `steers-taken`), in the order

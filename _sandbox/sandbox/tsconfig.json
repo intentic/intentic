@@ -12,7 +12,6 @@
         "./src/fences/engine-fence.ts",
         "./src/fences/tmux-fence.ts",
         "./src/harness/e2e-harness.ts",
-        "./src/testing.ts",
         "./src/store/shapes/**",
         "./src/store/generated/**",
         "./src/**/*.testing.ts"
@@ -31,6 +30,8 @@
         { "path": "../../_deploy/sdk" },
         { "path": "../../_sandbox/fileq" },
         { "path": "../../_sandbox/ocr" },
+        { "path": "../../_sandbox/privacy-detect" },
+        { "path": "../../_sandbox/speech" },
         { "path": "../../_tools/constants" }
     ],
     "extends": "@intentic/tsconfig/tsconfig.base.json"

@@ -114,7 +114,7 @@ const drainInto = async (
     let received = from;
     try {
         for (;;) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one read at a time IS the transfer
+            // one read at a time IS the transfer
             const chunk = await reader.read();
             if (chunk.done) {
                 break;
@@ -122,7 +122,7 @@ const drainInto = async (
             received += chunk.value.byteLength;
             onProgress?.(received, total);
             if (!file.write(chunk.value)) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- backpressure: waiting here is the point
+                // backpressure: waiting here is the point
                 await once(file, "drain");
             }
         }

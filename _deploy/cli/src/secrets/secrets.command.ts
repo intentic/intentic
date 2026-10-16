@@ -1,7 +1,7 @@
 import { dirname } from "node:path";
 import { plural } from "@intentic/base/format";
 import { type ForgejoApi, forgejoApi } from "@intentic/providers";
-import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
+import type { SecretInventoryEntry } from "@intentic/sandbox-contract/schemas/secrets";
 import { collectSecretInventory, readSyncState, secretDigest, writeSyncState } from "@intentic/scaffold";
 import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
 import { loadConfig } from "../env.config.js";

@@ -6,22 +6,18 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
+import { CapabilityConnectableSchema, type NeedRaised, NeedRaiseSchema, NeedsListSchema, NeedSchema } from "@intentic/sandbox-contract/schemas/needs";
 import {
-    CapabilityConnectableSchema,
     type CredentialGate,
     CredentialGatesSchema,
-    type NeedRaised,
-    NeedRaiseSchema,
-    NeedsListSchema,
-    NeedSchema,
     SecretGeneratedSchema,
     SecretGenerateSchema,
     type SecretHostGuard,
     SecretHostGuardsSchema,
     SecretHostGuardSetResultSchema,
     SecretHostGuardSetSchema,
-    sandboxRequestFor,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/secrets";
+import { sandboxRequestFor } from "@intentic/sandbox-contract";
 
 // The asking commands against the contract itself: each request a CLI sends must be the route the contract declares
 // (method, path) with a body its input schema takes, and each answer shaped by the output schema must print and exit as

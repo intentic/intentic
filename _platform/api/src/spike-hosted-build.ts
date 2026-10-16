@@ -123,12 +123,12 @@ const mintedTokens: string[] = [];
 const ENDED = new Set([`stopped`, `failed`, `destroyed`, `suspended`]);
 const waitForEnd = async (machineId: string, deadline: number): Promise<Awaited<ReturnType<typeof getMachineDetail>>> => {
     for (;;) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a poll is a loop of waits by definition
+        // a poll is a loop of waits by definition
         const detail = await getMachineDetail(flyApiToken, appName, machineId);
         if (ENDED.has(detail.state) || Date.now() > deadline) {
             return detail;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+        // as above
         await sleep(5_000);
     }
 };
@@ -330,7 +330,7 @@ try {
         }
     }
     for (const id of mintedTokens) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a handful at most, and teardown is not hot
+        // a handful at most, and teardown is not hot
         await revokeDeployToken(flyApiToken, id).catch((error: unknown) => out(`  could not revoke token ${id}: ${errorMessage(error)}`));
     }
 }

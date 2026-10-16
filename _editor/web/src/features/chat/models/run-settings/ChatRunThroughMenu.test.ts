@@ -1,7 +1,8 @@
 // jsdom, because this picker's whole job is what it says before the message goes: which machine gets the next
 // send, what stops one that spends money each round, and that picking either is picking instead of the other.
 import "@intentic/testing/dom";
-import type { LoopDesign, Workflow } from "@intentic/sandbox-contract";
+import type { LoopDesign } from "@intentic/sandbox-contract/schemas/loops";
+import type { Workflow } from "@intentic/sandbox-contract/schemas/workflows";
 import { type App, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { installI18n } from "@intentic/ui/i18n";
@@ -11,8 +12,8 @@ import { installI18n } from "@intentic/ui/i18n";
 const loops = ref<LoopDesign[]>([]);
 const workflows = ref<Workflow[]>([]);
 
-jest.mock(`../../../agents/fleet/useLoopDesigns`, () => ({ useLoopDesigns: () => ({ designs: loops }) }));
-jest.mock(`../../../agents/fleet/useWorkflowRuns`, () => ({ useWorkflowRuns: () => ({ designs: workflows }) }));
+jest.mock(`../../../../models/fleet/useLoopDesigns`, () => ({ useLoopDesigns: () => ({ designs: loops }) }));
+jest.mock(`../../../../models/fleet/useWorkflowRuns`, () => ({ useWorkflowRuns: () => ({ designs: workflows }) }));
 
 const { default: ChatRunThroughMenu } = await import("./ChatRunThroughMenu.vue");
 const { extensionsLoaded, extensionStatuses } = await import("../../../../workbench/views/extensionStatuses");

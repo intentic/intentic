@@ -5,7 +5,7 @@ import type {
     ComplianceReport,
     PresetApplyResult,
     PresetItem,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/compliance";
 import { useMutation } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";

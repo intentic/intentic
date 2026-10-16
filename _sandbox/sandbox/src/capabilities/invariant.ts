@@ -1,4 +1,4 @@
-import { VAULTED } from "@intentic/sandbox-contract";
+import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import type { InvariantCheck } from "../invariants/invariants.js";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 import type { ResolvedContribution } from "./contributions.js";

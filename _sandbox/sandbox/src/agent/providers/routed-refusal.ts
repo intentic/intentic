@@ -1,4 +1,5 @@
 import type { HarnessCredential } from "./agent-request.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Distinguishes an auth refusal (a subscription that excludes the model, which the proxy then answers instantly and
 // forever) from a real outage; the harness sees both as a bare 5xx and retries either way. Reads the response body as
@@ -56,15 +57,9 @@ const upstreamCause = (text: string): string | undefined => /last upstream error
 // Extracts the vendor's own sentence from the proxy's error envelope: the tail after 'last upstream error' when
 // present, else the whole message. Undefined when there's no JSON to read.
 const upstreamSentence = (body: string): string | undefined => {
-    let message: string | undefined;
-    try {
-        const parsed = JSON.parse(body) as { error?: { message?: unknown }; message?: unknown };
-        const inner = parsed.error?.message ?? parsed.message;
-        message = typeof inner === "string" ? inner : undefined;
-    } catch {
-        return undefined;
-    }
-    if (message === undefined) {
+    const parsed = parseJsonOr(body, undefined) as { error?: { message?: unknown }; message?: unknown } | null | undefined;
+    const message = parsed?.error?.message ?? parsed?.message;
+    if (typeof message !== "string") {
         return undefined;
     }
     return (upstreamCause(message) ?? message).trim().slice(0, REFUSAL_CHARS);

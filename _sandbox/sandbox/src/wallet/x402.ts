@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { USDC_NETWORKS, type UsdcNetwork, usdcNetworkOf } from "@intentic/sandbox-contract/x402";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Parses a 402 challenge into one normalized quote and builds the retry's payment; pure protocol logic, no network,
 // policy or keys.
@@ -120,13 +121,7 @@ const v1Quote = (entry: unknown): PaymentQuote | undefined => {
     };
 };
 
-const decodeBase64Json = (value: string): unknown => {
-    try {
-        return JSON.parse(Buffer.from(value, "base64").toString("utf8"));
-    } catch {
-        return undefined;
-    }
-};
+const decodeBase64Json = (value: string): unknown => parseJsonOr(Buffer.from(value, "base64").toString("utf8"), undefined);
 
 export const parseChallenge = (url: string, headers: Headers, body: string): ChallengeParse => {
     // v2: the whole challenge rides one response header, base64-encoded.

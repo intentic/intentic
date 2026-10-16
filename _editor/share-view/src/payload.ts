@@ -1,4 +1,4 @@
-import { type SharePayload, SharePayloadSchema } from "@intentic/sandbox-contract";
+import { type SharePayload, SharePayloadSchema } from "@intentic/sandbox-contract/events/transcript";
 import { t } from "@intentic/ui/i18n";
 
 // Reads the conversation the daemon embedded in index.html's `<script type="application/json">` block — already

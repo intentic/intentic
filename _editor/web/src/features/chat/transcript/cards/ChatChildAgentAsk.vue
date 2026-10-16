@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type { ChildAgentAsk, ChildMove, ChildRun } from "@intentic/sandbox-contract";
+import type { ChildAgentAsk, ChildMove, ChildRun } from "@intentic/sandbox-contract/events/requests";
 import { ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, useTemplateRef, watch } from "vue";
-import ProviderLogo from "../../accounts/ProviderLogo.vue";
-import { requestModelPick } from "../../models/host/hostModelPicker";
+import ProviderLogo from "../../../../parts/providers/ProviderLogo.vue";
+import { requestModelPick } from "../../../../models/conversations/accounts/hostModelPicker";
 import { watchClamp } from "../clampWatch";
 import { childRunFacts, childRunLine, pickedChildRun } from "./childAgentRun";
 

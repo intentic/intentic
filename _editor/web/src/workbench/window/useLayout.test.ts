@@ -20,7 +20,7 @@ const session = store(`sessionStorage`);
 
 const activeSandboxId = ref<string | undefined>(`sb1`);
 
-jest.mock("../../lib/activeSandbox", () => ({ activeSandboxId }));
+jest.mock("../../app/storage/activeSandbox", () => ({ activeSandboxId }));
 
 const { useLayout } = await import("./useLayout");
 

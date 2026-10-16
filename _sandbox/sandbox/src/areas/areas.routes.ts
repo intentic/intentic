@@ -1,5 +1,6 @@
 import { noteAudit } from "../audit/audit-http.js";
-import { foldPath, areasContract } from "@intentic/sandbox-contract";
+import { foldPath } from "@intentic/sandbox-contract/policy/fence-paths";
+import { areasContract } from "@intentic/sandbox-contract/contracts/areas.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";

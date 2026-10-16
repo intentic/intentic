@@ -1,9 +1,10 @@
 import { spawnCatalogText } from "../../agent/subagents/spawn-catalog.js";
 import type { McpServerConfig as CursorMcpServer, SDKCustomTool, SDKJsonValue, ToolName } from "@cursor/sdk";
-import type { AgentEvent, AskQuestion } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AskQuestion } from "@intentic/sandbox-contract/events/requests";
 import { z } from "zod";
 import type { AgentRequest, TurnHooks, TurnTools } from "../../agent/providers/agent-request.js";
-import { formatAnswers } from "../../agent/tools/question-answers.js";
+import { formatAnswers } from "../../sessions/vocabulary/question-answers.js";
 import type { SubagentWaitUntil } from "../../agent/subagents/subagents.js";
 import { workWaitAnswer } from "../../agent/subagents/work-wait.js";
 import { spawnedNote } from "../../agent/subagents/children.js";

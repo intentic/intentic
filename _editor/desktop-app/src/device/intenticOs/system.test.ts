@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import type { IntenticOsStatus } from "@intentic/sandbox-contract";
+import type { IntenticOsStatus } from "@intentic/sandbox-contract/schemas/intentic-os";
 import { freshImport, waitFor } from "@intentic/testing/bun";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import type { OsRunEnd, OsRunEvent } from "../../desktop";

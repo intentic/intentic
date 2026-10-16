@@ -1,4 +1,4 @@
-import { type Capability, LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODELS, localModelChoice } from "@intentic/sandbox-contract";
+import { type Capability, LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODELS, localModelChoice } from "@intentic/sandbox-contract/schemas/capabilities";
 import { translatedEndpoints } from "./endpoint-translator.js";
 import {
     endpointConfigOf,

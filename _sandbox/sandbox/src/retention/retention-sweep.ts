@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import type { RetentionSettings } from "@intentic/sandbox-contract";
+import type { RetentionSettings } from "@intentic/sandbox-contract/schemas/data-protection";
 import type { Logger } from "pino";
 import type { TranscriptRetentionResult } from "../conversations/registry/transcript-retention.js";
 import type { WorkspaceHistory } from "../history/history.js";

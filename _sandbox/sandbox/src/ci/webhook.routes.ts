@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { keyedLock } from "@intentic/base/async";
-import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract";
+import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import type { Context } from "hono";
 import { tokenEquals } from "../auth/auth.js";
 import type { Services } from "../composition.js";
@@ -20,6 +20,7 @@ import {
 } from "./providers.js";
 import { forgeOf } from "./main-line.js";
 import { ciProjects, type CiProject } from "./projects.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // Public webhook receiver, gated by the per-sandbox secret (github HMACs the body, gitlab echoes it as a token); one
 // route for both vendors. An unmapped project's delivery is acknowledged and dropped, not an error. Verifies the sender
@@ -266,3 +267,6 @@ export const createCiWebhookRoute = (services: Services, fetchFn: FetchFn = fetc
         return c.json({ ok: true });
     };
 };
+
+// CI webhook receiver, secret-gated in the handler; completed pipelines wake `ci` listener automations.
+export const ciWebhookRawRoutes = defineRawRoutes((services: Services) => ({ "POST /ci/webhook/{host}": createCiWebhookRoute(services) }));

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button, Card, Checkbox, ui, Icon, Modal } from "@intentic/extension-ui";
-import type { RepoApp, TemplateSummary } from "@intentic/sandbox-contract";
+import type { RepoApp, TemplateSummary } from "@intentic/sandbox-contract/schemas/workspace/workspace-repos";
 import { computed, ref } from "vue";
 import { t } from "./i18n.js";
 

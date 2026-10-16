@@ -84,7 +84,7 @@ test("a long turn that is never stopped keeps none of the frames already passed 
     }
     const frames = endedAfterStop(turn(), new AbortController().signal, () => {})[Symbol.asyncIterator]();
     for (let read = 0; read < reads; read += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- the consumer reads frame by frame, as the turn's does
+        // the consumer reads frame by frame, as the turn's does
         await frames.next();
     }
     // The turn is still open: the stream waits on its next read.

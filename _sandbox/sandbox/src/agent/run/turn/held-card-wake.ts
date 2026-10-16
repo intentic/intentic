@@ -2,7 +2,7 @@ import type { Logger } from "pino";
 import type { Services } from "../../../composition.js";
 import { conversationProfile } from "../../../conversations/registry/agents-store.js";
 import type { HeldCardWake } from "../../../guard/held-cards.js";
-import { deliverWake } from "./wake-delivery.js";
+import { deliverWake } from "../../../seams/wake-delivery.js";
 
 // The sandbox's words to a conversation whose turn held for a device card (guard/held-cards.ts), delivered as every
 // other wake is: queued behind the turn that held for it, whose close has already hushed its steering, so it opens the

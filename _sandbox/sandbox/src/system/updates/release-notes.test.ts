@@ -1,5 +1,5 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { expireTimeouts, stalledFetch } from "../../testing.js";
+import { expireTimeouts, stalledFetch } from "../../http/fetch.testing.js";
 import { isDevBuild } from "../../version.js";
 import { RELEASE_FETCH_TIMEOUT_MS } from "./version-check.js";
 import {

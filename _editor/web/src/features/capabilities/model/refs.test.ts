@@ -1,4 +1,5 @@
-import { type RemoteRef, type RemoteRefs, VAULTED } from "@intentic/sandbox-contract";
+import type { RemoteRef, RemoteRefs } from "@intentic/sandbox-contract/schemas/git/remote-refs";
+import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import { initialChoice, MANUAL_KEY, refGroups, refKey, refSummary, versionReadToken } from "./refs";
 
 // The version picker's ordering and its opening selection: what a repository offers, turned into the list a person

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Renders the matched line from a filtered row, with the term marked and the speaker labeled. Only the line;
 // wrapper, icon and clamp are the caller's.
-import type { MatchSnippet } from "@intentic/sandbox-contract";
+import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agents";
 import { computed } from "vue";
 import { markSegments } from "../lib/markSegments";
 import { useT } from "@intentic/ui/i18n";

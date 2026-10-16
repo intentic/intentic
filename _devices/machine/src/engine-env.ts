@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, win32 } from "node:path";
+import { parseJsonOr } from "@intentic/base/json";
 import { STATE_DIR } from "@intentic/constants";
 import { homeDir } from "@intentic/local-agent";
 
@@ -35,13 +36,8 @@ export const activeEngine = (text: string | undefined): EngineRecord | undefined
     if (text === undefined) {
         return undefined;
     }
-    let record: unknown;
-    try {
-        record = JSON.parse(text);
-    } catch {
-        // allow(silent-catch): a record that is not JSON names no engine, the same answer as no record at all
-        return undefined;
-    }
+    // A record that is not JSON names no engine, the same answer as no record at all.
+    const record = parseJsonOr(text, undefined);
     if (typeof record !== "object" || record === null) {
         return undefined;
     }

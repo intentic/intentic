@@ -1,4 +1,4 @@
-import type { GitCommit } from "@intentic/sandbox-contract";
+import type { GitCommit } from "@intentic/sandbox-contract/schemas/git/git-history";
 
 // Pure geometry for the commit-graph lanes GitHistoryTab.vue draws: per commit, a lane, then a top half (incoming edges
 // bending into the node) and a bottom half (parents leaving). Colour follows the branch, not the lane column: allocated

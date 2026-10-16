@@ -1,7 +1,9 @@
-import { type AgentLoop, type AgentProvider, mintedVariants, PROVIDER_VENDOR, TRIAL_ENDPOINT_ID, TRIAL_MODEL_ID } from "@intentic/sandbox-contract";
+import type { AgentLoop, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { mintedVariants } from "@intentic/sandbox-contract/models/provider-specs";
+import { PROVIDER_VENDOR, TRIAL_ENDPOINT_ID, TRIAL_MODEL_ID } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { Services } from "../../../composition.js";
 import { services, withTranslator } from "../../../harness/route-services.testing.js";
-import { testConfig } from "../../../testing.js";
+import { testConfig } from "../../../env.config.testing.js";
 import { type ModelRoute, resolveRoute, routeReadiness, routeUrl } from "./model-routes.js";
 
 // Every (provider, loop) pair resolved the way the loop will dial it. Today's Claude Code pairs are pinned to the exact

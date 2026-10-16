@@ -1,5 +1,5 @@
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE, fetchTemplateManifest, type TemplateManifest } from "@intentic/scaffold";
-import type { TemplateSummary } from "@intentic/sandbox-contract";
+import type { TemplateSummary } from "@intentic/sandbox-contract/schemas/workspace/workspace-repos";
 import type { Services } from "../../composition.js";
 import { statePath } from "../../state-paths.js";
 

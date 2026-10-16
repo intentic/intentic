@@ -1,4 +1,5 @@
-import { landedCommitMessage, type Rule } from "@intentic/sandbox-contract";
+import { landedCommitMessage } from "@intentic/sandbox-contract/state/landed-commit";
+import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import { sleep } from "@intentic/base/async";
 import type { Services } from "../../composition.js";
 import { AgentDomainRefusedError } from "../../workload/agent-execution.js";

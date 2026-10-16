@@ -6,7 +6,7 @@ import { effectScope, type EffectScope, ref } from "vue";
 
 // The ticket mint is an HTTP round trip; only the socket's URL matters to this suite.
 const socketUrl = jest.fn(async (): Promise<string | undefined> => `wss://sandbox.test/system/desktop-view`);
-jest.mock(`../sandbox/session/wsTicket`, () => ({ socketUrl }));
+jest.mock(`../../client/sandbox/streams/wsTicket`, () => ({ socketUrl }));
 
 const { HOLD_MS, useDesktopView } = await import(`./useDesktopView`);
 const { signalConnection } = await import(`../../client/sandbox/useSandbox`);

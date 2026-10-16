@@ -6,17 +6,18 @@
 // 2. a provider that has fallen off the list, so "spent" and "never connected" render as the same nothing, with
 //    no Usage tab in this window to check
 import "@intentic/testing/dom";
-import type { OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import type { TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { type App, createApp, h, nextTick } from "vue";
 import { stubGlobal, unstubAllGlobals, waitFor } from "@intentic/testing/bun";
 import { IconStub } from "@intentic/ui/testing";
 
 // Import chain pulls in app-wide singletons reading browser globals at import time (matchMedia, window.env).
 const { default: ChatCapacityRail } = await import("./ChatCapacityRail.vue");
-const { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } = await import("../../accounts/providerAccounts");
-const { heldAccounts } = await import("../../accounts/useChat-accounts");
+const { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } = await import("../../../../models/providers/providerAccounts");
+const { heldAccounts } = await import("../../../../models/conversations/accounts/useChat-accounts");
 // The app's own reset formatter, not a copy: assertions check it carries the reset, not a fixed timezone string.
-const { formatReset } = await import("../../session/usageStatus");
+const { formatReset } = await import("../../../../models/providers/usageStatus");
 const { judgeAccountStores } = await import("../../../../testing/judgedAccounts");
 
 const NO_ROUTED: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };

@@ -1,8 +1,9 @@
-import type { AgentReply, WaitingPermission } from "@intentic/sandbox-contract";
-import { postTurnControl } from "../../chat/run/turnStream";
-import { SKIP_CALL } from "../../chat/session/cardReplies";
-import type { FleetAgent } from "./useAgents-fleet";
-import { claim } from "./useAgents-provisional";
+import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { WaitingPermission } from "@intentic/sandbox-contract/schemas/agents";
+import { postTurnControl } from "../../../client/sandbox/streams/turnStream";
+import { SKIP_CALL } from "../../../models/conversations/session/cardReplies";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
+import { claim } from "../../../models/fleet/useAgents-provisional";
 
 // A permission answered on the board card itself, not a trip to a chat that may still be loading: the chat card's
 // first answer and its "skip this, keep going". "Always" and the No that stops the turn stay in the chat, where the

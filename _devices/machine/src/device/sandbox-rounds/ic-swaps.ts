@@ -1,5 +1,6 @@
 import { execBounded } from "@intentic/base/process";
-import { type DeviceSwap, DeviceSwapsSchema } from "@intentic/sandbox-contract";
+import { parseJsonWith } from "@intentic/base/json";
+import { type DeviceSwap, DeviceSwapsSchema } from "@intentic/sandbox-contract/schemas/device-swaps";
 import { homeDir } from "@intentic/local-agent";
 import { icCandidates } from "../tools/ic-binary.js";
 import { swapsFromFiles } from "./swaps-fallback.js";
@@ -29,13 +30,7 @@ export const swapsFrom = (stdout: string): DeviceSwap[] | undefined => {
     if (line === undefined) {
         return undefined;
     }
-    try {
-        const parsed = DeviceSwapsSchema.safeParse(JSON.parse(line));
-        return parsed.success ? parsed.data : undefined;
-    } catch {
-        // allow(silent-catch): a line that is not JSON is not ic's answer, which is what undefined says
-        return undefined;
-    }
+    return parseJsonWith(line, DeviceSwapsSchema);
 };
 
 // What the answer needs of the world, so the choice between ic and the fallback is asserted without a binary.
@@ -50,7 +45,7 @@ export interface SwapsSeams {
 const askIc = async (): Promise<string | undefined> => {
     for (const binary of icCandidates(process.platform, homeDir())) {
         // allow(silent-catch): a candidate that is missing, too old for the verb, or failing has no answer, and the next is tried
-        // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; the first that answers wins
+        // candidates are tried in order; the first that answers wins
         const answer = await execBounded(binary, [...swapsArgs], { timeoutMs: SWAPS_TIMEOUT_MS }).catch(() => undefined);
         if (answer !== undefined) {
             return answer.stdout;

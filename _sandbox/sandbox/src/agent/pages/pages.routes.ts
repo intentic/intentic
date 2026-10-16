@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
-import { pagesContract, readMcpAppData } from "@intentic/sandbox-contract";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { pagesContract } from "@intentic/sandbox-contract/contracts/pages.contract";
+import { readMcpAppData } from "@intentic/sandbox-contract/text/pages";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
 import { mcpToolsOf } from "../../capabilities/mcp-tools.js";
@@ -42,7 +43,7 @@ export const createPagesRoutes = (services: PagesRoutesDeps) => {
             }
             const answer = await callForApp(server, { name: input.name, arguments: input.arguments, pressed: input.pressed === true }).catch(
                 (error: unknown) => ({
-                    refused: error instanceof Error ? error.message : String(error),
+                    refused: errorMessage(error),
                 }),
             );
             if ("refused" in answer) {

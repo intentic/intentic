@@ -2,12 +2,12 @@
 // remounted. Regression: `v-show` on a `v-for` over a constant list applies once at mount and freezes.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
-import { setAgents } from "../../../agents/fleet/useAgents-registry";
-import { useChat } from "../../run/useChat";
-import { openAgentConversation } from "../../panel/useChat-reveal";
+import { setAgents } from "../../../../models/fleet/useAgents-registry";
+import { useChat } from "../../../../models/conversations/run/useChat";
+import { openAgentConversation } from "../../../../models/conversations/panel/useChat-reveal";
 import { queryClient } from "../../../../lib/queryPersistence";
 import { router } from "../../../../router/index";
 import ChatTabList from "../ChatTabList.vue";

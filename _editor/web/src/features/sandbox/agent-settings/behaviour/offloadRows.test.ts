@@ -1,5 +1,5 @@
 // Pins what a pick in "Where heavy work runs" writes (settings `offload`) and how a runner is offered and named.
-import type { RunnerSummary } from "@intentic/sandbox-contract";
+import type { RunnerSummary } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { HERE, kindTitle, runnerName, sessionsOptions, targetOptions, unavailableRunner, withCommandTarget, withSessions } from "./offloadRows";
 
 const omen: RunnerSummary = { id: `runner-omen`, host: `omen`, online: true, parity: `current` };

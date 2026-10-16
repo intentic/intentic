@@ -1,7 +1,7 @@
 // Pins that toggling a repo's changelog switch writes exactly that repo's name to `changelogRepos`, never
 // another. Mounted (not projected), since what's under test is the click-then-read round trip.
 import "@intentic/testing/dom";
-import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -11,12 +11,12 @@ const patch = jest.fn((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
-jest.mock(`../../overview/useSandboxSettings`, () => ({
+jest.mock(`../../../../models/sandbox/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 
 // Two repos, since the per-repo half is what's worth proving: one row must not write the other's name.
-jest.mock(`../../../workspace/explorer/useRepos`, () => ({
+jest.mock(`../../../../models/workspace/tree/useRepos`, () => ({
     useRepos: () => ({
         options: computed(() => [`root`, `vendor/widget`]),
         nested: computed(() => [`vendor/widget`]),

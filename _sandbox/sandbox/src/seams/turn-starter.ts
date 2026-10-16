@@ -1,26 +1,27 @@
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type {
-    AgentEvent,
     AgentHarness,
     AgentProvider,
-    AgentReply,
     AgentTurn,
     EditorContext,
-    LimitPolicy,
     MessageReceipt,
     MessageVoice,
+    QueueResumed,
+} from "@intentic/sandbox-contract/schemas/agent";
+import type {
+    AgentReply,
     QueuedMessageRef,
     QueueEdit,
     QueueResume,
-    QueueResumed,
     QueueSchedule,
-    ResumeReason,
     ResumeRouting,
-    SessionOwner,
     StopResult,
     StopTurn,
-    TurnErrand,
-    TurnSpeaker,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { LimitPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
+import type { ResumeReason } from "@intentic/sandbox-contract/events/resume";
+import type { SessionOwner } from "@intentic/sandbox-contract/schemas/agents";
+import type { TurnErrand, TurnSpeaker } from "@intentic/sandbox-contract/schemas/speaker";
 import type { BeginRefusal } from "../conversations/actor/conversation-decide.js";
 import type { QueueChange, TurnQueue } from "../conversations/actor/conversation-queue.js";
 

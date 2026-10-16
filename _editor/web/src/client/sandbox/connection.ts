@@ -1,4 +1,4 @@
-import type { EdgeVerdict } from "@intentic/sandbox-contract";
+import type { EdgeVerdict } from "@intentic/sandbox-contract/netd/generated/browser-wire";
 
 // The active sandbox connection as a pure state machine, testable without a network, timer, or Vue instance;
 // failure is a tagged value rather than a boolean triple sniffed from a message. Transient failures retry fast;

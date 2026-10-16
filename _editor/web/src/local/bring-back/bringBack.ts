@@ -1,4 +1,9 @@
-import { type ProjectAnswer, ProjectAnswerSchema, type ProjectChange, type ProjectSkipped } from "@intentic/sandbox-contract";
+import {
+    type ProjectAnswer,
+    ProjectAnswerSchema,
+    type ProjectChange,
+    type ProjectSkipped,
+} from "@intentic/sandbox-contract/schemas/project-bring-back";
 import type { SyncDirection } from "../../app/environments/local";
 
 // Bringing an agent's work back from a folder's own sandbox (the desktop app keeps the two in sync, copy-first by

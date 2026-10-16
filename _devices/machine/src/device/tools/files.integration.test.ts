@@ -2,7 +2,7 @@ import { chmodSync, closeSync, lstatSync, mkdirSync, mkdtempSync, openSync, read
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { agentHome } from "@intentic/local-agent";
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { ScopeError } from "../policy.js";
 import { editTextFile, readTextFile, trashFile, writeTextFile } from "./files.js";
 

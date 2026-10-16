@@ -1,7 +1,7 @@
 import { computed, ref, shallowRef } from "vue";
 import { externalDirtyPaths, setExternalDirty } from "../files/externalDirty";
-import { useEditBuffers } from "../files/useEditBuffers";
-import { useWorkspaceTabs } from "./useWorkspaceTabs";
+import { useEditBuffers } from "../../../models/workspace/files/useEditBuffers";
+import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 
 // The one guard in front of every close that would lose unsaved work, in the hosted workspace and in a local window
 // alike. Unsaved is either kind: the editor's own buffers, and what an editor keeping its own document reports

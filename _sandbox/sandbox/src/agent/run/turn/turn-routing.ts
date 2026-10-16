@@ -1,9 +1,9 @@
-import { type AgentTurn, type ModelPin, withRuntimeDefaults } from "@intentic/sandbox-contract";
+import { type AgentTurn, type ModelPin, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import { personaRunModel, runRoleModel, unpinnedRunProvider } from "../../models/run-role-model.js";
-import { sessionFor } from "../../providers/accounts/routing.js";
+import { sessionFor } from "../../../conversations/registry/routing.js";
 
 // Which provider, model and loop a turn runs on, decided once for every turn the daemon starts, whichever door it comes
 // through (turn-doors.ts: `start`, `run`, `stream`). Resolved before the turn is journaled, so a restart keeps the model

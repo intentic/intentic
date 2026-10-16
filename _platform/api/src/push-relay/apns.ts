@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { PushNotification } from "@intentic/sandbox-contract";
+import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import { createPrivateKey, createSign } from "node:crypto";
 import { connect, constants } from "node:http2";
 import type { Config } from "../config.js";

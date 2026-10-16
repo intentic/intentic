@@ -18,10 +18,23 @@ flowchart LR
 
 `createServices` in [src/composition.ts](../src/composition.ts) builds `Services` once from the config. `Services` is
 the sum of slices each subsystem declares beside its own code (`auth/auth-slice.ts`, `conversations/conversations-slice.ts`,
-`runtimes/claude/claude-provider.ts`, …), and each slice file also holds the slice's builder (`createConversationsSlice`,
-`createGitSlice`, …), which takes what it reads as a typed argument. Composition calls the builders in dependency order,
-so a new member of a slice is written in its slice file alone, and a dependency a builder gains but is not handed fails
-to compile. A member whose code would close an import cycle if its slice's builder imported it (`daemon-boundaries`) is
+`runtimes/claude/claude-provider.ts`, …), and each slice file also holds the slice's builder, which takes what it reads
+as a typed argument, so a new member of a slice is written in its slice file alone, and a dependency a builder gains but
+is not handed fails to compile.
+
+The slices come in two kinds. The core (workspace, auth, conversations, processes, deps, capabilities, secrets, broker,
+extensions, sessions, providers and the bridged members below) is built by hand in composition, in the order its
+dependencies ask for, since secrets needs the capabilities' vault, the broker needs the secrets' credential gate, and a
+session's purge reaches both. A leaf slice reads only that core, plus the finished `Services` through `whole` once
+composing has returned, so no leaf builds from another and their order is not significant. A leaf declares itself in
+its own folder as `export const gitSlice = defineSlice<GitSlice>({ build, stop? })` ([src/seams/slice.ts](../src/seams/slice.ts)),
+its `build` taking `Pick<CompositionCore, …>` of what it reads, and `scripts/write-indexes.mjs` lists it in the
+generated [src/bootstrap/slices/slice-registry.ts](../src/bootstrap/slices/slice-registry.ts): `LeafMembers`, which
+`Services` extends, `buildLeafSlices`, which composition calls once with the core and which throws on a member two
+slices (or a slice and the core) both build, and `leafTeardown`, the leaves' stops inside `servicesTeardown`. The leaves
+are links, webext, phones, runners, hosts, needs, the loops half of loops, git, org (the org policy), share, approvals,
+wallet (its ledger), safety (its log), rules (their firings) and history. A slice that reads a member of another leaf, or
+of anything composition builds after the core, stays hand-wired. A member whose code would close an import cycle if its slice's builder imported it (`daemon-boundaries`) is
 built in composition instead: the builder returns `Omit<Slice, …>` over an exported union of those names, and
 composition's `createBridgedMembers` returns the `Pick` of the same union.
 
@@ -48,8 +61,11 @@ the gate that throws is logged by name and the phases after it still start; a bo
 
 Routes are declared in `@intentic/sandbox-contract`, each with a policy (auth floor, stream, boot gating).
 [src/app.ts](../src/app.ts) wraps every request in order: security headers, compression, request timing, the boot gate, CORS,
-then authentication (the owner's session, the grant table, the role floor). Raw routes register through
-`http/raw-route-server.ts` under their `RAW_ROUTES` declaration, so none exists without a policy. The oRPC handler for
+then authentication (the owner's session, the grant table, the role floor). A raw route's handler lives in its unit's
+`*.routes.ts`, in a table exported as `export const name = defineRawRoutes(…)` (`http/raw-route-server.ts`), keyed by
+its `RAW_ROUTES` declaration. `scripts/write-indexes.mjs` merges every table into the generated `src/app-raw-routes.ts`,
+which fails to compile when a declared route has no handler, and `app.ts` registers them in declaration order, so the
+contract alone decides which of two overlapping routes answers and none exists without a policy. The oRPC handler for
 [src/router.ts](../src/router.ts) answers everything else.
 
 ## Seams
@@ -62,7 +78,15 @@ Subsystems that react to each other never import each other:
 - `seams/runtime-feed.ts` announces tmux sessions, panels, browsers and child turns to `system/runtime-watch.ts`,
   which pushes them over `/events` beside the file watcher and the git ref watcher.
 - `seams/turn-starter.ts` is how automations, loops, approvals, CI fixes, subagents and runners start or drive a turn;
-  composition hands them `agent/run/turn/turn-doors.ts`.
+  composition binds `agent/run/turn/turn-doors.ts` to `streamAgent` and hands it to the conversations slice as `turns`.
+  `seams/wake-delivery.ts` is the one door over it for words nobody at the composer typed.
+- `seams/turn-engine.ts` is the rest of what the fleet asks of the engine: a land's subject from the role model, and
+  the children and watches a conversation leaving ends. Composition fills it as `turnEngine`, so `conversations/`
+  imports nothing of `agent/`; the engine imports the fleet, never the other way.
+- Below both sit what each of them only reads: the journals and the prompt record (`store/journals/`), the failure and
+  role-answer sentences (`engines/`), and the transcript vocabulary a stored prompt is parsed with
+  (`sessions/vocabulary/`, which `agent/prompt/turn-preamble.ts` builds the other half of). The extension inventory
+  (`capabilities/extension-inventory/`) sits in capabilities, since its contribution registry is built from it.
 - `seams/environment-sources.ts` is where the environment overlay's contributed fragments come from (a capability's
   handler, an extension's checkout, a connected provider's packs); composition fills it from
   `extensions/fragment-sources.ts` and `agent/providers/provider-packs.ts`, which sit above `environment/`.
@@ -72,7 +96,7 @@ Subsystems that react to each other never import each other:
 A turn's words carry who spoke them (`TurnSpeaker`, `seams/turn-speaker.ts`) and, when the sandbox or the editor
 composed them, the errand they are (`TurnErrand`, contract `schemas/speaker.ts`): a push or CI fix attempt and its
 nudge, a land conflict. Both ride the turn input, the conversation's queue and a live steer onto the transcript row, so
-no reader shows the sandbox's words as the owner's. A wake (`agent/run/turn/wake-delivery.ts`) is the sandbox's by
+no reader shows the sandbox's words as the owner's. A wake (`seams/wake-delivery.ts`) is the sandbox's by
 construction; a fix attempt (`conversations/fix/fix-attempts.ts`) names its errand for the opening prompt and the nudge,
 and is the sandbox's own when nobody pressed for it. Over HTTP a client may name only `land-conflict`. Rows written
 before rows named an errand are still read by the prompt's opening paragraph (`errandOfRow`, contract

@@ -1,15 +1,15 @@
-import type { VoiceSettings } from "@intentic/sandbox-contract";
+import type { VoiceSettings } from "@intentic/sandbox-contract/schemas/voice";
 import { computed, createApp, defineComponent, h, nextTick, ref, shallowRef } from "vue";
-import type { CardAnswer } from "../session/cardReplies";
-import type { ChatMessage } from "../transcript/transcript";
-import type { SayOptions, SpeechEnd, SpeechPlayer, SpeechPlayerState } from "./speechPlayer";
+import type { CardAnswer } from "../../../models/conversations/session/cardReplies";
+import type { ChatMessage } from "../../../models/conversations/transcript/transcript";
+import type { SayOptions, SpeechEnd, SpeechPlayer, SpeechPlayerState } from "../../../models/voice/speechPlayer";
 import type { CardWords } from "./voiceCards";
 
 // Pins the agent answering out loud while hands-free is on: a finished turn's reply said short, a card put to the person
 // and answered by what they say next, the mic resting while the voice speaks, and talking over it stopping it when the
 // owner allowed that.
 
-jest.mock(`../../sandbox/session/wsTicket`, () => ({ socketUrl: async () => undefined }));
+jest.mock(`../../../client/sandbox/streams/wsTicket`, () => ({ socketUrl: async () => undefined }));
 
 const { useVoiceTalk } = await import(`./useVoiceTalk`);
 

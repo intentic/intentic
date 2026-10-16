@@ -1,17 +1,21 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { type AgentEvent, type AccountUsage, type PromptFingerprint, SandboxSettingsSchema, type UsageTurn } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AccountUsage } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { PromptFingerprint } from "@intentic/sandbox-contract/schemas/keep-warm";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import type { UsageTurn } from "@intentic/sandbox-contract/schemas/providers/usage";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../../composition.js";
 import { services } from "../../../../harness/route-services.testing.js";
-import { beginTurn } from "../../../../testing.js";
+import { beginTurn } from "../../../../conversations/actor/conversation-actors.testing.js";
 import { KEEP_WARM_PROMPT } from "../../../../runtimes/claude/claude-warm.js";
 import type { RoutedTurn } from "../../../../seams/turn-starter.js";
 import type { AgentRequest, TurnHooks } from "../../../providers/agent-request.js";
 import type { HarnessRequest } from "../../agent.js";
 import { assertAgentExecution, type AgentExecutionLease } from "../../../../workload/agent-execution.js";
 import { rootExecution } from "../../../../workload/agent-execution.testing.js";
-import { nextPromptDayAt } from "../../prompt-fingerprint.js";
 import { armKeepWarm, autoKeepWarm, dropKeepWarm, keepableOf, keepWarmDueOf, noteKeepable, stopKeepWarm, tendKeepWarm } from "../cache-keepwarm.js";
+import { nextPromptDayAt } from "../../../../conversations/actor/conversation-state.js";
 
 // Only the runtime is fake: the actor, registry, reducer and provider module a refresh reports into are the real ones.
 

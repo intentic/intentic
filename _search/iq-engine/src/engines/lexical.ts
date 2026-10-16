@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { scannerPruneGlobs } from "@intentic/workspace-ignore";
-import type { WorkspaceSearchSpan } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchSpan } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import type { EngineHit } from "../types.js";
 import { DENIED_GLOBS } from "../workspace/floor.js";
 

@@ -1,7 +1,7 @@
 import type { SwipeAction } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
-import { unregistered } from "../../fleet/agentStatus";
-import { canArchive, type FleetAgent } from "../../fleet/useAgents-fleet";
+import { unregistered } from "../../../../models/agent-status/agentStatus-standing";
+import { canArchive, type FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 
 // WHAT A THUMB SWIPING A CARD ASIDE FILES IT AS, on a phone's board: the card's own filing press, the one its menu offers
 // (cardMenu.filingRow) and its ⋯ sheet holds, under the same rules, so the swipe can never do what the press would not.

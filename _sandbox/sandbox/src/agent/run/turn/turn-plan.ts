@@ -1,4 +1,7 @@
-import { capabilitiesOf, PersonaPowersSchema, type UsageTurn, withRuntimeDefaults } from "@intentic/sandbox-contract";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
+import type { UsageTurn } from "@intentic/sandbox-contract/schemas/providers/usage";
+import { withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../../composition.js";
 import { armPlan, type TurnArmPlan, type TurnContext, type TurnRefusal } from "../../providers/adapter.js";
 import type { TurnBriefing } from "../../prompt/turn-briefing.js";

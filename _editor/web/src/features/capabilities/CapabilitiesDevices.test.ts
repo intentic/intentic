@@ -2,12 +2,12 @@
 // to show no trace of it while the Devices board listed it as live — one machine, two screens, two answers. These
 // mount the Linux PC tile with exactly that machine in the daemon's device list.
 import "@intentic/testing/dom";
-import type { Device } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
 import { computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import * as actualVueRouter from "vue-router";
-import * as actualUseDevices from "../sandbox/devices/useDevices";
+import * as actualUseDevices from "../../models/sandbox/devices/useDevices";
 
 const NOW = 1_700_000_000_000;
 
@@ -20,7 +20,7 @@ jest.mock(`vue-router`, () => ({
 
 // No capabilities at all: the tile exists, and nothing is connected on it. The machine below is the only row it can
 // possibly draw, so anything on screen came from the device list.
-jest.mock(`./connect/useCapabilities`, () => ({
+jest.mock(`../../models/capabilities/useCapabilities`, () => ({
     useCapabilities: () => ({
         recommendationFor: () => undefined,
         capabilities: ref([]),
@@ -55,7 +55,7 @@ const devicesExtension = {
         },
     },
 };
-jest.mock(`../extensions/useExtensions`, () => ({
+jest.mock(`../../models/extensions/useExtensions`, () => ({
     useExtensions: () => ({
         contributionOf: () => undefined,
         enabled: ref([devicesExtension]),
@@ -64,11 +64,11 @@ jest.mock(`../extensions/useExtensions`, () => ({
     }),
 }));
 jest.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
-jest.mock(`../terminal/useBackgroundProcesses`, () => ({
+jest.mock(`../../models/terminal/useBackgroundProcesses`, () => ({
     useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: jest.fn(), stop: jest.fn() }),
     viewProcessLogs: jest.fn(),
 }));
-jest.mock(`../sandbox/devices/useLiveLinks`, () => ({
+jest.mock(`../../models/sandbox/devices/useLiveLinks`, () => ({
     importForticlient: jest.fn(),
     useLiveLinks: () => ({ links: ref([]), error: ref(undefined), open: jest.fn(), close: jest.fn() }),
 }));
@@ -80,7 +80,7 @@ jest.mock(`./connect/hosts/HostConnectDialog.vue`, () => ({ default: defineCompo
 const fleet = ref<Device[]>([]);
 // Which machine the tile asked the daemon to cut off; no device connection needed, unlike everything else here.
 const revoked: string[] = [];
-jest.mock(`../sandbox/devices/useDevices`, () => ({
+jest.mock(`../../models/sandbox/devices/useDevices`, () => ({
     ...actualUseDevices,
     useDevices: () => ({
         devices: computed(() => fleet.value),

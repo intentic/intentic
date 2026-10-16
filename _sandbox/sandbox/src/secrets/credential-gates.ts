@@ -1,4 +1,4 @@
-import { type CredentialGate, type CredentialGateKind, CredentialGatesSchema } from "@intentic/sandbox-contract";
+import { type CredentialGate, type CredentialGateKind, CredentialGatesSchema } from "@intentic/sandbox-contract/schemas/secrets";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 

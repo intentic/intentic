@@ -1,5 +1,5 @@
 import { unstubbed } from "@intentic/testing";
-import type { UsageWindow } from "@intentic/sandbox-contract";
+import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { pino } from "pino";
 import type { Services } from "../../../../composition.js";
 import { HELD_AT_THE_DOOR, sandboxStarted, spentDoor } from "../spent-door.js";

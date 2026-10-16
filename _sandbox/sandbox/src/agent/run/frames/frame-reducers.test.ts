@@ -1,5 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { AgentEvent, TodoItem } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
 import type { HeldReason, HeldTurn } from "../turn/turn-resume.js";
 import type { UsageFrame } from "../turn/turn-usage.js";
 import {

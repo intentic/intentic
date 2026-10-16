@@ -1,6 +1,7 @@
 import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import { GATE_DAILY_MAX_DEFAULT, type GateVerdict, workflowFaults, workflowRunFaults } from "@intentic/sandbox-contract";
+import { GATE_DAILY_MAX_DEFAULT, type GateVerdict } from "@intentic/sandbox-contract/schemas/workflows";
+import { workflowFaults, workflowRunFaults } from "@intentic/sandbox-contract/text/workflow-faults";
 import type { Context } from "hono";
 import { PAYLOAD_MAX } from "../automations/scheduler.js";
 import { presentedDoorToken } from "../auth/tokens/door-tokens.js";
@@ -12,6 +13,7 @@ import { dailyBudget } from "../store/daily-budget.js";
 import { readBoundedText } from "../http/bounded-body.js";
 import { gateVerdictOf } from "./workflow-gate.js";
 import { openRun, runWorkflow, stopWorkflowRun } from "./workflow-runner.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // Release gate: the daemon's identity-less door that answers synchronously, running exactly the workflow named in the
 // URL. Token-authed (query or bearer), since pipeline callers send no Origin; the gate's presence is its own enable
@@ -149,3 +151,8 @@ export const settledWithin = async (work: Promise<unknown>, ms: number): Promise
         deadline.abort();
     }
 };
+
+// The release gate: a pipeline runner POSTs here and waits for the verdict, authenticated by the workflow's own
+// minted gate token.
+// The only route in the daemon that holds a request open for the work it started.
+export const gateRawRoutes = defineRawRoutes((services: Services) => ({ "POST /workflows/{id}/gate": createGateRoute(services) }));

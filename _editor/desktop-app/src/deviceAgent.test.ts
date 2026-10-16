@@ -1,4 +1,5 @@
-import { AGENT_STALL_AFTER_MS, DEV_VERSION, type DeviceAgent } from "@intentic/sandbox-contract";
+import { AGENT_STALL_AFTER_MS, type DeviceAgent } from "@intentic/sandbox-contract/schemas/devices";
+import { DEV_VERSION } from "@intentic/sandbox-contract/state/versions";
 import type { DeviceStatus } from "./desktop";
 import { desktopAgentPanel } from "./deviceAgent";
 

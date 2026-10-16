@@ -1,4 +1,4 @@
-import type { CapabilitySummary } from "@intentic/sandbox-contract";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { linkedSandboxRowsOf } from "./linkedSandboxRows";
 
 // The Devices board's linked sandboxes: each link card, read off the status its handler last saw over there.

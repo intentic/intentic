@@ -1,4 +1,4 @@
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { createIndicator, type Indicator } from "../indicator.js";
 import { ScopeError } from "../policy.js";
 import { fakeDesktop, fakeIndicatorDeps, fakeWindow } from "../device-testing.js";

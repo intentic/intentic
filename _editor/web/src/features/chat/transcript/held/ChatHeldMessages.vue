@@ -5,17 +5,17 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { useLimitResend } from "../../panel/pane/scheduledSend";
-import { atReopenPhrase, pickUpWhen } from "../../run/endings/pickUp";
+import { atReopenPhrase, pickUpWhen } from "../../../../models/conversations/endings/pickUp";
 import TurnBreakQuestion from "../../panel/TurnBreakQuestion.vue";
-import { usePaneView } from "../../panel/useChat-view";
-import { memoryNext } from "../../run/endings/turnBreak";
+import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
+import { memoryNext } from "../../../../models/conversations/endings/turnBreak";
 import MemoryRaise from "../notices/MemoryRaise.vue";
 import ChatHeldBooking from "./ChatHeldBooking.vue";
 import ChatHeldBubble from "./ChatHeldBubble.vue";
 import ChatHeldStatus from "./ChatHeldStatus.vue";
 import { HELD_PRESS_ATTR } from "../../panel/pane/heldLineSeen";
 import { useHeldQueue } from "./heldQueue";
-import { sendAnywayTip } from "./memoryTip";
+import { sendAnywayTip } from "../../../../models/conversations/transcript/memoryTip";
 
 /* What the conversation's queue holds, drawn where the reader looks for a message they just sent: at the foot of the transcript, as their own prompts. What a Stop or a refusal held is marked not sent, over the one line that says why and the one press that sends it; a low-memory hold also asks what happens next, as a spent allowance does. Each group of messages booked for later stands under its own line with the time it goes, its own Change and its own Send now (ChatHeldBooking). */
 

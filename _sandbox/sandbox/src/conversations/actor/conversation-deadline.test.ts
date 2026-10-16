@@ -1,5 +1,5 @@
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../registry/agents-registry.testing.js";
 import { deadlineKind, deadlines } from "./conversation-deadline.js";
 
 // One timer per conversation per kind, at the exact instant it is due: set, moved, cleared, gone with the conversation,

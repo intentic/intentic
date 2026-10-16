@@ -1,4 +1,4 @@
-import { DEVICE_FEATURE_ROLLBACK_TO, type DeviceFacts, deviceSupports } from "@intentic/sandbox-contract";
+import { DEVICE_FEATURE_ROLLBACK_TO, type DeviceFacts, deviceSupports } from "@intentic/sandbox-contract/schemas/hosts";
 import type { DeviceSandboxRow, RollbackChoice } from "@intentic/ui";
 import { versionName } from "../overview/version/updateOutcome";
 

@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { findHostServers } from "./host-servers.js";
 
 // The hosting computer as the container sees it: Ollama on its port, nothing on the others, and a web app on 8000 that

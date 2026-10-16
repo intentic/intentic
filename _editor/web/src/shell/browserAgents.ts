@@ -1,5 +1,5 @@
-import { turnWorking } from "../features/agents/fleet/agentStatus";
-import { agentById } from "../features/agents/fleet/useAgents-fleet";
+import { turnWorking } from "../models/agent-status/agentStatus-standing";
+import { agentById } from "../models/fleet/useAgents-fleet";
 import { provideAgentTurns } from "../features/browsers/agentTurns";
 
 /**

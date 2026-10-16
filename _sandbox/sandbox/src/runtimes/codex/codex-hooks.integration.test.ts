@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import { codexAllowlistConfig, codexHooksConfig, codexListName, createCodexHookSession, patchFiles } from "./codex-hooks.js";
 import { maskScript } from "./codex-mask-script.js";

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { parseJsonOr } from "@intentic/base/json";
 import { Notice, type NoticeModel, ui, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
@@ -6,7 +7,7 @@ import type { BrokerRule } from "@intentic/extension-manifest";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
 import type { SecretRow } from "../../../sandbox/secrets/secretRows";
-import { useCredentialGates, useCredentialPolicy } from "./useSecrets";
+import { useCredentialGates, useCredentialPolicy } from "../../../../models/capabilities/useSecrets";
 
 // How a connection's credential reaches the agent, under its approver and host guard: held by the sandbox's credential
 // gateway (the default wherever the connector declares routes), an SSH key held by its ssh agent, or handed over as it
@@ -58,13 +59,7 @@ const toggleGateway = (held: boolean): void => void save({ delivery: held ? `gat
 
 // Parsed here only to say what is wrong before a round trip; the daemon validates each rule again.
 const saveRules = async (): Promise<void> => {
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(draft.value);
-    } catch {
-        draftError.value = t(`capabilities.secretCredentialPolicy.notJson`);
-        return;
-    }
+    const parsed = parseJsonOr(draft.value, undefined);
     if (!Array.isArray(parsed)) {
         draftError.value = t(`capabilities.secretCredentialPolicy.notJson`);
         return;

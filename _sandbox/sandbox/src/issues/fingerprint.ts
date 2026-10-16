@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { IssueReport } from "@intentic/sandbox-contract";
+import type { IssueReport } from "@intentic/sandbox-contract/schemas/issues";
 
 // What makes two crashes the same crash, decided before anything else costs money (pure, synchronous, no dependencies).
 // Line/column, filename hashes, session ids and origins are exactly what must be discarded, since they vary per copy,

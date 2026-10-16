@@ -1,7 +1,8 @@
 // needs jsdom: pins position (data itself is pinned in usageStatus.test.ts), specifically that an account
 // heading sits visually above the pool meters it groups, not styled like one of them.
 import "@intentic/testing/dom";
-import type { AccountUsage, OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
+import type { AccountUsage, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
@@ -14,7 +15,7 @@ jest.mock(`vue-router`, () => ({ ...vueRouterOriginal, RouterLink: RouterLinkStu
 // Import chain touches window.matchMedia (@intentic/ui useDevice) and window.env (environment.ts) at import time.
 
 const { default: PlanLimitsPanel } = await import("./PlanLimitsPanel.vue");
-const { accountsLoaded, providerAccounts, translatorAccounts, usageByAccount } = await import("../../chat/accounts/providerAccounts");
+const { accountsLoaded, providerAccounts, translatorAccounts, usageByAccount } = await import("../../../models/providers/providerAccounts");
 const { judgeAccountStores } = await import("../../../testing/judgedAccounts");
 
 const NO_ROUTED: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };

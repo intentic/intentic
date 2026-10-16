@@ -15,7 +15,7 @@ stubGlobal(`localStorage`, {
 });
 jest.mock("../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
 // Every remembered key is filed under the sandbox it belongs to; the ids below are this test's sandbox.
-jest.mock("../../lib/activeSandbox", () => ({
+jest.mock("../../app/storage/activeSandbox", () => ({
     ACTIVE_KEY: `intentic.activeSandboxId`,
     activeSandboxId: ref(`sbx-1`),
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],

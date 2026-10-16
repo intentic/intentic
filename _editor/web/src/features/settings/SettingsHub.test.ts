@@ -10,7 +10,7 @@ import { createMemoryHistory, createRouter, type Router } from "vue-router";
 
 // The plan read still in flight: `enabled` unanswered, so the Billing row has nothing to be drawn from yet.
 const planLoading = ref(true);
-jest.mock(`./hosted-plan/useHostedPlan`, () => ({
+jest.mock(`../../models/hosted-plan/useHostedPlan`, () => ({
     useHostedPlan: () => ({ offered: ref(false), isLoading: planLoading }),
 }));
 

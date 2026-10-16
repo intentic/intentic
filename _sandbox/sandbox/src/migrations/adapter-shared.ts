@@ -1,5 +1,11 @@
-import type { ArrivalItem, Automation, Capability, SkillDraft } from "@intentic/sandbox-contract";
-import { asZone, AutomationSchema, CapabilitySchema, SkillDraftSchema } from "@intentic/sandbox-contract";
+import type { ArrivalItem } from "@intentic/sandbox-contract/state/arrival";
+import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { SkillDraft } from "@intentic/sandbox-contract/schemas/settings";
+import { asZone } from "@intentic/sandbox-contract/time/zone";
+import { AutomationSchema } from "@intentic/sandbox-contract/schemas/automations";
+import { CapabilitySchema } from "@intentic/sandbox-contract/schemas/capabilities";
+import { SkillDraftSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { Cron } from "croner";
 import { isBakedSkill } from "../settings/skills.js";
 import { parseSkillFile, SKILL_FILE } from "../skill-file.js";

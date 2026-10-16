@@ -1,22 +1,23 @@
 <script setup lang="ts">
-import type { TurnBreakPolicy } from "@intentic/sandbox-contract";
+import type { TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { computed } from "vue";
-import { effectiveAutoLand, landedAway, limited, memoryHeld, unregistered, writingNow } from "../../fleet/agentStatus";
+import { effectiveAutoLand, limited, memoryHeld, unregistered, writingNow } from "../../../../models/agent-status/agentStatus-standing";
+import { landedAway } from "../../fleet/agentStatus-land";
 import AgentReactions from "../cards/AgentReactions.vue";
-import { breakAnswers, breakLabel, effectivePolicy, sandboxPolicy } from "../../../chat/run/endings/turnBreak";
+import { breakAnswers, breakLabel, effectivePolicy, sandboxPolicy } from "../../../../models/conversations/endings/turnBreak";
 import type { useAgentChanges } from "../../review/useAgentChanges";
-import { useAgents } from "../../fleet/useAgents";
+import { useAgents } from "../../../../models/fleet/useAgents";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { useAuth } from "../../../../client/auth/useAuth";
-import { agentWork, assignAgent } from "../../fleet/agentActions";
+import { agentWork, assignAgent } from "../../../../models/fleet/agentActions";
 import { startOperation } from "../../../../workbench/operations/operations";
-import { mayAssign, ownedBy } from "../ownership";
-import { landsByDefault } from "../../../sandbox/environment/rules";
-import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
+import { mayAssign, ownedBy } from "../../../../models/agent-status/ownership";
+import { landsByDefault } from "../../../../models/sandbox/environment/rules";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 import { formatClock } from "@intentic/ui/format";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
-import { keptWarm, warmOffer } from "../../fleet/prompt-cache/promptCache";
+import { keptWarm, warmOffer } from "../../../../models/fleet/promptCache";
 
 // Session-level actions (refresh, rename, land, hold, archive, discard), as opposed to diff actions; once-per-session
 // decisions live behind one glyph rather than permanently cluttering the toolbar.

@@ -2,9 +2,9 @@
 import { Modal, ui } from "@intentic/ui";
 import { computed, nextTick, ref, useId, useTemplateRef, watch } from "vue";
 import { useT } from "@intentic/ui/i18n";
-import { useChatSurface } from "../../tools/chatToolSurface";
+import { useChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
 import { type ChatShot, shotName } from "./shots";
-import { downloadOriginal, type Picture, picture } from "../../../workspace/home/thumbnails";
+import { downloadOriginal, type Picture, picture } from "../../../../models/workspace/home/thumbnails";
 
 // The conversation's pictures one at a time and large, opened from a strip's tile or a tool card's picture; the arrows
 // walk every turn's strip in order and the filmstrip jumps. Fit draws the daemon's re-encoded view; actual size swaps in

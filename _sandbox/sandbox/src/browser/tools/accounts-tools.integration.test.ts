@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { accountLine } from "./accounts-tools.js";
 import { markConnected } from "../sessions/session-store.js";
 

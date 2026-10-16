@@ -87,7 +87,7 @@ const holdToShape = async (config: Config, logger: Logger, row: ShapeRow, tally:
             { app: row.appName, machine: stray.id, state: stray.state },
             `hosted app shape: a machine of ours that its sandbox's row does not name; destroying it, its volume stays`,
         );
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one at a time, and there is normally none
+        // one at a time, and there is normally none
         await destroyMachine(flyApiToken, row.appName, stray.id, { force: true });
         tally.destroyed.push(name);
     }
@@ -114,7 +114,7 @@ export const sweepHostedAppShapes = async (
             waiting += 1;
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one app at a time, gentle on the provider
+        // one app at a time, gentle on the provider
         const held = await withHostedAppLock(config, row.appName, false, () => holdToShape(config, logger, row, tally, now())).catch(
             (error: unknown) => {
                 logger.warn(

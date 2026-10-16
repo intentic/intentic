@@ -1,7 +1,7 @@
 import { ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { openById } from "../../agents/fleet/useAgents-actions";
-import { rosterHeard } from "../../agents/fleet/useAgents-registry";
+import { openById } from "../../../models/fleet/useAgents-actions";
+import { rosterHeard } from "../../../models/fleet/useAgents-registry";
 
 /**
  * The full-window chat's half of a link naming a conversation (router/conversationLink.ts): `/chat?focus=<id>` opens

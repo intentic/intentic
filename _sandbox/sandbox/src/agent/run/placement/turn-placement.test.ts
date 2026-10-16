@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import type { RepoSync } from "../../../conversations/land/sync.js";
 import type { ConversationWorktree } from "../../../conversations/worktrees/worktrees.js";

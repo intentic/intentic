@@ -3,7 +3,7 @@ import { Icon, ResponsiveOverlay, type Tip, toneWash, ui, useDevice } from "@int
 import { computed, ref } from "vue";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useScopeTitle } from "../health/scopeTitle";
-import { useWorkspaceTree } from "./useWorkspaceTree";
+import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 import { workspaceAgent } from "../../../app/workspaceScope";
 import { useT } from "@intentic/ui/i18n";
 import WorkspaceScopePicker from "./WorkspaceScopePicker.vue";

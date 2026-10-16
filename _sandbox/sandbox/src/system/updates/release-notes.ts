@@ -3,7 +3,8 @@
 // published GitHub release, not the npm packument. A background timer warms a cache; a failed refresh keeps the
 // previous value.
 
-import { isNewer, type WithdrawnRelease } from "@intentic/sandbox-contract";
+import { isNewer } from "@intentic/sandbox-contract/state/versions";
+import type { WithdrawnRelease } from "@intentic/sandbox-contract/schemas/updates";
 import { isDevBuild } from "../../version.js";
 import { RELEASE_FETCH_TIMEOUT_MS } from "./version-check.js";
 

@@ -1,7 +1,7 @@
 // jsdom: pins that a whole-card-upsert edit doesn't silently drop untouched fields, and that a folder's persona
 // list matches exactly, not more or fewer.
 import "@intentic/testing/dom";
-import type { Persona } from "@intentic/sandbox-contract";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import PrimeVue from "primevue/config";
 import { waitFor } from "@intentic/testing/bun";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -10,7 +10,7 @@ import { IconStub } from "@intentic/ui/testing";
 const personas = ref<Persona[]>([]);
 const save = jest.fn<(persona: Persona) => Promise<unknown>>().mockResolvedValue({ ok: true });
 
-jest.mock(`../../sandbox/personas/usePersonas`, () => ({
+jest.mock(`../../../models/sandbox/personas/usePersonas`, () => ({
     usePersonas: () => ({
         personas,
         connected: ref([]),
@@ -23,7 +23,7 @@ jest.mock(`../../sandbox/personas/usePersonas`, () => ({
 }));
 
 // Mocked since the real composable reaches the sandbox client at import time, unavailable under jsdom.
-jest.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities: ref([]) }) }));
+jest.mock(`../../../models/capabilities/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities: ref([]) }) }));
 
 const { default: DirectoryPersonas } = await import("./DirectoryPersonas.vue");
 

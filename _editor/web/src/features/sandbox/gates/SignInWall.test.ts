@@ -2,7 +2,7 @@
 // inside the desktop app (no FedCM there), and a passkey beside either once the daemon says one is registered here.
 // Step-up: the passkey the sandbox requires, or the walk through adding a first one, with the owner's recovery code.
 import "@intentic/testing/dom";
-import type { DaemonSession } from "@intentic/sandbox-contract";
+import type { DaemonSession } from "@intentic/sandbox-contract/schemas/system";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";

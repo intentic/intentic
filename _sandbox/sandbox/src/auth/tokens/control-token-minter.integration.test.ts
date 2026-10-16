@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { pino } from "pino";
 import { createApp } from "../../app.js";
 import { services } from "../../harness/route-services.testing.js";
-import { testConfig } from "../../testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import { createAuthorizer } from "../auth.js";
 import { createAuthSlice } from "../auth-slice.js";
 import { createAuthConnections } from "../connections.js";

@@ -1,7 +1,7 @@
-import { activeSandboxId } from "../../../_editor/web/src/lib/activeSandbox.ts";
+import { activeSandboxId } from "../../../_editor/web/src/app/storage/activeSandbox.ts";
 import { claimFloating, floatingOwner } from "../../../_editor/web/src/workbench/window/floating.ts";
-import { drawsChat, elsewhereStrip, publishStrip } from "../../../_editor/web/src/features/chat/run/chatEcho.ts";
-import { EMPTY_STRIP } from "../../../_editor/web/src/features/chat/tabs/tabFacts.ts";
+import { drawsChat, elsewhereStrip, publishStrip } from "../../../_editor/web/src/models/conversations/run/chatEcho.ts";
+import { EMPTY_STRIP } from "../../../_editor/web/src/models/conversations/tabs/tabFacts.ts";
 
 activeSandboxId.value = `sb1`;
 const owner = floatingOwner(`chat`);

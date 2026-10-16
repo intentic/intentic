@@ -1,9 +1,10 @@
 import { relative } from "node:path";
 import { contributedEntryOf, extensionIdOf } from "@intentic/extension-manifest";
-import type { Capability, ExtensionRemovalConnection, ExtensionRemovalPlan } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { ExtensionRemovalConnection, ExtensionRemovalPlan } from "@intentic/sandbox-contract/schemas/extension-updates";
 import { type CapabilityCtx, capabilityCtx } from "../capabilities/capability.js";
 import { contributionKey, contributionRegistry, type ResolvedContribution } from "../capabilities/contributions.js";
-import { extensionDir, extensionsRoot } from "../capabilities/extension-dirs.js";
+import { extensionDir, extensionsRoot, extensionProcessKey } from "../capabilities/extension-dirs.js";
 import { previousDir, withCheckoutLock } from "../capabilities/git-checkout.js";
 import { registry } from "../capabilities/registry.js";
 import { secretFieldsOf } from "../capabilities/credentials/secret-fields.js";
@@ -11,14 +12,14 @@ import type { Services } from "../composition.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { mintsEndpointProvider } from "../endpoints/local-model.js";
 import { composeEnvironment } from "../environment/environment.js";
-import { forgetExtensionApproval, revokeExtensionApproval } from "./extension-approvals.js";
-import { displayOf, forgetExtensionDev } from "./extension-dev.js";
-import { forgetExtensionEnablement } from "./extension-enablement.js";
-import { extensionProcessKey, reconcileListenerProcesses } from "./extension-processes.js";
+import { forgetExtensionApproval, revokeExtensionApproval } from "../capabilities/extension-inventory/extension-approvals.js";
+import { displayOf, forgetExtensionDev } from "../capabilities/extension-inventory/extension-dev.js";
+import { forgetExtensionEnablement } from "../capabilities/extension-inventory/extension-enablement.js";
+import { reconcileListenerProcesses } from "./extension-processes.js";
 import { forgetExtensionSettings, readAllExtensionSettings } from "./extension-settings.js";
 import { forgetUpdateState, previousVersionOf } from "./extension-updates.js";
 import { forgetExtensionUsage } from "./extension-usage.js";
-import { ESSENTIAL_EXTENSIONS, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
+import { ESSENTIAL_EXTENSIONS, type InstalledExtension, installedExtensions } from "../capabilities/extension-inventory/installed-extensions.js";
 import { existingExtensionDirs, forgetExtensionDirs } from "./runtime/extension-state.js";
 
 // Removing an extension, and the read an owner gets before deciding to. Removal is the one act that means an

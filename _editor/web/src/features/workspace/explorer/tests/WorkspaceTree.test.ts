@@ -2,16 +2,16 @@
 // file), not just composable state.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
 import type { RowAction } from "../rowActions";
-import type { OpenMode } from "../../tabs/workspaceTabs";
+import type { OpenMode } from "../../../../models/workspace/tabs/workspaceTabs";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { REVEAL_DELAY_MS, type TooltipValue } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
-import { ACTIVE_KEY, activeSandboxId } from "../../../../lib/activeSandbox";
+import { ACTIVE_KEY, activeSandboxId } from "../../../../app/storage/activeSandbox";
 import { useEntryDrag } from "../transfer/useEntryDrag";
 import * as actualSandboxClient from "../../../../client/sandbox/sandboxClient";
 import * as actualSandboxRpc from "../../../../client/sandbox/sandboxRpc";
@@ -93,11 +93,11 @@ const inputsTo = (procedure: ProcedureName): unknown[] =>
     daemon.calls.flatMap((call) => (`procedure` in call && call.procedure === procedure ? [call.input] : []));
 
 const { default: WorkspaceTree } = await import("../WorkspaceTree.vue");
-const { markFailed, noteArriving, reconcileProvisional } = await import("../../files/provisionalEntries");
+const { markFailed, noteArriving, reconcileProvisional } = await import("../../../../models/workspace/files/provisionalEntries");
 const { queryClient } = await import("../../../../lib/queryPersistence");
 const { useLayout } = await import("../../../../workbench/window/useLayout");
 const { useNotifications } = await import("../../../../workbench/notifications/notifications");
-const { useWorkspaceTabs } = await import("../../tabs/useWorkspaceTabs");
+const { useWorkspaceTabs } = await import("../../../../models/workspace/tabs/useWorkspaceTabs");
 
 const layout = useLayout();
 

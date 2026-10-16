@@ -1,4 +1,5 @@
-import type { NativeProvider, OauthAccount } from "@intentic/sandbox-contract";
+import type { NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { Services } from "../../../composition.js";
 import type { AccountDoor } from "../provider-module.js";
 

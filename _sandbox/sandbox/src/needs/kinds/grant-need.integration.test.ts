@@ -1,7 +1,9 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Capability, CapabilitySchema, type Need, type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract";
+import { type Capability, CapabilitySchema } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { Need } from "@intentic/sandbox-contract/schemas/needs";
+import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
 import type { TurnStanding } from "../../conversations/actor/turn-standing.js";
 import { type ConversationGrants, fileConversationGrants } from "../../personas/conversation-grants.js";
 import { grantNeed } from "./grant-need.js";

@@ -1,14 +1,14 @@
 import { sandboxRef } from "@intentic/extension-api";
-import type { RepoTarget } from "@intentic/sandbox-contract";
+import type { RepoTarget } from "@intentic/sandbox-contract/schemas/git/git";
 import type { TooltipValue } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
-import { ahead, behind, syncable, unpublished } from "../../push/outgoingWork";
+import { ahead, behind, syncable, unpublished } from "../../../../models/workspace/push/outgoingWork";
 import { usePushFlow } from "../../push/usePushFlow";
 import { discardTargets, fileRows, type ChangedFile } from "./changedFiles";
-import { truncatedTotal } from "../truncation";
-import { useChanges } from "../useChanges";
+import { truncatedTotal } from "../../../../models/workspace/changes/truncation";
+import { useChanges } from "../../../../models/changes/useChanges";
 
 // What a maker can do to the tree — name and save it, throw some of it away, back it up — and the one question
 // throwing away raises. State lives at module level, per sandbox: the name being typed outlives a trip to the Files tab,

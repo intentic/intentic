@@ -9,7 +9,7 @@ import {
     type PresetItem,
     type PresetValue,
     type ShieldCover,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/compliance";
 import type { Tone } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { RouteLocationRaw } from "vue-router";

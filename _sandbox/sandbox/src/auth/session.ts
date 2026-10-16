@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { writeFileAtomic } from "@intentic/base/fs";
-import { ProofMethodSchema } from "@intentic/sandbox-contract";
+import { ProofMethodSchema } from "@intentic/sandbox-contract/schemas/system";
 import { jwtVerify, SignJWT } from "jose";
 import { z } from "zod";
 import { loadOrMintKey } from "../store/plain-files/minted-key.js";

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { LandedMessageDraft } from "@intentic/sandbox-contract";
+import type { LandedMessageDraft } from "@intentic/sandbox-contract/schemas/agents";
 import { growTextarea, type IconName, type Tip } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
@@ -105,6 +105,9 @@ defineExpose({ focus: (): void => box.value?.focus() });
 
 <template>
     <div class="relative">
+        <!-- allow(tailwind): eight rows exactly: 8 x 16.5px (text-xs at leading-snug) + 8px of py-1 + the 2px border.
+             max-h-36 (144px) would add a 2px sliver of a ninth row under the eighth, which is the visual bug this
+             number was picked to avoid. -->
         <textarea
             ref="box"
             v-model="message"

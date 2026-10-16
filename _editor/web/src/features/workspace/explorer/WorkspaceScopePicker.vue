@@ -5,10 +5,11 @@ import { formatDayMonth, timeAgo } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onMounted, ref, useId } from "vue";
 import { RouterLink } from "vue-router";
-import { agentDisplayTitle, agentStandingMeta, type FleetLane } from "../../agents/fleet/agentStatus";
-import { sandboxNow } from "../../agents/fleet/sandboxClock";
-import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
-import { useAgents } from "../../agents/fleet/useAgents";
+import type { FleetLane } from "../../../models/agent-status/agentStatus-lanes";
+import { agentDisplayTitle, agentStandingMeta } from "../../../models/agent-status/agentStatus-meta";
+import { sandboxNow } from "../../../models/agent-status/sandboxClock";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
+import { useAgents } from "../../../models/fleet/useAgents";
 import { copyMatches, scopeGroups, switchableCopies } from "./scopeChoices";
 
 const t = useT();

@@ -1,4 +1,5 @@
-import type { PipelineRun, ListenerMessage } from "@intentic/sandbox-contract";
+import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import type { ListenerMessage } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import { CI_PROVIDER } from "../automations/catalog.js";
 import { dispatchListenerMessage } from "../automations/listeners.js";
 import type { Services } from "../composition.js";

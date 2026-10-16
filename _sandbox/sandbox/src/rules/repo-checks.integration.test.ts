@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { REPO_CHECKS_FILE, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { REPO_CHECKS_FILE, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
 import { declaredRepoChecks, readRepoDeclaration, repoCheckRules } from "./repo-checks.js";

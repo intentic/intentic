@@ -1,12 +1,12 @@
 // The two reads behind a file chip, focused on what they must never do: quote the same bytes twice, spend a second
 // request on a file the first one already finished, or decode something that isn't text and draw it as lines.
 import { nextTick, ref } from "vue";
-import type { WorkspaceFile } from "@intentic/sandbox-contract";
+import type { WorkspaceFile } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 
 const readWindow = jest.fn<(path: string, opts?: { offset?: number; limit?: number }) => Promise<WorkspaceFile>>();
 const daemonBase = ref<string | undefined>(`https://sandbox-1.example`);
 
-jest.mock("../../workspace/files/fileWindow", () => ({ readFileWindow: (path: string, opts?: object) => readWindow(path, opts) }));
+jest.mock("../../../models/workspace/files/fileWindow", () => ({ readFileWindow: (path: string, opts?: object) => readWindow(path, opts) }));
 jest.mock("../../../client/endpoint/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
 
 const { attachmentQuickLook } = await import("./attachmentQuickLooks");

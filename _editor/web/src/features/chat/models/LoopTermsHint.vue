@@ -1,7 +1,7 @@
 <!-- The vendor's own terms for one loop behind an (i): the card the terms row and a loop chip both raise, so the two say it in the same words. -->
 <script setup lang="ts">
 import { computed } from "vue";
-import type { LoopTerms } from "@intentic/sandbox-contract";
+import type { LoopTerms } from "@intentic/sandbox-contract/models/provider-specs";
 import { InfoHint } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 

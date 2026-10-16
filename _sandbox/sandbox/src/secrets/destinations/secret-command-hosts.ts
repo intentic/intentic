@@ -1,4 +1,4 @@
-import { normalizeHost } from "@intentic/sandbox-contract";
+import { normalizeHost } from "@intentic/sandbox-contract/policy/secret-hosts";
 import { type Reach, STAND_IN, type Unreadable, type Word } from "./secret-command-words.js";
 
 export const URL_SCHEME = /^([a-z][a-z0-9+.-]*):\/\//i;

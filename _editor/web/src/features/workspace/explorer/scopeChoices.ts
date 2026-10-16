@@ -1,5 +1,5 @@
-import { type FleetLane, laneOf } from "../../agents/fleet/agentStatus";
-import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
+import { type FleetLane, laneOf } from "../../../models/agent-status/agentStatus-lanes";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 
 // What the scope switcher lists: every conversation in this sandbox that has a private copy to show, under the board's
 // own lanes so a copy is filed where its card is on /agents. Inside a lane the order is the switcher's own, latest

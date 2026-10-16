@@ -1,11 +1,11 @@
 import type { AgentRequest, TurnHooks } from "../../agent/providers/agent-request.js";
 import { PROJECT_INSTALL_RULE } from "../../agent/providers/project-installs.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { consultWith, vendorSubject } from "../../guard/command-guard.js";
 import { opt } from "../../opt.js";
 import { conversationTainted } from "../../guard/turn-taint.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { vendorTurnGate } from "./vendor-gate.js";
 
 /* The groups a vendor loop's gate is minted from: what it judges by (policy), who judges (hooks), where (spec). */

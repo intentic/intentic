@@ -331,7 +331,7 @@ const STATE_FILES = [
     // Owner's per-extension update posture (notify/agent/auto, advisory opt-out). `carry`: a decision about the
     // extension, not the machine.
     { path: ".intentic/config/extension-update-policy.json", invalidates: ["extensions"], portability: "carry", versioned: true },
-    // Which installed extensions run from a source checkout instead of their pinned clone (extensions/extension-dev.ts).
+    // Which installed extensions run from a source checkout instead of their pinned clone (capabilities/extension-inventory/extension-dev.ts).
     // Local and never versioned: it can name a conversation's worktree, a path that means nothing in a commit or on
     // another machine. `extensions` because the row says where it runs from, and a rebuild reported here is what offers
     // the reload.

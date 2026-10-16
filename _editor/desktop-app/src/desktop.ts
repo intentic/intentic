@@ -1,14 +1,8 @@
+import { parseJsonOr } from "@intentic/base/json";
 import type { ResourcesForm } from "@intentic/ui";
-import type {
-    DeviceReport,
-    DeviceSandbox,
-    IntenticOsChannel,
-    IntenticOsStatus,
-    IntenticOsUpdateCheck,
-    KeyringShareMode,
-    KeyringSource,
-    KeyringState,
-} from "@intentic/sandbox-contract";
+import type { DeviceReport, DeviceSandbox } from "@intentic/sandbox-contract/schemas/devices";
+import type { IntenticOsChannel, IntenticOsStatus, IntenticOsUpdateCheck } from "@intentic/sandbox-contract/schemas/intentic-os";
+import type { KeyringShareMode, KeyringSource, KeyringState } from "@intentic/sandbox-contract/schemas/keyring";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { LocalFirstTask, LocalFound } from "@intentic/web/local-host";
@@ -951,12 +945,8 @@ export const parseRequirement = (line: string): Requirement | undefined => {
     if (found === null) {
         return undefined;
     }
-    try {
-        return requirementOf(JSON.parse(found[1] ?? ``));
-    } catch {
-        // A truncated line (pipe closed mid-write) is not worth a broken screen.
-        return undefined;
-    }
+    // A truncated line (pipe closed mid-write) is not worth a broken screen.
+    return requirementOf(parseJsonOr(found[1] ?? ``, undefined));
 };
 
 // Answers once whether a line is a marker for this window rather than transcript text, so a recognised line never

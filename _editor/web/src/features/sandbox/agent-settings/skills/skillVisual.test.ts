@@ -1,7 +1,9 @@
 // Marks must not be guessed from a skill's name: a renamed connection would lose its brand, and a slug that's
 // also an ordinary word (`linear`) must not borrow a logo it doesn't own.
 import type { ExtensionManifest } from "@intentic/extension-manifest";
-import type { ExtensionSummary, CapabilitySummary, SkillOrigin, SkillSummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { SkillOrigin, SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
 import { type SkillSources, skillVisual } from "./skillVisual";
 
 const skill = (name: string, origin: SkillOrigin, owner?: string): SkillSummary => ({

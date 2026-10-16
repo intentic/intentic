@@ -1,0 +1,3632 @@
+{
+    "_deploy/cli/src/adopt/adopt.command.ts#func#lines": {
+        "count": 107,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/cli/src/apply/apply.command.ts#func#cognitive": {
+        "count": 83,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/cli/src/apply/apply.command.ts#func#cyclomatic": {
+        "count": 51,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/cli/src/apply/apply.command.ts#func#lines": {
+        "count": 275,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/cli/src/demo.ts#up#lines": {
+        "count": 161,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/cli/src/plan/plan.command.ts#func#lines": {
+        "count": 133,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/engine/src/reconcile/apply.ts#apply#cognitive": {
+        "count": 31,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/engine/src/reconcile/orphans.ts#collectOrphans#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/engine/src/reconcile/plan.ts#plan#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/providers/src/core/ssh.ts#connect.<anonymous>#lines": {
+        "count": 162,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/providers/src/core/ssh.ts#connect.<anonymous>~2#lines": {
+        "count": 119,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/providers/src/core/ssh.ts#connect#lines": {
+        "count": 165,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/providers/src/core/ssh.ts#createSshExecutor#lines": {
+        "count": 199,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/providers/src/forgejo/forgejo.ts#createForgejoProvider#lines": {
+        "count": 134,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/providers/src/host/workspace.ts#createWorkspaceProvider#lines": {
+        "count": 138,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/providers/src/integrations/discord.ts#createDiscordProvider#lines": {
+        "count": 125,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/providers/src/integrations/discord.ts#read#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/providers/src/observability/signoz.ts#otelCollectorConfig#lines": {
+        "count": 119,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/providers/src/services/compose-service.ts#createComposeServiceProvider#lines": {
+        "count": 170,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/sdk/src/stack.ts#createStack#lines": {
+        "count": 240,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/state-resolver/src/emit/emit.ts#emit#cognitive": {
+        "count": 88,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/state-resolver/src/emit/emit.ts#emit#cyclomatic": {
+        "count": 60,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/state-resolver/src/emit/emit.ts#emit#lines": {
+        "count": 315,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/state-resolver/src/intent/needs.ts#resolveNeeds#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/state-resolver/src/resolvers/app.ts#resolveApp#cognitive": {
+        "count": 38,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/state-resolver/src/resolvers/app.ts#resolveApp#cyclomatic": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/state-resolver/src/resolvers/app.ts#resolveApp#lines": {
+        "count": 222,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/state-resolver/src/resolvers/identity.ts#resolveIdentities#cognitive": {
+        "count": 39,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/state-resolver/src/resolvers/identity.ts#resolveIdentities#cyclomatic": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/state-resolver/src/resolvers/identity.ts#resolveIdentities#lines": {
+        "count": 112,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/acp-bridge/src/bridge.ts#bridgeAgentApp.<anonymous>#cognitive": {
+        "count": 37,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/acp-bridge/src/bridge.ts#bridgeAgentApp.<anonymous>#cyclomatic": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/acp-bridge/src/bridge.ts#bridgeAgentApp#lines": {
+        "count": 206,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/browser/src/index.ts#browser#lines": {
+        "count": 118,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/local-agent/src/autostart.ts": {
+        "count": 856,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/local-agent/src/layout.ts#stopLines#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/local-agent/src/ui.ts": {
+        "count": 676,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/local-agent/src/ui.ts#createUi#cognitive": {
+        "count": 38,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/local-agent/src/ui.ts#createUi#lines": {
+        "count": 449,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/local-agent/src/ui.ts#fail#cognitive": {
+        "count": 31,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/local-files/src/server.ts#createLocalFilesServer#lines": {
+        "count": 103,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/device/connection.ts#connect#lines": {
+        "count": 130,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/device/mcp.ts": {
+        "count": 759,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/device/sandbox-rounds/keeper.ts": {
+        "count": 819,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/device/tools/android.ts": {
+        "count": 767,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/device/tools/programs/programs.ts": {
+        "count": 619,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/device/tools/programs/programs.ts#appStatus#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/device/tools/sandboxes.ts": {
+        "count": 788,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/environments/children.ts#superviseChildren#lines": {
+        "count": 126,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/sync/commands.ts": {
+        "count": 1042,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/sync/commands.ts#runSetup#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/sync/commands.ts#runSetup#lines": {
+        "count": 101,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/sync/git-bridge.ts#bridgeRepo#cognitive": {
+        "count": 31,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/sync/git-bridge.ts#bridgeRepo#cyclomatic": {
+        "count": 41,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/sync/mirror.ts": {
+        "count": 1482,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/sync/mutagen.ts": {
+        "count": 1332,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/sync/retire.ts#retireSandbox#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/upkeep/reconcile.ts#reconcile#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/webext/src/background/activity.ts#describeCall#cyclomatic": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/webext/src/page/driver.ts#askConfirm#lines": {
+        "count": 115,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/webext/src/page/driver.ts#collectPage#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/webext/src/page/driver.ts#collectPage#lines": {
+        "count": 135,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/webext/src/page/driver.ts#roleOf#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/webext/src/popup/popup.ts": {
+        "count": 625,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/webext/src/popup/popup.ts#ago#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/webext/src/popup/popup.ts#wire#lines": {
+        "count": 104,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/desktop-app/local/devDesktop.ts": {
+        "count": 826,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/desktop-app/src/desktop.ts": {
+        "count": 899,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/desktop-app/src/device/DeviceView.vue": {
+        "count": 665,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/desktop-app/src/device/setup.ts": {
+        "count": 1064,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/ui/src/components/markdown/MarkdownDocumentSurface.vue": {
+        "count": 788,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/ui/src/components/sandbox/deviceDetail.ts": {
+        "count": 791,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/ui/src/composables/useHighlighter.ts#highlightSliced#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/ui/src/composables/useHoverMenu.ts#useHoverMenu#lines": {
+        "count": 163,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/ui/src/lib/anchorPlacement.ts#placeAnchored#cognitive": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/ui/src/markdown/figures.ts#splitFigureSegments#cognitive": {
+        "count": 27,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/ui/src/markdown/figures.ts#splitFigureSegments#cyclomatic": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/ui/src/markdown/sourceDom.ts": {
+        "count": 792,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/source-aliases.ts#sourceAliases#lines": {
+        "count": 182,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/app/analytics.ts#initAnalytics#lines": {
+        "count": 101,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/app/environments/desktop.ts": {
+        "count": 657,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/client/sandbox/lazyByPath.ts#lazyByPath#lines": {
+        "count": 107,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/client/session/liveSocket.ts#liveSocket#lines": {
+        "count": 165,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/client/session/sandboxSession.ts": {
+        "count": 864,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/core-views/infrastructure/applyProgress.ts#reduceApplyLine#cognitive": {
+        "count": 38,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/core-views/infrastructure/applyProgress.ts#reduceApplyLine#cyclomatic": {
+        "count": 35,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/core-views/infrastructure/InfraDeclare.vue": {
+        "count": 672,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/core-views/infrastructure/useApplyProgress.ts#useApplyProgress#lines": {
+        "count": 166,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/core-views/infrastructure/usePlanPreview.ts#usePlanPreview#lines": {
+        "count": 176,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/extension-host/apiImpl.ts#createExtensionApi#cognitive": {
+        "count": 75,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/extension-host/apiImpl.ts#createExtensionApi#lines": {
+        "count": 446,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/board/AgentsView.vue": {
+        "count": 818,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/board/cards/AgentCard.vue": {
+        "count": 1035,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/board/useAgentFilter.ts#useAgentFilter#lines": {
+        "count": 168,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/board/view/boardLanes.ts#useBoardLanes#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/board/view/boardLanes.ts#useBoardLanes#lines": {
+        "count": 133,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/board/view/boardPresses.ts#useBoardPresses#lines": {
+        "count": 104,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/board/view/cardMenu.ts#menuItemsFor#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/board/view/cardSelection.ts#useCardFocus#lines": {
+        "count": 191,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/board/view/laneMotion.ts#useLaneMotion.<anonymous>#cognitive": {
+        "count": 34,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/board/view/laneMotion.ts#useLaneMotion#lines": {
+        "count": 116,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/metrics/sandboxFigures.ts#useSandboxReadout#lines": {
+        "count": 186,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/review/AgentDetail.vue": {
+        "count": 822,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/review/AgentReviewPanel.vue": {
+        "count": 1098,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/review/pager/swipePager.ts#useSwipePager#lines": {
+        "count": 256,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/review/useAgentChanges.ts#useAgentChanges#cognitive": {
+        "count": 49,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/review/useAgentChanges.ts#useAgentChanges#lines": {
+        "count": 341,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/auth/DesktopAuth.vue": {
+        "count": 741,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/auth/useEmailCode.ts#useEmailCode#lines": {
+        "count": 119,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/browsers/useBrowserView.ts#useBrowserView#cognitive": {
+        "count": 36,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/browsers/useBrowserView.ts#useBrowserView#lines": {
+        "count": 258,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/capabilities/Capabilities.vue": {
+        "count": 831,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/capabilities/capabilityForm.ts#useCapabilityForm#cognitive": {
+        "count": 39,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/capabilities/capabilityForm.ts#useCapabilityForm#lines": {
+        "count": 250,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/capabilities/capabilityPairing.ts#useCapabilityPairing#lines": {
+        "count": 135,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/accounts/pickerAccounts.ts#usePickerAccounts#lines": {
+        "count": 134,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/composer/voice/useComposerVoice.ts#useComposerVoice#lines": {
+        "count": 219,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/drafts/useChatAttachments.ts#useChatAttachments#lines": {
+        "count": 121,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/models/ModelPicker.vue": {
+        "count": 619,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/models/run-settings/useRunThrough.ts#useRunThrough#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/models/run-settings/useRunThrough.ts#useRunThrough#lines": {
+        "count": 181,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/panel/ChatPane.vue": {
+        "count": 1111,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/panel/pane/composerControls.ts#useComposerControls#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/panel/pane/composerControls.ts#useComposerControls#lines": {
+        "count": 140,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/panel/pane/composerKeys.ts#useComposerKeys#lines": {
+        "count": 146,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/panel/pane/composerPopovers.ts#useComposerPopovers#lines": {
+        "count": 134,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/panel/pane/composerSend.ts#useComposerSend#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/panel/pane/composerSend.ts#useComposerSend#lines": {
+        "count": 276,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/panel/pane/paneAttach.ts#usePaneAttach#lines": {
+        "count": 108,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/panel/pane/paneWindow.ts#useRowBudget#lines": {
+        "count": 112,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/tabs/ChatTabs.vue": {
+        "count": 621,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/tabs/ChatTabs.vue#<anonymous>#lines": {
+        "count": 149,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/tabs/useChatRowActions.ts#createChatRowActions.<anonymous>#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/tabs/useChatRowActions.ts#createChatRowActions#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/tabs/useChatRowActions.ts#createChatRowActions#lines": {
+        "count": 221,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/transcript/ChatMessageView.vue": {
+        "count": 656,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/transcript/pages/ChatPageFrame.vue#act#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/transcript/pages/ChatPageFrame.vue#act#cyclomatic": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/transcript/pages/pageBridge.ts#readPageAsk#cognitive": {
+        "count": 39,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/transcript/pages/pageBridge.ts#readPageAsk#cyclomatic": {
+        "count": 36,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/transcript/useStickToBottom.ts#useStickToBottom#lines": {
+        "count": 112,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/desktop/useDesktopView.ts#useDesktopView#cognitive": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/desktop/useDesktopView.ts#useDesktopView#lines": {
+        "count": 164,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/extensions/extensionFacets.ts#facetsOf#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/extensions/extensionFacets.ts#facetsOf#lines": {
+        "count": 121,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/extensions/reconcileStatus.ts#readPlanSteps#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/extensions/useExtensionList.ts#useExtensionList#lines": {
+        "count": 112,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/gettingStarted/useGettingStarted.ts#create#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/gettingStarted/useGettingStarted.ts#create#lines": {
+        "count": 125,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/needs/NeedAutomationBody.vue#<anonymous>#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/access/SandboxAccess.vue": {
+        "count": 782,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/access/usePasskeys.ts#usePasskeys#lines": {
+        "count": 115,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/devices/DevicePage.vue": {
+        "count": 783,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/devices/phones/phoneRows.ts#phoneRowOf#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/devices/runners/agentRun.ts#agentRunTitle#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/devices/runners/deviceOps.ts": {
+        "count": 1071,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/devices/runners/deviceOps.ts#useDeviceOps#cognitive": {
+        "count": 59,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/devices/runners/deviceOps.ts#useDeviceOps#lines": {
+        "count": 685,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/devices/runners/deviceUpdateStages.ts#foldUpdateLine#cyclomatic": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/gates/SandboxSwitcher.vue": {
+        "count": 792,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/overview/sandboxAttention.ts#useSandboxAttention.<anonymous>#lines": {
+        "count": 134,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/overview/sandboxAttention.ts#useSandboxAttention#lines": {
+        "count": 189,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/overview/version/SandboxUpdateCard.vue": {
+        "count": 677,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/recovery/useRecovery.ts#useRecovery#lines": {
+        "count": 126,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/settings/DesignKit.vue": {
+        "count": 1064,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/setup/flow/useAttachLane.ts#useAttachLane#lines": {
+        "count": 116,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/setup/flow/useCommandLane.ts#useCommandLane#lines": {
+        "count": 123,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/setup/flow/useHostedLane.ts#useHostedLane#cognitive": {
+        "count": 40,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/setup/flow/useHostedLane.ts#useHostedLane#lines": {
+        "count": 415,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/setup/flow/useRegistryWatch.ts#useRegistryWatch#lines": {
+        "count": 102,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/setup/flow/useRunStep.ts#useRunStep#lines": {
+        "count": 132,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/setup/flow/useSetupArrival.ts#useSetupArrival#lines": {
+        "count": 182,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/setup/flow/useSetupRow.ts#useSetupRow#lines": {
+        "count": 109,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/setup/Setup.vue": {
+        "count": 1552,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/terminal/channel/streamSocket.ts#receive#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/terminal/panel/useScrollbackView.ts#useScrollbackView#lines": {
+        "count": 103,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/terminal/terminalSession.ts#createTerminalSession#lines": {
+        "count": 118,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/terminal/useTerminal.ts": {
+        "count": 671,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/terminal/useTerminal.ts#createTerminalTabs#cognitive": {
+        "count": 37,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/terminal/useTerminal.ts#createTerminalTabs#lines": {
+        "count": 541,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/terminal/useTerminal.ts#relist#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/changes/changeOrigins.ts#stepRow#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/changes/changeOrigins.ts#summarizeOrigins#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/changes/ReviewPanel.vue": 1732,
+    "_editor/web/src/features/workspace/changes/save/useSaveActions.ts#useSaveActions#lines": {
+        "count": 105,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/explorer/tree/useTreeGestures.ts#useTreeGestures#lines": {
+        "count": 126,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/explorer/tree/useTreeRows.ts#useTreeRows#lines": {
+        "count": 103,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/explorer/tree/useTreeTransfer.ts#useTreeTransfer#lines": {
+        "count": 213,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/explorer/WorkspaceTree.vue": {
+        "count": 691,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/files/upload/useUploadQueue.ts": {
+        "count": 908,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/files/upload/useUploadQueue.ts#copyViaApp#lines": {
+        "count": 111,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/files/upload/useUploadQueue.ts#report#cognitive": {
+        "count": 33,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/files/upload/useUploadQueue.ts#uploadChunk#cognitive": {
+        "count": 29,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/files/upload/useUploadQueue.ts#useUploadQueue#lines": {
+        "count": 184,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/home/HomeView.vue": {
+        "count": 733,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/page/WorkspaceDesktop.vue": {
+        "count": 1212,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/page/WorkspaceDesktop.vue#<anonymous>#lines": {
+        "count": 129,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/page/WorkspaceMobile.vue": {
+        "count": 753,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/viewers/FileViewer.vue": {
+        "count": 869,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/workspace/viewers/markdownOutline.ts#useMarkdownOutline#lines": {
+        "count": 132,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/browsers/useScreencast.ts#useScreencast#lines": {
+        "count": 159,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/browsers/videoSink.ts#videoSink#lines": {
+        "count": 164,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/conversations/panel/useChat-view.ts#conversationView#cognitive": {
+        "count": 46,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/conversations/panel/useChat-view.ts#conversationView#lines": {
+        "count": 168,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/conversations/session/turnClient.ts": {
+        "count": 1306,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/conversations/transcript/transcriptState.ts#applyPatch#cognitive": {
+        "count": 27,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/conversations/transcript/transcriptState.ts#applyPatch#cyclomatic": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/extensions/useExtensions.ts#useExtensions#lines": {
+        "count": 104,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/fleet/board/boardTrays.ts#useBoardTrays#lines": {
+        "count": 110,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/fleet/board/childFold.ts#foldChildren#cognitive": {
+        "count": 34,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/providers/usageStatus.ts": {
+        "count": 827,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/sandbox/devices/deviceRows.ts": {
+        "count": 827,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/sandbox/devices/useDesktopSync.ts#useDesktopSync#lines": {
+        "count": 145,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/sandbox/live/acrossSandboxes.ts#createAcrossStore#lines": {
+        "count": 114,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/terminal/useBackgroundProcesses.ts#useBackgroundProcesses#lines": {
+        "count": 104,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/voice/speechLink.ts#httpTransport#lines": {
+        "count": 103,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/voice/speechLink.ts#openSpeechLink#lines": {
+        "count": 142,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/voice/speechPlayer.ts#createSpeechPlayer#lines": {
+        "count": 221,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/voice/useVoiceInput.ts#start.<anonymous>#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/voice/useVoiceInput.ts#start#lines": {
+        "count": 229,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/voice/useVoiceInput.ts#useVoiceInput#lines": {
+        "count": 340,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/workspace/tree/useWorkspaceTree.ts#useWorkspaceTree#cognitive": {
+        "count": 33,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/workspace/tree/useWorkspaceTree.ts#useWorkspaceTree#lines": {
+        "count": 385,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/shell/browsers/LiveBrowser.vue": {
+        "count": 1742,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/shell/commands/useJumpRows.ts#useJumpRows#lines": {
+        "count": 202,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/shell/commands/useNavigationCommands.ts#useNavigationCommands#lines": {
+        "count": 144,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/shell/commands/useShellCommands.ts#useShellCommands#lines": {
+        "count": 115,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/shell/edgeBack.ts#useEdgeBack#lines": {
+        "count": 314,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/shell/notifications/notificationSources.ts#startNotificationSources#lines": {
+        "count": 328,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/shell/prefetch/backgroundLoader.ts#runBackgroundLoader#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/shell/ShellDesktop.vue": {
+        "count": 800,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/workbench/push/usePushNotifications.ts#usePushNotifications#lines": {
+        "count": 116,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/workbench/window/floating.ts": {
+        "count": 644,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/workbench/window/floating.ts#claimFloating#lines": {
+        "count": 106,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/vite.shared.ts#devStyleSource#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/activity/src/episodes.ts#turnEpisode#cognitive": {
+        "count": 29,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/approvals/src/ApprovalsView.vue": {
+        "count": 847,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/automations/src/AutomationFields.vue": {
+        "count": 1400,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/automations/src/AutomationRow.vue": {
+        "count": 605,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/automations/src/calendarModel.ts#calendarWeek#cognitive": {
+        "count": 42,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/automations/src/cronSchedule.ts#parseCron#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/automations/src/cronSchedule.ts#parseCron#cyclomatic": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/automations/src/useAutomationForm.ts": {
+        "count": 931,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/automations/src/useAutomationForm.ts#build#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/automations/src/useAutomationForm.ts#useAutomationForm#cognitive": {
+        "count": 58,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/automations/src/useAutomationForm.ts#useAutomationForm#lines": {
+        "count": 830,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/discord/src/voice.ts#joinVoice#lines": {
+        "count": 113,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/git-history/src/GitHistoryTab.vue": {
+        "count": 887,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/git-history/src/useGitLog.ts#useGitLog#cognitive": {
+        "count": 27,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/google-workspace/src/google/csv.ts#parseCsv#cognitive": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/google-workspace/src/watch/poller.ts#startWatcher#lines": {
+        "count": 196,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/imap/src/connection.ts#openImapConnection#lines": {
+        "count": 147,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/imap/src/normalize.ts#mailMessage#cyclomatic": {
+        "count": 27,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/onlyoffice/src/server/browser-engine.ts#createBrowserEngine#lines": {
+        "count": 160,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/onlyoffice/src/server/listener.ts#createListener#lines": {
+        "count": 220,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/onlyoffice/src/server/local-office.ts#createLocalOffice#lines": {
+        "count": 174,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/onlyoffice/src/server/server.ts#activateServer#lines": {
+        "count": 246,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/pipelines/src/failureHistory.ts#recurringFailures#cognitive": {
+        "count": 39,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/repo-apps/src/depModel.ts#flowOrder#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/repo-apps/src/layerModel.ts#cyclesAmong#cognitive": {
+        "count": 30,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/repo-apps/src/layerModel.ts#stackOf#cognitive": {
+        "count": 31,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/slack/src/listener.ts#createSlackListener#lines": {
+        "count": 263,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/slack/src/reply.ts#createSlackReply#lines": {
+        "count": 155,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/telegram/src/client.ts#loop#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/telegram/src/listener.ts#createTelegramListener#lines": {
+        "count": 182,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/viewers/src/MediaViewer.vue": {
+        "count": 637,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/viewers/src/MediaViewer.vue#onKeyDown#cyclomatic": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/whatsapp/src/client.ts": {
+        "count": 633,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/whatsapp/src/content.ts#contentOf#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/whatsapp/src/content.ts#contentOf#cyclomatic": {
+        "count": 30,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/whatsapp/src/store.ts#directory#cognitive": {
+        "count": 47,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/whatsapp/src/store.ts#directory#cyclomatic": {
+        "count": 36,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/whatsapp/src/store.ts#openWaStore#cognitive": {
+        "count": 29,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/whatsapp/src/store.ts#openWaStore#lines": {
+        "count": 331,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/whatsapp/src/store.ts#upsertContacts.<anonymous>#cognitive": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/whatsapp/src/sync.ts#toStored#cognitive": {
+        "count": 32,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/whatsapp/src/sync.ts#toStored#cyclomatic": {
+        "count": 39,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/admin/admin-attention.ts#adminAttention#lines": {
+        "count": 167,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/admin/admin-costs.ts#adminCosts#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/admin/admin-user.ts#adminUserDetail#lines": {
+        "count": 138,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/app.ts#createApp#lines": {
+        "count": 489,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/fleet/fleet.routes.ts#fleetHttpRoutes#lines": {
+        "count": 115,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/repair/repair-tools.ts#repairToolDefinitions#lines": {
+        "count": 128,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/repair/repair-turn-schema.ts#asOpenAiMessages#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/repair/repair.routes.ts#repairRoutes#lines": {
+        "count": 106,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/sandbox/hosted/build/hosted-build.ts": {
+        "count": 652,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/sandbox/hosted/build/hosted-build.ts#finishHostedBuild#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/sandbox/hosted/build/hosted-build.ts#reconcileHostedBuilds#cognitive": {
+        "count": 27,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/sandbox/hosted/gate/state-gate.ts": {
+        "count": 654,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/sandbox/hosted/hosted-pool.ts#reconcileHostedPool#cognitive": {
+        "count": 29,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/sandbox/hosted/hosted.ts": {
+        "count": 1109,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/sandbox/hosted/plan/hosted-plan.orpc.ts#hostedPlanRoutes#lines": {
+        "count": 124,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/sandbox/sandbox.routes.ts": {
+        "count": 906,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/trial/trial-pool.ts#call#cognitive": {
+        "count": 54,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/trial/trial-pool.ts#call#cyclomatic": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/trial/trial-pool.ts#createTrialPool#lines": {
+        "count": 172,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/trial/trial.routes.ts#trialRoutes#lines": {
+        "count": 129,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/wallet/wallet.routes.ts#walletHttpRoutes.<anonymous>#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/wallet/wallet.routes.ts#walletHttpRoutes.<anonymous>#lines": {
+        "count": 110,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/wallet/wallet.routes.ts#walletHttpRoutes#lines": {
+        "count": 155,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/agent-context/src/workspace-map.ts#walk#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/claude-plugin/src/notes-evidence.ts#digestOf#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/claude-plugin/src/session-start.ts#compose#cognitive": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/fileq/src/lib/check/check-pptx.ts": {
+        "count": 678,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/gate/src/gate.ts#parseArgs#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/issue-sdk/src/styles.ts#dialogStyles#lines": {
+        "count": 106,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/ocr/src/geometry.ts#fillPolygon#cognitive": {
+        "count": 30,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/ocr/src/geometry.ts#perspectiveTransform#cognitive": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/output-cleaners/bench/cleaner-bench.mjs#readCorpus#cognitive": {
+        "count": 41,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/output-cleaners/bench/cleaner-bench.mjs#readCorpus#cyclomatic": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/output-cleaners/src/agent-output-filter.mjs#filterOutput#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/output-cleaners/src/agent-output-filter.mjs#filterOutput#cyclomatic": {
+        "count": 29,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/output-cleaners/src/agent-output-filter.mjs#filterRun#cyclomatic": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/output-cleaners/src/cleaners.mjs": {
+        "count": 866,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/privacy-detect/src/contact.ts#isPhone#cognitive": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/privacy-detect/src/contact.ts#isPhone#cyclomatic": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/agent-bench.ts#main#cognitive": {
+        "count": 36,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/agent-bench.ts#report#cognitive": {
+        "count": 43,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/agent-bench.ts#runOnce#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/agent-bench.ts#runOnce#cyclomatic": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/agent-tasks.ts#stripComments#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/guidance-corpus.ts#guidanceStats#cognitive": {
+        "count": 108,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/guidance-corpus.ts#guidanceStats#cyclomatic": {
+        "count": 52,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/guidance-corpus.ts#guidanceStats#lines": {
+        "count": 241,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/guidance-corpus.ts#readCalls#cognitive": {
+        "count": 40,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/guidance-corpus.ts#readCalls#cyclomatic": {
+        "count": 27,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/handoff-arms.ts#chainBefore#cyclomatic": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/handoff-arms.ts#renderTranscript#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/handoff-arms.ts#stateNote#cognitive": {
+        "count": 48,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/handoff-arms.ts#stateNote#cyclomatic": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/handoff-arms.ts#transcriptRows#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/handoff-arms.ts#trimSession#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/handoff-bench.ts": {
+        "count": 702,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/handoff-bench.ts#candidates#cognitive": {
+        "count": 31,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/handoff-bench.ts#candidates#cyclomatic": {
+        "count": 27,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/handoff-bench.ts#report#cognitive": {
+        "count": 50,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/handoff-bench.ts#report#cyclomatic": {
+        "count": 37,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/handoff-bench.ts#runQuery#cognitive": {
+        "count": 30,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/handoff-bench.ts#runQuery#cyclomatic": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/handoff-bench.ts#tier0#cognitive": {
+        "count": 69,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/handoff-bench.ts#tier0#cyclomatic": {
+        "count": 50,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/handoff-bench.ts#tier0#lines": {
+        "count": 112,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/map-corpus.ts#compactNoteOf#cognitive": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/map-corpus.ts#payloadOf#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/models/role-model.ts#askRoleModel#lines": {
+        "count": 169,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/pages/page-assets.ts#carrierFor#lines": {
+        "count": 156,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/pages/page-draft.ts#step#cognitive": {
+        "count": 32,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/pages/page-draft.ts#step#cyclomatic": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/accounts/switch-account.ts#switchAccount#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/accounts/switch-account.ts#switchAccount#cyclomatic": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/agent-installs.ts": {
+        "count": 808,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/agent-installs.ts#classifyImageInstalls#cognitive": {
+        "count": 132,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/agent-installs.ts#classifyImageInstalls#cyclomatic": {
+        "count": 68,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/agent-installs.ts#classifyImageInstalls#lines": {
+        "count": 113,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/agent-installs.ts#installsIn#cognitive": {
+        "count": 33,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/agent-installs.ts#nodeInstallOf#cognitive": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/agent-installs.ts#tokenize#cognitive": {
+        "count": 37,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/agent-installs.ts#tokenize#cyclomatic": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/agent-installs.ts#withoutPrefixes#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/harness-credentials.ts#resolveHarnessCredentials#cognitive": {
+        "count": 43,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/harness-credentials.ts#resolveHarnessCredentials#cyclomatic": {
+        "count": 35,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/translator.ts": {
+        "count": 693,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/translator.ts#createCliProxyClient#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/translator.ts#createCliProxyClient#lines": {
+        "count": 417,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/routes/agent.routes.ts#createAgentRoutes.<anonymous>#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/routes/agent.routes.ts#createAgentRoutes#lines": {
+        "count": 291,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/agent.ts": {
+        "count": 1090,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/agent.ts#baseOptions#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/agent.ts#baseOptions#cyclomatic": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/agent.ts#baseOptions#lines": {
+        "count": 147,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/agent.ts#permissionGate#lines": {
+        "count": 109,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/agent.ts#runAgent.<anonymous>#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/agent.ts#runAgent#lines": {
+        "count": 196,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/harness/harness-servers.ts#release#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/placement/worktree-placement.ts#worktreePlacement#lines": {
+        "count": 135,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/sdk-stream.ts": {
+        "count": 1070,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/sdk-stream.ts#onResult#cyclomatic": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/sdk-stream.ts#onStreamEvent#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/sdk-stream.ts#onStreamEvent#cyclomatic": {
+        "count": 30,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/sdk-stream.ts#onSystem#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/stream-agent.ts": 1086,
+    "_sandbox/sandbox/src/agent/run/stream-agent.ts#preflight#cyclomatic": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/turn/turn-admission.ts": {
+        "count": 646,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/turn/turn-admission.ts#createAdmission#lines": {
+        "count": 312,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts": {
+        "count": 1207,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts#rehydrateParkedTurn#lines": {
+        "count": 185,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/turn/turn-runs.ts": {
+        "count": 613,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/turn/turn-runs.ts#startTurnRun.<anonymous>#cognitive": {
+        "count": 38,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/turn/turn-runs.ts#startTurnRun.<anonymous>#cyclomatic": {
+        "count": 30,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/turn/turn-runs.ts#startTurnRun.<anonymous>#lines": {
+        "count": 111,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/turn/turn-runs.ts#startTurnRun#lines": {
+        "count": 212,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/subagents/children.routes.ts#createChildrenRoutes#lines": {
+        "count": 215,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/subagents/children.ts": {
+        "count": 1902,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/subagents/subagent-wait.ts#subagentWaitServer#lines": {
+        "count": 252,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/subagents/subagents.ts": {
+        "count": 1078,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/subagents/subagents.ts#noteSubagentTask#cognitive": {
+        "count": 63,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/subagents/subagents.ts#noteSubagentTask#cyclomatic": {
+        "count": 40,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/tools/agent-terminals.ts#bashTmuxHooks#lines": {
+        "count": 121,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/tools/jobs/background-jobs.ts": {
+        "count": 863,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/tools/turn-mounts.ts#createTurnMounts#lines": {
+        "count": 154,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/verification/agent-diagnostics.ts#editDiagnosticsHooks#lines": {
+        "count": 173,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/verification/agent-verification.ts#classifyCommand#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/verification/watch-server.ts#watchServer#lines": {
+        "count": 127,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/app.ts": {
+        "count": 688,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/app.ts#createApp#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/app.ts#createApp#lines": {
+        "count": 561,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/approvals/approvals-executor.ts#createApprovalsExecutor#lines": {
+        "count": 233,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_sandbox/sandbox/src/audit/audit-forward.ts#createAuditForwarder#lines": {
+        "count": 130,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/auth/auth.ts": {
+        "count": 680,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/auth/auth.ts#createAuthorizer#lines": {
+        "count": 196,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/auth/passkeys/passkey-store.ts#createPasskeyCeremonies#lines": {
+        "count": 150,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/auth/passkeys/passkeys.routes.ts#createPasskeyRoutes#lines": {
+        "count": 201,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/automations/automations-store.ts#fileAutomationsStore#lines": {
+        "count": 108,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/automations/automations.routes.ts#createAutomationsRoutes#lines": {
+        "count": 139,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/automations/scheduler.ts": {
+        "count": 1291,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/automations/scheduler.ts#runFire#cognitive": {
+        "count": 82,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/automations/scheduler.ts#runFire#cyclomatic": {
+        "count": 70,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/automations/scheduler.ts#runFire#lines": {
+        "count": 273,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/automations/watch/watch-condition.ts#checkCondition#cognitive": {
+        "count": 27,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/bootstrap/boot-schedulers.ts#startBootSchedulers#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/bootstrap/state-registry.ts#stateDocuments#lines": {
+        "count": 123,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_sandbox/sandbox/src/browser/cast/browser-view.ts#createBrowserViewRoute.<anonymous>#lines": {
+        "count": 208,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/cast/browser-view.ts#createBrowserViewRoute#lines": {
+        "count": 209,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/cast/live-view.ts": {
+        "count": 609,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/cast/live-view.ts#startFramesView#lines": {
+        "count": 105,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/cast/live-view.ts#startVideoView#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/cast/live-view.ts#startVideoView#lines": {
+        "count": 298,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/cast/screencast.ts": {
+        "count": 609,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/cast/screencast.ts#startScreencast#lines": {
+        "count": 194,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/cast/video-window.ts#videoWindow#lines": {
+        "count": 155,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/sessions/browser-profile.routes.ts#createBrowserProfileRoute.<anonymous>#lines": {
+        "count": 258,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/sessions/browser-profile.routes.ts#createBrowserProfileRoute#lines": {
+        "count": 259,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/sessions/browser-profile.routes.ts#open#cognitive": {
+        "count": 31,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/sessions/browser-profile.routes.ts#open#cyclomatic": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/sessions/browser-profile.routes.ts#open#lines": {
+        "count": 144,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/sessions/browser-sessions.ts": {
+        "count": 649,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/tools/accounts-tools.ts#accountsServer.<anonymous>#lines": {
+        "count": 240,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/tools/accounts-tools.ts#accountsServer#lines": {
+        "count": 241,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/tools/browser-router.ts#call#cognitive": {
+        "count": 27,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/tools/browser-router.ts#call#cyclomatic": {
+        "count": 33,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/tools/browser-router.ts#createBrowserRouter#lines": {
+        "count": 259,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/capabilities/broker/broker-gateway.ts#createGateway.<anonymous>#cognitive": {
+        "count": 40,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/capabilities/broker/broker-gateway.ts#createGateway.<anonymous>#cyclomatic": {
+        "count": 34,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/capabilities/broker/broker-gateway.ts#createGateway.<anonymous>#lines": {
+        "count": 156,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/capabilities/broker/broker-gateway.ts#createGateway#lines": {
+        "count": 159,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/capabilities/broker/ssh-agent-sockets.ts#createSshAgentSockets#lines": {
+        "count": 131,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/capabilities/broker/ssh-agent.ts#sign#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/capabilities/capabilities.routes.ts#createCapabilitiesRoutes#lines": {
+        "count": 357,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/capabilities/offers/recommend.ts#capabilityRecommendations#cognitive": {
+        "count": 29,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/chores/chore-signals.ts#findFiles#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/ci/ci.routes.ts#createCiRoutes#lines": {
+        "count": 121,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/ci/main-fixer.ts": {
+        "count": 841,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/ci/poller.ts#createCiPoller#lines": {
+        "count": 101,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/ci/providers.ts": {
+        "count": 868,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/ci/providers.ts#githubClient#lines": {
+        "count": 186,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/ci/providers.ts#gitlabClient#lines": {
+        "count": 185,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/ci/webhook.routes.ts#createCiWebhookRoute.<anonymous>#cognitive": {
+        "count": 43,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/ci/webhook.routes.ts#createCiWebhookRoute.<anonymous>#cyclomatic": {
+        "count": 41,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/ci/webhook.routes.ts#createCiWebhookRoute#lines": {
+        "count": 105,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/ci/workflowGraph.ts#resolveRun#lines": {
+        "count": 109,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/compliance/drafts.ts#dpia#lines": {
+        "count": 117,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/compliance/drafts.ts#ropa#lines": {
+        "count": 126,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/compliance/report.ts#flowsOf#lines": {
+        "count": 115,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/composition.ts": {
+        "count": 886,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/composition.ts#createServices#lines": {
+        "count": 273,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_sandbox/sandbox/src/conversations/actor/conversation-actors.ts#createConversationActors#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/actor/conversation-actors.ts#createConversationActors#lines": {
+        "count": 157,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/actor/conversation-decide.ts": {
+        "count": 870,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/actor/parked-cards.ts#parkedCards#lines": {
+        "count": 117,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/agents.routes.ts#createAgentsRoutes#cognitive": {
+        "count": 40,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/agents.routes.ts#createAgentsRoutes#lines": {
+        "count": 555,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/land/land.ts": {
+        "count": 695,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/land/landed-history.ts#commitsCarrying#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/land/landed-presence.ts#createLandedPresences#lines": {
+        "count": 159,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/land/landed-presence.ts#refresh#lines": {
+        "count": 102,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/land/origins.ts#createAgentOrigins#lines": {
+        "count": 170,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/land/project-delivery.ts": {
+        "count": 741,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/land/project-delivery.ts#createProjectDelivery#lines": {
+        "count": 219,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/land/review.ts#historyOf#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/registry/agents-registry.ts": {
+        "count": 1542,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/registry/agents-registry.ts#createFleet#cognitive": {
+        "count": 59,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/registry/agents-registry.ts#createFleet#lines": {
+        "count": 708,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/registry/pre-1308-import.ts": {
+        "count": 685,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/registry/pre-1308-import.ts#plan#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/worktrees/isolation.ts": {
+        "count": 644,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/worktrees/worktrees.ts": {
+        "count": 849,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/worktrees/worktrees.ts#createAgentWorktrees#cognitive": {
+        "count": 46,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/worktrees/worktrees.ts#createAgentWorktrees#lines": {
+        "count": 688,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/definition/apply-definition.ts#applyDefinitionItems#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/definition/apply-definition.ts#definitionItems#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/definition/definition.ts#definitionDiff#cognitive": {
+        "count": 47,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/definition/definition.ts#definitionDiff#cyclomatic": {
+        "count": 32,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/definition/definition.ts#deriveDefinition#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/definition/definition.ts#emitDefinitionToml#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/derived/shadow-keeper.ts#createShadowKeeper#lines": {
+        "count": 273,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/desktop/desktop-view.ts#createDesktopViewRoute.<anonymous>#lines": {
+        "count": 267,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/desktop/desktop-view.ts#createDesktopViewRoute#lines": {
+        "count": 268,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/environment/contents.ts#readEnvironmentContents#cognitive": {
+        "count": 42,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/environment/draft-offers.ts#reconcileOffers#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/environment/environment.routes.ts#createEnvironmentRoutes#lines": {
+        "count": 125,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/environment/environment.ts": {
+        "count": 618,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/extensions/backend/backend-host.ts#createBackendHostApp#lines": {
+        "count": 182,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_sandbox/sandbox/src/extensions/backend/backend-supervisor.ts": {
+        "count": 622,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/extensions/backend/backend-supervisor.ts#converge#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/extensions/backend/backend-supervisor.ts#converge#lines": {
+        "count": 123,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/extensions/backend/backend-supervisor.ts#createExtensionBackend#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/extensions/backend/backend-supervisor.ts#createExtensionBackend#lines": {
+        "count": 463,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/extensions/extension-dev.routes.ts#createExtensionDevRoutes#lines": {
+        "count": 144,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/extensions/extension-updates.ts": {
+        "count": 705,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/extensions/extension-updates.ts#checkExtensionUpdates.<anonymous>#cognitive": {
+        "count": 44,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/extensions/extension-updates.ts#checkExtensionUpdates.<anonymous>#cyclomatic": {
+        "count": 34,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/extensions/extension-updates.ts#checkExtensionUpdates.<anonymous>#lines": {
+        "count": 113,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/extensions/extension-updates.ts#checkExtensionUpdates.<anonymous>~2#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/extensions/extension-updates.ts#checkExtensionUpdates#lines": {
+        "count": 116,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/extensions/extensions.routes.ts#createExtensionsRoutes#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/extensions/extensions.routes.ts#createExtensionsRoutes#lines": {
+        "count": 364,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/extensions/listener/listener.routes.ts#createListenerRoutes#lines": {
+        "count": 118,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/git/changes/changes-commits.ts#commitLog#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/git/changes/changes-diff.ts#composeDiff#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/git/changes/changes-porcelain.ts#parseStatusV2#cognitive": {
+        "count": 33,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/git/changes/changes-porcelain.ts#parseStatusV2#cyclomatic": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/git/changes/diff-locate.ts#createDiffLocator#lines": {
+        "count": 103,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/git/git.routes.ts": {
+        "count": 726,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/git/git.routes.ts#createGitRoutes#cognitive": {
+        "count": 65,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/git/git.routes.ts#createGitRoutes#lines": {
+        "count": 633,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/git/ops/push-run.ts#createPushRuns#lines": {
+        "count": 137,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/git/remote/follow-origin.ts#createOriginFollow#lines": {
+        "count": 120,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/guard/command-guard.ts#createCommandGuard#lines": {
+        "count": 182,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/guard/command-guard.ts#safetyTiers#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/guard/command-guard.ts#safetyTiers#cyclomatic": {
+        "count": 27,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/guard/command-guard.ts#safetyTiers#lines": {
+        "count": 104,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/guard/settings-hooks.ts#settingsHookSet#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/history/history.ts": {
+        "count": 659,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/history/history.ts#createWorkspaceHistory#cognitive": {
+        "count": 29,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/history/history.ts#createWorkspaceHistory#lines": {
+        "count": 527,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/history/history.ts#healGitPointers#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/hosts/desktop-sync.routes.ts#createSyncRoutes#lines": {
+        "count": 136,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/hosts/device-reports.ts": {
+        "count": 611,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/hosts/device-reports.ts#mergeDevices#cognitive": {
+        "count": 32,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/hosts/device-reports.ts#mergeDevices#lines": {
+        "count": 105,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/hosts/device-tunnels.ts#createDeviceTunnels#lines": {
+        "count": 147,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/hosts/host-command-guard.ts#judgeHostCommand#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/hosts/host-command-guard.ts#judgeHostCommand#cyclomatic": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/issues/issues-store.ts#fileIssuesStore#lines": {
+        "count": 120,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/links/inbound-links.ts#fileInboundLinks#lines": {
+        "count": 153,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/links/linked-children.ts": {
+        "count": 607,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/links/links.routes.ts#createLinkRoutes#lines": {
+        "count": 195,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/logs/pane-log-clean.ts#feed#cognitive": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/loops/loop-runner.ts#runLoop#cognitive": {
+        "count": 66,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/loops/loop-runner.ts#runLoop#cyclomatic": {
+        "count": 39,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/loops/loop-runner.ts#runLoop#lines": {
+        "count": 146,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/main.ts#bootToGate#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/main.ts#bootToGate#lines": {
+        "count": 173,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/migrations/adapter-shared.ts#planSkillFiles#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/migrations/hermes.ts#planHermes#cognitive": {
+        "count": 89,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/migrations/hermes.ts#planHermes#cyclomatic": {
+        "count": 58,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/migrations/hermes.ts#planHermes#lines": {
+        "count": 214,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/migrations/host-scan.ts#scanHost#cognitive": {
+        "count": 42,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/migrations/json5ish.ts#dropTrailingCommas#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/migrations/json5ish.ts#parseJson5ish#cognitive": {
+        "count": 52,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/migrations/json5ish.ts#parseJson5ish#cyclomatic": {
+        "count": 30,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/migrations/openclaw.ts#planOpenclaw#cognitive": {
+        "count": 109,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/migrations/openclaw.ts#planOpenclaw#cyclomatic": {
+        "count": 77,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/migrations/openclaw.ts#planOpenclaw#lines": {
+        "count": 276,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/needs/kinds/capability-need.ts#capabilityNeed#lines": {
+        "count": 286,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/needs/kinds/capability-need.ts#resolve#cognitive": {
+        "count": 37,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/needs/kinds/capability-need.ts#resolve#cyclomatic": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/needs/kinds/grant-need.ts#grantNeed#lines": {
+        "count": 125,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/needs/kinds/grant-need.ts#onPersona#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/needs/kinds/grant-need.ts#onPersona#cyclomatic": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/needs/needs-slice.ts#createNeedsSlice#cognitive": {
+        "count": 35,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/needs/needs-slice.ts#createNeedsSlice#lines": {
+        "count": 112,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/needs/needs.ts#createNeeds#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/needs/needs.ts#createNeeds#lines": {
+        "count": 363,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/netd/netd-link.ts#connectNetd#lines": {
+        "count": 107,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/org/org-policy.ts#createOrgPolicyHolder#lines": {
+        "count": 159,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_sandbox/sandbox/src/panels/panels.routes.ts#createPanelsRoutes#lines": {
+        "count": 106,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/peers/enrollment.ts#enrollments#lines": {
+        "count": 138,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/peers/enrollment.ts#pairings#lines": {
+        "count": 114,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/peers/peer-hub.ts#createPeerHub#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/peers/peer-hub.ts#createPeerHub#lines": {
+        "count": 262,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/peers/peer-routes.ts#createPeerRoutes#lines": {
+        "count": 189,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/personas/conversation-grants.ts#grantsOver#lines": {
+        "count": 131,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/portability/arrival.routes.ts#createArrivalRoutes#lines": {
+        "count": 104,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/portability/arrival.ts#createArrivals#lines": {
+        "count": 123,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/portability/bundle-arrival.ts#applyBundle#lines": {
+        "count": 123,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/portability/bundle.ts#walk#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/gateway/gateway-route.ts#createGatewayRoute.<anonymous>#cognitive": {
+        "count": 63,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/gateway/gateway-route.ts#createGatewayRoute.<anonymous>#cyclomatic": {
+        "count": 40,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/gateway/gateway-route.ts#createGatewayRoute.<anonymous>#lines": {
+        "count": 140,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/gateway/gateway-route.ts#createGatewayRoute#lines": {
+        "count": 164,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/gateway/mcp-route.ts#createMcpRoute.<anonymous>#cognitive": {
+        "count": 40,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/gateway/mcp-route.ts#createMcpRoute.<anonymous>#cyclomatic": {
+        "count": 32,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/gateway/mcp-route.ts#createMcpRoute.<anonymous>#lines": {
+        "count": 111,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/gateway/mcp-route.ts#createMcpRoute#lines": {
+        "count": 133,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/gateway/mcp-route.ts#shieldValue#cognitive": {
+        "count": 31,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/gateway/mcp-route.ts#shieldValue#cyclomatic": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/gateway/protocols/chat-response.ts#chatStreamRestorer#lines": {
+        "count": 115,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/gateway/protocols/responses-response.ts#responsesStreamRestorer#lines": {
+        "count": 125,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/masker.ts#createMasker#lines": {
+        "count": 141,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/ner.ts#loadRecognizer#lines": {
+        "count": 118,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/privacy-shield.ts#createPrivacyShield#lines": {
+        "count": 304,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/privacy-shield.ts#turnShield#lines": {
+        "count": 106,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/privacy-vault.ts#createPrivacyVault#lines": {
+        "count": 220,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/processes/managed-processes.ts#createManagedProcesses#lines": {
+        "count": 195,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/processes/service-processes.ts#createServiceProcesses#lines": {
+        "count": 134,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/public/public-files.ts#listPublicFiles#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/acp/acp-agent.ts#runAcpTurn#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/acp/acp-connection.ts#connect#lines": {
+        "count": 144,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/acp/acp-connection.ts#createAcpConnections#lines": {
+        "count": 166,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/claude/claude-accounts.ts#claudeAccountDoor#lines": {
+        "count": 164,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/claude/claude-session-copy.ts#chainBefore#cyclomatic": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/claude/claude-session-copy.ts#copySession#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/codex/codex-agent.ts": {
+        "count": 1346,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/codex/codex-agent.ts#createCodexAgent#lines": {
+        "count": 119,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/codex/codex-agent.ts#runCodexAgent#lines": {
+        "count": 116,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/codex/codex-app-server.ts": {
+        "count": 1690,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/codex/codex-app-server.ts#createCodexAppServerRunner#lines": {
+        "count": 138,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/codex/codex-app-server.ts#runAppServerTurn#cognitive": {
+        "count": 34,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/codex/codex-app-server.ts#runAppServerTurn#lines": {
+        "count": 137,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/codex/codex-app-server.ts#stdioConnector.<anonymous>#lines": {
+        "count": 163,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/codex/codex-app-server.ts#stdioConnector#lines": {
+        "count": 164,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/codex/codex-hooks.ts#createCodexHookSession#lines": {
+        "count": 117,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts": {
+        "count": 789,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts#attempt#cognitive": {
+        "count": 35,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts#attempt#cyclomatic": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts#attempt#lines": {
+        "count": 205,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts#createCursorAgent#lines": {
+        "count": 385,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts#runPhase#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts#runPhase#lines": {
+        "count": 133,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-events.ts#createCursorEventMapper#lines": {
+        "count": 109,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-events.ts#map#cognitive": {
+        "count": 31,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-events.ts#map#cyclomatic": {
+        "count": 27,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-hook-script.ts#gateScript#lines": {
+        "count": 339,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-hooks.ts": {
+        "count": 765,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-host.ts#runtimeChannel#lines": {
+        "count": 112,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-shield.ts#read#cognitive": {
+        "count": 31,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/daemon-tools/policy-gate-server.ts#gateServer#lines": {
+        "count": 102,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/devin/accounts/devin-accounts.ts#devinAccountDoor#lines": {
+        "count": 110,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/opencode/opencode-agent.ts": {
+        "count": 1153,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/opencode/opencode-agent.ts#consumeTurn#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/opencode/opencode-events.ts#openEventStream#lines": {
+        "count": 135,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/opencode/opencode.ts": {
+        "count": 669,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/opencode/opencode.ts#createOpenCodeService#lines": {
+        "count": 331,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/opencode/shell/opencode-shell-script.ts#shellScript#lines": {
+        "count": 156,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/pi/pi-agent.ts#createPiAgent#lines": {
+        "count": 118,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/pi/pi-agent.ts#runPiAgent#lines": {
+        "count": 117,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/pi/pi-events.ts#createPiEventMapper#lines": {
+        "count": 145,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/pi/pi-events.ts#map#cognitive": {
+        "count": 52,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/pi/pi-events.ts#map#cyclomatic": {
+        "count": 48,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/pi/pi-events.ts#map#lines": {
+        "count": 132,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/pi/pi-hooks.ts#createPiHooks#lines": {
+        "count": 183,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/pi/pi-rpc.ts#piSpawner.<anonymous>#lines": {
+        "count": 106,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/pi/pi-rpc.ts#piSpawner#lines": {
+        "count": 110,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/secrets/secret-destinations.ts": {
+        "count": 942,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/secrets/secrets.routes.ts#createSecretsRoutes#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/secrets/secrets.routes.ts#createSecretsRoutes#lines": {
+        "count": 345,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_sandbox/sandbox/src/sessions/record/record-blobs.ts#sweepBlobs#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/sessions/sessions-slice.ts#createSessionsSlice#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/sessions/sessions-slice.ts#createSessionsSlice#lines": {
+        "count": 174,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/sessions/sessions.ts#restoredSessionMessages#cognitive": {
+        "count": 114,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/sessions/sessions.ts#restoredSessionMessages#cyclomatic": {
+        "count": 46,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/sessions/sessions.ts#restoredSessionMessages#lines": {
+        "count": 185,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/sessions/transcript-record.ts#fileTranscriptRecord#cognitive": {
+        "count": 27,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/sessions/transcript-record.ts#fileTranscriptRecord#lines": {
+        "count": 347,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/settings/settings.routes.ts#createSettingsRoutes#lines": {
+        "count": 129,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_sandbox/sandbox/src/speech/speech.routes.ts#createSpeechStreamRoute.<anonymous>#lines": {
+        "count": 135,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/speech/speech.routes.ts#createSpeechStreamRoute#lines": {
+        "count": 136,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/speech/voice/voice.routes.ts#createVoiceStreamRoute.<anonymous>#lines": {
+        "count": 110,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/speech/voice/voice.routes.ts#createVoiceStreamRoute#lines": {
+        "count": 111,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/store/json-dir.ts#jsonDir#lines": {
+        "count": 102,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/store/json-file.ts#openJsonFile#lines": {
+        "count": 103,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/system/boot/announce.ts#createAnnouncer#lines": {
+        "count": 141,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/system/boot/reaper.ts": {
+        "count": 664,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/system/boot/reaper.ts#createResourceReaper#lines": {
+        "count": 339,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/system/boot/reaper.ts#sweepProcesses#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/system/listeners/reach-report.ts#createReachReporter#lines": {
+        "count": 125,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/system/resources/resource-metrics.ts#createResourceSampler#lines": {
+        "count": 152,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/system/resources/resource-metrics.ts#sample#lines": {
+        "count": 119,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/system/system.routes.ts#createSystemRoutes#lines": {
+        "count": 310,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/system/system.routes.ts#systemEvents#cognitive": {
+        "count": 33,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/system/system.routes.ts#systemEvents#lines": {
+        "count": 181,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/system/updates/auto-update.ts#createAutoUpdater#lines": {
+        "count": 227,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/terminal/pane-door.ts#openPaneDoor#lines": {
+        "count": 200,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/usage/headroom.ts#createHeadroomService#lines": {
+        "count": 218,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/usage/serviceability/state-log.ts#note#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/usage/translator-usage.ts#appendCodexLimit#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/usage/translator-usage.ts#geminiUsageFromPayload#cognitive": {
+        "count": 32,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/usage/translator-usage.ts#geminiUsageFromPayload#cyclomatic": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/usage/usage-store.ts#rollup#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/wallet/payment-offer.ts#gatedPaidFetch#cognitive": {
+        "count": 53,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/wallet/payment-offer.ts#gatedPaidFetch#cyclomatic": {
+        "count": 54,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/wallet/payment-offer.ts#gatedPaidFetch#lines": {
+        "count": 262,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/webext/secret-tickets.ts#createSecretTickets#lines": {
+        "count": 104,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_sandbox/sandbox/src/workflows/workflow-runner.ts#runWorkflow#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workflows/workflow-runner.ts#runWorkflow#lines": {
+        "count": 156,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workflows/workflows.routes.ts#createWorkflowsRoutes#lines": {
+        "count": 128,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts": {
+        "count": 753,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts#compileView#cognitive": {
+        "count": 114,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts#compileView#cyclomatic": {
+        "count": 72,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts#compileView#lines": {
+        "count": 243,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts#prepareAgentDomainView#cognitive": {
+        "count": 100,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts#prepareAgentDomainView#cyclomatic": {
+        "count": 51,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts#prepareAgentDomainView#lines": {
+        "count": 130,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts#sameHostAliases#cognitive": {
+        "count": 38,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts#script#cognitive": {
+        "count": 52,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts#script#cyclomatic": {
+        "count": 27,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workload/resource-budget.ts#admit#cyclomatic": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workload/resource-budget.ts#createResourceBudget#lines": {
+        "count": 214,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/deps/package-graph.ts#readRepoMap#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/deps/package-modules.ts#readPackageModules#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/deps/package-usage.ts#withUsage.<anonymous>#cognitive": {
+        "count": 31,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/deps/package-usage.ts#withUsage#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/deps/reconcile-deps.ts#createDependencyCoordinator#lines": {
+        "count": 294,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/deps/reconcile-deps.ts#pass#cognitive": {
+        "count": 38,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/files/download/workspace-zip.ts#zipChunks#cognitive": {
+        "count": 31,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/files/download/workspace-zip.ts#zipChunks#lines": {
+        "count": 104,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/files/resident-tree.ts#createResidentTree#lines": {
+        "count": 308,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/files/resident-tree.ts#relist#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/files/resident-tree.ts#view#cognitive": {
+        "count": 47,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/files/workspace-bytes.routes.ts#createWorkspaceBytesRoutes#lines": {
+        "count": 250,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/files/workspace-tree.ts#listWorkspaceChildren#cognitive": {
+        "count": 51,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/files/workspace-tree.ts#listWorkspaceChildren#cyclomatic": {
+        "count": 27,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/files/workspace-tree.ts#walkWorkspaceTree#cognitive": {
+        "count": 53,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/files/workspace-tree.ts#walkWorkspaceTree#cyclomatic": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/workspace.routes.ts#createWorkspaceRoutes#cognitive": {
+        "count": 38,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/workspace.routes.ts#createWorkspaceRoutes#lines": {
+        "count": 456,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/scaffold/src/deploy-config.ts#parseLine#cyclomatic": {
+        "count": 32,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/speech/src/model-store.ts#createModelStore#lines": {
+        "count": 115,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/speech/src/speech-engine.ts#createSpeechProcess#lines": {
+        "count": 111,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/speech/src/transcribe.ts#createSpeech#lines": {
+        "count": 118,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/speech/src/voice/voice-model-store.ts#createVoiceModelStore#lines": {
+        "count": 133,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/speech/src/voice/voice.ts#createVoice#lines": {
+        "count": 160,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/webchat-widget/src/styles.ts#styles#lines": {
+        "count": 194,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/webq/src/lib/crawl.ts#crawl#lines": {
+        "count": 122,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/webq/src/lib/markdown.ts#renderBlock#cyclomatic": {
+        "count": 29,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/webq/src/lib/robots.ts#parseRobots#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/webq/src/lib/sitemap.ts#fetchSitemapUrls#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-bench/src/agents/analyze.ts#analyzeEvents#cognitive": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-bench/src/agents/analyze.ts#renderAnalytics#cognitive": {
+        "count": 39,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-bench/src/agents/analyze.ts#toolEvents#cognitive": {
+        "count": 29,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-bench/src/agents/claude.ts#parseClaudeStream#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-bench/src/agents/codex.ts#parseCodexStream#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-bench/src/agents/codex.ts#parseCodexStream#cyclomatic": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-bench/src/agents/run.ts#agents#cognitive": {
+        "count": 46,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-bench/src/agents/run.ts#agents#cyclomatic": {
+        "count": 30,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-bench/src/report.ts#configVsFull#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-bench/src/report.ts#renderAgentsReport#cognitive": {
+        "count": 42,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-bench/src/report.ts#renderAgentsReport#cyclomatic": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-bench/src/retrieval.ts#runConfig#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/engines/catalog.ts#entryMatch#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/engines/catalog.ts#parseCatalog#lines": {
+        "count": 123,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/engines/catalog.ts#value#cognitive": {
+        "count": 32,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/engines/git.ts#churnOf#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/engines/lexical.ts#rgSearch#lines": {
+        "count": 129,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/engines/routes.ts#compileRoute#cognitive": {
+        "count": 27,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/engines/routes.ts#literal#cognitive": {
+        "count": 40,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/engines/routes.ts#routeTable#cognitive": {
+        "count": 118,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/engines/routes.ts#routeTable#cyclomatic": {
+        "count": 71,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/engines/routes.ts#routeTable#lines": {
+        "count": 249,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/host/child.ts#<anonymous>#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/host/client.ts#createEngineClient#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/host/client.ts#createEngineClient#lines": {
+        "count": 258,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/index.ts#createEngine#lines": {
+        "count": 131,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/index.ts#createResidentEngine#lines": {
+        "count": 192,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/indexer/chunker.ts#chunkFile#cognitive": {
+        "count": 35,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/indexer/chunker.ts#chunkFile#cyclomatic": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/indexer/indexer.ts#revalidate#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/indexer/symbols.ts#extractSymbols#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/plan/fuse.ts#fuse#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/render/text.ts#renderText#cognitive": {
+        "count": 71,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/render/text.ts#renderText#cyclomatic": {
+        "count": 44,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/render/text.ts#renderText#lines": {
+        "count": 142,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verbs/dispatch.ts": {
+        "count": 1127,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verbs/dispatch.ts#dispatch#cognitive": {
+        "count": 66,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verbs/dispatch.ts#dispatch#cyclomatic": {
+        "count": 50,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verbs/dispatch.ts#dispatch#lines": {
+        "count": 121,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verbs/dispatch.ts#naturalPlan#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verbs/dispatch.ts#rerankGroups#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verbs/dispatch.ts#runVerb#cognitive": {
+        "count": 147,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verbs/dispatch.ts#runVerb#cyclomatic": {
+        "count": 91,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verbs/dispatch.ts#runVerb#lines": {
+        "count": 343,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verbs/literal.ts#literalAnswer#cognitive": {
+        "count": 40,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verbs/route.ts#routeAnswer#cognitive": {
+        "count": 70,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verbs/route.ts#routeAnswer#cyclomatic": {
+        "count": 35,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verbs/route.ts#routeAnswer#lines": {
+        "count": 143,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verify/check.ts#verifyReferences#cognitive": {
+        "count": 60,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verify/check.ts#verifyReferences#cyclomatic": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verify/check.ts#verifyReferences#lines": {
+        "count": 107,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verify/extract.ts#extractReferences.<anonymous>#cognitive": {
+        "count": 35,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verify/extract.ts#extractReferences.<anonymous>#cyclomatic": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verify/lookup.ts#indexLookup#lines": {
+        "count": 163,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/commands/sessions/sessions.routes.ts#func#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/lib/flags.ts#echoOf#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/lib/flags.ts#echoOf#cyclomatic": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/lib/run.ts#parseMultiLine#cognitive": {
+        "count": 60,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/lib/run.ts#parseMultiLine#cyclomatic": {
+        "count": 46,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/lib/run.ts#runMulti#cognitive": {
+        "count": 31,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/lib/run.ts#tokenize#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/recall/fork/fork-point.ts#selectForkPoint#cognitive": {
+        "count": 30,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/recall/fork/fork-point.ts#selectForkPoint#cyclomatic": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/recall/fork/fork.ts#materializeFork#cognitive": {
+        "count": 46,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/recall/fork/fork.ts#materializeFork#cyclomatic": {
+        "count": 29,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/recall/fork/fork.ts#materializeFork#lines": {
+        "count": 105,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/recall/ingest/ingest.ts#ingest#cognitive": {
+        "count": 29,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/recall/ingest/ingest.ts#parseDelta#cognitive": {
+        "count": 29,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/recall/ingest/ingest.ts#parseDelta#cyclomatic": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/recall/rank/match.ts#matchSessions#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/recall/transcript/lines.ts#fileTouchesOf#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/recall/transcript/lines.ts#fileTouchesOf#cyclomatic": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/api-contract/src/schemas.ts": {
+        "count": 905,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/capability-catalog/src/index.ts": {
+        "count": 1185,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/connector-runtime/src/chat-reply.ts#createChatReply#lines": {
+        "count": 296,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/connector-runtime/src/chat-reply.ts#runView#lines": {
+        "count": 161,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/connector-runtime/src/gateway.ts#reconcile#cognitive": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/connector-runtime/src/gateway.ts#runConnectorGateway#lines": {
+        "count": 212,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/extension-api/src/runtime.ts#createEventHub#lines": {
+        "count": 102,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/extension-manifest/src/meaning.ts#fillTemplate#cognitive": {
+        "count": 34,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/registry/src/registry.ts#resolveRegistry.<anonymous>#cyclomatic": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/chores/chores.ts": {
+        "count": 1105,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/chores/chores.ts#assess#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/chores/probes.ts": {
+        "count": 620,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/chores/verdict.ts#assessChore#cyclomatic": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/models/plan-pools.ts#serviceState#cyclomatic": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/policy/command-classes.ts": {
+        "count": 641,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/policy/request-status.ts#settledRequests#cognitive": {
+        "count": 56,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/policy/request-status.ts#settledRequests#cyclomatic": {
+        "count": 42,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/protocol/peer-dial.ts#dialPeer#lines": {
+        "count": 166,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/protocol/peer-dial.ts#open#lines": {
+        "count": 112,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/schemas/agents.ts": {
+        "count": 1007,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/schemas/automations.ts": {
+        "count": 633,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/schemas/devices.ts": {
+        "count": 810,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/schemas/git/git.ts": {
+        "count": 621,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/schemas/settings.ts": {
+        "count": 895,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/state/workspace-state.ts": {
+        "count": 809,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/text/transcript-fold.ts": {
+        "count": 1014,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/text/transcript-fold.ts#apply#cognitive": {
+        "count": 44,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/text/transcript-fold.ts#apply#cyclomatic": {
+        "count": 74,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/text/transcript-fold.ts#apply#lines": {
+        "count": 236,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/astro-integrations/src/html-to-markdown.mjs#parseHtml#cognitive": {
+        "count": 37,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/astro-integrations/src/html-to-markdown.mjs#renderNode#cognitive": {
+        "count": 30,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/astro-integrations/src/html-to-markdown.mjs#renderNode#cyclomatic": {
+        "count": 44,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/astro-integrations/src/llms-text.mjs#llmsText.<anonymous>#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/demo/scripts/smoke-daemon.ts#samplesOf#lines": {
+        "count": 266,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/demo/src/turn.ts#createRun#lines": {
+        "count": 106,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/site-content/src/compare.ts": {
+        "count": 1103,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/site-content/src/guides.ts": {
+        "count": 1267,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/site/src/lib/api-examples.ts#build#cognitive": {
+        "count": 65,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/site/src/lib/api-examples.ts#build#cyclomatic": {
+        "count": 50,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/site/src/lib/api-examples.ts#build#lines": {
+        "count": 117,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/site/src/lib/api-reference.ts#groupOperations#cyclomatic": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/site/src/lib/api-reference.ts#schemaRows#cognitive": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/site/src/lib/api-reference.ts#typeLabel#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/base/src/acme/acme.ts#obtainCertificate#cognitive": {
+        "count": 37,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/base/src/acme/acme.ts#obtainCertificate#cyclomatic": {
+        "count": 34,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/base/src/acme/acme.ts#obtainCertificate#lines": {
+        "count": 162,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/base/src/async.ts": {
+        "count": 829,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/base/src/text/utf16-text.ts#decodeUtf16Window#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/base/src/when.ts#scan#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/checks/lib/visible-text.mjs#expressionLiterals#lines": {
+        "count": 127,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/checks/lib/visible-text.mjs#visit#cognitive": {
+        "count": 68,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/checks/lib/visible-text.mjs#visit#cyclomatic": {
+        "count": 40,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/checks/lib/visible-text.mjs#visit#lines": {
+        "count": 104,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/checks/lib/workflows.mjs#jobsOf#cognitive": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/code-read/src/stat.ts#codeLineStat#cyclomatic": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/constants/src/assertion-measure.mjs#assertedChars#cognitive": {
+        "count": 41,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/constants/src/assertion-measure.mjs#assertedChars#cyclomatic": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/constants/src/contract-shrink.mjs#shrunkSurfaces#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/constants/src/contract-shrink.mjs#shrunkSurfaces#cyclomatic": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/constants/src/mirror-roots.mjs#replacedMirrorRoots#cognitive": {
+        "count": 37,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/desktop-smoke-windows/src/tier-engine.ts#moveBothWays#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/desktop-smoke-windows/src/tier-engine.ts#runEngineTier#cognitive": {
+        "count": 29,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/desktop-smoke-windows/src/tier-engine.ts#runEngineTier#lines": {
+        "count": 101,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/desktop-smoke-windows/src/tier-install.ts#runInstallTier#cognitive": {
+        "count": 57,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/desktop-smoke-windows/src/tier-install.ts#runInstallTier#cyclomatic": {
+        "count": 30,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/desktop-smoke-windows/src/tier-install.ts#runInstallTier#lines": {
+        "count": 201,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/desktop-smoke-windows/src/tier-setup.ts#runSetupTier#lines": {
+        "count": 103,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/fake-model/src/responses.ts#toolNames#cognitive": {
+        "count": 38,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/fake-model/src/responses.ts#toolNames#cyclomatic": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/fake-model/src/server.ts#startFakeModel.<anonymous>#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/fake-model/src/server.ts#startFakeModel.<anonymous>#cyclomatic": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/fake-model/src/server.ts#startFakeModel#lines": {
+        "count": 114,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/fake-upstream/src/server.ts#startFakeUpstream.<anonymous>#cognitive": {
+        "count": 30,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/fake-upstream/src/server.ts#startFakeUpstream#lines": {
+        "count": 108,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/nav/bench.mjs#runBench#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/nav/gate.mjs#snapshotOf#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/nav/lib/resolve.mjs#follow#cognitive": {
+        "count": 33,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/nav/lib/resolve.mjs#resolveSpecifier#cognitive": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/nav/lib/tokens.mjs#estimateTokens#cognitive": {
+        "count": 40,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/nav/lib/tokens.mjs#estimateTokens#cyclomatic": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/nav/lookup.mjs#runLookupSim#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/nav/metrics.mjs#measureShape#cognitive": {
+        "count": 40,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/nav/metrics.mjs#measureShape#lines": {
+        "count": 101,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/onboarding/src/provisioners/ic.ts#icProvisioner#lines": {
+        "count": 134,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/onboarding/src/world.ts#startWorld#lines": {
+        "count": 150,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/perf/src/browser/page-probe.ts#installProbe#lines": {
+        "count": 142,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/perf/src/chat/stream.ts#streamTurn#lines": {
+        "count": 125,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/registry-scan/src/audit.ts#admissionProblems#cyclomatic": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/registry-scan/src/audit.ts#securityAuditTargets#cognitive": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/registry-scan/src/audit.ts#securityAuditTargets#cyclomatic": {
+        "count": 28,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/registry-scan/src/scan.ts#scanRegistry#cognitive": {
+        "count": 23,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/scripts/desktop/try-onboarding.mjs": {
+        "count": 742,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/scripts/verify/clock-suites.mjs#main#cognitive": {
+        "count": 26,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/testing/bin/suites.mjs#run#cognitive": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/testing/src/fly-fake.ts#installFakeFly#cognitive": {
+        "count": 38,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/testing/src/fly-fake.ts#installFakeFly#lines": {
+        "count": 346,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/testing/src/stripe-fake.ts": {
+        "count": 646,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/testing/src/stripe-fake.ts#startFakeStripe#cognitive": {
+        "count": 30,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/testing/src/stripe-fake.ts#startFakeStripe#lines": {
+        "count": 358,
+        "why": "standing when the check arrived (2026-10-16)"
+    }
+}

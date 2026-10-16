@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { KeyringShareMode } from "@intentic/sandbox-contract";
+import type { KeyringShareMode } from "@intentic/sandbox-contract/schemas/keyring";
 import { computed, getCurrentScope, onScopeDispose, ref } from "vue";
 import {
     type KeyringEntry,

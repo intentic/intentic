@@ -6,7 +6,7 @@
 import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { computed, createApp, h, nextTick, ref } from "vue";
-import type { CredentialGate, SandboxKeyring } from "@intentic/sandbox-contract";
+import type { CredentialGate, SandboxKeyring } from "@intentic/sandbox-contract/schemas/secrets";
 import type { SecretRow } from "../../../sandbox/secrets/secretRows";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -19,7 +19,7 @@ const stored = ref<CredentialGate | undefined>(undefined);
 const role = ref<`owner` | `maintainer` | `collaborator`>(`owner`);
 
 jest.mock(`vue-router`, () => ({ RouterLink: { template: `<a><slot /></a>` } }));
-jest.mock(`./useSecrets`, () => ({
+jest.mock(`../../../../models/capabilities/useSecrets`, () => ({
     reveal: jest.fn(),
     useSecrets: () => ({ remove: { mutateAsync: jest.fn() } }),
     useSecretHosts: () => ({ setHosts: { mutateAsync: jest.fn() } }),

@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import type { HomeGroup } from "./homeOrder";
 
 // The home's tiles as a list of fixed-height bands: a group label, or one row of tiles. Turning the grid into a list is

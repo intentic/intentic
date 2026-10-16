@@ -1,4 +1,4 @@
-import type { IssueReport } from "@intentic/sandbox-contract";
+import type { IssueReport } from "@intentic/sandbox-contract/schemas/issues";
 
 // Every uncaught failure a browser reports, via two handlers:
 // - error: a throw that reached the top, or (filtered out) a failed resource load

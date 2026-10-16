@@ -7,6 +7,7 @@
 // https://github.com/MODSetter/SurfSense; see this package's NOTICE). Changed here: a page is blank only when nothing
 // at all is drawn on it (a cover image with no text is not), and the fourteen standard PDF fonts, which every reader
 // carries, are never reported as missing.
+import { errorMessage } from "@intentic/base/errors";
 import { getDocumentProxy, getResolvedPDFJS } from "unpdf";
 import { error, plural, warning, type CheckReport, type Finding } from "./finding.js";
 
@@ -182,7 +183,7 @@ const openPdf = async (bytes: Uint8Array): Promise<PdfDocument | CheckReport> =>
         const reason =
             cause instanceof Error && cause.name === "PasswordException"
                 ? "it is password-protected, so nothing past the password can be checked"
-                : `it is not a readable PDF (${cause instanceof Error ? cause.message : String(cause)})`;
+                : `it is not a readable PDF (${errorMessage(cause)})`;
         return { format: "pdf", findings: [error("unreadable", "", reason)], notes: [] };
     }
 };

@@ -1,15 +1,10 @@
-import {
-    ATTACHMENTS_DIR,
-    CONTROL_SCOPES,
-    type ContractRoute,
-    type ControlScope,
-    RAW_ROUTE_LIST,
-    type RouteMeta,
-    roleAtLeast,
-    routeAccess,
-    SANDBOX_ROUTES,
-    sandboxRouteFor,
-} from "@intentic/sandbox-contract";
+import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract/state/workspace-state";
+import { CONTROL_SCOPES, type ControlScope } from "@intentic/sandbox-contract/policy/control-scopes";
+import type { ContractRoute } from "@intentic/sandbox-contract/protocol/routes";
+import { RAW_ROUTE_LIST } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
+import { type RouteMeta, routeAccess } from "@intentic/sandbox-contract/protocol/route-meta";
+import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { SANDBOX_ROUTES, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { ControlTokens } from "./tokens/control-tokens.js";
 import { controlScoped } from "./tokens/control-tokens.js";

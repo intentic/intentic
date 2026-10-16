@@ -1,5 +1,6 @@
 import { TRIAL_MODEL_API_PATH } from "@intentic/api-contract/ingress";
-import { type Capability, TRIAL_ENDPOINT_ID, TRIAL_MODEL_ID } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { TRIAL_ENDPOINT_ID, TRIAL_MODEL_ID } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { CompatEntry } from "../endpoints/endpoint-translator.js";
 import type { Config } from "../env.config.js";

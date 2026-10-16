@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash, type Hash } from "node:crypto";
 import { type FileHandle, open } from "node:fs/promises";
 import { join } from "node:path";
+import { parseJsonWith } from "@intentic/base/json";
 import { z } from "zod";
 import { type RemoteShell, remoteShell, type SandboxEndpoint } from "../endpoint.js";
 import { type Listing, parseListing } from "./project-files.js";
@@ -189,7 +190,7 @@ const HEADER_MAX = 64 * 1024;
 
 const writeAll = async (handle: FileHandle, data: Buffer): Promise<void> => {
     for (let offset = 0; offset < data.length; ) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a short write continues where it stopped
+        // a short write continues where it stopped
         const { bytesWritten } = await handle.write(data, offset);
         offset += bytesWritten;
     }
@@ -237,13 +238,13 @@ export const receiveFiles = async (stdout: AsyncIterable<Buffer>, paths: readonl
         while (pending.length > 0) {
             if (body !== undefined) {
                 const piece = pending.subarray(0, body.remaining);
-                // oxlint-disable-next-line eslint/no-await-in-loop -- the stream is one file after another
+                // the stream is one file after another
                 await writeAll(body.handle, piece);
                 body.digest.update(piece);
                 body.remaining -= piece.length;
                 pending = pending.subarray(piece.length);
                 if (body.remaining === 0) {
-                    // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+                    // ditto
                     await finish(body);
                 }
                 continue;
@@ -255,7 +256,7 @@ export const receiveFiles = async (stdout: AsyncIterable<Buffer>, paths: readonl
                 }
                 break;
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             await begin(pending.subarray(0, newline).toString("utf8"));
             pending = pending.subarray(newline + 1);
         }
@@ -366,14 +367,8 @@ const SessionListSchema = z
 
 type ListedSession = NonNullable<z.infer<typeof SessionListSchema>>[number];
 
-const sessionsIn = (listed: string): readonly ListedSession[] => {
-    try {
-        return SessionListSchema.safeParse(JSON.parse(listed)).data ?? [];
-    } catch {
-        // allow(silent-catch): an answer that is not Mutagen's JSON names no session to hold still.
-        return [];
-    }
-};
+// An answer that is not Mutagen's JSON names no session to hold still.
+const sessionsIn = (listed: string): readonly ListedSession[] => parseJsonWith(listed, SessionListSchema) ?? [];
 
 const fileDigest = (entry: z.infer<typeof EntrySchema>): string | undefined => (entry?.kind === "file" ? entry.digest : undefined);
 

@@ -1,7 +1,7 @@
 // The three subagent ceilings, each writing its own key, and the line that says where spawning itself is decided:
 // Guardrails, which also says here when it is refused, since that leaves the ceilings bounding only in-process subagents.
 import "@intentic/testing/dom";
-import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
@@ -12,7 +12,7 @@ const patch = jest.fn((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
-jest.mock(`../../overview/useSandboxSettings`, () => ({
+jest.mock(`../../../../models/sandbox/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 

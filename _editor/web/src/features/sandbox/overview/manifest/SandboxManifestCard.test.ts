@@ -2,7 +2,7 @@
 // jsdom: mounts the component tree and reads rendered text.
 import "@intentic/testing/dom";
 import { STATE_DIR } from "@intentic/constants";
-import type { ManifestProblemReport, ManifestRepair } from "@intentic/sandbox-contract";
+import type { ManifestProblemReport, ManifestRepair } from "@intentic/sandbox-contract/schemas/system";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -13,7 +13,7 @@ jest.mock(`../../extensions/useManifestProblems`, () => ({
 }));
 
 const opened = jest.fn();
-jest.mock(`../../../workspace/files/refs/openFileRef`, () => ({ openWorkspaceRef: (path: string) => opened(path) }));
+jest.mock(`../../../../models/workspace/files/openFileRef`, () => ({ openWorkspaceRef: (path: string) => opened(path) }));
 
 const { default: SandboxManifestCard } = await import("./SandboxManifestCard.vue");
 const { forgetOperations } = await import("../../../../workbench/operations/operations");

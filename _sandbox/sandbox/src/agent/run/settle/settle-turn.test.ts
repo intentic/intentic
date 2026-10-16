@@ -1,10 +1,10 @@
 import { STATE_DIR } from "@intentic/constants";
-import type { TurnProof } from "@intentic/sandbox-contract";
+import type { TurnProof } from "@intentic/sandbox-contract/schemas/agents";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../../composition.js";
 import { fakeHistory, recordingLogger } from "../../../harness/route-fakes.testing.js";
 import { recordingTurnStores, services } from "../../../harness/route-services.testing.js";
-import { beginTurn } from "../../../testing.js";
+import { beginTurn } from "../../../conversations/actor/conversation-actors.testing.js";
 import { performSettlement } from "./settle-turn.js";
 import type { SettlementPlan } from "./turn-settlement.js";
 

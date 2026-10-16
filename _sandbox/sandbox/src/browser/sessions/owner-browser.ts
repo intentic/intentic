@@ -10,6 +10,8 @@ import type { BrowserFingerprint } from "./fingerprint.js";
 import { watchWindowFailures } from "./window-failures.js";
 import { detachedStamp } from "../../seams/workload-stamp.js";
 import { spawnAs } from "../../workload/workload-class.js";
+import { parseJsonWith } from "@intentic/base/json";
+import { readTextIfExists } from "@intentic/base/fs";
 
 // The owner's own sign-in window: Chromium started as a plain process, with Playwright attached afterwards over CDP.
 // Not launchPersistentContext: X's sign-in risk check refused a Google sign-in from every Playwright-launched window
@@ -114,15 +116,8 @@ const readPreferences = async (path: string): Promise<z.infer<typeof Preferences
     if (text === undefined) {
         return {};
     }
-    let json: unknown;
-    try {
-        json = JSON.parse(text);
-    } catch {
-        // allow(silent-catch): a file Chromium is mid-way through writing is its own, and left to it.
-        return undefined;
-    }
-    const parsed = PreferencesSchema.safeParse(json);
-    return parsed.success ? parsed.data : undefined;
+    // A file Chromium is mid-way through writing is its own, and left to it.
+    return parseJsonWith(text, PreferencesSchema);
 };
 
 export const seedPreferences = async (userDataDir: string, languages: readonly string[]): Promise<void> => {
@@ -176,7 +171,7 @@ const reapOrphans = async (userDataDir: string): Promise<void> => {
     const orphans: number[] = [];
     for (const pid of pids) {
         // allow(silent-catch): a process gone between the listing and the read is no window left to reap
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one small file per process, once per window opened
+        // one small file per process, once per window opened
         const argv = (await readFile(`/proc/${pid}/cmdline`, "utf8").catch(() => "")).split("\0");
         if (isOwnerWindow(argv, userDataDir)) {
             orphans.push(Number(pid));
@@ -199,8 +194,8 @@ const waitForPort = async (child: ChildProcess, file: string): Promise<number> =
             if (child.exitCode !== null || child.signalCode !== null) {
                 throw new Error(`the browser exited while starting (${child.exitCode ?? child.signalCode})`);
             }
-            // allow(silent-catch): no file yet is a browser still starting
-            return parseActivePort(await readFile(file, "utf8").catch(() => ""));
+            // No file yet is a browser still starting.
+            return parseActivePort((await readTextIfExists(file)) ?? "");
         },
         { intervalMs: 100, until: Date.now() + START_TIMEOUT_MS },
     );

@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AuditEvent, AuditRecord } from "@intentic/sandbox-contract";
+import type { AuditEvent, AuditRecord } from "@intentic/sandbox-contract/schemas/audit";
 import { GENESIS_HASH, sealRecord } from "./audit-chain.js";
 import { fileAuditLog } from "./audit-store.js";
 

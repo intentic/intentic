@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { t } from "@intentic/ui/i18n";
 import { basename } from "@intentic/ui/path";
 import type { Ref } from "vue";
@@ -8,9 +8,9 @@ import type { DownloadTarget } from "../../files/downloadEntries";
 import type { useUploadQueue } from "../../files/upload/useUploadQueue";
 import type { LandedEntry } from "../fileNesting";
 import type { RowAction } from "../rowActions";
-import type { DeleteBatch } from "../undo/deleteUndo";
+import type { DeleteBatch } from "../../../../models/workspace/tree/deleteUndo";
 import type { useEmptyDirs } from "../useEmptyDirs";
-import type { useWorkspaceTree } from "../useWorkspaceTree";
+import type { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
 import { useTreeDelete } from "./useTreeDelete";
 import { useInlineEdit, useTreeEdits } from "./useTreeEdits";
 import { type TreeMenuHost, useTreeMenu } from "./useTreeMenu";

@@ -4,12 +4,12 @@ import { lstat, mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/pro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
 import type { IsolationPlan } from "../../../conversations/worktrees/isolation.js";
 import { opt } from "../../../opt.js";
 import { memoryConversationGrants } from "../../../personas/conversation-grants.js";
-import { memoryFleet } from "../../../testing.js";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import type { ProjectInstall } from "../agent-installs.js";
 import {
     consultProjectInstall,

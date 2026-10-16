@@ -9,8 +9,8 @@ import * as fsOriginal from "@intentic/base/fs";
 import type { Logger } from "pino";
 import * as workloadOriginal from "../../workload/workload-class.js";
 import * as processGroupOriginal from "../../workload/process-group.js";
-import * as installedOriginal from "../installed-extensions.js";
-import type { ExtensionHost, InstalledExtension } from "../installed-extensions.js";
+import * as installedOriginal from "../../capabilities/extension-inventory/installed-extensions.js";
+import type { ExtensionHost, InstalledExtension } from "../../capabilities/extension-inventory/installed-extensions.js";
 import * as listenerOriginal from "../listener/listener-state.js";
 
 // A converge superseded while its in-place reload is in flight: the host takes that reload whether or not anyone still
@@ -33,7 +33,7 @@ let enabled: InstalledExtension[] = [v1];
 jest.mock("../../workload/workload-class.js", () => ({ ...workloadOriginal, spawnAs: () => spawnAs() }));
 jest.mock("@intentic/base/fs", () => ({ ...fsOriginal, freePort: async () => 41_000 }));
 jest.mock("../../workload/process-group.js", () => ({ ...processGroupOriginal, killGroup: () => {} }));
-jest.mock("../installed-extensions.js", () => ({ ...installedOriginal, enabledExtensions: async () => enabled }));
+jest.mock("../../capabilities/extension-inventory/installed-extensions.js", () => ({ ...installedOriginal, enabledExtensions: async () => enabled }));
 jest.mock("../listener/listener-state.js", () => ({
     ...listenerOriginal,
     listenerOwnershipOf: async () => ({ owners: new Map(), refused: new Map() }),

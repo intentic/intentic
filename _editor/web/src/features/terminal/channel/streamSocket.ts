@@ -148,7 +148,7 @@ export class StreamSocket extends EventTarget implements SocketLike {
         const accept = base64(new Uint8Array(await crypto.subtle.digest(`SHA-1`, utf8.encode(`${key}${ACCEPT_GUID}`))));
         let head: Uint8Array = new Uint8Array(0);
         for (;;) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a stream is read in order by definition
+            // a stream is read in order by definition
             const { value, done } = await this.reader.read();
             if (done || this.readyState === CLOSED) {
                 return this.finish(ABNORMAL, ``);

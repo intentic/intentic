@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import type { Capability, LocalModelConfig } from "@intentic/sandbox-contract";
+import type { Capability, LocalModelConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { packFragment } from "../../image/packs.js";
 import { estimatedModelMemory, fitsBudget, llamaServerMissing, localModelBudget } from "../../endpoints/local-model-fit.js";
 import { llamaServerProcesses } from "../../endpoints/local-model-load.js";
@@ -83,10 +83,10 @@ const stopOtherServers = async (ctx: CapabilityCtx, id: string): Promise<void> =
     const others = (await ctx.capabilities.list()).filter((capability) => capability.kind === "localmodel" && capability.id !== id);
     for (const other of others) {
         stopWatching(other.id);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one serving model at a time is the invariant this loop establishes
+        // one serving model at a time is the invariant this loop establishes
         await ctx.panels.stop(localModelPanelKey(other.id));
         // A stopped endpoint must not stay routable just because its last catalog survived on disk.
-        // oxlint-disable-next-line eslint/no-await-in-loop -- paired with the panel stop above
+        // paired with the panel stop above
         await ctx.endpointModels.forget(other.id);
     }
 };

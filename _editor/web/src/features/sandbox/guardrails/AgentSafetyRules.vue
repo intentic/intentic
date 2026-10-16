@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { COMMAND_RULE_CATALOG, type CommandLocus, type CommandRuleTier } from "@intentic/sandbox-contract";
-import RuleCommand from "./RuleCommand.vue";
+import { COMMAND_RULE_CATALOG, type CommandRuleTier } from "@intentic/sandbox-contract/policy/safety-policy";
+import type { CommandLocus } from "@intentic/sandbox-contract/schemas/agent";
+import RuleCommand from "../../../components/RuleCommand.vue";
 import { commandClassWords, qualifierWords } from "./ruleWords";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";

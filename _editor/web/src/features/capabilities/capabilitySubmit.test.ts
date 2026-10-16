@@ -3,11 +3,11 @@
 // the platform, whose refusal is said rather than swallowed. The write is the tile's, in the operations ledger, so a page
 // opened again mid-install finds it still busy rather than offering a second write the daemon would refuse.
 import "@intentic/testing/dom";
-import type { CapabilityRecommendation, CapabilityStatus, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { CapabilityRecommendation, CapabilityStatus, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { type AddCapabilityInput, CAPABILITY_CATALOG, type CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { NoticeModel } from "@intentic/ui";
 import { effectScope, type EffectScope, ref } from "vue";
-import { useTerminalPanel } from "../terminal/useTerminalPanel";
+import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import * as actualWalletPolicy from "./model/walletPolicy";
 
 // The platform's half of a wallet save; every other tile is one write, to the daemon.

@@ -1,4 +1,4 @@
-import type { BrowserSession } from "@intentic/sandbox-contract";
+import type { BrowserSession } from "@intentic/sandbox-contract/schemas/terminal";
 import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 

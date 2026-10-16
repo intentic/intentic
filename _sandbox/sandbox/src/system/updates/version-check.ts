@@ -3,7 +3,7 @@
 
 import { isDevBuild } from "../../version.js";
 
-export { isNewer } from "@intentic/sandbox-contract";
+export { isNewer } from "@intentic/sandbox-contract/state/versions";
 
 const LATEST_URL = "https://api.github.com/repos/intentic/intentic/releases/latest";
 const TOKEN_URL = "https://ghcr.io/token?scope=repository:intentic/sandbox:pull&service=ghcr.io";

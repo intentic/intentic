@@ -1,15 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { sleep } from "@intentic/base/async";
-import {
-    type Capability,
-    childReportPrompt,
-    LINK_MAX_HOPS,
-    type LinkConfig,
-    type LinkHello,
-    type LinkTaskStatus,
-    newConversationId,
-    type TurnProfile,
-} from "@intentic/sandbox-contract";
+import type { Capability, LinkConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import { childReportPrompt } from "@intentic/sandbox-contract/events/agent-words";
+import { LINK_MAX_HOPS, type LinkHello, type LinkTaskStatus } from "@intentic/sandbox-contract/schemas/links";
+import { newConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import type { Logger } from "pino";
 import { z } from "zod";
 import { parentOfActor } from "../auth/principal.js";
@@ -24,7 +19,7 @@ import {
     subagentEndingReported,
     subagentEndingReporter,
 } from "../agent/subagents/subagents.js";
-import { deliverWake, type WakeDoors } from "../agent/run/turn/wake-delivery.js";
+import { deliverWake, type WakeDoors } from "../seams/wake-delivery.js";
 import type { ConversationActors } from "../conversations/actor/conversation-actors.js";
 import type { TurnStanding } from "../conversations/actor/turn-standing.js";
 import { conversationTaintSource, markConversationTaint, taintWords } from "../guard/turn-taint.js";

@@ -1,4 +1,4 @@
-import type { GitCommit } from "@intentic/sandbox-contract";
+import type { GitCommit } from "@intentic/sandbox-contract/schemas/git/git-history";
 
 // Every typed word must match somewhere in a commit (subject, body, author, email, refs, or sha), each field a
 // candidate on its own, so more words always narrow. Accents and punctuation are folded before comparing (`feat(graph)`

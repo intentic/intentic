@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
-import type { SessionMark } from "../ownership";
+import type { SessionMark } from "../../../../models/agent-status/ownership";
 
 /* Whose conversation this is, in one token on the line it shares with the model and the branch: a colleague's given
    name, or for one nobody owns, the program that started it (a control token's label). The reader's own is never drawn

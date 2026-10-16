@@ -4,15 +4,15 @@
      mounted; the conversation's next use runs without it. Above them, the yeses that name no conversation: policy lines
      allowed with a card's Always, approved hook sets and approved workspace extensions. -->
 <script setup lang="ts">
-import type { ConversationGrantRevoke, GrantRevoke, OwnerGrant, StandingGrants } from "@intentic/sandbox-contract";
+import type { ConversationGrantRevoke, GrantRevoke, OwnerGrant, StandingGrants } from "@intentic/sandbox-contract/schemas/needs";
 import { Button, type IconName, Notice, Row, RowGroup, RowNote, timeAgo } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { useAuth } from "../../../client/auth/useAuth";
 import { useOperations } from "../../../workbench/operations/operations";
-import { agentDisplayTitle, agentStatusMeta } from "../../agents/fleet/agentStatus";
-import { useAgents } from "../../agents/fleet/useAgents";
+import { agentDisplayTitle, agentStatusMeta } from "../../../models/agent-status/agentStatus-meta";
+import { useAgents } from "../../../models/fleet/useAgents";
 import { useStandingGrants } from "./useStandingGrants";
 
 const t = useT();

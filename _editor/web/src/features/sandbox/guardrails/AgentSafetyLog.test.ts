@@ -1,5 +1,6 @@
 import "@intentic/testing/dom";
-import { type SafetyLogEntry, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import type { SafetyLogEntry } from "@intentic/sandbox-contract/policy/safety-policy";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -13,7 +14,7 @@ jest.mock(`../environment/useSafetyPolicy`, () => ({
 }));
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
-jest.mock(`../overview/useSandboxSettings`, () => ({
+jest.mock(`../../../models/sandbox/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch: jest.fn(), dropped: ref(undefined), error: ref(undefined), isLoading: ref(false) }),
 }));
 

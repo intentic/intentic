@@ -1,5 +1,5 @@
 import type { OpenCodeEvent } from "@opencode/client";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { z } from "zod";
 import { displayNameOf } from "@intentic/agent-context/tool-calls";
 import type { UsageTotals } from "../decorators/vendor-events.js";

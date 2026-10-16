@@ -1,5 +1,5 @@
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { syncHookOutput } from "../../../testing.js";
+import { syncHookOutput } from "../../run/harness/harness-hooks.testing.js";
 import { dependencyDirForCommand, depsNoticeHooks } from "./agent-deps.js";
 
 // Fake tree probe reporting exactly these names missing; `walks` counts calls, since not re-asking is half of what's

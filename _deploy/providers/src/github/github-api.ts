@@ -120,9 +120,7 @@ export const githubApi: GitHubApi = {
         const keyData = await json(`${BASE}/repos/${owner}/${repo}/actions/secrets/public-key`, { headers: headers(token) });
         const parsed = parseResponse(publicKeySchema, keyData, "GitHub /actions/secrets/public-key");
 
-        // Dynamic import of libsodium-wrappers (optional peer dep). The eslint-disable is intentional:
-        // Runtime-optional dependency; may not have type declarations installed.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        // Loaded on first use: only this call needs the wasm build, and the package ships no type declarations.
         // oxlint-disable-next-line typescript/no-explicit-any -- The dependency has no usable type declaration.
         const sodium: any = await import(/* webpackIgnore: true */ "libsodium-wrappers").then(
             // oxlint-disable-next-line typescript/no-explicit-any -- same untyped module as the line above.
@@ -131,14 +129,10 @@ export const githubApi: GitHubApi = {
                 throw new Error("libsodium-wrappers is required for GitHub Actions secrets; install it: pnpm add libsodium-wrappers");
             },
         );
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
         await sodium.ready;
 
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
         const keyBytes = sodium.from_base64(parsed.key, sodium.base64_variants.ORIGINAL) as Uint8Array;
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
         const encrypted = sodium.crypto_box_seal(Buffer.from(value), keyBytes) as Uint8Array;
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
         const encryptedBase64 = sodium.to_base64(encrypted, sodium.base64_variants.ORIGINAL) as string;
 
         await json(`${BASE}/repos/${owner}/${repo}/actions/secrets/${secretName}`, {

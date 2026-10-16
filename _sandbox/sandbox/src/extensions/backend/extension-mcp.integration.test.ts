@@ -3,14 +3,14 @@ import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { createTurnMounts } from "../../agent/tools/turn-mounts.js";
 import { createTurnMountRoute, type MountEndpoints } from "../../agent/tools/turn-mounts.routes.js";
 import type { AppEnv } from "../../app-env.js";
 import { readWorkspaceFile } from "../../workspace/files/workspace-files.js";
-import type { ExtensionHost } from "../installed-extensions.js";
+import type { ExtensionHost } from "../../capabilities/extension-inventory/installed-extensions.js";
 import type { ExtensionBackend } from "./backend-supervisor.js";
 import { createExtensionMcpEndpoint, extensionMcpToolsOf } from "./extension-mcp.js";
 

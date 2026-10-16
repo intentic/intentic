@@ -1,12 +1,7 @@
-import {
-    type AgentProvider,
-    isEndpointProvider,
-    isFreeProvider,
-    NATIVE_PROVIDERS,
-    type NativeProvider,
-    type ProviderKey,
-    type ProviderKeySource,
-} from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { isEndpointProvider, isFreeProvider } from "@intentic/sandbox-contract/models/agent-catalog";
+import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
+import type { ProviderKey, ProviderKeySource } from "@intentic/sandbox-contract/state/arrival";
 import { t } from "@intentic/ui/i18n";
 import type { ModelSourceStanding } from "./modelSources";
 

@@ -3,7 +3,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
+import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { gitCommitAll, gitInit } from "@intentic/base/git";

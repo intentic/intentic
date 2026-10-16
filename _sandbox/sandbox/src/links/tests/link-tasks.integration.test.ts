@@ -1,10 +1,12 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LINK_MAX_HOPS, type PushNotification, type TranscriptRow } from "@intentic/sandbox-contract";
+import { LINK_MAX_HOPS } from "@intentic/sandbox-contract/schemas/links";
+import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { type LiveRun, RUNS } from "../../conversations/actor/conversation-holdings.js";
 import type { Said } from "../../seams/turn-starter.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { opt } from "../../opt.js";
 import { unstubbed } from "@intentic/testing";
 import { fileInboundLinks, inboundLinksDocument, type ResolvedLink } from "../inbound-links.js";

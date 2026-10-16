@@ -1,4 +1,4 @@
-import type { IntenticLine } from "@intentic/sandbox-contract";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import type { StatusVariant } from "@intentic/ui";
 import { readIntenticLines } from "../../lib/intenticStream";
 import { t } from "@intentic/ui/i18n";

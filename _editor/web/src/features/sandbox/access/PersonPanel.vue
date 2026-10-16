@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AgentAccess } from "@intentic/sandbox-contract";
+import type { AgentAccess } from "@intentic/sandbox-contract/schemas/members";
 import { Button, Notice, type NoticeModel, SegmentedControl, ui } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onBeforeUnmount, ref, useId, watch } from "vue";

@@ -1,7 +1,7 @@
 import { isAbsolute, resolve } from "node:path";
 import type { HookCallback, HookJSONOutput, PostToolUseHookInput, PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { JsonValue } from "@intentic/base/fetch-json";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { z } from "zod";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";

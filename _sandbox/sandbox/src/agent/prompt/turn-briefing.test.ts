@@ -1,10 +1,11 @@
-import { type Persona, type TurnBriefingNoteId, type TurnNote, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract";
-import { LANDING_CHECKS_NOTE_TITLE } from "./checks-note.js";
+import { type Persona, type TurnBriefingNoteId, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract/schemas/personas";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { SETUP_NOTICE_TITLE, STALE_NOTICE_TITLE } from "../../workspace/layout/workspace-setup.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { HANDOFF_STATE_NOTE_TITLE } from "./handoff-state.js";
 import { BRIEFING_NOTE_TITLES, briefingLabelMismatches, briefingOf } from "./turn-briefing.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
+import { LANDING_CHECKS_NOTE_TITLE } from "../../sessions/vocabulary/prompt-envelope.js";
 
 // The card's deny list is matched against note titles, so the two claims this file holds are the ones types cannot:
 // that the editor's words are the transcript's words, and that a note nobody may drop stays put.

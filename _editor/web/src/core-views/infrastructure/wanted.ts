@@ -1,5 +1,5 @@
 import type { Deployment, ResourceView } from "@intentic/api-contract";
-import type { InventoryEntry } from "@intentic/sandbox-contract";
+import type { InventoryEntry } from "@intentic/sandbox-contract/schemas/inventory";
 
 /* The apps the user wants, for the Infra "What you want" list, the union of three sources, keyed by app name. */
 

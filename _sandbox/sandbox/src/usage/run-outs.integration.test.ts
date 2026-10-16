@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { UsageWindow } from "@intentic/sandbox-contract";
+import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { fileRunOutStore, poolName, runOutOf, type RunOut } from "./run-outs.js";
 
 /* Codex's five-hour window reopened at 16:37, and four Sol subagents started at 17:05 spent it by 18:15; the window

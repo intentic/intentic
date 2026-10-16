@@ -2,7 +2,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { Persona } from "@intentic/sandbox-contract";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { createApp } from "../app.js";
 import { clientFor, errorCode } from "../harness/route-client.testing.js";
 import { tempWorkspace } from "../harness/route-fakes.testing.js";

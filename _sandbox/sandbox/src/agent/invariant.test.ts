@@ -1,5 +1,5 @@
 import { checks } from "./invariant.js";
-import type { JournalEntry, TurnJournal } from "./run/turn/turn-journal.js";
+import type { JournalEntry, TurnJournal } from "../store/journals/turn-journal.js";
 import { unstubbed } from "@intentic/testing";
 import type { ConversationActors } from "../conversations/actor/conversation-actors.js";
 

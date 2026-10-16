@@ -1,10 +1,11 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CLAUDE_SEED_MODELS, type Model } from "@intentic/sandbox-contract";
+import { CLAUDE_SEED_MODELS } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { Model } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { unstubbed } from "@intentic/testing";
 import { DISCOVERY_TIMEOUT_MS } from "../../agent/models/model-discovery.js";
-import { expireTimeouts, stalledFetch } from "../../testing.js";
+import { expireTimeouts, stalledFetch } from "../../http/fetch.testing.js";
 import type { Config } from "../../env.config.js";
 import type { ClaudeStore } from "./claude-credentials.js";
 import { createClaudeCatalog } from "./claude-models.js";

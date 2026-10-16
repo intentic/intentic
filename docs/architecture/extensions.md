@@ -26,7 +26,7 @@ flowchart LR
 
 ## Where they come from
 
-[`installed-extensions.ts`](../../_sandbox/sandbox/src/extensions/installed-extensions.ts) merges three sources:
+[`installed-extensions.ts`](../../_sandbox/sandbox/src/capabilities/extension-inventory/installed-extensions.ts) merges three sources:
 
 | Source | Where | Trust |
 | --- | --- | --- |
@@ -34,13 +34,13 @@ flowchart LR
 | Installed | a git checkout pinned to a full commit sha, from a registry | the owner installed it; updates show a diff of new powers first |
 | Workspace | a folder an agent wrote under `.intentic/config` | inert until the owner approves the powers it declares |
 
-A workspace extension's approval is a digest of its declared powers, kept in `/history` where no workspace write reaches ([`extension-approvals.ts`](../../_sandbox/sandbox/src/extensions/extension-approvals.ts)). Editing its code under the same powers keeps the approval; asking for more voids it. The owner can switch any extension off except automations, whose engine fires on its own.
+A workspace extension's approval is a digest of its declared powers, kept in `/history` where no workspace write reaches ([`extension-approvals.ts`](../../_sandbox/sandbox/src/capabilities/extension-inventory/extension-approvals.ts)). Editing its code under the same powers keeps the approval; asking for more voids it. The owner can switch any extension off except automations, whose engine fires on its own.
 
 A registry ([`_shared/registry`](../../_shared/registry)) is a git repository of curated listings; the official one is `github.com/intentic/registry`, and [`_tools/registry-scan`](../../_tools/registry-scan) proposes and re-checks its entries.
 
 ## Dev mode
 
-An installed extension runs from its pinned clone in `.intentic/local/extensions/<id>`, which every conversation shares live, nobody reviews, and the next update replaces. Changing that copy used to be the only way to see a change on reload, so agents changed it. Dev mode points the install at a checkout of its source instead, such as `extensions/maintenance` or a conversation's own copy of it, and the daemon serves the extension from there: its bundle, backend, processes, skills and contributions. The pointer lives in `.intentic/local/extension-dev.json`, which is never versioned, since it can name a conversation's worktree ([`extension-dev.ts`](../../_sandbox/sandbox/src/extensions/extension-dev.ts)).
+An installed extension runs from its pinned clone in `.intentic/local/extensions/<id>`, which every conversation shares live, nobody reviews, and the next update replaces. Changing that copy used to be the only way to see a change on reload, so agents changed it. Dev mode points the install at a checkout of its source instead, such as `extensions/maintenance` or a conversation's own copy of it, and the daemon serves the extension from there: its bundle, backend, processes, skills and contributions. The pointer lives in `.intentic/local/extension-dev.json`, which is never versioned, since it can name a conversation's worktree ([`extension-dev.ts`](../../_sandbox/sandbox/src/capabilities/extension-inventory/extension-dev.ts)).
 
 - The inventory follows a pointer only to a checkout inside the workspace or a conversation's worktree, outside `.intentic/`, `refs/` and `public/`, holding the same extension id, declaring exactly the powers of the pinned version, and built, with every bundle a file inside the checkout (a symlink out of it is held, since the daemon would serve whatever it reaches). Otherwise the pinned clone keeps running and the row says why. New powers still come only through an update the owner approves.
 - The install keeps `source: "installed"` and its pinned `commit`, so updates, Browse and the environment overlay read the pinned clone, and removal deletes that clone and the pointer, never the checkout.

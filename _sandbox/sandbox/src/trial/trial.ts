@@ -1,6 +1,6 @@
 import { within } from "@intentic/base/async";
 import { TrialAllowanceSchema } from "@intentic/api-contract/ingress";
-import type { TrialHealth } from "@intentic/sandbox-contract";
+import type { TrialHealth } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import type { Config } from "../env.config.js";
 import { callIngress } from "../system/platform-client.js";
 

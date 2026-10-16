@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract";
+import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract/schemas/run-targets";
 import type { Services } from "../../composition.js";
 import type { TerminalRunner, TerminalRunOptions } from "../../terminal/terminal-run.js";
 import { createRunGrants } from "../device-door.js";
@@ -67,7 +67,7 @@ const routes = (root: string, online: boolean, features: string[], terminal: Ter
     );
 
 const call = async <T>(procedure: unknown, input?: unknown): Promise<T> =>
-    // oxlint-disable-next-line typescript/no-unsafe-call -- the implemented procedure's handler, called as oRPC would
+    // the implemented procedure's handler, called as oRPC would
     (await (procedure as { "~orpc": { handler: (options: unknown) => Promise<T> } })["~orpc"].handler({ input, context: {}, path: [], procedure, signal: undefined, lastEventId: undefined, errors: {} }));
 
 test("the list says which computers could take a run now, and why not", async () => {

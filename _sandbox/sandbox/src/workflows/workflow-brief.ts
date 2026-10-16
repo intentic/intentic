@@ -1,4 +1,5 @@
-import type { LoopDocument, WorkflowStep } from "@intentic/sandbox-contract";
+import type { LoopDocument } from "@intentic/sandbox-contract/schemas/loops";
+import type { WorkflowStep } from "@intentic/sandbox-contract/schemas/workflows";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // What a step is told beyond its own loop brief (loop-brief.ts): that other sessions ran before it and what they

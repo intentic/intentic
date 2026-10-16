@@ -1,4 +1,4 @@
-import type { PhoneSummary, PhoneWakeRegistration } from "@intentic/sandbox-contract";
+import type { PhoneSummary, PhoneWakeRegistration } from "@intentic/sandbox-contract/schemas/phone";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 
 // Making a phone wakeable, the editor's half. The sandbox wakes a sleeping phone through the platform's push relay,

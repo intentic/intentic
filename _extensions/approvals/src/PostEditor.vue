@@ -1,6 +1,6 @@
 <!-- In-place editor that replaces <PostBody> at the same size and position, so editing does not shift the row. -->
 <script setup lang="ts">
-import type { PostApprovalSummary } from "@intentic/sandbox-contract";
+import type { PostApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
 import { ProseField } from "@intentic/extension-ui";
 import { type ComponentPublicInstance, computed, onBeforeUnmount } from "vue";
 import { postsATitle } from "./postText";

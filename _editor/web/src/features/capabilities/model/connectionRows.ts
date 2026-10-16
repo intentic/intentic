@@ -1,21 +1,18 @@
 import { t } from "@intentic/ui/i18n";
 import { CAPABILITY_CATEGORIES, type CapabilityCatalogEntry, type CapabilityCategory } from "@intentic/capability-catalog";
-import type {
-    CapabilityKind,
-    Device,
-    HostSummary,
-    NetdiskLink,
-    PhoneSummary,
-    VpnLink,
-    WebExtSummary,
-    CapabilitySummary,
-} from "@intentic/sandbox-contract";
+import type { CapabilityKind, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
+import type { HostSummary } from "@intentic/sandbox-contract/schemas/hosts";
+import type { NetdiskLink } from "@intentic/sandbox-contract/schemas/netdisk";
+import type { PhoneSummary } from "@intentic/sandbox-contract/schemas/phone";
+import type { VpnLink } from "@intentic/sandbox-contract/schemas/vpn";
+import type { WebExtSummary } from "@intentic/sandbox-contract/schemas/webext";
 import type { CapabilityConnection, CapabilityConnectionGroup } from "../connect/CapabilityConnections.vue";
-import { type ConnectionState, connectionFacts, connectionState, netdiskFacts, sidesAwakeWithoutIt, vpnFacts } from "./connections";
+import { type ConnectionState, connectionFacts, connectionState, netdiskFacts, sidesAwakeWithoutIt, vpnFacts } from "../../../models/capabilities/connections";
 import { type DeviceConnection, sameMachineNote } from "./deviceConnections";
-import { categoryLabel, entryName } from "./catalogCopy";
+import { categoryLabel, entryName } from "../../../models/capabilities/catalogCopy";
 import type { CatalogTile } from "./slices";
-import { entryIcon } from "./tiles";
+import { entryIcon } from "../../../models/capabilities/tiles";
 
 // What a connection's row says beyond its stored config: its state and its facts line, on the tile that made it and
 // in the Connected slice, the inventory of every live connection plus each machine desktop sync alone reaches. Pure

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { CONTROL_MCP_SERVERS, DAEMON_MCP_SERVERS, RESERVED_MCP_SERVER_NAMES } from "@intentic/sandbox-contract";
+import { CONTROL_MCP_SERVERS, DAEMON_MCP_SERVERS, RESERVED_MCP_SERVER_NAMES } from "@intentic/sandbox-contract/policy/reserved-servers";
 import type { InProcessServer } from "../agent/tools/turn-mounts.js";
 import { JS_SERVER_NAME } from "../seams/js-tool-names.js";
 import { mcpServerOf, outsideResultHooks, outsideSourceOf, sealedDoor, sealResult } from "./outside-results.js";

@@ -1,4 +1,4 @@
-import type { ApprovalSummary } from "@intentic/sandbox-contract";
+import type { ApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
 import { freshEdition } from "../mode";
 
 // What the demo's agents prepared and may not do unasked (the Approvals queue, .intentic/config/approvals/): a launch

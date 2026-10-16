@@ -2,7 +2,7 @@
 // from a built-in prompt never replaces text somebody wrote without asking. Mounted, since what's tested is what this
 // page hands the document and what it does with a press.
 import "@intentic/testing/dom";
-import { SYSTEM_PROMPT_MAX, type BuiltinPromptText, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { SYSTEM_PROMPT_MAX, type BuiltinPromptText, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { noticeFrom } from "@intentic/ui/async";
@@ -19,7 +19,7 @@ const patch = jest.fn((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
-jest.mock(`../../overview/useSandboxSettings`, () => ({
+jest.mock(`../../../../models/sandbox/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({
         settings,
         patch,

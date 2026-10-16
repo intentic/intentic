@@ -10,7 +10,7 @@ import { environment } from "../../app/environments/environment";
 import { localFace } from "../../app/environments/local";
 import { clearImprints } from "@intentic/ui/skeleton-store";
 import { clearPersistedQueries } from "../../lib/queryPersistence";
-import { clearAccountStorage } from "../../lib/browserStorage";
+import { clearAccountStorage } from "../../app/storage/browserStorage";
 import { useSandboxSession } from "../session/sandboxSession";
 import { useGoogleIdentity } from "./useGoogleIdentity";
 import { emailCodeError } from "./emailCode";

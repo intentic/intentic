@@ -1,17 +1,12 @@
-import {
-    type AccountState,
-    accountServesLoop,
-    type AgentHarness,
-    type AgentProvider,
-    type KeyedProvider,
-    KeyedProviderSchema,
-    type ModelRef,
-    providerSpec,
-    reportsPlanLimits,
-} from "@intentic/sandbox-contract";
+import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { accountServesLoop, reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { type KeyedProvider, KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
+import type { ModelRef } from "@intentic/sandbox-contract/models/plan-pools";
+import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { computed, type Ref } from "vue";
-import { offeredLoops, selectedLoop } from "../models/offeredLoops";
-import { providerRefusals, translatorAccounts } from "./providerAccounts";
+import { offeredLoops, selectedLoop } from "../../../models/providers/offeredLoops";
+import { providerRefusals, translatorAccounts } from "../../../models/providers/providerAccounts";
 import {
     accountFacts,
     accountState,
@@ -27,8 +22,8 @@ import {
     planLimitBandTone,
     refusalFor,
     routedAccountFacts,
-} from "../session/usageStatus";
-import { accountsOf, refreshConnections, subscriptionOnly } from "./useChat-accounts";
+} from "../../../models/providers/usageStatus";
+import { accountsOf, refreshConnections, subscriptionOnly } from "../../../models/conversations/accounts/useChat-accounts";
 import { useOperation } from "../../../workbench/operations/operations";
 import { t } from "@intentic/ui/i18n";
 import { timeAgo } from "@intentic/ui/format";

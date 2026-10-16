@@ -1,7 +1,8 @@
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { PRIVACY_IMAGE_ID, type PrivacyImagePair, PrivacyImagePairSchema } from "@intentic/sandbox-contract";
+import { PRIVACY_IMAGE_ID, type PrivacyImagePair, PrivacyImagePairSchema } from "@intentic/sandbox-contract/schemas/privacy";
+import { parseJsonWith } from "@intentic/base/json";
 
 // The images the shield painted over, each as it was and as it left, so the owner can peek at what a provider saw in
 // place of a picture (privacy.image). The picture before holds the very values the vault keeps, so it is kept where the
@@ -72,15 +73,8 @@ export const filePrivacyImages = (dir: string, now: () => Date = () => new Date(
                 return undefined;
             }
             const raw = await readFile(fileOf(id), "utf8").catch(undefinedIfMissing);
-            if (raw === undefined) {
-                return undefined;
-            }
-            try {
-                return PrivacyImagePairSchema.safeParse(JSON.parse(raw)).data;
-            } catch {
-                // allow(silent-catch): a pair torn by a crash mid-write reads as one no longer kept.
-                return undefined;
-            }
+            // A pair torn by a crash mid-write reads as one no longer kept.
+            return raw === undefined ? undefined : parseJsonWith(raw, PrivacyImagePairSchema);
         },
     };
 };

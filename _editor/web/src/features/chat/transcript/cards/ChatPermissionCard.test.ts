@@ -1,11 +1,11 @@
 // Needs jsdom: which answer each button sends, and what its hover says before the press, are what this card decides.
 import "@intentic/testing/dom";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, h } from "vue";
-import type { CardAnswer } from "../../session/cardReplies";
-import type { ChatMessage } from "../transcript";
+import type { CardAnswer } from "../../../../models/conversations/session/cardReplies";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import ChatPermissionCard from "./ChatPermissionCard.vue";
 
 // A card waiting on the owner, as the daemon's own fold draws it from the frame that raised it.

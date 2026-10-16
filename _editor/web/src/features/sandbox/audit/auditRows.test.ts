@@ -1,6 +1,6 @@
 // Pins how an audit record reads: what happened in words, who did it, the chain check as one sentence, a burst of the
 // same record as one row, and the export period covering both of the days a person picked.
-import type { AuditRecord, AuditVerify } from "@intentic/sandbox-contract";
+import type { AuditRecord, AuditVerify } from "@intentic/sandbox-contract/schemas/audit";
 import { actionIcon, actionTitle, actorLine, actorShort, byDay, detailLines, entryActor, exportSpan, presetDays, toEntries, verdictLine } from "./auditRows";
 
 test(`an action reads as what happened; one this build has no sentence for keeps its name, under its subject if known`, () => {

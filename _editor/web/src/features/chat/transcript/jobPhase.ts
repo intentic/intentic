@@ -1,4 +1,4 @@
-import type { AgentJob } from "@intentic/sandbox-contract";
+import type { AgentJob } from "@intentic/sandbox-contract/schemas/agents";
 
 // A job the card no longer carries (a daemon restart forgets them) is `untracked`: nothing is claimed about how it went.
 

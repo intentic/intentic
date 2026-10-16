@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract";
+import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { accountLimitReset, fileAccountUsageStore } from "./account-usage.js";
 
 // Path's parent directory doesn't exist yet; the store must create it on write.

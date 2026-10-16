@@ -26,7 +26,7 @@
                     "**/*.css",
                     "@intentic/testing/dom",
                     "**/sandbox/switching/sandboxScope",
-                    "**/sandbox/switching/sandboxScreen",
+                    "**/models/sandbox/sandboxScreen",
                     "**/extension-host/hostModules"
                 ]
             }
@@ -394,6 +394,11 @@
     ],
     "overrides": [
         {
+            // Sorted so concurrent additions land in different places instead of all at the end of one reason block.
+            "files": ["_site/demo/src/unserved.ts"],
+            "rules": { "sort-keys": "error" }
+        },
+        {
             // A CommonJS file has no `import`: it exists because it is loaded by `node --require` into programs of any
             // Node version an agent's project pins (@intentic/constants heavy-hook.cjs), which `--import` is not.
             "files": ["**/*.cjs"],
@@ -426,7 +431,7 @@
                 "_sandbox/sandbox/src/extensions/backend/**",
                 "_editor/web/src/app/perf/perf.ts",
                 "_editor/web/src/app/perf/renderTrace.ts",
-                "_editor/web/src/features/chat/run/focusTrace.ts"
+                "_editor/web/src/models/conversations/run/focusTrace.ts"
             ],
             "rules": {
                 "no-console": "off"

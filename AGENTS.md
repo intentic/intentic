@@ -39,8 +39,9 @@ owner pushes.
 
 **After each file you write**: the `edit` checks in `.intentic/checks.json`: every check that can judge one file
 on its own (`node _tools/checks/run.mjs --paths {file}`), and the linter (`node _tools/oxlint/lint-edit.mjs {file}`,
-`.oxlintrc.json` plus the anti-slop and complexity rules of `.oxlintrc.plugins.json`, `.astro` included), which fixes
-what it can silently and reports only what the edit added over the file at `HEAD`. What they print rides back with the
+`.oxlintrc.json` plus the anti-slop rules of `.oxlintrc.plugins.json`, `.astro` included; its complexity rule is
+the `code-shape` check's), which fixes what it can silently and reports only what the edit added over the file at
+`HEAD`. What they print rides back with the
 edit and never stops the turn. Fix it there. A finding that is right where it stands says why with
 `// allow(<check>): <reason>` at the site, or an `Allow: <check> — <reason>` commit trailer for a whole change
 (`_tools/checks/README.md`); `Test-Note:` and `Breaking-Note:` below are declarations, not check exceptions.
@@ -77,11 +78,13 @@ If you weakened a test file on purpose, end your final message with a `Test-Note
 into the landed commit, and CI's push check reads it there. If you changed the wire contract (`_shared/sandbox-contract/src`),
 its lock changes with it. Before work lands from a worktree, the repository's fixers run there
 (`_tools/scripts/verify/fixers.mjs`, from `_sandbox/sandbox/src/conversations/land/worktree-fixers.ts`): they emit the
-contract and rewrite `contract.lock.json` when the change reached the contract, and freeze `state-shapes.json` and
-`state-registry.ts` when it reached a daemon or contract source, so the land carries them and its drafted commit gets
+contract and rewrite `contract.lock.json` when the change reached the contract, regenerate the daemon's indexes
+(`state-registry.ts`, `app-raw-routes.ts` and `slice-registry.ts`) when it reached a daemon source, and freeze `state-shapes.json` when it
+reached a daemon or contract source, so the land carries them and its drafted commit gets
 the `!` and `Breaking-Note:` a removal needs. Work in the main tree gets no fixers: regenerate the lock yourself
 (`pnpm --filter @intentic/sandbox-contract lock`, or `tsgo -b && node scripts/write-lock.mjs` in that package where
-pnpm cannot link), and the shapes with the generator named under "Stored data". A stale lock fails the contract's own
+pnpm cannot link), the daemon's indexes with the generator named under "Stored data", and the shapes with
+`node --import tsx src/store/shapes/write-state-shapes.ts --freeze` in `_sandbox/sandbox`. A stale lock fails the contract's own
 test in CI.
 
 ## Before it leaves the machine
@@ -124,10 +127,10 @@ is reused. It does not see a key read a new way under the same name and type, a 
 a refinement (a length, a pattern), or a store with no `defineDocument`. Define a document or a boot step as
 `export const name = defineDocument(…)` (or `defineStep`) at the top of its module, open it with `openDocument(spec,
 path, …)` (or `openEntries`, `openIdList`, `openDirectory`; `_sandbox/sandbox/src/store/open-document.ts`), which
-parses with the spec's own schema, never with a second one, and list it by running the shape
-generator (`node --import tsx src/store/shapes/write-state-shapes.ts --freeze` in `_sandbox/sandbox`): the boot step
-and the update pre-flight read only `src/bootstrap/state-registry.ts`, and its test fails on a definition missing from
-it. Never read an existing key a new way (rename it), and never reuse a retired name. [COMPATIBILITY.md](COMPATIBILITY.md#stored-data)
+parses with the spec's own schema, never with a second one, and list it by running the index
+generator (`node scripts/write-indexes.mjs` in `_sandbox/sandbox`, which its typecheck and tests also run first): the
+boot step and the update pre-flight read only `src/bootstrap/state-registry.ts`, and its test fails on a definition
+missing from it. Never read an existing key a new way (rename it), and never reuse a retired name. [COMPATIBILITY.md](COMPATIBILITY.md#stored-data)
 has the rest and the reasons.
 
 ## Tests
@@ -139,7 +142,15 @@ rules are about what a test stands the code up with, not about how it asserts.
 
 - One fake per seam, not one per suite – a copy cannot be updated when the interface grows, so it quietly
   starts describing a system that no longer exists. Shared fixtures live in the package's `src/testing.ts`
-  (excluded from the build, included in the type check).
+  or, where a package fakes many seams, in `<module>.testing.ts` beside the seam it fakes (both excluded from the
+  build, included in the type check).
+- In new editor code, hand a composable its seams instead of replacing modules by path – a `jest.mock` of a path
+  replaces the module for the whole file, depends on import order (it is not hoisted), and silently stops mocking once
+  the module moves, since Bun accepts a path that resolves to nothing. New code takes what it talks to as an argument,
+  or injects it through an `InjectionKey` with the real module as the default (`CHAT_SURFACE` in
+  `models/conversations/tools/chatToolSurface.ts`), and its suite runs it with `inSetup(use, { provides, plugins })` from
+  `_editor/web/src/testing/inSetup.ts`, handing the one fake through `provided(KEY, fake)`. Keep `jest.mock` for
+  third-party modules and browser globals.
 - Stub what the test relies on; let the rest name itself – `unstubbed("git", { … })` from `@intentic/testing`
   returns a seam whose unstubbed members throw with their own name, to any depth. A route that reaches past the
   fake says which method it wanted, instead of answering 500. One definition for the monorepo: the two copies

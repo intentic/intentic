@@ -1,6 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { syncHookOutput } from "../../../testing.js";
+import { syncHookOutput } from "../../run/harness/harness-hooks.testing.js";
 import { depsNoticeHooks } from "./agent-deps.js";
 import { outputNoticeMatcher, placeholderConnection, staleDistSymptom } from "./agent-output-notices.js";
 

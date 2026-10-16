@@ -1,5 +1,5 @@
 import type { RestartResume } from "../agent/run/turn/restart-resume-policy.js";
-import { consumeEntry, type JournalEntry, resumeBars, spendAttempt } from "../agent/run/turn/turn-journal.js";
+import { consumeEntry, type JournalEntry, resumeBars, spendAttempt } from "../store/journals/turn-journal.js";
 import { settingsResume } from "../agent/run/turn/turn-resume.js";
 import type { Services } from "../composition.js";
 import { opt } from "../opt.js";

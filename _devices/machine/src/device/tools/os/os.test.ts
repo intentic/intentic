@@ -1,4 +1,5 @@
-import type { DeviceScopes, IntenticOsStatus } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { IntenticOsStatus } from "@intentic/sandbox-contract/schemas/intentic-os";
 import { ScopeError } from "../../policy.js";
 import { intenticOsLine } from "../describe.js";
 import { intenticOsFactsOf, type OsDeps, osChannel, osReboot, osRollback, osStatus, osUpdate } from "./os.js";

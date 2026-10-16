@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { BrowserConfig, Capability, IdentityConfig } from "@intentic/sandbox-contract";
+import type { BrowserConfig, Capability, IdentityConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { accountSkillLine, browserToolsNote, identitiesSkill, rosterSummary } from "./browser-skill.js";
 import { loadedSkillFile, loadedSkillsRoot, removeLoadedSkill, skillWriterOf, stampSkill, writeLoadedSkill } from "../store/loaded-skills.js";
 import type { CapabilityCtx } from "./capability.js";

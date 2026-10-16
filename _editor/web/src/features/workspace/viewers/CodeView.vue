@@ -11,9 +11,9 @@ import { modelLineOf } from "@intentic/code-read";
 import { requestCodeAnalysis } from "../health/codeAnalysisClient";
 import { takeCaret } from "../files/caretRequest";
 import { normalizationEdits } from "../files/normalizeOnSave";
-import { useEditorSelection } from "../files/useEditorSelection";
+import { useEditorSelection } from "../../../models/workspace/files/useEditorSelection";
 import { editorType, useMonaco, watchEditorType } from "../files/useMonaco";
-import type { LineJump } from "../tabs/workspaceTabs";
+import type { LineJump } from "../../../models/workspace/tabs/workspaceTabs";
 
 // Single Monaco editor for both read-only preview and (with `editable`) editing, coloured by Shiki; no lang or
 // over the highlight cap opens as plaintext. `hideComments` removes (not folds) comments, keeping the file's own

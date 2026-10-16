@@ -10,18 +10,15 @@ import {
     AgentProviderSchema,
     AgentTurnSchema,
     ForkedFromSchema,
-    isConversationId,
-    LandConflictSchema,
-    LimitPolicySchema,
-    ParkedRequestSchema,
-    RetryPolicySchema,
-    SessionOwnerSchema,
     TurnProfileSchema,
-    UnfinishedWorkSchema,
-    WatchOutcomeSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/agent";
+import { isConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { LandConflictSchema, SessionOwnerSchema, UnfinishedWorkSchema } from "@intentic/sandbox-contract/schemas/agents";
+import { LimitPolicySchema, RetryPolicySchema } from "@intentic/sandbox-contract/schemas/turn-break";
+import { ParkedRequestSchema } from "@intentic/sandbox-contract/events/requests";
+import { WatchOutcomeSchema } from "@intentic/sandbox-contract/events/transcript";
 import { z } from "zod";
-import { turnJournalRows } from "../../agent/run/turn/turn-journal.js";
+import { turnJournalRows } from "../../store/journals/turn-journal.js";
 import { opt } from "../../opt.js";
 import { sessionsDir } from "../../sessions/session-store.js";
 import { legacyTranscriptFile, transcriptFile } from "../../sessions/transcript-record.js";
@@ -29,6 +26,7 @@ import { conversationUnit } from "../../store/conversation-units.js";
 import { type ConversationsDb, conversationsDbPath, openConversationsDb } from "../../store/conversations-db.js";
 import { defineStep, type StepContext, type StepPlan } from "../../store/evolution/state-steps.js";
 import { type Ending, type PersistedAgent, PersistedAgentSchema, sqliteAgentsStore } from "./agents-store.js";
+import { parseJsonWith } from "@intentic/base/json";
 
 // 1.308 (c760a6028) moved the conversation state on the history volume with no importer: agents.json, turns/,
 // turn-checkpoints.json and watches/ went into conversations.db, and transcripts/, system-prompts/ and each fenced
@@ -185,15 +183,8 @@ type ImportRecord = z.infer<typeof ImportRecordSchema>;
 
 // A small file read through the schema it was written with; absent, torn or unreadable is undefined, as it was to ≤1.307.
 const parsed = <T>(schema: z.ZodType<T>, text: string | undefined): T | undefined => {
-    if (text === undefined) {
-        return undefined;
-    }
-    try {
-        return schema.safeParse(JSON.parse(text)).data;
-    } catch {
-        // allow(silent-catch): a file that is not JSON was unreadable to ≤1.307 as well, so there is nothing in it to import
-        return undefined;
-    }
+    // A file that is not JSON was unreadable to ≤1.307 as well, so there is nothing in it to import.
+    return text === undefined ? undefined : parseJsonWith(text, schema);
 };
 
 /* ---- one old record as this build's ---- */

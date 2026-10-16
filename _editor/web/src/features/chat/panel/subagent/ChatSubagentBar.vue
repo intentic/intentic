@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { Button, formatElapsed, Icon, timeAgo } from "@intentic/ui";
-import type { AgentProvider } from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { childLook } from "../../../agents/board/cards/childLook";
-import RunFacts from "../../../agents/board/cards/RunFacts.vue";
-import { inProcess, type TrayChild } from "../../../agents/board/view/childFold";
+import { childLook } from "../../../../models/fleet/board/childLook";
+import RunFacts from "../../../../parts/fleet/RunFacts.vue";
+import { inProcess, type TrayChild } from "../../../../models/fleet/board/childFold";
 
 // WHERE THE COMPOSER STANDS WHEN THE CHAT IS A SUBAGENT'S. A subagent is its parent's to direct: the parent wrote its
 // ask, reads its report, and decides what it does next, so a box to type into here would invite words the parent never

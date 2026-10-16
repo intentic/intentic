@@ -1,7 +1,7 @@
 <!-- One port, explained: which port, what it is, and where it came from, with the raw command line, directory and pid one click down. -->
 <script setup lang="ts">
 import { Button, DisclosureRow, type IconName, Icon, InfoTable, StatusBadge, ui } from "@intentic/extension-ui";
-import type { PortSummary } from "@intentic/sandbox-contract";
+import type { PortSummary } from "@intentic/sandbox-contract/schemas/ports";
 import { computed, ref } from "vue";
 import SharePreview from "./SharePreview.vue";
 import { t } from "./i18n.js";

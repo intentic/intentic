@@ -29,7 +29,7 @@
             "@intentic/ui/time": ["../../_editor/ui/src/lib/timeWindow.ts"],
             "@intentic/web/main": ["../../_editor/web/src/main.ts"],
             "@intentic/web/builtins": ["../../_editor/web/src/extension-host/builtins.ts"],
-            "@intentic/web/chat-tabs": ["../../_editor/web/src/features/chat/tabs/tabSnapshot.ts"]
+            "@intentic/web/chat-tabs": ["../../_editor/web/src/models/conversations/tabs/tabSnapshot.ts"]
         }
     },
 /* The app's ambient declarations, for the same reason as the path map above: this checks the app's source. */

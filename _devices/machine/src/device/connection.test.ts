@@ -1,4 +1,4 @@
-import { HOST_HEARTBEAT_MS } from "@intentic/sandbox-contract";
+import { HOST_HEARTBEAT_MS } from "@intentic/sandbox-contract/protocol/doors/host-protocol";
 import { PEER_LINK_BACKOFF, peerLinkSilenceMs } from "@intentic/sandbox-contract/peer-dial";
 import { localDaemonPort } from "@intentic/sandbox-run";
 import { unstubbed } from "@intentic/testing";
@@ -298,10 +298,10 @@ describe(`a link whose sandbox is gone`, () => {
         );
 
         for (let attempt = 1; attempt <= GONE_PROBE_AFTER_ATTEMPTS; attempt += 1) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one dial after another, as the loop makes them
+            // one dial after another, as the loop makes them
             await waitFor(() => expect(sockets).toHaveLength(attempt));
             sockets[attempt - 1]?.drops(1002);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             await advanceTimersByTimeAsync(31_000);
         }
         await waitFor(() => expect(marked).toEqual([1_000]));

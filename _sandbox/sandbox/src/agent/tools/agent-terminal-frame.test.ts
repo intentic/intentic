@@ -1,13 +1,13 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { stubEnv, unstubAllEnvs } from "@intentic/testing/bun";
 import { type HarnessRequest, runAgent } from "../run/agent.js";
 import type { QueryFn } from "../run/sdk-stream.js";
 import * as fsOriginal from "node:fs";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 
 // One fleet's actors, and the cards a turn here parks in them.
 const actors = memoryFleet().conversations;

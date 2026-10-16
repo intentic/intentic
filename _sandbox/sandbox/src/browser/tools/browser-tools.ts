@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { errorMessage } from "@intentic/base/errors";
 import { freePort as bindEphemeral } from "@intentic/base/fs";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { workloadStamp } from "../../seams/workload-stamp.js";
 import { browserOutputDir } from "../cast/browser-artifacts.js";
 import type { AgentTool } from "../../agent/tools/agent-tools.js";

@@ -1,6 +1,6 @@
-import { type DeviceAgentOp, icForgetShapeArgs, icPowerArgs, icShapeArgs } from "@intentic/sandbox-contract";
+import { type DeviceAgentOp, icForgetShapeArgs, icPowerArgs, icShapeArgs } from "@intentic/sandbox-contract/schemas/devices";
 import type { SandboxVerb } from "@intentic/ui";
-import type { ShapeIntent } from "../shapeFlow";
+import type { ShapeIntent } from "../../../../models/sandbox/devices/shapeFlow";
 import type { SyncCommand } from "./deviceOps";
 
 // The line to type on the machine itself when the app's route to it is shut: a switch the device won't grant, an

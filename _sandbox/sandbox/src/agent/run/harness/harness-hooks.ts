@@ -1,5 +1,5 @@
 import { isAbsolute, join } from "node:path";
-import type { Rule } from "@intentic/sandbox-contract";
+import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { landingPaths } from "../../../conversations/land/landing-paths.js";
 import { isIsolated } from "../../../conversations/registry/agents-store.js";

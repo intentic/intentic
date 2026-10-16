@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { nestSiblings } from "./fileNesting";
 
 // Arithmetic behind revealing the file the user is looking at (WorkspaceTree's reveal watch): what must be open for a

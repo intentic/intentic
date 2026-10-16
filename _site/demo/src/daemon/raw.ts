@@ -1,12 +1,8 @@
-import {
-    accessRefusal,
-    memberAccess,
-    type PasskeysList,
-    ProviderKeysApplySchema,
-    type SandboxVitals,
-    tierOf,
-    type VoicesView,
-} from "@intentic/sandbox-contract";
+import { accessRefusal, memberAccess, tierOf } from "@intentic/sandbox-contract/schemas/members";
+import type { PasskeysList } from "@intentic/sandbox-contract/schemas/system";
+import { ProviderKeysApplySchema } from "@intentic/sandbox-contract/state/arrival";
+import type { SandboxVitals } from "@intentic/sandbox-contract/netd/generated/browser-wire";
+import type { VoicesView } from "@intentic/sandbox-contract/schemas/voice";
 import { type RawContext, type RawRoutes, refuse } from "@intentic/contract-serve";
 import { KNOWLEDGE_BASE } from "../../vendor/knowledge/wire-types";
 import { type DemoGrant, grantAccess, grants, revokeAccess } from "../fixture/access";

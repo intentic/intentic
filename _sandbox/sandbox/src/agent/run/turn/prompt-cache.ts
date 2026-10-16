@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 
 // How long a provider's prompt cache stays warm. No provider publishes an expiry anywhere in a response, so the answer
 // is either measured off the response or quoted from the harness that asked for it; a provider with neither answers

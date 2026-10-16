@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { STATE_DIR } from "@intentic/constants";
 import { type ExplorerFilters, explorerShows, isTechnicalEntry, technicalHidden } from "../explorerFilter";
 

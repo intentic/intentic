@@ -1,4 +1,5 @@
-import { type Page, standalonePage } from "@intentic/sandbox-contract";
+import type { Page } from "@intentic/sandbox-contract/events/requests";
+import { standalonePage } from "@intentic/sandbox-contract/text/pages";
 import { PRIYA_CHAT_ID } from "./openChats";
 
 // A page an agent showed in a chat (`show_page`), as the daemon stores it: the agent's own markup made whole on its own

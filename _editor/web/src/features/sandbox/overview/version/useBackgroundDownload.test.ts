@@ -2,7 +2,7 @@
 // sandbox, only when that machine's agent says it runs the download unattended, at most once per release per half hour
 // in a tab, and silently, like the machine's own timer.
 import "@intentic/testing/dom";
-import type { Device } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { listedDevice } from "../../../../testing/listedDevice";
 import { START_AGAIN_MS } from "./updateDownload";
@@ -10,7 +10,7 @@ import { START_AGAIN_MS } from "./updateDownload";
 const devices = ref<Device[]>([]);
 const sent: { hostId: string; slug: string; op: string }[] = [];
 let answer: () => Promise<string> = async () => `intentic: 1.54.0 is downloaded and built`;
-jest.mock(`../../devices/useDevices`, () => ({
+jest.mock(`../../../../models/sandbox/devices/useDevices`, () => ({
     useDevices: () => ({ devices }),
     manageDeviceSandbox: async (hostId: string, slug: string, op: string): Promise<string> => {
         sent.push({ hostId, slug, op });

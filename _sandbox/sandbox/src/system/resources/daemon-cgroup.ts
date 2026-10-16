@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { Logger } from "pino";
+import { errorMessage } from "@intentic/base/errors";
 
 // THE DAEMON'S OWN CGROUP, KEPT AS THE ENTRYPOINT MEANT IT. docker-entrypoint.sh puts the daemon in a `daemon` leaf with
 // no swap and the top cpu and io weight, so that a box short of memory swaps out a build rather than the heap every
@@ -68,7 +69,7 @@ export const checkDaemonLeaf = async (leaf: string, io: CgroupFiles = files): Pr
             await io.write(path, value);
             restored.push({ file, was });
         } catch (error) {
-            refused.push({ file, reason: error instanceof Error ? error.message : String(error) });
+            refused.push({ file, reason: errorMessage(error) });
         }
     }
     return { restored, refused, missing };

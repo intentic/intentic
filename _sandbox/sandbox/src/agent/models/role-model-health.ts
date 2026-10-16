@@ -1,4 +1,5 @@
-import type { ModelChoice, UsageTurn } from "@intentic/sandbox-contract";
+import type { ModelChoice } from "@intentic/sandbox-contract/models/model-pins";
+import type { UsageTurn } from "@intentic/sandbox-contract/schemas/providers/usage";
 import type { UsageStore } from "../../usage/usage-store.js";
 import { utcDay } from "../../usage/usage-store.js";
 

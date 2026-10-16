@@ -41,7 +41,7 @@ export const realPathThrough = async (path: string): Promise<string> => {
     const missing: string[] = [];
     for (let head = resolve(path); ; head = dirname(head)) {
         // allow(silent-catch): a name that does not resolve is the one this walk steps over.
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one ancestor at a time, nearest first
+        // one ancestor at a time, nearest first
         const real = await realpath(head).catch(() => undefined);
         if (real !== undefined) {
             return join(real, ...missing.toReversed());
@@ -65,7 +65,6 @@ export const realInside = async (root: string, path: string, options: Omit<Insid
 // `COM1`…, with or without an extension). Measured on NTFS: `a.txt:ads` resolved to a hidden stream of `a.txt`,
 // `notes:extra` left an empty `.notes` beside it, and a file made as `nul` could not be deleted by PowerShell. The
 // machine agent's project files and the desktop folder server both refuse such a name before anything is made for it.
-// oxlint-disable-next-line no-control-regex
 const WINDOWS_FORBIDDEN = /[<>:"|?*\u0000-\u001f]/;
 const WINDOWS_DEVICE = /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i;
 export const windowsHolds = (name: string): boolean => !WINDOWS_FORBIDDEN.test(name) && !/[. ]$/.test(name) && !WINDOWS_DEVICE.test(name);

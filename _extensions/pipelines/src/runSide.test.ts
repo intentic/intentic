@@ -1,4 +1,4 @@
-import type { CiRepo, CiRunsResponse } from "@intentic/sandbox-contract";
+import type { CiRepo, CiRunsResponse } from "@intentic/sandbox-contract/schemas/ci";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { messages } from "./i18n";

@@ -10,7 +10,7 @@ const FACE: LocalFace = { daemonUrl: `http://127.0.0.1:47201`, token: `t`.repeat
 
 const nestingIn = async (face: LocalFace | undefined): Promise<boolean> => {
     window.__INTENTIC_LOCAL__ = face;
-    const { useFileNesting } = await freshImport<typeof import("../useFileNesting")>(`../useFileNesting`, import.meta.url);
+    const { useFileNesting } = await freshImport<typeof import("../../../../models/workspace/tree/useFileNesting")>(`../../../../models/workspace/tree/useFileNesting`, import.meta.url);
     return useFileNesting().fileNesting.value;
 };
 

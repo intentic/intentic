@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { SearchBar, useDevice, vAction, ui } from "@intentic/ui";
 import { computed, nextTick, type Ref, ref, toRef } from "vue";
-import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import UsageMeter from "../session/UsageMeter.vue";
 import { ACCOUNT_LIST_LIMIT, matchAccounts, pickerOrder, usePickerAccounts } from "./pickerAccounts";
-import { providerDisplayLabel } from "./providerCatalog";
-import { servingAccount } from "./servingAccount";
-import { formatAge } from "../session/usageStatus";
-import ProviderLogo from "./ProviderLogo.vue";
+import { providerDisplayLabel } from "../../../models/providers/providerCatalog";
+import { servingAccount } from "../../../models/conversations/accounts/servingAccount";
+import { formatAge } from "../../../models/providers/usageStatus";
+import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import LoopChips from "../models/LoopChips.vue";
-import SandboxOutdatedNotice from "../../sandbox/overview/version/SandboxOutdatedNotice.vue";
-import { accountsOutdated } from "./accountsOutdated";
+import SandboxOutdatedNotice from "../../../parts/sandbox/SandboxOutdatedNotice.vue";
+import { accountsOutdated } from "../../../models/providers/accountsOutdated";
 import { useT } from "@intentic/ui/i18n";
 
 // Footer of the model picker: which connected account, and which agentic loop. Used by both the

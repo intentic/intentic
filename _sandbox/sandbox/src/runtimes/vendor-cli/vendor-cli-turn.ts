@@ -1,4 +1,6 @@
-import type { AgentEvent, Capability, RoutedAgentTurn } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import {
     type AgentAdapter,
     armPlan,
@@ -9,7 +11,7 @@ import {
     type TurnArmPlan,
     type TurnContext,
 } from "../../agent/providers/adapter.js";
-import { withAttachments } from "../../agent/prompt/attachment-note.js";
+import { withAttachments } from "../../sessions/vocabulary/attachment-note.js";
 import { releasingMounts } from "../../agent/tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";

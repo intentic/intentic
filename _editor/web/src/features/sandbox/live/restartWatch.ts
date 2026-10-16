@@ -1,8 +1,8 @@
 import { computed, effectScope, type EffectScope, shallowRef, watch } from "vue";
-import { router } from "../../../router";
+import { navigation } from "../../../workbench/navigation/navigation";
 import { type NotificationInput, useNotifications } from "../../../workbench/notifications/notifications";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useHostHolding } from "../devices/useDevices";
+import { useHostHolding } from "../../../models/sandbox/devices/useDevices";
 import {
     type DevRebuildPhase,
     type DevRebuildRun,
@@ -11,10 +11,10 @@ import {
     rebuildSeconds,
     useDevRebuild,
 } from "../environment/rebuild/useDevRebuild";
-import { useSandboxVersion } from "../overview/version/useSandboxVersion";
-import { SANDBOX_DEFAULT_SECTION } from "../sandboxNav";
+import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
+import { SANDBOX_DEFAULT_SECTION } from "../../../models/sandbox/sandboxNav";
 import { useHostedBuild } from "../secrets/useHostedBuild";
-import { restartFinished } from "./sandboxRestart";
+import { restartFinished } from "../../../models/sandbox/live/sandboxRestart";
 import { t } from "@intentic/ui/i18n";
 import { formatElapsed } from "@intentic/ui/format";
 
@@ -29,13 +29,13 @@ import { formatElapsed } from "@intentic/ui/format";
 // the one reader this stays quiet for is the one who never walked away.
 const READING_IT = new Set([`environment`, SANDBOX_DEFAULT_SECTION, undefined]);
 const onTheCard = (): boolean => {
-    const route = router.currentRoute.value;
+    const route = navigation().currentRoute.value;
     const tab = route.params[`tab`];
     return route.name === `sandbox` && READING_IT.has(typeof tab === `string` && tab !== `` ? tab : undefined);
 };
 
 const openEnvironment = (): void => {
-    void router.push({ name: `sandbox`, params: { tab: `environment` } });
+    void navigation().push({ name: `sandbox`, params: { tab: `environment` } });
 };
 
 const failureTitle = (run: DevRebuildRun): string => {

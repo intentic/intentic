@@ -1,7 +1,7 @@
 import { useLoadingReveal } from "@intentic/ui/loading-reveal";
 import { computed, type Ref } from "vue";
 import { type ChatDeliverable, deliverablesByTurn } from "../../transcript/deliverables/deliverables";
-import type { TranscriptRefresh } from "../../session/transcriptView";
+import type { TranscriptRefresh } from "../../../../models/conversations/session/transcriptView";
 import { attachedPathsOf, type ChatShot, shotsByTurn } from "../../transcript/shots/shots";
 import {
     type ChatMessage,
@@ -14,7 +14,7 @@ import {
     liveBubbleOf,
     repeatedChecklistIds,
     turnsOf,
-} from "../../transcript/transcript";
+} from "../../../../models/conversations/transcript/transcript";
 
 // The transcript as one pane draws it: turns, the live bubble, each turn's pictures and documents, fork cuts, day marks,
 // the skeleton.

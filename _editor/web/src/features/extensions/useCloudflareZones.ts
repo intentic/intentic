@@ -1,7 +1,7 @@
 import { computed, onUnmounted, ref } from "vue";
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
-import { devFillGet, devFillSet } from "../setup/devFill";
+import { devFillGet, devFillSet } from "../../app/devFill";
 import { apiClient } from "../../lib/useApi";
 
 // Cloudflare API token and zone discovery, shared by the onboarding Setup screen and the in-app Connect Cloudflare

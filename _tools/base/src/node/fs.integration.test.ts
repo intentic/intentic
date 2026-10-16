@@ -1,8 +1,24 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { freePort, pathExists, pathPresence, queueOnFile, renameOver, stagingOf, syncDirectories, writeChunksAtomic, writeFileAtomic, writeFileAtomicSync } from "./fs.js";
+import { requires } from "@intentic/testing/requires";
+import type { JsonValue, SafeParser } from "../json.js";
+import {
+    freePort,
+    pathExists,
+    pathPresence,
+    queueOnFile,
+    readJsonIfExists,
+    readTextIfExists,
+    readTextIfExistsSync,
+    renameOver,
+    stagingOf,
+    syncDirectories,
+    writeChunksAtomic,
+    writeFileAtomic,
+    writeFileAtomicSync,
+} from "./fs.js";
 
 const dir = (): string => mkdtempSync(join(tmpdir(), "fs-"));
 
@@ -41,7 +57,7 @@ describe("writeFileAtomic", () => {
             ...versions.map(async (body) => await writeFileAtomic(path, body)),
             (async () => {
                 for (let read = 0; read < 50; read++) {
-                    // oxlint-disable-next-line eslint/no-await-in-loop -- reads interleaved with the writes on purpose
+                    // reads interleaved with the writes on purpose
                     const body = await Bun.file(path)
                         .text()
                         .catch(() => versions[0] ?? "");
@@ -288,5 +304,101 @@ describe("freePort", () => {
         const port = await freePort("0.0.0.0");
 
         await expect(bind(port, "0.0.0.0")).resolves.toBeUndefined();
+    });
+});
+
+// Root reads past permission bits, so only another user can see a file refuse it.
+const unprivileged = requires(process.getuid?.() !== 0, "a user other than root, whom a mode of 000 refuses", {
+    absentOnCi: "CI's ci-base container runs its suites as root",
+});
+
+// A file nobody may read, in a fresh directory.
+const unreadable = (): string => {
+    const path = join(dir(), "secret.json");
+    writeFileSync(path, `{"port":1}`);
+    chmodSync(path, 0o000);
+    return path;
+};
+
+// A link that points at itself: ELOOP, a failure that is not an absence whoever runs the suite.
+const looping = (): string => {
+    const path = join(dir(), "loop.json");
+    symlinkSync(path, path);
+    return path;
+};
+
+const portSchema: SafeParser<number> = {
+    safeParse: (value: JsonValue) => (Number.isInteger(value) ? { success: true, data: Number(value) } : { success: false }),
+};
+
+describe("readTextIfExists", () => {
+    it("reads the file's text, an empty file included", async () => {
+        const at = dir();
+        writeFileSync(join(at, "note.txt"), "żółw\n");
+        writeFileSync(join(at, "empty.txt"), "");
+
+        expect(await readTextIfExists(join(at, "note.txt"))).toBe("żółw\n");
+        expect(await readTextIfExists(join(at, "empty.txt"))).toBe("");
+    });
+
+    it("answers undefined for a missing file and for a file standing where a directory belongs", async () => {
+        const at = dir();
+        writeFileSync(join(at, "file"), "x");
+
+        expect(await readTextIfExists(join(at, "absent.txt"))).toBeUndefined();
+        expect(await readTextIfExists(join(at, "file", "below.txt"))).toBeUndefined();
+    });
+
+    it("throws for a directory and for a link loop", async () => {
+        await expect(readTextIfExists(dir())).rejects.toMatchObject({ code: "EISDIR" });
+        await expect(readTextIfExists(looping())).rejects.toMatchObject({ code: "ELOOP" });
+    });
+
+    test.skipIf(!unprivileged.runs)(unprivileged.title("throws EACCES for a file it may not read"), async () => {
+        await expect(readTextIfExists(unreadable())).rejects.toMatchObject({ code: "EACCES" });
+    });
+});
+
+describe("readTextIfExistsSync", () => {
+    it("reads the text, answers undefined for a missing file, and throws for a directory", () => {
+        const at = dir();
+        writeFileSync(join(at, "note.txt"), "one line");
+
+        expect(readTextIfExistsSync(join(at, "note.txt"))).toBe("one line");
+        expect(readTextIfExistsSync(join(at, "absent.txt"))).toBeUndefined();
+        expect(() => readTextIfExistsSync(at)).toThrow(expect.objectContaining({ code: "EISDIR" }));
+        expect(() => readTextIfExistsSync(looping())).toThrow(expect.objectContaining({ code: "ELOOP" }));
+    });
+
+    test.skipIf(!unprivileged.runs)(unprivileged.title("throws EACCES for a file it may not read"), () => {
+        expect(() => readTextIfExistsSync(unreadable())).toThrow(expect.objectContaining({ code: "EACCES" }));
+    });
+});
+
+describe("readJsonIfExists", () => {
+    it("answers what the schema reads out of the file", async () => {
+        const path = join(dir(), "port.json");
+        writeFileSync(path, "8080");
+
+        expect(await readJsonIfExists(path, portSchema)).toBe(8080);
+    });
+
+    it("answers undefined for a missing file, a file that is not JSON, and JSON the schema refuses", async () => {
+        const at = dir();
+        writeFileSync(join(at, "torn.json"), `{"port":`);
+        writeFileSync(join(at, "string.json"), `"8080"`);
+
+        expect(await readJsonIfExists(join(at, "absent.json"), portSchema)).toBeUndefined();
+        expect(await readJsonIfExists(join(at, "torn.json"), portSchema)).toBeUndefined();
+        expect(await readJsonIfExists(join(at, "string.json"), portSchema)).toBeUndefined();
+    });
+
+    it("throws for a directory and for a link loop", async () => {
+        await expect(readJsonIfExists(dir(), portSchema)).rejects.toMatchObject({ code: "EISDIR" });
+        await expect(readJsonIfExists(looping(), portSchema)).rejects.toMatchObject({ code: "ELOOP" });
+    });
+
+    test.skipIf(!unprivileged.runs)(unprivileged.title("throws EACCES for a file it may not read"), async () => {
+        await expect(readJsonIfExists(unreadable(), portSchema)).rejects.toMatchObject({ code: "EACCES" });
     });
 });

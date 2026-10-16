@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
+import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
 import { fileSafetyPolicyStore, GRANTED_HEADING, withGrantedLines } from "./safety-policy-store.js";
 
 const store = async (granted: () => Promise<readonly string[]> = async () => []) => {

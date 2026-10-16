@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { pollUntil } from "@intentic/base/async";
 import { execBounded } from "@intentic/base/process";
 import { claimPidFile, type Log, releasePidFile, spawnDetached } from "@intentic/local-agent";
-import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
+import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract/state/versions";
 import { rollBackIfCrashLooping } from "../agent-trial.js";
 import { agentLogPath, binDir, upgradeLockPath } from "../config.js";
 import { installedBuild } from "../installed.js";
@@ -166,7 +166,7 @@ const upgradeFromRoot = async (io: MachineIo, ask: MachineUpgradeAsk, log: Log):
     }
     const legsFailed: string[] = [];
     for (const child of children) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one environment at a time; each restarts what it upgrades
+        // one environment at a time; each restarts what it upgrades
         if (!(await io.upgradeIn(child, target))) {
             legsFailed.push(child);
         }

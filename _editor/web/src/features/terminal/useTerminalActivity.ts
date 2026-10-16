@@ -1,6 +1,6 @@
 import { computed, type ComputedRef } from "vue";
-import { isWork, KINDS } from "./terminalMeta";
-import { useTerminalsQuery } from "./terminalsQuery";
+import { isWork, KINDS } from "../../models/terminal/terminalMeta";
+import { useTerminalsQuery } from "../../models/terminal/terminalsQuery";
 
 // Live non-work session count, read from the panel's own cache entry (with pending claims).
 // Excludes process sessions (own rows in useBackgroundProcesses) and work sessions, even when explicitly revealed.

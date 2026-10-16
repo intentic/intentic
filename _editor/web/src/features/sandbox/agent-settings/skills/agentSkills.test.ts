@@ -1,7 +1,9 @@
 // A row's controls (switch, edit, delete) come only from what the daemon reports for its origin, and every origin
 // gets a row, including a disabled built-in. Reading and editing happen on the row's own click, not a menu.
 import "@intentic/testing/dom";
-import { type CapabilitySummary, type ExtensionSummary, type SandboxSettings, type SkillSummary, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
+import { type SandboxSettings, type SkillSummary, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import PrimeVue from "primevue/config";
 import { stubGlobal } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
@@ -32,10 +34,10 @@ jest.mock(`../../environment/useSkills`, () => ({
 }));
 
 // Both empty: what each tier draws from them is skillVisual's own test; this file is about controls.
-jest.mock(`../../../capabilities/connect/useCapabilities`, () => ({
+jest.mock(`../../../../models/capabilities/useCapabilities`, () => ({
     useCapabilities: () => ({ capabilities: ref<CapabilitySummary[]>([]) }),
 }));
-jest.mock(`../../../extensions/useExtensions`, () => ({
+jest.mock(`../../../../models/extensions/useExtensions`, () => ({
     useExtensions: () => ({ enabled: ref<ExtensionSummary[]>([]) }),
 }));
 

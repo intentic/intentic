@@ -3,7 +3,7 @@ import { Button, DeviceRunLog, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { useOperation } from "../../workbench/operations/operations";
-import { manageDeviceSandbox } from "../sandbox/devices/useDevices";
+import { manageDeviceSandbox } from "../../models/sandbox/devices/useDevices";
 import { type MachineDoor, setupDoors } from "../sandbox/live/sandboxDoors";
 import { useDeviceRelays } from "../sandbox/live/useDeviceRelays";
 

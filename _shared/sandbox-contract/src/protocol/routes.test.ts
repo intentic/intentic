@@ -1,6 +1,7 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { z } from "zod";
-import { RAW_JSON_ROUTES, RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTES, sandboxRouteName, sandboxRouteFingerprints } from "../index.js";
+import { RAW_JSON_ROUTES } from "./raw/raw-json-routes.js";
+import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTES, sandboxRouteName, sandboxRouteFingerprints } from "../index.js";
 import { procedure } from "./route-meta.js";
 import { contractRoutes, routeNameForRequest, routeShapes, servedRoute, streamOf } from "./routes.js";
 

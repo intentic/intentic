@@ -48,7 +48,7 @@ RUN rm -f /etc/apt/apt.conf.d/docker-clean \
 # Heavy or privilege-coupled capability tools (WireGuard) are NOT baked here — each capability carries a
 # Dockerfile fragment the daemon composes into the sandbox's environment overlay on enable (see
 # capabilities/capability.ts `fragment`), applied by an owner-run rebuild. Speech-to-text is not one of them:
-# its runtime is the daemon's own dependency (sherpa-onnx-node), and the standard image's `speech` pack bakes
+# its runtime is a dependency of the daemon's @intentic/speech (sherpa-onnx-node), and the standard image's `speech` pack bakes
 # the model, so the composer's microphone and Discord's voice calls need nothing composed.
 # python3 + make + g++ are the node-gyp toolchain: a runtime `pnpm install` (ensure-intent.ts, scaffold
 # inject-template.ts, or a dev in /work) compiles any native dep that ships no prebuild for this platform.

@@ -316,7 +316,7 @@ test(
                 const shown: (Page | undefined)[] = [];
                 for (let tick = 0; tick < 30; tick += 1) {
                     shown.push(view.page());
-                    // oxlint-disable-next-line eslint/no-await-in-loop -- sampling the view over three follow ticks
+                    // sampling the view over three follow ticks
                     await settle(() => false, 100);
                 }
                 expect(shown.every((page) => page === older)).toBe(true);

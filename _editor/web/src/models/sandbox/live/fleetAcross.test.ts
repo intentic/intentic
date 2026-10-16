@@ -1,0 +1,110 @@
+import { waitFor } from "@intentic/testing/bun";
+import { ref } from "vue";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
+
+// Exercises the pure derivation only, not the store's polling: a failed read must never become a zero, since this
+// number ends up on both the switcher row and the rail badge, and disagreeing between them is the failure to avoid.
+
+// Mocks the query client and the daemon client, neither of which the derivation under test touches.
+const sandboxes = ref<{ id: string; name: string; lastSeenAt: string | null }[]>([]);
+const activeSandboxId = ref<string | undefined>(`sbx-here`);
+jest.mock("../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
+const list = jest.fn();
+const seen = jest.fn();
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { list, seen } }) }));
+jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { setQueryData: jest.fn() } }));
+
+const { boxAttention, markSeenAcross, otherBoxes, subscribe } = await import("./fleetAcross");
+type BoxFleet = Parameters<typeof boxAttention>[0];
+
+const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
+const agent = (over: Partial<AgentSummary>): AgentSummary =>
+    ({ id: `a1`, status: `idle`, provider: `claude`, harness: `claude-code`, updatedAt: 1, attention: none, ...over }) as AgentSummary;
+
+const box = (over: Partial<BoxFleet>): BoxFleet =>
+    ({ sandbox: { id: `sbx-other`, name: `Laptop` }, state: `ready`, agents: [], held: [], readAt: 1000, ...over }) as BoxFleet;
+
+describe("what one other box is holding for its owner", () => {
+    // Rendering a never-answered box as `0` would falsely claim nothing's waiting; surfaces draw a dash instead.
+    it("has no answer at all for a box that has never been read", () => {
+        expect(boxAttention(box({ readAt: undefined, state: `reading` }))).toBeUndefined();
+        expect(boxAttention(box({ readAt: undefined, state: `unreachable` }))).toBeUndefined();
+    });
+
+    // A box that has answered and gone quiet keeps its last count rather than falling back to unknown.
+    it("keeps the last real count for a box that has since gone quiet", () => {
+        const blocked = agent({ attention: { ...none, question: true } });
+        expect(boxAttention(box({ state: `unreachable`, agents: [blocked] }))).toBe(1);
+    });
+
+    it("counts an agent parked on a question", () => {
+        expect(boxAttention(box({ agents: [agent({ attention: { ...none, permission: true } })] }))).toBe(1);
+    });
+
+    // An unread update wears its card chip in Finished, but does not claim someone is waiting in Attention.
+    it("does not count an unread finished update", () => {
+        expect(boxAttention(box({ agents: [agent({ updatedAt: 500, seenAt: 100 })] }))).toBe(0);
+    });
+
+    // A running agent's ticking updatedAt must not light the count; the reading is "finished, unread."
+    it("does not count a turn that is still running", () => {
+        expect(boxAttention(box({ agents: [agent({ status: `running`, updatedAt: 500, seenAt: 100 })] }))).toBe(0);
+    });
+
+    // One agent that is both blocked and unread badges once, same as the local reading.
+    it("counts an agent once when it is both blocked and unread", () => {
+        expect(boxAttention(box({ agents: [agent({ attention: { ...none, plan: true }, updatedAt: 500, seenAt: 100 })] }))).toBe(1);
+    });
+
+    it("counts a bare awaiting status because the board puts it in Attention", () => {
+        expect(boxAttention(box({ agents: [agent({ status: `awaiting`, seenAt: 500 })] }))).toBe(1);
+    });
+
+    // A held wake needs the owner as much as a parked agent does; nothing else here can see one in another box.
+    it("adds the automation wakes waiting for a yes", () => {
+        expect(boxAttention(box({ agents: [], held: [{ id: `hold-1` }] as never }))).toBe(1);
+    });
+
+    it("says zero, not unknown, for a box that answered with nothing waiting", () => {
+        expect(boxAttention(box({ agents: [agent({ updatedAt: 100, seenAt: 500 })] }))).toBe(0);
+    });
+});
+
+// `useAgents.markSeen` is a no-op for an agent in another box, since it only writes the roster this browser streams;
+// that stopped being safe once a conversation could be held here and run there.
+describe("marking an agent in another box as read", () => {
+    const roster = (over: Partial<AgentSummary> = {}): { agents: AgentSummary[]; rev: number } => ({
+        agents: [agent({ id: `a1`, updatedAt: 500, seenAt: 100, ...over })],
+        rev: 1,
+    });
+
+    it("stamps this browser's copy and tells that box's own daemon", async () => {
+        sandboxes.value = [
+            { id: `sbx-here`, name: `Guest`, lastSeenAt: `2026-01-01T00:00:00Z` },
+            { id: `sbx-other`, name: `Laptop`, lastSeenAt: `2026-01-01T00:00:00Z` },
+        ];
+        list.mockResolvedValue(roster());
+        seen.mockResolvedValue(roster().agents[0]);
+        const release = subscribe();
+        await waitFor(() => expect(otherBoxes.value[0]?.state).toBe(`ready`));
+        expect(otherBoxes.value[0]?.agents[0]?.seenAt).toBe(100);
+        // Read from that box itself, and quietly: nobody is waiting on this poll, so it must never raise a sign-in.
+        expect(list).toHaveBeenCalledWith(undefined, { context: { at: `sbx-other`, background: true } });
+
+        markSeenAcross(`sbx-other`, `a1`);
+
+        // The next poll is up to 45 seconds out; the read marker must update in this browser at once.
+        expect(otherBoxes.value[0]?.agents[0]?.seenAt).toBeGreaterThan(100);
+        expect(boxAttention(otherBoxes.value[0]!)).toBe(0);
+        expect(seen).toHaveBeenCalledWith({ id: `a1` }, { context: { at: `sbx-other`, background: true } });
+        release();
+    });
+
+    // A box never read has no copy to stamp; writing to it would claim a roster nothing here has seen.
+    it("says nothing to a box it has never read", () => {
+        seen.mockClear();
+        markSeenAcross(`sbx-unknown`, `a1`);
+        expect(seen).not.toHaveBeenCalled();
+    });
+});

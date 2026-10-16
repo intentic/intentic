@@ -1,5 +1,6 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
-import { SandboxSettingsSchema, type SetupLadder } from "@intentic/sandbox-contract";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import type { SetupLadder } from "@intentic/sandbox-contract/models/model-setups";
 import { mergeHeavyRules } from "@intentic/constants/heavy-rules";
 import { unstubbed } from "@intentic/testing";
 import type { Logger } from "pino";
@@ -7,7 +8,7 @@ import { parkedCards } from "../../../../conversations/actor/parked-cards.js";
 import type { TurnPlacement } from "../../../../conversations/worktrees/isolation.js";
 import { memoryConversationGrants } from "../../../../personas/conversation-grants.js";
 import { memoryOwnerGrants } from "../../../../personas/owner-grants.js";
-import { memoryFleet } from "../../../../testing.js";
+import { memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
 import type { TurnBase } from "../../../providers/agent-request.js";
 import { type TurnSafetyDeps, withTurnSafety } from "../turn-safety.js";
 import { assertAgentExecutionContext, type AgentExecutionContext } from "../../../../workload/agent-execution.js";

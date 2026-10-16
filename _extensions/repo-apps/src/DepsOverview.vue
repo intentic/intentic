@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { WorkspaceDepEdge, WorkspaceDepUsage, WorkspacePackage } from "@intentic/sandbox-contract";
+import type { WorkspaceDepEdge, WorkspaceDepUsage, WorkspacePackage } from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
 import { Row, RowGroup, StatStrip } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { areaMatrix, heightsOf, impliedEdges, isRuntime, usageOf, type Area, type Finding } from "./depModel";

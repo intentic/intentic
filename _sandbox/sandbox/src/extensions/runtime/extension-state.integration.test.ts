@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathExists } from "@intentic/base/fs";
-import { extensionStateDir, legacyExtensionStateDir } from "@intentic/sandbox-contract";
+import { extensionStateDir, legacyExtensionStateDir } from "@intentic/sandbox-contract/state/workspace-state";
 import { prepareExtensionDirs } from "./extension-state.js";
 
 // The directories an extension's own code keeps things in: made before its code runs, and for a first-party extension

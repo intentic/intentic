@@ -1,6 +1,6 @@
 import { createServer } from "node:net";
 import { freePort } from "@intentic/base/fs";
-import type { LoopbackCatch, LoopbackCatchEvent } from "@intentic/sandbox-contract";
+import type { LoopbackCatch, LoopbackCatchEvent } from "@intentic/sandbox-contract/schemas/loopback-catch";
 import { catchLoopback } from "./loopback-catch.js";
 
 const specFor = (port: number, overrides: Partial<LoopbackCatch> = {}): LoopbackCatch => ({

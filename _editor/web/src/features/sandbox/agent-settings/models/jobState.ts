@@ -1,4 +1,4 @@
-import type { ModelRole } from "@intentic/sandbox-contract";
+import type { ModelRole } from "@intentic/sandbox-contract/models/model-roles";
 import type { InjectionKey } from "vue";
 
 // What the page knows about a job that its chip says beside its name, provided once by the page rather than threaded

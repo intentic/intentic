@@ -2,7 +2,7 @@ import { type FSWatcher, watch } from "node:fs";
 import { type FileHandle, mkdir, open, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { isMissing } from "@intentic/base/errors";
-import type { IntenticLine } from "@intentic/sandbox-contract";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import { parseIntenticLine } from "./intentic-runner.js";
 
 // Durable per-run apply event log; the CLI mirrors its ndjson stream here so a page refresh can resume the tail. Lives

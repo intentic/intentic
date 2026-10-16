@@ -1,0 +1,71 @@
+import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
+import { flashElement } from "@intentic/ui/motion";
+import { useAgents } from "./useAgents";
+import { agentSeed } from "./useAgents-actions";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
+import { raiseFloating } from "../../workbench/window/floating";
+import { chatParked, showParkedChat } from "../conversations/panel/chatPanelLayout";
+import { drawsChat } from "../conversations/run/chatEcho";
+import type { RunSession } from "../conversations/run/chatRun";
+import { summonChat } from "../conversations/run/summon";
+import { useChat } from "../conversations/run/useChat";
+import { agentTabOf, reveal } from "../conversations/panel/useChat-reveal";
+
+// Opens a run into the chat from wherever it was pressed (board card, rail row, diagram column), through one module, so
+// the three surfaces can't drift into different states for the same run.
+
+// Puts a run's sessions into the panes, one column each; returns whether anything opened, so a caller can fall back to
+// the diagram. A local reveal, never a summons: each window's panel follows its own ledger reads.
+export const openRunSessions = (sessions: readonly RunSession[]): boolean => {
+    if (sessions.length === 0) {
+        return false;
+    }
+    const { active } = useChat();
+    const { agentById, markSeen } = useAgents();
+    const entries = sessions.map((session) => {
+        const carded = agentById(session.conversationId);
+        if (carded !== undefined) {
+            markSeen(carded.id);
+            return agentTabOf(agentSeed(carded));
+        }
+        // Off the fleet roster isn't the same as gone: the chat still opens and hydrates from the daemon by id alone.
+        // The provider here is only a composer seed; getting it wrong doesn't affect the transcript.
+        return agentTabOf({
+            id: session.conversationId,
+            provider: session.agent ?? active.value.selection.provider.value,
+            harness: session.harness ?? active.value.selection.harness.value,
+        });
+    });
+    reveal({ verb: `panes`, entries, focus: entries.at(-1)!.conversationId, caret: false });
+    return true;
+};
+
+// Shows a run as `live` via summons, so every window's panel (including floating) follows from its own ledger reads,
+// rather than opening a window: starting a workflow is starting agent work. `live` is a standing instruction
+// re-evaluated every poll (runToFollow), not a one-shot reading. A bare id is checked against the ledger first, so a
+// bad one shows nothing.
+export const openRunInChat = async (run: WorkflowRun | string): Promise<void> => {
+    if (typeof run !== `string`) {
+        summonChat({ kind: `run`, runId: run.runId });
+        return;
+    }
+    // The id named nothing in the ledger: nothing to show, nothing to claim.
+    if ((await sandboxRpc.workflows.runs()).runs.some((entry) => entry.runId === run)) {
+        summonChat({ kind: `run`, runId: run });
+    }
+};
+
+// Points at the chat for a press that found it already showing what was asked for (chatRun's `shown`), so the press
+// still answers: the window holding the chat comes forward, a parked chat opens /chat, and a chat on screen
+// is ringed for a moment. Never opens a window or moves the panes.
+export const pointAtChat = (): void => {
+    if (!drawsChat.value) {
+        raiseFloating(`chat`);
+        return;
+    }
+    if (chatParked.value) {
+        showParkedChat();
+        return;
+    }
+    flashElement(document.querySelector(`.chat-panel`));
+};

@@ -1,9 +1,9 @@
 import { STATE_DIR } from "@intentic/constants";
-import type { TranscriptTool } from "@intentic/sandbox-contract";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { REVEAL_DELAY_MS } from "@intentic/ui/loading-reveal";
 import { nextTick, ref } from "vue";
-import type { TranscriptRefresh } from "../../../session/transcriptView";
-import type { ChatMessage } from "../../../transcript/transcript";
+import type { TranscriptRefresh } from "../../../../../models/conversations/session/transcriptView";
+import type { ChatMessage } from "../../../../../models/conversations/transcript/transcript";
 import { usePaneTranscript } from "../paneTranscript";
 
 // Pins what a pane draws of its transcript beyond the rows: which bubble is live, when the working line stands in for

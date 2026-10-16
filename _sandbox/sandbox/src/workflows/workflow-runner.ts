@@ -1,17 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type {
-    Loop,
-    LoopDocument,
-    LoopState,
-    RepoBase,
-    Workflow,
-    WorkflowRun,
-    WorkflowRunState,
-    WorkflowStep,
-    WorkflowStepRun,
-} from "@intentic/sandbox-contract";
+import type { Loop, LoopDocument, LoopState } from "@intentic/sandbox-contract/schemas/loops";
+import type { RepoBase } from "@intentic/sandbox-contract/schemas/agent";
+import type { Workflow, WorkflowRun, WorkflowRunState, WorkflowStep, WorkflowStepRun } from "@intentic/sandbox-contract/schemas/workflows";
 import type { Services } from "../composition.js";
 import type { RestartResume } from "../agent/run/turn/restart-resume-policy.js";
 import { resumeCapped, resumeLoops, runLoop, stopLoop } from "../loops/loop-runner.js";

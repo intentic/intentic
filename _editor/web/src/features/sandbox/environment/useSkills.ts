@@ -1,11 +1,11 @@
-import type { SkillBody, SkillDraft, SkillSummary, SkillSwitch } from "@intentic/sandbox-contract";
+import type { SkillBody, SkillDraft, SkillSummary, SkillSwitch } from "@intentic/sandbox-contract/schemas/settings";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { rpcKey } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
-import { useSandboxSettings } from "../overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 
 // What the agent knows: the list is a daemon read, since only the daemon sees all the sources a skill can arrive from.
 // Switching a baked tool is a settings write riding useSandboxSettings' optimistic write; switching one of the owner's

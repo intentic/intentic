@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
 import { jsonLines } from "@intentic/base/json-lines";
+import { parseJsonWith } from "@intentic/base/json";
 import { z } from "zod";
 import { parseChord } from "./keys.js";
 import { looksLikeUrl } from "./parse.js";
@@ -197,15 +198,7 @@ type RequestParams = { readonly [key: string]: Json | undefined };
 
 // A line of the driver's output as an answer this client waits on, or undefined for anything else (a notification,
 // a log line on the wrong stream, a partial write).
-const answerIn = (line: string): Answer | undefined => {
-    try {
-        const parsed = AnswerSchema.safeParse(JSON.parse(line));
-        return parsed.success ? parsed.data : undefined;
-    } catch {
-        // allow(silent-catch): a line that is not JSON is not an answer, which is all this needs to know.
-        return undefined;
-    }
-};
+const answerIn = (line: string): Answer | undefined => parseJsonWith(line, AnswerSchema);
 
 const textOf = (result: ToolResult): string =>
     result.content

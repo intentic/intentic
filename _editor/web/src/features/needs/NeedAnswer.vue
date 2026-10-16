@@ -1,7 +1,7 @@
 <!-- An open need's own way of being answered, wherever it is drawn: inside its chat card, or in the Needs you inbox's
      detail. The kind's yes, and "Not now" beside it with an optional word back to the agent. -->
 <script setup lang="ts">
-import type { Need, NeedAnswer } from "@intentic/sandbox-contract";
+import type { Need, NeedAnswer } from "@intentic/sandbox-contract/schemas/needs";
 import { Notice, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { ref } from "vue";
@@ -13,7 +13,7 @@ import NeedGrantBody from "./NeedGrantBody.vue";
 import NeedReleaseBody from "./NeedReleaseBody.vue";
 import NeedSecretBody from "./NeedSecretBody.vue";
 import { useNeedAnswer } from "./needAnswer";
-import { useNeeds } from "./useNeeds";
+import { useNeeds } from "../../models/needs/useNeeds";
 
 const t = useT();
 

@@ -1,4 +1,4 @@
-import type { ListenerDispatchFrame } from "@intentic/sandbox-contract";
+import type { ListenerDispatchFrame } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import { chunkMessage } from "./chunks.js";
 import type { Logger } from "./log.js";
 import { trackTurnProgress, type TurnProgress, type TurnProgressTracker } from "./progress.js";

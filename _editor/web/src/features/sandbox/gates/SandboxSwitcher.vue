@@ -15,7 +15,7 @@ import {
     type CommandOs,
     useHoverMenu,
 } from "@intentic/ui";
-import { sandboxSubdomain } from "@intentic/sandbox-contract";
+import { sandboxSubdomain } from "@intentic/sandbox-contract/ids/hostnames";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, type WatchStopHandle } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { SANDBOX } from "../../../workbench/commands/categories";
@@ -23,20 +23,20 @@ import { commandShortcut, registerCommand } from "../../../workbench/commands/us
 import ViewBadgeChip from "../../../workbench/views/ViewBadgeChip.vue";
 import { RUNNING_MARK_CLASS } from "../../../workbench/views/viewBadge";
 import TileMark from "../../../components/TileMark.vue";
-import { restartRunning } from "../live/sandboxRestart";
-import { sandboxHubPath } from "../sandboxNav";
+import { restartRunning } from "../../../models/sandbox/live/sandboxRestart";
+import { sandboxHubPath } from "../../../models/sandbox/sandboxNav";
 import { useRole } from "../../../client/sandbox/useRole";
 import { type SandboxAttentionItem, useSandboxAttention } from "../overview/sandboxAttention";
-import { sandboxIdFromToken } from "../session/sandboxIdFromToken";
+import { sandboxIdFromToken } from "../../../models/sandbox/sandboxIdFromToken";
 import { sandboxAvailabilityVisual } from "../overview/availability";
 import { placementOf, type SandboxPlacement } from "../overview/placement";
 import { useSandboxPlacement } from "../overview/useSandboxPlacement";
-import { attentionByBox, otherBoxes, subscribe as watchOtherBoxes } from "../live/fleetAcross";
-import { connectedSandboxes, unfinishedSandboxes } from "../live/roster";
+import { attentionByBox, otherBoxes, subscribe as watchOtherBoxes } from "../../../models/sandbox/live/fleetAcross";
+import { connectedSandboxes, unfinishedSandboxes } from "../../../models/sandbox/live/roster";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
-import { manageDeviceSandbox } from "../devices/useDevices";
+import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
+import { manageDeviceSandbox } from "../../../models/sandbox/devices/useDevices";
 import { beginDeviceWork } from "../devices/runners/deviceWork";
 import { useOperation } from "../../../workbench/operations/operations";
 import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";

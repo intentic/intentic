@@ -1,4 +1,5 @@
-import type { ChangeStatus, PartialFileDiff } from "@intentic/sandbox-contract";
+import type { ChangeStatus } from "@intentic/sandbox-contract/schemas/git/git";
+import type { PartialFileDiff } from "@intentic/sandbox-contract/schemas/history";
 
 // The argument to `api.workspace.openDiff`: the extension says what changed, the host owns the tab, viewer and
 // dirty-buffer bookkeeping. Lives in the public api package because the app's own review surfaces build the identical

@@ -2,7 +2,7 @@ import { sandboxValue } from "@intentic/extension-api";
 import { type Ref, ref } from "vue";
 import { z } from "zod";
 import type { PendingAttachment } from "./useChatAttachments";
-import { questionDraftKey, removeStoredValue, storedJson, storedKeys, storeJson } from "../../../lib/browserStorage";
+import { questionDraftKey, removeStoredValue, storedJson, storedKeys, storeJson } from "../../../app/storage/browserStorage";
 
 // Picks for an AskUserQuestion card, kept outside its component so they survive a reload while the run (daemon-side)
 // stays parked. Keyed by requestId, matching the replayed frame, so a draft finds its own card and no other. Dropped

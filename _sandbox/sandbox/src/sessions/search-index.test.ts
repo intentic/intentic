@@ -1,6 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { IN_MEMORY } from "@intentic/base/sqlite";
-import type { TranscriptRow } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { openSearchIndex } from "./search-index.js";
 import { type SpokenLine, spokenLinesOf } from "./transcript-search.js";
 

@@ -1,10 +1,10 @@
 import { ref } from "vue";
 import { freshImport } from "@intentic/testing/bun";
-import { TrialStatusSchema } from "@intentic/sandbox-contract";
+import { TrialStatusSchema } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import type { ProcedureInput, ProcedureOutput } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
-import { activeSandboxId } from "../../../lib/activeSandbox";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
 
 // The composer's picks are one answer per account, not per browser window; this suite proves it by making the
 // picks here and opening a second window's copy of the modules that hold them over the same storage. A thin catalog
@@ -67,16 +67,16 @@ const mockDaemon = (claudeModels = [`claude-fable-5`, `claude-opus-4-6`]): void 
 };
 
 mockDaemon();
-const { useChat } = await import("../run/useChat");
-const { loadAccountStatus } = await import("../accounts/useChat-accounts");
-const { loadProviderModels } = await import("../models/useChat-catalog");
+const { useChat } = await import("../../../models/conversations/run/useChat");
+const { loadAccountStatus } = await import("../../../models/conversations/accounts/useChat-accounts");
+const { loadProviderModels } = await import("../../../models/conversations/accounts/useChat-catalog");
 
 // A window that opens now: the module holding the picks, evaluated again over the same storage, which is what a second
 // copy of the app reads at load. bun has no module-registry reset, so the whole graph cannot be forked; this is where
 // every persisted pick lives, and Conversation seeds from exactly it. No account is among them: a new chat's account is
 // the daemon's to place (auto), never a pick carried over from another chat.
 const openWindow = async () => {
-    const turn = await freshImport<typeof import("../run/turnDefaults")>("../run/turnDefaults", import.meta.url);
+    const turn = await freshImport<typeof import("../../../models/conversations/run/turnDefaults")>("../../../models/conversations/run/turnDefaults", import.meta.url);
     return { turn };
 };
 

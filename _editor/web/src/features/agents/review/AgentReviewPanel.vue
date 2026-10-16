@@ -17,31 +17,33 @@ import {
     useExplorerStyle,
     useLoadingReveal,
 } from "@intentic/ui";
-import { isTestPath, type OutsideCheckout, type WorkspaceModule, type FileDiff } from "@intentic/sandbox-contract";
+import { isTestPath } from "@intentic/sandbox-contract/text/path-refs";
+import type { OutsideCheckout, WorkspaceModule } from "@intentic/sandbox-contract/schemas/git/git";
+import type { FileDiff } from "@intentic/sandbox-contract/schemas/history";
 import type { LineStat } from "@intentic/code-read";
 import { computed, nextTick, ref, type Ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import ReviewStat from "../../workspace/changes/ReviewStat.vue";
-import { draftStrayAsk, stopAgent } from "../fleet/agentActions";
-import { boxNameOf, openInSandbox } from "../fleet/fleetScope";
-import { CONFLICT_ICON, reasonCopy } from "./conflictResolution";
+import { draftStrayAsk, stopAgent } from "../../../models/fleet/agentActions";
+import { boxNameOf, openInSandbox } from "../../../models/fleet/fleetScope";
+import { CONFLICT_ICON, reasonCopy } from "../../../models/conversations/review/conflictResolution";
 import { AGENT_FILE_DIFF_OPTIONS, agentFileDiffKey, type AgentReviewFile, readAgentFileDiff, useAgentChanges } from "./useAgentChanges";
 import { useAgentHistory } from "../fleet/useAgentHistory";
 import { documentsAt } from "../../../workbench/views/documentRegistry";
-import { GIT_TAB } from "../../workspace/directory-ui/directoryTabs";
-import { useDirectoryTabs } from "../../workspace/directory-ui/useDirectoryTabs";
+import { GIT_TAB } from "../../../models/workspace/tabs/directoryTabs";
+import { useDirectoryTabs } from "../../../models/workspace/tabs/useDirectoryTabs";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { defaultReviewListWidth, MAX_REVIEW_LIST_WIDTH, MIN_REVIEW_LIST_WIDTH, useLayout } from "../../../workbench/window/useLayout";
 import { toAppPx, toScreenPx, uiLength } from "../../../workbench/window/uiScale";
-import { diffRawUrls } from "../../workspace/changes/diffRaw";
+import { diffRawUrls } from "../../../models/workspace/changes/diffRaw";
 // Where the user's own conflict half is resolved: the Changes panel, the same deep-link the card and the badges use.
-import { openChanges } from "../../workspace/changes/openChanges";
-import { useWorkspaceTabs } from "../../workspace/tabs/useWorkspaceTabs";
+import { openChanges } from "../../../models/changes/openChanges";
+import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import DiffToolbar from "../../workspace/viewers/DiffToolbar.vue";
 import FileDiffPane from "../../workspace/viewers/FileDiffPane.vue";
-import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "../../workspace/changes/changeModules";
-import { useChangeGrouping } from "../../workspace/changes/useChangeGrouping";
-import { addedIn, sumCode, sumShown, useChangeWeight, type ShownStat } from "../../workspace/changes/changeWeight";
+import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "../../../models/workspace/changes/changeModules";
+import { useChangeGrouping } from "../../../models/workspace/changes/useChangeGrouping";
+import { addedIn, sumCode, sumShown, useChangeWeight, type ShownStat } from "../../../models/workspace/changes/changeWeight";
 import ChangeRowName from "../../../components/ChangeRowName.vue";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
 import AgentConflictReport from "./AgentConflictReport.vue";

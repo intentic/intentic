@@ -3,7 +3,7 @@ import { Button, ui, CopyButton, Icon, Notice, noticeOf } from "@intentic/extens
 import { computed, nextTick, ref } from "vue";
 import AutomationFields from "./AutomationFields.vue";
 import { host } from "./host";
-import type { AutomationTemplate } from "@intentic/sandbox-contract";
+import type { AutomationTemplate } from "@intentic/sandbox-contract/schemas/automations";
 import { availableTemplates, type AvailableSource, glyph } from "./catalog";
 import { embedSnippet, useAutomations, useSandboxZone, webhookUrl } from "./useAutomations";
 import { triggerKey, useAutomationForm } from "./useAutomationForm";

@@ -1,5 +1,5 @@
 import { instancesOf } from "@intentic/capability-catalog";
-import type { CapabilityConnectable } from "@intentic/sandbox-contract";
+import type { CapabilityConnectable } from "@intentic/sandbox-contract/schemas/needs";
 import type { Context } from "hono";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
@@ -7,12 +7,13 @@ import { capabilityCtx } from "../capability.js";
 import { connectableEntries } from "./connectable.js";
 import { capabilityRecommendations } from "./recommend.js";
 import { registry } from "../registry.js";
+import { defineRawRoutes } from "../../http/raw-route-server.js";
 
 // The `capabilities list` door: every entry this sandbox could connect (ids and names only, never config), which are
 // live, and what the workspace itself looks like it wants, with the file or remote that says so. Asking for one is the
 // needs door's (needs/needs.routes.ts), which answers for the asking turn rather than for the sandbox.
 
-export const createCapabilityAskRoutes = (services: Services) => {
+const createCapabilityAskRoutes = (services: Services) => {
     const ctx = capabilityCtx(services);
     return {
         connectable: async (c: Context<AppEnv>): Promise<Response> => {
@@ -51,3 +52,10 @@ export const createCapabilityAskRoutes = (services: Services) => {
         },
     };
 };
+
+// The capability setup gate, the `capabilities` CLI's discovery: `connectable` is discovery only; its ask parks the
+// call on an owner-decided chat card. Ahead of the oRPC catch-all, so the exact path wins over the /capabilities REST
+// surface.
+export const capabilityAskRawRoutes = defineRawRoutes((services: Services) => ({
+    "GET /capabilities/connectable": createCapabilityAskRoutes(services).connectable,
+}));

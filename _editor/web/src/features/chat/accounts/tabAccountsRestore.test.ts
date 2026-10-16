@@ -1,5 +1,5 @@
 import { ref } from "vue";
-import { TrialStatusSchema } from "@intentic/sandbox-contract";
+import { TrialStatusSchema } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
@@ -96,9 +96,9 @@ session.set(
 local.set(`intentic.activeSandboxId`, `sb1`);
 
 // Imported last, so the seeded stores are what its module-scope restore reads.
-const { useChat } = await import("../run/useChat");
-const { draftConversation, reveal } = await import("../panel/useChat-reveal");
-const { loadAccountStatus } = await import("./useChat-accounts");
+const { useChat } = await import("../../../models/conversations/run/useChat");
+const { draftConversation, reveal } = await import("../../../models/conversations/panel/useChat-reveal");
+const { loadAccountStatus } = await import("../../../models/conversations/accounts/useChat-accounts");
 // The store half of "New agent"; the fixture these tests use to open extra tabs.
 const newChat = () => {
     const conversation = draftConversation();

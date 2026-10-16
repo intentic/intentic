@@ -1,6 +1,6 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
+import { readFile } from "node:fs/promises";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { writeFileAtomic } from "@intentic/base/fs";
 import { z } from "zod";
 import { childElements, descendants } from "../dom.js";
 import { digest, hex } from "../engine.js";
@@ -122,7 +122,7 @@ export const refreshTrustedLists = async (options: RefreshOptions): Promise<Refr
         try {
             lists.push(await memberList(options.fetcher, lotl.pointers, territory));
         } catch (cause) {
-            failed.push({ territory, error: cause instanceof Error ? cause.message : String(cause) });
+            failed.push({ territory, error: errorMessage(cause) });
         }
     }
     if (lists.length === 0) {
@@ -139,12 +139,7 @@ export const refreshTrustedLists = async (options: RefreshOptions): Promise<Refr
     };
 };
 
-export const writeTrustCache = async (path: string, cache: TrustCache): Promise<void> => {
-    await mkdir(dirname(path), { recursive: true });
-    const temporary = `${path}.${process.pid}.tmp`;
-    await writeFile(temporary, JSON.stringify(cache), { mode: 0o600 });
-    await rename(temporary, path);
-};
+export const writeTrustCache = async (path: string, cache: TrustCache): Promise<void> => await writeFileAtomic(path, JSON.stringify(cache), 0o600);
 
 // The cached lists, or undefined when none were fetched yet (or the file is from another version of this code).
 export const readTrustCache = async (path: string): Promise<TrustCache | undefined> => {

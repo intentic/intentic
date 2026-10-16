@@ -1,13 +1,8 @@
 import { narrate } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import type {
-    DeviceScopes,
-    DeviceFlowLine,
-    DeviceSandboxFlow,
-    DeviceSandboxOp,
-    ProjectDelivery,
-    ProjectDeliveryResult,
-} from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { DeviceFlowLine, DeviceSandboxFlow, DeviceSandboxOp } from "@intentic/sandbox-contract/schemas/devices";
+import type { ProjectDelivery, ProjectDeliveryResult } from "@intentic/sandbox-contract/schemas/project-delivery";
 import { implement, ORPCError } from "@orpc/server";
 import { audit } from "./audit.js";
 import { readGrant, tolerantDeviceContract } from "./grant.js";

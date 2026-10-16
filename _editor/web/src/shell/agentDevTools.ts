@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { useTheme } from "@intentic/ui/theme";
 import { isRef, nextTick } from "vue";
 import { buildId } from "../app/buildEpoch";
@@ -9,7 +10,7 @@ import { driftedRoutes, driftScope, missingRoutes, unknownDaemonRoutes } from ".
 import { useSandbox } from "../client/sandbox/useSandbox";
 import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "../features/settings/themeRow";
 import { queryClient } from "../lib/queryPersistence";
-import { router } from "../router";
+import { navigation } from "../workbench/navigation/navigation";
 import { useSkin } from "../skins/useSkin";
 import { commandLabel, commands, executeCommand } from "../workbench/commands/useCommands";
 import { effectiveKeybinding } from "../workbench/commands/useKeymap";
@@ -50,8 +51,6 @@ const plain = (value: unknown): unknown => {
     }
 };
 
-const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
 const stringArg = (input: Readonly<Record<string, unknown>>, key: string): string | undefined => {
     const value = input[key];
     return typeof value === `string` && value !== `` ? value : undefined;
@@ -89,7 +88,7 @@ const stateTool: WebMcpTool = {
         if (driftedRoutes.value.length > 0) {
             await readContractFreshness();
         }
-        const route = router.currentRoute.value;
+        const route = navigation().currentRoute.value;
         return {
             route: { path: route.fullPath, name: route.name === undefined ? null : String(route.name), params: plain(route.params) },
             sandbox: {
@@ -115,7 +114,7 @@ const stateTool: WebMcpTool = {
                 .filter((query) => query.state.status === `error`)
                 .map((query) => ({
                     key: plain(query.queryKey),
-                    error: errorText(query.state.error),
+                    error: errorMessage(query.state.error),
                     failures: query.state.fetchFailureCount,
                     at: new Date(query.state.errorUpdatedAt).toISOString(),
                 })),
@@ -258,7 +257,7 @@ const answeringErrors = (tool: WebMcpTool): WebMcpTool => ({
         try {
             return await tool.execute(input);
         } catch (error) {
-            return { isError: true, error: errorText(error) };
+            return { isError: true, error: errorMessage(error) };
         }
     },
 });
@@ -271,6 +270,6 @@ export const installAgentDevTools = (render: RenderTrace): void => {
     }
     for (const tool of [buildTool, stateTool, lookTool(), commandTool, perfTool, renderTool(render)].map(answeringErrors)) {
         // A refused registration costs that one tool, not the page.
-        void (async () => await context.registerTool(tool))().catch((error: unknown) => console.warn(`[webmcp] ${tool.name}: ${errorText(error)}`));
+        void (async () => await context.registerTool(tool))().catch((error: unknown) => console.warn(`[webmcp] ${tool.name}: ${errorMessage(error)}`));
     }
 };

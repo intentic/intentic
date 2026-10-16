@@ -1,4 +1,4 @@
-import type { AccountUsage, ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract";
+import type { AccountUsage, ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { codexConnectedProxy, services, withTranslator } from "../../../harness/route-services.testing.js";
 import { spawnBlocked, spawnableProviders, spawnCatalogText } from "../spawn-catalog.js";
 import { unstubbed } from "@intentic/testing";

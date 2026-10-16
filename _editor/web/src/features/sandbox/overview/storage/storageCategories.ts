@@ -1,4 +1,4 @@
-import type { StorageCategoryId, StorageCategoryUsage } from "@intentic/sandbox-contract";
+import type { StorageCategoryId, StorageCategoryUsage } from "@intentic/sandbox-contract/schemas/metrics";
 import { t } from "@intentic/ui/i18n";
 
 // What each disk category is called and why it holds what it holds, in the reader's language. Looked up when drawn,

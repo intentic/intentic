@@ -1,6 +1,6 @@
 import { posix, win32 } from "node:path";
 import type { Point, Rect } from "@intentic/desktop-automation";
-import { inertRegions, isLive } from "@intentic/sandbox-contract";
+import { inertRegions, isLive } from "@intentic/sandbox-contract/text/shell-regions";
 
 /* What adb prints, read into values, and what the phone is sent, spelled from values: nothing here runs a program, so
    every rule below is tested on text alone. android.ts runs adb and decides what is allowed. */

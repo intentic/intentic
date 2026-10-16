@@ -1,6 +1,6 @@
 // Pins what the composer does with the fleet advice for a new chat (settings `offload.sessions`): which machine the strip
 // offers, when an automatic placement moves the draft, and that neither one hops between machines or overrules a person.
-import type { FleetAdvice, FleetMachine, MachineLoad } from "@intentic/sandbox-contract";
+import type { FleetAdvice, FleetMachine, MachineLoad } from "@intentic/sandbox-contract/schemas/offload";
 import { autoPlacement, offeredMachine } from "./fleetPlacement";
 import { loadLine, movedLine, strainWords, suggestLine, unfitWords } from "./fleetWords";
 

@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Logger } from "pino";
 import { createRepeatGate } from "../../../logs/repeat-gate.js";
 import { opt } from "../../../opt.js";

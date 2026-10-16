@@ -1,4 +1,4 @@
-import { type AutomationApproval, awaitsOwner } from "@intentic/sandbox-contract";
+import { type AutomationApproval, awaitsOwner } from "@intentic/sandbox-contract/schemas/automations";
 import type { HostQuery } from "@intentic/extension-api";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";

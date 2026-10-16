@@ -1,4 +1,4 @@
-import type { ModelRole, ModelRoleSpec, PresetSetup } from "@intentic/sandbox-contract";
+import type { ModelRole, ModelRoleSpec, PresetSetup } from "@intentic/sandbox-contract/models/model-roles";
 import { t } from "@intentic/ui/i18n";
 
 // MODEL_ROLES names each job in English, for the daemon and the settings file as much as for the

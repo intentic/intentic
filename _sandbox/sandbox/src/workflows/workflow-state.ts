@@ -1,4 +1,4 @@
-import type { WorkflowRun } from "@intentic/sandbox-contract";
+import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 
 // Conversations a run owns: every step that took a turn, deduped, since a `continue` step shares its predecessor's.
 // `pending` and `skipped` are excluded: those ids are derived strings written before the chat existed.

@@ -1,17 +1,15 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-    type ActivityEvent,
-    type AgentEvent,
-    type AgentOrigin,
-    type Automation,
-    type ListenerDispatchFrame,
-    SandboxSettingsSchema,
-} from "@intentic/sandbox-contract";
+import type { ActivityEvent } from "@intentic/sandbox-contract/schemas/activity";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
+import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
+import type { ListenerDispatchFrame } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { Hono } from "hono";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
-import { sqliteTurnJournal } from "../../agent/run/turn/turn-journal.js";
+import { sqliteTurnJournal } from "../../store/journals/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../../store/conversations-db.js";
 import { fileHeldWakesStore } from "../../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../../automations/automations-store.js";
@@ -23,10 +21,11 @@ import { fileThreadSessionsStore } from "../../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
 import { HELD_NOTICE, PAYLOAD_MAX } from "../../automations/scheduler.js";
 import { listenerStateOf } from "./listener-state.js";
-import { listenerStatus } from "./listener-status.js";
+import { listenerStatus } from "../../capabilities/status/listener-status.js";
 import { createListenerRoutes } from "./listener.routes.js";
 import type { TurnStarter } from "../../seams/turn-starter.js";
-import { drivenBy, testConfig } from "../../testing.js";
+import { drivenBy } from "../../seams/turn-starter.testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import { readWorkspaceFile } from "../../workspace/files/workspace-files.js";
 import type { ExtensionGrant } from "../../auth/grants.js";
 

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { BoundedMap } from "@intentic/base/held";
-import { PRIVACY_REPLACEMENTS_MAX, type PrivacyImages } from "@intentic/sandbox-contract";
+import { PRIVACY_REPLACEMENTS_MAX, type PrivacyImages } from "@intentic/sandbox-contract/schemas/privacy";
 import { readCappedBytes } from "@intentic/base/capped-read";
 import { type PaintedImage, paintRegions, readingText, regionsFor } from "../image-mask.js";
 import type { ClassCounts, Masker, Replacement } from "../masker.js";

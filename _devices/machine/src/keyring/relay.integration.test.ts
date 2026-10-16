@@ -1,4 +1,5 @@
-import type { DeviceScopes, KeyringInboxItem } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { KeyringInboxItem } from "@intentic/sandbox-contract/schemas/keyring";
 import { createRouterClient, ORPCError } from "@orpc/server";
 import { createHostRouter } from "../device/router.js";
 import { BOX, fakeKeyring, type FakeKeyring, GRANT, KEY_A, NO_KEYRING, POINTER, STATE } from "./keyring-testing.js";

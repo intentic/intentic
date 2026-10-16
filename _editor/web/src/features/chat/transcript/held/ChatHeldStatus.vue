@@ -3,9 +3,9 @@ import { Icon } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { formatReset, formatWait } from "../../session/usageStatus";
+import { formatReset, formatWait } from "../../../../models/providers/usageStatus";
 import type { HoldReason } from "./heldQueue";
-import { memoryTip } from "./memoryTip";
+import { memoryTip } from "../../../../models/conversations/transcript/memoryTip";
 
 /* The one line under a message that did not go out: that it did not, why in a few words, and the way on (the slot). A
    scheduled send reads as what it is instead, a message booked for later with the time it goes. */

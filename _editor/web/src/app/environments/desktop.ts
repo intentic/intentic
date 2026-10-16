@@ -6,7 +6,7 @@
 
 import { isTypingTarget } from "@intentic/ui/event-target";
 import { z } from "zod";
-import { inAppPath } from "../../lib/routes/inAppPath";
+import { inAppPath } from "./inAppPath";
 
 // What the app tells the page about the webview (not about the app): whether this window skips the loopback gate
 // (loopback/loopbackPermission.ts). Optional since the SPA ships continuously and the app doesn't; undefined reads as "ask

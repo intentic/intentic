@@ -1,7 +1,7 @@
 import { mkdir, readdir, rename, rm, stat, utimes } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { isConversationId } from "@intentic/sandbox-contract";
+import { isConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 
 // One directory per conversation on the history volume, holding every file the daemon keeps for it; each file's owner
 // names it inside (its transcript, what it was last told, a fenced conversation's own runtime store). Removing the

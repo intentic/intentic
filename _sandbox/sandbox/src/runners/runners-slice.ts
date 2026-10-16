@@ -1,5 +1,7 @@
-import type { RunnerFacts } from "@intentic/sandbox-contract";
+import type { RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import type { CompositionCore } from "../composition.js";
 import { createPeerHub, type PeerDoorDeps } from "../peers/peer-hub.js";
+import { defineSlice } from "../seams/slice.js";
 import { filePeerStore } from "../peers/peer-store.js";
 import type { ParentCredentials } from "./runner-credentials.js";
 import { RUNNER_PEER, type RunnerAnnounced, type RunnerClient, type RunnerHub, type RunnerStore } from "./runner-peer.js";
@@ -15,8 +17,13 @@ export interface RunnersSlice {
 }
 
 // Builds the runners slice: the same peer door as a device or a browser, with the parent left for runner mode to fill.
-export const createRunnersSlice = ({ historyRoot, logger, peerTools }: PeerDoorDeps): RunnersSlice => ({
+const createRunnersSlice = ({ historyRoot, logger, peerTools }: PeerDoorDeps): RunnersSlice => ({
     runners: filePeerStore(historyRoot, RUNNER_PEER.store),
     runnerHub: createPeerHub<RunnerClient, RunnerAnnounced, RunnerFacts, never>(RUNNER_PEER.hub, logger, peerTools),
     runnerParent: {},
+});
+
+export const runnersSlice = defineSlice<RunnersSlice>({
+    build: ({ config, logger, peerTools }: Pick<CompositionCore, "config" | "logger" | "peerTools">) =>
+        createRunnersSlice({ historyRoot: config.historyRoot, logger, peerTools }),
 });

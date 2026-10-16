@@ -1,5 +1,5 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
-import type { AgentDomainPolicy } from "@intentic/sandbox-contract";
+import type { AgentDomainPolicy } from "@intentic/sandbox-contract/schemas/settings";
 import type { FencedPlacement, IsolationPlan } from "../conversations/worktrees/isolation.js";
 import { AGENT_DOMAIN_NOT_READY } from "./domain/agent-domain-rollout.js";
 import {

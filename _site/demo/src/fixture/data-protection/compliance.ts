@@ -1,4 +1,4 @@
-import type { ComplianceReport, DataFlow, Measure, PresetItem } from "@intentic/sandbox-contract";
+import type { ComplianceReport, DataFlow, Measure, PresetItem } from "@intentic/sandbox-contract/schemas/compliance";
 
 // The data protection page's answers for the demo workspace: a fresh sandbox reached through Intentic's tunnel, with
 // Claude connected and a Discord bot listening, and nothing of the public-office preset applied yet. Hand-written

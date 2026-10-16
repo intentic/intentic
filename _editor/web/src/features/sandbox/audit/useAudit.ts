@@ -1,4 +1,4 @@
-import type { AuditQuery, AuditRecord } from "@intentic/sandbox-contract";
+import type { AuditQuery, AuditRecord } from "@intentic/sandbox-contract/schemas/audit";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type MaybeRefOrGetter, ref, toValue, watch } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";

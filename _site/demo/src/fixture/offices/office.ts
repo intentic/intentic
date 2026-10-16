@@ -1,5 +1,6 @@
 import type { Snapshot } from "@intentic/ext-e-urzad/snapshot";
-import { STATE_DIR, type CapabilitySummary } from "@intentic/sandbox-contract";
+import { STATE_DIR } from "@intentic/sandbox-contract";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { json } from "../../transport";
 
 // Fictional offices in the full recording: no credentials and no requests to a government service.

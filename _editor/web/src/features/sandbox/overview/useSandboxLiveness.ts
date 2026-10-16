@@ -1,6 +1,6 @@
 import { anySignal, Latest, sleep, TimeoutError } from "@intentic/base/async";
 import { watch } from "vue";
-import { desyncAgents } from "../../agents/fleet/useAgents";
+import { desyncAgents } from "../../../models/fleet/useAgents";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { queryClient } from "../../../lib/queryPersistence";
 import { clearPresence, presenceStreamOpened } from "../../../workbench/presence/usePresence";
@@ -245,9 +245,9 @@ const attempt = async (signal: AbortSignal, run: AbortSignal): Promise<void> => 
 const loop = async (run: AbortSignal): Promise<void> => {
     while (!run.aborted) {
         const signal = attempts.next(run);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a reconnect loop is sequential by definition
+        // a reconnect loop is sequential by definition
         await attempt(signal, run);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto: the backoff IS the loop
+        // ditto: the backoff IS the loop
         await sleep(sandboxSeemsAlive() ? Math.max(connection.value.retryDelayMs, BUSY_RETRY_MS) : connection.value.retryDelayMs, { signal });
     }
 };

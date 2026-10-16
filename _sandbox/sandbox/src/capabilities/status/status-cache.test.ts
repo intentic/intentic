@@ -1,4 +1,4 @@
-import type { CapabilityStatus } from "@intentic/sandbox-contract";
+import type { CapabilityStatus } from "@intentic/sandbox-contract/schemas/capabilities";
 import { waitFor } from "@intentic/testing/bun";
 import { createStatusCache } from "./status-cache.js";
 

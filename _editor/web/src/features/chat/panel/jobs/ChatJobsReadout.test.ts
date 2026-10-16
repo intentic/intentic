@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import type { AgentJob } from "@intentic/sandbox-contract";
+import type { AgentJob } from "@intentic/sandbox-contract/schemas/agents";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, h, nextTick, shallowRef } from "vue";
 
@@ -23,9 +23,9 @@ jest.mock("@intentic/ui", async () => {
         ui: { iconButton: (extra: string) => extra },
     };
 });
-jest.mock("../../../agents/fleet/useAgents", () => ({ useAgents: () => ({ agentById: () => ({ jobs: roster.jobs }) }) }));
-jest.mock("../useChat-view", () => ({ usePaneView: () => ({ conversation: shallowRef({ conversationId: `agent-1` }) }) }));
-jest.mock("../../../terminal/useWorkTerminals", () => ({ openWorkTerminal: opened }));
+jest.mock("../../../../models/fleet/useAgents", () => ({ useAgents: () => ({ agentById: () => ({ jobs: roster.jobs }) }) }));
+jest.mock("../../../../models/conversations/panel/useChat-view", () => ({ usePaneView: () => ({ conversation: shallowRef({ conversationId: `agent-1` }) }) }));
+jest.mock("../../../../models/terminal/useWorkTerminals", () => ({ openWorkTerminal: opened }));
 
 const { default: ChatJobsReadout } = await import("./ChatJobsReadout.vue");
 

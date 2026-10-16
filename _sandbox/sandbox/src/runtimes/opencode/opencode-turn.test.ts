@@ -1,5 +1,5 @@
 import type { OpenCodeClient } from "@opencode/client";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { unstubbed } from "@intentic/testing";
 import { realYield } from "@intentic/testing/bun";
 import { turnWatchdog } from "../decorators/turn-watchdog.js";

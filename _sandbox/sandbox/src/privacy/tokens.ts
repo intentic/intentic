@@ -1,4 +1,4 @@
-import type { PersonalDataClass } from "@intentic/sandbox-contract";
+import type { PersonalDataClass } from "@intentic/sandbox-contract/schemas/privacy";
 
 // The tokens personal data becomes on its way to an untrusted provider: `⟦PERSON_12⟧`. Typed, so the model still knows
 // it is reading a person or an account number; numbered, so the same value is the same token every time and the

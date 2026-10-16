@@ -1,6 +1,6 @@
-import { NO_ATTENTION } from "../../../../agents/fleet/agentStatus";
-import type { ChatMessage } from "../../../transcript/transcript";
-import { pendingCardOf, pendingDecisionOf, waitKindOf } from "../pendingDecision";
+import { NO_ATTENTION } from "../../../../../models/agent-status/agentStatus-lanes";
+import type { ChatMessage } from "../../../../../models/conversations/transcript/transcript";
+import { pendingCardOf, pendingDecisionOf, waitKindOf } from "../../../../../models/conversations/panel/pendingDecision";
 
 // What the bar over the composer names: the newest card still waiting, read the way the card titles itself, else what
 // the agents list says the chat waits for.

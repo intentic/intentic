@@ -1,6 +1,7 @@
 {
     "root": "src",
-    "shelves": ["features", "workbench"],
+    "shelves": ["features", "models", "parts", "workbench"],
+    "subunits": ["features/chat", "features/sandbox", "features/workspace", "features/agents"],
     "layers": [
         {
             "name": "foundation",
@@ -21,6 +22,16 @@
             "name": "workbench",
             "about": "the services and registries features are written against, one unit per workbench/<x>",
             "units": ["workbench"]
+        },
+        {
+            "name": "models",
+            "about": "domain state and projections several features read: daemon query stores, pure derivations and their words; renders nothing and knows no feature, one unit per models/<x>",
+            "units": ["models"]
+        },
+        {
+            "name": "parts",
+            "about": "Vue parts that draw one model several features show and know no feature: a provider's logo, an agent's seal, a secret's field; one unit per parts/<x>",
+            "units": ["parts"]
         },
         {
             "name": "features",

@@ -1,4 +1,5 @@
-import { type RawBytesRouteKey, rawRoutePath } from "@intentic/sandbox-contract";
+import type { RawBytesRouteKey } from "@intentic/sandbox-contract/protocol/raw/raw-json-routes";
+import { rawRoutePath } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { sandboxUpload } from "./sandboxClient";
 
 // A `bytes` route's upload with progress: the body goes up in parts (or whole, for a tar the caller keeps to about one

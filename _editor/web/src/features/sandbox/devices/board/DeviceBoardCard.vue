@@ -2,9 +2,9 @@
 import { BrandMark, Icon, StatusBadge, type Tip, toneDot, toneFill, toneInk, toneRim } from "@intentic/ui";
 import { computed, useId } from "vue";
 import { RouterLink } from "vue-router";
-import { type BoardEnvironment, boardBody, machineFigures, machineMark, machineSpecs, machineVerdict, type MachineRow, manySided } from "../deviceRows";
-import { deviceRoute } from "../deviceLinks";
-import { lastSeenNote, osTitle } from "../deviceFacts";
+import { type BoardEnvironment, boardBody, machineFigures, machineMark, machineSpecs, machineVerdict, type MachineRow, manySided } from "../../../../models/sandbox/devices/deviceRows";
+import { deviceRoute } from "../../../../models/sandbox/devices/deviceLinks";
+import { lastSeenNote, osTitle } from "../../../../models/sandbox/devices/deviceFacts";
 import { environmentWorking, machineWork, sandboxesWorking } from "../runners/deviceWork";
 import { useT } from "@intentic/ui/i18n";
 

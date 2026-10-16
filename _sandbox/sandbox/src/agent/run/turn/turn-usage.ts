@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 
 // The turn's accounting frame. A turn can emit several, one per steered follow-up turn, and every consumer
 // that answers "what did this turn cost" (the spend ledger, the activity log) wants their SUM, not the last.

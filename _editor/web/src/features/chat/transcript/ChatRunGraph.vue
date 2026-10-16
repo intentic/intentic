@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { DagGraph, Icon } from "@intentic/ui";
-import type { WorkflowRun } from "@intentic/sandbox-contract";
+import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { computed, ref, watch } from "vue";
-import type { RunSession } from "../run/chatRun";
+import type { RunSession } from "../../../models/conversations/run/chatRun";
 import { RUN_NODE_HEIGHT, RUN_NODE_WIDTH, runColumns } from "../run/runColumns";
 import { workflowDag } from "../run/workflowDag";
 import { useT } from "@intentic/ui/i18n";

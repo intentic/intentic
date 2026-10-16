@@ -1,6 +1,6 @@
 import { type Ref, ref } from "vue";
 import { desktopApp, openDesktopLink } from "./desktop";
-import { inAppPath } from "../../lib/routes/inAppPath";
+import { inAppPath } from "./inAppPath";
 
 // The desktop app's own notifications and the mark on its icon, as the workspace asks for them (desktop-app notice.rs,
 // badge.rs), one link each and built here alone. Like every link to the app, a navigation the app intercepts, never IPC.

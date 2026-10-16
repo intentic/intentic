@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract";
+import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract/schemas/run-targets";
 import { Button, ui, Icon, Modal, toneDot } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { useT } from "@intentic/ui/i18n";
-import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
+import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import { useRunPresses, useRunTargets } from "./useRunTargets";
 
 const t = useT();

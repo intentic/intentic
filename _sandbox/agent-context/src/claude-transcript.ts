@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { isMissing } from "@intentic/base/errors";
+import { parseJsonOr } from "@intentic/base/json";
 import { promptOf as kindOfPrompt } from "@intentic/iq/transcript";
 import { displayNameOf, toolCategoryOf, toolPathsUnder, toolTarget } from "./tool-calls.js";
 import type { ToolCallFacts } from "./turn-metrics.js";
@@ -90,12 +91,9 @@ const parse = (raw: string): Line | undefined => {
     if (!raw.includes(`"type":"user"`) && !raw.includes(`"type":"assistant"`)) {
         return undefined;
     }
-    try {
-        return JSON.parse(raw) as Line;
-    } catch {
-        // allow(silent-catch): a line that is not JSON (a write torn by a crash, a shape a later CLI writes) is one lost line, the rest of the session still reads.
-        return undefined;
-    }
+    // A line that is not JSON (a write torn by a crash, a shape a later CLI writes) is one lost line, the rest of the session still reads.
+    // SAFETY: a transcript line is Claude Code's own record, and every field Line names is optional.
+    return parseJsonOr(raw, undefined) as Line | undefined;
 };
 
 // A prompt a person sent, or a slash command they typed, as opposed to a user line carrying tool results, a caveat the

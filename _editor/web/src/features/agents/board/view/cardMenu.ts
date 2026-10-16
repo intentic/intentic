@@ -2,9 +2,10 @@ import { clipboardOf } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, type Ref, ref } from "vue";
-import { drillTarget, reviewAction, unregistered, watching } from "../../fleet/agentStatus";
-import { boxNameOf, isRemote, openInSandbox } from "../../fleet/fleetScope";
-import { canArchive, type FleetAgent } from "../../fleet/useAgents-fleet";
+import { drillTarget, reviewAction } from "../../../../models/agent-status/agentStatus-attention";
+import { unregistered, watching } from "../../../../models/agent-status/agentStatus-standing";
+import { boxNameOf, isRemote, openInSandbox } from "../../../../models/fleet/fleetScope";
+import { canArchive, type FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import { bareBranch } from "../session/sessionChip";
 
 // One menu for every card (forty cards cost one node, and only one is ever open), since a card's surface is otherwise

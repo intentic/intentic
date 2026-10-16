@@ -400,7 +400,6 @@
             "tooLargeToDeliver": "Too large to deliver by itself: press \"Bring back changes\" in the folder's window",
             "yourFolder": "your folder",
             "inChannel": " in {channel}",
-            "workedSince": "Worked since you last opened it, {when}",
             "subagents": "{count} subagent | {count} subagents",
             "loopIteration": "Iteration {iteration}/{max} · until {goal}",
             "loopDone": "Goal met after {iteration}",
@@ -674,10 +673,6 @@
             "copySessionId": "Copy the session id",
             "pasteIdIntoQuick": "Paste the id into Quick Open to come back to this agent from anywhere.",
             "sessionId": "Session id"
-        },
-        "suggestedSessionBox": {
-            "ctrlEnter": "Ctrl+Enter",
-            "whatShouldAgentDo": "What should the agent do?"
         },
         "workflowRunCard": {
             "archive": "Archive run",

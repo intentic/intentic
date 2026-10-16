@@ -1,17 +1,15 @@
-import { type Persona, type TurnBriefingNoteId, type TurnNote, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract";
-import { CONTEXT_NOTE_TITLE } from "../context/context-note.js";
-import { SPAWN_NOTE_TITLE } from "../subagents/spawn-note.js";
+import { type Persona, type TurnBriefingNoteId, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract/schemas/personas";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { PERSONA_NOTE_TITLE, UNATTENDED_ACCOUNTS_TITLE } from "../../personas/personas.js";
 import { GATED_CREDENTIALS_TITLE } from "../../secrets/credential-gating.js";
 import { SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";
 import { REPO_SYNC_NOTE_TITLE } from "../../workspace/layout/sync-repos.js";
 import { SETUP_NOTICE_TITLE, STALE_NOTICE_TITLE } from "../../workspace/layout/workspace-setup.js";
-import { LANDING_CHECKS_NOTE_TITLE } from "./checks-note.js";
 import { HANDOFF_STATE_NOTE_TITLE } from "./handoff-state.js";
 import { IQ_SEARCH_INSTRUCTION_TITLE } from "./iq-search-instruction.js";
 import { LITERAL_SLASH_NOTE, WORKTREE_NOTE_TITLE } from "./turn-preamble.js";
-import { MEMORY_NOTE_TITLE } from "./workspace-memory.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
+import { SPAWN_NOTE_TITLE, LANDING_CHECKS_NOTE_TITLE, MEMORY_NOTE_TITLE, CONTEXT_NOTE_TITLE } from "../../sessions/vocabulary/prompt-envelope.js";
 
 // Which of the sandbox's own preamble notes a card still wants. The card names ids; the notes themselves are titled
 // prose written at a dozen sites, so this is the one place the two meet.

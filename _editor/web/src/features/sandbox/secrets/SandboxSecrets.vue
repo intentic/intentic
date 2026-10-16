@@ -14,17 +14,17 @@ import {
     vSkeletonSource,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { SECRET_KEY_MAX, SECRET_KEY_RE } from "@intentic/sandbox-contract";
+import { SECRET_KEY_MAX, SECRET_KEY_RE } from "@intentic/sandbox-contract/schemas/secrets";
 import { computed, nextTick, ref, useTemplateRef } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import SecretEntryRow from "../../capabilities/connect/secrets/SecretEntryRow.vue";
-import SecretField from "../../capabilities/connect/secrets/SecretField.vue";
-import { useCapabilities } from "../../capabilities/connect/useCapabilities";
-import { useExtensions } from "../../extensions/useExtensions";
+import SecretField from "../../../parts/capabilities/SecretField.vue";
+import { useCapabilities } from "../../../models/capabilities/useCapabilities";
+import { useExtensions } from "../../../models/extensions/useExtensions";
 import { untilResult } from "../../../lib/intenticStream";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
-import { useSecretInventory } from "../../capabilities/connect/secrets/useSecrets";
+import { useSecretInventory } from "../../../models/capabilities/useSecrets";
 import { useKeyrings } from "../../capabilities/connect/secrets/useKeyrings";
 import SecretKeyrings from "./SecretKeyrings.vue";
 import { useOperation } from "../../../workbench/operations/operations";

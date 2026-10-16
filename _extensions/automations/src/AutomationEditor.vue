@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AutomationSummary, AutomationTemplate } from "@intentic/sandbox-contract";
+import type { AutomationSummary, AutomationTemplate } from "@intentic/sandbox-contract/schemas/automations";
 import { Button, Icon, Notice, noticeOf } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import type { AvailableSource } from "./catalog";

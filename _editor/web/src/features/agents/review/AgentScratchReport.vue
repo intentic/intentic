@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ScratchPath, ScratchReason } from "@intentic/sandbox-contract";
+import type { ScratchPath, ScratchReason } from "@intentic/sandbox-contract/schemas/git/git";
 import { Button, formatBytes } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";

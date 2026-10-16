@@ -1,4 +1,5 @@
-import type { AgentSummary, PresenceUser, SystemEvent } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { PresenceUser, SystemEvent } from "@intentic/sandbox-contract/events/system-events";
 import { refuse } from "@intentic/contract-serve";
 import { automationApprovals } from "../fixture/automations";
 import { DESK_AWAITING_ID, DESK_FEATURED_ID, deskRoster } from "../fixture/desk";

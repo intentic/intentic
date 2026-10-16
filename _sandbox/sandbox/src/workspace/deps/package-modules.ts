@@ -7,7 +7,7 @@ import {
     type PackageModules,
     type PackageUnit,
     type PackageUnitEdge,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
 import { importsOf } from "./import-scan.js";
 import { packageFiles, readSources } from "./package-files.js";
 import { isTooling } from "./package-usage.js";

@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { mapPool } from "@intentic/base/async";
 import { isMissing } from "@intentic/base/errors";
 import { held } from "@intentic/base/held";
-import type { WorkspaceLink } from "@intentic/sandbox-contract";
+import type { WorkspaceLink } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { compileGitignore, type Matchers, walkMatchers } from "@intentic/workspace-ignore";
 import { isUnder, realPathOf } from "./workspace-files-paths.js";
 

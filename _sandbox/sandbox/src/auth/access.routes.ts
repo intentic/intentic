@@ -3,6 +3,7 @@ import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { bearerFrom, ForbiddenError } from "./auth.js";
 import { ownerDenied } from "./owner-gates.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // What still holds a browser credential to this sandbox, and the three ways to act on it: mint a ticket, sign every
 // browser out, or retire access for good.
@@ -56,4 +57,15 @@ export const createAccessRoutes = (services: AccessRoutesDeps) => ({
         services.mediaTickets.revoke();
         return c.json({ ok: true });
     },
+});
+
+// Browser credentials: the one-shot ticket the WebSocket upgrades redeem, minted over HTTP so auth can bind it. Then
+// sign out every browser, and retire access for good; the latter stays repeatable after a partial attempt.
+export const accessRawRoutes = defineRawRoutes((services: AccessRoutesDeps) => {
+    const access = createAccessRoutes(services);
+    return {
+        "POST /system/ws-ticket": access.wsTicket,
+        "POST /system/sessions/revoke": access.revokeSessions,
+        "POST /system/access/disable": access.disable,
+    };
 });

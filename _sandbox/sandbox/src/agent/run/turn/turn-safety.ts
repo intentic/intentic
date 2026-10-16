@@ -1,4 +1,5 @@
-import { roleLadder, type SandboxSettings, type SetupLadder } from "@intentic/sandbox-contract";
+import { roleLadder, type SetupLadder } from "@intentic/sandbox-contract/models/model-setups";
+import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import type { Services } from "../../../composition.js";
 import type { CommandGuardOptions } from "../../../guard/command-guard.js";
 import { opt } from "../../../opt.js";

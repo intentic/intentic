@@ -20,7 +20,7 @@ const local = store(`localStorage`);
 const session = store(`sessionStorage`);
 
 const activeSandboxId = ref<string | undefined>(`sb1`);
-jest.mock("../../lib/activeSandbox", () => ({ activeSandboxId }));
+jest.mock("../../app/storage/activeSandbox", () => ({ activeSandboxId }));
 
 const { activateTab, closeAllTabs, closeOtherTabs, closeTab, cycleTab, keepTab, openBeside, setSplit, sideTabId, useSidePanel } =
     await import("./sideTabs");

@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { checks } from "./invariant.js";
 import { parseMountinfo } from "./mountinfo.js";

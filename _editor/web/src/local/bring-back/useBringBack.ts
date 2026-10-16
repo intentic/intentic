@@ -1,6 +1,6 @@
 import { computed, onScopeDispose, shallowReactive, watch } from "vue";
 import { askLocalApp, LOCAL_PROJECT_EVENT, type LocalVerb, type SyncDirection } from "../../app/environments/local";
-import { activeSandboxId } from "../../lib/activeSandbox";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
 import {
     answered,
     BRING_BACK_CAP,

@@ -1,6 +1,6 @@
 import { computed, type ComputedRef, type Ref, ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
-import { storedValue, storeValue } from "../lib/browserStorage";
+import { storedValue, storeValue } from "./storage/browserStorage";
 
 // Who the screen is written for. A developer reads git's own words (branch, land, commit, diff) and every panel; a
 // maker reads plain ones (draft, accept, version, what changed) over the same mechanisms, with tooling files, the index

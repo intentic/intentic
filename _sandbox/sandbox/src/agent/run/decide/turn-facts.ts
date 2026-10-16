@@ -1,6 +1,13 @@
 import { join } from "node:path";
 import { FIELD_NOTES_FILE } from "@intentic/constants";
-import type { Area, Capability, ConversationGrant, CredentialGate, HelperOnly, Persona, Rule, SandboxSettings, TurnNote } from "@intentic/sandbox-contract";
+import type { Area } from "@intentic/sandbox-contract/schemas/areas";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { ConversationGrant } from "@intentic/sandbox-contract/schemas/needs";
+import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
+import type { HelperOnly } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Rule, SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { Services } from "../../../composition.js";
 import { readPersonaPrompt } from "../../../personas/persona-kit.js";
 import type { ShortMemory } from "@intentic/constants/memory-room";
@@ -14,7 +21,7 @@ import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js
 import type { ProjectSetupStatus } from "../../../workspace/layout/workspace-setup.js";
 import { contextNoteIfDue } from "../../context/conversation-context.js";
 import { type AccountRoute, offBlockedAccount } from "../../providers/accounts/blocked-account.js";
-import { routingFor } from "../../providers/accounts/routing.js";
+import { routingFor } from "../../../conversations/registry/routing.js";
 import { type FieldNotes, fieldNotes } from "@intentic/agent-context/field-notes";
 import { type IqSearchTeaching, iqSearchInstruction } from "../../prompt/iq-search-instruction.js";
 import { type DeclaredWindow, servedEndpointModel, windowOf } from "../../prompt/window/context-budget.js";

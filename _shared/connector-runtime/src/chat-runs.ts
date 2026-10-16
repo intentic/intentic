@@ -1,4 +1,4 @@
-import type { ListenerStop, ListenerStopAnswer } from "@intentic/sandbox-contract";
+import type { ListenerStop, ListenerStopAnswer } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import type { ReplyRegistry, RunControl } from "./chat-reply.js";
 import type { Logger } from "./log.js";
 

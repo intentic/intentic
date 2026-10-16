@@ -1,5 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { sessionsContract } from "@intentic/sandbox-contract";
+import { sessionsContract } from "@intentic/sandbox-contract/contracts/sessions.contract";
 import { unstubbed } from "@intentic/testing";
 import { routesClient } from "../harness/route-client.testing.js";
 import { workspacePaths } from "../workspace/workspace.js";

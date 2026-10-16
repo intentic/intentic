@@ -1,4 +1,4 @@
-import type { DaemonSession, PasskeyRequired } from "@intentic/sandbox-contract";
+import type { DaemonSession, PasskeyRequired } from "@intentic/sandbox-contract/schemas/system";
 import { shallowRef } from "vue";
 import type { SandboxTarget } from "../sandbox/sandboxTarget";
 

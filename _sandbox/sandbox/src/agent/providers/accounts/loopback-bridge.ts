@@ -6,13 +6,15 @@ import {
     deviceSupports,
     HOST_NATIVE_ENVIRONMENT,
     type DeviceFacts,
+    parseHostConnection,
+} from "@intentic/sandbox-contract/schemas/hosts";
+import {
     LOOPBACK_CATCH_FEATURE,
     type LoopbackCatch,
     type LoopbackCatchEvent,
-    parseHostConnection,
     type SignInCatcher,
-    type WebExtFacts,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/loopback-catch";
+import type { WebExtFacts } from "@intentic/sandbox-contract/schemas/webext";
 import type { Logger } from "pino";
 
 // A SIGN-IN WHOSE REDIRECT LANDS ON LOOPBACK, FINISHED WITHOUT A PASTE. A provider built for a CLI sends the browser to

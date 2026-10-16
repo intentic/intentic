@@ -44,9 +44,9 @@ export const syncWorkspaceRepos = async (services: Pick<Services, "git" | "works
 
 const commits = (n: number): string => `${n} ${n === 1 ? "commit" : "commits"}`;
 
-// The note's fixed opening; turn-preamble.ts matches on it to both disclose and strip the note.
+// The note's fixed opening; sessions/vocabulary/prompt-envelope.ts matches on it to both disclose and strip the note.
 export const REPO_SYNC_NOTE_HEADER = "## Repos synced with their remotes";
-// The chat-row title paired with REPO_SYNC_NOTE_HEADER (turn-preamble.ts).
+// The chat-row title paired with REPO_SYNC_NOTE_HEADER (sessions/vocabulary/prompt-envelope.ts).
 export const REPO_SYNC_NOTE_TITLE = "Repos synced with their remotes";
 
 // Prepends a note to the turn's prompt naming what moved and what it could NOT advance (context there may be stale).

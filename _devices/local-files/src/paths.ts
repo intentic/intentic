@@ -2,6 +2,7 @@ import type { Stats } from "node:fs";
 import { lstat, realpath, stat } from "node:fs/promises";
 import hostPath, { basename, dirname, join, type PlatformPath, relative } from "node:path";
 import { isInside, windowsHolds } from "@intentic/base/contained";
+import { undefinedIfMissing } from "@intentic/base/errors";
 
 // Every path a window names is root-relative with forward slashes, as the contract carries it, and is only ever
 // resolved here: lexically first (no `..`, no drive, no NUL), then on disk, where the real path of whatever exists must
@@ -62,8 +63,8 @@ export const resolveExisting = async (root: string, path: string): Promise<Resol
 export const brokenLink = (name: string): string => `“${name}” is a link to something that isn't there.`;
 
 export const entryOf = (abs: string): Promise<Stats | undefined> =>
-    // allow(silent-catch): nothing at the path at all, not even a link, is the undefined its caller walks past.
-    lstat(abs).catch(() => undefined);
+    // Nothing at the path at all, not even a link, is the undefined its caller walks past.
+    lstat(abs).catch(undefinedIfMissing);
 
 // Where a link at `abs` leads when a write names it: the real path it resolves to inside the root, never past it, and
 // never a place that is not there yet.
@@ -94,10 +95,10 @@ export const resolveWritable = async (root: string, path: string): Promise<Resol
         return within(root, real) ? { kind: `found`, abs: real } : { kind: `refused`, why: OUTSIDE };
     }
     for (let probe = abs; ; probe = dirname(probe)) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one ancestor at a time, nearest first, stopping at the first that exists
+        // one ancestor at a time, nearest first, stopping at the first that exists
         const entry = await entryOf(probe);
         if (entry !== undefined) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- runs once, for the ancestor that ends the walk
+            // runs once, for the ancestor that ends the walk
             return landingUnder(root, probe, relative(probe, abs), entry);
         }
         if (probe === root || dirname(probe) === probe) {
@@ -116,8 +117,8 @@ const landingUnder = async (root: string, ancestor: string, rest: string, entry:
     if (!within(root, real)) {
         return { kind: `refused`, why: OUTSIDE };
     }
-    // allow(silent-catch): an ancestor gone since it was resolved holds nothing to write into.
-    const folder = await stat(real).catch(() => undefined);
+    // An ancestor gone since it was resolved holds nothing to write into.
+    const folder = await stat(real).catch(undefinedIfMissing);
     return folder?.isDirectory() === true ? { kind: `found`, abs: join(real, rest) } : { kind: `refused`, why: `not a folder` };
 };
 

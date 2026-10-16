@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PRIVACY_ALLOW_MAX } from "@intentic/sandbox-contract";
+import { PRIVACY_ALLOW_MAX } from "@intentic/sandbox-contract/schemas/privacy";
 import { CopyButton, Icon, Row, ui } from "@intentic/ui";
 import { formatFixed } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";

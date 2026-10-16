@@ -1,5 +1,10 @@
 import { keyedLock } from "@intentic/base/async";
-import { WEBCHAT_DAILY_MAX_DEFAULT, type WebchatConfig, WebchatMessageSchema, type WebchatPending } from "@intentic/sandbox-contract";
+import {
+    WEBCHAT_DAILY_MAX_DEFAULT,
+    type WebchatConfig,
+    WebchatMessageSchema,
+    type WebchatPending,
+} from "@intentic/sandbox-contract/schemas/automations";
 import { WEBCHAT_EVENT } from "@intentic/sandbox-contract/embed";
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
@@ -18,6 +23,8 @@ import { publicConfig, usableAntiBot } from "./webchat-config.js";
 import { resolveVisitor, SignInRequired, type VisitorIdentity } from "./webchat-identity.js";
 import { webchatInstallsDocument } from "../store/installs.js";
 import { readBoundedJson } from "../http/bounded-body.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
+import { createWidgetRoute } from "./webchat-widget.js";
 
 // The Visitor chat's ingest: a public door (automations/public-door.ts) whose verb is `message`, where every arrival is
 // an agent turn. Somebody is waiting for an answer, so the reply streams back as SSE.
@@ -227,3 +234,19 @@ export const createWebchatRoutes = (services: Services, installs?: InstallsStore
         },
     };
 };
+
+// The Visitor chat: widget bundle, per-automation config, bot challenge, the message ingest streaming its reply as
+// SSE, and the poll that collects a reply written after that stream closed.
+export const webchatRawRoutes = defineRawRoutes((services: Services) => {
+    const webchat = createWebchatRoutes(services);
+    return {
+        "GET /webchat/widget.js": createWidgetRoute(),
+        "GET /webchat/{id}/config": webchat.config,
+        "GET /webchat/{id}/challenge": webchat.challenge,
+        "POST /webchat/{id}/message": webchat.message,
+        // Replies written after the visitor's stream closed: an approved wake's, or a human's, written as the agent.
+        "GET /webchat/{id}/messages": webchat.messages,
+        // Which sites loaded this widget, the owner's diagnostic.
+        "GET /webchat/{id}/installs": webchat.installs,
+    };
+});

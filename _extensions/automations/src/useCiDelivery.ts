@@ -1,4 +1,4 @@
-import { CI_POLL_INTERVAL_MS, type CiRepo } from "@intentic/sandbox-contract";
+import { CI_POLL_INTERVAL_MS, type CiRepo } from "@intentic/sandbox-contract/schemas/ci";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
 import { t } from "./i18n.js";

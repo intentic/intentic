@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type { Persona } from "@intentic/sandbox-contract";
-import { personaBoundsWords } from "../../sandbox/personas/personaBounds";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import { personaBoundsWords } from "../../../models/sandbox/personas/personaBounds";
 import { browserOwnsClick, FACE_SIZES, PersonaFace, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { usePersonas } from "../../sandbox/personas/usePersonas";
+import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useT } from "@intentic/ui/i18n";
 

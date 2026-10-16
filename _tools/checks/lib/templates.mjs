@@ -1,8 +1,9 @@
 // Shared markup reading for button-tiers, input-tiers and row-tiers: one git listing, blanking pass, tag walk and
-// waiver bookkeeping, so a fix reaches all three gates at once. Works on a bare checkout, no node_modules or parser,
+// site-comment lookup, so a fix reaches all three gates at once. Works on a bare checkout, no node_modules or parser,
 // since checks run before `pnpm install`.
 import { readFileSync } from "node:fs";
-import { root, subjectFiles, subjectScope } from "./repo.mjs";
+import { allowedAt } from "./allow.mjs";
+import { root, subjectFiles } from "./repo.mjs";
 
 /** Every tracked .vue file under `roots` that this run is asked to judge (`--paths` narrows it; see repo.mjs's scope). */
 export const templatesUnder = (...roots) => subjectFiles(...roots).filter((path) => path.endsWith(`.vue`));
@@ -28,7 +29,7 @@ export function* tags(scan, from = 0) {
     let match;
     while ((match = walk.exec(scan)) !== null) {
         const [, closing, name, attrs, selfClosing] = match;
-        yield { closing, name, attrs, selfClosing, index: match.index };
+        yield { closing, name, attrs, selfClosing, index: match.index, end: walk.lastIndex };
     }
 }
 
@@ -49,32 +50,29 @@ export const classWordsOf = (attrs) =>
         .replace(/\s+/gu, ` `)
         .trim();
 
-// Waivers keyed by path then the exact finding text, with a reason. Tracks hits so a waiver whose code is gone is
-// reported as a finding, not a warning, since only failing keeps a list like this honest.
-export const waiverList = (allowed, gate) => {
-    const used = new Set();
-    return {
-        waived: (path, key) => {
-            if (allowed.get(path)?.get(key) === undefined) {
-                return false;
-            }
-            used.add(JSON.stringify([path, key]));
-            return true;
-        },
-        // Only for files this run actually read. "Nothing matches it any more" is a claim about a file's contents, and a
-        // scoped run never opened the rest of them — without this, `--paths one.vue` reports every OTHER waiver in the
-        // list as stale, which is the whole-tree question leaking into a per-file answer.
-        stale: () => {
-            const scope = subjectScope();
-            return [...allowed]
-                .filter(([path]) => scope === undefined || scope.has(path))
-                .flatMap(([path, entries]) =>
-                    [...entries.keys()]
-                        .filter((key) => !used.has(JSON.stringify([path, key])))
-                        .map((key) => ({ at: path, why: `stale ALLOWED entry in ${gate}: nothing in this file matches \`${key}\` any more, so drop it` })),
-                );
-        },
-    };
+// The index of the tag whose markup holds `offset` in a blanked scan, or undefined when it sits outside every tag.
+const tagHolding = (scan, offset) => {
+    for (const { index, end } of tags(scan)) {
+        if (index > offset) {
+            return undefined;
+        }
+        if (offset < end) {
+            return index;
+        }
+    }
+    return undefined;
+};
+
+/**
+ * Whether an `allow(<check>): <reason>` comment excuses the finding at `offset` of `source` (lib/allow.mjs): above its
+ * line, or above the tag whose attributes hold it, since markup has no room for a comment between attributes. `scan` is
+ * the blanked markup; without it only the line is read.
+ */
+export const excusedAt = (source, scan, offset, check) => {
+    const lines = source.split(`\n`);
+    const lineOf = (index) => source.slice(0, index).split(`\n`).length;
+    const tag = scan === undefined ? undefined : tagHolding(scan, offset);
+    return allowedAt(lines, lineOf(offset), check) || (tag !== undefined && allowedAt(lines, lineOf(tag), check));
 };
 
 /** Every finding as `path:line  why`, sorted by where it is, then the sentence that says what the gate is for. */

@@ -1,4 +1,4 @@
-import { roleAtLeast } from "@intentic/sandbox-contract";
+import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 

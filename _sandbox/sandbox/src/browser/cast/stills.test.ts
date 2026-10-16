@@ -94,7 +94,7 @@ test("the pointer coming to rest gets another look: what it lit up replaces the 
     for (let step = 0; step < 5; step += 1) {
         made.noteInput();
         expect(made.noteFrame(quiet)).toBe("quiet");
-        // oxlint-disable-next-line eslint/no-await-in-loop -- the pointer moving, a step at a time
+        // the pointer moving, a step at a time
         await advanceTimersByTimeAsync(STILL_DELAY_MS / 2);
     }
     // Still moving: nothing looked at yet.

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { FREE_TIER, type HostedShape, type HostedTierId } from "@intentic/constants";
-import { projectRemoteDir } from "@intentic/sandbox-contract";
+import { projectRemoteDir } from "@intentic/sandbox-contract/ids/project-dir";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT, verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
 import { ENV_PLATFORM_IDENTITY_KEY } from "@intentic/sandbox-contract/identity-assertion";
@@ -442,7 +442,7 @@ const claimPoolMachine = async (
     const stockImage = await resolveHostedImage(config, logger);
     const candidates = ready.filter((row) => row.image === stockImage);
     for (const row of candidates) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- each iteration races other claimers for one row; parallelism is the bug
+        // each iteration races other claimers for one row; parallelism is the bug
         const won = await prisma.hostedPoolMachine.updateMany({ where: { id: row.id, state: `ready` }, data: { state: `claimed` } });
         if (won.count === 0) {
             continue;
@@ -453,7 +453,6 @@ const claimPoolMachine = async (
                 // Machine's identity, not the row's: the config, hostname and row all follow it.
                 const connectToken = decryptSecret(config, row.token);
                 const adopted: HostedProvisionArgs = { ...args, connectToken };
-                // oxlint-disable-next-line eslint/no-await-in-loop
                 // `row.image` and not the configured tag: this machine already holds that exact digest, so replacing
                 // its config changes identity and env only, and it starts instead of pulling.
                 await updateMachine(
@@ -463,9 +462,7 @@ const claimPoolMachine = async (
                     hostedMachineConfig(config, adopted, row.appName, row.volumeId, STOCK_OVERLAY, row.image),
                 );
                 await assertHostedIdentity(prisma, args.sandboxId, args.connectToken);
-                // oxlint-disable-next-line eslint/no-await-in-loop
                 await startAfterUpdate(config, row, () => assertHostedIdentity(prisma, args.sandboxId, args.connectToken));
-                // oxlint-disable-next-line eslint/no-await-in-loop
                 await withHostedSlot(prisma, config, args, row.appName, async (tx) => {
                     await tx.hostedMachine.create({
                         data: {
@@ -493,7 +490,7 @@ const claimPoolMachine = async (
             }
             // The one failure that must not try the next candidate: a `sandboxId` collision means this sandbox already
             // has a machine, so every further candidate would be branded and stranded for nothing.
-            // oxlint-disable-next-line eslint/no-await-in-loop -- the loop is sequential by design; see above
+            // the loop is sequential by design; see above
             if (await alreadyProvisioned(prisma, args.sandboxId, error)) {
                 logger.warn(
                     { app: row.appName, sandboxId: args.sandboxId },
@@ -1014,7 +1011,7 @@ export const sortUnknownApps = async (
             skipped.push({ app, why: `live` });
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one small read per unknown app, once a day
+        // one small read per unknown app, once a day
         const evidence = await appEvidence(config, app);
         const why = orphanVerdict(evidence, records.tombstoned.has(id), now);
         if (why === undefined) {
@@ -1101,7 +1098,7 @@ export const reapHostedOrphans = async (prisma: PrismaClient, config: Config, lo
     for (const name of doomed.slice(0, cap)) {
         logger.warn({ app: name }, `hosted reaper: destroying an app whose sandbox was deleted, or warm stock nobody claimed`);
         try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- sequential teardown, gentle on the API; a handful at most
+            // sequential teardown, gentle on the API; a handful at most
             await deleteApp(config.hosted.flyApiToken, name);
             destroyed.push(name);
         } catch (error) {

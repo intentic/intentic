@@ -3,7 +3,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import type { IssueReport } from "@intentic/sandbox-contract";
+import type { IssueReport } from "@intentic/sandbox-contract/schemas/issues";
 import { fileIssuesStore, type RecordInput } from "./issues-store.js";
 
 // A store over a fresh temp path (the issues dir doesn't exist yet: the store must create it on write).

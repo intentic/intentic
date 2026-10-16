@@ -9,7 +9,7 @@ jest.mock(`../../../../client/sandbox/sandboxClient`, () => ({
     SandboxHttpError: class SandboxHttpError extends Error {},
 }));
 
-const { DeviceFlowLostError } = await import("../useDevices");
+const { DeviceFlowLostError } = await import("../../../../models/sandbox/devices/useDevices");
 const { runnerFailure } = await import("./runnerFailure");
 const { runnerFallback } = await import("./deviceFallback");
 

@@ -1,4 +1,4 @@
-import type { AddInventoryInput, InventoryEntry } from "@intentic/sandbox-contract";
+import type { AddInventoryInput, InventoryEntry } from "@intentic/sandbox-contract/schemas/inventory";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { rpcKey } from "../../lib/queryKeys";

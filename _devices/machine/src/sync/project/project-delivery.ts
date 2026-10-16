@@ -8,7 +8,7 @@ import {
     PROJECT_DELIVERY_MAX_BYTES,
     type ProjectDelivery,
     type ProjectDeliveryResult,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/project-delivery";
 import { baseDir } from "../../config.js";
 import { deliversByItself, isProjectPairing, type Pairing, pairingKey, readState } from "../config.js";
 import { runProcess } from "../exec.js";
@@ -285,7 +285,7 @@ const backUpWrites = async (place: PointPlace, writes: readonly Write[], conflic
     for (const plan of writes) {
         try {
             const request = { path: plan.path, kind: backupKind(plan), applied: plan.outcome === "remove" ? null : plan.hash };
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one file at a time, so a failure names one path
+            // one file at a time, so a failure names one path
             const entry = await backUp(place.stateDir, place.key, place.id, place.root, request, place.durability);
             if ((entry.backedUp ? (entry.backup ?? null) : null) === plan.before) {
                 kept.push({ plan, entry });
@@ -321,7 +321,7 @@ const withoutCaseRenames = async (root: string, items: readonly Decoded[]): Prom
     for (const gone of items.filter((item) => item.next === null)) {
         const spelling = gone.file.path.toLowerCase();
         const kept = items.find((item) => item.next !== null && item.file.path !== gone.file.path && item.file.path.toLowerCase() === spelling && !renamed.has(item.file.path));
-        // oxlint-disable-next-line eslint/no-await-in-loop -- rarely more than one, and each is two lstats
+        // rarely more than one, and each is two lstats
         if (kept !== undefined && (await sameFileHere(root, gone.file.path, kept.file.path))) {
             renamed.set(kept.file.path, gone);
             dropped.add(gone);
@@ -368,7 +368,7 @@ const planAll = async (
     const { items: planned, renamed } = await withoutCaseRenames(root, items);
     const byPath = new Map<string, Plan>();
     for (const [at, item] of planned.entries()) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one file at a time, so a failure names one path
+        // one file at a time, so a failure names one path
         byPath.set(item.file.path, await planFile(root, item, staging, at, git));
     }
     // An old spelling comes to what its new one did: kept out with it, or already gone as a file of its own.
@@ -380,7 +380,7 @@ const planAll = async (
         for (const [kept, gone] of renamed) {
             const outcome = byPath.get(kept)?.outcome;
             if (outcome === "already" || outcome === "merged-in-place" || written.has(kept)) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- one rename at a time
+                // one rename at a time
                 await respell(root, gone.file.path, kept);
             }
         }
@@ -417,7 +417,7 @@ const deliverHeld = async (context: DeliveryContext, delivery: ProjectDelivery, 
     const done: { readonly plan: Write; readonly entry: RestoreEntry }[] = [];
     for (const item of kept) {
         try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             await carryOut(root, item.plan, item.entry);
             done.push(item);
         } catch {

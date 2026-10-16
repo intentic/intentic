@@ -1,4 +1,4 @@
-import type { IntenticOsChannel, IntenticOsStatus, IntenticOsUpdateCheck } from "@intentic/sandbox-contract";
+import type { IntenticOsChannel, IntenticOsStatus, IntenticOsUpdateCheck } from "@intentic/sandbox-contract/schemas/intentic-os";
 import type { StatusVariant } from "@intentic/ui";
 import type { OsRunEnd, OsRunEvent, OsVerb } from "../../desktop";
 

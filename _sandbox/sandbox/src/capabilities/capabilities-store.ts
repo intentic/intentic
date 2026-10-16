@@ -1,4 +1,5 @@
-import { type Capability, CapabilitySchema, type LocalModelConfig, VAULTED } from "@intentic/sandbox-contract";
+import { type Capability, CapabilitySchema, type LocalModelConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import { isJsonObject, mapValue, retireEntries, transform } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import type { IdListStore } from "../store/id-list-file.js";

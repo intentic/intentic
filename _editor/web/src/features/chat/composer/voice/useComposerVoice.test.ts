@@ -1,6 +1,6 @@
-import type { SpeechStatus } from "@intentic/sandbox-contract";
+import type { SpeechStatus } from "@intentic/sandbox-contract/schemas/speech";
 import { createApp, defineComponent, h, ref, shallowRef } from "vue";
-import type { Heard, VoiceError, VoiceInput, VoiceState } from "./useVoiceInput";
+import type { Heard, VoiceError, VoiceInput, VoiceState } from "../../../../models/voice/useVoiceInput";
 
 // Pins what the composer makes of voice: the words appear in the box while they are spoken and are replaced by what
 // was heard, the pause sends only once nothing more is coming, words that land after a stop are written and not sent,
@@ -8,7 +8,7 @@ import type { Heard, VoiceError, VoiceInput, VoiceState } from "./useVoiceInput"
 // past it, offered only to a reader who may take it.
 
 jest.mock(`../../../../client/sandbox/sandboxClient`, () => ({ sandboxJson: () => Promise.reject(new Error(`unmocked`)) }));
-jest.mock(`../../../sandbox/session/wsTicket`, () => ({ socketUrl: async () => undefined }));
+jest.mock(`../../../../client/sandbox/streams/wsTicket`, () => ({ socketUrl: async () => undefined }));
 jest.mock(`../../../../app/analytics`, () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 
 const { useComposerVoice } = await import(`./useComposerVoice`);

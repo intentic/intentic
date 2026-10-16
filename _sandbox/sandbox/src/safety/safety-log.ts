@@ -1,4 +1,4 @@
-import { type SafetyLogEntry, SafetyLogEntrySchema } from "@intentic/sandbox-contract";
+import { type SafetyLogEntry, SafetyLogEntrySchema } from "@intentic/sandbox-contract/policy/safety-policy";
 import { defineDocument } from "../store/evolution/documents.js";
 import { boundedLog } from "../store/json-file.js";
 import { openEntries } from "../store/open-document.js";

@@ -1,7 +1,8 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
 import { pageTools } from "./page-tools.js";
 

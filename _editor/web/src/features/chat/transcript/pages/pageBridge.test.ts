@@ -1,7 +1,8 @@
 // What a page in the chat may say to the window around it, read where it arrives: the two dialects (the sealed
 // document's link guide, the page bridge's JSON-RPC) become a handful of asks, and everything else is nothing.
-import { PAGE_BRIDGE, PAGE_ERROR_CHARS, PAGE_FALLBACK_THEMES, PAGE_VALUE_MAX } from "@intentic/sandbox-contract";
-import { withPageDraft } from "../../session/turnClient";
+import { PAGE_BRIDGE, PAGE_ERROR_CHARS, PAGE_FALLBACK_THEMES } from "@intentic/sandbox-contract/text/pages";
+import { PAGE_VALUE_MAX } from "@intentic/sandbox-contract/events/requests";
+import { withPageDraft } from "../../../../models/conversations/session/turnClient";
 import { initializeResult, readPageAsk, themeMessage } from "./pageBridge";
 
 const rpc = (method: string, params: unknown, id?: string | number) => ({ jsonrpc: `2.0`, method, params, ...(id === undefined ? {} : { id }) });

@@ -1,4 +1,4 @@
-import { EDGE_VERDICT_HEADER } from "@intentic/sandbox-contract";
+import { EDGE_VERDICT_HEADER } from "@intentic/sandbox-contract/protocol/edge-verdict";
 import { forgetEdgeVerdict, lastEdgeVerdict, noteEdgeVerdict } from "../edgeVerdict";
 
 // The edge's verdict reaches the connection machine through a module-level note, so what it forgets matters as much as

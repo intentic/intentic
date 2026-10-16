@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { RESTART_ACTIONS, RESTART_INITIATORS, RESTART_SIDES, RestartIntentSchema } from "@intentic/sandbox-contract";
+import { RESTART_ACTIONS, RESTART_INITIATORS, RESTART_SIDES, RestartIntentSchema } from "@intentic/sandbox-contract/schemas/restart-intent";
 import { fakeKeeper, fixRun, linkView } from "../../testing.js";
 import type { IcRun } from "../tools/sandboxes.js";
 import {

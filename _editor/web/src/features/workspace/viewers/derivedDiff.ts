@@ -1,4 +1,4 @@
-import type { DerivedDiff, DiffSourceQuery } from "@intentic/sandbox-contract";
+import type { DerivedDiff, DiffSourceQuery } from "@intentic/sandbox-contract/schemas/diff";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 
 // Both sides of a document's diff as the text fileq renders, the same rendering an agent reads instead of the bytes.

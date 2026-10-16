@@ -1,10 +1,11 @@
-import { EngineChannelInputSchema, EngineRevertInputSchema, EngineUpdateInputSchema } from "@intentic/sandbox-contract";
+import { EngineChannelInputSchema, EngineRevertInputSchema, EngineUpdateInputSchema } from "@intentic/sandbox-contract/schemas/engines";
 import type { Context } from "hono";
 import { opt } from "../opt.js";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { enginesView, revertEngine, setChannel, updateEngine } from "./engines.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // Which version of each agent engine this sandbox runs, and where it comes from. Mounted beside /environment and
 // owner-only for the same reason: these writes install code every turn then runs. Update's version is optional; absent
@@ -13,7 +14,7 @@ import { enginesView, revertEngine, setChannel, updateEngine } from "./engines.j
 
 export type EnginesRoutesDeps = Pick<Services, "auth" | "workspace" | "logger">;
 
-export const createEnginesRoutes = (services: EnginesRoutesDeps) => ({
+const createEnginesRoutes = (services: EnginesRoutesDeps) => ({
     /** GET /engines */
     view: async (c: Context<AppEnv>): Promise<Response> => c.json(await enginesView(services)),
     /** POST /engines/channel */
@@ -70,4 +71,15 @@ export const createEnginesRoutes = (services: EnginesRoutesDeps) => ({
         const applied = await revertEngine(services, parsed.data.id);
         return c.json({ applied, engines: await enginesView(services) });
     },
+});
+
+// Agent engines, beside /environment since both answer the same owner question: what is installed here.
+export const enginesRawRoutes = defineRawRoutes((services: EnginesRoutesDeps) => {
+    const engines = createEnginesRoutes(services);
+    return {
+        "GET /engines": engines.view,
+        "POST /engines/channel": engines.channel,
+        "POST /engines/update": engines.update,
+        "POST /engines/revert": engines.revert,
+    };
 });

@@ -1,10 +1,10 @@
 import { localFace } from "../../../../app/environments/local";
 import { useNotifications } from "../../../../workbench/notifications/notifications";
-import { useTerminalPanel } from "../../../terminal/useTerminalPanel";
+import { useTerminalPanel } from "../../../../models/terminal/useTerminalPanel";
 import { downloadEntries } from "../../files/downloadEntries";
 import { useUploadQueue } from "../../files/upload/useUploadQueue";
 import { useDeleteUndo } from "../undo/useDeleteUndo";
-import { useWorkspaceTree } from "../useWorkspaceTree";
+import { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
 import type { FileVerbSeams } from "./fileVerbs";
 
 // The daemon's store as a surface holds it: all of it, less unpacking where nothing unpacks.

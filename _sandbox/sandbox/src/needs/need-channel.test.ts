@@ -1,4 +1,4 @@
-import type { AgentOrigin } from "@intentic/sandbox-contract";
+import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
 import { needChannelOf, needChannelText } from "./need-channel.js";
 
 // What a channel conversation hears when its agent asks a person for something, and which conversations hear it.

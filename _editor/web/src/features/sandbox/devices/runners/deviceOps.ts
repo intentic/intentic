@@ -1,4 +1,4 @@
-import type { DeviceAgentOp, DeviceSandboxOp, DeviceSyncSwitch } from "@intentic/sandbox-contract";
+import type { DeviceAgentOp, DeviceSandboxOp, DeviceSyncSwitch } from "@intentic/sandbox-contract/schemas/devices";
 import type { DeviceSandboxGroup, NoticeModel, ResourcesForm, RollbackChoice, SandboxVerb } from "@intentic/ui";
 import { runningShape } from "@intentic/ui/sandbox-resources";
 import { rollbackToPrompt, sandboxVerbPrompt, VERB_LABEL } from "@intentic/ui";
@@ -9,7 +9,7 @@ import { agentFallback, sandboxFallback, syncFallback } from "./deviceFallback";
 import { agentRefusal, type AgentRun, type LinksAsked } from "./agentRun";
 import { type DeviceUpdateRun, foldUpdateLine, isStagedVerb, settleUpdateRun, startUpdateRun } from "./deviceUpdateStages";
 import { agentInFlight, agentRunOf, beginDeviceWork, dismissAgentRun, machineCalling, pressAgent, sandboxesWorking } from "./deviceWork";
-import { canSetShape, type ShapeIntent, shapeFlow, shapeSevers, tooOldToSave } from "../shapeFlow";
+import { canSetShape, type ShapeIntent, shapeFlow, shapeSevers, tooOldToSave } from "../../../../models/sandbox/devices/shapeFlow";
 import {
     type BatchAction,
     type BatchVerb,
@@ -20,8 +20,8 @@ import {
     managerOf,
     removableHere,
     rowRemoval,
-} from "../deviceRows";
-import { type DeviceSandboxPayload, manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "../useDevices";
+} from "../../../../models/sandbox/devices/deviceRows";
+import { type DeviceSandboxPayload, manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "../../../../models/sandbox/devices/useDevices";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { t } from "@intentic/ui/i18n";
 import { setupSaid } from "../sync/syncSetup";
@@ -745,7 +745,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
                 try {
                     for (const [index, group] of groups.entries()) {
                         report.progress((previous) => ({ ...previous, row: group.sandboxId }));
-                        // oxlint-disable-next-line eslint/no-await-in-loop -- one row at a time: every row goes through the same door
+                        // one row at a time: every row goes through the same door
                         const done = await removeRow(group);
                         containers += done.container ? 1 : 0;
                         pairings += done.pairing ? 1 : 0;
@@ -800,7 +800,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
                             continue;
                         }
                         report.progress((previous) => ({ ...previous, row: group.sandboxId }));
-                        // oxlint-disable-next-line eslint/no-await-in-loop -- one row at a time: every row goes through the same door
+                        // one row at a time: every row goes through the same door
                         const refusal = await manageDeviceSandbox(hostId, slug, OP[verb]).then(
                             () => undefined,
                             (error: unknown) => refusalText(error),

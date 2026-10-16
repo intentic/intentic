@@ -1,4 +1,4 @@
-import { compareVersions } from "@intentic/sandbox-contract";
+import { compareVersions } from "@intentic/sandbox-contract/state/versions";
 
 // Minimal matcher for a manifest's `engines.intentic` range against the host's extension API version: an exact
 // version ("0.1.0") or a caret range ("^0.1", "^1", "^1.2.3"). Caret follows semver, same major at or above

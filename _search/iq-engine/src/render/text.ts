@@ -1,4 +1,4 @@
-import type { WorkspaceSearchFreshness, WorkspaceSearchTag } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchFreshness, WorkspaceSearchTag } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import type { Confidence, RankedGroup, RankedHit } from "../types.js";
 import { estimateTokens } from "./budget.js";
 import { encodeCursor } from "./cursor.js";

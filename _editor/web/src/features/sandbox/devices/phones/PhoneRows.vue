@@ -3,8 +3,8 @@
 import { BrandMark, Notice, Row, RowGroup, StatusBadge } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { capabilityRoute } from "../deviceLinks";
-import { PHONE_DOOR, usePeerConnect } from "../usePeerConnect";
+import { capabilityRoute } from "../../../../models/sandbox/devices/deviceLinks";
+import { PHONE_DOOR, usePeerConnect } from "../../../../models/sandbox/devices/usePeerConnect";
 import { phoneRowOf, phoneStateWord } from "./phoneRows";
 
 const t = useT();

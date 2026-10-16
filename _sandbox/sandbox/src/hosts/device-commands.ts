@@ -1,14 +1,10 @@
 import { type InstallScript, installScriptUrl, oneLinerCommand, oneLinerHostOf } from "@intentic/constants";
-import type { Capability, Device, DeviceCommand, DeviceCommandInput, DeviceCommandResult, DeviceFacts } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { Device, DeviceCommand, DeviceCommandInput, DeviceCommandResult } from "@intentic/sandbox-contract/schemas/devices";
+import type { DeviceFacts } from "@intentic/sandbox-contract/schemas/hosts";
 
-import {
-    DEV_REBUILD_EXIT_MARK,
-    DEV_REBUILD_QUIET_MARK,
-    devRebuildLogPath,
-    HOST_NATIVE_ENVIRONMENT,
-    hostConnectionKey,
-    pathReach,
-} from "@intentic/sandbox-contract";
+import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, devRebuildLogPath, pathReach } from "@intentic/sandbox-contract/schemas/devices";
+import { HOST_NATIVE_ENVIRONMENT, hostConnectionKey } from "@intentic/sandbox-contract/schemas/hosts";
 import { powershellQuote, shellQuote } from "@intentic/sandbox-run/quote";
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";

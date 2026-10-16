@@ -1,7 +1,7 @@
 // Pins the form's Test: what it asks the daemon to dial, that a second press while one is in flight does nothing, that
 // the service naming the account renames a name nobody chose, and that "no test exists" retires the button.
 import "@intentic/testing/dom";
-import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { NoticeModel } from "@intentic/ui";
 import { effectScope, type EffectScope, ref } from "vue";

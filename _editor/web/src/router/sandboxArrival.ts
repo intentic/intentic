@@ -1,5 +1,5 @@
 import type { SandboxSummary } from "@intentic/api-contract";
-import { isProjectDirName } from "@intentic/sandbox-contract";
+import { isProjectDirName } from "@intentic/sandbox-contract/ids/project-dir";
 import type { RouteLocationNormalized, RouteLocationRaw } from "vue-router";
 
 // `?sandbox=<id>` on a link into the workspace (`/?sandbox=<id>`): the desktop app opening the workspace on the sandbox

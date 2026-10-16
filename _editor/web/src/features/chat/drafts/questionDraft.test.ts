@@ -1,7 +1,7 @@
 // The picks a question card keeps across a reload: found by the same requestId and no other, gone once the
 // card is settled or swept, and limited to what the live card would still accept.
 import "@intentic/testing/dom";
-import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract";
+import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract/state/workspace-state";
 import { freshImport } from "@intentic/testing/bun";
 import {
     answerStarted,

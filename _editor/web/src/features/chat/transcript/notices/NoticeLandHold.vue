@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { effectiveAutoLand } from "../../../agents/fleet/agentStatus";
-import { useAgents } from "../../../agents/fleet/useAgents";
-import { landsByDefault } from "../../../sandbox/environment/rules";
-import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
-import { usePaneView } from "../../panel/useChat-view";
-import type { ChatMessage } from "../transcript";
+import { effectiveAutoLand } from "../../../../models/agent-status/agentStatus-standing";
+import { useAgents } from "../../../../models/fleet/useAgents";
+import { landsByDefault } from "../../../../models/sandbox/environment/rules";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
+import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 
 /* A landed turn's one-press opt-out from future auto-land, offered while this agent still lands by itself. */
 

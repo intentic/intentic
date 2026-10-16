@@ -1,13 +1,9 @@
-import {
-    type AgentCapabilities,
-    type Capability,
-    capabilitiesOf,
-    type CredentialGate,
-    type Persona,
-    PersonaPowersSchema,
-    type Rule,
-    SandboxSettingsSchema,
-} from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
+import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
+import { type Rule, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { MemoryReading } from "@intentic/constants/memory-room";
 import type { Admission } from "../../../workload/resource-budget.js";
@@ -20,14 +16,14 @@ import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map"
 import { MAP_COMPARISON } from "./experiments.js";
 import { opt } from "../../../opt.js";
 import type { ChildSupervisor } from "../../subagents/children.js";
-import { SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE } from "../../subagents/spawn-note.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { experimentArm } from "@intentic/agent-context/experiments";
-import { conversationAfter } from "../../../testing.js";
-import { LANDING_CHECKS_NOTE_TITLE, LANDING_CHECKS_NOTE } from "../../prompt/checks-note.js";
+import { conversationAfter } from "../../../conversations/registry/agents-store.testing.js";
+import { LANDING_CHECKS_NOTE } from "../../prompt/checks-note.js";
 import { base, budgetOn, context, memoryReading, ROOT, turn } from "../turn/turn-plan.testing.js";
 import { decideTurn, spawnNoteFor, type TurnDecision } from "./turn-decision.js";
 import type { AdmittedTurnFacts, TurnFacts } from "./turn-facts.js";
+import { SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE, LANDING_CHECKS_NOTE_TITLE } from "../../../sessions/vocabulary/prompt-envelope.js";
 
 // decideTurn over facts stated as values: no services, no disk, no clock. Which reads a turn pays for is
 // turn-facts.integration.test.ts's subject, and that planTurn joins the two up is turn-plan.test.ts's.
@@ -109,7 +105,7 @@ test.each([
     const budget = budgetOn(reading, { waitDeadlineMs: 20 });
     const presses: boolean[] = [];
     for (const _ of expected) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- the presses are in order: the second reads the first's warning.
+        // the presses are in order: the second reads the first's warning.
         presses.push(decideTurn(factsAfter(await press(budget, unattended)), turn(), context).ok);
     }
     expect(presses).toEqual([...expected]);

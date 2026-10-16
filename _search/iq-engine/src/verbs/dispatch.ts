@@ -1,6 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { WorkspaceSearchFreshness, WorkspaceSearchGroup, WorkspaceSearchResult } from "@intentic/sandbox-contract";
+import type {
+    WorkspaceSearchFreshness,
+    WorkspaceSearchGroup,
+    WorkspaceSearchResult,
+} from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import { astSearch } from "../engines/astq.js";
 import { bm25Search, prfTerms } from "../engines/bm25.js";
 import { fileSearch, filesVerbHits } from "../engines/files.js";

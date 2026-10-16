@@ -11,17 +11,16 @@ import type { Hono } from "hono";
 import type { AppEnv } from "../app-env.js";
 import { createApp } from "../app.js";
 import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.testing.js";
-import { extensionDir } from "../capabilities/extension-dirs.js";
+import { extensionDir, extensionProcessKey } from "../capabilities/extension-dirs.js";
 import { clientFor, errorCode } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import type { ServiceProcesses } from "../processes/service-processes.js";
 import { unstubbed } from "@intentic/testing";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 import { removeWorkspacePath } from "../workspace/files/workspace-files.js";
 import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
-import { readExtensionDev, worktreesRootOf } from "./extension-dev.js";
-import { extensionProcessKey } from "./extension-processes.js";
+import { readExtensionDev, worktreesRootOf } from "../capabilities/extension-inventory/extension-dev.js";
 
 // Dev mode over the daemon's HTTP surface, the way the `extension` CLI and the Extensions tab drive it: the checkout is
 // found by the address the extension was installed from, served in place of the pinned copy (bundle, processes) until

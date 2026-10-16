@@ -1,3 +1,4 @@
+import { parseJsonOr } from "@intentic/base/json";
 import {
     at,
     drop,
@@ -199,12 +200,8 @@ export const sandboxLedger = (host: () => IntenticApi, path: string): SandboxLed
         if (!answer.present) {
             return {};
         }
-        try {
-            return marksOf(JSON.parse(answer.content));
-        } catch {
-            // allow(silent-catch): an unparseable ledger holds nothing acknowledged, the contract `read` states.
-            return {};
-        }
+        // An unparseable ledger holds nothing acknowledged, the contract `read` states.
+        return marksOf(parseJsonOr(answer.content, undefined));
     };
 
     // One writer for both mark and replace; the scope guard lives here, not at the call site, since a sandbox switch

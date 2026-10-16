@@ -1,0 +1,162 @@
+import type { AgentAttention, AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { parentOf } from "./ownership";
+import {
+    type AgentStanding,
+    blocked,
+    heardByParent,
+    limitScheduled,
+    onlyOwnerCanAnswer,
+    scheduledSend,
+    turnInFlight,
+    watching,
+} from "./agentStatus-standing";
+
+// Whether what a child agent stopped on is the reader's to answer rather than its parent's, given the lanes both stand
+// in and when the parent last moved. An ask only the owner can answer always is; anything else it stopped on (a spent
+// allowance, a failure, a stop, a question, a land conflict) is its parent's news while the parent supervises, and the
+// reader's once it no longer does: nothing running there to hear it and nothing armed to wake it, which is a parent out
+// of Active. That holds only until the parent moves past it (heardByParent). After that the stop is the family's
+// history, drawn in the tray, and no longer something the reader owes a press. The sandbox draws the same line for a
+// child's land news (subagents/child-lands.ts): the parent's while it has a live turn, the owner's after.
+export const callsOwner = (
+    child: AgentStanding & { readonly updatedAt: number },
+    family: { readonly child: FleetLane; readonly parent: FleetLane; readonly parentAt: number },
+): boolean => onlyOwnerCanAnswer(child) || (family.child === `attention` && family.parent !== `active` && !heardByParent(child, family.parentAt));
+
+export type FleetLane = "attention" | "active" | "finished";
+
+// Nothing owed to the user. The one "no attention" block in the app: a client-only card has no daemon account of
+// what a turn asked, and two copies of this would let two surfaces place the same conversation differently.
+export const NO_ATTENTION: AgentAttention = {
+    plan: false,
+    question: false,
+    permission: false,
+    capability: false,
+    credential: false,
+    conflict: false,
+};
+
+// The lane projection every surface must agree with (see the header). Pure reading of the state machine:
+// "finished" needs no explicit timer since auto-land already flips a cleanly-completed turn to landed/idle within
+// ms, and any follow-up message moves the card back to active. Unread stays a badge, not a lane.
+export const laneOf = (agent: AgentStanding): FleetLane => {
+    // A spent allowance nothing is booked for reaches Attention through `blocked` alone, no branch of its own, and ahead
+    // of the `watching` branch below: a watch is the agent's own plan for waiting, a spent allowance an obstacle in
+    // the way of it, and a watch firing into a shut window runs nothing (turn-admission.ts holds its words back).
+    if (blocked(agent) || agent.status === `awaiting` || agent.status === `conflict`) {
+        return `attention`;
+    }
+    // Settled from the press, ahead of the in-flight check below, rather than routed through Active: a waved-away turn
+    // is one the user is already done with (unlike `stopping`, which rests in Attention), and a land spends no model at
+    // all. Active means a turn in progress, so a land must end in the lane it was pressed in.
+    if (agent.status === `dismissing` || agent.status === `landing`) {
+        return `finished`;
+    }
+    // `resuming` is why in-flight must outrank the settled readings below: without this order the card would drop
+    // into Finished for the seconds a credential takes to re-mint, then climb back out.
+    if (turnInFlight(agent) || agent.status === `draft`) {
+        return `active`;
+    }
+    // An armed watch is Active, not Finished: nothing is running, but the conversation restarts itself later, and
+    // filing it Finished would announce as over work that resumes at 3am. Active rather than Attention since nothing
+    // is owed by the user. Checked after the in-flight readings: an agent that armed a watch and is now running again
+    // is running.
+    if (watching(agent)) {
+        return `active`;
+    }
+    // A stranded turn booked to go again is Active: at the reset, or on the resume pass's next beat for a move to another
+    // account. Reached only because `blocked` let it through; stated explicitly or the card would fall through to
+    // Finished, which would announce as over work that resumes by itself.
+    if (limitScheduled(agent)) {
+        return `active`;
+    }
+    // Messages booked for later are the same: the conversation starts again by itself, at a time or once the agent it
+    // waits for has landed, so filing it Finished would announce as done work that has not started yet.
+    if (scheduledSend(agent)) {
+        return `active`;
+    }
+    // `landed`/`idle`/`ready` all finish here: `ready` is work held on the branch because auto-land is off, still
+    // finished rather than attention since nothing is failing. `resumed` lands here too: nothing running, nothing
+    // owed.
+    return `finished`;
+};
+
+// How many cards the board's Attention lane draws for one fleet, as the board folds child agents under their parents
+// (models/fleet/board/childFold.ts): an agent in Attention is a card of its own, except a child agent whose parent is in the
+// fleet, which rides under its family's one card and lifts that card to Attention only when it calls the reader
+// (callsOwner). A family counts once however many of its children call, and not again when its own card is in
+// Attention already; a child with words left in its composer keeps a card of its own, as on the board. The rail
+// badge's count, for this sandbox's fleet and another's alike, so the badge cannot disagree with the lane it names.
+export const attentionCards = (agents: readonly CallerStanding[]): number => new Set(attentionCalls(agents).map((call) => call.card)).size;
+
+// Enough of a fleet's agent to say whether it calls the reader, and through which card.
+export type CallerStanding = AgentStanding & {
+    readonly id: string;
+    readonly updatedAt: number;
+    readonly startedBy?: string | undefined;
+    readonly unsent?: boolean | undefined;
+};
+
+// Every agent calling the reader, each with the card it is drawn on: its own, or its family's where it rides one. The
+// count above is the cards; the browser tab's chime wants the callers, so a second child calling under a family already
+// in Attention is news although the lane's count does not move.
+export const attentionCalls = (agents: readonly CallerStanding[]): readonly { readonly id: string; readonly card: string }[] => {
+    type Standing = (typeof agents)[number];
+    const byId = new Map(agents.map((agent) => [agent.id, agent] as const));
+    const parentIn = (agent: Standing): Standing | undefined => {
+        const id = parentOf(agent.startedBy);
+        return id === undefined ? undefined : byId.get(id);
+    };
+    // The card a child rides under: its eldest ancestor in this fleet, walked with a guard against a record naming its
+    // own descendant as its parent.
+    const familyOf = (agent: Standing): string => {
+        const seen = new Set([agent.id]);
+        let top = agent;
+        for (let above = parentIn(top); above !== undefined && !seen.has(above.id); above = parentIn(top)) {
+            seen.add(above.id);
+            top = above;
+        }
+        return top.id;
+    };
+    const calls: { readonly id: string; readonly card: string }[] = [];
+    for (const agent of agents) {
+        const parent = parentIn(agent);
+        if (parent === undefined || agent.unsent === true) {
+            if (laneOf(agent) === `attention`) {
+                calls.push({ id: agent.id, card: agent.id });
+            }
+        } else if (callsOwner(agent, { child: laneOf(agent), parent: laneOf(parent), parentAt: parent.updatedAt })) {
+            calls.push({ id: agent.id, card: familyOf(agent) });
+        }
+    }
+    return calls;
+};
+
+// Enough of an agent to draw its identity tile's rim; a FleetAgent, a roster AgentSummary and a test literal all fit.
+export type RimAgent = AgentStanding & Pick<AgentSummary, "checklist">;
+
+// What the identity tile's rim draws: lit segments of a SegmentRing, in a Tailwind text-* tone (it draws in
+// `currentColor`).
+export interface TileRim {
+    readonly segments: number;
+    readonly filled: number;
+    readonly tone: string;
+}
+
+// THE RIM SAYS HOW FAR THE SESSION GOT, AND NOTHING ELSE. It used to fall back to the context window's fill for a
+// session that kept no list, and a gauge reads as progress whatever it measures: most of Finished wore half-empty rims
+// on work that was done. Context is the tile's hover now (AgentCard's tileHint), and the chat's own status bar, where
+// it is acted on.
+// SEGMENTS ARE ITEMS PLUS ONE, the extra being the session's own ending, and it closes only once the card files in
+// Finished (laneOf): a list emptied by a turn still running, a turn parked on a question, one that broke or was stopped
+// is not a finished session, and a closed ring would claim it was. A session that kept no list is the same rule with no
+// items: one segment, empty until it is done and whole after, so a closed ring is a finished card's default and a gap
+// in Finished means a list left short.
+export const tileRim = (agent: RimAgent, { quiet }: { quiet: boolean }): TileRim => {
+    const total = agent.checklist?.total ?? 0;
+    // The daemon promises done <= total; a frame that broke it would otherwise light more segments than exist.
+    const done = Math.min(agent.checklist?.done ?? 0, total);
+    const finished = done === total && laneOf(agent) === `finished`;
+    // A quiet rim states its count without arguing for it, which is what a receipt and a destination row both want.
+    return { segments: total + 1, filled: finished ? total + 1 : done, tone: quiet ? `text-subtle` : `text-accent` };
+};

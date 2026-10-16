@@ -1,4 +1,4 @@
-import type { WorkspaceDerived } from "@intentic/sandbox-contract";
+import type { WorkspaceDerived } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import type { OpenFile } from "../viewers/openFile";
 import { rememberDerived } from "./derivedCache";

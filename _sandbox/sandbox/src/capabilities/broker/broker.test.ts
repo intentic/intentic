@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Broker, BrokerRule, CapabilityContribution } from "@intentic/extension-manifest";
-import type { SecretHostGuard } from "@intentic/sandbox-contract";
+import type { SecretHostGuard } from "@intentic/sandbox-contract/schemas/secrets";
 import { brokeredEnvOf, gitRewriteEnv, rawRouteEnv } from "./broker-env.js";
 import { createGateway, type GatewayCard, type GatewayDeps, type GatewayUse, type RuleAsk } from "./broker-gateway.js";
 import { brokerRoutes, GATEWAY_PLACEHOLDER, secretBearingEnv } from "./broker-routes.js";

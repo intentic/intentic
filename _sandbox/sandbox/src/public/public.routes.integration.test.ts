@@ -3,11 +3,11 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { publicContract } from "@intentic/sandbox-contract";
+import { publicContract } from "@intentic/sandbox-contract/contracts/public.contract";
 import { SHARE_DIR } from "@intentic/sandbox-contract/share-paths";
 import { PUBLIC_DIR } from "@intentic/workspace-ignore";
 import { errorCode, routesClient } from "../harness/route-client.testing.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { createPublicRoutes, type PublicRoutesDeps } from "./public.routes.js";
 

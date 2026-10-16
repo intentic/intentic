@@ -1,4 +1,4 @@
-import type { Need, NeedAsk, NeedSubject, SecretNeed } from "@intentic/sandbox-contract";
+import type { Need, NeedAsk, NeedSubject, SecretNeed } from "@intentic/sandbox-contract/schemas/needs";
 import type { NamedSecret } from "../../secrets/secret-registry.js";
 import type { AskContext, Met, NeedKindHandler, Resolved, SecretKeepOn } from "../need-kinds.js";
 

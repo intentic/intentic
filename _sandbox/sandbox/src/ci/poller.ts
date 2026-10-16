@@ -1,5 +1,5 @@
 import { type Backoff, createBackoff, serialLock } from "@intentic/base/async";
-import { CI_POLL_INTERVAL_MS, isPipelineInFlight } from "@intentic/sandbox-contract";
+import { CI_POLL_INTERVAL_MS, isPipelineInFlight } from "@intentic/sandbox-contract/schemas/ci";
 import type { Services } from "../composition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { ciResultOf, dispatchCiRun, rememberCiRun } from "./events.js";

@@ -19,7 +19,7 @@ import makeWASocket, {
     type WAMessageKey,
     type WAVersion,
 } from "baileys";
-import type { ListenerPairing } from "@intentic/sandbox-contract";
+import type { ListenerPairing } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import type { Logger } from "@intentic/connector-runtime";
 import { bareJid, isGroupJid, jidUser } from "./content.js";
 import { toWhatsAppText } from "./format.js";

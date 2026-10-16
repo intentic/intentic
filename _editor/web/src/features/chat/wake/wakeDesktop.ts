@@ -2,7 +2,7 @@ import { watch } from "vue";
 import { z } from "zod";
 import { desktopApp, openDesktopLink } from "../../../app/environments/desktop";
 import { onScreen } from "../../../workbench/window/onScreen";
-import type { WakeListener } from "./useWakeListener";
+import type { WakeListener } from "../../../models/voice/useWakeListener";
 
 // The wake listener inside the desktop app, which keeps the workspace loaded in its tray and so is where listening lives
 // longest. The page tells the app where listening stands (`intentic://wake`), for the tray's rows and for whether to

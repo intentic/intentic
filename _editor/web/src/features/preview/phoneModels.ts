@@ -1,5 +1,5 @@
 import type { PickerGroup } from "@intentic/ui";
-import { storedValue, storeValue } from "../../lib/browserStorage";
+import { storedValue, storeValue } from "../../app/storage/browserStorage";
 import { t } from "@intentic/ui/i18n";
 
 // The phones the preview can stand in for. Sizes are the CSS viewport each device reports to a page in portrait — the

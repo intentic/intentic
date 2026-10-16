@@ -1,8 +1,8 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
 import { opt } from "../../../opt.js";
-import { memoryFleet } from "../../../testing.js";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { builtInAsk, cursorOwner } from "./cursor-approvals.js";
 
 // The person a `default`-mode Cursor turn puts each call to: a real parked card, answered as the composer answers one.

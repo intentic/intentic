@@ -1,4 +1,5 @@
-import { conversationEntry, isolatedAgent, memoryFleet } from "../../testing.js";
+import { conversationEntry, isolatedAgent } from "../../conversations/registry/agents-store.testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { checkpointSteeredMessage } from "./steer-checkpoints.js";
 
 // Pins that a steered message's position is fixed when the turn accepts it, before its snapshot resolves; a queue that

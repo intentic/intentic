@@ -1,4 +1,4 @@
-import type { AuditRecord } from "@intentic/sandbox-contract";
+import type { AuditRecord } from "@intentic/sandbox-contract/schemas/audit";
 import { canonicalJson, checkChain, GENESIS_HASH, recordHash, sealRecord } from "./audit-chain.js";
 
 const chain = (count: number, start = GENESIS_HASH): AuditRecord[] => {

@@ -8,8 +8,8 @@ import {
     HookScriptSchema,
     type SettingsHook,
     SettingsHookSchema,
-    type TurnNote,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/approvals";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { z } from "zod";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { defineDocument } from "../store/evolution/documents.js";

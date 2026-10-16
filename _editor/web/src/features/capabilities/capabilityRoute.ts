@@ -1,4 +1,4 @@
-import type { CapabilitySummary } from "@intentic/sandbox-contract";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { type CapabilityCatalogEntry, instancesOf } from "@intentic/capability-catalog";
 import { computed, type Ref, watch } from "vue";
 import type { LocationQueryRaw, RouteLocationNormalizedLoaded, RouteLocationRaw, Router } from "vue-router";

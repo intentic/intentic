@@ -1,4 +1,4 @@
-import { PRIVACY_REPLACEMENTS_MAX } from "@intentic/sandbox-contract";
+import { PRIVACY_REPLACEMENTS_MAX } from "@intentic/sandbox-contract/schemas/privacy";
 import sharp from "sharp";
 import type { OcrLine } from "@intentic/ocr/paddle-ocr";
 import { createMaskMemo, createMasker } from "../masker.js";

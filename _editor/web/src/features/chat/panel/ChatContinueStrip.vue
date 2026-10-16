@@ -1,22 +1,24 @@
 <script setup lang="ts">
-import { type HandoffMode, isTurnBreak, type LimitResetClaim, type TurnBreakPolicy } from "@intentic/sandbox-contract";
+import type { HandoffMode } from "@intentic/sandbox-contract/schemas/providers/handoff";
+import { isTurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
+import type { LimitResetClaim } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { Button, formatTokens, Icon, type IconName, ResponsiveOverlay, type Tip, type TooltipValue, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
-import { useAgents } from "../../agents/fleet/useAgents";
-import SandboxOutdatedNotice from "../../sandbox/overview/version/SandboxOutdatedNotice.vue";
-import { accountsOutdated } from "../accounts/accountsOutdated";
-import { modelLabelFor, modelOptionsFor } from "../accounts/providerCatalog";
+import { useAgents } from "../../../models/fleet/useAgents";
+import SandboxOutdatedNotice from "../../../parts/sandbox/SandboxOutdatedNotice.vue";
+import { accountsOutdated } from "../../../models/providers/accountsOutdated";
+import { modelLabelFor, modelOptionsFor } from "../../../models/providers/providerCatalog";
 import { fallbackAccount, fallbackLabel } from "../session/limitFallback";
 import { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } from "../session/limitReset";
-import { atReopenPhrase, type ContinueOptions, handoffPicked, pickUpNext, pickUpStatus, pickUpWhen, pressCost } from "../run/endings/pickUp";
+import { atReopenPhrase, type ContinueOptions, handoffPicked, pickUpNext, pickUpStatus, pickUpWhen, pressCost } from "../../../models/conversations/endings/pickUp";
 import type { ReopenPress } from "../composer/composerIntent";
-import { handoffLine } from "../run/endings/handoffChoice";
+import { handoffLine } from "../../../models/conversations/endings/handoffChoice";
 import HandoffQuestion from "./HandoffQuestion.vue";
 import TurnBreakQuestion from "./TurnBreakQuestion.vue";
-import { usePaneView } from "./useChat-view";
+import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import { useOperation } from "../../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
 

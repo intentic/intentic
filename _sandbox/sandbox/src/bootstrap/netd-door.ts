@@ -10,7 +10,7 @@ import {
     NODE_GENERATION_ENV,
     NODE_SOCKET_ENV,
 } from "@intentic/sandbox-contract/netd-wire";
-import { tunnelBulkRoutes } from "@intentic/sandbox-contract";
+import { tunnelBulkRoutes } from "@intentic/sandbox-contract/protocol/tunnel-bulk";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Logger } from "pino";
 import { WebSocketServer } from "ws";

@@ -7,8 +7,8 @@ import { resetSandboxScope, sandboxRef, sandboxValue } from "@intentic/extension
 const calls: string[] = [];
 const record = (name: string) => (): void => void calls.push(name);
 
-jest.mock(`../../agents/fleet/useAgents-registry`, () => ({ loadArchived: record(`loadArchived`) }));
-jest.mock(`../../chat/accounts/useChat-accounts`, () => ({ loadAccountStatus: record(`loadAccountStatus`) }));
+jest.mock(`../../../models/fleet/useAgents-registry`, () => ({ loadArchived: record(`loadArchived`) }));
+jest.mock(`../../../models/conversations/accounts/useChat-accounts`, () => ({ loadAccountStatus: record(`loadAccountStatus`) }));
 
 // Stands in for useSandbox so the switch can be exercised without the platform client, sandbox list or a connection.
 const { activeSandboxId, reachable } = await (async () => {

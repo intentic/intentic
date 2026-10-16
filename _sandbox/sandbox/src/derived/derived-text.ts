@@ -4,9 +4,11 @@ import { SingleFlight } from "@intentic/base/async";
 import { estimateTokens } from "@intentic/base/format";
 import { detectFormat } from "@intentic/fileq/formats";
 import { parseSidecarFront, sha256OfFile, sidecarBody, sidecarPathFor } from "@intentic/fileq/sidecar";
-import type { WorkspaceDerived } from "@intentic/sandbox-contract";
+import type { WorkspaceDerived } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { readWorkspaceFileWindow } from "../workspace/files/workspace-files.js";
 import { defaultExec, DERIVE_TIMEOUT_MS, FILEQ_MAX_BUFFER, isMissingBinary, runFailure, stdoutOf, withFileqSlot, type ExecFn } from "./fileq.js";
+import { parseJsonOr } from "@intentic/base/json";
+import { undefinedIfMissing } from "@intentic/base/errors";
 
 // Reading a file's rendered text for a person rather than an agent: the same markdown `fileq read` serves from its cache,
 // plus the front matter's provenance, so a reader can see what was derived, by which reader, and what it had to cut.
@@ -22,7 +24,7 @@ const MAX_DERIVED_BYTES = 512 * 1024;
 // Magic first, like everywhere else in fileq, so a renamed archive still answers yes; a file that is not there answers
 // no, since the extension alone would otherwise vouch for a path with nothing behind it.
 const isDerivable = async (absPath: string): Promise<boolean> => {
-    const source = await stat(absPath).catch(() => undefined);
+    const source = await stat(absPath).catch(undefinedIfMissing);
     return source?.isFile() === true && (await detectFormat(absPath).catch(() => undefined)) !== undefined;
 };
 
@@ -93,13 +95,9 @@ const skipReason = (stdout: string): string | undefined => {
     if (last === undefined) {
         return undefined;
     }
-    try {
-        const outcome: unknown = JSON.parse(last);
-        const reason = (outcome as { reason?: unknown }).reason;
-        return typeof reason === "string" ? reason : undefined;
-    } catch {
-        return undefined;
-    }
+    const outcome = parseJsonOr(last, undefined) as { reason?: unknown } | null | undefined;
+    const reason = outcome?.reason;
+    return typeof reason === "string" ? reason : undefined;
 };
 
 const deriveOnce = async (root: string, relPath: string, exec: ExecFn): Promise<WorkspaceDerived> => {

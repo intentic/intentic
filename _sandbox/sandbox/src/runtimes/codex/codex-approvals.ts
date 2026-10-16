@@ -1,4 +1,6 @@
-import type { AgentEvent, PermissionMode, ProgramAsk } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
+import type { ProgramAsk } from "@intentic/sandbox-contract/events/requests";
 import type { TurnHooks } from "../../agent/providers/agent-request.js";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
 import { type CommandGuard, type GuardOutcome, vendorSubject } from "../../guard/command-guard.js";

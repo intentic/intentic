@@ -1,12 +1,9 @@
 import { errorMessage } from "@intentic/base/errors";
-import {
-    type Capability,
-    capabilitiesContract,
-    CapabilitySchema,
-    collidesWithReservedServer,
-    EXTENSION_TOKEN_HEADER,
-    isVaulted,
-} from "@intentic/sandbox-contract";
+import { type Capability, CapabilitySchema } from "@intentic/sandbox-contract/schemas/capabilities";
+import { capabilitiesContract } from "@intentic/sandbox-contract/contracts/capabilities.contract";
+import { collidesWithReservedServer } from "@intentic/sandbox-contract/policy/reserved-servers";
+import { EXTENSION_TOKEN_HEADER } from "@intentic/sandbox-contract/protocol/headers";
+import { isVaulted } from "@intentic/sandbox-contract/policy/capability-secrets";
 import { implement, ORPCError } from "@orpc/server";
 import { forkedExec } from "@intentic/base/git";
 import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
@@ -18,7 +15,7 @@ import { composeEnvironment } from "../environment/environment.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { mintsEndpointProvider } from "../endpoints/local-model.js";
 import { reconcileListenerProcesses, startAutoStartProcesses } from "../extensions/extension-processes.js";
-import { enabledExtensions } from "../extensions/installed-extensions.js";
+import { enabledExtensions } from "./extension-inventory/installed-extensions.js";
 import { type CapabilityCtx, capabilityCtx } from "./capability.js";
 import { echoConfig, secretField } from "./summary.js";
 import { secretFieldsOf } from "./credentials/secret-fields.js";

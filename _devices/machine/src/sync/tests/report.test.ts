@@ -1,5 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { PortSummary } from "@intentic/sandbox-contract";
+import type { PortSummary } from "@intentic/sandbox-contract/schemas/ports";
 import type { Pairing, SyncState } from "../config.js";
 import { skippedPortsOf } from "../mirror.js";
 import { sessionsByName } from "../mutagen.js";

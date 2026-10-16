@@ -1,5 +1,5 @@
 /* WHEN A VENDOR NAMES TWO MODELS THE SAME. */
-import { modelOptionsFor, perProvider, providerModels } from "../accounts/providerCatalog";
+import { modelOptionsFor, perProvider, providerModels } from "../../../models/providers/providerCatalog";
 
 beforeEach(() => {
     providerModels.value = perProvider(() => []);

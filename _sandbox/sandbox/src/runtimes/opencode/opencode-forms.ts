@@ -1,4 +1,5 @@
-import type { AgentReply, AskQuestion } from "@intentic/sandbox-contract";
+import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AskQuestion } from "@intentic/sandbox-contract/events/requests";
 
 // OpenCode's forms as question cards. Its `question` tool, and anything else that asks the person (an MCP server's
 // elicitation), raises a form on the session and waits for its answer; the daemon draws the form as the same card the

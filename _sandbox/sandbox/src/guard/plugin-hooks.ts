@@ -2,6 +2,7 @@ import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { isRecord } from "@intentic/base/escape";
 import { type FrontmatterHooks, frontmatterHooks, undefinedIfCliSeesNothing } from "./frontmatter-hooks.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 /* What one Claude Code plugin directory runs as hooks: the `hooks` of its hooks files (hooks/hooks.json, any the manifest
  * names, a block inline in the manifest), its skills', subagents' and commands' frontmatter, and its hooks module: the
@@ -27,15 +28,8 @@ export interface PluginHooks {
 // A JSON file the CLI reads, or undefined where it reads nothing: absent, or not strict JSON.
 export const jsonIn = async (path: string): Promise<unknown> => {
     const text = await readFile(path, "utf8").catch(undefinedIfCliSeesNothing);
-    if (text === undefined) {
-        return undefined;
-    }
-    try {
-        return JSON.parse(text) as unknown;
-    } catch {
-        // allow(silent-catch): text that is not strict JSON is a file the CLI reads nothing from, which is what undefined says
-        return undefined;
-    }
+    // Text that is not strict JSON is a file the CLI reads nothing from, which is what undefined says.
+    return text === undefined ? undefined : parseJsonOr(text, undefined);
 };
 
 const MANIFEST = join(".claude-plugin", "plugin.json");

@@ -126,37 +126,61 @@ const adopt = (check, name, found) => {
     console.log(`${check}: baseline ${name}.json adopts ${found.size} entries, ${raised} of them raised because: ${reason}`);
 };
 
-const tighten = (check, name, found, paths, touchedBy) => {
+// The baseline with each key that borrows (`lent`: key → `{ from, count }`) holding what it now has under its own name,
+// where the change touched both: a moved or renamed thing takes its entry along, and `from` is then lowered or dropped
+// like any other entry the tree beats. Answers the keys that took one.
+export const transferredOf = (baseline, found, lent, inScope) => {
+    const { next, lowered } = tightenedOf(baseline, found, inScope);
+    const moved = [];
+    for (const [key, { from, count }] of lent) {
+        const now = found.get(key) ?? 0;
+        if (now > allowanceOf(baseline[key]) + count || !inScope(key) || !inScope(from)) {
+            continue;
+        }
+        next[key] = entryOf(baseline[key] ?? baseline[from], now, undefined);
+        moved.push(key);
+        lowered.push(`${from} → ${key}: ${now}`);
+    }
+    // An entry that moved is said once, as the move.
+    const gone = new Set(moved.map((key) => `${lent.get(key).from}: `));
+    return { next, lowered: lowered.filter((line) => ![...gone].some((prefix) => line.startsWith(prefix) && line.endsWith(` → 0`))), moved };
+};
+
+const tighten = (check, name, found, paths, touchedBy, lent) => {
     if (subjectScope() !== undefined) {
         refuse(`${check}: --tighten measures the whole tree and lowers what the named paths touch, so it cannot run under --paths`);
     }
     const baseline = readBaseline(name);
-    const { next, lowered } = tightenedOf(baseline, found, (key) => paths.some((path) => touchedBy(key, path)));
+    const { next, lowered, moved } = transferredOf(baseline, found, lent, (key) => paths.some((path) => touchedBy(key, path)));
     if (lowered.length > 0) {
         writeBaseline(name, Object.entries(next));
         console.log(`${check}: lowered baselines/${name}.json where the named paths beat it (${lowered.join(", ")})`);
     }
+    return moved;
 };
 
 /**
  * Findings per key in baselines/<name>.json may only shrink: growth is returned for the caller to refuse. A check run
  * writes nothing; where the tree beats the baseline it says so, and `--tighten <paths>` is what lowers it.
  * `touchedBy(key, path)` says whether a change to `path` can move `key`'s count; by default a key names a path.
+ * `lent` (key → `{ from, count }`) lets a key the baseline lacks or holds too little of borrow another entry's allowance,
+ * which `--tighten` writes under the borrower's name (transferredOf).
  */
-export const ratchet = (check, name, found, { touchedBy = underKey } = {}) => {
+export const ratchet = (check, name, found, { touchedBy = underKey, lent = new Map() } = {}) => {
     if (ADOPTING) {
         adopt(check, name, found);
         return { grown: [], baseline: {}, beaten: [] };
     }
     const scope = subjectScope();
     const paths = tightenPaths();
-    if (paths !== undefined) {
-        tighten(check, name, found, paths, touchedBy);
-    }
+    const moved = paths === undefined ? [] : tighten(check, name, found, paths, touchedBy, lent);
     const baseline = readBaseline(name);
-    const grown = [...found].filter(([key, count]) => count > allowanceOf(baseline[key])).map(([key, count]) => ({ key, count, allowed: allowanceOf(baseline[key]) }));
-    // A scoped run knows nothing of the files it skipped, so it speaks only for the keys it read.
-    const { lowered: beaten } = tightenedOf(baseline, found, (key) => scope === undefined || scope.has(key));
+    const allowed = (key) => allowanceOf(baseline[key]) + (moved.includes(key) ? 0 : (lent.get(key)?.count ?? 0));
+    const grown = [...found].filter(([key, count]) => count > allowed(key)).map(([key, count]) => ({ key, count, allowed: allowed(key) }));
+    // A scoped run knows nothing of the files it skipped, so it speaks only for the keys it read. An entry another key
+    // borrows has moved, not shrunk.
+    const lending = new Set([...lent.values()].map(({ from }) => from));
+    const { lowered: beaten } = tightenedOf(baseline, found, (key) => (scope === undefined || scope.has(key)) && !lending.has(key));
     if (beaten.length > 0) {
         console.log(`${check}: the tree beats baselines/${name}.json (${beaten.join(", ")}), and \`--tighten <the paths that shrank them>\` lowers it, which fixers.mjs runs before a worktree's land`);
     }

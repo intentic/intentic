@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { FREE_TIER, PAID_TIERS } from "@intentic/constants";
 import { Button, Card, Icon } from "@intentic/ui";
-import { useHostedPlan } from "./useHostedPlan";
+import { useHostedPlan } from "../../../models/hosted-plan/useHostedPlan";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 

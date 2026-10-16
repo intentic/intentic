@@ -3,12 +3,12 @@ import { startVanishedRepoSweep } from "../conversations/registry/vanished-repos
 import { capabilitiesDocument } from "../capabilities/capabilities-store.js";
 import { invalidateContributions } from "../capabilities/contributions.js";
 import { extensionsRoot, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
-import { extensionDevDocument } from "../extensions/extension-dev.js";
+import { extensionDevDocument } from "../capabilities/extension-inventory/extension-dev.js";
 import { createShadowKeeper } from "../derived/shadow-keeper.js";
 import { recomposeOnInputChanges } from "../environment/recompose-on-change.js";
-import { extensionEnablementDocument } from "../extensions/extension-enablement.js";
+import { extensionEnablementDocument } from "../capabilities/extension-inventory/extension-enablement.js";
 import { followExtensionDirs, stopPendingExtensionProcesses } from "../extensions/extension-processes.js";
-import { onListenerStatusMoved } from "../extensions/listener/listener-status.js";
+import { onListenerStatusMoved } from "../capabilities/status/listener-status.js";
 import { settingsDocument } from "../settings/settings-store.js";
 import { startRefWatch, subscribeRefChanges } from "../git/remote/ref-watch.js";
 import { ignoreFileMode } from "../git/remote/repo-git-dirs.js";

@@ -1,6 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import { computed, onScopeDispose, ref, shallowRef } from "vue";
-import { floatChatAt } from "../../features/chat/panel/chatPanelLayout";
+import { floatChatAt } from "../../models/conversations/panel/chatPanelLayout";
 import { useNotifications } from "../../workbench/notifications/notifications";
 import type { ScreenPoint } from "../../workbench/window/floating";
 

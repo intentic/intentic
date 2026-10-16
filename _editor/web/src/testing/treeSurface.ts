@@ -1,13 +1,13 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { noticeOf, type NoticeModel } from "@intentic/ui/async";
 import { unstubbed } from "@intentic/testing";
 import { mock } from "bun:test";
 import { computed, effectScope, ref, shallowRef } from "vue";
 import type { DownloadTarget } from "../features/workspace/files/downloadEntries";
-import type { DeleteBatch } from "../features/workspace/explorer/undo/deleteUndo";
+import type { DeleteBatch } from "../models/workspace/tree/deleteUndo";
 import { barrenChainOf, barrenChildren, barrenRoots } from "../features/workspace/explorer/emptyDirs";
 import type { RowAction } from "../features/workspace/explorer/rowActions";
-import type { DroppedFile } from "../features/workspace/explorer/transfer/dropEntries";
+import type { DroppedFile } from "../models/workspace/tree/dropEntries";
 import { indexEntries } from "../features/workspace/explorer/tree/treeRows";
 import { createFileVerbs, type FileVerbSeams } from "../features/workspace/explorer/tree/fileVerbs";
 import type { TreeMenuHost } from "../features/workspace/explorer/tree/useTreeMenu";

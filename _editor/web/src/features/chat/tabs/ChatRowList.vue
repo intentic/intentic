@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import type { MatchSnippet } from "@intentic/sandbox-contract";
+import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agents";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount } from "vue";
-import { cacheWarm } from "../../agents/fleet/prompt-cache/promptCache";
-import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
-import ChildRows from "../../agents/board/cards/ChildRows.vue";
-import { subagentOnScreen } from "../panel/subagent/subagentView";
+import { cacheWarm } from "../../../models/fleet/promptCache";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
+import ChildRows from "../../../parts/fleet/ChildRows.vue";
+import { subagentOnScreen } from "../../../models/conversations/panel/subagentView";
 import { createCardViews, type OpenChat } from "./cardView";
 import ChatTabRow from "./ChatTabRow.vue";
 import { laneOfTab } from "./tabs";

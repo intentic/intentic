@@ -1,4 +1,4 @@
-import { usageContract } from "@intentic/sandbox-contract";
+import { usageContract } from "@intentic/sandbox-contract/contracts/usage.contract";
 import { unstubbed } from "@intentic/testing";
 import type { UsageRoutesDeps } from "./usage.routes.js";
 import { createUsageRoutes } from "./usage.routes.js";

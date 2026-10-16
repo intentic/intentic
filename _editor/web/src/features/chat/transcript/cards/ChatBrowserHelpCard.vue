@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import type { CardAnswer } from "../../session/cardReplies";
-import type { ChatMessage } from "../transcript";
-import ChatCard from "./ChatCard.vue";
-import ChatDecisionButton from "./ChatDecisionButton.vue";
+import type { CardAnswer } from "../../../../models/conversations/session/cardReplies";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
+import ChatCard from "../../../../components/ChatCard.vue";
+import ChatDecisionButton from "../../../../components/ChatDecisionButton.vue";
 import { helpStatus } from "./cardStatus";
 
 const t = useT();

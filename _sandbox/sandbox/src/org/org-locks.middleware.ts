@@ -1,4 +1,5 @@
-import { orgLockRefusal, orgSectionOfRoute, sandboxRouteFor } from "@intentic/sandbox-contract";
+import { orgLockRefusal, orgSectionOfRoute } from "@intentic/sandbox-contract/policy/org-locks";
+import { sandboxRouteFor } from "@intentic/sandbox-contract";
 import type { MiddlewareHandler } from "hono";
 import type { AppEnv } from "../app-env.js";
 import { ORG_POLICY_FIRST_ANSWER_MS, type OrgPolicyHolder } from "./org-policy.js";

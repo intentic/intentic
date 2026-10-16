@@ -1,4 +1,7 @@
-import type { AgentEvent, ListenerPlanItem, ListenerStep, SubagentStatus, ToolCallStatus } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { ListenerPlanItem, ListenerStep } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
+import type { SubagentStatus } from "@intentic/sandbox-contract/schemas/terminal";
+import type { ToolCallStatus } from "@intentic/sandbox-contract/events/requests";
 import { opt } from "../../opt.js";
 
 // What a channel that started a turn sees of its work, read off the turn's own frames: each of its tool calls as a step

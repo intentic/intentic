@@ -1,13 +1,13 @@
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { computed, onBeforeUnmount, type Ref, watch } from "vue";
-import { awaitingUser, turnInFlight } from "../../../agents/fleet/agentStatus";
-import { useAgents } from "../../../agents/fleet/useAgents";
-import type { FleetAgent } from "../../../agents/fleet/useAgents-fleet";
-import { registry } from "../../../agents/fleet/useAgents-registry";
-import { otherBoxes } from "../../../sandbox/live/fleetAcross";
-import { hydrateOnce, refreshAfterSleep } from "../../run/useChat-sessions";
-import type { Conversation } from "../../session/conversation";
-import { newerQueue } from "../../session/turnClient";
+import { awaitingUser, turnInFlight } from "../../../../models/agent-status/agentStatus-standing";
+import { useAgents } from "../../../../models/fleet/useAgents";
+import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
+import { registry } from "../../../../models/fleet/useAgents-registry";
+import { otherBoxes } from "../../../../models/sandbox/live/fleetAcross";
+import { hydrateOnce, refreshAfterSleep } from "../../../../models/conversations/run/useChat-sessions";
+import type { Conversation } from "../../../../models/conversations/session/conversation";
+import { newerQueue } from "../../../../models/conversations/session/turnClient";
 import { onScreen } from "../../../../workbench/window/onScreen";
 import { refVisibility, watchPageWake } from "../../../../client/sandbox/pageWake";
 

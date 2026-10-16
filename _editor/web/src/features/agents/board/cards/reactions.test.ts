@@ -1,4 +1,4 @@
-import type { AgentReaction } from "@intentic/sandbox-contract";
+import type { AgentReaction } from "@intentic/sandbox-contract/schemas/agents";
 import { PICKER_EMOJI, QUICK_EMOJI, reactionChips, withPress } from "./reactions";
 
 const reader = { me: `ada@example.com`, you: `you` };

@@ -11,7 +11,7 @@ const tiles = new Map<string, { url: string | undefined }>();
 // Every path a strip asked a tile or a view of, in order.
 const tileAsks: string[] = [];
 const viewAsks: string[] = [];
-jest.mock("../../../workspace/home/thumbnails", () => ({
+jest.mock("../../../../models/workspace/home/thumbnails", () => ({
     picture: (_agent: string | undefined, path: string, size: string) => {
         if (size === `view`) {
             viewAsks.push(path);
@@ -31,7 +31,7 @@ jest.mock("./shotLooks", () => ({
 
 // The viewport is the observer's to judge, which jsdom has none of: each case says when its strip comes near.
 const nearing: (() => void)[] = [];
-jest.mock("../../../workspace/home/nearViewport", () => ({
+jest.mock("../../../../models/workspace/home/nearViewport", () => ({
     whenNear: (_el: Element, near: () => void) => nearing.push(near),
     stopWaiting: () => {},
 }));

@@ -1,4 +1,4 @@
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { ScopeError } from "../../policy.js";
 import { type DeviceLog, deviceLogs, filterLines, icLogDir, listingText } from "./logs.js";
 

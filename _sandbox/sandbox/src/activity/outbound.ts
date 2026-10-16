@@ -1,5 +1,6 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Services } from "../composition.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Outbound provider calls are the agent running curl in Bash; there's no typed send path, so this sniffs tool events,
 // matching each command to its result by tool-use id. Monitoring, not enforcement: a creatively-quoted command can slip
@@ -182,17 +183,14 @@ const outcomeOf = (output: string, isError: boolean | undefined): { outcome: "ok
     if (isError === true) {
         return { outcome: "error", error: output.trim().slice(-ERROR_TAIL) };
     }
-    try {
-        const parsed = JSON.parse(output) as { code?: unknown; message?: unknown; ok?: unknown; error?: unknown; description?: unknown };
-        if (typeof parsed.code === "number" && typeof parsed.message === "string") {
-            return { outcome: "error", error: parsed.message };
-        }
-        if (parsed.ok === false) {
-            const reason = [parsed.error, parsed.description].find((each) => typeof each === "string");
-            return { outcome: "error", error: reason ?? "the call was refused" };
-        }
-    } catch {
-        // Non-JSON output (empty 204 body, piped text), no error envelope to read.
+    // Non-JSON output (empty 204 body, piped text) has no error envelope to read.
+    const parsed = parseJsonOr(output, undefined) as { code?: unknown; message?: unknown; ok?: unknown; error?: unknown; description?: unknown } | null | undefined;
+    if (typeof parsed?.code === "number" && typeof parsed.message === "string") {
+        return { outcome: "error", error: parsed.message };
+    }
+    if (parsed?.ok === false) {
+        const reason = [parsed.error, parsed.description].find((each) => typeof each === "string");
+        return { outcome: "error", error: reason ?? "the call was refused" };
     }
     return { outcome: "ok" };
 };

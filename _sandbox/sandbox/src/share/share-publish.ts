@@ -1,7 +1,8 @@
 import { cp, mkdir, readFile, readdir, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { publishedPage, type SharePayload } from "@intentic/sandbox-contract";
+import { publishedPage } from "@intentic/sandbox-contract/text/pages";
+import type { SharePayload } from "@intentic/sandbox-contract/events/transcript";
 import { SHARE_DIR, SHARE_VIEWER_DIR } from "@intentic/sandbox-contract/share-paths";
 import { publicRoot } from "../public/public-files.js";
 import { stateRelPath } from "../state-paths.js";

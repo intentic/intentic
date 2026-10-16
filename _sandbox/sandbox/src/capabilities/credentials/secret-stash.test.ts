@@ -1,4 +1,4 @@
-import { type Capability, stashedMarker, stashedToken } from "@intentic/sandbox-contract";
+import { type Capability, stashedMarker, stashedToken } from "@intentic/sandbox-contract/schemas/capabilities";
 import { sshHandler } from "../handlers/ssh.handler.js";
 import { secretFieldsOf } from "./secret-fields.js";
 import { createSecretStash, type SecretStash, spendStashed, StashRefusal, unstash } from "./secret-stash.js";

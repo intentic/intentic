@@ -1,8 +1,8 @@
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import { extensionOf } from "@intentic/ui/file-format";
 import type { RegisteredViewer } from "../../../workbench/views/viewerRegistry";
 import { viewerForExtension } from "../../../workbench/views/viewerRegistry";
-import { RAW_MAX_BYTES, resolveFile } from "../explorer/fileType";
+import { RAW_MAX_BYTES, resolveFile } from "../../../models/workspace/tree/fileType";
 
 // Which surface opens a file: an extension that claims its extension wins, fileType.ts's answer is the fallback. Text
 // (code/markdown) stays the editable surface even when claimed; other viewers are render-only. Kept out of fileType.ts

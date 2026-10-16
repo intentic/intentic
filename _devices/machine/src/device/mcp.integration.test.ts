@@ -3,7 +3,8 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { agentHome } from "@intentic/local-agent";
-import { DEVICE_PROGRAM_TOOLS, type DeviceScopes } from "@intentic/sandbox-contract";
+import { DEVICE_PROGRAM_TOOLS } from "@intentic/sandbox-contract/policy/device-programs";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { handleMcpMessage } from "./mcp.js";
 
 const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({

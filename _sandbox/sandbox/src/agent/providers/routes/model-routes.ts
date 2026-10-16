@@ -1,21 +1,17 @@
+import type { AgentLoop, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import type { EndpointConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import {
-    type AgentLoop,
-    type AgentProvider,
-    type EndpointConfig,
     endpointIdOf,
     loopLabel,
     loopsOf,
-    type MintedProvider,
-    mintedVariant,
-    type Model,
     PROVIDER_ACCESS,
     PROVIDER_VENDOR,
     providerLabel,
-    providerSpec,
     TRIAL_ENDPOINT_ID,
     TRIAL_MODEL_ID,
-    type TranslatorProvider,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/models/agent-catalog";
+import { type MintedProvider, mintedVariant, providerSpec, type TranslatorProvider } from "@intentic/sandbox-contract/models/provider-specs";
+import type { Model } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 import { parseHeaders, unversionedBase, versionedBase } from "../../../endpoints/endpoint-config.js";

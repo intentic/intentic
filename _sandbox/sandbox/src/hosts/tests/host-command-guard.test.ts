@@ -1,4 +1,6 @@
-import { type Capability, DEFAULT_SAFETY_POLICY, DeviceConfigSchema, type SafetyLogEntry, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type Capability, DeviceConfigSchema } from "@intentic/sandbox-contract/schemas/capabilities";
+import { DEFAULT_SAFETY_POLICY, type SafetyLogEntry } from "@intentic/sandbox-contract/policy/safety-policy";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import { startTurnRun } from "../../agent/run/turn/turn-runs.js";
 import type { Services } from "../../composition.js";
@@ -8,7 +10,7 @@ import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { createHeldCards } from "../../guard/held-cards.js";
 import { clearTurnTaint, NO_TAINT, publishTurnTaint } from "../../guard/turn-taint.js";
 import { createDomainEvents, type DomainEventMap } from "../../seams/domain-events.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import type { HostGuardDeps } from "../host-guard-deps.js";
 import { judgeHostCommand, programOf } from "../host-command-guard.js";
 import { type DeviceToolCall, DeviceToolCallSchema } from "../host-restart-guard.js";

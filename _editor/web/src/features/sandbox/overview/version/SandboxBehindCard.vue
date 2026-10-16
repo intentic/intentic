@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { machinesOf } from "@intentic/sandbox-contract";
+import { machinesOf } from "@intentic/sandbox-contract/schemas/devices";
 import { Button, DisclosureRow, Notice, Row, RowGroup, RowNote, StatusBadge, type Tip } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watchEffect } from "vue";
@@ -15,13 +15,13 @@ import {
 } from "../../../../client/sandbox/useDaemonRoutes";
 import { appParty, driftAreas, KIND_BADGE, KIND_ICON, KIND_TONE, kindImpact, kindTag, sandboxParty } from "./driftReport";
 import { contractUncompiled, readContractFreshness, uncompiledRoutes } from "../../../../client/sandbox/contractFreshness";
-import { useEnvironment } from "../../environment/useEnvironment";
+import { useEnvironment } from "../../../../models/sandbox/environment/useEnvironment";
 import RunCommand from "../../../../components/RunCommand.vue";
-import { runSeveringDeviceCommand, useDevices, useHostHolding } from "../../devices/useDevices";
+import { runSeveringDeviceCommand, useDevices, useHostHolding } from "../../../../models/sandbox/devices/useDevices";
 import { useOperation } from "../../../../workbench/operations/operations";
-import { activeSandboxId } from "../../../../lib/activeSandbox";
-import { expectRestart } from "../../live/sandboxRestart";
-import ConnectDeviceHint from "../../devices/ConnectDeviceHint.vue";
+import { activeSandboxId } from "../../../../app/storage/activeSandbox";
+import { expectRestart } from "../../../../models/sandbox/live/sandboxRestart";
+import ConnectDeviceHint from "../../../../parts/sandbox/ConnectDeviceHint.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Checks the daemon's route surface against this app's contract, not version strings (SandboxUpdateCard); catches

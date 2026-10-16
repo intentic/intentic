@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { errorMessage, isMissing } from "@intentic/base/errors";
-import { fieldsValidator, type Loop, type LoopCheck, type LoopDocument, LoopDocumentSchema } from "@intentic/sandbox-contract";
-import type { RoleAnswer } from "../agent/models/role-answer.js";
+import { fieldsValidator } from "@intentic/sandbox-contract/policy/output-fields";
+import { type Loop, type LoopCheck, type LoopDocument, LoopDocumentSchema } from "@intentic/sandbox-contract/schemas/loops";
+import type { RoleAnswer } from "../engines/role-answer.js";
 import { askRoleModel, roleModelIsSet } from "../agent/models/role-model.js";
 import { RoleModelUnsetError } from "../seams/role-model-unset.js";
 import { AgentDomainRefusedError, type AgentExecutionContext, withAgentExecution } from "../workload/agent-execution.js";

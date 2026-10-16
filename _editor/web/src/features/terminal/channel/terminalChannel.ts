@@ -1,3 +1,4 @@
+import { parseJsonWith } from "@intentic/base/json";
 import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract/browser-wire";
 import { z } from "zod";
 import type { SocketLike } from "./streamSocket";
@@ -32,12 +33,8 @@ const ServerMessageSchema: z.ZodType<TerminalServerMessage> = z.discriminatedUni
 ]);
 
 const parse = (text: string): TerminalServerMessage | undefined => {
-    try {
-        return ServerMessageSchema.safeParse(JSON.parse(text)).data;
-    } catch {
-        // allow(silent-catch): a message that is not JSON is no message; the channel reads on.
-        return undefined;
-    }
+    // A message that is not JSON is no message; the channel reads on.
+    return parseJsonWith(text, ServerMessageSchema);
 };
 
 export const socketChannel = (socket: SocketLike, events: ChannelEvents): TerminalChannel => {

@@ -1,7 +1,7 @@
 import { t } from "@intentic/ui/i18n";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import type { TerminalTabs } from "../useTerminal";
-import { clearTerminalRequest, type TerminalRequest } from "../useTerminalPanel";
+import { clearTerminalRequest, type TerminalRequest } from "../../../models/terminal/useTerminalPanel";
 
 // What an empty panel is waiting for and says about it. `pending` is the wait itself, a standing one the session list
 // resolves whenever the session appears; after a few seconds the panel stops holding itself empty and says what it is

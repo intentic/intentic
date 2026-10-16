@@ -9,6 +9,7 @@ import type { Services } from "../composition.js";
 import { repoGitDir } from "../workspace/layout/git-layout.js";
 import { bearerPeer } from "../peers/peer-store.js";
 import { nodeStream } from "@intentic/base/web-stream";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // Smart-HTTP git door: one repo's real git dir served for a runner's stock git fetch/push. No protocol lives here, each
 // route spawns git's own --stateless-rpc half and moves bytes. Auth is the runner's bearer token; push safety is git's
@@ -147,3 +148,10 @@ export const createRunnerGitRpcRoute =
             headers: { "content-type": `application/x-${service}-result`, "cache-control": "no-cache" },
         });
     };
+
+// The git door runners fetch and push through: stock smart HTTP off the real git dirs, per-request, own token.
+export const runnerGitRawRoutes = defineRawRoutes((services: Services) => ({
+    "GET /system/runners/git/{repo}/info/refs": createRunnerGitRefsRoute(services),
+    "POST /system/runners/git/{repo}/git-upload-pack": createRunnerGitRpcRoute(services, "git-upload-pack"),
+    "POST /system/runners/git/{repo}/git-receive-pack": createRunnerGitRpcRoute(services, "git-receive-pack"),
+}));

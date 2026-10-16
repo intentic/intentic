@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
-import { useSearchOptions } from "./useSearchOptions";
-import { type SearchScope, useWorkspaceSearch } from "./useWorkspaceSearch";
+import { useSearchOptions } from "../../../models/workspace/search/useSearchOptions";
+import { type SearchScope, useWorkspaceSearch } from "../../../models/workspace/search/useWorkspaceSearch";
 
 // Explorer search box as state, shared by desktop and mobile (only the chrome differs). Three scopes:
 // name → filters the loaded tree client-side, instantly.

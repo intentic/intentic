@@ -4,7 +4,8 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { OFFLOAD_REF_PREFIX, type OffloadFrame, type RunnerCommand } from "@intentic/sandbox-contract";
+import { OFFLOAD_REF_PREFIX, type RunnerCommand } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import type { OffloadFrame } from "@intentic/sandbox-contract/schemas/offload";
 import { createRunnerCommands } from "../runners/runner-command.js";
 
 // bin/offload-run end to end, against a stand-in daemon that answers the two /offload routes the way offload.routes.ts

@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { channelId, type RelayChannel, type WebPushChannel } from "@intentic/sandbox-contract";
+import { channelId, type RelayChannel, type WebPushChannel } from "@intentic/sandbox-contract/schemas/push";
 import type { Logger } from "pino";
 import { mocked } from "@intentic/testing/bun";
 import webpush, { WebPushError } from "web-push";

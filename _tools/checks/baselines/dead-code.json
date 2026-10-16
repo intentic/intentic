@@ -1,0 +1,939 @@
+{
+    "_deploy/cli/src/host-ssh-tunnel/host-ssh-tunnel.ts": "standing when the check arrived (2026-10-16)",
+    "_deploy/engine/src/reconcile/reconcile.ts": "standing when the check arrived (2026-10-16)",
+    "_deploy/providers/src/core/list-stamped.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/browser/src/launch.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/desktop-automation/src/cua.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/keyring/src/askpass/askpass.ts": "standing when the check arrived (2026-10-16); came in with main's own changes",
+    "_devices/keyring/src/consent/consent-posix.ts": "standing when the check arrived (2026-10-16); came in with main's own changes",
+    "_devices/keyring/src/keys.ts": "standing when the check arrived (2026-10-16); came in with main's own changes",
+    "_devices/keyring/src/policy.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_devices/keyring/src/powershell.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_devices/keyring/src/serve.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_devices/keyring/src/service/paths.ts": "standing when the check arrived (2026-10-16); came in with main's own changes",
+    "_devices/keyring/src/testing.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_devices/keyring/src/typing/android.ts": {
+        "count": 5,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_devices/keyring/src/typing/index.ts": {
+        "count": 16,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_devices/keyring/src/typing/linux.ts": "standing when the check arrived (2026-10-16); came in with main's own changes",
+    "_devices/keyring/src/typing/mac.ts": "standing when the check arrived (2026-10-16); came in with main's own changes",
+    "_devices/keyring/src/vault.ts": {
+        "count": 6,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_devices/local-agent/src/autostart.ts": {
+        "count": 6,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/local-agent/src/layout.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/local-files/src/asks.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/local-files/src/derived.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/local-files/src/files.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/local-files/src/paths.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/local-files/src/search.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/local-files/src/testing.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/local-files/src/walk.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/local-files/src/watch.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/autostart/before-sign-in.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/cli-ui.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/daemon-base.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/device/policy.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/device/sandbox-cli.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/device/sandbox-rounds/ic-swaps.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/device/sandbox-rounds/keeper.ts": {
+        "count": 7,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/device/sandbox-rounds/sleep.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/device/tools/android-parse.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/device/tools/android.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/device/tools/device.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/device/tools/ic-binary.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/device/tools/logs/logs.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/device/tools/programs/artifacts.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/device/tools/programs/isolated.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/device/tools/sandboxes.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/environments/commands.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/environments/crossing.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/environments/machine-upgrade.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/environments/machine.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/environments/wsl.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/install.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/keyring/askpass.ts": {
+        "count": 4,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_devices/machine/src/keyring/commands.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_devices/machine/src/keyring/feature.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_devices/machine/src/keyring/flags.ts": "standing when the check arrived (2026-10-16); came in with main's own changes",
+    "_devices/machine/src/keyring/keyring-testing.ts": "standing when the check arrived (2026-10-16); came in with main's own changes",
+    "_devices/machine/src/keyring/secret-input.ts": "standing when the check arrived (2026-10-16); came in with main's own changes",
+    "_devices/machine/src/keyring/service.ts": {
+        "count": 6,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_devices/machine/src/machine-id.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/resident/handover.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/resident/log-roll.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/resident/resident.ts": {
+        "count": 4,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/resident/watchdog.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/status.ts": {
+        "count": 5,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/sync/attach-commands.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/sync/config.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/sync/endpoint.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/sync/exec.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/sync/gone-watch.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/sync/mutagen.ts": {
+        "count": 7,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/sync/project/project-commands.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/sync/project/project-remote.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/sync/project/project-transfer.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/sync/restore-points.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/sync/siblings.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/upkeep/doctor.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/upkeep/reconcile.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/upkeep/retention.ts": "standing when the check arrived (2026-10-16)",
+    "_devices/machine/src/upkeep/retired.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/desktop-app/src/desktop.ts": "standing when the check arrived (2026-10-16); came in with main's own changes",
+    "_editor/desktop-app/src/device/machineSandbox.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/desktop-app/src/device/runs.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/desktop-app/src/device/title.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/desktop-app/src/dragWindow.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/desktop-app/src/host.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/desktop-app/src/onScreen.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/desktop-app/src/setupPlan.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/ui/src/components/brand/assistants/modular/preview.mjs": "standing when the check arrived (2026-10-16)",
+    "_editor/ui/src/components/brand/personaAccessory.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/app/clientDiagnostics.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/app/environments/desktopNotices.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/app/storage/browserStorage.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/client/sandbox/pageWake.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/client/sandbox/useDaemonRoutes.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/client/session/liveSocket.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/client/session/passkeySignIn.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/agents/board/view/archiveDoor.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/agents/board/view/boardLanes.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/agents/fleet/sessionSuggestion.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/agents/metrics/sandboxFigures.ts": {
+        "count": 4,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/review/pager/swipeYields.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/auth/useEmailCode.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/capabilities/capabilitySubmit.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/capabilities/model/deviceConnections.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/chat/composer/composerLanding.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/chat/composer/later/laterCalendar.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/drafts/localHandoff.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/drafts/localTaskHandoff.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/chat/panel/fleet/fleetWords.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/chat/panel/pane/paneWindow.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/transcript/pages/pageBridge.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/chat/transcript/pages/pageDocument.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/chat/transcript/pages/pageTheme.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/chat/wake/wakeDelivery.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/chat/wake/wakeDesktop.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/wake/wakeRoute.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/sandbox/access/accessGrant.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/sandbox/access/useStandingGrants.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/sandbox/agent-settings/behaviour/agentVoice.ts": {
+        "count": 9,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/audit/auditRows.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/data-protection/dataProtection.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/sandbox/diagnosis/probes.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/diagnosis/useDiagnosis.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/sandbox/environment/rebuild/devRebuildStages.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/sandbox/environment/useEngines.ts": {
+        "count": 5,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/sandbox/overview/offerTimezone.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/sandbox/overview/storage/storageView.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/sandbox/overview/version/driftReport.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/sandbox/secrets/useHostedBuild.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/setup/desktopRun.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/setup/flow/useHostedLane.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/setup/flow/useRunStep.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/terminal/channel/streamSocket.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/workspace/directory-ui/useRunTargets.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/workspace/explorer/transfer/useEntryDrag.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/workspace/explorer/tree/fileVerbs.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/workspace/explorer/tree/useTreeDelete.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/workspace/explorer/useAddRepo.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/features/workspace/viewers/proseDiff.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/lib/markdown/renderMarkdown.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/lib/markdown/useMarkdown.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/local/foundProjects.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/agent-status/sandboxClock.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/browsers/frameUrls.ts": {
+        "count": 4,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/changes/landing.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/conversations/endings/handoffChoice.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/conversations/endings/pickUp.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/conversations/panel/useChat-strip.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/conversations/review/conflictResolution.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/conversations/run/turnRequest.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/conversations/run/useChat-connect.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/conversations/tabs/tabFacts.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/fleet/board/childFold.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/fleet/board/columnWidth.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/fleet/promptCache.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/fleet/useAgents-fleet.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/fleet/useAgents-provisional.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/hosted-plan/hostedHours.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/needs/useNeeds.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/providers/pickerRunSettings.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/sandbox/devices/deviceRows.ts": {
+        "count": 4,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/sandbox/devices/useRunners.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/terminal/useBackgroundProcesses.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/voice/useWakeListener.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/voice/wakeWord.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/workspace/changes/changesAcross.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/workspace/files/fileRefQuickLook.ts": {
+        "count": 5,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/models/workspace/tabs/workspaceTabs.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/models/workspace/viewers/htmlDocument.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/shell/browser-tab/tabSignal.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/shell/prefetch/warmPlan.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/shell/rail/chatTileDrag.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/skins/useWallpaper.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/workbench/operations/operations.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/workbench/side/sideFileInput.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/workbench/side/sideTabs.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/workbench/views/registry.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/workbench/window/controlsReserve.ts": "standing when the check arrived (2026-10-16)",
+    "_editor/web/src/workbench/window/inputAway.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/vite.shared.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/approvals/src/extension.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/automations/src/calendarModel.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/discord/src/card.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/discord/src/cli.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/discord/src/listener.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/discord/src/reply.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/e-urzad/src/actions.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_extensions/e-urzad/src/server/perform.ts": "standing when the check arrived (2026-10-16); came in with main's own changes",
+    "_extensions/onlyoffice/src/server/browser-engine.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/onlyoffice/src/server/docker.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/onlyoffice/src/server/document-server.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/pipelines/src/runSide.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/repo-apps/src/depModel.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/repo-apps/src/layerModel.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/slack/src/listener.ts": {
+        "count": 4,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/slack/src/reply.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/telegram/src/listener.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/viewers/src/odf/content.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/viewers/src/odf/document-model.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/viewers/src/odf/xml-tree.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/viewers/src/pptx/deck-model.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/viewers/src/pptx/xml-dom.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/whatsapp/src/cli.ts": "standing when the check arrived (2026-10-16)",
+    "_extensions/whatsapp/src/routes.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/account-erase.ts": "standing when the check arrived (2026-10-16); came in with main's own changes",
+    "_platform/api/src/org/org-policy.ts": "standing when the check arrived (2026-10-16)",
+    "_platform/api/src/repair/repair-tools.ts": "standing when the check arrived (2026-10-16)",
+    "_platform/api/src/repair/repair-turn-schema.ts": "standing when the check arrived (2026-10-16)",
+    "_platform/api/src/repair/repair.routes.ts": "standing when the check arrived (2026-10-16)",
+    "_platform/api/src/sandbox/announce-copies.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/sandbox/cloudflare.ts": "standing when the check arrived (2026-10-16)",
+    "_platform/api/src/sandbox/edge-certificate.ts": "standing when the check arrived (2026-10-16)",
+    "_platform/api/src/sandbox/hosted/abuse/hosted-standing.ts": "standing when the check arrived (2026-10-16)",
+    "_platform/api/src/sandbox/hosted/hosted-canary.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/sandbox/hosted/hosted-capacity.ts": "standing when the check arrived (2026-10-16)",
+    "_platform/api/src/sandbox/hosted/hosted-health.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/sandbox/hosted/hosted-pool.ts": "standing when the check arrived (2026-10-16)",
+    "_platform/api/src/sandbox/hosted/hosted-probation.ts": "standing when the check arrived (2026-10-16)",
+    "_platform/api/src/sandbox/hosted/hosted.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/sandbox/hosted/migrate/hosted-migrate.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/sandbox/hosted/plan/hosted-plan.ts": "standing when the check arrived (2026-10-16)",
+    "_platform/api/src/sandbox/setup-code.ts": "standing when the check arrived (2026-10-16)",
+    "_platform/api/src/sandbox/setup-failure-email.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/trial/trial-ladder.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/claude-plugin/hooks/register.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/claude-plugin/src/features.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/claude-plugin/src/hook-io.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/claude-plugin/src/notes-evidence.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/claude-plugin/src/runtime.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/claude-plugin/src/sessions.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/claude-plugin/src/stats.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/fileq/src/commands/derive.command.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/fileq/src/lib/check/package.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/fileq/src/lib/derivers/pptx.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/fileq/src/lib/render/render.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/ocr/src/text-detection.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/bench/handoff-arms.ts": {
+        "count": 5,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/bench/map-corpus.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/context/context-note.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/context/conversation-context.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/models/role-model.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/pages/mcp-apps.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/pages/page-errors.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/pages/ui-server.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/prompt/system-prompt.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/providers/limit-handoff.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/project-installs.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/providers/providers-slice.testing.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/providers/routes/model-routes.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/providers/translator.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/routes/accounts.routes.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/run/frames/stop-grace.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/run/turn/cache-keepwarm.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/turn/interrupted-ledger.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/run/turn/message-receipts.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/run/turn/turn-admission.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/run/turn/turn-interactions.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/subagents/children.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/subagents/subagents.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/tools/agent-terminals.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/tools/notices/agent-output-notices.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/verification/agent-reach.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/app.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/areas/area-scope.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/audit/audit-service.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/audit/audit-store.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/auth/auth.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/auth/grants.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/auth/passkeys/webauthn.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/auth/principal.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/automations/automations-slice.testing.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/automations/automations-store.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/automations/listeners.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/automations/scheduler.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/automations/watch/watch-condition.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/bootstrap/daemon-env.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/bootstrap/state-boot.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/bootstrap/working-now.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/browser/cast/display.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/cast/screencast.ts": {
+        "count": 5,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/sessions/own-browser.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/browser/sessions/owner-browser.ts": {
+        "count": 4,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/tools/accounts-tools.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/browser/tools/browser-router.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/browser/tools/browser-tools.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/capabilities/broker/broker-slice.testing.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/capabilities/broker/broker-slice.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/capabilities/broker/ssh-agent.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/capabilities/cli-env.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/capabilities/cli/git-access.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/capabilities/credentials/secret-stash.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/capabilities/extension-inventory/extension-dev.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/ci/logs/failure-digest.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/ci/main-fixer.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/ci/main-line.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/compliance/compliance.routes.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/compliance/docx.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/compliance/facts.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/compliance/preset.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/conversations/actor/card-deps.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/conversations/actor/conversation-queue.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/conversations/land/agent-changes.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/conversations/land/land-by-hand.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/conversations/land/lockfile-reconcile.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/conversations/produced-files.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/conversations/registry/agents-registry.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/registry/agents-store.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/conversations/worktrees/domain-anchor.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/conversations/worktrees/isolation.ts": {
+        "count": 4,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/conversations/worktrees/turn-sandbox.ts": {
+        "count": 6,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/definition/definition.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/derived/search-env.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/derived/shadow-keeper.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/desktop/desktop-tools.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/endpoints/endpoint-catalog.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/endpoints/local-model-fit.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/endpoints/local-model-weights.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/engines/engine-descriptors.ts": {
+        "count": 4,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/engines/engine-install.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/environment/apt-cache-rule.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/environment/environment.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/exit/exit-observe.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/exit/exit-routing.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/extensions/backend/backend-tools.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/extensions/extension-settings.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/git-identity.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/git/changes/code-counts.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/git/changes/ignored-outputs.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/git/git.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/git/ops/commit-message.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/git/ops/git-gc.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/git/ops/stale-git-locks.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/git/remote/project-repo.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/guard/held-asks.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/harness/passkey-authenticator.testing.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/harness/route-services.testing.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/history/large-files.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/hosts/desktop-sync-ssh.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/hosts/host-peer.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/invariants/invariants.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/issues/intake.routes.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/links/inbound-links.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/links/link-tasks.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/links/linked-children.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/logs/diagnostics-render.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/logs/diagnostics.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/logs/log-files.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/logs/log-read.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/migrations/adapter-shared.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/migrations/provider-keys.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/migrations/scan-policy.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/needs/kinds/automation-need.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/needs/kinds/grant-need.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/needs/needs-store.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/needs/standing-grants.testing.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/offload/offload.routes.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/org/org-policy.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_sandbox/sandbox/src/peers/desktop-sync.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/peers/peer-store.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/peers/redeem-codes.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/personas/persona-kit.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/portability/bundle-arrival.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/ports/established.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/privacy/gateway/protocols/responses-request.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/gateway/protocols/sse.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/privacy/gateway/protocols/tests/fake-shield.testing.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/privacy/harness-route.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/ner.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/privacy-images.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/privacy/privacy-policy.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/privacy/privacy-shield.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/privacy-slice.testing.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/privacy-trust.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/privacy/privacy-vault.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/privacy/token-glyphs.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/tokens.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/processes/service-processes.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/retention/retention-sweep.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runners/fleet-facts.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runners/runner-identity.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/acp/acp-adapter.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/acp/acp-mcp-proxy.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/acp/acp-model.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/claude/claude-session-copy.ts": {
+        "count": 10,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/claude/claude-warm.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/codex/codex-agent.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/codex/codex-app-server.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/codex/codex-hooks.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/codex/codex-provider.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-events.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-hooks.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-shield.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-tools.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-usage.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/devin/accounts/devin-credentials.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/devin/models/devin-catalog.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/gemini/gemini-models.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/grok/grok-provider.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/minted/meta-login.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/minted/minted-credentials.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/minted/minted-provider.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/minted/zai-login.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/muse/muse-adapter.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/muse/muse-host.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/muse/muse-settings.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/muse/muse-stream.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/muse/muse-wire.ts": {
+        "count": 4,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/opencode/hosted/opencode-routes.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/opencode/opencode-serve.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/opencode/opencode-subagents.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/opencode/opencode.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/opencode/shell/opencode-shell.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/pi/pi-adapter.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/runtimes/vendor-cli/vendor-cli-turn.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/sandboxes/link-client.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/seams/frame-backlog.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/secrets/credential-gates.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/secrets/credential-reach.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/sessions/record/record-convert.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/sessions/transcript-record.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/settings/skill-retirement.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/settings/skills.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/store/conversations-db.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/store/encryption/at-rest.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/store/evolution/conversion-types.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/store/evolution/conversions.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/store/evolution/passthrough.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/store/evolution/state-convergence.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/store/evolution/state-journal.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/system/boot/announce.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/system/boot/boot-failure.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/system/boot/generation-sweep.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/system/boot/leftovers.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/system/boot/prewarm.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/system/boot/reaper.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/system/boot/restarts/daemon-stop.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/system/platform-client.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/system/resources/daemon-cgroup.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/system/resources/process-scan.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/system/resources/queue-slots.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/system/resources/resource-metrics.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/system/resources/storage/disk-storage.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/terminal/prompt-signal.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/terminal/tmux-server.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/tunnel/net-probe.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/usage/observed-accounts.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/wallet/wallet-ledger.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/webchat/webchat.routes.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/webext/webext-peer.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/workflows/gate.routes.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/workload/domain/agent-domain.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workload/heavy-commands.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workload/namespace-entry.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/workload/namespace-holder.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workload/resource-budget.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/workload/room-socket.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/workspace/deps/package-modules.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workspace/deps/package-usage.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/workspace/files/download/workspace-download.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/workspace/files/download/workspace-zip.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/workspace/files/resident-tree.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/speech/src/speech-recognizers.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/speech/src/voice/voice-models.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/speech/src/voice/voice-synth.ts": "standing when the check arrived (2026-10-16)",
+    "_search/iq-engine/src/engines/catalog.ts": "standing when the check arrived (2026-10-16)",
+    "_search/iq-engine/src/verbs/context.ts": "standing when the check arrived (2026-10-16)",
+    "_search/iq-engine/src/verbs/literal.ts": "standing when the check arrived (2026-10-16)",
+    "_search/iq-engine/src/verify/check.ts": "standing when the check arrived (2026-10-16)",
+    "_search/iq-engine/src/workspace/shadows.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq/src/recall/recall.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_shared/sandbox-contract/src/contracts/usage.contract.ts": "standing when the check arrived (2026-10-16)",
+    "_site/demo/src/fixture/audit.ts": "standing when the check arrived (2026-10-16)",
+    "_site/demo/src/fixture/fleet.ts": {
+        "count": 4,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/demo/src/fixture/specimen.ts": "standing when the check arrived (2026-10-16)",
+    "_site/demo/src/mode.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/site/scripts/readme/art.mjs": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/site/scripts/readme/capture.mjs": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/site/scripts/readme/compose.mjs": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/site/src/lib/live.ts": "standing when the check arrived (2026-10-16)",
+    "_site/site/src/lib/shiki-theme.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/site/src/lib/variant.ts": {
+        "count": 6,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_site/site/src/lib/visit.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/base/src/web/capped-read.testing.ts": "standing when the check arrived (2026-10-16)",
+    "_tools/checks/lib/allow.mjs": "standing when the check arrived (2026-10-16)",
+    "_tools/checks/lib/ignored-imports.mjs": "standing when the check arrived (2026-10-16)",
+    "_tools/checks/lib/layers.mjs": "standing when the check arrived (2026-10-16)",
+    "_tools/checks/lib/lockfile.mjs": "standing when the check arrived (2026-10-16)",
+    "_tools/checks/lib/repo.mjs": "standing when the check arrived (2026-10-16)",
+    "_tools/checks/lib/route-literals.mjs": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/checks/lib/visible-text.mjs": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/checks/lib/workflows.mjs": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/constants/src/heavy/heavy-turn.cjs": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/e2e/accessibility/audit.ts": "standing when the check arrived (2026-10-16)",
+    "_tools/onboarding/src/containers.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/onboarding/src/seed.ts": {
+        "count": 2,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/onboarding/src/world.ts": {
+        "count": 3,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/oxlint/anti-slop/shared/dictionary-types.ts": "standing when the check arrived (2026-10-16)",
+    "_tools/perf/src/baseline.ts": "standing when the check arrived (2026-10-16)",
+    "_tools/perf/src/mobile/phone.ts": "standing when the check arrived (2026-10-16)"
+}

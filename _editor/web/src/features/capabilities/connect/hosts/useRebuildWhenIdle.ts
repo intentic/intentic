@@ -1,9 +1,9 @@
-import type { Environment } from "@intentic/sandbox-contract";
+import type { Environment } from "@intentic/sandbox-contract/schemas/environment";
 import { useQueryClient } from "@tanstack/vue-query";
 import { usePollWhile } from "@intentic/ui/async";
 import { computed } from "vue";
 import { sandboxRaw } from "../../../../client/sandbox/sandboxRaw";
-import { ENVIRONMENT_KEY, useEnvironment } from "../../../sandbox/environment/useEnvironment";
+import { ENVIRONMENT_KEY, useEnvironment } from "../../../../models/sandbox/environment/useEnvironment";
 import { onScreen } from "../../../../workbench/window/onScreen";
 
 // "REBUILD WHEN THEY'RE IDLE", as the page sees it. The wait itself is the sandbox's (POST /environment/rebuild-when-idle),

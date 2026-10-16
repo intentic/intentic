@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { PRIVACY_DICTIONARY_SAMPLE_MAX, type PrivacyNameList } from "@intentic/sandbox-contract";
+import { PRIVACY_DICTIONARY_SAMPLE_MAX, type PrivacyNameList } from "@intentic/sandbox-contract/schemas/privacy";
 import { DisclosureRow, FilterBar, Notice } from "@intentic/ui";
 import { formatFixed } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { type NameTrait, nameVerdict, shownWord, sourceHost, traitsOf } from "./privacyShield";
-import { usePrivacyDictionary } from "./usePrivacyShield";
+import { usePrivacyDictionary } from "../../../models/sandbox/usePrivacyShield";
 
 // What the shield's name dictionary holds, under "Finding names": each list with how many words, how they are matched
 // and where they come from, and a search that browses the lists by a word's first letters and says whether a word or a

@@ -1,4 +1,5 @@
-import type { AgentCapabilities, PersonaPowers } from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { PersonaPowers } from "@intentic/sandbox-contract/schemas/personas";
 import type { ConversationActors } from "./conversation-actors.js";
 import type { Holding } from "./conversation-holdings.js";
 

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { FileDiff } from "@intentic/sandbox-contract";
+import type { FileDiff } from "@intentic/sandbox-contract/schemas/history";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { EMPTY_TREE } from "../../workspace/layout/git-layout.js";
 import { readWorkspaceFile, readWorkspaceFileWindow, statWorkspaceFileSize } from "../../workspace/files/workspace-files.js";

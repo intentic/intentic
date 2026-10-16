@@ -3,8 +3,8 @@
 import { Row, RowGroup, StatusBadge } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { useCapabilities } from "../../../capabilities/connect/useCapabilities";
-import { capabilityRoute } from "../deviceLinks";
+import { useCapabilities } from "../../../../models/capabilities/useCapabilities";
+import { capabilityRoute } from "../../../../models/sandbox/devices/deviceLinks";
 import { linkedSandboxRowsOf } from "./linkedSandboxRows";
 
 const t = useT();

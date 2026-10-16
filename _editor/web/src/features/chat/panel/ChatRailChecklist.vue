@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useRowReveal } from "@intentic/ui/motion";
 import { computed, ref } from "vue";
-import { useChat } from "../run/useChat";
-import { currentChecklist } from "../transcript/transcript";
+import { useChat } from "../../../models/conversations/run/useChat";
+import { currentChecklist } from "../../../models/conversations/transcript/transcript";
 import ChatTodoList from "../transcript/ChatTodoList.vue";
 import { useT } from "@intentic/ui/i18n";
 

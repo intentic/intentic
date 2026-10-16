@@ -1,12 +1,13 @@
-import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { parentDir } from "@intentic/ui/path";
 import { computed, type Ref } from "vue";
-import { opensAsFolder } from "../../files/archiveEntries";
-import { withProvisionalEntries } from "../../files/provisionalEntries";
+import { opensAsFolder } from "../../../../models/workspace/files/archiveEntries";
+import { withProvisionalEntries } from "../../../../models/workspace/files/provisionalEntries";
 import { type ExplorerFilters, technicalHidden } from "../explorerFilter";
 import { type LandedEntry, landingNest } from "../fileNesting";
 import type { useEmptyDirs } from "../useEmptyDirs";
-import type { useWorkspaceTree } from "../useWorkspaceTree";
+import type { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
 import { deadLink, flattenRows, indexEntries, type Row } from "./treeRows";
 
 // The tree the explorer draws, as reactive state: the by-path index over the eager walk and every lazy subtree, the

@@ -1,3 +1,4 @@
+import { parseJsonWith } from "@intentic/base/json";
 import type { Log } from "@intentic/local-agent";
 import { z } from "zod";
 import { type IcRun, lastLine, newRoundState, type RoundState, type Rounds, runRound, startRounds, ticksToSkip } from "./ic-rounds.js";
@@ -29,15 +30,7 @@ export const watchTargets = (records: readonly SwapRecord[], busy: ReadonlySet<s
 const WatchAnswerSchema = z.object({ slug: z.string(), action: z.string(), reason: z.string().optional() });
 export type WatchAnswer = z.infer<typeof WatchAnswerSchema>;
 
-const watchAnswer = (line: string): WatchAnswer | undefined => {
-    try {
-        const parsed = WatchAnswerSchema.safeParse(JSON.parse(line));
-        return parsed.success ? parsed.data : undefined;
-    } catch {
-        // allow(silent-catch): a line that is not JSON is ic's progress prose, which says nothing a line below does not
-        return undefined;
-    }
-};
+const watchAnswer = (line: string): WatchAnswer | undefined => parseJsonWith(line, WatchAnswerSchema);
 
 export const watchAnswers = (output: string): WatchAnswer[] =>
     output

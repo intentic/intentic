@@ -1,4 +1,4 @@
-import type { FleetUnfit, MachineLoad, MachineStanding, MachineStrain } from "@intentic/sandbox-contract";
+import type { FleetUnfit, MachineLoad, MachineStanding, MachineStrain } from "@intentic/sandbox-contract/schemas/offload";
 import { formatBytes } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 

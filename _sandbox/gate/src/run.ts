@@ -1,6 +1,7 @@
 // Starts an agent turn with a control token, polls until it settles, and maps the ending to an exit code. Three calls:
 // POST /agent starts it, GET /agents/{id} is polled (survives a dropped connection where streaming would not), POST
 // /agents/{id}/land merges. No schema library, so readers are checked by hand against run.test.ts's contract schemas.
+import { errorMessage } from "@intentic/base/errors";
 
 export const RUN_WAIT_DEFAULT_S = 1800;
 // How often the card is polled for settlement; five seconds is invisible against a turn that runs minutes.
@@ -290,7 +291,7 @@ const answerOf = async (
     init: { method: string; headers: Record<string, string>; body?: string },
 ): Promise<unknown> => {
     const response = await deps.fetch(url, init).catch((error: unknown) => {
-        throw new RunExchangeError(`${what} could not be reached: ${error instanceof Error ? error.message : String(error)}`);
+        throw new RunExchangeError(`${what} could not be reached: ${errorMessage(error)}`);
     });
     const text = await response.text();
     if (!response.ok) {

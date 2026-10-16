@@ -1,18 +1,11 @@
-import {
-    capabilitiesOf,
-    DEFAULT_PRIVACY_SHIELD,
-    type Info,
-    loopsOf,
-    NATIVE_PROVIDERS,
-    PROVIDER_SPECS,
-    type GettingStarted,
-    TRANSLATOR_PROVIDERS,
-    type TranslatorAccounts,
-    TRIAL_LABEL,
-    TRIAL_PROVIDER,
-    type TrialStatusResponse,
-    type WorkflowRun,
-} from "@intentic/sandbox-contract";
+import { capabilitiesOf, loopsOf, TRIAL_LABEL, TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
+import { DEFAULT_PRIVACY_SHIELD } from "@intentic/sandbox-contract/schemas/privacy";
+import type { Info } from "@intentic/sandbox-contract/schemas/system";
+import { NATIVE_PROVIDERS, PROVIDER_SPECS, TRANSLATOR_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
+import type { GettingStarted } from "@intentic/sandbox-contract/schemas/settings";
+import type { TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { TrialStatusResponse } from "@intentic/sandbox-contract/contracts/endpoints.contract";
+import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { type FixtureRouter, refuse } from "@intentic/contract-serve";
 import { BROWSER_SESSIONS, closeOwnBrowser, closeOwnTab, OWN_SESSION, openOwnBrowser, ownSession } from "../browser";
 import { demoSecretInventory } from "../fixture/access";

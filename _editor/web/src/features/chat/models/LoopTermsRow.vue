@@ -1,6 +1,6 @@
 <!-- The vendor's own terms for the loop a pick runs on, said quietly: a muted row and a hover card, never a banner. The owner keeps these routes by choice; the row exists so nobody runs one without being able to find out. -->
 <script setup lang="ts">
-import type { LoopTerms } from "@intentic/sandbox-contract";
+import type { LoopTerms } from "@intentic/sandbox-contract/models/provider-specs";
 import { useT } from "@intentic/ui/i18n";
 import LoopTermsHint from "./LoopTermsHint.vue";
 

@@ -1,4 +1,4 @@
-import type { GrantRevoke, OwnerGrant, OwnerGrantKind, StandingGrants } from "@intentic/sandbox-contract";
+import type { GrantRevoke, OwnerGrant, OwnerGrantKind, StandingGrants } from "@intentic/sandbox-contract/schemas/needs";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { rpcKey, rpcPrefix } from "../../../lib/queryKeys";

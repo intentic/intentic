@@ -1,5 +1,7 @@
 import { access } from "node:fs/promises";
-import { type ArchivePath, archivePrefixOf, archiveRootOf, ConversationIdSchema, type WorkspaceChildren } from "@intentic/sandbox-contract";
+import { type ArchivePath, archivePrefixOf, archiveRootOf } from "@intentic/sandbox-contract/text/archives";
+import { ConversationIdSchema } from "@intentic/sandbox-contract/schemas/agent";
+import type { WorkspaceChildren } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { ORPCError } from "@orpc/server";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
 import { archiveChildrenOf, archiveMemberPath, isBrowsableArchiveFile } from "../files/archive/workspace-archive-browse.js";

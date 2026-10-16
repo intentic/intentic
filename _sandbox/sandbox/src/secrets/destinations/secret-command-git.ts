@@ -1,4 +1,4 @@
-import { normalizeHost } from "@intentic/sandbox-contract";
+import { normalizeHost } from "@intentic/sandbox-contract/policy/secret-hosts";
 import { hostsOf, URL_SCHEME } from "./secret-command-hosts.js";
 import type { ProgramReader, Reach, Unreadable, Word } from "./secret-command-words.js";
 

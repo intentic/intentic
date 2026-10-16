@@ -1,4 +1,4 @@
-import { VISITOR_CHAT_PERSONA, type Persona } from "@intentic/sandbox-contract";
+import { VISITOR_CHAT_PERSONA, type Persona } from "@intentic/sandbox-contract/schemas/personas";
 import type { PersonasStore } from "./personas-store.js";
 
 // The one persona the daemon writes itself: a read-only persona a public web chat answers through, created only when a

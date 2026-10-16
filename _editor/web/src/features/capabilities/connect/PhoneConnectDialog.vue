@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { phonePairingCode, phonePairingLink } from "@intentic/sandbox-contract";
+import { phonePairingCode, phonePairingLink } from "@intentic/sandbox-contract/protocol/doors/phone-links";
 import { Button, Code, Modal, Notice, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { renderSVG } from "uqr";
 import { computed, ref, watch } from "vue";
-import { PHONE_DOOR, usePeerConnect } from "../../sandbox/devices/usePeerConnect";
+import { PHONE_DOOR, usePeerConnect } from "../../../models/sandbox/devices/usePeerConnect";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { registerWakeOnce, type WakeOutcome } from "./phoneWake";
 

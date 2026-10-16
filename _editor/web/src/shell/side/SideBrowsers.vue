@@ -4,7 +4,7 @@ import { useT } from "@intentic/ui/i18n";
 import { useTemplateRef } from "vue";
 import { useBrowsersFloating } from "../../workbench/browsers/browsersFloating";
 import { markBrowsersOpened } from "../../workbench/browsers/browsersSurface";
-import type { LineJump } from "../../features/workspace/tabs/workspaceTabs";
+import type { LineJump } from "../../models/workspace/tabs/workspaceTabs";
 import { publishSlot, sideBrowsersSlot } from "../../workbench/window/panelSlots";
 import type { SideInput } from "../../workbench/side/sideTabs";
 

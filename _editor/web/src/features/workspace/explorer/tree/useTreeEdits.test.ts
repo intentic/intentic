@@ -1,10 +1,10 @@
 import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { nextTick } from "vue";
 import { dir, file, type StoreOptions, treeSurface } from "../../../../testing/treeSurface";
-import { noteArriving } from "../../files/provisionalEntries";
+import { noteArriving } from "../../../../models/workspace/files/provisionalEntries";
 
 // Pins what the inline field's gestures write, where the selection lands, when a new file opens, and that Enter writes once.
 

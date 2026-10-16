@@ -1,4 +1,4 @@
-import type { IntenticOsChannel, IntenticOsStatus, IntenticOsUpdateCheck } from "@intentic/sandbox-contract";
+import type { IntenticOsChannel, IntenticOsStatus, IntenticOsUpdateCheck } from "@intentic/sandbox-contract/schemas/intentic-os";
 import { t } from "@intentic/ui/i18n";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { ref } from "vue";

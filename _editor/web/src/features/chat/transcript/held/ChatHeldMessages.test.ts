@@ -1,12 +1,13 @@
 import "@intentic/testing/dom";
 import { STATE_DIR } from "@intentic/constants";
-import type { ConversationQueue, QueuedMessage } from "@intentic/sandbox-contract";
+import type { ConversationQueue, QueuedMessage } from "@intentic/sandbox-contract/schemas/agent";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, computed, createApp, type Directive, h, nextTick, ref } from "vue";
-import { type AgentStanding, NO_ATTENTION } from "../../../agents/fleet/agentStatus";
-import { conversationView, PANE_VIEW } from "../../panel/useChat-view";
-import { Conversation } from "../../session/conversation";
-import type { ChatMessage } from "../transcript";
+import { NO_ATTENTION } from "../../../../models/agent-status/agentStatus-lanes";
+import type { AgentStanding } from "../../../../models/agent-status/agentStatus-standing";
+import { conversationView, PANE_VIEW } from "../../../../models/conversations/panel/useChat-view";
+import { Conversation } from "../../../../models/conversations/session/conversation";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import * as useSandboxOriginal from "../../../../client/sandbox/useSandbox";
 
 // A message the sandbox held is drawn where the reader looks for what they just sent: their own prompt, with its
@@ -25,7 +26,7 @@ jest.mock("../../drafts/attachmentPreviews", () => ({
 jest.mock("../../drafts/attachmentQuickLooks", () => ({ attachmentQuickLook: () => undefined }));
 
 // A 16 GiB box a connected device can reshape, on a 64 GiB engine: room for the raise's 4 GiB step.
-jest.mock("../../../sandbox/devices/useSelfResources", () => ({
+jest.mock("../../../../models/sandbox/devices/useSelfResources", () => ({
     useSelfResources: () => ({
         slug: computed(() => `box`),
         current: computed(() => ({ memoryBytes: 16 * 1024 ** 3 })),
@@ -41,10 +42,10 @@ jest.mock("../../../sandbox/devices/useSelfResources", () => ({
 // sandbox's settings are not loaded, so the wall's own default answers for it (turnBreak.ts).
 const memoryOverride = ref<`wait` | `resend` | undefined>();
 const setBreakPolicy = jest.fn(async () => undefined);
-jest.mock("../../../agents/fleet/useAgents", () => ({
+jest.mock("../../../../models/fleet/useAgents", () => ({
     useAgents: () => ({ agentById: () => (memoryOverride.value === undefined ? undefined : { memoryPolicy: memoryOverride.value }), setBreakPolicy }),
 }));
-jest.mock("../../../sandbox/overview/useSandboxSettings", () => ({ useSandboxSettings: () => ({ settings: computed(() => undefined) }) }));
+jest.mock("../../../../models/sandbox/useSandboxSettings", () => ({ useSandboxSettings: () => ({ settings: computed(() => undefined) }) }));
 // Reachable, so the question can be answered: the state the press and the answer are both about.
 const realUseSandbox = useSandboxOriginal.useSandbox;
 jest.mock("../../../../client/sandbox/useSandbox", () => ({

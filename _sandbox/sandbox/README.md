@@ -295,10 +295,12 @@ flowchart LR
   converting on read; nothing of that boot commits. `src/state-plan.ts` is the same plan, read-only, for `ic`'s pre-flight. Both
   take every document and structural step from `bootstrap/state-registry.ts` (`main.ts` hands it to the boot step),
   never from what a process loaded; it sits in the boot wiring, above every subsystem, because it imports them all.
-  `store/shapes/write-state-shapes.ts --freeze` (which the fixers run in a worktree before its land, when the change
-  reached a daemon or contract source: `conversations/land/worktree-fixers.ts`) writes it from every
-  `export const name = defineDocument(…)` (or `defineStep`) in the source, failing on a definition in any other form,
-  and records each document's shape in `store/generated/state-shapes.json` by the release that first shipped it.
+  `scripts/write-indexes.mjs` (`pnpm indexes`, run before this package's typecheck, test, dev and build, and by the
+  fixers in a worktree before its land: `conversations/land/worktree-fixers.ts`) writes it from every
+  `export const name = defineDocument(…)` (or `defineStep`) in the source, failing on a definition in any other form.
+  `store/shapes/write-state-shapes.ts --freeze` (which the fixers run next, when the change reached a daemon or
+  contract source) reads it and records each document's shape in `store/generated/state-shapes.json` by the release
+  that first shipped it.
   `--checks` (this package's `pretypecheck`) derives the uncommitted `state-shapes.ts` from it: every released shape
   must still fit today's schema after its conversions and lose no key without a `drop` or `rename`
   (`store/evolution/conversion-types.ts`).
@@ -411,7 +413,7 @@ flowchart LR
   spends the intent. `/health` carries `build` (version, source commit from `build-info.json` or `INTENTIC_COMMIT`, and
   build time; `system/boot/build-info.ts`).
 - A turn parked on a person comes back after a restart as the same run (2026-10-06): while a card is up, the turn
-  journal's `run` column holds the run's id and the rows it has drawn (`agent/run/turn/turn-journal.ts`), and the boot
+  journal's `run` column holds the run's id and the rows it has drawn (`store/journals/turn-journal.ts`), and the boot
   carries that run on with its own id, start time and rows, raising each card again on the row it already had
   (`turn-resume.ts` `carriedRun`). Before this, the boot started a new run that sent the prompt again. A window still
   showing the old run drew the prompt and the card a second time, so the question could be answered twice, and the
@@ -471,7 +473,7 @@ flowchart LR
   owner does not trust. Every runtime whose model requests go to a base URL the daemon names (the Claude Code loop for
   every provider, Codex, OpenCode's Grok and Gemini) is pointed at one gateway route, `ALL /privacy/gateway/<session>/*`,
   whose signed session names the provider and the only upstream it forwards to (`privacy/gateway/`). For an untrusted
-  provider it replaces what the detectors (`privacy/detect/`), the vault of known values and, with the `privacy` image
+  provider it replaces what the detectors ([`@intentic/privacy-detect`](../privacy-detect)), the vault of known values and, with the `privacy` image
   pack, a local name model find with tokens like `⟦PERSON_3⟧`, and restores them in the answer as it streams back, so
   the agent's tools run on real values while the provider reads tokens. An image still goes as an image: its text is
   read on this machine by PaddleOCR ([`@intentic/ocr`](../ocr), the pack's PP-OCRv6 models) and every stretch found to be personal data
@@ -495,15 +497,15 @@ flowchart LR
   they cannot be read, and published under numbers rather than their file names. The policy lives off the workspace and only the owner changes it; the agent's `privacy` CLI can only teach
   it a dataset's values.
 
-- Speech runs on this machine in both directions (`speech/`), each in a child process of its own over
-  `sherpa-onnx-node`, so a model's memory goes back to the box when it idles and a native crash takes down only that
-  process. Dictation (`speech/transcribe.ts`) hears the composer's microphone and Discord's calls: Parakeet for 25
+- Speech runs on this machine in both directions ([`@intentic/speech`](../speech), its routes in `speech/`), each in a
+  child process of its own over `sherpa-onnx-node`, so a model's memory goes back to the box when it idles and a native
+  crash takes down only that process. Dictation (`transcribe.ts`) hears the composer's microphone and Discord's calls: Parakeet for 25
   European languages, baked into the standard image, and Whisper for the rest, fetched the first time one is spoken.
   The same live wire hears the editor's wake word (`settings.voice.wake`, "Leon" unless changed): a device that listens
   sends only each phrase's first seconds, asking for finals alone (`guesses=0`), and the whole phrase only when it opens
   with the name. Every device of one person hears the same call, so the first to claim it (`POST /speech/wake`, held in
   memory per member) acts on it and the rest stand down.
-  Speaking (`speech/voice/`) reads replies aloud for the editor's player (`GET /speech/say`, a socket) and Discord's
+  Speaking (`voice/`, its routes in `speech/voice/`) reads replies aloud for the editor's player (`GET /speech/say`, a socket) and Discord's
   calls (`POST /speech/say`). The voice is picked from the text's own language: the owner's pick for that language
   (`settings.voice.voices`), else their own provider (ElevenLabs, Cartesia or Deepgram, its key a stored secret)
   where it speaks the language, else Kokoro for the eight languages it speaks and a Piper voice for 33 more, fetched
@@ -519,25 +521,33 @@ reads at start), [debugging](docs/debugging.md) (logs, diagnostics, state on dis
 ## Key files
 
 - [src/main.ts](src/main.ts) — the entry point: boot phases in the one order that matters.
-- [src/composition.ts](src/composition.ts) — `Services` extends each module's own slice; `createServices` builds every subsystem once, `wireReactions` subscribes them to each other.
+- [src/composition.ts](src/composition.ts) — `Services` extends each module's own slice; `createServices` builds the core in dependency order, then every leaf slice, and `wireReactions` subscribes them to each other.
+- [src/bootstrap/slices/slice-registry.ts](src/bootstrap/slices/slice-registry.ts) — every leaf slice, built over the core and torn down with it, generated by `scripts/write-indexes.mjs`.
 - [src/app.ts](src/app.ts) — the Hono app: security headers, boot gate, CORS, auth, raw routes, then the oRPC handler.
+- [src/app-raw-routes.ts](src/app-raw-routes.ts) — every raw route table, generated by `scripts/write-indexes.mjs`.
 - [src/router.ts](src/router.ts) — the per-domain route factories assembled into the contract's shape.
 - [src/env.config.ts](src/env.config.ts) — the configuration schema read from the environment.
 - [src/agent/run/stream-agent.ts](src/agent/run/stream-agent.ts) — `streamAgent`: one turn, from placement to settlement.
 
 ## Layout
 
-Main groups under `src/`:
+The directories under `src/` are layered, lowest first, and a value import may only reach its own layer or a lower
+one ([layers.json](layers.json), checked by `daemon-boundaries`). Above every layer sits the surface: the root files
+(`app.ts`, `composition.ts`, `router.ts`, `main.ts`), every `*.routes.ts` and every `*.testing.ts`. Inside each unit
+`subunits` lists (`agent/`, `conversations/`), each immediate subdirectory and the unit's root files are subunits, and a new
+value import closing a cycle between two of them fails too (standing ones: `_tools/checks/baselines/daemon-subunits.json`).
 
-| Concern | Directories |
-| --- | --- |
-| Turns and agents | `agent/` `conversations/` `runtimes/` `sessions/` `personas/` `loops/` `workflows/` `guard/` `rules/` |
-| Workspace | `workspace/` `git/` `history/` `derived/` `terminal/` `processes/` `ports/` `panels/` |
-| Owner controls | `auth/` `audit/` `secrets/` `needs/` `areas/` `approvals/` `safety/` `privacy/` `usage/` `wallet/` `settings/` |
-| Outside world | `capabilities/` `extensions/` `browser/` `desktop/` `hosts/` `peers/` `webext/` `phones/` `runners/` `sandboxes/` `ci/` `automations/` `speech/` |
-| Network | `netd/` `tunnel/` `vpn/` `exit/` `netdisk/` `public/` `share/` `webchat/` |
-| Plumbing | `bootstrap/` `store/` `seams/` `system/` `http/` `logs/` `invariants/` `workload/` |
-| Test support | `harness/` `fences/` `e2e/` |
+<!-- >>> generated from layers.json: edit it there, then run node _tools/checks/layer-tables.mjs --fix -->
+| Layer | Holds | Directories |
+| --- | --- | --- |
+| foundation | storage, ports and primitives every other layer stands on; they know no subsystem | `store/` `seams/` `http/` `offload/` `netd/` `fences/` `speech/` `areas/` `workload/` `safety/` `tunnel/` `image/` |
+| host | what the box itself offers: identity, secrets, files, git, processes, engines, the OS and its network | `auth/` `personas/` `secrets/` `guard/` `git/` `workspace/` `derived/` `hashline/` `engines/` `terminal/` `processes/` `privacy/` `environment/` `peers/` `push/` `ports/` `exit/` `vpn/` `netdisk/` `usage/` `logs/` `rules/` `endpoints/` `trial/` `system/` `intentic/` `activity/` `audit/` `org/` |
+| connections | what the owner connected: capabilities, browsers, devices, extensions, channels and published files | `capabilities/` `browser/` `desktop/` `webext/` `phones/` `hosts/` `wallet/` `sandboxes/` `runners/` `scaffold/` `extensions/` `panels/` `public/` `share/` `webchat/` `issues/` `definition/` |
+| agent | the turn engine, its runtimes, conversations, transcripts and the code a turn runs | `agent/` `runtimes/` `conversations/` `sessions/` `execution/` |
+| orchestration | what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings | `automations/` `compliance/` `loops/` `workflows/` `ci/` `chores/` `links/` `needs/` `approvals/` `settings/` `inventory/` `portability/` `migrations/` `history/` `retention/` |
+| composition | boot wiring and whole-daemon self-checks, which import every layer and are imported by none | `bootstrap/` `invariants/` `harness/` |
+| (none) | in no layer: the boundary check places no module here | `e2e/` |
+<!-- <<< end of generated layers.json -->
 
 Beside `src/`, the image copies a few directories as they are: `bin/` (the command runners and asking CLIs),
 `seed-skills/` (the skills baked into `/root/.claude/skills`), `starter-site/`, and `claude-policy/`, Claude Code's

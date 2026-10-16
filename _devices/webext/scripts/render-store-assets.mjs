@@ -1,6 +1,6 @@
-import { createRequire } from "node:module";
-import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { Resvg } from "@resvg/resvg-js";
 import { crc32, deflateSync } from "node:zlib";
 import { lotusPaths } from "../../../_site/site/scripts/lotus.mjs";
 
@@ -46,24 +46,7 @@ const rgbPng = (pixels, width, height) => {
 };
 
 const here = import.meta.dirname;
-const workspace = join(here, "..", "..", "..");
 const out = join(here, "..", "assets", "store");
-
-const require = createRequire(join(workspace, "package.json"));
-const fromStore = () => {
-    const store = join(workspace, "node_modules", ".pnpm");
-    const hit = readdirSync(store).find((entry) => entry.startsWith("@resvg+resvg-js@"));
-    return hit === undefined ? undefined : require(join(store, hit, "node_modules", "@resvg", "resvg-js"));
-};
-let Resvg;
-try {
-    ({ Resvg } = require("@resvg/resvg-js"));
-} catch {
-    ({ Resvg } = fromStore() ?? {});
-}
-if (Resvg === undefined) {
-    throw new Error("@resvg/resvg-js is not installed in this workspace; the committed store asset is unchanged.");
-}
 
 // The whole flower, leaves included, unlike the icon ladders: at 440x280 there is room for it. Through the shared
 // helper rather than a second regex over ornaments.ts — the copy that used to live here is what went stale when the

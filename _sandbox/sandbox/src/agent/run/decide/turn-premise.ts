@@ -1,4 +1,10 @@
-import { type AgentCapabilities, type AgentHarness, type AgentProvider, type AgentTurn, type Area, type ConversationGrant, type Persona, type SandboxSettings, capabilitiesOf, type RoutedAgentTurn } from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { AgentHarness, AgentProvider, AgentTurn, RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { Area } from "@intentic/sandbox-contract/schemas/areas";
+import type { ConversationGrant } from "@intentic/sandbox-contract/schemas/needs";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { conversationFence } from "../../../areas/area-scope.js";
 import { parentOfActor } from "../../../auth/principal.js";
 import { compactedSinceLastTurn, type PersistedAgent } from "../../../conversations/registry/agents-store.js";

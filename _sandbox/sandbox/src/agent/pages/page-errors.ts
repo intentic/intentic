@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { readMcpAppData } from "@intentic/sandbox-contract";
+import { readMcpAppData } from "@intentic/sandbox-contract/text/pages";
 import { SHOW_PAGE_TOOL } from "./page-names.js";
 import { PAGES_DIR } from "./pages-dir.js";
 

@@ -7,7 +7,7 @@ import { focusInput } from "@intentic/ui/inline-rename";
 import { clickIntent, useMultiSelect } from "../../../lib/multiSelect";
 import { TERMINAL } from "../../../workbench/commands/categories";
 import { commandShortcut, registerCommand, tipWithShortcut } from "../../../workbench/commands/useCommands";
-import { KINDS, setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../terminalMeta";
+import { KINDS, setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../../../models/terminal/terminalMeta";
 import type { useTerminalFloating } from "../terminalFloating";
 import { inactiveTerminals } from "../terminalSweep";
 import type { TerminalTabs } from "../useTerminal";

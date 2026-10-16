@@ -1,6 +1,6 @@
-import { readFile } from "node:fs/promises";
 import { execBounded } from "@intentic/base/process";
-import { WSL_SYSTEM_DISTROS } from "@intentic/sandbox-contract";
+import { readTextIfExists } from "@intentic/base/fs";
+import { WSL_SYSTEM_DISTROS } from "@intentic/sandbox-contract/schemas/hosts";
 
 // Whether this agent is running inside a WSL distro rather than on the machine itself, and which distro. WSL hands a
 // distro the Windows computer's name, so `hostname` alone makes Windows and every distro on it look like one machine
@@ -46,7 +46,7 @@ const nameFrom = (osRelease: string | undefined): string => {
     return line === undefined ? "" : line.slice("NAME=".length).trim().replaceAll(/^"|"$/g, "");
 };
 
-const readable = (path: string): Promise<string | undefined> => readFile(path, "utf8").catch(() => undefined);
+
 
 // Asking WSL what it calls this distro. Short deadline and every failure swallowed: interop can be off, wslpath can
 // be absent, and neither is a reason for a report to fail — the fallbacks below answer instead.
@@ -57,14 +57,14 @@ const wslRoot = async (): Promise<string | undefined> =>
 // One reading per report. Two small reads on Linux, nothing anywhere else since neither path exists there, and the
 // one spawn only where the kernel has already said WSL — a native Linux box never pays for it.
 export const wslEnvironment = async (): Promise<{ readonly distro: string } | undefined> => {
-    const [procVersion, osRelease] = await Promise.all([readable("/proc/version"), readable("/etc/os-release")]);
+    const [procVersion, osRelease] = await Promise.all([readTextIfExists("/proc/version"), readTextIfExists("/etc/os-release")]);
     const root = WSL_KERNEL.test(procVersion ?? "") ? await wslRoot() : undefined;
     return wslFrom(procVersion, process.env["WSL_DISTRO_NAME"], osRelease, root);
 };
 
 // This distro's registration name, or undefined outside WSL or where WSL will not say it: a guess would be refused by wsl.exe.
 export const registeredDistro = async (): Promise<string | undefined> => {
-    if (!WSL_KERNEL.test((await readable("/proc/version")) ?? "")) {
+    if (!WSL_KERNEL.test((await readTextIfExists("/proc/version")) ?? "")) {
         return undefined;
     }
     return registeredNameFrom(process.env["WSL_DISTRO_NAME"], await wslRoot());

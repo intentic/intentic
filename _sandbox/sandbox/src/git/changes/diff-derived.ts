@@ -1,5 +1,6 @@
 import { basename } from "node:path";
-import { type DerivedSide, diffContract, type DiffSourceQuery } from "@intentic/sandbox-contract";
+import type { DerivedSide, DiffSourceQuery } from "@intentic/sandbox-contract/schemas/diff";
+import { diffContract } from "@intentic/sandbox-contract/contracts/diff.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../../composition.js";
 import type { OrpcContext } from "../../app-env.js";

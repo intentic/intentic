@@ -16,17 +16,13 @@ import { refreshClaudeSdk } from "../../engines/claude-sdk.js";
 import { spawnAs } from "../../workload/workload-class.js";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import {
-    type AgentEvent,
-    type RequestDocument,
-    DEFAULT_SAFETY_POLICY,
-    documentOf,
-    isPlanDocumentPath,
-    type PermissionMode,
-    sendableEffort,
-    sendableThinking,
-    type UsageWindow,
-} from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { RequestDocument } from "@intentic/sandbox-contract/events/requests";
+import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
+import { documentOf, isPlanDocumentPath } from "@intentic/sandbox-contract/text/documents";
+import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
+import { sendableEffort, sendableThinking } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { join, normalize } from "node:path";
 import { claudeStatePath } from "../../sessions/session-store.js";
 import { daemonMountNs, handoffDirOf, type IsolationAnchor, ownWorktree, TMUX_NS_ENV } from "../../conversations/worktrees/isolation.js";
@@ -72,15 +68,15 @@ import { settingsHookChangeHooks } from "./harness/settings-hook-gate.js";
 import { checklistSeedOf } from "./task-store.js";
 import { carriedCostOf } from "./carried-cost.js";
 import { promptInputOf, sdkSystemPrompt, terminalMounted } from "../prompt/system-prompt.js";
-import { storedPromptTitle } from "../prompt/turn-preamble.js";
 import { noteChildWork } from "../subagents/child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
-import { ASK_TOOL_NAMES } from "../tools/question-answers.js";
+import { ASK_TOOL_NAMES } from "../../sessions/vocabulary/question-answers.js";
 import { uiServer } from "../pages/ui-server.js";
 import { PAGE_TOOL_NAMES } from "../pages/page-names.js";
 import { McpAppHost } from "../pages/mcp-apps.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import { CLAUDE_INSTRUCTION_FILES } from "../../runtimes/claude/claude-builtins.js";
+import { storedPromptTitle } from "../../sessions/vocabulary/prompt-envelope.js";
 
 // The request the Claude Code loop runs: it spends a stored account's token, a routed endpoint, the trial, or the
 // container's own credential.

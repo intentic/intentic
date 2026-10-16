@@ -1,9 +1,14 @@
-import { type PersonalDataClass, PersonalDataClassSchema, type PrivacyKnownSource, type PrivacyKnownValue } from "@intentic/sandbox-contract";
+import {
+    type PersonalDataClass,
+    PersonalDataClassSchema,
+    type PrivacyKnownSource,
+    type PrivacyKnownValue,
+} from "@intentic/sandbox-contract/schemas/privacy";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import type { JsonFile } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
-import { personalAlone } from "./detect/standalone.js";
+import { personalAlone } from "@intentic/privacy-detect/standalone";
 import { createKnownMatcher, type KnownMatcher, type Spelling, spellingKey } from "./known-matcher.js";
 import { TOKEN_LABEL, tokenKey, tokenOf } from "./tokens.js";
 
@@ -297,7 +302,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
                 return built.matcher;
             }
             // A value the owner taught is matched whatever it is; one the detectors found, only while it would still be
-            // personal data standing alone (detect/standalone.ts).
+            // personal data standing alone (@intentic/privacy-detect standalone.ts).
             const values = [...byValue.values()]
                 .filter((entry) => entry.value.length >= MIN_MATCHED)
                 .filter((entry) => entry.source !== undefined || personalAlone(entry.value, entry.class))

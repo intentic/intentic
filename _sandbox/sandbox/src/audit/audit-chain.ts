@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import type { AuditRecord, AuditVerify } from "@intentic/sandbox-contract";
+import type { AuditRecord, AuditVerify } from "@intentic/sandbox-contract/schemas/audit";
 import { z } from "zod";
+import { parseJsonWith } from "@intentic/base/json";
 
 // The hash chain behind the audit trail, kept free of files so it can be checked line by line by anyone holding an
 // export. A record's hash covers its canonical JSON (keys sorted at every depth, `hash` itself left out), and that JSON
@@ -58,14 +59,13 @@ const LinkSchema = z.looseObject({
 });
 
 const linkOf = (line: string): { readonly link: z.infer<typeof LinkSchema>; readonly json: JsonObject } | undefined => {
-    try {
-        const json = z.record(z.string(), z.json()).parse(JSON.parse(line));
-        const link = LinkSchema.safeParse(json);
-        return link.success ? { link: link.data, json } : undefined;
-    } catch {
-        // allow(silent-catch): an unparseable line is exactly what the verifier reports as `unreadable`
+    // An unparseable line is exactly what the verifier reports as `unreadable`.
+    const json = parseJsonWith(line, z.record(z.string(), z.json()));
+    if (json === undefined) {
         return undefined;
     }
+    const link = LinkSchema.safeParse(json);
+    return link.success ? { link: link.data, json } : undefined;
 };
 
 type Broken = NonNullable<AuditVerify["broken"]>;

@@ -1,9 +1,9 @@
 // What the Environment card is allowed to offer follows from the base this container was built on, and nothing else:
 // a checkout-built base gets the rebuild-from-source offer, every published or pinned one must not (an update is that
 // sandbox's update, and offering a rebuild from a checkout it has none of would be a dead button).
-import { DEV_SANDBOX_IMAGE } from "@intentic/sandbox-contract";
+import { DEV_SANDBOX_IMAGE } from "@intentic/sandbox-contract/policy/overlay-lint";
 import { containerFacts } from "./environment.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 
 const facts = (sandbox: Partial<(typeof testConfig)["sandbox"]>) => containerFacts({ ...testConfig.sandbox, ...sandbox });
 

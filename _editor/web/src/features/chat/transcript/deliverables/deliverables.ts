@@ -1,5 +1,6 @@
-import { type DeliverableKind, deliverableKindOf, type TranscriptTool } from "@intentic/sandbox-contract";
-import type { ChatMessage, ChatTurn } from "../transcript";
+import { type DeliverableKind, deliverableKindOf } from "@intentic/sandbox-contract/text/documents";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import type { ChatMessage, ChatTurn } from "../../../../models/conversations/transcript/transcript";
 
 // The documents a turn made or changed that a person opens rather than reads as code (a Word file, a deck, a sheet, a
 // PDF, a web page), for the row under its answer. Read off the calls' own records, so a live chat and a reopened one

@@ -1,4 +1,4 @@
-import type { FieldNotesStatus } from "@intentic/sandbox-contract";
+import type { FieldNotesStatus } from "@intentic/sandbox-contract/schemas/settings";
 import { computed, type ComputedRef } from "vue";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";

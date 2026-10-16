@@ -1,4 +1,4 @@
-import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
+import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
 import type { Logger } from "pino";
 import { type StarterReadiness, waitForStarter } from "../system/boot/prewarm.js";
 import { answers } from "../ports/port-probe.js";

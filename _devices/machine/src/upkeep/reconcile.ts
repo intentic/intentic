@@ -1,9 +1,9 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
-import { writeFileAtomic } from "@intentic/base/fs";
+import { readJsonIfExists, writeFileAtomic } from "@intentic/base/fs";
 import { claimPidFile, homeDir, type Log, releasePidFile } from "@intentic/local-agent";
-import { type DeviceUpkeep, DeviceUpkeepSchema, UPKEEP_SKIPPED_SHOWN } from "@intentic/sandbox-contract";
+import { type DeviceUpkeep, DeviceUpkeepSchema, UPKEEP_SKIPPED_SHOWN } from "@intentic/sandbox-contract/schemas/hosts";
 import { baseDir } from "../config.js";
 import { type Rounds, startRounds } from "../device/sandbox-rounds/ic-rounds.js";
 import { MACHINE_VERSION } from "../version.js";
@@ -120,13 +120,13 @@ export const reconcile = async (
     const items: UpkeepItem[] = [];
     for (const entry of entries) {
         const line = { id: entry.id, kind: entry.kind, action: entry.action };
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one entry at a time: two may touch the same folder
+        // one entry at a time: two may touch the same folder
         if (entry.once === true && (await done(entry, context, fix))) {
             continue;
         }
         let found;
         try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             found = await entry.find(context);
         } catch (error) {
             items.push({ ...line, what: entry.id, outcome: "skipped", why: `could not look: ${errorMessage(error)}` });
@@ -142,7 +142,7 @@ export const reconcile = async (
                 left = true;
             } else {
                 try {
-                    // oxlint-disable-next-line eslint/no-await-in-loop -- in order, as found
+                    // in order, as found
                     await finding.act();
                     items.push({ ...line, what: finding.what, outcome: "fixed" });
                 } catch (error) {
@@ -152,7 +152,7 @@ export const reconcile = async (
             }
         }
         if (fix && entry.once === true && !left) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             await markDone(entry, context);
         }
     }
@@ -212,20 +212,9 @@ export const runUpkeep = async (options: UpkeepOptions): Promise<UpkeepRun | { r
 // What the device's facts carry of the last pass (contract: DeviceUpkeepSchema): its counts and the first skipped lines.
 // Undefined before the first pass, or for a file this build cannot read.
 export const readUpkeepSummary = async (base: string = baseDir): Promise<DeviceUpkeep | undefined> => {
-    // allow(silent-catch): no file yet is no pass yet, which the facts leave out
-    const text = await readFile(upkeepPathOf(base), "utf8").catch(() => undefined);
-    if (text === undefined) {
-        return undefined;
-    }
-    let raw: unknown;
-    try {
-        raw = JSON.parse(text);
-    } catch {
-        // allow(silent-catch): a torn file is no reading; the next pass writes it whole
-        return undefined;
-    }
-    const parsed = DeviceUpkeepSchema.safeParse(raw);
-    return parsed.success ? { ...parsed.data, skipped: parsed.data.skipped.slice(0, UPKEEP_SKIPPED_SHOWN) } : undefined;
+    // No file yet is no pass yet, which the facts leave out; a torn one is no reading, and the next pass writes it whole.
+    const parsed = await readJsonIfExists(upkeepPathOf(base), DeviceUpkeepSchema);
+    return parsed === undefined ? undefined : { ...parsed, skipped: parsed.skipped.slice(0, UPKEEP_SKIPPED_SHOWN) };
 };
 
 // The resident's clock: a pass a minute after start, then every six hours, in every environment.

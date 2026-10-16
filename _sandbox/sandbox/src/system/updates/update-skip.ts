@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { isNewer } from "@intentic/sandbox-contract";
+import { isNewer } from "@intentic/sandbox-contract/state/versions";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { openDocument } from "../../store/open-document.js";

@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import type { AgentTurn, RepoBase, TurnNote } from "@intentic/sandbox-contract";
+import type { AgentTurn, RepoBase } from "@intentic/sandbox-contract/schemas/agent";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { landTargetOf } from "../../conversations/land/land-target.js";
 import { compactedSinceLastTurn, type Composition, isIsolated, type PersistedAgent, worktreeOf } from "../../conversations/registry/agents-store.js";
 import type { ConversationWorktree } from "../../conversations/worktrees/worktrees.js";
@@ -102,7 +103,7 @@ const uncomposable = async (root: string, live: readonly string[]): Promise<{ un
     const unreadable: string[] = [];
     for (const repo of live) {
         try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one short read per nested repo, a handful at most
+            // one short read per nested repo, a handful at most
             if ((await headSha(join(root, repo))) === undefined) {
                 unborn.push(repo);
             }

@@ -1,4 +1,4 @@
-import { type ExitPoint, TOR_EXIT_COUNTRIES, VPNGATE_EXIT_COUNTRIES } from "@intentic/sandbox-contract";
+import { type ExitPoint, TOR_EXIT_COUNTRIES, VPNGATE_EXIT_COUNTRIES } from "@intentic/sandbox-contract/schemas/exit";
 
 // What a country code means here: a name to render, a timezone/locale to dress a browser in, and a baked per-provider
 // fallback list. Names and locale come from ICU (ships with Node); no hand-written tables for either.

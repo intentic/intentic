@@ -1,15 +1,15 @@
-import type { AgentOrigin } from "@intentic/sandbox-contract";
+import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
 import { t } from "@intentic/ui/i18n";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { computed, type ComputedRef } from "vue";
-import { useAgents } from "../../agents/fleet/useAgents";
-import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
-import { type FleetLane, laneOf, NO_ATTENTION } from "../../agents/fleet/agentStatus";
-import { rosterHeard } from "../../agents/fleet/useAgents-registry";
-import type { Conversation } from "../session/conversation";
-import { draftPreview } from "../drafts/draftPreview";
-import { useChat } from "../run/useChat";
-import { standingOf, untouchedDraft } from "./tabFacts";
+import { useAgents } from "../../../models/fleet/useAgents";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
+import { type FleetLane, laneOf, NO_ATTENTION } from "../../../models/agent-status/agentStatus-lanes";
+import { rosterHeard } from "../../../models/fleet/useAgents-registry";
+import type { Conversation } from "../../../models/conversations/session/conversation";
+import { draftPreview } from "../../../models/conversations/drafts/draftPreview";
+import { useChat } from "../../../models/conversations/run/useChat";
+import { standingOf, untouchedDraft } from "../../../models/conversations/tabs/tabFacts";
 import { twinsOf } from "./titleTwins";
 
 // Facts the open-chat list and header both need, kept as projections rather than component state, so the two

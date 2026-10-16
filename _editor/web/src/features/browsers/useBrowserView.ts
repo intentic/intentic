@@ -2,11 +2,11 @@ import { errorMessage } from "@intentic/base/errors";
 import { t } from "@intentic/ui/i18n";
 import { onScopeDispose, ref, type Ref, watch } from "vue";
 import { z } from "zod";
-import { keyIntent, type BrowserCommand, type KeyFrame } from "./keyIntent";
-import { pointerFrame, type PointerAction } from "./pointerFrame";
-import { selectionCopy } from "./selectionCopy";
-import { type ScreencastMessage, useScreencast } from "./useScreencast";
-import { socketUrl as wsSocketUrl } from "../sandbox/session/wsTicket";
+import { keyIntent, type BrowserCommand, type KeyFrame } from "../../models/browsers/keyIntent";
+import { pointerFrame, type PointerAction } from "../../models/browsers/pointerFrame";
+import { selectionCopy } from "../../models/browsers/selectionCopy";
+import { type ScreencastMessage, useScreencast } from "../../models/browsers/useScreencast";
+import { socketUrl as wsSocketUrl } from "../../client/sandbox/streams/wsTicket";
 
 // One live view of the agent's browser over /system/browser-view, with clicks/keys going back. `ready` picks video
 // (H.264 of the page's viewport off the browser's own X display into a canvas, with a sharp still laid over it once

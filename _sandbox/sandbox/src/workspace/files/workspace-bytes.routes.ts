@@ -15,10 +15,11 @@ import { MAX_UPLOAD_BYTES, UploadTooLargeError } from "./workspace-files-upload.
 import { isRendition, thumbnailable, workspaceThumbnail } from "./workspace-thumbnail.js";
 import { insideArchive, scopedTarget } from "../layout/workspace-scope.js";
 import { fenceOpens, refuseFenced } from "../layout/workspace-fence.js";
-import type { Fence } from "@intentic/sandbox-contract";
+import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
 import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
 import type { Caller } from "../../auth/auth.js";
 import { callerEditFence, callerFence } from "../../areas/area-scope.js";
+import { defineRawRoutes } from "../../http/raw-route-server.js";
 
 // Byte routes that stay off oRPC because their bodies are streamed: raw file read, ranged media read, and file/diff/tar
 // uploads. Registered before the oRPC catch-all, like /health.
@@ -90,7 +91,7 @@ const uploadTarget = async (
     return { target: resolved.path };
 };
 
-export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
+const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
     // GET /workspace/raw: raw bytes for any file under /work, typed by extension; the text route utf8-decodes and would
     // corrupt these. Same guard order as workspace.file: 400/404/413.
     raw: async (c: Context<AppEnv>): Promise<Response> => {
@@ -339,4 +340,19 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
         services.history.notifyUserWrite();
         return c.json({ ok: true });
     },
+});
+
+// The workspace's byte routes: raw file read, the ranged media read a <video> talks to, the ZIP download of a selection, and the three upload doors.
+// Off oRPC since their bodies are streamed bytes.
+export const workspaceBytesRawRoutes = defineRawRoutes((services: WorkspaceBytesRoutesDeps) => {
+    const workspaceBytes = createWorkspaceBytesRoutes(services);
+    return {
+        "GET /workspace/raw": workspaceBytes.raw,
+        "GET /workspace/thumb": workspaceBytes.thumb,
+        "GET /workspace/media": workspaceBytes.media,
+        "GET /workspace/download": workspaceBytes.download,
+        "POST /workspace/upload": workspaceBytes.upload,
+        "POST /workspace/upload-diff": workspaceBytes.uploadDiff,
+        "POST /workspace/upload-archive": workspaceBytes.uploadArchive,
+    };
 });

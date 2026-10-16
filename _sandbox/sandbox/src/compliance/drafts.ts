@@ -5,8 +5,8 @@ import type {
     DataFlow,
     Measure,
     MeasureCategory,
-    RetentionSettings,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/compliance";
+import type { RetentionSettings } from "@intentic/sandbox-contract/schemas/data-protection";
 import { type Words, wordsFor } from "./compliance-text.js";
 import type { ComplianceFacts } from "./facts.js";
 

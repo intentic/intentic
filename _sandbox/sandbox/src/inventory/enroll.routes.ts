@@ -1,4 +1,6 @@
-import { CONNECT_TOKEN_HEADER, type EnrollCodeAnswer, EnrollCodeRequestSchema, type EnrollHostInput, EnrollHostInputSchema } from "@intentic/sandbox-contract";
+import { CONNECT_TOKEN_HEADER } from "@intentic/sandbox-contract/protocol/headers";
+import { type EnrollCodeAnswer, EnrollCodeRequestSchema } from "@intentic/sandbox-contract/schemas/short-codes";
+import { type EnrollHostInput, EnrollHostInputSchema } from "@intentic/sandbox-contract/schemas/inventory";
 import { hostSshIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { ManagedRegionError } from "@intentic/scaffold";
 import { ORPCError } from "@orpc/server";
@@ -9,6 +11,7 @@ import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { ownDomainZone } from "../peers/redeem-codes.js";
 import { enrollHost } from "./enroll-host.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // POST /enroll. Deploy-target enrollment from the connect-host script (curl, not a browser): authenticated by
 // the connect token alone (a door in the contract's RAW_ROUTES), so it self-registers a host without a
@@ -104,3 +107,9 @@ export const createEnrollCodeRoute =
         const answer: EnrollCodeAnswer = { code, expiresIn };
         return c.json(answer);
     };
+
+// Deploy-target enrollment: the connect token, or the single-use code the owner's command carries instead.
+export const enrollRawRoutes = defineRawRoutes((services: Services) => ({
+    "POST /enroll": createEnrollRoute(services),
+    "POST /system/enroll/code": createEnrollCodeRoute(services),
+}));

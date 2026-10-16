@@ -4,7 +4,8 @@ import "@intentic/testing/dom";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { AddCapabilityInput } from "@intentic/capability-catalog";
-import { VAULTED, type CapabilitySummary } from "@intentic/sandbox-contract";
+import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
 
@@ -16,7 +17,7 @@ const replace = jest.fn();
 jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
     useRoute: () => ({ params: { entry: `vpn` }, query }) as never,
-    // `resolve` as well as `push`: a row's menu carries the address of what it opens (menuLink.ts).
+    // `resolve` as well as `push`: a row's menu carries the address of what it opens.
     useRouter: () => ({ push: jest.fn(), replace, resolve: (to: string) => ({ href: to }) }) as never,
 }));
 
@@ -32,7 +33,7 @@ const office = (): CapabilitySummary => ({
 });
 
 const add = jest.fn<(input: AddCapabilityInput) => Promise<void>>(async () => {});
-jest.mock(`./connect/useCapabilities`, () => ({
+jest.mock(`../../models/capabilities/useCapabilities`, () => ({
     useCapabilities: () => ({
         recommendationFor: () => undefined,
         capabilities,
@@ -49,11 +50,11 @@ jest.mock(`./connect/useCapabilities`, () => ({
     readRemoteRefs: jest.fn(async () => ({ refs: [] })),
     probeCapability: jest.fn(),
 }));
-jest.mock(`../extensions/useExtensions`, () => ({
+jest.mock(`../../models/extensions/useExtensions`, () => ({
     useExtensions: () => ({ contributionOf: () => undefined, enabled: ref([]), extensions: ref([]), settled: ref(true) }),
 }));
 jest.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
-jest.mock(`../terminal/useBackgroundProcesses`, () => ({
+jest.mock(`../../models/terminal/useBackgroundProcesses`, () => ({
     useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: jest.fn(), stop: jest.fn() }),
     viewProcessLogs: jest.fn(),
 }));
@@ -61,7 +62,7 @@ jest.mock(`../composables/sandbox/useHostConnect`, () => ({
     useHostConnect: () => ({ hostFor: () => undefined, revoke: jest.fn(), refresh: jest.fn(), start: jest.fn(), stop: jest.fn() }),
 }));
 // LiveLinkRows opens as well as lists, so `error` must be present or the render throws.
-jest.mock(`../sandbox/devices/useLiveLinks`, () => ({
+jest.mock(`../../models/sandbox/devices/useLiveLinks`, () => ({
     importForticlient: jest.fn(),
     useLiveLinks: () => ({ links: ref([]), error: ref(undefined), open: jest.fn(), close: jest.fn() }),
 }));

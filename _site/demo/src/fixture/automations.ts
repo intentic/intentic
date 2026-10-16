@@ -1,4 +1,11 @@
-import type { Automation, AutomationApproval, AutomationCatalog, AutomationSummary, WatchCheckResult, WatchSource } from "@intentic/sandbox-contract";
+import type {
+    Automation,
+    AutomationApproval,
+    AutomationCatalog,
+    AutomationSummary,
+    WatchCheckResult,
+    WatchSource,
+} from "@intentic/sandbox-contract/schemas/automations";
 import { LATENCY_AGENT_ID } from "./fleet";
 
 // Automations acme-shop runs unattended: one of each trigger kind (schedule, once, listener, workspace, event) so the

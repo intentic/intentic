@@ -17,12 +17,12 @@ import {
 import { activeLocale, type Locale, LOCALE_CODES, LOCALES, setLocale, useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
-import { useToolCalls } from "../chat/tools/useToolCalls";
-import { showLiveMetrics } from "../agents/metrics/liveMetrics";
+import { useToolCalls } from "../../models/conversations/tools/useToolCalls";
+import { showLiveMetrics } from "../../models/sandbox/liveMetrics";
 import { type DiffOpen, useLayout } from "../../workbench/window/useLayout";
-import { useChangeGrouping } from "../workspace/changes/useChangeGrouping";
-import { useChangeWeight } from "../workspace/changes/changeWeight";
-import { useFileNesting } from "../workspace/explorer/useFileNesting";
+import { useChangeGrouping } from "../../models/workspace/changes/useChangeGrouping";
+import { useChangeWeight } from "../../models/workspace/changes/changeWeight";
+import { useFileNesting } from "../../models/workspace/tree/useFileNesting";
 import { useIconRailSize } from "../../workbench/window/useIconRailSize";
 import { useSkin } from "../../skins/useSkin";
 import { WALLPAPERS, useWallpaper } from "../../skins/useWallpaper";

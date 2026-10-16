@@ -1,10 +1,10 @@
 import { fieldNotesPrompt } from "@intentic/agent-context/field-notes-prompt";
 import { FIELD_NOTES_FILE, HISTORY_ROOT } from "@intentic/constants";
 import { CHORES, choreAutomationPrompt } from "@intentic/sandbox-contract/chores";
-import { type AutomationCatalog, type AutomationTemplate, TriggerSchema, type TriggerSource } from "@intentic/sandbox-contract";
+import { type AutomationCatalog, type AutomationTemplate, TriggerSchema, type TriggerSource } from "@intentic/sandbox-contract/schemas/automations";
 import { type AutomationTemplateContribution, extensionIdOf, type ListenerContribution } from "@intentic/extension-manifest";
-import { installedExtensions } from "../extensions/installed-extensions.js";
-import type { ExtensionHost, InstalledExtension } from "../extensions/installed-extensions.js";
+import { installedExtensions } from "../capabilities/extension-inventory/installed-extensions.js";
+import type { ExtensionHost, InstalledExtension } from "../capabilities/extension-inventory/installed-extensions.js";
 import { conversationsRoot } from "../store/conversation-units.js";
 
 // Trigger catalogue for what can wake an agent: sources and templates the composer offers and `upsert` validates

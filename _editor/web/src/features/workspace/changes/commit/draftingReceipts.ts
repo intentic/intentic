@@ -1,6 +1,6 @@
 import { computed, watch } from "vue";
-import type { LandedMessageDraft } from "@intentic/sandbox-contract";
-import { useAgents } from "../../../agents/fleet/useAgents";
+import type { LandedMessageDraft } from "@intentic/sandbox-contract/schemas/agents";
+import { useAgents } from "../../../../models/fleet/useAgents";
 import { useNotifications } from "../../../../workbench/notifications/notifications";
 import { commitMessageOf } from "../changeOrigins";
 import { fillCommitMessage, namedAfter } from "./commitMessage";

@@ -1,4 +1,5 @@
-import type { AgentCapabilities, AgentProvider } from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../../composition.js";
 import { services } from "../../../harness/route-services.testing.js";
 import { contextShortfall, declaredWindow } from "./context-budget.js";

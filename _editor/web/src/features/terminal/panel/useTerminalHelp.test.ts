@@ -1,6 +1,6 @@
 import "@intentic/testing/dom";
 import { type EffectScope, effectScope, nextTick, ref } from "vue";
-import type { TerminalSession } from "../terminalsQuery";
+import type { TerminalSession } from "../../../models/terminal/terminalsQuery";
 import { useTerminalHelp } from "./useTerminalHelp";
 
 // Pins the handover ask: the active tab shows its own session's ask, a reply carries the trimmed note only when there

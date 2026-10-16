@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { STATE_DIR } from "@intentic/constants";
 import { defaultGit, gitInit, type GitRunner } from "@intentic/base/git";
-import { noIsolation } from "../../testing.js";
+import { noIsolation } from "./isolation.testing.js";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { repoGitDir } from "../../workspace/layout/git-layout.js";
 import { createLogger } from "../../logger.js";

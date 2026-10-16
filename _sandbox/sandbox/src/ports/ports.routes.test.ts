@@ -1,9 +1,11 @@
 import { rmSync } from "node:fs";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { portsContract, portUrl } from "@intentic/sandbox-contract";
+import { portsContract } from "@intentic/sandbox-contract/contracts/ports.contract";
+import { portUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import { portSlotsFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { workspacePaths } from "../workspace/workspace.js";
-import { memoryFleet, testConfig } from "../testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
+import { testConfig } from "../env.config.testing.js";
 import { errorCode, routesClient } from "../harness/route-client.testing.js";
 import { fakeServiceProcesses } from "../processes/processes-slice.testing.js";
 import { handJobOver, openBackgroundJob, portJobOf } from "../agent/tools/jobs/background-jobs.js";

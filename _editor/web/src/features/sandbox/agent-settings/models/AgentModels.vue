@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { AUTO_MODEL_GUIDANCE_MAX, MODEL_ROLE_IDS, type ModelPin, type ModelRole, type SetupSettings } from "@intentic/sandbox-contract";
+import { AUTO_MODEL_GUIDANCE_MAX } from "@intentic/sandbox-contract/schemas/settings";
+import { MODEL_ROLE_IDS, type ModelRole } from "@intentic/sandbox-contract/models/model-roles";
+import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import type { SetupSettings } from "@intentic/sandbox-contract/models/model-setups";
 import { Button, MarkdownDocument, Modal, Notice, ResponsiveOverlay, ui } from "@intentic/ui";
 import { computed, nextTick, provide, ref, shallowRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useTrimmedDraft } from "../../../../lib/useDraft";
-import { readConnectedCatalogs, roleSources } from "../../../chat/accounts/roleModel";
-import { useSandboxSettings } from "../../overview/useSandboxSettings";
+import { readConnectedCatalogs, roleSources } from "../../../../models/providers/roleModel";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import JobChip from "./JobChip.vue";
 import { JOB_STATE, type JobNote } from "./jobState";
 import type { PinnedList } from "./modelPinList";

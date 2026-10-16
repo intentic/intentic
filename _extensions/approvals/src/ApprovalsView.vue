@@ -1,12 +1,7 @@
 <script setup lang="ts">
-import {
-    type ActionApprovalSummary,
-    type ApprovalSummary,
-    type AutomationApproval,
-    type HookRequest,
-    type PostApprovalSummary,
-    roleAtLeast,
-} from "@intentic/sandbox-contract";
+import type { ActionApprovalSummary, ApprovalSummary, HookRequest, PostApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
+import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
+import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import {
     appLink,
     BrandMark,

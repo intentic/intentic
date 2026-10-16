@@ -3,7 +3,7 @@ import { mkdir, readdir, readlink, rename, rm, writeFile } from "node:fs/promise
 import { hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import type { BrowserConfig, Capability } from "@intentic/sandbox-contract";
+import type { BrowserConfig, Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { statePath } from "../../state-paths.js";
 

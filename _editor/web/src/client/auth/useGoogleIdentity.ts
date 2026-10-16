@@ -4,7 +4,7 @@ import { ref } from "vue";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import { desktopVersion } from "../../app/environments/desktop";
 import { environment } from "../../app/environments/environment";
-import { removeStoredValue, storedValue, storeValue } from "../../lib/browserStorage";
+import { removeStoredValue, storedValue, storeValue } from "../../app/storage/browserStorage";
 import { idTokenClaims } from "./googleToken";
 
 // Slim slice of Google Identity Services used to mint an ID token in the browser: a Google-signed JWT (audience =

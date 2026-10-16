@@ -1,7 +1,8 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExitConfig, IntenticLine } from "@intentic/sandbox-contract";
+import type { ExitConfig } from "@intentic/sandbox-contract/schemas/exit";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 
 // A start that can't prove its country is taken back down, and its error is the only place that says whether that
 // worked: a failed stop must not read as done, nor erase the reading of where the exit still comes out.

@@ -1,6 +1,6 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import { type Fence, fenceAllows, isSandboxPath } from "@intentic/sandbox-contract";
+import { type Fence, fenceAllows, isSandboxPath } from "@intentic/sandbox-contract/policy/fence-paths";
 import { EDIT_TOOL_NAMES, editedPath } from "../rules/edit-tools.js";
 import type { TurnPersona } from "./personas.js";
 

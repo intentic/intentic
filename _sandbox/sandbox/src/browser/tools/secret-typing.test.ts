@@ -1,4 +1,4 @@
-import type { KeyringTypeResult } from "@intentic/sandbox-contract";
+import type { KeyringTypeResult } from "@intentic/sandbox-contract/schemas/keyring";
 import type { DesktopTypist, FocusedDesktopWindow } from "../../desktop/desktop-secret-typing.js";
 import type { DevicePointer, KeyringLink } from "../../secrets/device/keyring-link.js";
 import { pointerOf } from "../../secrets/device/keyring.testing.js";

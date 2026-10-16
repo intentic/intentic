@@ -1,5 +1,5 @@
 import type { Page } from "playwright";
-import type { OpenBrowserResult } from "@intentic/sandbox-contract";
+import type { OpenBrowserResult } from "@intentic/sandbox-contract/schemas/terminal";
 import { chromiumWindowArgs, ensureDisplay, releaseDisplay } from "../cast/display.js";
 import { adoptBrowserSession, browserSessionBlankPage, browserSessionNewTab, browserSessionRunning } from "./browser-sessions.js";
 import { browserFingerprint } from "./fingerprint.js";

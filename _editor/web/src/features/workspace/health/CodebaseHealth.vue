@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { Card, EmptyState, formatCount, Meter, Notice, Picker, SegmentedControl, SkeletonSnapshot, ui, useAgentRunPick, vSkeletonSource } from "@intentic/ui";
 import { computed, ref } from "vue";
-import { shellModelPicking } from "../../chat/models/shellModelPicking";
+import { shellModelPicking } from "../../../models/conversations/accounts/shellModelPicking";
 import RefactorAction from "./RefactorAction.vue";
 import { useCodebaseHealth } from "./useCodebaseHealth";
-import { useRepos } from "../explorer/useRepos";
-import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
+import { useRepos } from "../../../models/workspace/tree/useRepos";
+import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import { type ChurnWindow, churnWindows, hotspotRows, moduleRows, perFile } from "./codebaseHealth";
 import { useT } from "@intentic/ui/i18n";
 

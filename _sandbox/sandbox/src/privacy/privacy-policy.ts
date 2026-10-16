@@ -1,4 +1,4 @@
-import { DEFAULT_PRIVACY_SHIELD, type PrivacyShieldPolicy, PrivacyShieldPolicySchema } from "@intentic/sandbox-contract";
+import { DEFAULT_PRIVACY_SHIELD, type PrivacyShieldPolicy, PrivacyShieldPolicySchema } from "@intentic/sandbox-contract/schemas/privacy";
 import { mapValue } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";

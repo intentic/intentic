@@ -1,4 +1,4 @@
-import type { WorkspaceEvent } from "@intentic/sandbox-contract";
+import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
 
 export interface DependencyLandOrigin {
     readonly kind: "land";

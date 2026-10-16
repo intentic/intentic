@@ -2,7 +2,7 @@
 import { Button, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
-import type { Conversation } from "../../session/conversation";
+import type { Conversation } from "../../../../models/conversations/session/conversation";
 import { placeConversation } from "../pane/composerControls";
 import { useFleetAdvice } from "./fleetAdvice";
 import { autoPlacement, draftFleet, offeredMachine } from "./fleetPlacement";

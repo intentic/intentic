@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ComplianceDocumentFormat, ComplianceDocumentKind } from "@intentic/sandbox-contract";
+import type { ComplianceDocumentFormat, ComplianceDocumentKind } from "@intentic/sandbox-contract/schemas/compliance";
 import { Button, Icon, InfoHint, Notice, type NoticeModel, Row, RowGroup, RowNote, SegmentedControl, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { activeLocale, useT } from "@intentic/ui/i18n";

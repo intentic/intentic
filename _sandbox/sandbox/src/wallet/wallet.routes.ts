@@ -1,4 +1,4 @@
-import type { WalletConfig } from "@intentic/sandbox-contract";
+import type { WalletConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { atomicToUsd, usdcNetworkOf, usdToAtomic } from "@intentic/sandbox-contract/x402";
 import type { Context } from "hono";
 import { cardDeps } from "../conversations/actor/card-deps.js";
@@ -12,6 +12,7 @@ import { gatedPaidFetch } from "./payment-offer.js";
 import { relayWalletSign } from "./wallet-signer.js";
 import { spentTodayAtomic } from "./wallet-ledger.js";
 import { usdcBalance } from "./x402.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 /* Wallet routes are scoped to the agent token. */
 
@@ -20,7 +21,7 @@ const walletEntry = async (services: Services): Promise<WalletConfig | undefined
     return entry?.kind === "wallet" ? entry.config : undefined;
 };
 
-export const createWalletRoutes = (services: Services) => ({
+const createWalletRoutes = (services: Services) => ({
     status: async (c: Context<AppEnv>): Promise<Response> => {
         const config = await walletEntry(services);
         if (config === undefined) {
@@ -93,4 +94,16 @@ export const createWalletRoutes = (services: Services) => ({
         const rows = await services.walletLedger.all();
         return c.json({ payments: rows.slice(-50).toReversed() });
     },
+});
+
+// The wallet surface: `status`/`history` are reads, `fetch` is the one door money leaves through.
+// It parses the endpoint's x402 challenge, checks the owner's policy, parks non-standing spend on an approval card,
+// and has the platform sign; the key never enters this container.
+export const walletRawRoutes = defineRawRoutes((services: Services) => {
+    const walletRoutes = createWalletRoutes(services);
+    return {
+        "GET /wallet/status": walletRoutes.status,
+        "POST /wallet/fetch": walletRoutes.fetch,
+        "GET /wallet/history": walletRoutes.history,
+    };
 });

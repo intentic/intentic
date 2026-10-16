@@ -3,7 +3,8 @@
 // second — so a clean tree blinked between its answer and its waiting line for as long as the writes lasted. Only a
 // render can tell those two sentences apart.
 import "@intentic/testing/dom";
-import type { AgentSummary, GitChanges } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { GitChanges } from "@intentic/sandbox-contract/schemas/git/git";
 import { IconStub } from "@intentic/ui/testing";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
@@ -11,8 +12,8 @@ import { type App, createApp, h, nextTick } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
 import { signalConnection } from "../../../client/sandbox/useSandbox";
-import { registry } from "../../agents/fleet/useAgents-registry";
-import { changesKey } from "./useChanges";
+import { registry } from "../../../models/fleet/useAgents-registry";
+import { changesKey } from "../../../models/changes/useChanges";
 import { commitMessage, nameCommitAfter } from "./commit/commitMessage";
 import * as actualSandboxRpc from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";

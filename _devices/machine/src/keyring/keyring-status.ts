@@ -1,6 +1,7 @@
 import { KeyringUnavailable } from "@intentic/keyring";
 import type { Item } from "@intentic/local-agent";
-import { type KeyringState, localZone, wallClockIn } from "@intentic/sandbox-contract";
+import type { KeyringState } from "@intentic/sandbox-contract/schemas/keyring";
+import { localZone, wallClockIn } from "@intentic/sandbox-contract/time/zone";
 import { askpassStatus } from "./askpass.js";
 import { hardenedHere, keyringInstalled, keyringState } from "./service.js";
 

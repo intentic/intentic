@@ -3,7 +3,7 @@
 import "@intentic/testing/dom";
 import { freshImport } from "@intentic/testing/bun";
 import type { LoopbackPermission } from "./loopbackPermission";
-import { activeSandboxId } from "../../lib/activeSandbox";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
 
 // A yes belongs to the browser, a no belongs to the sandbox; swapped, either costs every future sandbox the
 // shortcut or re-prompts an already-granted permission. Stored answers matter only while Chrome is at `prompt`.

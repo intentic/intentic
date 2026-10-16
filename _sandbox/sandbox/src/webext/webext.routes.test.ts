@@ -1,4 +1,4 @@
-import { WebExtSecretAnswerSchema, type WebExtSecretRequest } from "@intentic/sandbox-contract";
+import { WebExtSecretAnswerSchema, type WebExtSecretRequest } from "@intentic/sandbox-contract/schemas/webext";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { z } from "zod";

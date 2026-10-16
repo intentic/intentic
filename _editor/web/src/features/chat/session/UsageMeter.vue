@@ -13,7 +13,7 @@ import {
     poolResetNote,
     usageDetail,
     usageTone,
-} from "./usageStatus";
+} from "../../../models/providers/usageStatus";
 import { useT } from "@intentic/ui/i18n";
 
 // Usage meter and breakdown panel, shared by the composer chip, model picker and Agent tab rows. Plan usage is

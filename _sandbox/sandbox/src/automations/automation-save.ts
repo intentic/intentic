@@ -1,4 +1,6 @@
-import { type Automation, type AutomationCatalog, cronOptions, VISITOR_CHAT_PERSONA } from "@intentic/sandbox-contract";
+import type { Automation, AutomationCatalog } from "@intentic/sandbox-contract/schemas/automations";
+import { cronOptions } from "@intentic/sandbox-contract/time/zone";
+import { VISITOR_CHAT_PERSONA } from "@intentic/sandbox-contract/schemas/personas";
 import { ORPCError } from "@orpc/server";
 import { Cron } from "croner";
 import { type DoorKind, doorChange } from "../auth/tokens/door-tokens.js";

@@ -1,6 +1,8 @@
-import { type Fence, fenceHoldsPersona, type Persona } from "@intentic/sandbox-contract";
+import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
+import { fenceHoldsPersona } from "@intentic/sandbox-contract/policy/persona-home";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { useAreas } from "../areas/useAreas";
-import { usePersonas } from "../personas/usePersonas";
+import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
 
 // Which assistants a fence hands over — the same derivation the daemon refuses on (personas/persona-reach.ts). An
 // assistant lives where it starts, and a person's areas either cover that folder or they do not; nobody picks

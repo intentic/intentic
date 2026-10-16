@@ -1,8 +1,8 @@
 // Which documents a turn lists under its answer, and in what order: what its edits wrote and what the daemon found its
 // commands wrote, a delegation's included, a file written twice kept once where it was last written, a failed edit, a
 // read and a deleted file left out, and source never counted.
-import type { TranscriptTool } from "@intentic/sandbox-contract";
-import type { ChatMessage, ChatTurn } from "../transcript";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import type { ChatMessage, ChatTurn } from "../../../../models/conversations/transcript/transcript";
 import { deliverableName, deliverablesByTurn, deliverablesOfTurn } from "./deliverables";
 
 let nextId = 0;

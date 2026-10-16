@@ -1,7 +1,8 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { errnoCode } from "@intentic/base/errors";
 import { SECRET_VALUE_MIN } from "@intentic/output-cleaners/cleaners";
-import { classifyCommand, maskCredentialMaterial } from "@intentic/sandbox-contract";
+import { classifyCommand } from "@intentic/sandbox-contract/policy/command-classes";
+import { maskCredentialMaterial } from "@intentic/sandbox-contract/policy/credential-material";
 import { type NamedSecret, SecretStoreUnreadableError, secretReference, surfaceForms } from "../../secrets/secret-registry.js";
 
 // Masks every tool's PostToolUse output, not just Bash's, closing the gap where masking depended on how a value was

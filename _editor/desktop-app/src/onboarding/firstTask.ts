@@ -1,5 +1,5 @@
 import type { LocalFirstTask, LocalOnboardingHost } from "@intentic/web/local-host";
-import { projectDirCandidates } from "@intentic/sandbox-contract";
+import { projectDirCandidates } from "@intentic/sandbox-contract/ids/project-dir";
 import { listen } from "@tauri-apps/api/event";
 import { ref } from "vue";
 import { firstTaskClear, firstTaskPickFolder, firstTaskQueue, firstTaskRead, firstTaskTakeDraft, type FirstTaskDraft } from "../desktop";

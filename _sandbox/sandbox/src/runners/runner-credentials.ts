@@ -6,7 +6,7 @@ import {
     runnerCredentialRefreshUrl,
     runnerCredentialsUrl,
     runnerTranslatorUrl,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { HarnessCredentialsResult } from "../agent/providers/harness-credentials.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 

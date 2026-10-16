@@ -10,7 +10,7 @@ import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 // Only in-repo builtins can be checked here; third-party extensions have nothing to read until installed.
 
 // The registry's runtime chain reaches useSandbox, which wants a browser at import; only the push table is read here.
-jest.mock("../../lib/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx`] }));
+jest.mock("../../app/storage/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx`] }));
 const { pushedKeys } = await import("../../lib/queryKeys");
 
 const EXTENSIONS_ROOT = join(repoRoot(import.meta.url), `_extensions`);

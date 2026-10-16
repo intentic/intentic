@@ -1,16 +1,14 @@
 import { tokensOfChars } from "@intentic/base/format";
+import { type AgentTurn, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import {
-    type AgentTurn,
-    capabilitiesOf,
     type HandedOff,
     type HandoffMode,
     type HandoffOffer,
     suggestHandoff,
     TRIM_KEEPS_RESULTS,
-    type TranscriptRow,
-    type TurnNote,
-    withRuntimeDefaults,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/providers/handoff";
+import type { TranscriptRow, TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { Services } from "../../composition.js";
 import { estimateCopy, readSessionChain, writeSessionCopy } from "../../runtimes/claude/claude-session-copy.js";
 import type { AgentExecutionContext } from "../../workload/agent-execution.js";

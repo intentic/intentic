@@ -4,7 +4,8 @@ import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { writeFileAtomic } from "@intentic/base/fs";
 import type { Log } from "@intentic/local-agent";
-import { type DeviceReport, type PortSkipReason, type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
+import type { DeviceReport, PortSkipReason } from "@intentic/sandbox-contract/schemas/devices";
+import { type PortSummary, PortsListSchema } from "@intentic/sandbox-contract/schemas/ports";
 import {
     isAttachedPairing,
     mirrorHeartbeatPath,
@@ -41,7 +42,6 @@ import {
     mutagenForwardArgs,
     ourForwardSessions,
     pauseRunningSync,
-    pauseUnreachableSync,
     type RelabelBudget,
     relabelBudget,
     retireOrphanSessions,
@@ -293,11 +293,11 @@ export const reconcileForwards = async (
             // A genuinely new port: clears any leftover session from a crashed run before the free-check.
             executor.terminate(summary.port);
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of ports; sequenced keeps the log readable
+        // a handful of ports; sequenced keeps the log readable
         if (!(await mayTake(executor, summary, holds, log))) {
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of ports, and each create dials the
+        // a handful of ports, and each create dials the
         // sandbox over this process's own transport; sequencing keeps the log readable
         await executor.create(summary);
         // Only once the forward exists: a create that failed leaves the grace served, so the next pass tries at once.
@@ -524,14 +524,14 @@ const postReports = async (
     const report = await deviceReport(mutagen);
     for (const { pairing, base } of reportable) {
         try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox at a time, like every other pass in this agent
+            // one sandbox at a time, like every other pass in this agent
             const response = await sendReport(base, pairing, report);
             // 404 means a daemon predating machine reports; that never heals, so stop asking and say so once.
             if (response.status === 404) {
                 unsupported.add(pairing.sandboxId);
                 log(`  ${pairing.sandboxId}: this sandbox is running a daemon without machine reports, its Devices view will stay empty.`);
             } else if (answeredGone(response)) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+                // ditto
                 await gone(pairing);
             } else if (!response.ok) {
                 log(`  ${pairing.sandboxId}: report not taken (${response.status})`);
@@ -627,7 +627,7 @@ const absorbUnreachablePoll = async (mutagen: string, pairing: Pairing, unreacha
 // it): the sandbox's poll above says so for the pairing that polls, and for the folders attached to that sandbox too
 // (`followSandbox`).
 const pauseIfLongUnreachable = async (mutagen: string, pairing: Pairing, unreachableForMs: number, log: Log): Promise<boolean> => {
-    if (pairing.fileSyncAutoPaused === true || !shouldAutoPauseFileSync(unreachableForMs) || !pauseUnreachableSync(mutagen, pairing)) {
+    if (pairing.fileSyncAutoPaused === true || !shouldAutoPauseFileSync(unreachableForMs) || !pauseRunningSync(mutagen, pairing)) {
         return false;
     }
     await setFileSyncAutoPaused(pairingKey(pairing), true);
@@ -734,7 +734,7 @@ export const readyToPrepare = async (
     const ready: Pairing[] = [];
     for (const pairing of setups) {
         if (isAttachedPairing(pairing) && pairing.mode === "sync" && pairing.localDir !== undefined && firstCopyAhead(pairing)) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one report per sandbox, and the folders of one wait on it
+            // one report per sandbox, and the folders of one wait on it
             const said = told.get(pairing.sandboxId) ?? (await announce(pairing));
             told.set(pairing.sandboxId, said);
             if (!said) {
@@ -881,12 +881,12 @@ const holdSyncDuringSwaps = async (
         }
         const step = swapPauseStep(pairing, holds);
         if (step === "pause" && pauseRunningSync(mutagen, pairing)) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+            // state is a single file; serial keeps the writes ordered
             await setFileSyncSwapPaused(pairingKey(pairing), true);
             say(`  ${pairingKey(pairing)}: its sandbox is being swapped on this machine; file sync is paused until the new version has held.`);
         } else if (step === "resume") {
             resumeSwapPausedSync(mutagen, pairing);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             await setFileSyncSwapPaused(pairingKey(pairing), false);
             say(`  ${pairingKey(pairing)}: its sandbox's swap is settled; file sync resumed.`);
         }
@@ -1082,7 +1082,7 @@ const runPasses = async (
             return;
         }
         // A sandbox said to be gone is asked again only hourly, and retired past the trash window.
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox at a time, as every pass here
+        // one sandbox at a time, as every pass here
         const gone = await passGone(context, pairing);
         if (gone === "skip") {
             continue;
@@ -1092,7 +1092,7 @@ const runPasses = async (
         if (gone === "pass" && !pollDue(context.tracking.unreachable.get(pairing.sandboxId), Date.now())) {
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- One sandbox at a time keeps tunnel state ordered.
+        // One sandbox at a time keeps tunnel state ordered.
         await runPairingPass(context, pairing, base);
         context.progress(`${pairingKey(pairing)}'s pass`);
     }
@@ -1100,7 +1100,7 @@ const runPasses = async (
         if (!live()) {
             return;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one folder at a time, as every pass here
+        // one folder at a time, as every pass here
         await guard(context.say, `${pairingKey(pairing)}: following its sandbox`, async () => await followSandbox(context, pairing));
     }
 };
@@ -1174,7 +1174,7 @@ interface Generation {
 
 export const runMirrorWatch = async (log: Log): Promise<void> => {
     for (;;) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one loop at a time; a stalled one is replaced, never joined
+        // one loop at a time; a stalled one is replaced, never joined
         if ((await watchGeneration(log)) === "done") {
             return;
         }
@@ -1241,11 +1241,11 @@ const watchLoop = async (log: Log, generation: Generation): Promise<void> => {
         return;
     }
     for (let tick = 0; watch.live(); tick += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- the tick loop itself, serial by definition
+        // the tick loop itself, serial by definition
         if ((await watchTick(watch, tick)) === "stop") {
             return;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+        // ditto
         await sleep(POLL_MS, { signal: generation.signal });
     }
 };

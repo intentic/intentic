@@ -1,4 +1,4 @@
-import { CLAUDE_SEED_MODELS } from "@intentic/sandbox-contract";
+import { CLAUDE_SEED_MODELS } from "@intentic/sandbox-contract/models/agent-catalog";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

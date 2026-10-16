@@ -200,7 +200,7 @@ export const createTunnelPool = (log: Log, signal?: AbortSignal) => {
             for (const [sandboxId, held] of running) {
                 if (!wanted.has(sandboxId)) {
                     running.delete(sandboxId);
-                    // oxlint-disable-next-line eslint/no-await-in-loop -- Listeners are released in order.
+                    // Listeners are released in order.
                     await held.stop();
                     log(`  sync transport for ${sandboxId} stopped: it is no longer paired`);
                 }
@@ -216,11 +216,11 @@ export const createTunnelPool = (log: Log, signal?: AbortSignal) => {
                 // regardless.
                 if (held !== undefined) {
                     running.delete(target.sandboxId);
-                    // oxlint-disable-next-line eslint/no-await-in-loop -- The old listener must release the port first.
+                    // The old listener must release the port first.
                     await held.stop();
                     log(`  sync transport for ${target.sandboxId} moving to ${target.base}`);
                 }
-                // oxlint-disable-next-line eslint/no-await-in-loop -- ditto: a bind per pairing, serialized on purpose
+                // ditto: a bind per pairing, serialized on purpose
                 const stop = await startSshTunnel(target, log);
                 if (stop !== undefined && retired()) {
                     await stop();

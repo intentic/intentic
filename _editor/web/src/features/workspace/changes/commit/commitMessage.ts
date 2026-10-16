@@ -2,7 +2,7 @@ import { sandboxRef } from "@intentic/extension-api";
 import { computed, watch, type Ref } from "vue";
 import { z } from "zod";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
-import { commitMessageKey, removeStoredValue, storedJson, storeJson } from "../../../../lib/browserStorage";
+import { commitMessageKey, removeStoredValue, storedJson, storeJson } from "../../../../app/storage/browserStorage";
 
 // The commit box's draft: one value, empty until a From-chip click fills it as a subject line; typing is
 // always untouchable, a fill may only replace its own output. Lives as a per-sandbox, localStorage-backed

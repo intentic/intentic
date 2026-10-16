@@ -3,7 +3,7 @@
      takes this slot's place rather than redrawing the screen around it. -->
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
-import { composeAgent, startAgent } from "../../fleet/agentActions";
+import { composeAgent, startAgent } from "../../../../models/fleet/agentActions";
 import type { Starter } from "../view/firstScreen";
 import TourMark from "../../../tour/TourMark.vue";
 

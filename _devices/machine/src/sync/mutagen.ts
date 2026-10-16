@@ -5,8 +5,9 @@ import { chmod, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
+import { parseJsonOr } from "@intentic/base/json";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import type { DeviceConflict, DeviceConflictChange, DeviceConflictNature } from "@intentic/sandbox-contract";
+import type { DeviceConflict, DeviceConflictChange, DeviceConflictNature } from "@intentic/sandbox-contract/schemas/devices";
 import {
     type CliLauncher,
     clearWindowsRunValue,
@@ -532,13 +533,11 @@ const listSessions = (mutagen: string, names: readonly string[]): LiveSession[] 
     // SAFETY: Mutagen's own JSON rendering of its session list (null when it holds none), and every field read off it
     // is optional in LiveSession, so a field this build does not know or one Mutagen left out reads as absent. An answer
     // that is not that JSON is no answer.
-    let sessions: LiveSession[];
-    try {
-        sessions = (JSON.parse(listed) as LiveSession[] | null) ?? [];
-    } catch {
-        // allow(silent-catch): read as Mutagen not answering, which every caller already handles
+    const parsed = parseJsonOr(listed, undefined);
+    if (parsed === undefined) {
         return undefined;
     }
+    const sessions = (parsed as LiveSession[] | null) ?? [];
     return names.length === 0 ? sessions : sessions.filter((session) => session.name !== undefined && names.includes(session.name));
 };
 
@@ -715,8 +714,6 @@ export const pauseRunningSync = (mutagen: string, pairing: Pairing): boolean => 
     const result = runProcessSync(mutagen, ["sync", "pause", ...names], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
     return result.status === 0;
 };
-
-export const pauseUnreachableSync = pauseRunningSync;
 
 // Lifts the pause a swap of the sandbox put on its file sync. Every session the pairing has: that pause paused them all.
 export const resumeSwapPausedSync = (mutagen: string, pairing: Pairing): boolean => {

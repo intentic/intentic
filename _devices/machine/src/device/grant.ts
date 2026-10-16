@@ -1,4 +1,5 @@
-import { DeviceScopesSchema, type DeviceScopes, deviceContract } from "@intentic/sandbox-contract";
+import { DeviceScopesSchema, type DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
+import { deviceContract } from "@intentic/sandbox-contract/contracts/device.contract";
 import { z } from "zod";
 
 // THE GRANT A SANDBOX PUSHES, read so that a newer sandbox cannot knock an older agent off the line. A switch this

@@ -2,7 +2,7 @@
 import { localZone, sameClock, UTC, asZone } from "@intentic/sandbox-contract/time";
 import { Notice, Row, RowGroup, RowNote } from "@intentic/ui";
 import { computed } from "vue";
-import { useSandboxSettings } from "../../overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
 // WHICH CLOCK THIS SANDBOX'S SCHEDULES ARE SET BY. Not a display preference: every time on screen is already drawn in

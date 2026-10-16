@@ -1,5 +1,6 @@
 import type { SDKCustomTool, SDKCustomToolResult } from "@cursor/sdk";
-import { maskCredentialMaterial, SECRET_REFERENCE } from "@intentic/sandbox-contract";
+import { maskCredentialMaterial } from "@intentic/sandbox-contract/policy/credential-material";
+import { SECRET_REFERENCE } from "@intentic/sandbox-contract/schemas/needs";
 import { maskDeep, type MaskTarget, maskTargets, namesCredentialMaterial, withheld } from "../../../agent/tools/agent-redaction.js";
 import { type ResolvedCommand, resolveCommandSecrets, type SecretAccess } from "../../../secrets/secret-access.js";
 

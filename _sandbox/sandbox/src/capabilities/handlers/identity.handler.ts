@@ -1,4 +1,4 @@
-import type { IdentityConfig } from "@intentic/sandbox-contract";
+import type { IdentityConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { clearSession, hasSession, moveSession } from "../../browser/sessions/session-store.js";
 import { packFragment } from "../../image/packs.js";
 import { loadedSkillFile } from "../../store/loaded-skills.js";

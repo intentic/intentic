@@ -1,9 +1,10 @@
-import type { AgentEvent, CredentialGate as GatePolicy } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { CredentialGate as GatePolicy } from "@intentic/sandbox-contract/schemas/secrets";
 import { createCredentialGate, type CredentialCheck, type CredentialGateDeps } from "./credential-gate.js";
 import type { CredentialGatesStore } from "../credential-gates.js";
 import { createCredentialGrants } from "../credential-grants.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { createHeldCards } from "../../guard/held-cards.js";
 
 // Where a turn here parks its cards: one fleet's actors.

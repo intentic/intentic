@@ -1,4 +1,6 @@
-import { type AgentCapabilities, type PrivacyShieldStatus, providerLabel, trustedInConversation } from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import { type PrivacyShieldStatus, trustedInConversation } from "@intentic/sandbox-contract/schemas/privacy";
+import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 
 // Where a conversation stands with the privacy shield before anything is sent. Said above the composer only when it is
 // already known that a turn would be turned away, so nothing here guesses from the provider alone (2026-10-08): the

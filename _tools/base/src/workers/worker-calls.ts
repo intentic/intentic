@@ -1,5 +1,6 @@
 import { extname } from "node:path";
 import { type MessagePort, Worker } from "node:worker_threads";
+import { errorMessage } from "../errors.js";
 
 // A call-and-answer channel to a worker thread: spawned on first call and after a crash, referenced only while a call is in flight.
 
@@ -134,7 +135,7 @@ export const serveCalls = <Ask extends { readonly id: number }>(port: MessagePor
         void answer(ask).then(
             (value) => post(port, { id: ask.id, ok: true, value } satisfies WorkerAnswer<never>),
             (error: unknown) =>
-                post(port, { id: ask.id, ok: false, message: error instanceof Error ? error.message : String(error) } satisfies WorkerAnswer<never>),
+                post(port, { id: ask.id, ok: false, message: errorMessage(error) } satisfies WorkerAnswer<never>),
         );
     });
 };

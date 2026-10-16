@@ -1,5 +1,7 @@
 import { PROFILE_IDS } from "@intentic/constants";
-import { GrantedRoleSchema, isProjectDirName, SANDBOX_ID } from "@intentic/sandbox-contract";
+import { GrantedRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
+import { isProjectDirName } from "@intentic/sandbox-contract/ids/project-dir";
+import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
 import { oc } from "@orpc/contract";
 import { z } from "zod";
 import { orgContract } from "./organisations.js";

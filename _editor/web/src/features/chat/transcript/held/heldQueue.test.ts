@@ -1,10 +1,11 @@
 import "@intentic/testing/dom";
-import type { ConversationQueue } from "@intentic/sandbox-contract";
+import type { ConversationQueue } from "@intentic/sandbox-contract/schemas/agent";
 import { type App, computed, createApp, defineComponent, h } from "vue";
-import { type AgentStanding, NO_ATTENTION } from "../../../agents/fleet/agentStatus";
-import { conversationView, PANE_VIEW } from "../../panel/useChat-view";
-import { Conversation } from "../../session/conversation";
-import type { ChatMessage } from "../transcript";
+import { NO_ATTENTION } from "../../../../models/agent-status/agentStatus-lanes";
+import type { AgentStanding } from "../../../../models/agent-status/agentStatus-standing";
+import { conversationView, PANE_VIEW } from "../../../../models/conversations/panel/useChat-view";
+import { Conversation } from "../../../../models/conversations/session/conversation";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import { isMemoryHold, memoryReading, useHeldQueue } from "./heldQueue";
 
 // Which row the held message's own line stands in for: the transcript leaves exactly that one out (ChatPaneTurns), so

@@ -1,4 +1,4 @@
-import type { SafetyLogEntry, SafetyPolicy } from "@intentic/sandbox-contract";
+import type { SafetyLogEntry, SafetyPolicy } from "@intentic/sandbox-contract/policy/safety-policy";
 import { useMutation } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";

@@ -1,8 +1,9 @@
-import type { AgentEvent, WalletConfig } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { WalletConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { gatedPaidFetch, type PaidFetchRequest, type PaymentGateDeps } from "./payment-offer.js";
 import type { PaymentRow, WalletLedgerStore } from "./wallet-ledger.js";
 import { parkedCards } from "../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 import { createHeldCards } from "../guard/held-cards.js";
 
 // Where a turn here parks its cards: one fleet's actors.

@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import type { AgentJob, AgentWatch } from "@intentic/sandbox-contract";
+import type { AgentJob, AgentWatch } from "@intentic/sandbox-contract/schemas/agents";
 import { formatElapsed, type IconName, ui } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import { useAgents } from "../../../agents/fleet/useAgents";
-import { portTargetId } from "../../../preview/previewModel";
+import { useAgents } from "../../../../models/fleet/useAgents";
+import { portTargetId } from "../../../../models/preview/previewModel";
 import { openPreviewBeside } from "../../../../workbench/browsers/browsersSurface";
 import { useOperations } from "../../../../workbench/operations/operations";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
-import { useChatSurface } from "../../tools/chatToolSurface";
+import { useChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
 import { portsLine, runningJobs } from "../../transcript/jobPhase";
-import { usePaneView } from "../useChat-view";
+import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 
 // What a chat whose turn is over still has going, at the foot of the transcript where a reader looks to see whether it
 // is done: the jobs the turn left (the ones it waits on, which wake it when they exit, and the servers it left running

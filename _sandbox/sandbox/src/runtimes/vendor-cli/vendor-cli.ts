@@ -1,4 +1,5 @@
-import type { EngineId, NativeProvider } from "@intentic/sandbox-contract";
+import type { EngineId } from "@intentic/sandbox-contract/schemas/engines";
+import type { NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import { engineDescriptor } from "../../engines/engine-descriptors.js";
 import { type EngineInstallOutcome, installEngine } from "../../engines/engine-install.js";
 import { engineBinary, forgetEngineResolution } from "../../engines/engine-resolve.js";

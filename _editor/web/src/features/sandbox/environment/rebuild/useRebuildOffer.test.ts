@@ -12,12 +12,12 @@ const active = ref<{ id: string; role: string; hosted: { region: string; warm: b
 jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
 const pending = ref<{ hash: string; content: string } | undefined>({ hash: `h1`, content: `RUN true` });
 const proposal = ref<{ hash: string; content: string } | undefined>(undefined);
-jest.mock(`../useEnvironment`, () => ({ useEnvironment: () => ({ pending, proposal }) }));
+jest.mock(`../../../../models/sandbox/environment/useEnvironment`, () => ({ useEnvironment: () => ({ pending, proposal }) }));
 const build = ref<HostedBuildState | undefined>(undefined);
 const rebuild = jest.fn().mockResolvedValue({ state: `building`, hash: `h1`, startedAt: `2026-10-06T12:00:00.000Z` });
 jest.mock(`../../secrets/useHostedBuild`, () => ({ useHostedBuild: () => ({ build, applied: ref(undefined), rebuild }) }));
 const fleet = ref<{ status: string }[]>([]);
-jest.mock(`../../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet }) }));
+jest.mock(`../../../../models/fleet/useAgents`, () => ({ useAgents: () => ({ fleet }) }));
 
 const { useRebuildOffer } = await import("./useRebuildOffer");
 const { forgetOperations } = await import("../../../../workbench/operations/operations");

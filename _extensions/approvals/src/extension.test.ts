@@ -1,4 +1,5 @@
-import type { ApprovalsList, AutomationApproval, HookRequest, HookRequests, PostApprovalSummary } from "@intentic/sandbox-contract";
+import type { ApprovalsList, HookRequest, HookRequests, PostApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
+import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
 import type { ExtensionContext, HostQuery, IntenticApi, ViewRegistration } from "@intentic/extension-api";
 import { waitFor } from "@intentic/testing/bun";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";

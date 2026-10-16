@@ -1,4 +1,5 @@
-import { type AgentSummary, CI_FIX_PREFIX } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { CI_FIX_PREFIX } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "../host";

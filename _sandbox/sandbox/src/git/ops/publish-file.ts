@@ -1,5 +1,5 @@
 import { defaultGit, type GitRunner } from "@intentic/base/git";
-import type { GitPublishFileResult } from "@intentic/sandbox-contract";
+import type { GitPublishFileResult } from "@intentic/sandbox-contract/schemas/git/git-history";
 import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 import { gitFailureReason, identity } from "../git.js";
 import { operationInProgress } from "./operation.js";

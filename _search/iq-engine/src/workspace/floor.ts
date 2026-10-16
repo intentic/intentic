@@ -1,5 +1,5 @@
 import { STATE_DIR } from "@intentic/constants";
-import { SEARCHABLE_STATE_PATHS, WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
+import { SEARCHABLE_STATE_PATHS, WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspace-state";
 
 // Where the index lives, root-relative, inside the denied-by-default state dir so it can never surface itself.
 export const IQ_DIR = `${STATE_DIR}/local/cache/iq`;

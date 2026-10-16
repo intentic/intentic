@@ -6,11 +6,11 @@ import { type Component, computed, createApp, h, nextTick } from "vue";
 import ChatQueue from "../../../composer/later/ChatQueue.vue";
 import { rememberMedia } from "../../../drafts/attachmentPreviews";
 import type { PendingAttachment } from "../../../drafts/useChatAttachments";
-import { Conversation } from "../../../session/conversation";
-import type { ChatMessage } from "../../../transcript/transcript";
+import { Conversation } from "../../../../../models/conversations/session/conversation";
+import type { ChatMessage } from "../../../../../models/conversations/transcript/transcript";
 import { runningTurn } from "../../../../../testing/runningTurn";
 import ChatEditNotice from "../ChatEditNotice.vue";
-import { conversationView, PANE_VIEW } from "../../useChat-view";
+import { conversationView, PANE_VIEW } from "../../../../../models/conversations/panel/useChat-view";
 
 // The words over the composer that read the pane's conversation alone: an armed edit's way out, and the queue's promise.
 

@@ -1,5 +1,6 @@
 <script setup lang="ts" generic="K extends LinkKind">
-import type { VpnLink, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { VpnLink } from "@intentic/sandbox-contract/schemas/vpn";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import {
     Button,
     ContextMenu,
@@ -18,7 +19,7 @@ import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
 import { useOperations } from "../../workbench/operations/operations";
-import { type LinkKind, type LinkOf, useLiveLinks } from "../sandbox/devices/useLiveLinks";
+import { type LinkKind, type LinkOf, useLiveLinks } from "../../models/sandbox/devices/useLiveLinks";
 
 // Rows come from the capability list, not the live read, which can lag or fail on its own: a row exists before its link.
 

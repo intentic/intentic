@@ -102,7 +102,7 @@ export const servesSandbox = (inspected: InspectedContainer | undefined, sandbox
 export const localSandboxContainer = async (sandboxUrl: string, inspect: InspectContainer = inspectContainer): Promise<string | undefined> => {
     for (const slug of pairingSlugs(sandboxUrl)) {
         const { container } = sandboxNames(slug);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- at most two candidates, and the first that is this sandbox wins
+        // at most two candidates, and the first that is this sandbox wins
         if (isSandboxContainerName(container) && servesSandbox(await inspect(container), sandboxUrl)) {
             return container;
         }

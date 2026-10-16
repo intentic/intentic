@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { WorkspaceStatePath } from "@intentic/sandbox-contract";
+import type { WorkspaceStatePath } from "@intentic/sandbox-contract/state/workspace-state";
 
 // Builds an absolute path for a declared WorkspaceStatePath; only a table-declared path is nameable (literal union).
 // tail extends a directory entry (the table declares the prefix); trailing slashes are dropped.

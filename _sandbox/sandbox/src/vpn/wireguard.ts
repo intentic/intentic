@@ -1,5 +1,5 @@
 import { rm } from "node:fs/promises";
-import type { VpnConfig, WireguardVpnConfig } from "@intentic/sandbox-contract";
+import type { VpnConfig, WireguardVpnConfig } from "@intentic/sandbox-contract/schemas/vpn";
 import { activeResolvers, interfaceAddress, interfaceRoutes } from "../tunnel/net-probe.js";
 import { wireguardDial, wireguardDrop, wireguardEndpoint, wireguardMissing, wireguardUp, writeWireguardConf } from "../tunnel/wireguard-tools.js";
 import type { VpnDriver, VpnProbe } from "./vpn-driver.js";

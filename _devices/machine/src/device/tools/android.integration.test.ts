@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { fakeAdb, fakeIndicatorDeps, phonePng, SETTINGS_DUMP, uiDump, uiNode } from "../device-testing.js";
 import { createIndicator } from "../indicator.js";
 import { ScopeError } from "../policy.js";

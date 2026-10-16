@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { oneLine } from "@intentic/base/one-line";
-import { type ActivityEvent, ActivityEventSchema, type UsageTurn } from "@intentic/sandbox-contract";
+import { type ActivityEvent, ActivityEventSchema } from "@intentic/sandbox-contract/schemas/activity";
+import type { UsageTurn } from "@intentic/sandbox-contract/schemas/providers/usage";
 import { z } from "zod";
 import { activityLogDocument } from "../activity/activity-store.js";
 import { opt } from "../opt.js";

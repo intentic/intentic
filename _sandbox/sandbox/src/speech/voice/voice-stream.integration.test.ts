@@ -2,16 +2,16 @@ import { once } from "node:events";
 import { createAdaptorServer, type WebSocketServerLike } from "@hono/node-server";
 import { unstubbed } from "@intentic/testing";
 import { waitFor } from "@intentic/testing/bun";
-import { type VoiceServerMessage, VoiceServerMessageSchema } from "@intentic/sandbox-contract";
+import { type VoiceServerMessage, VoiceServerMessageSchema } from "@intentic/sandbox-contract/schemas/voice";
 import { Hono } from "hono";
 import { WebSocket, WebSocketServer } from "ws";
 import { z } from "zod";
 import type { Services } from "../../composition.js";
 import { createLogger } from "../../logger.js";
-import { testConfig } from "../../testing.js";
-import type { VoiceChunk } from "./cloud-voices.js";
+import { testConfig } from "../../env.config.testing.js";
+import type { VoiceChunk } from "@intentic/speech/voice/cloud-voices";
 import { createVoiceStreamRoute } from "./voice.routes.js";
-import type { SpeakEvents, SpeakRequest, Voice } from "./voice.js";
+import type { SpeakEvents, SpeakRequest, Voice } from "@intentic/speech/voice/voice";
 
 /* The editor's player wire over a real socket, with the voice faked: each utterance's words and audio come back in
    order, a header before each binary frame, then `done`; a stop ends one mid-way and the next is still said. */

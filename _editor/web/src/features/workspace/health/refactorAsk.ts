@@ -1,4 +1,4 @@
-import type { WorkspaceHotspot, WorkspaceKeyModule } from "@intentic/sandbox-contract";
+import type { WorkspaceHotspot, WorkspaceKeyModule } from "@intentic/sandbox-contract/schemas/codebase-health";
 import { composeAsk, REFACTOR_INVARIANTS } from "@intentic/sandbox-contract/chores";
 import type { ChurnWindow } from "./codebaseHealth";
 import type { Tip } from "@intentic/ui";

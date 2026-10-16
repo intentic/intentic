@@ -1,4 +1,4 @@
-import { humanizeModelId } from "@intentic/sandbox-contract";
+import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { discoverGeminiModels, isChatModel, SEED_GEMINI_MODELS } from "./gemini-models.js";
 

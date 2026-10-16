@@ -1,5 +1,8 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { CRASH_LOOP_RESTARTS, type DaemonHealthReading, DaemonHealthReadingSchema, parseVitals, VITALS_FILE, VITALS_PATH } from "@intentic/sandbox-contract";
+import { parseJsonOr, parseJsonWith } from "@intentic/base/json";
+import { CRASH_LOOP_RESTARTS } from "@intentic/sandbox-contract/state/update-probation";
+import { DaemonHealthReadingSchema } from "@intentic/sandbox-contract/schemas/system";
+import { parseVitals, VITALS_FILE, VITALS_PATH } from "@intentic/sandbox-contract/protocol/vitals";
 import type { Config } from "../../../config.js";
 import { MINUTE_MS } from "../../../durations.js";
 import { execMachine, type FlyMachineDetail, getMachineDetail } from "../fly/fly.js";
@@ -57,11 +60,9 @@ export const readDaemonHealth = (stdout: string): DaemonHealthAnswer | undefined
     if (text === ``) {
         return undefined;
     }
-    let parsed: DaemonHealthReading;
-    try {
-        parsed = DaemonHealthReadingSchema.parse(JSON.parse(text));
-    } catch {
-        // allow(silent-catch): not JSON or not a /health shape, which is what undefined answers
+    // Not JSON or not a /health shape, which is what undefined answers.
+    const parsed = parseJsonWith(text, DaemonHealthReadingSchema);
+    if (parsed === undefined) {
         return undefined;
     }
     const journal = parsed.state?.journal;
@@ -75,14 +76,9 @@ export const readDaemonHealth = (stdout: string): DaemonHealthAnswer | undefined
 // crashing, or undefined: down now, after as many restarts as make a crash loop (the contract's CRASH_LOOP_RESTARTS, which
 // ic's health.rs and the editor's diagnose.ts hold to the same number).
 export const crashLoopRestartsOf = (stdout: string): number | undefined => {
-    let body: Parameters<typeof parseVitals>[0];
-    try {
-        body = JSON.parse(stdout);
-    } catch {
-        // allow(silent-catch): not JSON is not netd's answer, which is what undefined says
-        return undefined;
-    }
-    const vitals = parseVitals(body);
+    // Not JSON is not netd's answer, which is what undefined says.
+    const body = parseJsonOr(stdout, undefined);
+    const vitals = body === undefined ? undefined : parseVitals(body);
     return vitals !== undefined && vitals.node !== `up` && vitals.restarts >= CRASH_LOOP_RESTARTS ? vitals.restarts : undefined;
 };
 
@@ -232,19 +228,19 @@ export const awaitDaemon = async (
     const seen: Seen = { answered: false, journalSeen: false, converting: false, ready: false, checkedIn: checkedIn === undefined || baseline.running };
     const budget = (): number => (seen.journalSeen ? JOURNAL_BUDGET_MS : READY_BUDGET_MS);
     for (let attempt = 0; attempt < Math.ceil(budget() / HEALTH_POLL_MS) && Date.now() - started < budget(); attempt += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a poll is sequential by definition
+        // a poll is sequential by definition
         const verdict = await look(config, machine, baseline, seen);
         if (verdict !== undefined) {
             return verdict;
         }
         if (!seen.checkedIn && checkedIn !== undefined) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // as above
             seen.checkedIn = await checkedIn();
         }
         if (seen.ready && seen.checkedIn) {
             return { kind: `up`, slow: false };
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+        // as above
         await delay(HEALTH_POLL_MS);
     }
     return budgetSpent(seen);

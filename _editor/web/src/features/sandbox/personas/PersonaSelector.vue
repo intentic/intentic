@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { Persona } from "@intentic/sandbox-contract";
-import { personaBoundsWords } from "./personaBounds";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import { personaBoundsWords } from "../../../models/sandbox/personas/personaBounds";
 import { Icon, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, useId } from "vue";

@@ -7,7 +7,7 @@ import { extract, pack } from "tar-stream";
 import { nodeStream, webStream } from "@intentic/base/web-stream";
 import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.testing.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { BUNDLE_MANIFEST_ENTRY, packBundle } from "./bundle.js";

@@ -1,6 +1,6 @@
 import { once } from "node:events";
 import { type AddressInfo, createServer } from "node:net";
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { ScopeError } from "../../policy.js";
 import { dialLoopback, tunnelSocketUrl } from "./device-tunnel.js";
 

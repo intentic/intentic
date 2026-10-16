@@ -4,6 +4,7 @@ import type { CheckPlacement } from "@intentic/lsp/client";
 import { runCheck } from "../../../workload/run-check.js";
 import { onPath } from "../../../image/on-path.js";
 import type { DiagAnswer, DiagRequest } from "../agent-diagnostics.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Python half of the same post-edit-check seam (DiagRunner), a different pair of tools. ruff answers parsing and
 // undefined names, needing no environment; pyright answers type-correctness, only with a `.venv` to resolve imports,
@@ -124,10 +125,8 @@ const pyrightLine = (entry: PyrightDiagnostic, named: (file: string) => string, 
 };
 
 export const pyrightErrors = (stdout: string, named: (file: string) => string, dropped: ReadonlySet<string>): string[] | undefined => {
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(stdout);
-    } catch {
+    const parsed = parseJsonOr(stdout, undefined);
+    if (parsed === undefined) {
         return undefined;
     }
     const diagnostics = (parsed as { generalDiagnostics?: unknown }).generalDiagnostics;

@@ -1,6 +1,7 @@
 import { pollUntil } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import { type Capability, RESERVED_MCP_SERVER_NAMES } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { RESERVED_MCP_SERVER_NAMES } from "@intentic/sandbox-contract/policy/reserved-servers";
 import { type ToolServer, toolServerForCard, toolServersOf } from "@intentic/extension-manifest";
 import type { Context } from "hono";
 import type { AgentTool } from "../../agent/tools/agent-tools.js";
@@ -9,10 +10,10 @@ import type { MountCall, MountEndpoints } from "../../agent/tools/turn-mounts.ro
 import type { AppEnv } from "../../app-env.js";
 import { cachedEnabledExtensions, contributionFor, contributionRegistry } from "../../capabilities/contributions.js";
 import type { Services } from "../../composition.js";
-import { extensionProcessKey } from "../extension-processes.js";
-import { type ExtensionHost, extensionGranted, type InstalledExtension } from "../installed-extensions.js";
+import { type ExtensionHost, extensionGranted, type InstalledExtension } from "../../capabilities/extension-inventory/installed-extensions.js";
 import { BACKEND_CARD_HEADER, BACKEND_HOST_HEADER } from "./backend-host-config.js";
 import { forwardToBackend } from "./backend-proxy.js";
+import { extensionProcessKey } from "../../capabilities/extension-dirs.js";
 
 // An extension's tools (`contributes.tools`, or a cli card's `mcp`, its alias for one release), mounted into every turn
 // granted them at the daemon's one MCP door on the turn's lease, like peer bridges: the door checks the turn's bearer against

@@ -1,4 +1,4 @@
-import type { CiMainFailure, CiRepo, CiRunsResponse, PipelineJob, PipelineRun } from "@intentic/sandbox-contract";
+import type { CiMainFailure, CiRepo, CiRunsResponse, PipelineJob, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { API_MAIN_FIXER_ID, WEB_MAIN_FIXER_ID } from "./fleet";
 
 // acme-shop's two repos on two hosts (web/GitHub, api/GitLab) as one board. Runs are a healthy afternoon: one running,

@@ -1,4 +1,4 @@
-import { removeStoredValue, type StorageArea, storedKeys, storedValue, storeValue } from "../../../lib/browserStorage";
+import { removeStoredValue, type StorageArea, storedKeys, storedValue, storeValue } from "../../../app/storage/browserStorage";
 
 // What a daemon `/events` frame makes stale: the routing policy, dependency-free (no store, query client, or Vue), so
 // it's testable on its own. The dispatcher that acts on these rules is systemEvents.ts.

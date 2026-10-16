@@ -1,4 +1,4 @@
-import type { PreparingUpdate } from "@intentic/sandbox-contract";
+import type { PreparingUpdate } from "@intentic/sandbox-contract/schemas/system";
 
 // THE NEXT UPDATE'S DOWNLOAD, AS THE UPDATE CARD FOLLOWS IT. The machine that runs a sandbox downloads its next update
 // by itself (the machine agent's timer, `ic sandbox prepare --auto`), and the card starts that same download when it

@@ -1,4 +1,4 @@
-import type { Capability, CapabilityKind } from "@intentic/sandbox-contract";
+import type { Capability, CapabilityKind } from "@intentic/sandbox-contract/schemas/capabilities";
 import { HOST_CARD_RULE } from "../hosts/host-peer.js";
 import { checks, type PeerRegistryDeps } from "./invariant.js";
 

@@ -1,6 +1,6 @@
-import type { TranscriptTool } from "@intentic/sandbox-contract";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import type { ShotLook } from "./shotLook";
-import type { ChatMessage, ChatTurn } from "../transcript";
+import type { ChatMessage, ChatTurn } from "../../../../models/conversations/transcript/transcript";
 
 // The pictures a turn's tools showed the agent (a screenshot it took, an image it read back), for the strip at the
 // turn's end and the conversation's one viewer. Pure over the rows, so a live chat and a reopened one agree.

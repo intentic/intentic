@@ -1,4 +1,6 @@
-import { edgeVerdictOf, EDGE_VERDICT_HEADER, parseVitals, type SandboxVitals, VITALS_PATH } from "@intentic/sandbox-contract";
+import { edgeVerdictOf, EDGE_VERDICT_HEADER } from "@intentic/sandbox-contract/protocol/edge-verdict";
+import { parseVitals, VITALS_PATH } from "@intentic/sandbox-contract/protocol/vitals";
+import type { SandboxVitals } from "@intentic/sandbox-contract/netd/generated/browser-wire";
 import type { NetdProbe } from "./diagnose";
 
 // THE PROBES a diagnosis is made of, each bounded and each safe to run against a sandbox that is down, busy or gone.

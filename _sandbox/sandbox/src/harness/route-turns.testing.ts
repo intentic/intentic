@@ -1,4 +1,7 @@
-import type { AgentTurn, AttachFrame, sandboxContract, TranscriptRow, TurnFact } from "@intentic/sandbox-contract";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { AttachFrame, TurnFact } from "@intentic/sandbox-contract/events/agent-events";
+import type { sandboxContract } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { applyTranscriptPatch } from "@intentic/sandbox-contract/transcript-fold";
 import type { ContractRouterClient } from "@orpc/contract";
 import { expect } from "bun:test";

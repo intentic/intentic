@@ -3,8 +3,9 @@
 import "@intentic/testing/dom";
 import { type App, createApp, h, nextTick } from "vue";
 import { STATE_DIR } from "@intentic/constants";
-import type { SubagentSession, TranscriptTool } from "@intentic/sandbox-contract";
-import type { ChatSurface } from "./chatToolSurface";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import type { ChatSurface } from "../../../models/conversations/tools/chatToolSurface";
 import { IconStub } from "@intentic/ui/testing";
 import { useAudience } from "../../../app/useAudience";
 
@@ -12,7 +13,7 @@ import { useAudience } from "../../../app/useAudience";
 // this file loads, same as the real page.
 
 const { default: ChatToolCard } = await import("./ChatToolCard.vue");
-const { CHAT_SURFACE } = await import("./chatToolSurface");
+const { CHAT_SURFACE } = await import("../../../models/conversations/tools/chatToolSurface");
 
 let app: App | undefined;
 // `surface` is what the card reaches beyond itself; omitted, it falls back to the inert one, the same shape a

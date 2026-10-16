@@ -3,7 +3,8 @@ import type { AddressInfo } from "node:net";
 import { type ClaudeSdk, sdk } from "../../engines/claude-sdk.js";
 import { opt } from "../../opt.js";
 import { CLAUDE_INSTRUCTION_FILES } from "../../runtimes/claude/claude-builtins.js";
-import type { BuiltinPromptText } from "@intentic/sandbox-contract";
+import type { BuiltinPromptText } from "@intentic/sandbox-contract/schemas/settings";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Claude Code's system prompt, captured from a real CLI request rather than transcribed here, since neither the SDK nor
 // the CLI exposes the preset text directly. A loopback endpoint intercepts one throwaway turn's first request and
@@ -70,10 +71,10 @@ const capture = async (copy: ClaudeSdk, cwd: string, model: string | undefined):
         request.on("end", () => {
             if (text === undefined) {
                 // A malformed body is not worth failing on; the timeout below reports a probe that never captures one.
-                try {
-                    text = promptTextOf((JSON.parse(Buffer.concat(chunks).toString()) as { system?: unknown }).system);
-                } catch {
-                    // Not the messages call; ignored.
+                const body = parseJsonOr(Buffer.concat(chunks).toString(), undefined) as { system?: unknown } | null | undefined;
+                // Not the messages call; ignored.
+                if (body !== undefined && body !== null) {
+                    text = promptTextOf(body.system);
                 }
             }
             response.writeHead(200, { "content-type": "text/event-stream" });

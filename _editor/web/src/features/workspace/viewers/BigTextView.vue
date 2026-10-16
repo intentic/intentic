@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type { WorkspaceFileWindow } from "@intentic/sandbox-contract";
+import type { WorkspaceFileWindow } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { Button, formatBytes, vAction } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { FILE_WINDOW_BYTES, readFileWindow } from "../files/fileWindow";
-import { changeEpochOf } from "../changes/live/useWorkspaceLive";
-import { RAW_MAX_BYTES } from "../explorer/fileType";
+import { FILE_WINDOW_BYTES, readFileWindow } from "../../../models/workspace/files/fileWindow";
+import { changeEpochOf } from "../../../models/workspace/changes/useWorkspaceLive";
+import { RAW_MAX_BYTES } from "../../../models/workspace/tree/fileType";
 import { useViewScope } from "../../../app/workspaceScope";
 import CodeView from "./CodeView.vue";
 import { useT } from "@intentic/ui/i18n";

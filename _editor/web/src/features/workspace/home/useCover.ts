@@ -1,9 +1,10 @@
-import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { parentDir } from "@intentic/ui/path";
 import { computed } from "vue";
 import { useLayout } from "../../../workbench/window/useLayout";
 import { explorerShows } from "../explorer/explorerFilter";
-import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
+import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 import { workspaceDir } from "../../../app/workspaceScope";
 import { coverIn, coverIndex, coversBelow, NO_COVERS } from "./homeCover";
 

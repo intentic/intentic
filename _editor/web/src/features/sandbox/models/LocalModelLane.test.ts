@@ -5,7 +5,8 @@ import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { createApp, h, nextTick, ref } from "vue";
 import { localModelGb } from "@intentic/capability-catalog";
-import type { LocalModelFitResponse, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { LocalModelFitResponse } from "@intentic/sandbox-contract/contracts/endpoints.contract";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { IconStub } from "@intentic/ui/testing";
 
 const QUICK = `unsloth/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q4_K_M.gguf`;
@@ -13,7 +14,7 @@ const WORK = `unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_M.gguf`;
 
 const capabilities = ref<CapabilitySummary[]>([]);
 const add = jest.fn(async () => undefined);
-jest.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities, add }) }));
+jest.mock(`../../../models/capabilities/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities, add }) }));
 jest.mock(`vue-router`, () => ({ RouterLink: { template: `<a><slot /></a>` } }));
 
 const { default: LocalModelLane } = await import("./LocalModelLane.vue");

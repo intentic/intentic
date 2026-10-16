@@ -1,5 +1,5 @@
 import { isAudioPath, isImagePath } from "./fileQuickLook";
-import { forgetOriginal, picture, rememberOriginal } from "../../workspace/home/thumbnails";
+import { forgetOriginal, picture, rememberOriginal } from "../../../models/workspace/home/thumbnails";
 
 // An attachment's own bytes as an element's source, the file's original (thumbnails.ts); `rememberMedia` seeds an upload.
 

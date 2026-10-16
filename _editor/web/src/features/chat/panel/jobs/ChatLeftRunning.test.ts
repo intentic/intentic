@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import type { AgentJob, AgentWatch } from "@intentic/sandbox-contract";
+import type { AgentJob, AgentWatch } from "@intentic/sandbox-contract/schemas/agents";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, h, nextTick, shallowRef } from "vue";
 
@@ -10,12 +10,12 @@ const stopWatching = jest.fn((_id: string, _watchId?: string) => Promise.resolve
 const previewed = jest.fn((_router: unknown, _target?: string) => undefined);
 const watched = jest.fn((_session: string) => undefined);
 
-jest.mock("../../../agents/fleet/useAgents", () => ({
+jest.mock("../../../../models/fleet/useAgents", () => ({
     useAgents: () => ({ agentById: () => ({ jobs: roster.jobs, watches: roster.watches }), stopJob, stopWatching }),
 }));
-jest.mock("../useChat-view", () => ({ usePaneView: () => ({ conversation: shallowRef({ conversationId: `agent-1` }), streaming: pane.streaming }) }));
+jest.mock("../../../../models/conversations/panel/useChat-view", () => ({ usePaneView: () => ({ conversation: shallowRef({ conversationId: `agent-1` }), streaming: pane.streaming }) }));
 jest.mock("../../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ reachable: shallowRef(true) }) }));
-jest.mock("../../tools/chatToolSurface", () => ({ useChatSurface: () => ({ watchTerminal: watched }) }));
+jest.mock("../../../../models/conversations/tools/chatToolSurface", () => ({ useChatSurface: () => ({ watchTerminal: watched }) }));
 jest.mock("../../../../workbench/browsers/browsersSurface", () => ({ openPreviewBeside: previewed }));
 jest.mock("vue-router", () => ({ useRouter: () => ({}) }));
 

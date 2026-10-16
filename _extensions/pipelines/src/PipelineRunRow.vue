@@ -1,13 +1,9 @@
 <script setup lang="ts">
-import {
-    type AgentSummary,
-    ciFixConversationId,
-    fixAttemptOf,
-    type FixResume,
-    fixStance,
-    isPipelineInFlight,
-    type PipelineRun,
-} from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { ciFixConversationId, fixAttemptOf } from "@intentic/sandbox-contract/ids/conversation-ids";
+import type { FixResume } from "@intentic/sandbox-contract/state/fix-attempt-plan";
+import { fixStance } from "@intentic/sandbox-contract/state/fix-stance";
+import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import {
     AgentRunButton,
     type AgentRunAttempt,

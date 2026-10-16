@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { pino } from "pino";
-import { testConfig } from "../../testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import { createAuthSlice } from "../auth-slice.js";
 
 // Who may reach this sandbox, who owns it and which programs hold a token are the daemon's to decide, and every turn

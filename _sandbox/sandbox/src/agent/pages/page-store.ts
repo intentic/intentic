@@ -1,21 +1,16 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type Page, PAGE_MAX_HEIGHT, PAGE_MIN_HEIGHT, PAGE_TITLE_MAX, standalonePage } from "@intentic/sandbox-contract";
-import { statePath, stateRelPath } from "../../state-paths.js";
+import { type Page, PAGE_MAX_HEIGHT, PAGE_MIN_HEIGHT, PAGE_TITLE_MAX } from "@intentic/sandbox-contract/events/requests";
+import { standalonePage } from "@intentic/sandbox-contract/text/pages";
+import { stateRelPath } from "../../state-paths.js";
+import { folderOf } from "../../sessions/conversation-purge.js";
 
 // Where the pages a conversation showed are kept: one folder per conversation under the workspace's records, one file
 // per drawing. A page is never rewritten once shown, so a transcript reopened next month draws exactly what was seen;
 // a redraw is a new file beside the old, and the conversation's folder goes with the conversation (conversation-purge.ts).
 
 const PAGES = (...tail: readonly string[]): string => stateRelPath(".intentic/records/artifacts/", "pages", ...tail);
-
-// The folder a conversation's pages are filed in; a turn with no conversation files its pages together.
-const folderOf = (conversationId: string | undefined): string => (conversationId === undefined ? "loose" : conversationId.replace(/[^A-Za-z0-9_-]/g, "_"));
-
-// Every conversation's pages, for the purge that removes one.
-export const pagesFolder = (workspaceRoot: string, conversationId: string): string =>
-    statePath(workspaceRoot, ".intentic/records/artifacts/", "pages", folderOf(conversationId));
 
 const newId = (): string => randomBytes(5).toString("hex");
 
@@ -84,7 +79,3 @@ export const publishPage = async (input: PublishPageInput): Promise<Page> => {
         ...(revision === 0 ? {} : { revision }),
     };
 };
-
-// Removes a conversation's pages with it.
-export const purgePages = (workspaceRoot: string, conversationId: string): Promise<void> =>
-    rm(pagesFolder(workspaceRoot, conversationId), { recursive: true, force: true });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SandboxMetrics } from "@intentic/sandbox-contract";
+import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
 import { Meter } from "@intentic/ui";
 import { useSandboxReadout } from "./sandboxFigures";
 

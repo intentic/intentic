@@ -1,4 +1,6 @@
-import { type CiFixParam, type CiFixResponse, type FixResume, isPipelineInFlight, type PipelineRun, runPickOf } from "@intentic/sandbox-contract";
+import { type CiFixParam, type CiFixResponse, isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import type { FixResume } from "@intentic/sandbox-contract/state/fix-attempt-plan";
+import { runPickOf } from "@intentic/sandbox-contract/schemas/agent";
 import type { AgentRunChoice } from "@intentic/extension-ui";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";

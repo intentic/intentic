@@ -1,5 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { capabilitiesOf, HARNESSES, loopsOf, MINTED_PROVIDERS, NATIVE_PROVIDERS, PROVIDERS } from "@intentic/sandbox-contract";
+import { capabilitiesOf, HARNESSES, loopsOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
+import { MINTED_PROVIDERS, NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
 import * as onPathOriginal from "../image/on-path.js";
 import * as engineResolveOriginal from "../engines/engine-resolve.js";
 import * as filesystemOriginal from "node:fs/promises";
@@ -230,7 +231,6 @@ const services = (overrides: Record<string, unknown>) =>
         openCode: { connected: async () => false },
         capabilities: { list: async () => [] },
         ...overrides,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
     }) as any;
 
 const healthOf = async (runtime: string, overrides: Record<string, unknown> = {}) => {

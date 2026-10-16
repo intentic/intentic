@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { isConversationId } from "@intentic/sandbox-contract";
+import { isConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { Logger } from "pino";
 import { hostsDir } from "../../capabilities/ssh-hosts.js";
 import { opt } from "../../opt.js";
@@ -43,7 +43,7 @@ export interface DomainAnchorOptions {
     readonly historyRoot: string;
     readonly authRoot: string;
     readonly conversationId: string | undefined;
-    // The conversation's ssh agent socket, when it has one (capabilities/turn-env.ts): bound into the domain at its path.
+    // The conversation's ssh agent socket, when it has one (agent/run/harness/turn-env.ts): bound into the domain at its path.
     readonly sshSocket: string | undefined;
     readonly logger: Pick<Logger, "warn">;
 }

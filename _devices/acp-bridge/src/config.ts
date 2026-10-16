@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { writeFileAtomicSync } from "@intentic/base/fs";
+import { readTextIfExistsSync, writeFileAtomicSync } from "@intentic/base/fs";
+import { parseJsonWith } from "@intentic/base/json";
 import { agentHome } from "@intentic/local-agent";
 import { z } from "zod";
 
@@ -19,12 +20,8 @@ export interface BridgeConfig {
 }
 
 const readStored = (path: string): z.infer<typeof StoredConfigSchema> | undefined => {
-    try {
-        const parsed = StoredConfigSchema.safeParse(JSON.parse(readFileSync(path, "utf8")));
-        return parsed.success ? parsed.data : undefined;
-    } catch {
-        return undefined;
-    }
+    const text = readTextIfExistsSync(path);
+    return text === undefined ? undefined : parseJsonWith(text, StoredConfigSchema);
 };
 
 // Environment first, then the login-written config file; undefined when neither supplies url+token (the
@@ -69,14 +66,9 @@ export const readSessions = (dir: string = CONFIG_DIR): SessionMap => {
         }
         throw error;
     }
-    let parsed: ReturnType<typeof SessionMapSchema.safeParse> | undefined;
-    try {
-        parsed = SessionMapSchema.safeParse(JSON.parse(text));
-    } catch {
-        parsed = undefined;
-    }
-    if (parsed?.success === true) {
-        return parsed.data;
+    const parsed = parseJsonWith(text, SessionMapSchema);
+    if (parsed !== undefined) {
+        return parsed;
     }
     const aside = `${path}.unreadable-${Date.now()}`;
     renameSync(path, aside);

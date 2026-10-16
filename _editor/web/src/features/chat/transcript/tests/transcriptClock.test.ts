@@ -1,7 +1,7 @@
-import type { TranscriptRow } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { TranscriptClock } from "../transcriptClock";
-import type { AttachEntry, AttachHead } from "../../run/turnStream";
+import { TranscriptClock } from "../../../../models/conversations/transcript/transcriptClock";
+import type { AttachEntry, AttachHead } from "../../../../client/sandbox/streams/turnStream";
 
 // Needs fake timers/rAF (paint() drives frames by hand) to tell "typed over N frames" apart from "settled in one". Only
 // the watched pane types; unwatched panes settle whole in the frame text arrives.

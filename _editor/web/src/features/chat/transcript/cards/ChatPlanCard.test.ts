@@ -1,16 +1,17 @@
 // Needs jsdom: what this pins is which lines a pending plan draws under itself, which only a render shows.
 import "@intentic/testing/dom";
-import { type AgentEvent, type Need, NeedSchema } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { type Need, NeedSchema } from "@intentic/sandbox-contract/schemas/needs";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, computed, createApp, h, ref } from "vue";
-import type { ChatMessage } from "../transcript";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 
 // The pane this card is drawn in, the markdown it renders (not what this suite is about) and the needs store.
 const open = ref<readonly Need[]>([]);
-jest.mock("../../panel/useChat-view", () => ({ usePaneView: () => ({ conversation: ref({ conversationId: `conv-plan`, scope: ref(undefined) }) }) }));
+jest.mock("../../../../models/conversations/panel/useChat-view", () => ({ usePaneView: () => ({ conversation: ref({ conversationId: `conv-plan`, scope: ref(undefined) }) }) }));
 jest.mock("../../../../lib/markdown/useMarkdown", () => ({ useMarkdown: () => ref([]) }));
-jest.mock("../../../needs/useNeeds", () => ({ useNeeds: () => ({ openFor: () => computed(() => open.value) }) }));
+jest.mock("../../../../models/needs/useNeeds", () => ({ useNeeds: () => ({ openFor: () => computed(() => open.value) }) }));
 
 const { default: ChatPlanCard } = await import("./ChatPlanCard.vue");
 

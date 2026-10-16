@@ -1,4 +1,4 @@
-import { removeStoredValue, type StorageArea, storedValue, storeValue } from "../../lib/browserStorage";
+import { removeStoredValue, type StorageArea, storedValue, storeValue } from "../../app/storage/browserStorage";
 
 // A window's own view state (open tabs, expanded folders) lives in sessionStorage, authoritative for this window;
 // localStorage holds the same blob as a seed for a window that has never held it. The seed is last-writer-wins,

@@ -1,4 +1,6 @@
-import { FREE_PROVIDERS, NATIVE_PROVIDERS, type ProviderKey } from "@intentic/sandbox-contract";
+import { FREE_PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
+import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
+import type { ProviderKey } from "@intentic/sandbox-contract/state/arrival";
 import {
     arrivalTile,
     foundSignIns,

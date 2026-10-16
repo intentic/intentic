@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
-import { memoryFleet } from "../../../testing.js";
+import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { startTurnRun } from "../../run/turn/turn-runs.js";
 import { createDomainEvents } from "../../../seams/domain-events.js";
 import type { TurnStarter } from "../../../seams/turn-starter.js";

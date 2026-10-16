@@ -1,4 +1,4 @@
-import type { SystemEvent } from "@intentic/sandbox-contract";
+import type { SystemEvent } from "@intentic/sandbox-contract/events/system-events";
 import { Frames } from "@intentic/contract-serve";
 import { watchOwnBrowser } from "../browser";
 import { REPOS } from "../fixture/workspace";

@@ -1,4 +1,4 @@
-import { KeyedProviderSchema } from "@intentic/sandbox-contract";
+import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { Services } from "../../../composition.js";
 import { limitReopensAt } from "../../models/limit-reset.js";
 import { limitWayOf } from "../../models/limit-way.js";

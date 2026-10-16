@@ -1,4 +1,4 @@
-import type { WorkspaceSearchResult } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchResult } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import type { Anchor, CaseScore } from "./schema.js";
 
 export const DEFAULT_TOLERANCE = 10;

@@ -1,6 +1,6 @@
 import { classifyFailure, type ConnectionFailure } from "../../../client/sandbox/connection";
 import { DETACHED_AFTER_MS } from "../overview/availability";
-import { RESTART_PATIENCE_MS } from "../live/sandboxRestart";
+import { RESTART_PATIENCE_MS } from "../../../models/sandbox/live/sandboxRestart";
 import {
     connectionNotice,
     type ConnectionNoticeInput,

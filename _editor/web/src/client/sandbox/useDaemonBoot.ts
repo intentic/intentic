@@ -1,5 +1,5 @@
 import { sandboxRef } from "@intentic/extension-api";
-import type { BootProgress } from "@intentic/sandbox-contract";
+import type { BootProgress } from "@intentic/sandbox-contract/events/system-events";
 import { computed } from "vue";
 
 // Where the active daemon is in its own boot (from the /events hello + boot frames). It answers /health and

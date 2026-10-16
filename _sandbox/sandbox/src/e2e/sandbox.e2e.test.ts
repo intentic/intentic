@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { STATE_DIR } from "@intentic/constants";
-import { hasOfficialBase, sandboxContract } from "@intentic/sandbox-contract";
+import { hasOfficialBase } from "@intentic/sandbox-contract/policy/overlay-lint";
+import { sandboxContract } from "@intentic/sandbox-contract";
 import { e2eTier } from "@intentic/testing/e2e";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";

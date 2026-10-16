@@ -1,7 +1,7 @@
 import { mkdtemp, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { TranscriptRow } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { blobsRoot, getBlob, putBlob, sweepBlobs } from "./record-blobs.js";
 import { blobNamesIn, callsOf, keptLine, PAGE_TEXT_CAP, previewOf, wholeOf } from "./record-rows.js";
 

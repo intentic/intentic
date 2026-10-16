@@ -1,4 +1,4 @@
-import type { RuntimeDomain } from "@intentic/sandbox-contract";
+import type { RuntimeDomain } from "@intentic/sandbox-contract/state/runtime-state";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { createRuntimeSampler, paneFingerprint, type RuntimeProbes, subscribeRuntimeChanges } from "./runtime-watch.js";

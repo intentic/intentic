@@ -1,5 +1,5 @@
 import { serialLock } from "@intentic/base/async";
-import type { Trigger, WorkspaceEvent } from "@intentic/sandbox-contract";
+import type { Trigger, WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
 import type { Services } from "../composition.js";
 import { fireAutomation, firedBy } from "./scheduler.js";
 

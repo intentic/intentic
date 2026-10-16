@@ -3,7 +3,7 @@ import { webStream } from "@intentic/base/web-stream";
 import { lstat, open, type FileHandle } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
-import { producedDocumentPaths } from "@intentic/sandbox-contract";
+import { producedDocumentPaths } from "@intentic/sandbox-contract/text/documents";
 import { defaultGit } from "@intentic/base/git";
 import type { Context } from "hono";
 import type { AppEnv } from "../app-env.js";

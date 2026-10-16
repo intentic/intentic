@@ -1,4 +1,5 @@
-import type { AgentSummary, PipelineRun } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 
 // The board's fixtures, one per seam, for every suite in this package: the fleet's card and a pipeline run. Each literal
 // names every field its type requires, so an override only ever narrows one.

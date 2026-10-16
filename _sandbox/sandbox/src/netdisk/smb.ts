@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
-import type { NetdiskConfig, SmbNetdiskConfig } from "@intentic/sandbox-contract";
+import type { NetdiskConfig, SmbNetdiskConfig } from "@intentic/sandbox-contract/schemas/netdisk";
 import { toolMissing } from "../tunnel/net-probe.js";
 import { isReadOnly, mountAt, readMountinfo } from "./mountinfo.js";
 import type { NetdiskDriver, NetdiskProbe } from "./netdisk-driver.js";

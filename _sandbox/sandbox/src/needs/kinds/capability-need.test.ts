@@ -1,5 +1,8 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
-import { type Capability, CapabilitySchema, type CapabilityStatus, type CredentialGate, type Need, PersonaPowersSchema } from "@intentic/sandbox-contract";
+import { type Capability, CapabilitySchema, type CapabilityStatus } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
+import type { Need } from "@intentic/sandbox-contract/schemas/needs";
+import { PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
 import type { TurnStanding } from "../../conversations/actor/turn-standing.js";
 import type { AskContext, Resolved } from "../need-kinds.js";
 import { capabilityNeed, hostOf, servesTarget } from "./capability-need.js";

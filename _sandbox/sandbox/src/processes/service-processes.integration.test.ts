@@ -25,7 +25,7 @@ const until = async (what: string, predicate: () => boolean, timeoutMs = 5_000):
         if (Date.now() > deadline) {
             throw new Error(`timed out waiting for ${what}`);
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- polling a live child IS the wait
+        // polling a live child IS the wait
         await new Promise((resolve) => setTimeout(resolve, 25));
     }
 };

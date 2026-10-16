@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import type { TerminalScrollback } from "@intentic/sandbox-contract";
+import type { TerminalScrollback } from "@intentic/sandbox-contract/schemas/terminal";
 import { unstubbed } from "@intentic/testing";
 import { type EffectScope, effectScope } from "vue";
 import type { TerminalSession } from "../terminalSession";

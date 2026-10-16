@@ -1,5 +1,5 @@
 import { computed, type Ref, ref } from "vue";
-import type { ChatTurn } from "../transcript";
+import type { ChatTurn } from "../../../../models/conversations/transcript/transcript";
 import { type ChatShot, shotKey, sortShots, type SortedShots } from "./shots";
 import { shotLook } from "./shotLooks";
 

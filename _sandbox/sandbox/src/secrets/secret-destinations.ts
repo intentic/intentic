@@ -1,4 +1,5 @@
-import { normalizeHost, SECRET_REFERENCE } from "@intentic/sandbox-contract";
+import { normalizeHost } from "@intentic/sandbox-contract/policy/secret-hosts";
+import { SECRET_REFERENCE } from "@intentic/sandbox-contract/schemas/needs";
 import { FETCHER_READERS } from "./destinations/secret-command-fetchers.js";
 import { gitReach } from "./destinations/secret-command-git.js";
 import { urlHost, WEB_SCHEMES } from "./destinations/secret-command-hosts.js";

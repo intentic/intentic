@@ -5,10 +5,10 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
-import { useChat } from "../run/useChat";
-import { focusComposer } from "../tabs/useChat-tabs";
-import { quickBarShowAsk } from "./chatPanelLayout";
-import { draftConversation, reveal } from "./useChat-reveal";
+import { useChat } from "../../../models/conversations/run/useChat";
+import { focusComposer } from "../../../models/conversations/tabs/useChat-tabs";
+import { quickBarShowAsk } from "../../../models/conversations/panel/chatPanelLayout";
+import { draftConversation, reveal } from "../../../models/conversations/panel/useChat-reveal";
 
 import { queryClient } from "../../../lib/queryPersistence";
 import { chatBarSlot, chatFullSlot } from "../../../workbench/window/panelSlots";
@@ -17,7 +17,7 @@ import { router } from "../../../router";
 import ChatPanel from "./ChatPanel.vue";
 import ChatQuickBar from "./ChatQuickBar.vue";
 import { IconStub } from "@intentic/ui/testing";
-import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
+import * as useWorkflowRunsOriginal from "../../../models/fleet/useWorkflowRuns";
 
 // jsdom has neither, and both the pane's pinned-prompt observer and its reveal reach for them.
 (() => {
@@ -30,10 +30,10 @@ import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
 })();
 
 // An empty roster and an empty ledger: neither the fleet nor a workflow run is what these tests are about.
-jest.mock(`../../agents/fleet/useAgents`, () => {
+jest.mock(`../../../models/fleet/useAgents`, () => {
     return { useAgents: () => ({ fleet: computed(() => []), agentById: () => undefined }) };
 });
-jest.mock(`../../agents/fleet/useWorkflowRuns`, () => ({
+jest.mock(`../../../models/fleet/useWorkflowRuns`, () => ({
     ...useWorkflowRunsOriginal,
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));

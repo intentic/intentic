@@ -1,4 +1,4 @@
-import type { ProofMethod } from "@intentic/sandbox-contract";
+import type { ProofMethod } from "@intentic/sandbox-contract/schemas/system";
 import type { Config } from "../env.config.js";
 
 // Whether this daemon authenticates callers at all. It does when it can verify a person by some proof: a Google ID token

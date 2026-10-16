@@ -1,6 +1,8 @@
 import { errorMessage } from "@intentic/base/errors";
 import { MEMORY_FILE } from "@intentic/constants";
-import { type ArrivalReport, type Capability, type SkillDraft, CapabilitySchema } from "@intentic/sandbox-contract";
+import type { ArrivalReport } from "@intentic/sandbox-contract/state/arrival";
+import { type Capability, CapabilitySchema } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { SkillDraft } from "@intentic/sandbox-contract/schemas/settings";
 import type { MigratedAutomation, PlannedItem, SourcePlan } from "./adapter-shared.js";
 import { mergeFenced } from "./merge.js";
 

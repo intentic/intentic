@@ -1,5 +1,5 @@
 import { chromium } from "playwright";
-import { browserSessionFixture } from "../../testing.js";
+import { browserSessionFixture } from "./browser-sessions.testing.js";
 import { browserSessionContext, closeBrowserSession, listBrowserSessions, openBrowserSession } from "./browser-sessions.js";
 import * as feed from "../../seams/runtime-feed.js";
 

@@ -12,7 +12,7 @@ import { type App, createApp, h, nextTick, ref } from "vue";
 })();
 
 const activeSandboxId = ref<string | undefined>(`sbx-a`);
-jest.mock(`../../lib/activeSandbox`, () => ({
+jest.mock(`../../app/storage/activeSandbox`, () => ({
     ACTIVE_KEY: `intentic.activeSandboxId`,
     activeSandboxId,
     sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId],
@@ -32,7 +32,7 @@ jest.mock(`./terminalSession`, () => ({
     pasteIntoTerminal: jest.fn(),
 }));
 // Query cache reaches the network on its own schedule; stubbed down to the two writes the strip makes.
-jest.mock(`./terminalsQuery`, () => ({
+jest.mock(`../../models/terminal/terminalsQuery`, () => ({
     useTerminalsQuery: () => ({ sessions: ref([]), refetch: jest.fn() }),
     addPendingTerminal: jest.fn(),
     dropPendingTerminal: jest.fn(),

@@ -1,25 +1,25 @@
 <!-- A capability need's own answer: the connection's form inside the card (a linked sandbox paired in it), a new credential, a setting change, or a removal. -->
 <script setup lang="ts">
 import { type CapabilityCatalogEntry, capabilityEffects, type CapabilityEffect } from "@intentic/capability-catalog";
-import type { CapabilityNeed, Need } from "@intentic/sandbox-contract";
+import type { CapabilityNeed, Need } from "@intentic/sandbox-contract/schemas/needs";
 import { type NoticeModel, Notice, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, reactive, ref } from "vue";
-import CapabilityFieldRow from "../capabilities/connect/CapabilityFieldRow.vue";
-import LinkPairing from "../capabilities/connect/links/LinkPairing.vue";
-import type { PairedLink } from "../capabilities/connect/links/linkPairing";
-import { guideParts, guideTokenUrl } from "../capabilities/connect/credentialGuide";
-import SecretField from "../capabilities/connect/secrets/SecretField.vue";
-import { useCapabilities } from "../capabilities/connect/useCapabilities";
-import { buildConfig, cleanName, fieldError, formComplete, inlineField, nameError, seedValues, shownFields } from "../capabilities/model/form";
-import { generatesKey, sshKeyScope } from "../capabilities/model/sshKey";
-import SshKeyField from "../capabilities/ssh/SshKeyField.vue";
-import { catalogEntries, suggestName } from "../capabilities/model/tiles";
-import ChatDecisionButton from "../chat/transcript/cards/ChatDecisionButton.vue";
-import { useExtensions } from "../extensions/useExtensions";
+import CapabilityFieldRow from "../../components/CapabilityFieldRow.vue";
+import LinkPairing from "../../components/LinkPairing.vue";
+import type { PairedLink } from "../../components/linkPairing";
+import { guideParts, guideTokenUrl } from "../../models/capabilities/credentialGuide";
+import SecretField from "../../parts/capabilities/SecretField.vue";
+import { useCapabilities } from "../../models/capabilities/useCapabilities";
+import { buildConfig, cleanName, fieldError, formComplete, inlineField, nameError, seedValues, shownFields } from "../../models/capabilities/form";
+import { generatesKey, sshKeyScope } from "../../models/capabilities/sshKey";
+import SshKeyField from "../../parts/capabilities/SshKeyField.vue";
+import { catalogEntries, suggestName } from "../../models/capabilities/tiles";
+import ChatDecisionButton from "../../components/ChatDecisionButton.vue";
+import { useExtensions } from "../../models/extensions/useExtensions";
 import { dismissOperation, operationsUnder } from "../../workbench/operations/operations";
 import { useNeedAnswer } from "./needAnswer";
-import { useNeeds } from "./useNeeds";
+import { useNeeds } from "../../models/needs/useNeeds";
 
 const t = useT();
 

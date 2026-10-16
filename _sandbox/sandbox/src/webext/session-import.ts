@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { errorMessage } from "@intentic/base/errors";
-import type { Capability, WebExtSessionImport } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { WebExtSessionImport } from "@intentic/sandbox-contract/schemas/webext";
 import { acquireProfileLock, isProfileOpen, launchSessionDir, markConnected, profileOwner, releaseProfileLock } from "../browser/sessions/session-store.js";
 
 // Where a session crosses from the person's browser into the sandbox's: the extension POSTs cookies straight to this

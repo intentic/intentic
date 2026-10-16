@@ -1,5 +1,7 @@
 import { join } from "node:path";
-import type { Capability, Persona, SandboxSettings, SkillSummary } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { SandboxSettings, SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
 import { type AgentMount, agentMounts } from "../agent/run/harness/agent-mounts.js";
 import type { Services } from "../composition.js";
 import { accountGroupOf } from "../capabilities/account-skills.js";

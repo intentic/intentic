@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";

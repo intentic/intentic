@@ -1,5 +1,5 @@
 import type { SideViewInput, SideViewLabel } from "@intentic/extension-api";
-import type { CiRepo, CiRunsResponse, PipelineRun } from "@intentic/sandbox-contract";
+import type { CiRepo, CiRunsResponse, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { STATUS_TONE } from "./statusVisual";
 import { t } from "./i18n.js";
 

@@ -1,6 +1,6 @@
 // Which of the owner's sandboxes carries a press to a machine, so a screen offers a button instead of a command to type
 // out there. Machines named after the owner's own: rog holds the box, omen holds none.
-import type { Device, DeviceSandbox } from "@intentic/sandbox-contract";
+import type { Device, DeviceSandbox } from "@intentic/sandbox-contract/schemas/devices";
 import { listedDevice } from "../../../testing/listedDevice";
 import { doorsHolding, machinesLooked, sandboxDoor, setupDoors } from "./sandboxDoors";
 

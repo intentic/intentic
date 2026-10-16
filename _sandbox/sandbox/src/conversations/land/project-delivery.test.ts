@@ -1,5 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { DevicePairing } from "@intentic/sandbox-contract";
+import type { DevicePairing } from "@intentic/sandbox-contract/schemas/devices";
 import { ownNames, pairingIsOurs, writablePath } from "./project-delivery.js";
 
 // Which of a machine's pairings are this sandbox's, and which paths a machine's merge may write into the sandbox's copy.

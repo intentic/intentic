@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import {
     type IconName,
     type Tip,
@@ -13,8 +13,8 @@ import {
 } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useEditBuffers } from "../files/useEditBuffers";
-import type { WorkspaceTab } from "./workspaceTabs";
+import { useEditBuffers } from "../../../models/workspace/files/useEditBuffers";
+import type { WorkspaceTab } from "../../../models/workspace/tabs/workspaceTabs";
 import { basename } from "@intentic/ui/path";
 
 // Open-item tab strip (VSCode-style): one pill per open file, snapshot diff, or workspace surface. Presentational:

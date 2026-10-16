@@ -6,7 +6,7 @@
 // it happened, however late), the future is the cron rule read in the zone the daemon fires it in. A past slot with no
 // ledger entry draws nothing: the ledger keeps twenty runs, and an empty cell must not read as a miss.
 
-import type { AutomationRun, AutomationSummary } from "@intentic/sandbox-contract";
+import type { AutomationRun, AutomationSummary } from "@intentic/sandbox-contract/schemas/automations";
 import { asZone, cronOptions, type Zone } from "@intentic/sandbox-contract/time";
 import { Cron } from "croner";
 

@@ -1,4 +1,4 @@
-import type { Rule } from "@intentic/sandbox-contract";
+import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import { plainText } from "@intentic/base/plain-text";
 import { runCheck, shellArgv } from "../workload/run-check.js";
 import { conditionHolds, reposOf, standing } from "./rules.js";

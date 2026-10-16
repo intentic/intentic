@@ -8,7 +8,7 @@ import { basename, parentDir } from "@intentic/ui/path";
 import ReviewStat from "../changes/ReviewStat.vue";
 import type { LineStat } from "@intentic/code-read";
 import { extensionOf, formatOf } from "@intentic/ui/file-format";
-import { rendersAsBytes } from "../explorer/fileType";
+import { rendersAsBytes } from "../../../models/workspace/tree/fileType";
 import { compareViewerForExtension } from "../../../workbench/views/viewerRegistry";
 import { useT } from "@intentic/ui/i18n";
 

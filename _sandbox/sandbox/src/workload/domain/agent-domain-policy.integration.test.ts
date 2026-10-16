@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AgentDomainPolicySchema, SandboxSettingsWriteSchema } from "@intentic/sandbox-contract";
+import { AgentDomainPolicySchema, SandboxSettingsWriteSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { fileAgentDomainPolicy } from "./agent-domain-policy.js";
 
 const fixture = async () => {

@@ -1,7 +1,8 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
-import { isForticlientCiphertext, stashedToken } from "@intentic/sandbox-contract";
-import { devFillGet, devFillSet } from "../../setup/devFill";
-import { type FormValues, secretFields } from "./form";
+import { isForticlientCiphertext } from "@intentic/sandbox-contract/schemas/vpn";
+import { stashedToken } from "@intentic/sandbox-contract/schemas/capabilities";
+import { devFillGet, devFillSet } from "../../../app/devFill";
+import { type FormValues, secretFields } from "../../../models/capabilities/form";
 
 // Dev autofill for the capability form: remembers a tile's secret fields after a successful add and
 // offers them back, keyed per tile. Inert in production, where devFillGet/devFillSet are no-ops.

@@ -2,16 +2,16 @@ import { once } from "node:events";
 import { createAdaptorServer, type WebSocketServerLike } from "@hono/node-server";
 import { unstubbed } from "@intentic/testing";
 import { waitFor } from "@intentic/testing/bun";
-import { type SpeechServerMessage, SpeechServerMessageSchema, type SpeechStatus } from "@intentic/sandbox-contract";
+import { type SpeechServerMessage, SpeechServerMessageSchema, type SpeechStatus } from "@intentic/sandbox-contract/schemas/speech";
 import { Hono } from "hono";
 import { WebSocket, WebSocketServer } from "ws";
 import { z } from "zod";
 import type { Services } from "../composition.js";
 import { createLogger } from "../logger.js";
 import { createPerfTracker } from "../system/resources/perf.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 import { createSpeechStreamRoute } from "./speech.routes.js";
-import type { Speech } from "./transcribe.js";
+import type { Speech } from "@intentic/speech/transcribe";
 
 /* The composer's live dictation wire over a real socket, with the models faked: a phrase streams in as s16le frames
    between `begin` and `end`, running guesses come back while it is spoken, one final per ended phrase comes back in

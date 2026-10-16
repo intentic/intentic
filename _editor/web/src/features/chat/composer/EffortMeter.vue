@@ -1,10 +1,10 @@
 <!-- Reasoning-effort ladder over a plain (levels, level) pair, used by the composer and by Sandbox ▸ Agent ▸ Models. -->
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import type { CatalogOption } from "@intentic/sandbox-contract";
+import type { CatalogOption } from "@intentic/sandbox-contract/models/agent-catalog";
 import { ResponsiveOverlay, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { effortRungFill } from "../models/run-settings/effortScale";
+import { effortRungFill } from "../../../models/providers/effortScale";
 
 const t = useT();
 

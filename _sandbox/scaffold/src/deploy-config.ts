@@ -1,4 +1,4 @@
-import type { InventoryEntry, InventoryProvider, ServiceKind } from "@intentic/sandbox-contract";
+import type { InventoryEntry, InventoryProvider, ServiceKind } from "@intentic/sandbox-contract/schemas/inventory";
 
 // Renders/parses the platform-owned region between the markers in deploy.config.ts, regenerated wholesale from
 // InventoryEntry (backend/service/app); user code outside is untouched. Name references (`on: self`) round-trip

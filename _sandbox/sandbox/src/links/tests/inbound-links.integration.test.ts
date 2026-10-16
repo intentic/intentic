@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LINK_TOKEN_PREFIX } from "@intentic/sandbox-contract";
+import { LINK_TOKEN_PREFIX } from "@intentic/sandbox-contract/schemas/links";
 import { fileInboundLinks, inboundLinksDocument } from "../inbound-links.js";
 
 // The inbound-link store is the whole of a link's credential and reach: a hashed token, the terms the owner wrote on it,

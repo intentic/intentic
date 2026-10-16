@@ -1,4 +1,4 @@
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../registry/agents-registry.testing.js";
 import { parkedCards, standingOn } from "./parked-cards.js";
 
 // The registry decides what every client is told about a card's fate: a real answer versus the abort's stand-in is the

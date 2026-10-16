@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { turnProgressReader } from "./listener-progress.js";
 
 const read = (events: readonly AgentEvent[]) => {

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Button, Icon, toneTint } from "@intentic/ui";
-import type { DeviceAgentOp } from "@intentic/sandbox-contract";
+import type { DeviceAgentOp } from "@intentic/sandbox-contract/schemas/devices";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
-import type { DeviceConcern } from "./deviceAttention";
+import type { DeviceConcern } from "../../../../models/sandbox/devices/deviceAttention";
 import { useT } from "@intentic/ui/i18n";
 
 // One thing a machine wants from the reader, drawn as a line rather than a slab: the glyph says which kind of want

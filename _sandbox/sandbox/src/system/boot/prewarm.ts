@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { pollFor } from "@intentic/base/async";
-import { STARTER_REPO } from "@intentic/sandbox-contract";
+import { STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";

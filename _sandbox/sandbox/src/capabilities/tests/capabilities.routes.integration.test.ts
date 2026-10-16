@@ -4,7 +4,9 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { RESERVED_MCP_SERVER_NAMES, stashedMarker, VAULTED } from "@intentic/sandbox-contract";
+import { RESERVED_MCP_SERVER_NAMES } from "@intentic/sandbox-contract/policy/reserved-servers";
+import { stashedMarker } from "@intentic/sandbox-contract/schemas/capabilities";
+import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import { gitFullHead, gitHead } from "@intentic/base/git";
 
 import { createApp } from "../../app.js";
@@ -16,7 +18,7 @@ import { makeWorkspaceDir, moveWorkspacePath, readWorkspaceFile, removeWorkspace
 import { fakeFiles } from "../../workspace/workspace-slice.testing.js";
 import { services } from "../../harness/route-services.testing.js";
 import { memoryPersonasStore } from "../../harness/route-stores.testing.js";
-import { testConfig } from "../../testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import { memoryCapabilitiesStore, memoryDismissalsStore } from "../capabilities-slice.testing.js";
 import { capabilitiesDocument, fileCapabilitiesStore } from "../capabilities-store.js";
 import { publicKeyOf } from "../credentials/ssh-keys.js";

@@ -1,4 +1,5 @@
-import { type AuditEvent, type OrgPolicy, orgPersonPreimage } from "@intentic/sandbox-contract";
+import type { AuditEvent } from "@intentic/sandbox-contract/schemas/audit";
+import { type OrgPolicy, orgPersonPreimage } from "@intentic/sandbox-contract/schemas/organisation";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Logger } from "pino";
 import type { MembersStore } from "../auth/auth.js";
@@ -49,7 +50,7 @@ export const reconcileOrgRoster = async (
     }
     const leaving = (await deps.members.list()).filter((member) => !orgAdmits(policy, member.email)).map((member) => member.email);
     for (const email of leaving) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one roster file, one write at a time through its own queue
+        // one roster file, one write at a time through its own queue
         await deps.members.remove(email);
         deps.revoke(email);
         deps.record({

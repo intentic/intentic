@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { type ProjectFocus, projectFocusRows, projectIdsOf } from "../projectFocus";
 
 // Pins where the project scope is chosen in the tree: a repository's own row narrows to it, the background widens back.

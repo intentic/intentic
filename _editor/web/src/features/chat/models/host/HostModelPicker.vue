@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ResponsiveOverlay } from "@intentic/ui";
 import { computed } from "vue";
-import { dismissModelPick, modelRequest } from "./hostModelPicker";
+import { dismissModelPick, modelRequest } from "../../../../models/conversations/accounts/hostModelPicker";
 import HostPickerBody from "./HostPickerBody.vue";
 import { useT } from "@intentic/ui/i18n";
 

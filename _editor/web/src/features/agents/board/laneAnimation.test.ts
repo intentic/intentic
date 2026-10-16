@@ -1,11 +1,11 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
-import { setAgents } from "../fleet/useAgents-registry";
+import { setAgents } from "../../../models/fleet/useAgents-registry";
 import { router } from "../../../router";
 import AgentsView from "./AgentsView.vue";
 import { IconStub } from "@intentic/ui/testing";

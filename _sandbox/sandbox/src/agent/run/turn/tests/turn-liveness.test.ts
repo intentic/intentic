@@ -1,4 +1,4 @@
-import { memoryFleet } from "../../../../testing.js";
+import { memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
 import { conversationBusy } from "../turn-liveness.js";
 
 test("a conversation with nothing in flight is not busy", () => {

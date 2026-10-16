@@ -1,19 +1,17 @@
+import type { CardlessHost } from "@intentic/sandbox-contract/schemas/devices";
 import {
-    type CardlessHost,
     derivedMachineId,
-    HOST_HEARTBEAT_MS,
     HOST_NATIVE_ENVIRONMENT,
     hostConnectionKey,
-    type deviceContract,
     type HostEnvironment,
     isDerivedMachineId,
     type DeviceFacts,
-    type HostHello,
-    HostHelloSchema,
-    type DeviceScopes,
     type HostSummary,
     parseHostConnection,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/hosts";
+import { HOST_HEARTBEAT_MS, type HostHello, HostHelloSchema } from "@intentic/sandbox-contract/protocol/doors/host-protocol";
+import type { deviceContract } from "@intentic/sandbox-contract/contracts/device.contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { ContractRouterClient } from "@orpc/contract";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { deviceHandler, refreshDeviceSkill } from "../capabilities/handlers/device.handler.js";

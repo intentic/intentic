@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TurnNote } from "@intentic/sandbox-contract";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { ref } from "vue";
 import ChatSpineNode from "./ChatSpineNode.vue";
 import { useT } from "@intentic/ui/i18n";

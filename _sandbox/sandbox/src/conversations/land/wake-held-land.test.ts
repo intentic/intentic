@@ -1,8 +1,10 @@
-import { type LandResult, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import type { LandResult } from "@intentic/sandbox-contract/schemas/agents";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { pino } from "pino";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
-import { isolatedAgent, memoryFleet } from "../../testing.js";
+import { isolatedAgent } from "../registry/agents-store.testing.js";
+import { memoryFleet } from "../registry/agents-registry.testing.js";
 import { joined, NO_QUEUE, type TurnQueue } from "../actor/conversation-queue.js";
 import { type ConversationState, idleConversation } from "../actor/conversation-state.js";
 import type { IsolatedAgent, PersistedAgent } from "../registry/agents-store.js";

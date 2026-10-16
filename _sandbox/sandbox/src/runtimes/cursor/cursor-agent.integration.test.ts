@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import type { AgentOptions, InteractionUpdate, SDKCustomTool, SendOptions } from "@cursor/sdk";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { unstubbed } from "@intentic/testing";
 import type { Logger } from "pino";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
@@ -12,11 +12,11 @@ import type { CallResult, HostCall, HostMessage, RuntimeMessage } from "./cursor
 import type { CursorGateTurn, CursorHookService } from "./cursor-hooks.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pesel } from "../../privacy/detect/tests/ids.testing.js";
+import { pesel } from "@intentic/privacy-detect/testing";
 import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
 import { tokenOf } from "../../privacy/tokens.js";
 

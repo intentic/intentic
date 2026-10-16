@@ -2,7 +2,7 @@
 // vars with the instance id (`GOOGLE_MODE_GOOGLE`, `GOOGLE_MODE_WORK_GMAIL`...). A half-filled card is a connection
 // with a problem, not an absent one: the true answer ("no refresh token") is what the owner can act on.
 
-import { envSuffix } from "@intentic/sandbox-contract";
+import { envSuffix } from "@intentic/sandbox-contract/policy/capability-env";
 
 export type AccessLevel = "read" | "write";
 

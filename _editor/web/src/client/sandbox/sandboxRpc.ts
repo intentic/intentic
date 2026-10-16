@@ -1,5 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
-import { REQUEST_ID_HEADER, sandboxAnswerSchema, sandboxContract } from "@intentic/sandbox-contract";
+import { REQUEST_ID_HEADER } from "@intentic/sandbox-contract/protocol/headers";
+import { sandboxAnswerSchema, sandboxContract } from "@intentic/sandbox-contract";
 import { createORPCClient, type InferClientInputs, type InferClientOutputs, ORPCError } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink, type OpenAPILinkOptions } from "@orpc/openapi-client/fetch";

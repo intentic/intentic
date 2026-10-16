@@ -1,4 +1,4 @@
-import type { Need } from "@intentic/sandbox-contract";
+import type { Need } from "@intentic/sandbox-contract/schemas/needs";
 import { t } from "@intentic/ui/i18n";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { type OperationReport, useOperations } from "../../workbench/operations/operations";

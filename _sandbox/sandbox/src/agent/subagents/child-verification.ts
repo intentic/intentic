@@ -1,8 +1,10 @@
-import type { AgentEvent, SubagentVerification, ToolCallStatus } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { SubagentVerification } from "@intentic/sandbox-contract/schemas/terminal";
+import type { ToolCallStatus } from "@intentic/sandbox-contract/events/requests";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import type { Holding } from "../../conversations/actor/conversation-holdings.js";
 import { createFrameLedger, type FrameLedger, trackedCall } from "../verification/agent-verification.js";
-import { ROSTER } from "./subagent-roster.js";
+import { ROSTER } from "../../conversations/actor/subagent-roster.js";
 
 // Whether a child's report is checked: fed from every provider's own tool_call/tool_call_update frames, not hooks, so
 // Codex, Grok, Cursor and ACP children are covered too. One ledger per child id, alive as long as its record. `no-code`

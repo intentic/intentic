@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
-import { cleanName, nameError } from "../model/form";
+import { cleanName, nameError } from "../../../models/capabilities/form";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

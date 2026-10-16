@@ -1,4 +1,4 @@
-import type { AgentReaction } from "@intentic/sandbox-contract";
+import type { AgentReaction } from "@intentic/sandbox-contract/schemas/agents";
 
 // The marks on a conversation, as a row of chips draws them. Pure, so the two hosts (the board card and the session's
 // own page) cannot group or count the same reactions differently.

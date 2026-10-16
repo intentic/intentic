@@ -1,4 +1,5 @@
-import type { KeyringShareMode, SandboxKeyring } from "@intentic/sandbox-contract";
+import type { KeyringShareMode } from "@intentic/sandbox-contract/schemas/keyring";
+import type { SandboxKeyring } from "@intentic/sandbox-contract/schemas/secrets";
 import { t } from "@intentic/ui/i18n";
 
 // The words a secret kept on one of the owner's computers is said in, wherever it is drawn: its row, the need card that

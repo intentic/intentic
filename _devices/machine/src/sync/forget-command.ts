@@ -1,5 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
 import { execBounded } from "@intentic/base/process";
+import { parseJsonOr } from "@intentic/base/json";
 import type { Log } from "@intentic/local-agent";
 import type { CommandContext } from "@stricli/core";
 import { buildCommand } from "../cli-ui.js";
@@ -52,12 +53,8 @@ const lastObject = (stdout: string): unknown => {
         .split(/\r?\n/)
         .map((text) => text.trim())
         .findLast((text) => text.startsWith("{"));
-    try {
-        return line === undefined ? undefined : JSON.parse(line);
-    } catch {
-        // allow(silent-catch): an answer that is not JSON is said in its own words (distroAnswer)
-        return undefined;
-    }
+    // An answer that is not JSON is said in its own words (distroAnswer).
+    return line === undefined ? undefined : parseJsonOr(line, undefined);
 };
 
 export const distroAnswer = (environment: string, status: number, stdout: string, stderr: string): EnvironmentForgot => {
@@ -96,7 +93,7 @@ export const forgetSandbox = async (
     const mutagen = ids.length === 0 ? undefined : await resolve().catch(() => undefined);
     const retired: Retired[] = [];
     for (const sandboxId of ids) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox at a time; each rewrites the one state file
+        // one sandbox at a time; each rewrites the one state file
         const done = await retireSandbox(sandboxId, log, "forgotten by `intentic-machine sync forget`", { mutagen });
         if (done !== undefined) {
             retired.push(done);

@@ -1,5 +1,5 @@
 import type { DagNode } from "@intentic/extension-ui";
-import type { PipelineJob } from "@intentic/sandbox-contract";
+import type { PipelineJob } from "@intentic/sandbox-contract/schemas/ci";
 import { jobName, type PipelineJobCluster, stageOfNode } from "./pipelineDag";
 import { runDuration, STATUS_TONE } from "../statusVisual";
 

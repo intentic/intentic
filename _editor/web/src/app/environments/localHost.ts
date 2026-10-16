@@ -1,3 +1,4 @@
+import { parseJsonWith } from "@intentic/base/json";
 import { type User, UserSchema } from "@intentic/api-contract";
 import type { ViewBadge } from "@intentic/extension-api";
 import type { Component, Ref } from "vue";
@@ -442,28 +443,14 @@ const SessionAnswerSchema = z
     .nullable();
 
 export const accountOfSession = (text: string): User | null => {
-    try {
-        return SessionAnswerSchema.safeParse(JSON.parse(text)).data?.user ?? null;
-    } catch (error) {
-        if (error instanceof SyntaxError) {
-            return null;
-        }
-        throw error;
-    }
+    return parseJsonWith(text, SessionAnswerSchema)?.user ?? null;
 };
 
 // A refusal's sentence, which Better Auth and oRPC both say as `message`.
 const RefusalSchema = z.object({ message: z.string().min(1) });
 
 export const refusalOf = (text: string): string | undefined => {
-    try {
-        return RefusalSchema.safeParse(JSON.parse(text)).data?.message;
-    } catch (error) {
-        if (error instanceof SyntaxError) {
-            return undefined;
-        }
-        throw error;
-    }
+    return parseJsonWith(text, RefusalSchema)?.message;
 };
 
 declare global {

@@ -1,5 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
-import { type CredentialGateKind, type HostGuardSetting, type SecretHostGuard, secretsContract, tightensHostGuard } from "@intentic/sandbox-contract";
+import type { CredentialGateKind, SecretHostGuard } from "@intentic/sandbox-contract/schemas/secrets";
+import { type HostGuardSetting, tightensHostGuard } from "@intentic/sandbox-contract/policy/secret-hosts";
+import { secretsContract } from "@intentic/sandbox-contract/contracts/secrets.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
 import { isOwnerBearer } from "../../auth/owner-gates.js";

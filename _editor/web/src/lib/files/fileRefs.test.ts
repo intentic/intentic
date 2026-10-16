@@ -8,7 +8,7 @@ jest.mock("../queryPersistence", treeCacheModule);
 
 const { FILE_REF, parseRef, resolveInTree, toWorkspacePath } = await import("./fileRefs");
 const { workspaceTreeKeyFor } = await import("./workspaceTreeCache");
-const { workspaceTreeKey } = await import("../../features/workspace/health/workspaceTreeKey");
+const { workspaceTreeKey } = await import("../../models/workspace/tree/workspaceTreeKey");
 const { workspaceAgent } = await import("../../app/workspaceScope");
 
 // The explorer's fetch landing for one scope, the shared tree when none is named.

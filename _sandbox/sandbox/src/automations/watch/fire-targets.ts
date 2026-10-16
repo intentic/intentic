@@ -1,7 +1,7 @@
-import { watchWakePrompt } from "@intentic/sandbox-contract";
+import { watchWakePrompt } from "@intentic/sandbox-contract/events/watch-wake";
 import type { Services } from "../../composition.js";
 import { conversationProfile } from "../../conversations/registry/agents-store.js";
-import { deliverWake } from "../../agent/run/turn/wake-delivery.js";
+import { deliverWake } from "../../seams/wake-delivery.js";
 import { automationExpired, automationFired } from "../../push/notifications.js";
 import type { AutomationRecord } from "../automations-store.js";
 import { conditionLabel, sinceLabel } from "./watch-condition.js";

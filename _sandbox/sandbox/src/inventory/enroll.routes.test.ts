@@ -1,11 +1,13 @@
-import { CONNECT_TOKEN_HEADER, EnrollCodeAnswerSchema, type EnrollHostInput } from "@intentic/sandbox-contract";
+import { CONNECT_TOKEN_HEADER } from "@intentic/sandbox-contract/protocol/headers";
+import { EnrollCodeAnswerSchema } from "@intentic/sandbox-contract/schemas/short-codes";
+import type { EnrollHostInput } from "@intentic/sandbox-contract/schemas/inventory";
 import { hostSshIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { unstubbed } from "@intentic/testing";
 import { ORPCError } from "@orpc/server";
 import { Hono } from "hono";
 import type { AppEnv } from "../app-env.js";
 import type { Services } from "../composition.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 import { pairings } from "../peers/enrollment.js";
 import { type CodeGrant, createRedeemRoute, redeemCodes } from "../peers/redeem-codes.js";
 import { createEnrollCodeRoute, createEnrollRoute, ENROLL_AFTER_REDEEM_MS } from "./enroll.routes.js";

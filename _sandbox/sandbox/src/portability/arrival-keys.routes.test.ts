@@ -1,4 +1,6 @@
-import { CapabilitySchema, type DeviceFacts, ProviderKeysAppliedSchema, ProviderKeysSchema } from "@intentic/sandbox-contract";
+import { CapabilitySchema } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { DeviceFacts } from "@intentic/sandbox-contract/schemas/hosts";
+import { ProviderKeysAppliedSchema, ProviderKeysSchema } from "@intentic/sandbox-contract/state/arrival";
 import { unstubbed } from "@intentic/testing";
 import { createApp } from "../app.js";
 import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.testing.js";

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
-import { pictureRect } from "../../browsers/viewportCoords";
+import { pictureRect } from "../../../models/browsers/viewportCoords";
 
 // An open <select>'s native menu never reaches the screencast, so the daemon reads its options (readSelect) and
 // this draws a real menu on this side of the wire: sharp at any zoom, scrollable, keyboard-driven, with nothing

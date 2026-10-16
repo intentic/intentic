@@ -103,7 +103,6 @@ const refillStock = async (
     for (const region of new Set([config.hosted.region, config.hosted.regionEu].filter((entry) => entry !== ``))) {
         const stock = live.get(region) ?? [];
         for (const surplus of stock.slice(target)) {
-            // oxlint-disable-next-line eslint/no-await-in-loop
             await destroyPoolMachine(prisma, config, surplus).catch((error: unknown) =>
                 logger.error({ err: error, app: surplus.appName }, `hosted pool: shrinking failed; retried next tick`),
             );
@@ -118,7 +117,6 @@ const refillStock = async (
             }
             headroom -= 1;
             // A capacity refusal ends the whole tick: the allowance is the org's, so every region meets the same wall.
-            // oxlint-disable-next-line eslint/no-await-in-loop
             const refusal = await buildPoolMachine(prisma, config, logger, region, image).then(
                 () => undefined,
                 (error: unknown) => {
@@ -149,9 +147,7 @@ export const reconcileHostedPool = async (prisma: PrismaClient, config: Config, 
         if (now - row.updatedAt.getTime() <= CLAIM_TIMEOUT_MS) {
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop
         const adopted = await prisma.hostedMachine.findUnique({ where: { appName: row.appName } });
-        // oxlint-disable-next-line eslint/no-await-in-loop
         await (adopted !== null ? prisma.hostedPoolMachine.delete({ where: { id: row.id } }) : destroyPoolMachine(prisma, config, row)).catch(
             (error: unknown) => logger.error({ err: error, app: row.appName }, `hosted pool: collecting a crashed claim failed`),
         );
@@ -160,7 +156,7 @@ export const reconcileHostedPool = async (prisma: PrismaClient, config: Config, 
     const target = hostedEnabled(config) ? config.hosted.poolSize : 0;
     if (target === 0) {
         for (const row of rows) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- sequential teardown, gentle on the API
+            // sequential teardown, gentle on the API
             await destroyPoolMachine(prisma, config, row).catch((error: unknown) =>
                 logger.error({ err: error, app: row.appName }, `hosted pool: drain failed; retried next tick`),
             );
@@ -173,18 +169,16 @@ export const reconcileHostedPool = async (prisma: PrismaClient, config: Config, 
     for (const row of rows) {
         // A drifted image is worth nothing claimable, for the same reason a wrong rootfs is.
         if (row.image !== stockImage) {
-            // oxlint-disable-next-line eslint/no-await-in-loop
             await destroyPoolMachine(prisma, config, row).catch((error: unknown) =>
                 logger.error({ err: error, app: row.appName }, `hosted pool: replacing a drifted machine failed`),
             );
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one small read per standing row, every five minutes
+        // one small read per standing row, every five minutes
         const health = await poolMachineHealth(config, row);
         // Checked before the clock: a pulled rootfs is the point, so a late finish banks it rather than paying twice.
         if (health === `warm`) {
             if (row.state === `building`) {
-                // oxlint-disable-next-line eslint/no-await-in-loop
                 await prisma.hostedPoolMachine.update({ where: { id: row.id }, data: { state: `ready` } });
                 logger.info({ app: row.appName, region: row.region }, `hosted pool: machine ready`);
             }
@@ -194,7 +188,6 @@ export const reconcileHostedPool = async (prisma: PrismaClient, config: Config, 
         // Only a `building` row can be stuck this way; a `ready` one waits on nothing, so its age says nothing.
         const stuck = row.state === `building` && now - row.createdAt.getTime() > BUILD_TIMEOUT_MS;
         if (health === `dead` || stuck) {
-            // oxlint-disable-next-line eslint/no-await-in-loop
             await destroyPoolMachine(prisma, config, row).catch((error: unknown) =>
                 logger.error({ err: error, app: row.appName, state: row.state }, `hosted pool: replacing a machine that is gone failed`),
             );

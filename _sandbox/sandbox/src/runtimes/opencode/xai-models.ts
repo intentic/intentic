@@ -38,7 +38,7 @@ export const parseModelSuggestions = (message: string): string[] => suggestedMod
 // endpoint with an invalid model and reads valid ids out of xAI's rejection. Returns [] only if xAI names none.
 export const discoverXaiModels = async (accessToken: string, fetchImpl: typeof fetch = fetch): Promise<string[]> => {
     for (const url of [XAI_MODELS_URL, XAI_LANGUAGE_MODELS_URL]) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a ladder: the second endpoint is asked only when the first says nothing
+        // a ladder: the second endpoint is asked only when the first says nothing
         const ids = (await listModels(url, accessToken, fetchImpl)).map((model) => model.id).filter(isChatModel);
         if (ids.length > 0) {
             return ids;

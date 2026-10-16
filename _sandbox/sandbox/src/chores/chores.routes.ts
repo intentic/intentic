@@ -1,5 +1,5 @@
 import { choreById, PROBES } from "@intentic/sandbox-contract/chores";
-import { choresContract } from "@intentic/sandbox-contract";
+import { choresContract } from "@intentic/sandbox-contract/contracts/chores.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";

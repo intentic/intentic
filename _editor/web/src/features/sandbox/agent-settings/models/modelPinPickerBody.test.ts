@@ -33,10 +33,10 @@ let unpickable: ((entry: { provider: string; value: string }) => boolean) | unde
 let ticked: { readonly provider?: string; readonly model?: string } | undefined;
 
 // Only used as the floor when adding, where there's no entry to read a provider off.
-jest.mock(`../../../chat/run/useChat`, () => ({ useChat: () => ({ provider: ref(`claude`), model: ref(`claude-haiku-4-5`) }) }));
+jest.mock(`../../../../models/conversations/run/useChat`, () => ({ useChat: () => ({ provider: ref(`claude`), model: ref(`claude-haiku-4-5`) }) }));
 // Empty: puts every model on the static effort scale with no `fast` badge; the badge case sets its own catalog below.
 const catalog = ref<Record<string, readonly { value: string; label: string; badges?: readonly string[]; efforts?: readonly string[] }[]>>({});
-jest.mock(`../../../chat/accounts/providerCatalog`, () => ({
+jest.mock(`../../../../models/providers/providerCatalog`, () => ({
     providerModels: catalog,
     providerDisplayLabel: (provider: string) => provider.toUpperCase(),
     // <ProviderLogo> names it; bun links an ESM import against exactly what this factory returns.
@@ -44,7 +44,7 @@ jest.mock(`../../../chat/accounts/providerCatalog`, () => ({
 }));
 
 const { default: ModelPinPickerBody } = await import("./ModelPinPickerBody.vue");
-const { advertisedLoops } = await import("../../../chat/models/offeredLoops");
+const { advertisedLoops } = await import("../../../../models/providers/offeredLoops");
 
 let app: App | undefined;
 const written: unknown[] = [];

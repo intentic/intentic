@@ -1,5 +1,5 @@
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import {
-    type Capability,
     GRANT_SHELVES,
     type GrantNeed,
     grantSite,
@@ -7,10 +7,8 @@ import {
     type Need,
     type NeedAsk,
     type NeedSubject,
-    type Persona,
-    type PersonaPowers,
-    PersonaPowersSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/needs";
+import { type Persona, type PersonaPowers, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
 import type { ConversationGrants } from "../../personas/conversation-grants.js";
 import type { AskContext, Met, NeedKindHandler, Resolved } from "../need-kinds.js";
 

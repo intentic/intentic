@@ -3,7 +3,7 @@
 // Both agent ops (update, restart) stop the process carrying the request, so the stream always ends with no
 // terminal frame. Pinned here: a silent end is success, a refusal is thrown, and a completed run is quoted.
 import "@intentic/testing/dom";
-import type { DeviceFlowLine } from "@intentic/sandbox-contract";
+import type { DeviceFlowLine } from "@intentic/sandbox-contract/schemas/devices";
 import { AsyncIteratorClass } from "@orpc/client";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
@@ -15,7 +15,7 @@ const flow = jest.fn<SandboxRpc[`system`][`runDeviceAgentFlow`]>();
 jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ system: { runDeviceAgentFlow: flow } }) }));
 jest.mock(`../../../client/sandbox/sandboxClient`, () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn(), sandboxError: jest.fn() }));
 
-const { runDeviceAgentFlow } = await import("./useDevices");
+const { runDeviceAgentFlow } = await import("../../../models/sandbox/devices/useDevices");
 
 // The daemon's frames as the typed client hands them over, the same shape the sandbox flow reads, ending cleanly.
 const streams = (frames: readonly DeviceFlowLine[]): void => {

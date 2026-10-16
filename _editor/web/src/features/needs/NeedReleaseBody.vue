@@ -1,13 +1,13 @@
 <!-- A release need's own answer: only the people the gate names may release it, or decline it. -->
 <script setup lang="ts">
-import type { Need, ReleaseNeed } from "@intentic/sandbox-contract";
+import type { Need, ReleaseNeed } from "@intentic/sandbox-contract/schemas/needs";
 import { Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import ChatDecisionButton from "../chat/transcript/cards/ChatDecisionButton.vue";
+import ChatDecisionButton from "../../components/ChatDecisionButton.vue";
 import { useSandboxSession } from "../../client/session/sandboxSession";
 import { useNeedAnswer } from "./needAnswer";
-import { useNeeds } from "./useNeeds";
+import { useNeeds } from "../../models/needs/useNeeds";
 
 const t = useT();
 

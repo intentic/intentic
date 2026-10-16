@@ -1,4 +1,4 @@
-import type { LoginStatus, OauthAccount } from "@intentic/sandbox-contract";
+import type { LoginStatus, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { Services } from "../../../composition.js";
 import { forgetAccountState, sameAccount, signInIdentity } from "../../../agent/providers/accounts/account-identity.js";
 import { type ArmedCatch, armLoopbackCatch, loopbackWatchers } from "../../../agent/providers/accounts/loopback-bridge.js";

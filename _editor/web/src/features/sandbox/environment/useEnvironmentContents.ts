@@ -1,4 +1,4 @@
-import type { EnvironmentItem } from "@intentic/sandbox-contract";
+import type { EnvironmentItem } from "@intentic/sandbox-contract/schemas/environment";
 import { computed, ref } from "vue";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";

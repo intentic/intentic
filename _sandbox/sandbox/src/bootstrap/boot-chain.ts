@@ -1,6 +1,6 @@
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import type { ArrivalItem } from "@intentic/sandbox-contract";
+import type { ArrivalItem } from "@intentic/sandbox-contract/state/arrival";
 import { panelSession } from "@intentic/sandbox-contract/session-names";
 import { defaultGit } from "@intentic/base/git";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";

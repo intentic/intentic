@@ -1,4 +1,5 @@
-import type { GitChange, GitCommit } from "@intentic/sandbox-contract";
+import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
+import type { GitCommit } from "@intentic/sandbox-contract/schemas/git/git-history";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { parseNameStatusZ, parseNumstatZ } from "./changes-porcelain.js";
 import { identity } from "../git.js";

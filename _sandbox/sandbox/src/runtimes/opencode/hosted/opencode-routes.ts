@@ -1,14 +1,8 @@
 import { createHash } from "node:crypto";
-import {
-    type AgentProvider,
-    endpointIdOf,
-    endpointProvider,
-    type Model,
-    NATIVE_PROVIDERS,
-    PROVIDER_VENDOR,
-    providerLabel,
-    TRIAL_ENDPOINT_ID,
-} from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { endpointIdOf, endpointProvider, PROVIDER_VENDOR, providerLabel, TRIAL_ENDPOINT_ID } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { Model } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
 import { endpointConfigOf, mintsEndpointProvider } from "../../../endpoints/local-model.js";
 import { opt } from "../../../opt.js";
 import { type ModelRoute, resolveRoute, type RouteDeps, routeSlug, routeUrl, type RouteWire } from "../../../agent/providers/routes/model-routes.js";

@@ -1,4 +1,4 @@
-import type { TurnJournal } from "../../agent/run/turn/turn-journal.js";
+import type { TurnJournal } from "../../store/journals/turn-journal.js";
 import { type AgentArchiveDeps, archivable, archiveAgents } from "./archive.js";
 import { massAbsence } from "./mass-absence.js";
 

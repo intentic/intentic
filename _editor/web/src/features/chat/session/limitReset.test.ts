@@ -1,4 +1,4 @@
-import type { LimitResetStatus } from "@intentic/sandbox-contract";
+import type { LimitResetStatus } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 

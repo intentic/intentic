@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { ownPhoneReach, phoneSummaries, phoneTypingRefusal, sealAnswer, typedOnPhone } from "./phone-peer.js";
 
 /* What the sandbox decides about a phone's calls before and after they cross: the seal, and the typing check. */

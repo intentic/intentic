@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { Coalescer } from "@intentic/base/async";
 import { STATE_DIR } from "@intentic/constants";
-import type { WorkspaceTree, WorkspaceTreeDelta } from "@intentic/sandbox-contract";
+import type { WorkspaceTree, WorkspaceTreeDelta } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { type AsyncSubscription, subscribe } from "@parcel/watcher";
 import type { Logger } from "pino";
 import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, isReferencePath, REFERENCE_DIR, toRelPath } from "@intentic/workspace-ignore";

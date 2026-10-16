@@ -1,4 +1,4 @@
-import type { ModelRole } from "@intentic/sandbox-contract";
+import type { ModelRole } from "@intentic/sandbox-contract/models/model-roles";
 
 // Not a fault: nobody set a model for this role. Thrown by agent/models/role-model.ts before it reaches a catalog or an
 // adapter, and told apart from a model that failed by every gate that asks a role's model for a verdict

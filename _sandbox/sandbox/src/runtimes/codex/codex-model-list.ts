@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { Model, ModelBadge } from "@intentic/sandbox-contract";
+import type { Model, ModelBadge } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { containerKeyEnv } from "../../seams/sealed-env.js";
 import { jsonLines } from "../stdio/child-output.js";
 import { codexBinary } from "./codex-path.js";

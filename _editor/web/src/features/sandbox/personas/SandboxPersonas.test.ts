@@ -1,7 +1,8 @@
 // Pins two wordings that cost something if wrong: marking a persona whose accounts are all signed out, and saving both
 // accounts on a persona that spans sites. jsdom: renders and reads the mounted DOM.
 import "@intentic/testing/dom";
-import { type Persona, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { type Persona, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract/schemas/personas";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import type { BrowserAccount } from "../../extensions/useBrowserAccounts";
 import { waitFor } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref, ref as shallow } from "vue";
@@ -25,7 +26,7 @@ const save = jest.fn<(persona: Persona) => Promise<unknown>>().mockImplementatio
 });
 const remove = jest.fn<(id: string) => Promise<unknown>>().mockResolvedValue({ ok: true });
 
-jest.mock(`./usePersonas`, () => ({
+jest.mock(`../../../models/sandbox/personas/usePersonas`, () => ({
     usePersonas: () => ({
         personas,
         connected,
@@ -44,12 +45,12 @@ jest.mock(`../../extensions/useBrowserAccounts`, () => ({
 
 // Mocked since the real composable reaches the sandbox client at import time, which jsdom has no environment for.
 const capabilities = ref<{ id: string; kind: string }[]>([]);
-jest.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
+jest.mock(`../../../models/capabilities/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
 
 // The installed extensions, for the persona's extensions grant: two switched on, one off (nothing to grant).
 const extension = (id: string, enabled = true) => ({ id, enabled, manifest: { publisher: id.split(`.`)[0]!, name: id.split(`.`)[1]! } });
 const extensions = ref([extension(`acme.notes`), extension(`acme.tasks`), extension(`acme.off`, false)]);
-jest.mock(`../../extensions/useExtensions`, () => ({ useExtensions: () => ({ extensions }) }));
+jest.mock(`../../../models/extensions/useExtensions`, () => ({ useExtensions: () => ({ extensions }) }));
 
 // Stubbed separately from the query mock below, which answers everything with a workspace tree; this suite is about the
 // persona, so the kit answers empty.

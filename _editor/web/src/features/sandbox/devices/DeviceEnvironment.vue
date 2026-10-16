@@ -3,11 +3,11 @@ import { agentLines, BrandMark, Button, DeviceAgentNotes, Row, StatusBadge } fro
 import { computed } from "vue";
 import AgentRunStrip from "./health/AgentRunStrip.vue";
 import DeviceConcern from "./health/DeviceConcern.vue";
-import { cardRoute } from "./deviceLinks";
+import { cardRoute } from "../../../models/sandbox/devices/deviceLinks";
 import type { DeviceAgentPanel } from "./deviceAgent";
-import type { DeviceConcern as Concern } from "./health/deviceAttention";
-import { type DeviceRow, deviceState, deviceTone } from "./deviceRows";
-import { lastSeenNote, osMark, syncNote, syncStopped } from "./deviceFacts";
+import type { DeviceConcern as Concern } from "../../../models/sandbox/devices/deviceAttention";
+import { type DeviceRow, deviceState, deviceTone } from "../../../models/sandbox/devices/deviceRows";
+import { lastSeenNote, osMark, syncNote, syncStopped } from "../../../models/sandbox/devices/deviceFacts";
 import { environmentAddressed, environmentDetail, environmentIdentity, environmentTitle } from "./machineEnvironments";
 import type { DeviceOps } from "./runners/deviceOps";
 

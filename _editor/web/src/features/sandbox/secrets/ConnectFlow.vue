@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { type AgentProvider, providerSpec } from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { Button, ui } from "@intentic/ui";
 import { formatList } from "@intentic/ui/format";
 import { computed, nextTick, onUnmounted, ref, useId, useTemplateRef, watch } from "vue";
-import { useChat } from "../../chat/run/useChat";
-import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
+import { useChat } from "../../../models/conversations/run/useChat";
+import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import { readClipboard, useCopied } from "@intentic/ui/clipboard";
 import { useT } from "@intentic/ui/i18n";
 import { onScreen } from "../../../workbench/window/onScreen";
@@ -352,6 +353,8 @@ watch(flow, (live) => {
                 >
                     {{ flow.code }}
                 </button>
+                <!-- allow(recipes): A COPY GLYPH THAT SAYS "COPIED" for a beat after the press: while the word shows,
+                     the box is the word's width, then it is the glyph's square again. -->
                 <button
                     type="button"
                     :aria-label="t(`sandbox.connectFlow.copyCode`)"

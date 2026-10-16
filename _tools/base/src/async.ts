@@ -217,7 +217,7 @@ export const mapPool = async <T>(items: readonly T[], limit: number, task: (item
     let next = 0;
     const worker = async (): Promise<void> => {
         for (let item = items[next++]; item !== undefined; item = items[next++]) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one worker is sequential by definition; `limit` of them run at once
+            // one worker is sequential by definition; `limit` of them run at once
             await task(item);
         }
     };
@@ -535,16 +535,16 @@ export const retry = async <T>(task: (attempt: number) => Promise<T>, options: R
     const { signal } = options;
     for (let attempt = 1; ; attempt += 1) {
         try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- tries are sequential by definition
+            // tries are sequential by definition
             return await task(attempt);
         } catch (error) {
             if (attempt >= options.attempts || isAborted(signal)) {
                 throw error;
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- the wait between tries
+            // the wait between tries
             await (options.wait ?? waitOut)(options.delayMs(attempt), signal);
             if (signal !== undefined && isAborted(signal)) {
-                // oxlint-disable-next-line typescript/only-throw-error -- the abort's own reason, as fetch rejects with it
+                // the abort's own reason, as fetch rejects with it
                 throw signal.reason;
             }
         }
@@ -591,7 +591,7 @@ export const pollFor = async <T>(probe: () => Promise<T | undefined>, options: P
         }
         let value: T | undefined;
         try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- polling is sequential by definition
+            // polling is sequential by definition
             value = await probe();
         } catch (error) {
             if (options.retryOnError !== true) {
@@ -608,7 +608,7 @@ export const pollFor = async <T>(probe: () => Promise<T | undefined>, options: P
         if (probes >= (options.maxProbes ?? Infinity)) {
             return { kind: `expired` };
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- the wait between probes
+        // the wait between probes
         await wait();
     }
 };
@@ -631,7 +631,7 @@ export const pollUntil = async (check: () => boolean | Promise<boolean>, options
     const wait = options.wait ?? ((ms: number) => sleep(ms, { signal: options.signal }));
     const deadline = now() + options.timeoutMs;
     for (;;) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- polling is sequential by definition
+        // polling is sequential by definition
         if (await check()) {
             return true;
         }
@@ -639,7 +639,7 @@ export const pollUntil = async (check: () => boolean | Promise<boolean>, options
             return false;
         }
         options.onRetry?.();
-        // oxlint-disable-next-line eslint/no-await-in-loop -- the wait between probes
+        // the wait between probes
         await wait(options.intervalMs);
     }
 };

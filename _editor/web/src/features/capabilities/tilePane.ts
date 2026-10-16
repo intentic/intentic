@@ -1,10 +1,11 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { contributionDiscriminator } from "@intentic/extension-manifest";
 import type { RegistryEntry } from "@intentic/registry";
-import type { ExtensionSummary, CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
+import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { computed, type Ref } from "vue";
-import type { BackgroundProcessRow } from "../terminal/useBackgroundProcesses";
-import { rebuildStep } from "./model/connections";
+import type { BackgroundProcessRow } from "../../models/terminal/useBackgroundProcesses";
+import { rebuildStep } from "../../models/capabilities/connections";
 import { type ConnectionSources, liveState, tileRowFacts } from "./model/connectionRows";
 import type { DeviceConnection } from "./model/deviceConnections";
 

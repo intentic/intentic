@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { errorMessage } from "@intentic/base/errors";
-import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { Caller } from "../../auth/auth.js";
 import type { ConversationActors } from "./conversation-actors.js";
 import type { Holding } from "./conversation-holdings.js";

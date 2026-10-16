@@ -1,4 +1,4 @@
-import type { ListenerDispatchFrame, ListenerMessage } from "@intentic/sandbox-contract";
+import type { ListenerDispatchFrame, ListenerMessage } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import { waitFor } from "@intentic/testing/bun";
 import { GatewayRefusal } from "./gateway.js";
 import { deliverChunked, paintReply } from "./reply.js";

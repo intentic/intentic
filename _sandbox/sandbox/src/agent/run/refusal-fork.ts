@@ -1,5 +1,5 @@
 import type { SDKAssistantMessage, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { isSafeguardFlagText } from "../providers/failure-sentences.js";
+import { isSafeguardFlagText } from "../../engines/failure-sentences.js";
 
 // Where a turn the provider's safety classifier stopped can be resumed from, so a retry carries none of what was stopped.
 //

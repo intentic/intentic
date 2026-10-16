@@ -1,6 +1,6 @@
 // The scope switcher once listed every conversation that ever had a branch, flat, in roster order, each under the same
 // robot: forty rows of near-identical names with nothing to tell them apart. These pin what replaced it.
-import type { FleetAgent } from "../../../agents/fleet/useAgents-fleet";
+import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import { copyMatches, SCOPE_WINDOW, scopeGroups, switchableCopies } from "../scopeChoices";
 
 const NONE = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };

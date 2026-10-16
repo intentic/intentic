@@ -1,4 +1,4 @@
-import type { PushNotification, RelayChannel } from "@intentic/sandbox-contract";
+import type { PushNotification, RelayChannel } from "@intentic/sandbox-contract/schemas/push";
 import { DEAD, type ChannelSend } from "./send.js";
 
 /* The relay transport: a native install's OS push service (APNs) only accepts sends from the app's vendor. */

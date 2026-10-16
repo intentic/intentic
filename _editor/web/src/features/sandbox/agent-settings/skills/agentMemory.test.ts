@@ -12,7 +12,7 @@ import * as vueRouterOriginal from "vue-router";
 const files = new Map<string, string>();
 const readFile = jest.fn(async (path: string) => files.get(path));
 const saveText = jest.fn(async (path: string, text: string) => void files.set(path, text));
-jest.mock(`../../../workspace/explorer/useWorkspaceTree`, () => ({ useWorkspaceTree: () => ({ readFile, saveText }) }));
+jest.mock(`../../../../models/workspace/tree/useWorkspaceTree`, () => ({ useWorkspaceTree: () => ({ readFile, saveText }) }));
 
 const push = jest.fn();
 jest.mock(`vue-router`, () => ({

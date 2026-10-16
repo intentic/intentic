@@ -1,7 +1,7 @@
 // AgentSafetyRules renders every COMMAND_RULE_CATALOG entry once, generated from the contract with no controls,
 // since the un-waivable half of it can't be edited.
 import "@intentic/testing/dom";
-import { COMMAND_RULE_CATALOG } from "@intentic/sandbox-contract";
+import { COMMAND_RULE_CATALOG } from "@intentic/sandbox-contract/policy/safety-policy";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h } from "vue";
 import { IconStub } from "@intentic/ui/testing";

@@ -1,5 +1,5 @@
 import { createLogger } from "../../logger.js";
-import { testConfig } from "../../testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import type { CliParts } from "./vendor-cli-slice.js";
 
 // A vendor CLI's parts with nothing signed in, as route suites stand a provider slice up. Not part of the build.

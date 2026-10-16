@@ -1,10 +1,12 @@
-import { type AgentEvent, type PermissionMode, PI } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
+import { PI } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
-import { withFileNote } from "../../agent/prompt/attachment-note.js";
+import { withFileNote } from "../../sessions/vocabulary/attachment-note.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { consultWith, type GuardOutcome, vendorSubject } from "../../guard/command-guard.js";
 import { conversationTainted } from "../../guard/turn-taint.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { EXECUTE_PROMPT, PLAN_PREAMBLE } from "./plan-mode.js";
 import { textPlanTurn, vendorTurn } from "./vendor-turn.js";
 

@@ -1,5 +1,6 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import type { ActivityEvent, AgentEvent } from "@intentic/sandbox-contract";
+import type { ActivityEvent } from "@intentic/sandbox-contract/schemas/activity";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { createOutboundSniffer } from "./outbound.js";

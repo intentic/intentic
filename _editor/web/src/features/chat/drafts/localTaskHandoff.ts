@@ -1,3 +1,4 @@
+import { parseJsonWith } from "@intentic/base/json";
 import type { LocalTaskHandoff } from "../../../app/environments/localHost";
 import { TASK_QUERY } from "../../../app/environments/localHost";
 import type { RouteLocationNormalized, RouteLocationRaw } from "vue-router";
@@ -28,23 +29,10 @@ const fromBase64Url = (value: string): string | undefined => {
     }
 };
 
-// Only a SyntaxError means "not JSON"; anything else is a bug, and is thrown.
-const parsedJson = (text: string): unknown => {
-    try {
-        return JSON.parse(text);
-    } catch (error) {
-        if (error instanceof SyntaxError) {
-            return undefined;
-        }
-        throw error;
-    }
-};
-
 /** The handoff a `?task=` value carries, or undefined for one that does not decode or validate. */
 export const parseTaskHandoff = (raw: string): LocalTaskHandoff | undefined => {
     const text = fromBase64Url(raw);
-    const parsed = text === undefined ? undefined : HandoffSchema.safeParse(parsedJson(text));
-    return parsed?.success === true ? parsed.data : undefined;
+    return text === undefined ? undefined : parseJsonWith(text, HandoffSchema);
 };
 
 // A browser that refuses storage (a SecurityError, a DOMException) has none; anything else is thrown.
@@ -65,8 +53,7 @@ export const taskAlreadySent = (id: string): boolean => {
     if (raw === null || raw === undefined) {
         return false;
     }
-    const ids = z.array(z.string()).safeParse(parsedJson(raw));
-    return ids.success && ids.data.includes(id);
+    return parseJsonWith(raw, z.array(z.string()))?.includes(id) === true;
 };
 
 export const rememberTaskSent = (id: string): void => {
@@ -75,8 +62,7 @@ export const rememberTaskSent = (id: string): void => {
         if (store === undefined) {
             return;
         }
-        const ids = z.array(z.string()).safeParse(parsedJson(store.getItem(SENT_KEY) ?? `[]`));
-        const kept = ids.success ? ids.data : [];
+        const kept = parseJsonWith(store.getItem(SENT_KEY) ?? `[]`, z.array(z.string())) ?? [];
         if (!kept.includes(id)) {
             kept.push(id);
         }

@@ -144,7 +144,7 @@ export async function* sseEvents(body: ReadableStream<Uint8Array>, idleMs: numbe
             const idle = new Promise<`idle`>((resolve) => {
                 timer = setTimeout(() => resolve(`idle`), idleMs);
             });
-            // oxlint-disable-next-line eslint/no-await-in-loop -- streaming reader; each chunk must be awaited in order as it arrives
+            // streaming reader; each chunk must be awaited in order as it arrives
             const result = await Promise.race([reader.read(), idle]);
             clearTimeout(timer);
             if (result === `idle`) {

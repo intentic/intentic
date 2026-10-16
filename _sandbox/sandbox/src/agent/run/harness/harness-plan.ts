@@ -1,4 +1,6 @@
-import { type Capability, profileOf, type SandboxSettings, SandboxSettingsSchema, type RoutedAgentTurn } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { profileOf, type RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { browserFields } from "../../../browser/tools/browser-fields.js";
 import { mcpToolsOf } from "../../../capabilities/mcp-tools.js";
 import type { Services } from "../../../composition.js";
@@ -16,7 +18,7 @@ import {
     harnessCredentialOf,
     resolveHarnessCredentials,
 } from "../../providers/harness-credentials.js";
-import { withAttachmentNote } from "../../prompt/attachment-note.js";
+import { withAttachmentNote } from "../../../sessions/vocabulary/attachment-note.js";
 import { shieldHarnessCredential } from "../../../privacy/harness-route.js";
 import { LITERAL_SLASH_NOTE } from "../../prompt/turn-preamble.js";
 import { releasingMounts } from "../../tools/turn-mounts.js";

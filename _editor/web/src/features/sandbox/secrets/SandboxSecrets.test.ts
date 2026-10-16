@@ -1,7 +1,9 @@
 // needs jsdom: renders the real page. Pins that the list stays short as accounts grow, what's owed rises to the
 // top, and a truncated or filtered account stays reachable, never silently dropped.
 import "@intentic/testing/dom";
-import type { ExtensionSummary, SecretInventoryEntry, CapabilitySummary, SandboxKeyring } from "@intentic/sandbox-contract";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
+import type { SecretInventoryEntry, SandboxKeyring } from "@intentic/sandbox-contract/schemas/secrets";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
@@ -11,7 +13,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // Import chain touches window.matchMedia (@intentic/ui useDevice) and window.env (environment.ts) at import time.
 
 const inventory = ref<SecretInventoryEntry[]>([]);
-jest.mock(`../../capabilities/connect/secrets/useSecrets`, () => ({
+jest.mock(`../../../models/capabilities/useSecrets`, () => ({
     useSecretInventory: () => ({
         inventory,
         missingRequiredCount: ref(0),
@@ -47,13 +49,13 @@ jest.mock(`../../capabilities/connect/secrets/useKeyrings`, () => ({
 }));
 
 const capabilities = ref<CapabilitySummary[]>([]);
-jest.mock(`../../capabilities/connect/useCapabilities`, () => ({
+jest.mock(`../../../models/capabilities/useCapabilities`, () => ({
     useCapabilities: () => ({ capabilities }),
     useCapabilitySecret: () => ({ mutateAsync: jest.fn() }),
 }));
 
 const extensions = ref<ExtensionSummary[]>([]);
-jest.mock(`../../extensions/useExtensions`, () => ({ useExtensions: () => ({ enabled: extensions }) }));
+jest.mock(`../../../models/extensions/useExtensions`, () => ({ useExtensions: () => ({ enabled: extensions }) }));
 
 // Reached only by the CI push, which nothing here presses: faked because the client has no environment here.
 jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc() }));

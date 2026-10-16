@@ -1,10 +1,10 @@
 <!-- Fills the VPN add-form from a FortiClient export file read in this tab; only its text is sent, since the daemon cannot reach the user's filesystem. -->
 <script setup lang="ts">
-import type { ForticlientConnection } from "@intentic/sandbox-contract";
+import type { ForticlientConnection } from "@intentic/sandbox-contract/schemas/vpn";
 import { type NoticeModel, RowGroup, RowNote, ui } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { ref } from "vue";
-import { importForticlient } from "../../sandbox/devices/useLiveLinks";
+import { importForticlient } from "../../../models/sandbox/devices/useLiveLinks";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

@@ -1,5 +1,8 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { CONTROL_SCOPES, type ControlReach, type ControlScope, ControlScopeSchema, roleAtLeast, sandboxRouteFor } from "@intentic/sandbox-contract";
+import { CONTROL_SCOPES, type ControlScope, ControlScopeSchema } from "@intentic/sandbox-contract/policy/control-scopes";
+import type { ControlReach } from "@intentic/sandbox-contract/protocol/route-meta";
+import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { sandboxRouteFor } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";

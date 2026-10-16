@@ -1,4 +1,4 @@
-import type { RuntimeDomain } from "@intentic/sandbox-contract";
+import type { RuntimeDomain } from "@intentic/sandbox-contract/state/runtime-state";
 import type { z } from "zod";
 import type { BurnDocument, CardRule, EnrollmentsDocument } from "./enrollment.js";
 

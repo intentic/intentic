@@ -2,6 +2,7 @@ import { lstat, mkdir, readdir, readFile, readlink, rename } from "node:fs/promi
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { isInside as baseIsInside } from "@intentic/base/contained";
 import { execBounded } from "@intentic/base/process";
+import { undefinedIfMissing } from "@intentic/base/errors";
 
 // The file moves the manifest's entries share: into this agent's trash, and the checks that come before one.
 
@@ -31,7 +32,7 @@ export const moveToTrash = async (base: string, path: string, at: number): Promi
     await mkdir(trash, { recursive: true, mode: 0o700 });
     // Two things of one name moved in one pass (a timer and its `wants` link) must not land on each other.
     let destination = join(trash, `${trashStamp(at)}-${basename(path)}`);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- one stat per name taken, almost always none
+    // one stat per name taken, almost always none
     for (let n = 2; await exists(destination); n += 1) {
         destination = join(trash, `${trashStamp(at)}-${basename(path)}-${n}`);
     }
@@ -57,8 +58,8 @@ export const isInside = (path: string, dir: string): boolean => isAbsolute(path)
 
 // Where a symbolic link points, resolved against its own folder; undefined for anything that is not a link.
 export const linkTarget = async (path: string): Promise<string | undefined> => {
-    // allow(silent-catch): a path that is not there, or not a link, points nowhere
-    const info = await lstat(path).catch(() => undefined);
+    // A path that is not there, or not a link, points nowhere.
+    const info = await lstat(path).catch(undefinedIfMissing);
     if (info?.isSymbolicLink() !== true) {
         return undefined;
     }

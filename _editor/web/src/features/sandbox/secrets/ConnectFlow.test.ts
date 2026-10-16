@@ -26,7 +26,7 @@ const completeConnect = jest.fn(async () => true);
 const completeTranslator = jest.fn(async () => true);
 
 // The chat store is a module singleton the panel reads directly; this is the whole of what it needs from it.
-jest.mock(`../../chat/run/useChat`, () => ({
+jest.mock(`../../../models/conversations/run/useChat`, () => ({
     useChat: () => ({
         nativeConnectFlow,
         translatorConnectFlow,
@@ -55,7 +55,7 @@ jest.mock(`@intentic/ui`, () => ({
     }),
     CopyButton: defineComponent({ render: () => h(`button`) }),
 }));
-jest.mock(`../../chat/accounts/ProviderLogo.vue`, () => ({ default: defineComponent({ render: () => h(`svg`) }) }));
+jest.mock(`../../../parts/providers/ProviderLogo.vue`, () => ({ default: defineComponent({ render: () => h(`svg`) }) }));
 
 let app: App | undefined;
 afterEach(() => {

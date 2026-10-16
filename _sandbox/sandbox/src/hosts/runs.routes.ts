@@ -1,7 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { errnoCode, errorMessage, undefinedIfMissing } from "@intentic/base/errors";
-import { DEVICE_FEATURE_PROGRAMS, deviceSupports, RUN_TARGETS_FILE, RunTargetsFileSchema, runsContract, type RunTargetsList } from "@intentic/sandbox-contract";
+import { DEVICE_FEATURE_PROGRAMS, deviceSupports } from "@intentic/sandbox-contract/schemas/hosts";
+import { RUN_TARGETS_FILE, RunTargetsFileSchema, type RunTargetsList } from "@intentic/sandbox-contract/schemas/run-targets";
+import { runsContract } from "@intentic/sandbox-contract/contracts/runs.contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";

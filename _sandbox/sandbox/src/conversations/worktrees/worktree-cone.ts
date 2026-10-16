@@ -1,4 +1,4 @@
-import { type Fence, fenceAllows, fenceReaches, foldPath } from "@intentic/sandbox-contract";
+import { type Fence, fenceAllows, fenceReaches, foldPath } from "@intentic/sandbox-contract/policy/fence-paths";
 
 // What a fenced conversation's checkout actually holds. The hook that fences an agent's file tools stops a misread
 // instruction, not a shell, and a shell computes its own paths — so for a conversation started by a fenced person the

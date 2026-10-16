@@ -1,9 +1,10 @@
-import type { SubagentStatus } from "@intentic/sandbox-contract";
-import { listSubagentSessions, subagentRunning } from "../agent/subagents/subagents.js";
+import type { SubagentStatus } from "@intentic/sandbox-contract/schemas/terminal";
+import { listSubagentSessions } from "../agent/subagents/subagents.js";
 import { armedWatcherCount } from "../agent/verification/watchers.js";
 import type { Services } from "../composition.js";
 import { liveRunOf } from "../conversations/actor/conversation-holdings.js";
 import { runningWorkflows } from "../workflows/workflow-runner.js";
+import { subagentRunning } from "../conversations/actor/subagent-roster.js";
 
 // IS THE SANDBOX BUSY? ONE ANSWER, ASKED FOR A PURPOSE (2026-10-05). Four places each kept their own: the automatic
 // update waited for turns, lands, running subagents and workflows; idle-stop for turns, live subagents and armed

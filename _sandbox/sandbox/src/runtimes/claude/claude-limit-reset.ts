@@ -1,4 +1,5 @@
-import type { AccountUsage, AgentProvider, LimitResetClaim, LimitResetStatus } from "@intentic/sandbox-contract";
+import type { AccountUsage, LimitResetClaim, LimitResetStatus } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { claudeUsageWindows, rateLimitParkMs } from "./claude-usage.js";
 import { asRecord, asString, resetFromIso } from "../../usage/payload.js";
 import { CLAUDE_CLI_USER_AGENT, type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";

@@ -2,7 +2,7 @@ import { realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { isInside } from "@intentic/base/contained";
 import { homeDir } from "@intentic/local-agent";
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 
 // The enforcement point: every scope the owner ticked is checked here, on the machine, and nowhere else. The
 // sandbox only asks; a compromised sandbox cannot widen what happens on this device. A refusal is a value, not

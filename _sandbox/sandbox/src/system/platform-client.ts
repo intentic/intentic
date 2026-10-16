@@ -11,6 +11,7 @@ import { errorMessage } from "@intentic/base/errors";
 import type { Config } from "../env.config.js";
 import { isLocalHost } from "./tls/local-tls.js";
 import { nodeRequest } from "./tls/node-request.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Every platform call is one exchange over node:https (nodeRequest): undici can skip a dev platform's self-signed cert
 // only process-wide.
@@ -95,12 +96,8 @@ export const ingressExchange = <K extends DaemonIngressRoute>(config: Config, ca
 };
 
 const jsonOf = (body: string): unknown => {
-    try {
-        return JSON.parse(body);
-    } catch {
-        // allow(silent-catch): an unparseable body is an answer without JSON, which every caller reads as undefined.
-        return undefined;
-    }
+    // An unparseable body is an answer without JSON, which every caller reads as undefined.
+    return parseJsonOr(body, undefined);
 };
 
 export interface IngressAnswer<O> {

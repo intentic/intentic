@@ -5,12 +5,12 @@ import {
     type PrivacyNameList,
     type PrivacyNameLookup,
     type PrivacyNameWord,
-} from "@intentic/sandbox-contract";
-import { AMBIGUOUS_EN, AMBIGUOUS_PL } from "./detect/data/ambiguous.js";
-import { COMMON_WORDS } from "./detect/data/common-words.js";
-import { FIRST_NAMES_PL, FIRST_NAMES_PL_RARE } from "./detect/data/first-names-pl.js";
-import { FIRST_NAMES_EN, SURNAMES_EN } from "./detect/data/names-en.js";
-import { SURNAMES_PL } from "./detect/data/surnames-pl.js";
+} from "@intentic/sandbox-contract/schemas/privacy";
+import { AMBIGUOUS_EN, AMBIGUOUS_PL } from "@intentic/privacy-detect/data/ambiguous";
+import { COMMON_WORDS } from "@intentic/privacy-detect/data/common-words";
+import { FIRST_NAMES_PL, FIRST_NAMES_PL_RARE } from "@intentic/privacy-detect/data/first-names-pl";
+import { FIRST_NAMES_EN, SURNAMES_EN } from "@intentic/privacy-detect/data/names-en";
+import { SURNAMES_PL } from "@intentic/privacy-detect/data/surnames-pl";
 import {
     DIMINUTIVES_PL,
     NEVER_NAMES,
@@ -20,13 +20,13 @@ import {
     TITLE_ABBREVIATIONS_PL,
     TITLES_EN,
     TITLES_PL,
-} from "./detect/data/vocabulary.js";
-import { detectPersonalData } from "./detect/detect.js";
-import { wordInfo } from "./detect/lexicon.js";
+} from "@intentic/privacy-detect/data/vocabulary";
+import { detectPersonalData } from "@intentic/privacy-detect";
+import { wordInfo } from "@intentic/privacy-detect/lexicon";
 
 // The dictionary the shield finds names by, as the owner can read it: each list it holds, how many words, where they
 // come from, and, for a word, which lists hold it and whether it would be found. The lists themselves are the detector's
-// own (detect/data/), read here, never copied, so what this says is what the detector does.
+// own (@intentic/privacy-detect data/), read here, never copied, so what this says is what the detector does.
 
 interface ListSource {
     readonly list: Omit<PrivacyNameList, "count">;

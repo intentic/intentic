@@ -2,7 +2,7 @@ import type { NoticeTone, TooltipValue } from "@intentic/ui";
 import { formatBytes } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, nextTick, onBeforeUnmount, type Ref, ref, watch } from "vue";
-import { UPDATE_ACTION_ANCHOR } from "../../../sandbox/overview/version/updateAnchor";
+import { UPDATE_ACTION_ANCHOR } from "../../../../models/sandbox/updateAnchor";
 import {
     type Heard,
     useVoiceInput,
@@ -11,7 +11,7 @@ import {
     type VoiceState,
     type VoiceUnsupported,
     voiceUnsupported,
-} from "./useVoiceInput";
+} from "../../../../models/voice/useVoiceInput";
 
 // Composer-side half of hands-free voice: one mic tap arms it, and an utterance's pause is the send. Capture
 // and transcription live in useVoiceInput; this file owns the send rule, the glance window, the words appearing in

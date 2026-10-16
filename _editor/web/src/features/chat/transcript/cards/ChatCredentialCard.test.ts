@@ -1,12 +1,13 @@
 // Needs jsdom: the line under a refused release is one sentence joined from three messages, and only a render shows
 // whether a space survives the joins, in every language the editor ships.
 import "@intentic/testing/dom";
-import type { AgentEvent, CredentialReceipt } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { CredentialReceipt } from "@intentic/sandbox-contract/events/requests";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { type Locale, setLocale } from "@intentic/ui/i18n";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, h, ref } from "vue";
-import type { ChatMessage } from "../transcript";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 
 // The viewer, one of the card's approvers; the card reads nothing else of the session.
 jest.mock("../../../../client/session/sandboxSession", () => ({ useSandboxSession: () => ({ presentedEmail: ref(`bob@corp.com`) }) }));

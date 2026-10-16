@@ -1,9 +1,9 @@
-import { readFileSync, writeFileSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { writeFileSync } from "node:fs";
 import { uptime } from "node:os";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
-import { writeFileAtomic } from "@intentic/base/fs";
+import { readJsonIfExists, readTextIfExistsSync, writeFileAtomic } from "@intentic/base/fs";
+import { parseJsonWith } from "@intentic/base/json";
 import { z } from "zod";
 import { baseDir } from "../config.js";
 
@@ -34,30 +34,13 @@ const ExitRecordSchema = z.object({
 });
 export type ExitRecord = z.infer<typeof ExitRecordSchema>;
 
+// No record (a first start) or a torn one says nothing about the agent before.
 export const readExitRecordSync = (path: string = lastExitPath): ExitRecord | undefined => {
-    try {
-        const parsed = ExitRecordSchema.safeParse(JSON.parse(readFileSync(path, "utf8")));
-        return parsed.success ? parsed.data : undefined;
-    } catch {
-        // allow(silent-catch): no record (a first start) or a torn one says nothing about the agent before
-        return undefined;
-    }
+    const text = readTextIfExistsSync(path);
+    return text === undefined ? undefined : parseJsonWith(text, ExitRecordSchema);
 };
 
-const readExitRecord = async (path: string): Promise<ExitRecord | undefined> => {
-    // allow(silent-catch): no record yet, the first start of this agent here
-    const text = await readFile(path, "utf8").catch(() => undefined);
-    if (text === undefined) {
-        return undefined;
-    }
-    try {
-        const parsed = ExitRecordSchema.safeParse(JSON.parse(text));
-        return parsed.success ? parsed.data : undefined;
-    } catch {
-        // allow(silent-catch): a record torn by a crash mid-write is as good as none
-        return undefined;
-    }
-};
+const readExitRecord = async (path: string): Promise<ExitRecord | undefined> => await readJsonIfExists(path, ExitRecordSchema);
 
 // How an exit reads in the record: the reason, and the one line that says how.
 export interface ExitCause {

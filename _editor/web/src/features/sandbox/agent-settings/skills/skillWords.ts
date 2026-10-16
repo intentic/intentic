@@ -1,4 +1,4 @@
-import type { SkillOrigin, SkillSummary } from "@intentic/sandbox-contract";
+import type { SkillOrigin, SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
 import type { StatusVariant } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 

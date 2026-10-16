@@ -1,14 +1,14 @@
 import {
     AgentTurnSchema,
     type ConversationQueue,
-    mentionPaths,
     MessageVoiceSchema,
     type QueuePause,
     QueuePauseSchema,
-    type ResumeRouting,
-    SessionOwnerSchema,
-    TurnSpeakerSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/agent";
+import { mentionPaths } from "@intentic/sandbox-contract/text/mentions";
+import type { ResumeRouting } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { SessionOwnerSchema } from "@intentic/sandbox-contract/schemas/agents";
+import { TurnSpeakerSchema } from "@intentic/sandbox-contract/schemas/speaker";
 import { z } from "zod";
 import { opt } from "../../opt.js";
 

@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { CredentialGate } from "@intentic/sandbox-contract";
+import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
 import { fileCredentialGates, gateForName, gateSubjectOf, gateTargetOf } from "./credential-gates.js";
 
 // Verifies the store tells an absent policy from an unreadable one (a refusal, never the house fallback) and resolves
@@ -63,7 +63,7 @@ it("writes the policy 0600, beside the vault it guards", async () => {
     const path = join(await dir(), "credential-gates.json");
     await store(path).set(gate());
     const { mode } = await (await import("node:fs/promises")).stat(path);
-    // eslint-disable-next-line no-bitwise -- the permission bits are the assertion
+    // the permission bits are the assertion
     expect(mode & 0o777).toBe(0o600);
     expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ gates: [gate()] });
 });

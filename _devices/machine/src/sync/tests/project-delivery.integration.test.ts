@@ -2,7 +2,7 @@ import { link, lstat, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writ
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { PROJECT_DELIVERY_MAX_BYTES, type ProjectDelivery } from "@intentic/sandbox-contract";
+import { PROJECT_DELIVERY_MAX_BYTES, type ProjectDelivery } from "@intentic/sandbox-contract/schemas/project-delivery";
 import { FAKE_MUTAGEN, FAKE_SSH, type FakeProject, fakeProject } from "../../testing.js";
 import { attachedKey, type Pairing } from "../config.js";
 import { decodeDelivery, type DeliveryContext, type DeliveryRefused, deliveryPairingFor, deliverToFolder } from "../project/project-delivery.js";

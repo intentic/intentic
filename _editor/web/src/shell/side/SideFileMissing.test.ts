@@ -2,11 +2,11 @@
 // of which opens in the card's place.
 import "@intentic/testing/dom";
 import { installUi } from "@intentic/ui";
-import type { WorkspaceResolve } from "@intentic/sandbox-contract";
+import type { WorkspaceResolve } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { type App, computed, createApp, h, nextTick } from "vue";
 
 const lookUpWorkspaceRef = jest.fn(async (_path: string, _scope: { agent: string | undefined }): Promise<WorkspaceResolve | undefined> => ({}));
-jest.mock("../../features/workspace/files/refs/resolveFileRef", () => ({ lookUpWorkspaceRef }));
+jest.mock("../../models/workspace/files/resolveFileRef", () => ({ lookUpWorkspaceRef }));
 jest.mock("../../features/workspace/health/scopeTitle", () => ({ useScopeTitle: () => computed(() => `Intentic bare-metal OS`) }));
 
 const { default: SideFileMissing } = await import("./SideFileMissing.vue");

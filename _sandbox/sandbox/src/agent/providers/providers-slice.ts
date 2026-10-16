@@ -1,4 +1,8 @@
-import type { AcpAgentConfig, AgentEvent, NativeProvider, SafetyVerdict, SetupLadder } from "@intentic/sandbox-contract";
+import type { AcpAgentConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
+import type { SafetyVerdict } from "@intentic/sandbox-contract/policy/safety-policy";
+import type { SetupLadder } from "@intentic/sandbox-contract/models/model-setups";
 import { join } from "node:path";
 import type { Services } from "../../composition.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";

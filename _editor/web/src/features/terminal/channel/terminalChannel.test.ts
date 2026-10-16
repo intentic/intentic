@@ -66,7 +66,7 @@ const upgradeOf = async (far: FarEnd): Promise<{ head: string; frames: () => Pro
         return true;
     };
     while (!text.decode(pending).includes(`\r\n\r\n`)) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a stream is read in order by definition
+        // a stream is read in order by definition
         if (!(await more())) {
             throw new Error(`the stream ended before its head`);
         }
@@ -87,7 +87,7 @@ const upgradeOf = async (far: FarEnd): Promise<{ head: string; frames: () => Pro
                     return frame;
                 }
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a stream is read in order by definition
+            // a stream is read in order by definition
             if (!(await more())) {
                 return undefined;
             }
@@ -128,7 +128,7 @@ const until = async (condition: () => boolean): Promise<void> => {
         if (tries > 200) {
             throw new Error(`timed out`);
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- polling is sequential by definition
+        // polling is sequential by definition
         await new Promise((resolve) => setTimeout(resolve, 1));
     }
 };
@@ -225,11 +225,11 @@ describe(`a terminal on a WebTransport stream`, () => {
             const { opening, far } = streamPair();
             const { log, events, closed } = recorded();
             socketChannel(new StreamSocket(opening, REQUEST), events);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one refusal after another, each on its own stream
+            // one refusal after another, each on its own stream
             await upgradeOf(far);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // as above
             await far.answer.write(utf8.encode(answer));
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // as above
             await closed;
             expect(log).toEqual([`closed 1006 ${reason}`]);
         }

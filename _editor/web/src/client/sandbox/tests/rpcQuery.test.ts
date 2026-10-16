@@ -1,8 +1,8 @@
-import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { QueryClient } from "@tanstack/vue-query";
 import { ref } from "vue";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
-import { activeSandboxId } from "../../../lib/activeSandbox";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
 import { mirrors, UNPERSISTED } from "../../../lib/queryPersistence";
 
 // A contract read's cache entry is named by its procedure, its input and its sandbox, and its fetch is exactly that

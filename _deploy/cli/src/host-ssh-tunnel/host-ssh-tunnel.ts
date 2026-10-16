@@ -1,5 +1,5 @@
 import { type CloudflareApi, cloudflareApi, findOrCreateTunnel, upsertCname } from "@intentic/providers";
-import { CATCH_ALL, cfargotunnelCname, hostSshTunnelName, sshHostname } from "@intentic/sandbox-contract";
+import { CATCH_ALL, cfargotunnelCname, hostSshTunnelName, sshHostname } from "@intentic/sandbox-contract/ids/hostnames";
 import { hostSshIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { resolveZone } from "../lib/cf-tunnel.js";
 

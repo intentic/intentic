@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { browserUrls, contributionKey, type ResolvedContribution } from "./contributions.js";
 import { identityLoginUrl } from "./handlers/identity.handler.js";
 

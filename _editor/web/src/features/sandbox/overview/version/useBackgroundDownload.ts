@@ -1,8 +1,9 @@
-import { DEVICE_FEATURE_BACKGROUND_PREPARE, deviceSupports, hostRunningSandbox } from "@intentic/sandbox-contract";
+import { DEVICE_FEATURE_BACKGROUND_PREPARE, deviceSupports } from "@intentic/sandbox-contract/schemas/hosts";
+import { hostRunningSandbox } from "@intentic/sandbox-contract/schemas/devices";
 import { computed, type Ref, ref, watch } from "vue";
 import { rpcPrefix } from "../../../../lib/queryKeys";
 import { queryClient } from "../../../../lib/queryPersistence";
-import { manageDeviceSandbox, useDevices } from "../../devices/useDevices";
+import { manageDeviceSandbox, useDevices } from "../../../../models/sandbox/devices/useDevices";
 import { mayStart } from "./updateDownload";
 
 // THE UPDATE CARD STARTS THE DOWNLOAD IT IS ABOUT TO OFFER. The machine agent's own timer downloads every running

@@ -1,9 +1,9 @@
-import type { VoiceSettings } from "@intentic/sandbox-contract";
+import type { VoiceSettings } from "@intentic/sandbox-contract/schemas/voice";
 import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, onBeforeUnmount, type Ref, watch } from "vue";
-import type { CardAnswer } from "../session/cardReplies";
-import type { ChatMessage } from "../transcript/transcript";
-import { type SpeechPlayer, useSpeechPlayer } from "./speechPlayer";
+import type { CardAnswer } from "../../../models/conversations/session/cardReplies";
+import type { ChatMessage } from "../../../models/conversations/transcript/transcript";
+import { type SpeechPlayer, useSpeechPlayer } from "../../../models/voice/speechPlayer";
 import { type CardWords, finalReplyOf, type SpokenCard, spokenCardOf } from "./voiceCards";
 
 // The other half of hands-free voice: the agent answering out loud. While the composer's mic is armed (useComposerVoice),

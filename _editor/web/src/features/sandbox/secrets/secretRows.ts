@@ -1,6 +1,8 @@
-import { type ExtensionSummary, type SecretInventoryEntry, type CapabilitySummary, SECRET_KEY_RE } from "@intentic/sandbox-contract";
-import { capabilityTile } from "../../capabilities/model/tiles";
-import { type ConnectionState, connectionFacts, connectionState } from "../../capabilities/model/connections";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
+import { type SecretInventoryEntry, SECRET_KEY_RE } from "@intentic/sandbox-contract/schemas/secrets";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import { capabilityTile } from "../../../models/capabilities/tiles";
+import { type ConnectionState, connectionFacts, connectionState } from "../../../models/capabilities/connections";
 import { t } from "@intentic/ui/i18n";
 import { keyringModeWords } from "../../capabilities/connect/secrets/keyringWords";
 

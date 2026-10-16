@@ -1,4 +1,4 @@
-import type { BuiltinPromptText } from "@intentic/sandbox-contract";
+import type { BuiltinPromptText } from "@intentic/sandbox-contract/schemas/settings";
 import { presetSystemPrompt } from "./preset-prompt.js";
 
 // Intentic's default agent system prompt: Claude Code's own preset, read live from the installed CLI (preset-prompt.ts),

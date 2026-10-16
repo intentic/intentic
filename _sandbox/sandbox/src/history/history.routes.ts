@@ -1,5 +1,5 @@
 import { seesWholeFleet } from "../auth/scope/conversation-reader.js";
-import { historyContract } from "@intentic/sandbox-contract";
+import { historyContract } from "@intentic/sandbox-contract/contracts/history.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";

@@ -1,0 +1,147 @@
+import { accessFor, accountServesLoop, isTrialProvider, loopDoors, TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
+import { type AccessKind, NATIVE_PROVIDERS, type ProviderAccess, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { type KeyedProvider, KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
+import { t } from "@intentic/ui/i18n";
+import { computed, type ComputedRef } from "vue";
+import { accountsLoaded, providerAccounts, translatorAccounts } from "./providerAccounts";
+import { requirementWords, runsWords } from "./providerWords";
+import { acpProviders, endpointProviders, endpointsLoaded, nativeReady, trialStatus } from "./providerCatalog";
+import { offeredLoops, selectedLoop } from "./offeredLoops";
+
+// Whether a provider can actually run, and what unlocks it: one rule, read by every surface that offers a
+// provider (picker, connect gate, account panel). A catalog always has rows (every provider seeds a floor
+// model), so having rows says nothing about readiness.
+
+export interface ProviderAccessState {
+    // Whether a turn on this provider can be sent right now.
+    readonly ready: boolean;
+    // Undefined for an ACP agent or endpoint: both carry their own credential, nothing left to connect.
+    readonly access: ProviderAccess | undefined;
+    // Whether any connected account of this provider has a credential that can no longer be refreshed.
+    readonly needsReauth: boolean;
+}
+
+const accountsOf = (provider: AgentProvider) => providerAccounts.value[provider] ?? [];
+const isAcp = (provider: AgentProvider): boolean => acpProviders.value.some((agent) => agent.id === provider);
+const isEndpoint = (provider: AgentProvider): boolean => endpointProviders.value.some((endpoint) => endpoint.id === provider);
+
+// Mirrors the daemon's own gate (agent.routes): keyed on how the credential is held (ProviderSpec.auth), not
+// which provider. Grok alone is served both ways; `providerReadyOn` narrows to one harness.
+export const providerReady = (provider: AgentProvider): boolean => {
+    const spec = providerSpec(provider);
+    if (spec?.auth.kind === `translator`) {
+        const routed = translatorAccounts.value[provider as KeyedProvider].length > 0;
+        // Grok's native xAI account counts too: the question is whether this provider can run at all.
+        return routed || accountsOf(provider).length > 0;
+    }
+    // Trial existing isn't readiness: its daily allowance can be spent, unlike other endpoints' credentials.
+    if (isTrialProvider(provider)) {
+        return isEndpoint(provider) && trialStatus.value.available && trialStatus.value.remaining > 0;
+    }
+    // Everything else needs a stored account; an endpoint or installed ACP agent is ready just by existing.
+    // `nativeReady` is the daemon's own answer to the same question, and the only one a reader gets who may drive a
+    // turn but not read /accounts: without it a guest is told to connect a provider the box is already signed into.
+    return accountsOf(provider).length > 0 || nativeReady.value.includes(provider) || isAcp(provider) || isEndpoint(provider);
+};
+
+// Narrows providerReady to one harness, for the providers whose credential depends on it: Grok (its xAI account under
+// OpenCode, Grok Build's own sign-in on its CLI loop, the translator's SuperGrok subscription under Claude Code) and any
+// whose CLI loop signs in through a door of its own (Kimi CLI beside the translator's Kimi Code subscription). Every
+// other provider's loops share one credential. Read off the loop that would run, which a pick the daemon no longer
+// offers is not.
+export const providerReadyOn = (provider: AgentProvider, harness: AgentHarness): boolean => {
+    if (provider === `grok` || (providerSpec(provider)?.auth.kind === `translator` && loopDoors(provider).length > 0)) {
+        const loop = selectedLoop(offeredLoops(provider), harness);
+        const keyed = KeyedProviderSchema.safeParse(provider);
+        return loop === `claude-code`
+            ? keyed.success && translatorAccounts.value[keyed.data].length > 0
+            : accountsOf(provider).some((account) => accountServesLoop(provider, loop, account));
+    }
+    return providerReady(provider);
+};
+
+// The one ladder anything falls down when the provider it wanted cannot run: a connected account first, the free
+// trial only as the floor under nothing connected, never as a substitute for a subscription. Shared by the seed a
+// new conversation is born on and the watcher that repoints an open one, so a chat is never born on a provider it
+// would be moved off a beat later — that beat was the "connect a model" state flashing over a usable chat.
+export const firstReadyProvider = (): AgentProvider | undefined =>
+    NATIVE_PROVIDERS.find((provider) => providerReady(provider)) ?? (providerReady(TRIAL_PROVIDER) ? TRIAL_PROVIDER : undefined);
+
+export const accessStateFor = (provider: AgentProvider): ProviderAccessState => ({
+    ready: providerReady(provider),
+    access: accessFor(provider),
+    needsReauth: accountsOf(provider).some((account) => account.needsReauth === true),
+});
+
+/* WHETHER THERE IS A SIGN-IN HERE AT ALL, which is a different question from whether this provider is ready. */
+export const hasSignIn = (provider: AgentProvider): boolean => accessFor(provider) !== undefined;
+
+// How a locked provider states its price in one chip. `free` leads with the word that changes a decision, a
+// user who has connected nothing should be able to see, without connecting anything, that one of these rows
+// costs nothing; the others name what they'd have to already pay for.
+const KIND_BADGE: Record<AccessKind, (access: ProviderAccess) => string> = {
+    free: (access) => t(`chat.access.freeBadge`, { requirement: requirementWords(access, `name`) }),
+    subscription: (access) => t(`chat.access.needsBadge`, { requirement: requirementWords(access, `needed`) }),
+};
+
+// Chip a provider's section header shows: nothing once ready (a usable provider looks like the plain default),
+// else its access requirement.
+export const accessBadge = (provider: AgentProvider): string | undefined => {
+    const state = accessStateFor(provider);
+    if (state.ready || state.access === undefined) {
+        return undefined;
+    }
+    return KIND_BADGE[state.access.kind](state.access);
+};
+
+// Connect gate's pitch and the button's accessible name (`action`); the visible chip just shows the provider's
+// name. Grok's requirement depends on harness: under Claude Code it needs the translator's SuperGrok subscription.
+export const connectPitch = (provider: AgentProvider, harness: AgentHarness): { copy: string; action: string } | undefined => {
+    const access = accessFor(provider);
+    if (access === undefined) {
+        return undefined;
+    }
+    const runs =
+        provider === `grok` && selectedLoop(offeredLoops(provider), harness) === `claude-code`
+            ? t(`chat.access.runsUnderClaudeCode`, { runs: runsWords(access) })
+            : runsWords(access);
+    const requirement = requirementWords(access, `object`);
+    return {
+        copy: t(`chat.access.connectPitch`, { requirement, runs }),
+        action: t(`chat.access.connectAction`, { requirement }),
+    };
+};
+
+// Separate from accessBadge: the trial is an endpoint (accessFor rightly returns undefined), but the row needs
+// a remaining count, not a price, and no Connect button, and nothing before the daemon confirms it.
+export const trialBadge = (provider: AgentProvider): string | undefined => {
+    if (!isTrialProvider(provider) || !trialStatus.value.available) {
+        return undefined;
+    }
+    const { remaining } = trialStatus.value;
+    return remaining > 0 ? t(`chat.access.trialLeft`, { remaining }) : t(`chat.access.trialUsedUp`);
+};
+
+// Where the day's free trial stands, the one reading of its allowance every surface takes: `none` (not the trial, or
+// the daemon has not confirmed it), `fresh` (no more than half the day's messages spent, so nothing needs saying),
+// `low` (past half: the strip counts down) and `spent` (nothing left: the row points at the free, uncapped options).
+export type TrialPhase = "none" | "fresh" | "low" | "spent";
+
+export const trialPhase = (provider: AgentProvider): TrialPhase => {
+    if (!isTrialProvider(provider) || !trialStatus.value.available) {
+        return `none`;
+    }
+    const { remaining, allowance } = trialStatus.value;
+    if (remaining <= 0) {
+        return `spent`;
+    }
+    return allowance > 0 && remaining > allowance / 2 ? `fresh` : `low`;
+};
+
+// Whether the trial is spent: the row stops being an offer and points to the free, uncapped Google sign-in instead.
+export const trialExhausted = (provider: AgentProvider): boolean => trialPhase(provider) === `spent`;
+
+// Both accountsLoaded and endpointsLoaded must be true before a surface says "nothing to send with": the
+// account half lands first and, alone, showed a connect wall a beat before the free trial arrived to contradict it.
+export const accessKnown: ComputedRef<boolean> = computed(() => accountsLoaded.value && endpointsLoaded.value);

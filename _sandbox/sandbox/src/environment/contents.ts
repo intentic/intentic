@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import type { EnvironmentContents, EnvironmentItem } from "@intentic/sandbox-contract";
+import type { EnvironmentContents, EnvironmentItem } from "@intentic/sandbox-contract/schemas/environment";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
 import { customPath, proposalPath } from "./environment.js";

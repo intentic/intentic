@@ -7,9 +7,8 @@ import { defineComponent, h } from "vue";
 
 // Where "Open in …" and a phone's fallback go, stood in for: the route itself is the router's business.
 const push = jest.fn((_path: string) => Promise.resolve());
-jest.mock("../../router/index", () => ({
-    router: { push, currentRoute: { value: { name: `agents` } }, resolve: (path: string) => ({ href: path, fullPath: path }) },
-}));
+const router = { push, currentRoute: { value: { name: `agents` } }, resolve: (path: string) => ({ href: path, fullPath: path }) };
+jest.mock("../../workbench/navigation/navigation", () => ({ navigation: () => router }));
 
 const { createExtensionApi, deactivateExtension } = await import("../apiImpl");
 const { claimLink, describeTab, homeOf, sideViewOf } = await import("../../workbench/side/sideViews");

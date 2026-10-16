@@ -76,7 +76,7 @@ afterEach(() => jest.useRealTimers());
 // reading status().
 const settle = async (): Promise<void> => {
     for (let turn = 0; turn < 5; turn++) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- draining microtasks one turn at a time is the point
+        // draining microtasks one turn at a time is the point
         await Promise.resolve();
     }
 };

@@ -1,7 +1,7 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
-import type { WorkspaceSearchFreshness } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchFreshness } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import { type Embedder, loadEmbedder, VECTOR_SPACE } from "./embed/embedder.js";
 import { loadReranker, type Reranker } from "./embed/reranker.js";
 import { openVectorCache, type VectorCache, vectorCachePath } from "./embed/vector-cache.js";

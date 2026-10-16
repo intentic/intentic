@@ -1,6 +1,6 @@
 // The kit's DOM-free subpath, not the barrel: nothing here draws anything.
 import { type AgentNote, type AgentPanel, agentStateNote, agentProcessState, agentSkewNote, restartAgent } from "@intentic/ui/device-agent";
-import { agentBuildSkew, agentStalled } from "@intentic/sandbox-contract";
+import { agentBuildSkew, agentStalled } from "@intentic/sandbox-contract/schemas/devices";
 import type { DeviceStatus } from "./desktop";
 import { t } from "@intentic/ui/i18n";
 

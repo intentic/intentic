@@ -1,4 +1,4 @@
-import type { LimitResetClaim, LimitResetStatus } from "@intentic/sandbox-contract";
+import type { LimitResetClaim, LimitResetStatus } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { ref } from "vue";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";

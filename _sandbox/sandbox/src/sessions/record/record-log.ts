@@ -76,7 +76,7 @@ const walk = async (handle: FileHandle, size: number): Promise<{ frames: Frame[]
     const prefix = Buffer.allocUnsafe(PREFIX_BYTES);
     let at = 0;
     while (at + PREFIX_BYTES <= size) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- each prefix names where the next one is.
+        // each prefix names where the next one is.
         await handle.read(prefix, 0, PREFIX_BYTES, at);
         if (prefix.readUInt32LE(0) !== SKIPPABLE_MAGIC || prefix.readUInt32LE(4) !== META_BYTES) {
             break;

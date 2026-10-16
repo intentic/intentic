@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useAudience } from "../../../app/useAudience";
-import { deliverableKindOf } from "@intentic/sandbox-contract";
+import { deliverableKindOf } from "@intentic/sandbox-contract/text/documents";
 import {
     Avatar,
     Button,
@@ -17,8 +17,9 @@ import { createInlineRename } from "@intentic/ui/inline-rename";
 import { computed, onMounted, onUnmounted, provide, ref, useTemplateRef, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import ChatPanel from "../../chat/panel/ChatPanel.vue";
-import { agentStatusMeta, unregistered, writingNow } from "../fleet/agentStatus";
-import { agentWork, assignAgent, landRequestWork, requestLandAgent, startAgent } from "../fleet/agentActions";
+import { agentStatusMeta } from "../../../models/agent-status/agentStatus-meta";
+import { unregistered, writingNow } from "../../../models/agent-status/agentStatus-standing";
+import { agentWork, assignAgent, landRequestWork, requestLandAgent, startAgent } from "../../../models/fleet/agentActions";
 import { useOperation } from "../../../workbench/operations/operations";
 import { presenceOthers } from "../../../workbench/presence/usePresence";
 import { identityHue } from "../../../lib/identityHue";
@@ -26,15 +27,15 @@ import { mobileChatPath } from "../../../lib/routes/tabRoots";
 import { afterPaint } from "../../../lib/afterPaint";
 import { whenIdle } from "../../../lib/whenIdle";
 import ChatSwitcherSheet from "../../chat/tabs/ChatSwitcherSheet.vue";
-import { QUIET_TRANSCRIPT_WAIT } from "../../chat/transcript/transcriptWait";
-import { boxNameOf, openInSandbox, otherFleet } from "../fleet/fleetScope";
-import { otherBoxes, refreshAcross, subscribe as watchOtherBoxes } from "../../sandbox/live/fleetAcross";
+import { QUIET_TRANSCRIPT_WAIT } from "../../../models/conversations/transcript/transcriptWait";
+import { boxNameOf, openInSandbox, otherFleet } from "../../../models/fleet/fleetScope";
+import { otherBoxes, refreshAcross, subscribe as watchOtherBoxes } from "../../../models/sandbox/live/fleetAcross";
 import { useAgentChanges } from "./useAgentChanges";
-import { useAgents } from "../fleet/useAgents";
+import { useAgents } from "../../../models/fleet/useAgents";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
-import { useChat } from "../../chat/run/useChat";
+import { useChat } from "../../../models/conversations/run/useChat";
 import AgentReviewPanel from "./AgentReviewPanel.vue";
 import AgentReviewOutline from "./AgentReviewOutline.vue";
 import AgentLandPress from "./AgentLandPress.vue";

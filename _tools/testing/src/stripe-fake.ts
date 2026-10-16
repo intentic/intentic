@@ -260,7 +260,7 @@ const customerDeletion =
         }
         for (const subscription of subscriptions.values()) {
             if (subscription.customer === customerId && subscription.status !== "canceled") {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- one event per subscription, in order
+                // one event per subscription, in order
                 await update(subscription.id, { status: "canceled" });
             }
         }

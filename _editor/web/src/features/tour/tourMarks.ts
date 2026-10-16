@@ -1,6 +1,6 @@
 import { sandboxRef, sandboxShallowRef } from "@intentic/extension-api";
 import { computed, type ComputedRef } from "vue";
-import { activeSandboxId } from "../../lib/activeSandbox";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
 import type { StepId } from "./steps";
 
 // Which of the places pointing at a step gets to: one beacon on screen at a time is the whole rule, since two marks

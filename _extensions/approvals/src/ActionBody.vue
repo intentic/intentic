@@ -1,6 +1,6 @@
 <!-- Body of an action awaiting approval: `summary` (headline), `details` (Markdown), and the executing turn's own `instructions`, folded. -->
 <script setup lang="ts">
-import type { ActionApprovalSummary } from "@intentic/sandbox-contract";
+import type { ActionApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
 import { ui, Code, Markdown } from "@intentic/extension-ui";
 import { ref } from "vue";
 import { t } from "./i18n.js";

@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/base/git";
 import { Hono } from "hono";
-import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
-import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { sqliteTurnJournal } from "../store/journals/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
@@ -23,7 +23,7 @@ import { createRunsCache } from "./runs-cache.js";
 import { createCiHookReconciler } from "./hooks.js";
 import { createCiWebhookRoute } from "./webhook.routes.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
-import { drivenBy } from "../testing.js";
+import { drivenBy } from "../seams/turn-starter.testing.js";
 
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
 // sampler (tmux, procfs) for a fact these tests state in one line.

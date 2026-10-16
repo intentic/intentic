@@ -1,13 +1,9 @@
-import {
-    type ActivityEvent,
-    type AgentEvent,
-    type AgentProvider,
-    AgentProviderSchema,
-    KeyedProviderSchema,
-    type ProviderRefusal,
-    type ServiceFacts,
-    type UsageWindow,
-} from "@intentic/sandbox-contract";
+import type { ActivityEvent } from "@intentic/sandbox-contract/schemas/activity";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { type AgentProvider, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
+import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
+import type { ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { ServiceFacts } from "@intentic/sandbox-contract/models/plan-pools";
 import type { Services } from "../../../composition.js";
 import { recordProviderSuccess } from "../../providers/provider-health.js";
 import { opt } from "../../../opt.js";

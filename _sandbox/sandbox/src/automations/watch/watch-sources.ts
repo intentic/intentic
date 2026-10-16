@@ -1,6 +1,7 @@
 import { Script, createContext } from "node:vm";
-import type { WatchSource } from "@intentic/sandbox-contract";
+import type { WatchSource } from "@intentic/sandbox-contract/schemas/automations";
 import { maxSatisfying, validRange } from "semver";
+import { errorMessage } from "@intentic/base/errors";
 
 // The ready-made checks a watch can name instead of a guard command (WatchSourceSchema): the daemon asks the registry,
 // GitHub or the page itself, with no shell, no extension and no model. Each answers whether its condition holds and what
@@ -65,7 +66,7 @@ export const sourceProblem = (source: WatchSource): string | undefined => {
                 // Compiled only to learn whether it can be; the check compiles its own each time.
                 void new RegExp(source.select);
             } catch (error) {
-                return `the select pattern does not compile: ${error instanceof Error ? error.message : String(error)}`;
+                return `the select pattern does not compile: ${errorMessage(error)}`;
             }
         }
     }
@@ -76,7 +77,7 @@ const timed = async (context: SourceContext, url: string, headers: Record<string
     try {
         return await context.fetch(url, { headers: { "user-agent": USER_AGENT, ...headers }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     } catch (error) {
-        return `could not reach ${new URL(url).host}: ${error instanceof Error ? error.message : String(error)}`;
+        return `could not reach ${new URL(url).host}: ${errorMessage(error)}`;
     }
 };
 
@@ -230,6 +231,6 @@ export const checkSource = async (source: WatchSource, context: SourceContext): 
         return await checkUrl(source, context);
     } catch (error) {
         // A body that would not parse is a check that did not pass, said as such, never a crashed tick.
-        return { pass: false, detail: `the check failed: ${error instanceof Error ? error.message : String(error)}` };
+        return { pass: false, detail: `the check failed: ${errorMessage(error)}` };
     }
 };

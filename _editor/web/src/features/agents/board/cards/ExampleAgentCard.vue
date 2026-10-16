@@ -8,8 +8,8 @@
 import { Button, Code, DiffStat, Modal, StatusBadge } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import IdentityTile from "../../../capabilities/connect/IdentityTile.vue";
-import { startAgent } from "../../fleet/agentActions";
+import IdentityTile from "../../../../parts/capabilities/IdentityTile.vue";
+import { startAgent } from "../../../../models/fleet/agentActions";
 import { EXAMPLE_DIFF, EXAMPLE_FILES } from "./exampleRun";
 
 const t = useT();

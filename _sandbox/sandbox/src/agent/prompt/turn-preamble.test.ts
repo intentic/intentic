@@ -1,21 +1,12 @@
-import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
+import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract/events/resume";
 import { opensWithInjectedNote, stripInjectedPreamble, WORKSPACE_ROOT } from "@intentic/constants";
 import { setupNoticeFor, SETUP_NOTICE_HEADER } from "../../workspace/layout/workspace-setup.js";
-import { LEGACY_SPAWN_NOTE_HEADER, SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE } from "../subagents/spawn-note.js";
 import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";
-import { withRuntimeHistory } from "../providers/runtime-history.js";
-import { withAttachmentNote } from "./attachment-note.js";
+import { withRuntimeHistory } from "../../sessions/vocabulary/runtime-history.js";
+import { withAttachmentNote } from "../../sessions/vocabulary/attachment-note.js";
 import { checkpointNote } from "../checkpoints/checkpoint-worktree.js";
-import {
-    composeWirePrompt,
-    INJECTED,
-    LITERAL_SLASH_NOTE,
-    parsePromptEnvelope,
-    parseQueuedPrompt,
-    preambleNotes,
-    stripTurnPreamble,
-    withTurnPreamble,
-} from "./turn-preamble.js";
+import { composeWirePrompt, LITERAL_SLASH_NOTE, withTurnPreamble } from "./turn-preamble.js";
+import { LEGACY_SPAWN_NOTE_HEADER, SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE, INJECTED, parsePromptEnvelope, parseQueuedPrompt, preambleNotes, stripTurnPreamble } from "../../sessions/vocabulary/prompt-envelope.js";
 
 const notice = `${SETUP_NOTICE_HEADER}\n(a dropped project arrives without them on purpose):\n- intentic: run \`pnpm install\` there first.`;
 const note = `${SPAWN_NOTE_HEADER}\n\nThis sandbox can start full agents on any connected provider from your shell.`;

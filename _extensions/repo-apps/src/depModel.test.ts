@@ -1,4 +1,4 @@
-import type { WorkspaceDepEdge, WorkspacePackage } from "@intentic/sandbox-contract";
+import type { WorkspaceDepEdge, WorkspacePackage } from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
 import { areaMatrix, areasOf, closureOf, edgeKey, findingsOf, flowOrder, heightsOf, hubsOf, impliedEdges, monogramsOf } from "./depModel";
 
 const pkg = (name: string, group: string, component?: string): WorkspacePackage => ({

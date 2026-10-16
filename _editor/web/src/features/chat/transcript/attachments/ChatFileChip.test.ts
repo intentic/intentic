@@ -4,7 +4,7 @@ import "@intentic/testing/dom";
 import { type App, createApp, h } from "vue";
 import { STATE_DIR } from "@intentic/constants";
 import { IconStub } from "@intentic/ui/testing";
-import { CHAT_SURFACE, type ChatSurface } from "../../tools/chatToolSurface";
+import { CHAT_SURFACE, type ChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
 import type { FileQuickLook } from "../../drafts/fileQuickLook";
 import ChatFileChip from "./ChatFileChip.vue";
 

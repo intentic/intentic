@@ -1,14 +1,6 @@
-import type {
-    FileDiff,
-    GitBranch,
-    GitChange,
-    GitCommit,
-    GitPublishFileResult,
-    GitRemoteBranch,
-    GitRemoteState,
-    ScratchPath,
-    StashEntry,
-} from "@intentic/sandbox-contract";
+import type { FileDiff } from "@intentic/sandbox-contract/schemas/history";
+import type { GitBranch, GitChange, GitRemoteBranch, GitRemoteState, ScratchPath } from "@intentic/sandbox-contract/schemas/git/git";
+import type { GitCommit, GitPublishFileResult, StashEntry } from "@intentic/sandbox-contract/schemas/git/git-history";
 import {
     defaultGit,
     gitCheckout,
@@ -25,6 +17,7 @@ import {
     gitSync,
     type GitSyncResult,
 } from "@intentic/base/git";
+import { defineSlice } from "../seams/slice.js";
 import { changedFiles } from "./changes/changes.js";
 import {
     type ActionResult,
@@ -164,7 +157,7 @@ export interface GitSlice {
 
 // The slice as the daemon runs it: every verb is the real subprocess function, so a new one is a line here and its
 // declaration above, never a line in composition.ts.
-export const createGitSlice = (): GitSlice => ({
+const createGitSlice = (): GitSlice => ({
     git: {
         init: gitInit,
         status: gitStatus,
@@ -225,3 +218,5 @@ export const createGitSlice = (): GitSlice => ({
         dropCommit,
     },
 });
+
+export const gitSlice = defineSlice<GitSlice>({ build: createGitSlice });

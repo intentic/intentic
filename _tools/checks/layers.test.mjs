@@ -1,13 +1,14 @@
 // Pins how a layer table places a module (lib/layers.mjs) and what the two boundary checks build from it
 // (lib/daemon-graph.mjs, lib/editor-graph.mjs): an upward import is counted per edge in sites, a downward one is never
-// a finding, and a cycle is looked for only among imports that stay in one layer.
+// a finding, and a cycle is looked for only among imports that stay in one layer, or between the subunits of a unit
+// `subunits` lists.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DAEMON_LAYERS } from "./lib/daemon-layers.mjs";
 import { daemonGraphs, placeInDaemon } from "./lib/daemon-graph.mjs";
 import { EDITOR_LAYERS } from "./lib/editor-layers.mjs";
 import { editorLayering, placeInEditor } from "./lib/editor-graph.mjs";
-import { directionOf, layering } from "./lib/layers.mjs";
+import { directionOf, layering, partOf } from "./lib/layers.mjs";
 
 test("the longest unit wins: a directory, a subdirectory, or a module named without its extension", () => {
     const { placeOf, top } = layering([
@@ -92,4 +93,54 @@ test("the editor's features and workbench are shelves, one layer each but every 
     );
     assert.deepEqual(Object.fromEntries(upward), { "lib -> features/auth": 1 });
     assert.deepEqual([...cycles.cycleEdges.keys()].sort(), ["features/auth -> features/billing", "features/billing -> features/auth"]);
+});
+
+test("the editor's models are a shelf between the workbench and the features", () => {
+    const layerOf = (path) => placeInEditor(path)?.layer ?? -1;
+    assert.equal(placeInEditor("models/agent-status/agentStatus-lanes.ts")?.unit, "models/agent-status");
+    assert.ok(layerOf("workbench/window/useLayout.ts") < layerOf("models/agent-status/x.ts"));
+    assert.ok(layerOf("models/agent-status/x.ts") < layerOf("features/chat/x.ts"));
+});
+
+test("the editor's parts are a shelf between the models and the features", () => {
+    const layerOf = (path) => placeInEditor(path)?.layer ?? -1;
+    assert.equal(placeInEditor("parts/fleet/CardSeal.vue")?.unit, "parts/fleet");
+    assert.ok(layerOf("models/fleet/x.ts") < layerOf("parts/fleet/x.vue"));
+    assert.ok(layerOf("parts/fleet/x.vue") < layerOf("features/chat/x.ts"));
+});
+
+test("inside a unit layers.json's subunits lists, a cycle between its subdirectories is found, and the root files are one more subunit", () => {
+    assert.equal(partOf("agent", "agent/turn/run.ts"), "agent/turn");
+    assert.equal(partOf("agent", "agent/agent-slice.ts"), "agent");
+    assert.equal(partOf("features/chat", "features/chat/panel/deep/ChatPane.vue"), "features/chat/panel");
+    const src = "/src";
+    const at = (path, text) => ({ file: `${src}/${path}`, text });
+    const { partCycles } = daemonGraphs(src, [
+        at("agent/turn/run.ts", 'import { q } from "../queue/q.js";'),
+        at("agent/queue/q.ts", 'import { s } from "../slice.js";'),
+        at("agent/slice.ts", 'import { r } from "./turn/run.js";'),
+    ]);
+    assert.deepEqual([...partCycles.cycleEdges.keys()].sort(), ["agent -> agent/turn", "agent/queue -> agent", "agent/turn -> agent/queue"]);
+});
+
+test("a type-only way back closes no cycle between subunits", () => {
+    const src = "/src";
+    const at = (path, text) => ({ file: `${src}/${path}`, text });
+    const { partCycles } = daemonGraphs(src, [
+        at("agent/turn/run.ts", 'import { q } from "../queue/q.js";'),
+        at("agent/queue/q.ts", 'import type { R } from "../turn/run.js";'),
+    ]);
+    assert.deepEqual([...partCycles.cycleEdges.keys()], []);
+});
+
+test("a unit subunits does not list is not looked inside, and an editor unit it lists is", () => {
+    const { partCycles } = editorLayering(
+        new Map([
+            ["features/billing/a/a.ts", 'import { b } from "../b/b";'],
+            ["features/billing/b/b.ts", 'import { a } from "../a/a";'],
+            ["features/chat/panel/p.ts", 'import { s } from "../stream/s";'],
+            ["features/chat/stream/s.ts", 'import { p } from "../panel/p";'],
+        ]),
+    );
+    assert.deepEqual([...partCycles.cycleEdges.keys()].sort(), ["features/chat/panel -> features/chat/stream", "features/chat/stream -> features/chat/panel"]);
 });

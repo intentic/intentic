@@ -1,6 +1,7 @@
 import type { Broker, BrokerRule } from "@intentic/extension-manifest";
 import { oneLine } from "@intentic/base/one-line";
-import { hostAllowed, type SecretHostGuard } from "@intentic/sandbox-contract";
+import { hostAllowed } from "@intentic/sandbox-contract/policy/secret-hosts";
+import type { SecretHostGuard } from "@intentic/sandbox-contract/schemas/secrets";
 import { credentialRequest } from "../../guard/actions.js";
 import { guard } from "../../guard/guard.js";
 import { REQUEST_REFRAMED, RESPONSE_REFRAMED, forwardHeaders } from "../../http/forward-headers.js";

@@ -1,5 +1,9 @@
-import type { AgentAccess, MemberRole } from "@intentic/sandbox-contract";
-import { defaultFloor, isAttachmentPath, roleAtLeast, sandboxRouteFor } from "@intentic/sandbox-contract";
+import type { AgentAccess } from "@intentic/sandbox-contract/schemas/members";
+import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import { defaultFloor } from "@intentic/sandbox-contract/protocol/route-meta";
+import { isAttachmentPath } from "@intentic/sandbox-contract/state/workspace-state";
+import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { sandboxRouteFor } from "@intentic/sandbox-contract";
 
 // Role floors: the minimum trust tier each route demands, read from the route's own RouteMeta (sandbox-contract
 // route-meta.ts) by the bearer middleware right after the caller's role resolves. A floor, not the whole answer:

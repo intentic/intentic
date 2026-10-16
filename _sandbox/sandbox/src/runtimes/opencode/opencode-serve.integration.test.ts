@@ -207,7 +207,7 @@ test.skipIf(!linuxProc.runs)(linuxProc.title("waitForExit kills a server that ou
     // a kill at or after the grace is what it holds, which the 2 999 ms look above already bounds from below.
     const heard = tracked(exited);
     for (let step = 0; step < 50 && !heard(); step += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- each step must land before the next is taken
+        // each step must land before the next is taken
         await advanceTimersByTimeAsync(20);
     }
 
@@ -238,7 +238,7 @@ test.skipIf(!linuxProc.runs)(linuxProc.title("waitForExit looks for the stamp ag
     expect(looks).toEqual([]);
     const heard = tracked(exited);
     for (let step = 0; step < 50 && !heard(); step += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- each step must land before the next is taken
+        // each step must land before the next is taken
         await advanceTimersByTimeAsync(20);
     }
 

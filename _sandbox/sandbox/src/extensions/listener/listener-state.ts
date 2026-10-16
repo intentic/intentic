@@ -1,8 +1,8 @@
-import type { CliConfig } from "@intentic/sandbox-contract";
+import type { CliConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { AutomationRecord } from "../../automations/automations-store.js";
 import { cachedEnabledExtensions, contributionFor, contributionKey, contributionRegistry } from "../../capabilities/contributions.js";
 import type { Services } from "../../composition.js";
-import type { ExtensionHost, InstalledExtension } from "../installed-extensions.js";
+import type { ExtensionHost, InstalledExtension } from "../../capabilities/extension-inventory/installed-extensions.js";
 
 // Provider's listener state: both the reconcile feed the gateway polls and the daemon's spawn gate, one computation.
 // Connector configs carry their secrets; the gateway needs the bot token to connect.

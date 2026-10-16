@@ -1,5 +1,6 @@
+import { parseJsonWith } from "@intentic/base/json";
 import { DAEMON_PORT } from "@intentic/constants";
-import { DaemonHealthReadingSchema } from "@intentic/sandbox-contract";
+import { DaemonHealthReadingSchema } from "@intentic/sandbox-contract/schemas/system";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { slugOfDaemonUrl } from "@intentic/sandbox-run/slug";
 import { waitForAnnounce } from "../announce.js";
@@ -19,15 +20,8 @@ const setupCodeOf = (command: string): string | undefined => /\bsh\s+(?:-s\s+--\
 // `reachedBy` off one /health answer, read with the contract's loose reading; undefined for output that is not an answer
 // (curl's own noise, a body cut short), which the posture check then reports as not a tunnel.
 const healthReachedBy = (output: string): string | undefined => {
-    let body: unknown;
-    try {
-        body = JSON.parse(output);
-    } catch {
-        // allow(silent-catch): not JSON is not the daemon's answer, which undefined says
-        return undefined;
-    }
-    const parsed = DaemonHealthReadingSchema.safeParse(body);
-    return parsed.success ? parsed.data.reachedBy : undefined;
+    // Not JSON is not the daemon's answer, which undefined says.
+    return parseJsonWith(output, DaemonHealthReadingSchema)?.reachedBy;
 };
 
 // Only links expected to fail in a world with no edge; any other failing link fails the lane.

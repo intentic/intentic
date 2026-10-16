@@ -11,7 +11,8 @@ import {
     shoot,
     type Shot,
 } from "@intentic/desktop-automation";
-import { type DeviceScopes, SandboxResourcesAskFieldsSchema, SandboxShapeWhenSchema } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
+import { SandboxResourcesAskFieldsSchema, SandboxShapeWhenSchema } from "@intentic/sandbox-contract/schemas/devices";
 import { createMcpServer, type McpAuditEntry, type McpTool, textResult, tool } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { audit } from "./audit.js";

@@ -1,11 +1,8 @@
-import {
-    type AgentCapabilities,
-    type CredentialGate,
-    type SandboxSettings,
-    type SystemPromptMode,
-    type TurnNote,
-    envSuffix,
-} from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
+import type { SandboxSettings, SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
+import { envSuffix } from "@intentic/sandbox-contract/policy/capability-env";
 import { jsExecutionPlanOf } from "../../../execution/js-runtime.js";
 import { personaScopeOf } from "../../../personas/persona-scope.js";
 import {
@@ -28,13 +25,12 @@ import { turnPromptPlacement } from "../../prompt/system-prompt.js";
 import { fencedNote, fencedReminder, worktreeNote, worktreeReminder } from "../../prompt/turn-preamble.js";
 import { promptTrim } from "../../prompt/window/context-trim.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
-import { SPAWN_NOTE_TITLE } from "../../subagents/spawn-note.js";
 import type { TurnBase, TurnPolicy, TurnSpec, TurnTools } from "../../providers/agent-request.js";
 import { opt } from "../../../opt.js";
-import { TURN_CONTEXT_NOTE_TITLE } from "../turn/turn-context.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import type { AdmittedTurnFacts } from "./turn-facts.js";
 import type { TurnPremise } from "./turn-premise.js";
+import { SPAWN_NOTE_TITLE, TURN_CONTEXT_NOTE_TITLE } from "../../../sessions/vocabulary/prompt-envelope.js";
 
 // The tool this product's guidance names for finding code: iq wherever the conversation has the iq teaching, so the two
 // never disagree; its holdout, and a sandbox with iq off, keep `rg`.

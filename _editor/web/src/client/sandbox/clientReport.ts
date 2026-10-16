@@ -1,4 +1,5 @@
-import { type ClientDiagnostic, type ClientPage, REQUEST_ID_HEADER } from "@intentic/sandbox-contract";
+import type { ClientDiagnostic, ClientPage } from "@intentic/sandbox-contract/schemas/logs";
+import { REQUEST_ID_HEADER } from "@intentic/sandbox-contract/protocol/headers";
 import { uuid } from "../../lib/uuid";
 import { sandboxAuthenticatedFetch } from "./sandboxAuthFetch";
 import { currentSandboxTarget } from "./sandboxTarget";

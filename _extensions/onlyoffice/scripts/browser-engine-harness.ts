@@ -12,6 +12,7 @@ import { mkdir, stat } from "node:fs/promises";
 import http from "node:http";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { BUNDLE_PIN } from "../src/server/bundle-pin.js";
 import { BundleStore } from "../src/server/bundle.js";
 import { createBrowserEngine } from "../src/server/browser-engine.js";
@@ -51,13 +52,9 @@ const engine = createBrowserEngine({
         if (agent !== undefined) {
             return { digest: `harness-copy` };
         }
-        try {
-            const found = await stat(join(workspace, path));
-            return { stat: { size: found.size, mtimeMs: found.mtimeMs } };
-        } catch {
-            // allow(silent-catch): a missing file is the undefined the engine answers 404 for.
-            return undefined;
-        }
+        // A missing file is the undefined the engine answers 404 for.
+        const found = await stat(join(workspace, path)).catch(undefinedIfMissing);
+        return found === undefined ? undefined : { stat: { size: found.size, mtimeMs: found.mtimeMs } };
     },
     exposure: async () => listenerOrigin,
     log: (line) => console.log(`[engine] ${line}`),

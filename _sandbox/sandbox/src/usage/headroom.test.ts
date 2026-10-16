@@ -1,4 +1,4 @@
-import type { AccountUsage } from "@intentic/sandbox-contract";
+import type { AccountUsage } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { pino } from "pino";
 import type { AccountUsageStore } from "./account-usage.js";
 import { createHeadroomService, FRESH_MS, type HeadroomReading, type HeadroomSource, type HeadroomTarget } from "./headroom.js";

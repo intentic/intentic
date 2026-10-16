@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
-import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
-import { conversationView } from "../panel/useChat-view";
-import type { Conversation } from "../session/conversation";
-import { useSpeechPlayer } from "../voice/speechPlayer";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
+import { conversationView } from "../../../models/conversations/panel/useChat-view";
+import type { Conversation } from "../../../models/conversations/session/conversation";
+import { useSpeechPlayer } from "../../../models/voice/speechPlayer";
 import { useVoiceTalk } from "../voice/useVoiceTalk";
-import { FOLLOWING_MS, WAKE_HOLD_MS, type WakeListener } from "./useWakeListener";
+import { FOLLOWING_MS, WAKE_HOLD_MS, type WakeListener } from "../../../models/voice/useWakeListener";
 
 // The agent answering out loud in the conversation a wake went to, as hands-free voice answers in a composer
 // (useVoiceTalk): a finished turn said short, a card it stops on put to the person. Its words over, the person may answer

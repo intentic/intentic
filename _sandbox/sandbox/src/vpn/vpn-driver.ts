@@ -1,4 +1,5 @@
-import type { IntenticLine, VpnConfig, VpnState } from "@intentic/sandbox-contract";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
+import type { VpnConfig, VpnState } from "@intentic/sandbox-contract/schemas/vpn";
 
 // The per-protocol SPI behind the `vpn` capability: a driver owns writing, dialling, dropping and observing one kind of
 // tunnel, nothing about the manifest, routes or UI.

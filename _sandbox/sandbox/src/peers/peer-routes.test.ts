@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
-import { PairingAnswerSchema } from "@intentic/sandbox-contract";
+import { PairingAnswerSchema } from "@intentic/sandbox-contract/schemas/short-codes";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { z } from "zod";

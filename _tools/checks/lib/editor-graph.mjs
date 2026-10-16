@@ -3,7 +3,7 @@
 // resolves a relative specifier here, value imports only.
 import { posix } from "node:path";
 import { addEdge, cyclesOf } from "./cycle-edges.mjs";
-import { EDITOR_LAYERS, EDITOR_SHELVES } from "./editor-layers.mjs";
+import { EDITOR_LAYERS, EDITOR_SUBUNITS, EDITOR_SHELVES } from "./editor-layers.mjs";
 import { importsOf } from "./imports.mjs";
 import { layeredSink, layering } from "./layers.mjs";
 
@@ -87,19 +87,20 @@ export const placeInEditor = (path) => {
     }
     const placed = editorLayers.placeOf(path);
     if (placed === undefined) {
-        return { unit: parts[0], layer: undefined, top: parts[0] };
+        return { unit: parts[0], layer: undefined, top: parts[0], path };
     }
     const unit = shelved(parts, placed.unit);
-    return { unit, layer: placed.layer, top: parts[0] };
+    return { unit, layer: placed.layer, top: parts[0], path };
 };
 
 /**
  * The editor's layered view of the same imports `editorGraphs` reads, static and dynamic alike (either couples one unit
  * to another): upward imports counted per `from -> to` with their sites, the same-layer edges between units as a
- * `cyclesOf` graph, and the top-level directories no layer places.
+ * `cyclesOf` graph, the edges between subunits of each unit layers.json's `subunits` lists as another, and the top-level
+ * directories no layer places.
  */
 export const editorLayering = (sources) => {
-    const sink = layeredSink(addEdge);
+    const sink = layeredSink(addEdge, EDITOR_SUBUNITS);
     for (const [from, text] of sources) {
         const source = placeInEditor(from);
         const imports = source === undefined ? [] : importsOf(scriptOf(from, text)).filter(({ typeOnly }) => !typeOnly);
@@ -111,5 +112,11 @@ export const editorLayering = (sources) => {
             }
         }
     }
-    return { cycles: cyclesOf(sink.sameLayer), upward: sink.upward, upwardSites: sink.upwardSites, unplaced: sink.unplaced };
+    return {
+        cycles: cyclesOf(sink.sameLayer),
+        partCycles: cyclesOf(sink.betweenParts),
+        upward: sink.upward,
+        upwardSites: sink.upwardSites,
+        unplaced: sink.unplaced,
+    };
 };

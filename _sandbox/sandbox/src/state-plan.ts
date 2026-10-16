@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
-import { STATE_PLAN_FORMAT, type StatePlan } from "@intentic/sandbox-contract";
+import { STATE_PLAN_FORMAT, type StatePlan } from "@intentic/sandbox-contract/schemas/state-plan";
 import { authRootOf } from "./state-paths.js";
 import { recordNewestRun } from "./store/newest-run.js";
 import { planState } from "./store/evolution/state-convergence.js";

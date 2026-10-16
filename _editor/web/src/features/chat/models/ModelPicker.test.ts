@@ -3,28 +3,28 @@
 // - every locked row still states its price
 // - the door to connecting one lives here, since nothing else in the picker offers it
 import "@intentic/testing/dom";
-import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
+import { TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
 
 // Catalogs are daemon-owned and refreshed on open; mocked to no-ops so the mount reflects only seeded state.
-jest.mock(`./useChat-catalog`, () => ({
+jest.mock(`../../../models/conversations/accounts/useChat-catalog`, () => ({
     loadAllProviderModels: () => Promise.resolve(),
     loadProviderModels: () => Promise.resolve(),
 }));
-jest.mock(`../accounts/useChat-accounts`, () => ({ refreshConnections: () => Promise.resolve() }));
+jest.mock(`../../../models/conversations/accounts/useChat-accounts`, () => ({ refreshConnections: () => Promise.resolve() }));
 // The runtime-health probe is the daemon's; silent here, which is its own "not probed yet" state.
-jest.mock(`../../sandbox/overview/version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ runtimeIssue: () => undefined, pairIssue: () => undefined }) }));
+jest.mock(`../../../models/sandbox/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ runtimeIssue: () => undefined, pairIssue: () => undefined }) }));
 jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
     useRouter: () => ({ push: jest.fn() }) as never,
     RouterLink: RouterLinkStub as never,
 }));
 
-const { providerAccounts, translatorAccounts } = await import("../accounts/providerAccounts");
-const { acpProviders, endpointProviders, perProvider, providerModels, trialStatus } = await import("../accounts/providerCatalog");
+const { providerAccounts, translatorAccounts } = await import("../../../models/providers/providerAccounts");
+const { acpProviders, endpointProviders, perProvider, providerModels, trialStatus } = await import("../../../models/providers/providerCatalog");
 const { default: ModelPicker } = await import("./ModelPicker.vue");
 
 let app: App | undefined;

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { SECRET_STORES, type SecretStore } from "@intentic/output-cleaners/cleaners";
-import { SECRET_REFERENCE } from "@intentic/sandbox-contract";
+import { SECRET_REFERENCE } from "@intentic/sandbox-contract/schemas/needs";
 import { z } from "zod";
 import type { SecretVault, SecretVaultContents } from "../capabilities/credentials/secret-vault.js";
 import type { SandboxSecrets } from "./sandbox-secrets.js";

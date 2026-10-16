@@ -1,4 +1,4 @@
-import { AgentProviderSchema } from "@intentic/sandbox-contract";
+import { AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";

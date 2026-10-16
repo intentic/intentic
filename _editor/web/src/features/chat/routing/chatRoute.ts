@@ -1,13 +1,16 @@
-import { type ChatRoute, type Persona, mentionPaths, parsePinned, personaModels } from "@intentic/sandbox-contract";
+import type { ChatRoute } from "@intentic/sandbox-contract/schemas/chat-route";
+import { type Persona, personaModels } from "@intentic/sandbox-contract/schemas/personas";
+import { mentionPaths } from "@intentic/sandbox-contract/text/mentions";
+import { parsePinned } from "@intentic/sandbox-contract/models/model-pins";
 import { t } from "@intentic/ui/i18n";
 import { computed, ref, type Ref } from "vue";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
-import { usePersonas } from "../../sandbox/personas/usePersonas";
-import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
+import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import { useRole } from "../../../client/sandbox/useRole";
-import { modelLabelFor } from "../accounts/providerCatalog";
-import { roleSources } from "../accounts/roleModel";
-import type { Conversation } from "../session/conversation";
+import { modelLabelFor } from "../../../models/providers/providerCatalog";
+import { roleSources } from "../../../models/providers/roleModel";
+import type { Conversation } from "../../../models/conversations/session/conversation";
 
 // What a new chat opens on — which persona it belongs to, and which model it runs on — asked of the daemon once, on the
 // message the user actually sent. ONE call for both questions: they are read from the same message at the same moment,

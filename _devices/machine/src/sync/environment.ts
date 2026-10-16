@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { hostname } from "node:os";
+import { readTextIfExistsSync } from "@intentic/base/fs";
 import { machineId } from "../machine-id.js";
 
 // WHICH ENVIRONMENT OF THIS COMPUTER the sync half runs in: "windows", the WSL distro's name, "macos" or "linux". A
@@ -22,14 +23,7 @@ import { machineId } from "../machine-id.js";
 
 const WSL_KERNEL = /microsoft/i;
 
-const readable = (path: string): string | undefined => {
-    try {
-        return readFileSync(path, "utf8");
-    } catch {
-        // allow(silent-catch): a file that is not there is a platform that does not have it (macOS, Windows)
-        return undefined;
-    }
-};
+
 
 const osReleaseName = (osRelease: string | undefined): string | undefined => {
     const line = (osRelease ?? "").split(/\r?\n/).find((entry) => entry.startsWith("NAME="));
@@ -71,9 +65,9 @@ let cached: SyncEnvironment | undefined;
 export const syncEnvironment = (): SyncEnvironment =>
     (cached ??= syncEnvironmentFrom(
         process.platform,
-        process.platform === "linux" ? readable("/proc/version") : undefined,
+        process.platform === "linux" ? readTextIfExistsSync("/proc/version") : undefined,
         process.env["WSL_DISTRO_NAME"],
-        process.platform === "linux" ? readable("/etc/os-release") : undefined,
+        process.platform === "linux" ? readTextIfExistsSync("/etc/os-release") : undefined,
         process.platform === "linux" && (existsSync("/run/WSL") || existsSync("/mnt/wsl")),
     ));
 

@@ -1,15 +1,18 @@
 import { t } from "@intentic/ui/i18n";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
-import type { CapabilityKind, HostSummary, PhoneSummary, WebExtSummary, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { CapabilityKind, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { HostSummary } from "@intentic/sandbox-contract/schemas/hosts";
+import type { PhoneSummary } from "@intentic/sandbox-contract/schemas/phone";
+import type { WebExtSummary } from "@intentic/sandbox-contract/schemas/webext";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { type Ref, ref } from "vue";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
-import type { usePeerConnect } from "../sandbox/devices/usePeerConnect";
-import { useTerminalPanel } from "../terminal/useTerminalPanel";
-import { awaitingLogin, browserGrants, machineGrants, phoneGrants, signsInByHand } from "./model/connections";
+import type { usePeerConnect } from "../../models/sandbox/devices/usePeerConnect";
+import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
+import { awaitingLogin, browserGrants, machineGrants, phoneGrants, signsInByHand } from "../../models/capabilities/connections";
 import { type ContributionOf, contributionFor } from "./model/effects";
-import { isDefaultName } from "./model/tiles";
+import { isDefaultName } from "../../models/capabilities/tiles";
 
 // The windows a connection is finished in: a live browser signed into by hand, a one-time command run on a device of
 // the user's own, a one-time code pasted into a browser of theirs, a code their phone scans. This page owns which is open and on what; rosters

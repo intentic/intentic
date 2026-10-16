@@ -7,7 +7,7 @@ import { type CodexSubagentThreads, codexSubagentThreads } from "./codex-subagen
 import { opt } from "../../opt.js";
 import { jsonLines, outputTail } from "../stdio/child-output.js";
 import { z } from "zod";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 
 // Codex client surface: the request fields Intentic sends and the item fields it renders, not the full generated
 // protocol. Unknown notifications/item kinds pass through untouched; malformed fields on a known kind fail at the

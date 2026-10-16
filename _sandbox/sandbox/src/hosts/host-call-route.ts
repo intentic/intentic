@@ -1,4 +1,4 @@
-import { HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract";
+import { HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract/schemas/hosts";
 import { z } from "zod";
 import type { RpcMessage } from "../agent/tools/turn-mounts.js";
 import type { Services } from "../composition.js";

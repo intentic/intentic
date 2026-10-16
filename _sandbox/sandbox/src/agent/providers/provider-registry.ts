@@ -1,4 +1,6 @@
-import type { Model, NativeProvider, OauthAccount, SecretInventoryEntry } from "@intentic/sandbox-contract";
+import type { Model, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import type { NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
+import type { SecretInventoryEntry } from "@intentic/sandbox-contract/schemas/secrets";
 import type { Logger } from "pino";
 import type { Services } from "../../composition.js";
 import type { ProviderDeps } from "../../runtimes/runtime-table.js";

@@ -1,7 +1,8 @@
 import { errorMessage } from "@intentic/base/errors";
-import { declaredAllows, declaredTestNote, type LandedMessageDraft, type LandedMessageStep } from "@intentic/sandbox-contract";
-import { type RoleAnswer, sentenceReason } from "../../agent/models/role-answer.js";
-import { askRoleModel, type RoleModelAttempt, roleModelIsSet } from "../../agent/models/role-model.js";
+import { declaredAllows, declaredTestNote } from "@intentic/sandbox-contract/state/landed-commit";
+import type { LandedMessageDraft, LandedMessageStep } from "@intentic/sandbox-contract/schemas/agents";
+import { type RoleAnswer, sentenceReason } from "../../engines/role-answer.js";
+import type { RoleModelAttempt } from "../../agent/models/role-model.js";
 import type { Services } from "../../composition.js";
 import { withAgentExecution } from "../../workload/agent-execution.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
@@ -116,7 +117,7 @@ export const describeLanding = async (services: Services, id: string): Promise<v
         return;
     }
     // Checked here, before a 'writing...' chip goes up, so an owner who disabled the model gets silence, not a failure.
-    if (!(await roleModelIsSet(services, `commit-message`))) {
+    if (!(await services.turnEngine.roleModelIsSet(services, `commit-message`))) {
         return;
     }
     // Report opens with the diff itself as the started fact; later beats replace the whole report, never diff it.
@@ -149,7 +150,7 @@ export const describeLanding = async (services: Services, id: string): Promise<v
         // Each walk beat publishes immediately; the outcome (`ended`) is written last, after the sentence is already live.
         const { value } = await withAgentExecution(services.agentExecution, { localCwd: services.workspace.root }, (execution) =>
             services.perf.track("landing.subject", { agent: id, repos: diffs.length }, () =>
-                askRoleModel(
+                services.turnEngine.askRoleModel(
                     services,
                     execution,
                     `commit-message`,

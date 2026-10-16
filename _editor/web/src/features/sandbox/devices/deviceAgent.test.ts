@@ -1,6 +1,6 @@
-import type { Device } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 import { deviceAgentPanel, machineAgent } from "./deviceAgent";
-import { deviceRow, machineRow } from "./deviceRows";
+import { deviceRow, machineRow } from "../../../models/sandbox/devices/deviceRows";
 
 // The agent panel's rules, checked without mounting the page: what it says about one device's agent, and
 // when each of its two verbs is offered.

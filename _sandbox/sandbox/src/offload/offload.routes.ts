@@ -1,5 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
-import { type OffloadFrame, type OffloadRecord, type OffloadTarget, offloadContract } from "@intentic/sandbox-contract";
+import type { OffloadFrame, OffloadRecord, OffloadTarget } from "@intentic/sandbox-contract/schemas/offload";
+import { offloadContract } from "@intentic/sandbox-contract/contracts/offload.contract";
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";

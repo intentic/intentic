@@ -1,4 +1,5 @@
-import { DEV_SANDBOX_IMAGE, type RunnerParity } from "@intentic/sandbox-contract";
+import { DEV_SANDBOX_IMAGE } from "@intentic/sandbox-contract/policy/overlay-lint";
+import type { RunnerParity } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 
 // Whether a runner's build matches the parent's, since both run turns through the same daemon code. Reported, never
 // enforced: an outdated runner still runs, this only decides a badge and update button. `unknown` is real: a

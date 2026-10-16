@@ -1,4 +1,4 @@
-import type { IssueIngest, IssuePublicConfig, IssueReport } from "@intentic/sandbox-contract";
+import type { IssueIngest, IssuePublicConfig, IssueReport } from "@intentic/sandbox-contract/schemas/issues";
 import { type EmbedEndpoint, solveProofOfWork, storedId } from "@intentic/sandbox-contract/embed";
 import { type Breadcrumbs, createBreadcrumbs } from "./breadcrumbs.js";
 import { type Capture, reportFrom, startCapture } from "./capture.js";

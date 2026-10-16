@@ -1,8 +1,9 @@
-import { RelinkRequestSchema } from "@intentic/sandbox-contract";
+import { RelinkRequestSchema } from "@intentic/sandbox-contract/schemas/platform-link";
 import type { Context } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import { ownershipDenied } from "../../auth/owner-gates.js";
 import type { Services } from "../../composition.js";
+import { defineRawRoutes } from "../../http/raw-route-server.js";
 
 // POST /platform/relink, the owner's Reconnect (announce.ts). Gated by ownership rather than the operating gate, as
 // membership is: an adoption has the platform list this sandbox under the account asking, which only its owner decides.
@@ -28,3 +29,8 @@ export const createRelinkRoute =
         }
         return c.json(await services.announcer.relink({ ticket, owner, name, image }));
     };
+
+// The owner's Reconnect with the platform, adopting the sandbox first when the platform holds no record of it.
+export const relinkRawRoutes = defineRawRoutes((services: Pick<Services, "auth" | "announcer" | "ownerEmail">) => ({
+    "POST /platform/relink": createRelinkRoute(services),
+}));

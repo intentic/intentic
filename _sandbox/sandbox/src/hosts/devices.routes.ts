@@ -1,4 +1,5 @@
-import { type DeviceFlowLine, type DeviceSandboxFlowInput, type DeviceSandboxOp, systemContract } from "@intentic/sandbox-contract";
+import type { DeviceFlowLine, DeviceSandboxFlowInput, DeviceSandboxOp } from "@intentic/sandbox-contract/schemas/devices";
+import { systemContract } from "@intentic/sandbox-contract/contracts/system.contract";
 import { sandboxSlugOf } from "@intentic/sandbox-run";
 import { implement } from "@orpc/server";
 import { askedRestart, fileRestartResume } from "../system/restart-resume.js";

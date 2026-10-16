@@ -1,4 +1,5 @@
-import { type DataFlow, type Measure, OUTWARD_ACTION_KEYS, type PresetItem } from "@intentic/sandbox-contract";
+import type { DataFlow, Measure, PresetItem } from "@intentic/sandbox-contract/schemas/compliance";
+import { OUTWARD_ACTION_KEYS } from "@intentic/sandbox-contract/schemas/data-protection";
 import {
     documentLanguageFor,
     flowFacts,

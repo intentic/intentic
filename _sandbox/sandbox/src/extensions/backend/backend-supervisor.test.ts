@@ -6,8 +6,8 @@ import * as fsOriginal from "@intentic/base/fs";
 import type { Logger } from "pino";
 import * as workloadOriginal from "../../workload/workload-class.js";
 import * as processGroupOriginal from "../../workload/process-group.js";
-import * as installedOriginal from "../installed-extensions.js";
-import type { ExtensionHost, InstalledExtension } from "../installed-extensions.js";
+import * as installedOriginal from "../../capabilities/extension-inventory/installed-extensions.js";
+import type { ExtensionHost, InstalledExtension } from "../../capabilities/extension-inventory/installed-extensions.js";
 import * as listenerOriginal from "../listener/listener-state.js";
 
 // The supervisor's converges racing each other and stop(), with the host, its port and its /health faked: which host
@@ -44,7 +44,7 @@ const enabledExtensions = jest.fn(async (): Promise<InstalledExtension[]> => [ex
 jest.mock("../../workload/workload-class.js", () => ({ ...workloadOriginal, spawnAs: () => spawnAs() }));
 jest.mock("@intentic/base/fs", () => ({ ...fsOriginal, freePort: () => freePort() }));
 jest.mock("../../workload/process-group.js", () => ({ ...processGroupOriginal, killGroup: (child: ChildProcess) => killGroup(child) }));
-jest.mock("../installed-extensions.js", () => ({ ...installedOriginal, enabledExtensions: () => enabledExtensions() }));
+jest.mock("../../capabilities/extension-inventory/installed-extensions.js", () => ({ ...installedOriginal, enabledExtensions: () => enabledExtensions() }));
 jest.mock("../listener/listener-state.js", () => ({
     ...listenerOriginal,
     listenerOwnershipOf: async () => ({ owners: new Map(), refused: new Map() }),

@@ -1,5 +1,8 @@
 import { errorMessage } from "@intentic/base/errors";
-import { type KeyedProvider, KeyedProviderSchema, providerLabel, translatorContract, type TranslatorStatus } from "@intentic/sandbox-contract";
+import { type KeyedProvider, KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
+import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
+import { translatorContract } from "@intentic/sandbox-contract/contracts/translator.contract";
+import type { TranslatorStatus } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../../composition.js";
 import type { OrpcContext } from "../../app-env.js";

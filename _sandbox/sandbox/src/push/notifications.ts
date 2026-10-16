@@ -1,4 +1,7 @@
-import { commandRunOutcome, type ParkKind, type PushNotification, type PushRun } from "@intentic/sandbox-contract";
+import { commandRunOutcome } from "@intentic/sandbox-contract/policy/command-run";
+import type { ParkKind } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
+import type { PushRun } from "@intentic/sandbox-contract/schemas/git/git";
 
 // Every notification's fixed wording, kept out of the subsystems that trigger it so the vocabulary a user can receive
 // lives in one place.

@@ -4,7 +4,7 @@ import { lstat, mkdir, readdir, readFile, rename, stat } from "node:fs/promises"
 import { basename, dirname, join } from "node:path";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { agentHome } from "@intentic/local-agent";
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { assertPath, assertScope } from "../policy.js";
 
 // Files on somebody's device. Reads are bounded by the roots; writes need the roots AND the write switch, off by

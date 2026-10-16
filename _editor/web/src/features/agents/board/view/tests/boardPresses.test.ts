@@ -1,9 +1,9 @@
 import "@intentic/testing/dom";
 import { unstubbed } from "@intentic/testing";
-import type { WorkflowRun } from "@intentic/sandbox-contract";
+import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { type EffectScope, effectScope, nextTick, ref, shallowRef } from "vue";
 import type { RouteLocationRaw, Router } from "vue-router";
-import type { Strip } from "../../../../chat/tabs/tabFacts";
+import type { Strip } from "../../../../../models/conversations/tabs/tabFacts";
 import { forgetOperations } from "../../../../../workbench/operations/operations";
 import { useBoardPresses } from "../boardPresses";
 

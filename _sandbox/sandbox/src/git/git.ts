@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { PushRefusal } from "@intentic/sandbox-contract";
+import type { PushRefusal } from "@intentic/sandbox-contract/schemas/git/git";
 import { GIT_GLOBAL_ARGS, type GitRunner, literalPathspecs } from "@intentic/base/git";
 import type { TerminalRunner } from "../terminal/terminal-run.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";

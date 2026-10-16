@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { AnchoredOverlay, timeAgo, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
-import { KINDS } from "./terminalMeta";
-import { openWorkTerminal, useWorkTerminals, type WorkTerminalRow } from "./useWorkTerminals";
+import { KINDS } from "../../models/terminal/terminalMeta";
+import { openWorkTerminal, useWorkTerminals, type WorkTerminalRow } from "../../models/terminal/useWorkTerminals";
 import { useT } from "@intentic/ui/i18n";
 
 // Popover listing work in progress (agent Bash shells, daemon job sessions, one-shot runs) instead of tabbing into the

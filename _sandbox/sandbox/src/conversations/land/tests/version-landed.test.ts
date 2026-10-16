@@ -1,10 +1,11 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { LandedMessage, Rule } from "@intentic/sandbox-contract";
+import type { LandedMessage } from "@intentic/sandbox-contract/schemas/agents";
+import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
 import { committableSubject, subjectFromPaths } from "../../../git/ops/commit-message.js";
 import { settleLanding, settleLandingInBackground, versionCommitsSettled, versionRuleOf } from "../version-landed.js";
-import { isolatedAgent } from "../../../testing.js";
+import { isolatedAgent } from "../../registry/agents-store.testing.js";
 
 const describeLanding = jest.fn<() => Promise<void>>();
 jest.mock("../landed-subject.js", () => ({ describeLanding: () => describeLanding() }));

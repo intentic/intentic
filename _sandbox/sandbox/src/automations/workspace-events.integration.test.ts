@@ -1,9 +1,11 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentEvent, type Automation, SandboxSettingsSchema, type WorkspaceEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { Automation, WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { freshImport, SETTLES, waitFor } from "@intentic/testing/bun";
-import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { sqliteTurnJournal } from "../store/journals/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
@@ -11,7 +13,7 @@ import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { fileAutomationsStore } from "./automations-store.js";
 import { mintConversationId } from "./scheduler.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
-import { drivenBy } from "../testing.js";
+import { drivenBy } from "../seams/turn-starter.testing.js";
 
 // Chore queues and the turn chain are process-wide singletons; each test gets a fresh module so one test's unfinished
 // pump can't swallow the next test's event.

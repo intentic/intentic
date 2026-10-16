@@ -1,7 +1,7 @@
 <!-- The AskUserQuestion card: the ask, the options, and the answer being composed. -->
 <script setup lang="ts">
 import { growTextarea, Icon, type IconName, useDevice } from "@intentic/ui";
-import type { AskQuestion } from "@intentic/sandbox-contract";
+import type { AskQuestion } from "@intentic/sandbox-contract/events/requests";
 import { type ComponentPublicInstance, computed, inject, nextTick, reactive, ref, type Ref, watch } from "vue";
 import {
     answerStarted,
@@ -15,14 +15,14 @@ import {
 } from "../../drafts/questionDraft";
 import { claimDrop, type PendingAttachment, useChatAttachments } from "../../drafts/useChatAttachments";
 import ChatAttachmentStrip from "../../composer/ChatAttachmentStrip.vue";
-import { PANE_VIEW } from "../../panel/useChat-view";
+import { PANE_VIEW } from "../../../../models/conversations/panel/useChat-view";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { uuid } from "../../../../lib/uuid";
-import ChatCard from "./ChatCard.vue";
-import ChatDecisionButton from "./ChatDecisionButton.vue";
+import ChatCard from "../../../../components/ChatCard.vue";
+import ChatDecisionButton from "../../../../components/ChatDecisionButton.vue";
 import ChatDocumentBody from "./ChatDocumentBody.vue";
-import type { CardAnswer } from "../../session/cardReplies";
-import type { ChatMessage } from "../transcript";
+import type { CardAnswer } from "../../../../models/conversations/session/cardReplies";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import { documentDrawn, questionStatus } from "./cardStatus";
 import { useT } from "@intentic/ui/i18n";
 

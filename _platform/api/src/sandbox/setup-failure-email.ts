@@ -210,7 +210,7 @@ export const mailUnwatchedSetupFailures = async (
             continue;
         }
         try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- sequential: a handful of rows, each its own mail
+            // sequential: a handful of rows, each its own mail
             if (await ownerBackSince(prisma, row, verdict.failedAt)) {
                 continue;
             }
@@ -222,9 +222,9 @@ export const mailUnwatchedSetupFailures = async (
                 offerHosted: hostedEnabled(config) && row.owner.hostedSuspendedAt === null,
             });
             // Mail first, stamp second: a stamp before a failed send would silently burn the one mail.
-            // oxlint-disable-next-line eslint/no-await-in-loop -- sequential, as above
+            // sequential, as above
             const delivery = await sendMail(config, logger, { to: row.owner.email, ...mail });
-            // oxlint-disable-next-line eslint/no-await-in-loop -- sequential, as above
+            // sequential, as above
             await prisma.sandbox.update({ where: { id: row.id }, data: { setupFailureEmailedAt: now, setupFailureEmailedFor: verdict.key } });
             logger.info({ sandboxId: row.id, stage: verdict.report.stage, check: verdict.first.check, delivery }, `setup failure: owner mailed`);
             mailed += 1;

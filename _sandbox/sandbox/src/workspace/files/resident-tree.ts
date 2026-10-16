@@ -1,12 +1,12 @@
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import {
-    isLockedWorkspacePath,
-    type WorkspaceLink,
-    type WorkspaceTree,
-    type WorkspaceTreeDelta,
-    type WorkspaceTreeEntry,
-} from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
+import type {
+    WorkspaceLink,
+    WorkspaceTree,
+    WorkspaceTreeDelta,
+    WorkspaceTreeEntry,
+} from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { createIgnoreScope, type IgnoreScope } from "@intentic/workspace-ignore";
 import { byKind, type Entry, fileFacts, followEntries } from "./dir-reads.js";
 import { descendable, MAX_ENTRIES } from "./workspace-tree.js";

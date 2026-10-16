@@ -1,4 +1,4 @@
-import type { RelinkAnswer } from "@intentic/sandbox-contract";
+import type { RelinkAnswer } from "@intentic/sandbox-contract/schemas/platform-link";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import type { AppEnv } from "../../app-env.js";

@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { termsOf } from "@intentic/sandbox-contract";
-import type { Conversation } from "../session/conversation";
-import { AUTO_KEY, autoEntry, type PickerEntry } from "./modelPickerState";
+import { termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { Conversation } from "../../../models/conversations/session/conversation";
+import { AUTO_KEY, autoEntry, type PickerEntry } from "../../../models/conversations/accounts/modelPickerState";
 import { usePickerAccounts } from "../accounts/pickerAccounts";
-import { type RunSettingsPatch, usePickerRunSettings } from "./run-settings/pickerRunSettings";
+import { type RunSettingsPatch, usePickerRunSettings } from "../../../models/providers/pickerRunSettings";
 import ModelPicker from "./ModelPicker.vue";
 import PickerAccounts from "../accounts/PickerAccounts.vue";
 import PickerRunSettings from "./run-settings/PickerRunSettings.vue";
 import LoopTermsRow from "./LoopTermsRow.vue";
 import LoopLimitsRow from "./LoopLimitsRow.vue";
-import { limitationsOn, offeredLoops, selectedLoop } from "./offeredLoops";
+import { limitationsOn, offeredLoops, selectedLoop } from "../../../models/providers/offeredLoops";
 import { useT } from "@intentic/ui/i18n";
 
 // Chat's binding of the shared model picker: the list, the who-serves-the-turn block, and per-conversation footer

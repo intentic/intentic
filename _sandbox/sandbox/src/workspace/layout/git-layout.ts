@@ -1,7 +1,7 @@
 import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { VERSIONED_STATE_PATHS } from "@intentic/sandbox-contract";
+import { VERSIONED_STATE_PATHS } from "@intentic/sandbox-contract/state/workspace-state";
 import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 
 // Where the workspace's git lives and what its root repo leaves out: each repo's real git dir on the history volume,

@@ -1,4 +1,5 @@
-import type { AgentDomainPolicy, AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentDomainPolicy } from "@intentic/sandbox-contract/schemas/settings";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { unstubbed } from "@intentic/testing";
 import type { IsolationPlan } from "../../conversations/worktrees/isolation.js";
 import {

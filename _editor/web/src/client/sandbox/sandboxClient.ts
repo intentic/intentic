@@ -1,3 +1,4 @@
+import { parseJsonOr } from "@intentic/base/json";
 import { sandboxRouteName } from "@intentic/sandbox-contract";
 import type { output, ZodType } from "zod";
 import { t } from "@intentic/ui/i18n";
@@ -167,13 +168,7 @@ const sendPart = (
                 resolve();
                 return;
             }
-            const detail = ((): { error?: string } | undefined => {
-                try {
-                    return JSON.parse(xhr.responseText) as { error?: string };
-                } catch {
-                    return undefined;
-                }
-            })();
+            const detail = parseJsonOr(xhr.responseText, undefined) as { error?: string } | null | undefined;
             reject(new SandboxHttpError(xhr.status, detail?.error ?? t(`sandbox.sandboxClient.requestFailed`, { status: xhr.status })));
         });
         xhr.addEventListener(`error`, () => reject(new Error(t(`sandbox.sandboxClient.uploadUnreachable`))));

@@ -1,5 +1,6 @@
-import type { AuditEvent } from "@intentic/sandbox-contract";
-import { SANDBOX_ROUTES, RAW_ROUTE_LIST } from "@intentic/sandbox-contract";
+import type { AuditEvent } from "@intentic/sandbox-contract/schemas/audit";
+import { SANDBOX_ROUTES } from "@intentic/sandbox-contract";
+import { RAW_ROUTE_LIST } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { Hono } from "hono";
 import type { AppEnv } from "../app-env.js";
 import { AUDITED_CHANGES, AUDITED_READS, auditRequests, noteAudit, pathTarget } from "./audit-http.js";

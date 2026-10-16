@@ -50,7 +50,7 @@ jest.mock("../../../client/sandbox/pageWake", () => ({ watchPageWake: () => () =
 jest.mock("../../../app/hotReload", () => ({ reloadOnHotUpdate: () => undefined }));
 jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { removeQueries: () => undefined } }));
 jest.mock("../../../workbench/presence/usePresence", () => ({ clearPresence: () => undefined, presenceStreamOpened: () => undefined }));
-jest.mock("../../agents/fleet/useAgents", () => ({ desyncAgents: () => undefined }));
+jest.mock("../../../models/fleet/useAgents", () => ({ desyncAgents: () => undefined }));
 jest.mock("../live/systemEvents", () => ({ applySystemEvent: () => undefined }));
 jest.mock("../live/systemEventRouting", () => ({ sandboxQueryPredicate: () => () => false }));
 jest.mock("../diagnosis/useDiagnosis", () => ({ sandboxSeemsAlive: () => false, startDiagnosis: () => undefined, stopDiagnosis: () => undefined }));

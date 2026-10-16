@@ -1,12 +1,6 @@
-import {
-    type AgentProvider,
-    capabilitiesOf,
-    endpointProvider,
-    loopsOf,
-    NATIVE_PROVIDERS,
-    pairHealthKey,
-    TRIAL_ENDPOINT_ID,
-} from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { capabilitiesOf, endpointProvider, loopsOf, pairHealthKey, TRIAL_ENDPOINT_ID } from "@intentic/sandbox-contract/models/agent-catalog";
+import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
 import { mintsEndpointProvider } from "../../endpoints/local-model.js";
 import type { Services } from "../../composition.js";
 import type { RuntimeDeps } from "../../runtimes/runtime-table.js";

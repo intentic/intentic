@@ -1,4 +1,4 @@
-import type { DeviceFlowLine } from "@intentic/sandbox-contract";
+import type { DeviceFlowLine } from "@intentic/sandbox-contract/schemas/devices";
 import { Frames } from "@intentic/contract-serve";
 import { forgetDemoLinks, removeDemoSandbox, setDemoSandboxRunning } from "../fixture/devices";
 

@@ -2,13 +2,13 @@ import {
     accessRefusal,
     type AgentAccess,
     type CredentialReach,
-    type GrantedRole,
     type Member,
     type MemberAccess,
     type MemberGrant,
     memberAccess,
     tierOf,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/members";
+import type { GrantedRole } from "@intentic/sandbox-contract/schemas/shared";
 import { googleMailbox } from "../../../client/auth/signInMethods";
 
 // One person's access as the People panel edits it, and the grant that writes it. Pure, since the panel, the roster's

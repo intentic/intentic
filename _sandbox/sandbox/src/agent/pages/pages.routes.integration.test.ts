@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pagesContract } from "@intentic/sandbox-contract";
+import { pagesContract } from "@intentic/sandbox-contract/contracts/pages.contract";
 import { unstubbed } from "@intentic/testing";
 import { errorCode, routesClient } from "../../harness/route-client.testing.js";
 import { PAGES_DIR } from "./pages-dir.js";

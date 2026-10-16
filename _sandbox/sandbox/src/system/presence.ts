@@ -1,4 +1,5 @@
-import type { PresenceReport, PresenceUser } from "@intentic/sandbox-contract";
+import type { PresenceReport } from "@intentic/sandbox-contract/schemas/logs";
+import type { PresenceUser } from "@intentic/sandbox-contract/events/system-events";
 import type { Caller, VerifiedIdentity } from "../auth/auth.js";
 
 // Live connections keyed by clientId, removed in the stream's finally; no TTL sweep needed.

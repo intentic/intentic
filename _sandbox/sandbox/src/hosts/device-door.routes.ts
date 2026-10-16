@@ -5,6 +5,7 @@ import type { AppEnv } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { soleLiveConversation } from "../conversations/actor/conversation-holdings.js";
 import { callTool } from "./device-reports.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // WHO MAY ACT ON ONE OF THE OWNER'S COMPUTERS FROM A SHELL IN THE SANDBOX: the `devices` command's routes (push a build,
 // start it, reach its ports). Two callers, one rule each:
@@ -67,7 +68,7 @@ const bodyOf = async <T>(c: Context<AppEnv>, schema: z.ZodType<T>): Promise<{ ok
         : { ok: false, error: `bad request: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "body"}: ${issue.message}`).join("; ")}` };
 };
 
-export const createDeviceDoorRoutes = (services: DoorServices & Pick<Services, "deviceTunnels">) => ({
+const createDeviceDoorRoutes = (services: DoorServices & Pick<Services, "deviceTunnels">) => ({
     // POST /devices/{name}/apps: the device's own app_start, for a shell (`devices run`); it answers as the tool does.
     start: async (c: Context<AppEnv>): Promise<Response> => {
         const device = c.req.param("name") ?? "";
@@ -115,4 +116,16 @@ export const createDeviceDoorRoutes = (services: DoorServices & Pick<Services, "
     },
     // GET /devices/tunnels: every tunnel open now.
     listTunnels: (c: Context<AppEnv>): Response => c.json({ tunnels: services.deviceTunnels.list() }),
+});
+
+// The rest of the `devices` command, and a device's end of a `devices reach` tunnel, redeeming its one-time ticket.
+export const deviceDoorRawRoutes = defineRawRoutes((services: DoorServices & Pick<Services, "deviceTunnels">) => {
+    const deviceDoor = createDeviceDoorRoutes(services);
+    return {
+        "POST /devices/{name}/apps": deviceDoor.start,
+        "POST /devices/{name}/tunnels": deviceDoor.openTunnel,
+        "DELETE /devices/{name}/tunnels/{port}": deviceDoor.closeTunnel,
+        "GET /devices/tunnels": deviceDoor.listTunnels,
+        "GET /system/hosts/tunnel": services.deviceTunnels.route,
+    };
 });

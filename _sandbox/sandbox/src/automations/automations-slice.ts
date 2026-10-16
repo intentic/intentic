@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { AgentOrigin } from "@intentic/sandbox-contract";
+import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
 import type { Logger } from "pino";
 import type { IssuesStore } from "../issues/issues-store.js";
 import { fileThreadSessionsStore, threadSessionsDocument, type ThreadSessionsStore } from "../sessions/thread-sessions.js";

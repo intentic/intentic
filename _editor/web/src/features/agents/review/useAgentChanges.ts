@@ -1,17 +1,8 @@
 import { t } from "@intentic/ui/i18n";
-import {
-    isTestPath,
-    type AgentSpan,
-    type AgentSummary,
-    type LandConflictReason,
-    type LandMode,
-    type LandResult,
-    type WorkspaceModule,
-    type AgentChange,
-    type AgentChanges,
-    type AgentRepoChanges,
-    type FileDiff,
-} from "@intentic/sandbox-contract";
+import { isTestPath } from "@intentic/sandbox-contract/text/path-refs";
+import type { AgentSpan, AgentSummary, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract/schemas/agents";
+import type { WorkspaceModule, AgentChange, AgentChanges, AgentRepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
+import type { FileDiff } from "@intentic/sandbox-contract/schemas/history";
 import { sandboxRef } from "@intentic/extension-api";
 import type { NoticeModel } from "@intentic/ui/async";
 import { computed, onScopeDispose, watch, type Ref } from "vue";
@@ -32,10 +23,11 @@ import {
     landAgent,
     nothingLanded,
     type ResolveAsk,
-} from "../fleet/agentActions";
-import { landedAway, turnInFlight } from "../fleet/agentStatus";
-import { agentBlockers, blockersOf } from "./conflictResolution";
-import { useAgents } from "../fleet/useAgents";
+} from "../../../models/fleet/agentActions";
+import { turnInFlight } from "../../../models/agent-status/agentStatus-standing";
+import { landedAway } from "../fleet/agentStatus-land";
+import { agentBlockers, blockersOf } from "../../../models/conversations/review/conflictResolution";
+import { useAgents } from "../../../models/fleet/useAgents";
 import { useNotifications } from "../../../workbench/notifications/notifications";
 
 // Per-agent review of what a worktree has that main does not (agents.diff): one flat set per repo, no
@@ -443,7 +435,7 @@ export function useAgentChanges(
             failed: t(`agents.useAgentChanges.copyIgnoredFailed`),
             task: async () => {
                 for (const group of groups) {
-                    // oxlint-disable-next-line eslint/no-await-in-loop -- one repository at a time, as the daemon copies
+                    // one repository at a time, as the daemon copies
                     await copyAgentIgnored(id, group.repo, group.paths, box);
                 }
                 await invalidateAgentAction(id, box);

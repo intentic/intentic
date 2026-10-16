@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { t } from "@intentic/ui/i18n";
 import { parentDir } from "@intentic/ui/path";
 import { computed, type Ref } from "vue";
@@ -6,8 +6,8 @@ import type { RowAction } from "../explorer/rowActions";
 import { createFileVerbs } from "../explorer/tree/fileVerbs";
 import { fileVerbSeams } from "../explorer/tree/fileVerbSeams";
 import { useEmptyDirs } from "../explorer/useEmptyDirs";
-import { opensAsFolder } from "../files/archiveEntries";
-import { provisionalAt } from "../files/provisionalEntries";
+import { opensAsFolder } from "../../../models/workspace/files/archiveEntries";
+import { provisionalAt } from "../../../models/workspace/files/provisionalEntries";
 
 // The tree's own verbs (explorer/tree) over the home's tiles, every one aimed at the open folder; the clipboard is shared.
 

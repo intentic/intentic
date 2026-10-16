@@ -3,13 +3,13 @@
 // board's other selection (multi-pane splits) is tested at the foot of the file.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
-import { useChat } from "../../chat/run/useChat";
-import { openAgentConversation } from "../../chat/panel/useChat-reveal";
+import { useChat } from "../../../models/conversations/run/useChat";
+import { openAgentConversation } from "../../../models/conversations/panel/useChat-reveal";
 import { queryClient } from "../../../lib/queryPersistence";
-import { setAgents } from "../fleet/useAgents-registry";
+import { setAgents } from "../../../models/fleet/useAgents-registry";
 import { router } from "../../../router";
 import AgentsView from "./AgentsView.vue";
 import { IconStub } from "@intentic/ui/testing";

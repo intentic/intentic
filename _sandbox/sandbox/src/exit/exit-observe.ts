@@ -1,7 +1,7 @@
 import { connect as netConnect, type Socket } from "node:net";
 import { connect as tlsConnect } from "node:tls";
 import { errorMessage } from "@intentic/base/errors";
-import type { ExitObservation } from "@intentic/sandbox-contract";
+import type { ExitObservation } from "@intentic/sandbox-contract/schemas/exit";
 import { countryName } from "./exit-countries.js";
 import { type ExitResolver, resolveThroughExit } from "./exit-dns.js";
 import { socksConnect } from "./exit-socks.js";

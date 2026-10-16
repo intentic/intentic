@@ -5,9 +5,8 @@ import {
     LOCAL_MODEL_WINDOWS,
     LOCAL_MODELS,
     type LocalModelChoice,
-    type LocalModelFitResponse,
-    type LocalModelPrefetch,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/capabilities";
+import type { LocalModelFitResponse, LocalModelPrefetch } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import { forkedExec } from "@intentic/base/git";
 import { opt } from "../opt.js";
 import { localModelWeightsPath } from "./local-model.js";

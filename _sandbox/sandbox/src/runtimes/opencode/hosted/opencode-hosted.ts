@@ -1,4 +1,5 @@
-import type { AgentProvider, Capability, RoutedAgentTurn } from "@intentic/sandbox-contract";
+import type { AgentProvider, RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import {
     type AdapterHealth,
     armPlan,
@@ -10,7 +11,7 @@ import {
     type TurnContext,
 } from "../../../agent/providers/adapter.js";
 import type { AgentRequest, OpenCodeCredential } from "../../../agent/providers/agent-request.js";
-import { withAttachments } from "../../../agent/prompt/attachment-note.js";
+import { withAttachments } from "../../../sessions/vocabulary/attachment-note.js";
 import { engineMissing, enginesReady } from "../../../agent/providers/provider-module.js";
 import { resolveRoute, type RouteDeps, routeReadiness } from "../../../agent/providers/routes/model-routes.js";
 import { releasingMounts } from "../../../agent/tools/turn-mounts.js";

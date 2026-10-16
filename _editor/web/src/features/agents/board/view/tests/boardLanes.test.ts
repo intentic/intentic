@@ -1,13 +1,15 @@
 import "@intentic/testing/dom";
-import type { AutomationApproval, SubagentSession, WorkflowRun } from "@intentic/sandbox-contract";
+import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
+import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { t } from "@intentic/ui/i18n";
 import { type EffectScope, effectScope, ref, shallowRef } from "vue";
-import { NO_ATTENTION } from "../../../fleet/agentStatus";
-import { type FleetAgent, laneGroups } from "../../../fleet/useAgents-fleet";
+import { NO_ATTENTION } from "../../../../../models/agent-status/agentStatus-lanes";
+import { type FleetAgent, laneGroups } from "../../../../../models/fleet/useAgents-fleet";
 import type { DropTarget } from "../../laneDrop";
 import { dropClass, laneHeads, useBoardLanes } from "../boardLanes";
 import { ARCHIVE_PAGE, type BoardView, VIEW_START } from "../boardView";
-import { foldChildren } from "../childFold";
+import { foldChildren } from "../../../../../models/fleet/board/childFold";
 
 // Pins what each lane draws and what the board says about it: Finished's window and the card it pins, the archive's page
 // in Finished's place, runs above their lane and capped with it, a filter lifting the window but not the archive's page,

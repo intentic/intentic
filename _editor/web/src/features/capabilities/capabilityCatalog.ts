@@ -1,11 +1,11 @@
-import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { computed, type Ref } from "vue";
 import { type ConnectionSources, connectionRows, groupConnections } from "./model/connectionRows";
 import type { DeviceConnection } from "./model/deviceConnections";
 import { type ContributionOf, tileBadges } from "./model/effects";
 import { activeScopeOf, CONNECTED, catalogTiles, groupTiles, matching, railScopes, sliceDescription, tilesInScope } from "./model/slices";
-import { entryHaystack } from "./model/tiles";
+import { entryHaystack } from "../../models/capabilities/tiles";
 
 // The catalog pane: the rail's slices, the grid a slice and the filter leave, and the Connected slice, which answers
 // "what have I got" with the connections themselves, named and stated, rather than as a shorter grid.

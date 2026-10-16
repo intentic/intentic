@@ -1,5 +1,6 @@
 // What the engine tier reads and builds, as pure functions: `ic engine status --json`, the `intentic-move:` lines, the
 // isolated environment the tier runs ic in, and how its own `docker` reaches the engine under test.
+import { parseJsonOr } from "@intentic/base/json";
 
 /** The distro the tier's engine lives in: never the real one's name, so a developer's engine on this machine is safe. */
 export const ENGINE_DISTRO = `intentic-engine-ci`;
@@ -60,13 +61,9 @@ export const moveLines = (stdout: string): Record<string, unknown>[] =>
         .map((line) => line.trim())
         .filter((line) => line.startsWith(`intentic-move:`))
         .flatMap((line) => {
-            try {
-                const value: unknown = JSON.parse(line.slice(`intentic-move:`.length).trim());
-                return typeof value === `object` && value !== null ? [value as Record<string, unknown>] : [];
-            } catch {
-                // allow(silent-catch): a line that does not parse is not a move line, and anything else is left out.
-                return [];
-            }
+            // A line that does not parse is not a move line, and anything else is left out.
+            const value = parseJsonOr(line.slice(`intentic-move:`.length).trim(), undefined);
+            return typeof value === `object` && value !== null ? [value as Record<string, unknown>] : [];
         });
 
 /**

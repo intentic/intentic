@@ -1,14 +1,11 @@
 import { builtinModules } from "@intentic/web/builtins";
-import type {
-    Environment,
-    EnvironmentContents,
-    ExtensionSummary,
-    LocalModelFitResponse,
-    PanelSummary,
-    UsageRollupRow,
-    CapabilitySummary,
-} from "@intentic/sandbox-contract";
-import { LOCAL_MODEL_KV_BYTES_PER_TOKEN, LOCAL_MODEL_WINDOWS, LOCAL_MODELS } from "@intentic/sandbox-contract";
+import type { Environment, EnvironmentContents } from "@intentic/sandbox-contract/schemas/environment";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
+import type { LocalModelFitResponse } from "@intentic/sandbox-contract/contracts/endpoints.contract";
+import type { PanelSummary } from "@intentic/sandbox-contract/schemas/panels";
+import type { UsageRollupRow } from "@intentic/sandbox-contract/schemas/providers/usage";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import { LOCAL_MODEL_KV_BYTES_PER_TOKEN, LOCAL_MODEL_WINDOWS, LOCAL_MODELS } from "@intentic/sandbox-contract/schemas/capabilities";
 import { deskEdition, enabledExtensions, freshEdition } from "../mode";
 import pins from "../../vendor/extensions.json";
 import { DESK_REPOS } from "./desk";

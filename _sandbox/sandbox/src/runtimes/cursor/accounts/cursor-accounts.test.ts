@@ -1,5 +1,5 @@
 import { unstubbed } from "@intentic/testing";
-import type { AccountUsage } from "@intentic/sandbox-contract";
+import type { AccountUsage } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { Services } from "../../../composition.js";
 import { cursorAccountDoor } from "./cursor-accounts.js";
 

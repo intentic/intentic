@@ -1,9 +1,10 @@
-import type { AgentDomainPolicy } from "@intentic/sandbox-contract";
+import type { AgentDomainPolicy } from "@intentic/sandbox-contract/schemas/settings";
 import { isAbsolute, normalize } from "node:path";
 import { isInside } from "@intentic/base/contained";
 import type { TurnPlacement } from "../conversations/worktrees/isolation.js";
 import { requireAgentDomainRollout } from "./domain/agent-domain-rollout.js";
 import { agentEntrant, namespaceTargetOf, nsenterArgv, type NamespaceEntryReference, type NamespaceEntrant } from "./namespace-entry.js";
+import { errorMessage } from "@intentic/base/errors";
 
 // Daemon-local handles, never request/wire shapes. Public fields describe the view; only the private registries below
 // authorize its use. Worktree placement and workload scheduling are not execution authority.
@@ -85,7 +86,7 @@ const entered = (group: ExecutionGroup, cwd: string, command: string, args: read
         return group.target === undefined ? { command, args: [...args], cwd } : nsenterArgv(group.target, cwd, command, args);
     } catch (error) {
         if (error instanceof AgentDomainRefusedError) { throw error; }
-        throw new AgentDomainRefusedError(error instanceof Error ? error.message : String(error), error);
+        throw new AgentDomainRefusedError(errorMessage(error), error);
     }
 };
 
@@ -216,7 +217,7 @@ export const createAgentExecutionService = (
                 admissions.set(admission, { active: true });
                 return admission;
             } catch (error) {
-                throw new AgentDomainRefusedError(error instanceof Error ? error.message : String(error), error);
+                throw new AgentDomainRefusedError(errorMessage(error), error);
             }
         },
         close: (admission) => {

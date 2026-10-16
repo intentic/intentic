@@ -1,4 +1,4 @@
-import type { PhoneSummary, PhoneWakeRegistration } from "@intentic/sandbox-contract";
+import type { PhoneSummary, PhoneWakeRegistration } from "@intentic/sandbox-contract/schemas/phone";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 
 // The default hand-over is the typed route's: the path, the id in it and the body come from the contract's table.

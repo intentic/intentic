@@ -3,7 +3,7 @@ import { pollFor } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { oneLine } from "@intentic/base/one-line";
 import type { Prisma } from "@intentic/prisma";
-import { type PlanFailure, PlanFailureSchema, STATE_PLAN_FORMAT } from "@intentic/sandbox-contract";
+import { type PlanFailure, PlanFailureSchema, STATE_PLAN_FORMAT } from "@intentic/sandbox-contract/schemas/state-plan";
 import { FLY_VOLUME_LAYOUT, type FlyMachineConfig } from "@intentic/sandbox-run/fly";
 import type { Logger } from "pino";
 import { z } from "zod";

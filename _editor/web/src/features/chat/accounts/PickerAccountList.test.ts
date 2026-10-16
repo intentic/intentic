@@ -2,7 +2,9 @@
 // one listed), the accounts that can take a turn come first, and one that can take none is dimmed with its reason
 // legible. The reported bug: an org-disabled account listed first was ticked while the turn ran on another.
 import "@intentic/testing/dom";
-import type { AccountState, AgentProvider, OauthAccount } from "@intentic/sandbox-contract";
+import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { type App, computed, createApp, h } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
@@ -10,13 +12,13 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // The provider's connected accounts, in the provider's own order, as the daemon lists them.
 let listed: OauthAccount[] = [];
 jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
-jest.mock("./useChat-accounts", () => ({
+jest.mock("../../../models/conversations/accounts/useChat-accounts", () => ({
     accountsOf: (provider: AgentProvider) => (provider === `claude` ? listed : []),
     refreshConnections: jest.fn(async () => {}),
     subscriptionOnly: () => false,
 }));
 // A sandbox new enough to judge its own accounts, which is every one this list is drawn for.
-jest.mock("./accountsOutdated", () => ({ accountsOutdated: computed(() => false) }));
+jest.mock("../../../models/providers/accountsOutdated", () => ({ accountsOutdated: computed(() => false) }));
 const { default: PickerAccounts } = await import("./PickerAccounts.vue");
 
 const account = (id: string, state: AccountState): OauthAccount => ({ id, label: `${id}@example.com`, connectedAt: 0, state });

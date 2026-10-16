@@ -1,6 +1,8 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, Capability, RoutedAgentTurn } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import type { Logger } from "pino";
 import {
     type AgentAdapter,
@@ -12,7 +14,7 @@ import {
     type TurnArmPlan,
     type TurnContext,
 } from "../../agent/providers/adapter.js";
-import { withAttachments } from "../../agent/prompt/attachment-note.js";
+import { withAttachments } from "../../sessions/vocabulary/attachment-note.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
 import { releasingMounts } from "../../agent/tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";

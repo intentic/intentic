@@ -1,5 +1,5 @@
 import type { SetupCode } from "@intentic/api-contract";
-import { syncFolder } from "@intentic/sandbox-contract";
+import { syncFolder } from "@intentic/sandbox-contract/ids/hostnames";
 import { commandLang } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { computed, ref, type Ref } from "vue";

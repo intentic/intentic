@@ -1,5 +1,5 @@
-import type { TranslatorAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
-import { testConfig } from "../../../testing.js";
+import type { TranslatorAccount, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { testConfig } from "../../../env.config.testing.js";
 import { authStateRelPath, type SharedProviderReads, translatorAccountEntries, translatorReady } from "../provider-module.js";
 
 // Two answers every translator-backed provider gives the same way: its routed readiness and its secrets-inventory rows.

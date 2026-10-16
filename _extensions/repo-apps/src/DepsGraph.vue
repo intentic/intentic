@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { WorkspaceDepEdge, WorkspacePackage } from "@intentic/sandbox-contract";
+import type { WorkspaceDepEdge, WorkspacePackage } from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
 import { DagGraph, Icon, ToggleSwitch, ui, useNarrow, type DagEdge, type DagNode } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import DepsInspector from "./DepsInspector.vue";

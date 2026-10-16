@@ -1,4 +1,4 @@
-import type { RuntimeDomain } from "@intentic/sandbox-contract";
+import type { RuntimeDomain } from "@intentic/sandbox-contract/state/runtime-state";
 import type { Logger } from "pino";
 
 // The push feed's announcing half, below every subsystem that changes a runtime (a tmux session, a panel, a browser, a

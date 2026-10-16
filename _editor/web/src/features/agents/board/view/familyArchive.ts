@@ -1,6 +1,6 @@
 import { computed, type Ref, ref } from "vue";
-import { agentDisplayTitle } from "../../fleet/agentStatus";
-import type { FleetAgent } from "../../fleet/useAgents-fleet";
+import { agentDisplayTitle } from "../../../../models/agent-status/agentStatus-meta";
+import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 
 // What archiving one card from the board does when children ride under it (childFold): it asks first, naming how many
 // go with it. One tap on a phone archived an agent and its seven children with nothing said, and the list reflowed

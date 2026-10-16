@@ -48,14 +48,14 @@ jest.mock("@tanstack/vue-query", () => {
     };
 });
 
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { computed, effectScope, type EffectScope, nextTick, ref, type Ref, unref } from "vue";
-import { Conversation } from "../../chat/session/conversation";
-import { useChat } from "../../chat/run/useChat";
+import { Conversation } from "../../../models/conversations/session/conversation";
+import { useChat } from "../../../models/conversations/run/useChat";
 import { useAgentFilter } from "./useAgentFilter";
-import { useAgents } from "../fleet/useAgents";
-import type { FleetAgent } from "../fleet/useAgents-fleet";
-import { setAgents } from "../fleet/useAgents-registry";
+import { useAgents } from "../../../models/fleet/useAgents";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
+import { setAgents } from "../../../models/fleet/useAgents-registry";
 
 const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 const agent = (id: string, extra: Partial<AgentSummary> = {}): AgentSummary => ({

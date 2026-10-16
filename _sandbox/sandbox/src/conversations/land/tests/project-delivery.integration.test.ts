@@ -3,9 +3,12 @@ import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { DeviceFacts, DevicePairing, LandingDelivery, ProjectDelivery, ProjectDeliveryResult, WorkspaceEvent } from "@intentic/sandbox-contract";
+import type { DeviceFacts } from "@intentic/sandbox-contract/schemas/hosts";
+import type { DevicePairing } from "@intentic/sandbox-contract/schemas/devices";
+import type { LandingDelivery, ProjectDelivery, ProjectDeliveryResult } from "@intentic/sandbox-contract/schemas/project-delivery";
+import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
 import { ORPCError } from "@orpc/server";
-import { isolatedAgent } from "../../../testing.js";
+import { isolatedAgent } from "../../registry/agents-store.testing.js";
 import type { PersistedAgent } from "../../registry/agents-store.js";
 import {
     createProjectDelivery,

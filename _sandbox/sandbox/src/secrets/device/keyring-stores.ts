@@ -1,5 +1,5 @@
 import { rm } from "node:fs/promises";
-import { KeyringPointerSchema, KeyringPublicKeySchema } from "@intentic/sandbox-contract";
+import { KeyringPointerSchema, KeyringPublicKeySchema } from "@intentic/sandbox-contract/schemas/keyring";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { writeJsonFile } from "../../store/json-file.js";

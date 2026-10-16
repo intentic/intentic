@@ -2,7 +2,7 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import { constants, zstdCompressSync } from "node:zlib";
 import { readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { TranscriptRow } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { openLog, readFrame, writeLog } from "./record-log.js";
 import { keptLine } from "./record-rows.js";
 import { writeDurable } from "./record-io.js";
@@ -84,7 +84,7 @@ export const convertLegacy = async ({ historyRoot, conversationId, legacy, targe
     const index = await openLog(target);
     const read: string[] = [];
     for (const frame of index?.frames ?? []) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- frames in order, compared as a whole below.
+        // frames in order, compared as a whole below.
         read.push(...(await readFrame(target, frame)));
     }
     if (read.length !== kept.length || read.some((line, at) => line !== kept[at])) {

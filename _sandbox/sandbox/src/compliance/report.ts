@@ -1,4 +1,11 @@
-import type { ComplianceReport, DataFlow, Measure, MeasureStatus, PersonalDataReach, ShieldCover } from "@intentic/sandbox-contract";
+import type {
+    ComplianceReport,
+    DataFlow,
+    Measure,
+    MeasureStatus,
+    PersonalDataReach,
+    ShieldCover,
+} from "@intentic/sandbox-contract/schemas/compliance";
 import { KEY_PROVIDERS } from "../migrations/provider-keys.js";
 import type { ComplianceFacts, ConnectorFact } from "./facts.js";
 import { PUBLIC_OFFICE_ACTION_KEYS, PUBLIC_OFFICE_ADMISSION_KEYS } from "./preset.js";
@@ -49,7 +56,7 @@ const TEAM_CHAT_DESTINATIONS = new Map<string, Destination>([
     ["whatsapp", { hosts: ["web.whatsapp.com", "g.whatsapp.net"], operator: "WhatsApp Ireland (Meta)", region: "EU/US", thirdCountry: true }],
 ]);
 
-// Cloud voices (speech/voice/cloud-voices.ts). Speech recognition is always local, so it has no row.
+// Cloud voices (@intentic/speech voice/cloud-voices.ts). Speech recognition is always local, so it has no row.
 const SPEECH_DESTINATIONS = new Map<string, Destination>([
     ["elevenlabs", { hosts: ["api.elevenlabs.io"], operator: "ElevenLabs", region: "US", thirdCountry: true }],
     ["cartesia", { hosts: ["api.cartesia.ai"], operator: "Cartesia", region: "US", thirdCountry: true }],

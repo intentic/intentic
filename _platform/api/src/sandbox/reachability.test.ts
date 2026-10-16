@@ -1,4 +1,4 @@
-import { sandboxSubdomain } from "@intentic/sandbox-contract";
+import { sandboxSubdomain } from "@intentic/sandbox-contract/ids/hostnames";
 import { verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Config } from "../config.js";

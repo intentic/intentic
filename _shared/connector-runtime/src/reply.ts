@@ -1,4 +1,4 @@
-import type { ListenerMessage } from "@intentic/sandbox-contract";
+import type { ListenerMessage } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import { chunkMessage } from "./chunks.js";
 import type { DaemonClient } from "./daemon.js";
 import { createBufferedPainter, failureNotice, framePainter } from "./painter.js";

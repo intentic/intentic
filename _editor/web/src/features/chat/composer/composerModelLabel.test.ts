@@ -3,9 +3,9 @@
 // hides the one thing the control is there for.
 import "@intentic/testing/dom";
 import { composerModelReading, stillRunningOn } from "./composerModelLabel";
-import { accountsLoaded, providerAccounts, translatorAccounts } from "../accounts/providerAccounts";
-import { acpProviders, endpointProviders, endpointsLoaded, perProvider, providerModels, trialStatus } from "../accounts/providerCatalog";
-import { advertisedLoops } from "../models/offeredLoops";
+import { accountsLoaded, providerAccounts, translatorAccounts } from "../../../models/providers/providerAccounts";
+import { acpProviders, endpointProviders, endpointsLoaded, perProvider, providerModels, trialStatus } from "../../../models/providers/providerCatalog";
+import { advertisedLoops } from "../../../models/providers/offeredLoops";
 
 const CHAT = { provider: `claude`, harness: `native`, model: `claude-opus-5`, auto: false } as const;
 

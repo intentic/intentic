@@ -1,6 +1,6 @@
 import type { IconName, StatusVariant } from "@intentic/extension-ui";
 import { formatElapsed } from "@intentic/extension-ui/format";
-import type { PipelineStatus } from "@intentic/sandbox-contract";
+import type { PipelineStatus } from "@intentic/sandbox-contract/schemas/ci";
 import { t } from "./i18n";
 
 // Every way a pipeline status is drawn, in one table shared by runs, stages and jobs, so the same status is always the

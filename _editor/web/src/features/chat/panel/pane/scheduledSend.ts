@@ -1,12 +1,13 @@
-import { bindingWindow, type OauthAccount } from "@intentic/sandbox-contract";
+import { bindingWindow } from "@intentic/sandbox-contract/models/plan-pools";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { computed, type ComputedRef, type Ref, ref, watch } from "vue";
-import { useAgents } from "../../../agents/fleet/useAgents";
-import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
-import { effectivePolicy, sandboxPolicy } from "../../run/endings/turnBreak";
-import type { Conversation } from "../../session/conversation";
+import { useAgents } from "../../../../models/fleet/useAgents";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
+import { effectivePolicy, sandboxPolicy } from "../../../../models/conversations/endings/turnBreak";
+import type { Conversation } from "../../../../models/conversations/session/conversation";
 import { fallbackAccount, fallbackLabel } from "../../session/limitFallback";
 import { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } from "../../session/limitReset";
-import { usageStatusFor } from "../../session/usageStatus";
+import { usageStatusFor } from "../../../../models/providers/usageStatus";
 import type { SendIntent } from "../../composer/composerIntent";
 
 // The scheduled send's two halves outside the ladder: arming the conversation's limit answer, and the ways to skip the

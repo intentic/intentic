@@ -7,7 +7,7 @@ import {
     type StorageReport,
     type StorageScan,
     StorageScanSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/metrics";
 import { FLY_VOLUME_LAYOUT, FLY_VOLUME_PATH } from "@intentic/sandbox-run/fly";
 import type { Logger } from "pino";
 import { cacheFile } from "../../../store/open-document.js";

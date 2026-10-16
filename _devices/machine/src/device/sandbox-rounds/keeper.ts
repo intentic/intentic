@@ -2,8 +2,9 @@ import { hostname } from "node:os";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { errorMessage } from "@intentic/base/errors";
 import { execBounded, runBounded } from "@intentic/base/process";
+import { parseJsonWith } from "@intentic/base/json";
 import type { Log } from "@intentic/local-agent";
-import type { RestartIntent, RestartSide } from "@intentic/sandbox-contract";
+import type { RestartIntent, RestartSide } from "@intentic/sandbox-contract/schemas/restart-intent";
 import { z } from "zod";
 import { readMachineConfig } from "../../environments/machine.js";
 import { thisSide } from "../../environments/wsl.js";
@@ -108,15 +109,7 @@ export interface FixProgress {
 }
 
 // One line read by `schema`, or undefined for a line that is not JSON or not of that shape.
-const lineAs = <T>(schema: z.ZodType<T>, text: string): T | undefined => {
-    try {
-        const parsed = schema.safeParse(JSON.parse(text));
-        return parsed.success ? parsed.data : undefined;
-    } catch {
-        // allow(silent-catch): a line that is not JSON is ic's prose, which says nothing a JSON line does not
-        return undefined;
-    }
-};
+const lineAs = <T>(schema: z.ZodType<T>, text: string): T | undefined => parseJsonWith(text, schema);
 
 export const fixProgress = (line: string): FixProgress | undefined => {
     const trimmed = line.trim();

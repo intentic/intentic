@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import type { CapabilityStatus } from "@intentic/sandbox-contract";
+import type { CapabilityStatus } from "@intentic/sandbox-contract/schemas/capabilities";
 
 // A connection's status as its last probe found it, answered at once while the next probe runs behind it: a probe can
 // be a network call, a docker exec or a model server's health check, and a list of forty waited on the slowest of them.

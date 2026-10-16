@@ -1,4 +1,5 @@
-import { type AgentProvider, KeyedProviderSchema } from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { Services } from "../../composition.js";
 import { accountLimitReset } from "../../usage/account-usage.js";
 

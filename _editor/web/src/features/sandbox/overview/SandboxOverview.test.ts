@@ -20,7 +20,7 @@ jest.mock(`../../../client/sandbox/useSandbox`, () => ({
 // This container as its machine lists it. Undefined is a sandbox whose machine is not a connected device, which draws
 // no Resources line at all; stubbed so the subject is who is offered the form, not how the row was found.
 const selfRow = ref<DeviceSandboxRow | undefined>(undefined);
-jest.mock(`../devices/useSelfResources`, () => ({
+jest.mock(`../../../models/sandbox/devices/useSelfResources`, () => ({
     useSelfResources: () => ({
         row: selfRow,
         slug: computed(() => selfRow.value?.slug),
@@ -38,10 +38,10 @@ const versionInfo = ref<{ image: string } | undefined>(undefined);
 const installedVersion = ref<string | undefined>(undefined);
 const latestVersion = ref<string | undefined>(undefined);
 const updateAvailable = ref(false);
-jest.mock(`./version/useSandboxVersion`, () => ({
+jest.mock(`../../../models/sandbox/useSandboxVersion`, () => ({
     useSandboxVersion: () => ({ info: versionInfo, installed: installedVersion, latest: latestVersion, updateAvailable }),
 }));
-jest.mock(`../../workspace/explorer/useWorkspaceTree`, () => ({ useWorkspaceTree: () => ({ hasSnapshot: ref(true) }) }));
+jest.mock(`../../../models/workspace/tree/useWorkspaceTree`, () => ({ useWorkspaceTree: () => ({ hasSnapshot: ref(true) }) }));
 const availability = ref<`live` | `warming` | `busy`>(`live`);
 jest.mock(`./useSandboxAvailability`, () => ({ useSandboxAvailability: () => availability }));
 // Where the sandbox runs is read off the fleet and the transport; stubbed for the same reason as the rest, so this
@@ -51,7 +51,7 @@ jest.mock(`./useSandboxPlacement`, () => ({ useSandboxPlacement: () => placement
 // The hosted plan's state is a plain ref here, not a query; the sentence read off it is hostedHours.ts's own.
 const hostedPlan = ref<HostedPlanState | undefined>(undefined);
 const planOffered = ref(false);
-jest.mock(`../../settings/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ state: hostedPlan, offered: planOffered }) }));
+jest.mock(`../../../models/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ state: hostedPlan, offered: planOffered }) }));
 jest.mock(`./version/SandboxUpdateCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 jest.mock(`./version/SandboxBehindCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 jest.mock(`./manifest/SandboxManifestCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));

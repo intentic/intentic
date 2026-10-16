@@ -1,4 +1,4 @@
-import { fenceHoldsPersona } from "@intentic/sandbox-contract";
+import { fenceHoldsPersona } from "@intentic/sandbox-contract/policy/persona-home";
 import type { InvariantCheck } from "../invariants/invariants.js";
 import type { MembersStore } from "../auth/auth.js";
 import type { PersonasStore } from "../personas/personas-store.js";

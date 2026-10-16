@@ -1,4 +1,4 @@
-import type { GitChange, GitDiffSide } from "@intentic/sandbox-contract";
+import type { GitChange, GitDiffSide } from "@intentic/sandbox-contract/schemas/git/git";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";
 

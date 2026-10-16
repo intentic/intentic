@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import { setTerminalMeta, TERMINAL_COLORS } from "../terminalMeta";
+import { setTerminalMeta, TERMINAL_COLORS } from "../../../models/terminal/terminalMeta";
 import type { TerminalTab } from "../useTerminal";
 import type { TooltipValue } from "@intentic/ui";
 import { clearedLabel, cycled, segmentColor, iconFor, labelFor, tooltipFor, stripIndex } from "./stripSegments";

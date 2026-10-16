@@ -1,6 +1,6 @@
 import type { PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
 import { errorMessage } from "@intentic/base/errors";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Logger } from "pino";
 import { allowlistRefusal, toolAllowed } from "../../agent/tools/tool-allowlist.js";
 import { askCwdOf, askProgramOf, CONSULT_FAILED, VendorToolInputSchema } from "../decorators/vendor-ask.js";

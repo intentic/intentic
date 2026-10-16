@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AI_LITERACY_TEXT, AiLiteracyLocaleSchema } from "@intentic/sandbox-contract";
+import { AI_LITERACY_TEXT, AiLiteracyLocaleSchema } from "@intentic/sandbox-contract/schemas/ai-literacy";
 import { Button, Notice, Row, RowNote, ui } from "@intentic/ui";
 import { formatDateTime } from "@intentic/ui/format";
 import { activeLocale, useT } from "@intentic/ui/i18n";
@@ -7,7 +7,7 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
-import { useSandboxSettings } from "../overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 
 // The AI notice (art. 4 of the EU AI Act): whether people are shown it before they start, its words, and who confirmed
 // which wording. Rows only, no group of its own: Sandbox ▸ Access sets them in a group of their own, about the people

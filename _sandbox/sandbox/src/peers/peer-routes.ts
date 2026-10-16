@@ -12,10 +12,10 @@ import type { RpcMessage } from "../agent/tools/turn-mounts.js";
 import { ownerDenied, unavailableIfUnreadable } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
-import type { rawRouteServer } from "../http/raw-route-server.js";
+import type { RawRouteTable } from "../http/raw-route-server.js";
 import { createRepeatGate } from "../logs/repeat-gate.js";
 import { callFailure } from "./call-failure.js";
-import type { PeerDoor, PeerKind } from "./peer.js";
+import type { PeerDoor, PeerKind, PeerSlug } from "./peer.js";
 import type { PeerClient, PeerHub } from "./peer-hub.js";
 import type { PeerStore } from "./peer-store.js";
 
@@ -440,16 +440,21 @@ export const createPeerRoutes = <
 
 export type PeerRoutes = ReturnType<typeof createPeerRoutes>;
 
-// Mounted before the oRPC catch-all, like the terminal's, each under its declaration; one mount ensures a door's socket
-// and enroll route share the same slug. The MCP bridge is not among them: it is reached through the daemon's one MCP door.
-export const mountPeerRoutes = (
-    serve: ReturnType<typeof rawRouteServer>,
-    door: Pick<PeerDoor<{ token: string }, unknown, z.ZodRawShape>, "slug">,
-    routes: PeerRoutes,
-): void => {
-    serve(`POST /system/${door.slug}/pair`, routes.pair);
-    serve(`POST /system/${door.slug}/enroll`, routes.enroll);
-    serve(`GET /system/${door.slug}`, routes.list);
-    serve(`DELETE /system/${door.slug}/{id}`, routes.revoke);
-    serve(`GET /system/${door.slug}/connect`, routes.connect);
-};
+// Every route of one peer door, each under its declaration; one table ensures a door's socket and enroll route share
+// the same slug. The MCP bridge is not among them: it is reached through the daemon's one MCP door.
+export type PeerRouteKey<S extends PeerSlug> =
+    | `POST /system/${S}/pair`
+    | `POST /system/${S}/enroll`
+    | `GET /system/${S}`
+    | `DELETE /system/${S}/{id}`
+    | `GET /system/${S}/connect`;
+
+export const peerRouteTable = <S extends PeerSlug>(door: { readonly slug: S }, routes: PeerRoutes): RawRouteTable<PeerRouteKey<S>> =>
+    // SAFETY: each key below is spelled from `door.slug`, which is the S the table is typed by.
+    ({
+        [`POST /system/${door.slug}/pair`]: routes.pair,
+        [`POST /system/${door.slug}/enroll`]: routes.enroll,
+        [`GET /system/${door.slug}`]: routes.list,
+        [`DELETE /system/${door.slug}/{id}`]: routes.revoke,
+        [`GET /system/${door.slug}/connect`]: routes.connect,
+    }) as RawRouteTable<PeerRouteKey<S>>;

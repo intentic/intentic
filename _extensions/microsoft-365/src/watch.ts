@@ -1,5 +1,6 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { writeFileAtomic } from "@intentic/base/fs";
 import type { GatewayCtx, ListenerMessage } from "@intentic/connector-runtime";
 import { signInKey } from "./accounts.js";
 import { SignInError } from "./auth.js";
@@ -66,8 +67,7 @@ const readCursor = async (path: string): Promise<string | undefined> => {
 
 const saveCursor = async (path: string, cursor: string): Promise<void> => {
     await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    await writeFile(`${path}.tmp`, JSON.stringify({ cursor }), { mode: 0o600 });
-    await rename(`${path}.tmp`, path);
+    await writeFileAtomic(path, JSON.stringify({ cursor }), 0o600);
 };
 
 const listenerMessage = (graph: Graph, own: string, message: MailChange): ListenerMessage => {

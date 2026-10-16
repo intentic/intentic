@@ -1,4 +1,4 @@
-import type { WebchatMessage, WebchatPending, WebchatPublicConfig } from "@intentic/sandbox-contract";
+import type { WebchatMessage, WebchatPending, WebchatPublicConfig } from "@intentic/sandbox-contract/schemas/automations";
 import { embedFailure, type EmbedEndpoint, embedUrl, fetchEmbedChallenge, fetchEmbedJson, type PowChallenge, WEBCHAT_EVENT } from "@intentic/sandbox-contract/embed";
 import { createSseParser, type SseEvent } from "@intentic/sandbox-contract/sse";
 

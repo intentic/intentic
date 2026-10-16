@@ -1,16 +1,15 @@
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { ConversationGrant } from "@intentic/sandbox-contract/schemas/needs";
+import { type Fence, fenceIntersection } from "@intentic/sandbox-contract/policy/fence-paths";
 import {
-    type Capability,
-    type ConversationGrant,
-    type Fence,
     type Persona,
     type PersonaPowers,
     type PersonaWorkspace,
-    type SystemPromptMode,
-    type TurnNote,
-    fenceIntersection,
     VISITOR_CHAT_PERSONA,
     PersonaPowersSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/personas";
+import type { SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { VISITOR_CHAT_GUIDANCE } from "./visitor-chat.js";
 
 // A persona answers four questions together: accounts, tool shelves, workspace, and prompt. Accounts default to

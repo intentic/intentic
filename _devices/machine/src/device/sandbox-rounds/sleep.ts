@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
+import { parseJsonWith } from "@intentic/base/json";
 import type { Log } from "@intentic/local-agent";
 import { z } from "zod";
 import type { MachineConfig } from "../../environments/machine.js";
@@ -48,13 +49,8 @@ const linesAs = <T>(schema: z.ZodType<T>, output: string): T[] =>
         .map((line) => line.trim())
         .filter((line) => line.startsWith("{"))
         .flatMap((line) => {
-            try {
-                const parsed = schema.safeParse(JSON.parse(line));
-                return parsed.success ? [parsed.data] : [];
-            } catch {
-                // allow(silent-catch): a line that is not JSON is ic's prose, which says nothing a JSON line does not
-                return [];
-            }
+            const parsed = parseJsonWith(line, schema);
+            return parsed === undefined ? [] : [parsed];
         });
 
 export type SleepReading = { readonly unavailable: string } | { readonly slept: readonly string[] };

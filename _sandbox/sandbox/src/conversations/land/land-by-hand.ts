@@ -1,12 +1,12 @@
 import { includeProducedFiles } from "../produced-files.js";
-import type { AgentSpan, LandMode, LandResult } from "@intentic/sandbox-contract";
+import type { AgentSpan, LandMode, LandResult } from "@intentic/sandbox-contract/schemas/agents";
 import type { Services } from "../../composition.js";
-import { reportChildConflict } from "../../agent/subagents/child-lands.js";
+import { reportChildConflict } from "./child-lands.js";
 import { opt } from "../../opt.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import { landAgent, reportLockfileFailures } from "./land.js";
 import { intoOf, type LandTarget, landTargetOf, upstreamOf, underLeases } from "./land-target.js";
-import { keepLandFailure, settleParentBooks } from "../../agent/run/placement/turn-landing.js";
+import { keepLandFailure, settleParentBooks } from "./turn-landing.js";
 import { syncBeforeLand } from "./sync.js";
 import { settleLandingInBackground, versionCommitsSettled, versionProjectFolders } from "./version-landed.js";
 

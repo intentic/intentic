@@ -1,5 +1,8 @@
 import { charsOfTokens, tokensOfChars } from "@intentic/base/format";
-import { type AgentCapabilities, type AgentProvider, endpointIdOf, isTrialProvider, type Model } from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { endpointIdOf, isTrialProvider } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { Model } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { Services } from "../../../composition.js";
 import { endpointConfigOf } from "../../../endpoints/local-model.js";
 import { routedModel } from "../../providers/harness-credentials.js";

@@ -1,4 +1,11 @@
-import type { ComplianceLanguage, DataFlowKind, MeasureId, MeasureStatus, PersonalDataReach, ShieldCover } from "@intentic/sandbox-contract";
+import type {
+    ComplianceLanguage,
+    DataFlowKind,
+    MeasureId,
+    MeasureStatus,
+    PersonalDataReach,
+    ShieldCover,
+} from "@intentic/sandbox-contract/schemas/compliance";
 
 // The words the compliance documents are written in, Polish first: the readers are a Polish office's data protection
 // officer (IOD) and its clerks, so the Polish is written as such a document is, in the terms of the Polish text of the

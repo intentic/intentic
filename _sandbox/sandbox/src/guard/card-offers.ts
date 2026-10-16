@@ -1,4 +1,5 @@
-import type { AgentEvent, AgentReply, ParkKind } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentReply, ParkKind } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { Caller } from "../auth/auth.js";
 import type { MayAnswer, ParkedCards } from "../conversations/actor/parked-cards.js";
 import { opt } from "../opt.js";

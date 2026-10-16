@@ -2,7 +2,7 @@
 // value import between modules of _sandbox/sandbox/src, placed by lib/daemon-layers.mjs and judged by lib/layers.mjs.
 import { join, relative, resolve, sep } from "node:path";
 import { addEdge, cyclesOf } from "./cycle-edges.mjs";
-import { DAEMON_LAYERS, DAEMON_SHELVES, DAEMON_SURFACE } from "./daemon-layers.mjs";
+import { DAEMON_LAYERS, DAEMON_SUBUNITS, DAEMON_SHELVES, DAEMON_SURFACE } from "./daemon-layers.mjs";
 import { importsOf } from "./imports.mjs";
 import { layeredSink, layering } from "./layers.mjs";
 
@@ -30,21 +30,21 @@ export const placeInDaemon = (path) => {
         return undefined;
     }
     if (isSurface(path)) {
-        return { kind: "surface", unit: `${parts[0]} surface`, layer: top };
+        return { kind: "surface", unit: `${parts[0]} surface`, layer: top, path };
     }
     const subsystem = SHELVES.has(parts[0]) && parts.length > 2 ? `${parts[0]}/${parts[1]}` : parts[0];
     const placed = placeOf(parts[0]);
-    return { kind: "subsystem", unit: subsystem, layer: placed?.layer, top: parts[0] };
+    return { kind: "subsystem", unit: subsystem, layer: placed?.layer, top: parts[0], path };
 };
 
 /**
  * `sources` is `[{ file, text }]` with absolute paths under `src`. Returns the same-layer cycles (`cyclesOf` over the
- * imports that stay in one layer), the upward imports counted per `from -> to` with their sites, the top-level
+ * imports that stay in one layer), the cycles between subunits of each unit layers.json's `subunits` lists, the upward imports counted per `from -> to` with their sites, the top-level
  * directories no layer places, and the totals for the report line.
  */
 export const daemonGraphs = (src, sources) => {
     const relPath = (file) => relative(src, file).split(sep).join("/");
-    const sink = layeredSink(addEdge);
+    const sink = layeredSink(addEdge, DAEMON_SUBUNITS);
     let valueEdges = 0;
     for (const { file, text } of sources) {
         const fromPath = relPath(file);
@@ -59,5 +59,5 @@ export const daemonGraphs = (src, sources) => {
             }
         }
     }
-    return { cycles: cyclesOf(sink.sameLayer), upward: sink.upward, upwardSites: sink.upwardSites, unplaced: sink.unplaced, valueEdges };
+    return { cycles: cyclesOf(sink.sameLayer), partCycles: cyclesOf(sink.betweenParts), upward: sink.upward, upwardSites: sink.upwardSites, unplaced: sink.unplaced, valueEdges };
 };

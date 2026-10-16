@@ -1,4 +1,5 @@
-import { MAX_REF_CANDIDATES, rankRefCandidates, referenceTails, type WorkspaceResolve } from "@intentic/sandbox-contract";
+import { MAX_REF_CANDIDATES, rankRefCandidates, referenceTails } from "@intentic/sandbox-contract/text/path-refs";
+import type { WorkspaceResolve } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 
 // Resolves a named reference (a path written in prose) to a real workspace file: since it's often only a suffix of the
 // true path, the reference is tried as written, then progressively shorter tails, first match wins. When nothing

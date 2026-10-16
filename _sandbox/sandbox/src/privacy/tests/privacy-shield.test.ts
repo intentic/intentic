@@ -5,7 +5,7 @@ import { redactStrings } from "../privacy-shield.js";
 import type { LocalReaders } from "../readers.js";
 import { tokenOf } from "../tokens.js";
 import { maskJsonText, restoreJsonText } from "../gateway/protocols/json-text.js";
-import { pesel } from "../detect/tests/ids.testing.js";
+import { pesel } from "@intentic/privacy-detect/testing";
 import { privacySliceFake } from "../privacy-slice.testing.js";
 
 // The parts of the shield every exit shares: the masker the gateway walks a request with, the decision whether a turn

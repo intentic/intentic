@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { fenceCovers, type ModelPin, personaHome, type SystemPromptMode, type TurnBriefingNoteId } from "@intentic/sandbox-contract";
+import { fenceCovers } from "@intentic/sandbox-contract/policy/fence-paths";
+import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import { personaHome } from "@intentic/sandbox-contract/policy/persona-home";
+import type { SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
+import type { TurnBriefingNoteId } from "@intentic/sandbox-contract/schemas/personas";
 import { BrandMark, ui, Notice, type NoticeModel, SearchBar, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, shallowRef } from "vue";
@@ -11,10 +15,10 @@ import FolderPicker from "../devices/FolderPicker.vue";
 import { useAreas } from "../areas/useAreas";
 import PersonaBriefingFields from "./PersonaBriefingFields.vue";
 import PersonaKitFields from "./PersonaKitFields.vue";
-import PersonaPowersFields from "./PersonaPowersFields.vue";
+import PersonaPowersFields from "../../../components/PersonaPowersFields.vue";
 import type { BrowserAccount } from "../../extensions/useBrowserAccounts";
-import type { PersonaGrantable, PersonaPowersDraft } from "./personaRules";
-import { useRepos } from "../../workspace/explorer/useRepos";
+import type { PersonaGrantable, PersonaPowersDraft } from "../../../models/sandbox/personas/personaRules";
+import { useRepos } from "../../../models/workspace/tree/useRepos";
 import { useT } from "@intentic/ui/i18n";
 
 // Persona editor: one of five questions shown at a time via SegmentedControl, replacing a ~30-control scroll. The folder

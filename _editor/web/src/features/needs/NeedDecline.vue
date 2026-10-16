@@ -1,7 +1,7 @@
 <!-- A need's "Not now", beside its yes: one press opens a line for a reason, a second declines with it. -->
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
-import ChatDecisionButton from "../chat/transcript/cards/ChatDecisionButton.vue";
+import ChatDecisionButton from "../../components/ChatDecisionButton.vue";
 
 const t = useT();
 

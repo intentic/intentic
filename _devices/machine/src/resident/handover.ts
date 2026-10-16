@@ -1,6 +1,7 @@
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pollUntil } from "@intentic/base/async";
+import { readJsonIfExists } from "@intentic/base/fs";
 import { isProcessAlive } from "@intentic/local-agent";
 import { z } from "zod";
 import { baseDir } from "../config.js";
@@ -22,19 +23,8 @@ export const HANDOVER_WAIT_MS = 4 * LINK_STAMP_MS;
 const HandoverSchema = z.object({ pid: z.int().positive(), at: z.number() });
 type Handover = z.infer<typeof HandoverSchema>;
 
-const readHandover = async (path: string): Promise<Handover | undefined> => {
-    // allow(silent-catch): no request file is no request
-    const raw = await readFile(path, "utf8").catch(() => undefined);
-    if (raw === undefined) {
-        return undefined;
-    }
-    try {
-        return HandoverSchema.safeParse(JSON.parse(raw)).data;
-    } catch {
-        // allow(silent-catch): a half-written request is read whole at the next tick, while its writer still waits
-        return undefined;
-    }
-};
+// No request file is no request, and a half-written one is read whole at the next tick, while its writer still waits.
+const readHandover = async (path: string): Promise<Handover | undefined> => await readJsonIfExists(path, HandoverSchema);
 
 interface AskedOptions {
     readonly path?: string;

@@ -1,4 +1,6 @@
-import { gatingWindows, humanizeModelId, type ModelRef, type UsageWindow } from "@intentic/sandbox-contract";
+import { gatingWindows, type ModelRef } from "@intentic/sandbox-contract/models/plan-pools";
+import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
+import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";

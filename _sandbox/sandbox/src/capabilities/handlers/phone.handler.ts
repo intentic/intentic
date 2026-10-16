@@ -1,4 +1,4 @@
-import type { PhoneConfig } from "@intentic/sandbox-contract";
+import type { PhoneConfig } from "@intentic/sandbox-contract/schemas/phone";
 import { PHONE_TOOLS_NOTE } from "../../phones/phone-skills.js";
 import { peerHandler } from "./peer.handler.js";
 

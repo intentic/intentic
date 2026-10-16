@@ -1,4 +1,4 @@
-import type { EndpointConfig } from "@intentic/sandbox-contract";
+import type { EndpointConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { CapabilityHandler } from "../capability.js";
 
 // A model API the user pointed us at (Ollama, vLLM, a gateway); this holds only where it is and how to reach it. apply

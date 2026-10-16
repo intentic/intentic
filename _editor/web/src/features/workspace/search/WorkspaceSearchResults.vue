@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type { WorkspaceSearchGroup, WorkspaceSearchHit } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchGroup, WorkspaceSearchHit } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { formatCount, iconForEntry, Notice } from "@intentic/ui";
 import { codeLangForPath } from "@intentic/code-read";
 import { type SnippetPiece, snippetPieces, snippetTokens, snippetWindow } from "./searchSnippet";
-import type { OpenMode } from "../tabs/workspaceTabs";
+import type { OpenMode } from "../../../models/workspace/tabs/workspaceTabs";
 import { basename, parentDir } from "@intentic/ui/path";
 import { useT } from "@intentic/ui/i18n";
 

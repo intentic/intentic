@@ -1,12 +1,12 @@
-import type { DeviceCommandInput } from "@intentic/sandbox-contract";
+import type { DeviceCommandInput } from "@intentic/sandbox-contract/schemas/devices";
 import {
     DEV_REBUILD_EXIT_MARK,
-    HOST_NATIVE_ENVIRONMENT,
     DEV_REBUILD_QUIET_MARK,
     DeviceCommandInputSchema,
     DeviceLocalDirSchema,
     devRebuildLogPath,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/devices";
+import { HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract/schemas/hosts";
 import { COMMAND_TIMEOUT_MS, type DeviceCommandFacts, DEVICE_COMMANDS, doorRoute, outcomeOf, streamOf, succeeded } from "../device-commands.js";
 
 // What the daemon knows when it builds a line. Only `sandboxId`, `mode`, `localDir` and `port` ever arrive from a

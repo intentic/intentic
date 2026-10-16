@@ -1,4 +1,4 @@
-import type { GitChange } from "@intentic/sandbox-contract";
+import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
 
 // Parsers behind the Changes review: git's -z porcelain listings into the GitChange rows the panel renders.
 // Pure string work, nothing spawned; changes.ts, changes-commits.ts and stash.ts spawn git and share these readers.

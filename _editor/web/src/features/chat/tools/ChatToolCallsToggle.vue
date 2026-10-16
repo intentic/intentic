@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
-import { usePaneView } from "../panel/useChat-view";
-import type { ChatMessage } from "../transcript/transcript";
-import { runningTotal } from "../transcript/transcriptScan";
-import { toolCallsNote, useToolCalls } from "./useToolCalls";
+import { usePaneView } from "../../../models/conversations/panel/useChat-view";
+import type { ChatMessage } from "../../../models/conversations/transcript/transcript";
+import { runningTotal } from "../../../models/conversations/transcript/transcriptScan";
+import { toolCallsNote, useToolCalls } from "../../../models/conversations/tools/useToolCalls";
 import { useT } from "@intentic/ui/i18n";
 import { useAudience } from "../../../app/useAudience";
 

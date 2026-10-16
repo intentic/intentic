@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { useT } from "@intentic/ui/i18n";
 
 // Marks a conversation as one step of a workflow run, in OriginMark's slot and grammar. Text, not a link: a

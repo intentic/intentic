@@ -1,4 +1,4 @@
-import type { ModelRole } from "@intentic/sandbox-contract";
+import type { ModelRole } from "@intentic/sandbox-contract/models/model-roles";
 import { computed, onBeforeUnmount, ref } from "vue";
 
 // A job chip dragged onto a setup: Pointer Events rather than HTML5 drag-and-drop, as the agent board does

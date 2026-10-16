@@ -1,6 +1,6 @@
 import { effectScope, type EffectScope, nextTick, ref, shallowRef } from "vue";
-import { NO_ATTENTION } from "../../../fleet/agentStatus";
-import type { FleetAgent } from "../../../fleet/useAgents-fleet";
+import { NO_ATTENTION } from "../../../../../models/agent-status/agentStatus-lanes";
+import type { FleetAgent } from "../../../../../models/fleet/useAgents-fleet";
 import type { ViewEvent } from "../boardView";
 import { useFoundCard } from "../foundCard";
 

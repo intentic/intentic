@@ -1,5 +1,5 @@
 import { isIqDenied } from "@intentic/iq-engine";
-import { isUnversionedStatePath } from "@intentic/sandbox-contract";
+import { isUnversionedStatePath } from "@intentic/sandbox-contract/state/workspace-state";
 
 // Which workspace change batches a reaction has to act on. The watcher reports every write it sees, the daemon's own
 // included, and under load the daemon rewrites its state every few seconds (the privacy ledger, extension usage,

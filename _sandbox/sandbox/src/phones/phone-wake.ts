@@ -4,8 +4,8 @@ import {
     type PhoneWakeRegistration,
     PhoneWakeRegistrationSchema,
     type PhoneWakeState,
-    type PushNotification,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/phone";
+import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import { z } from "zod";
 import { sendRelay } from "../push/senders/relay.js";
 import { defineDocument } from "../store/evolution/documents.js";

@@ -1,6 +1,6 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../engines/claude-sdk.js";
-import type { UsageTurn } from "@intentic/sandbox-contract";
+import type { UsageTurn } from "@intentic/sandbox-contract/schemas/providers/usage";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { opt } from "../opt.js";

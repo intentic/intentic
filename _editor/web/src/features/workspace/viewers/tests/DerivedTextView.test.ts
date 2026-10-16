@@ -5,7 +5,7 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import type { WorkspaceDerived } from "@intentic/sandbox-contract";
+import type { WorkspaceDerived } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 
 // The daemon seam, stubbed: `read` is what opening the file answers, `derive` what asking for it now answers. `hold`
 // keeps a call unanswered, which is the only way to assert what the pane shows while it waits.
@@ -35,7 +35,7 @@ jest.mock("../../files/derivedText", () => ({
 // `derivedEpoch` is a real ref, since a plain field would not re-trigger the watch and the test would pass on a
 // component that never re-reads — which is the bug being covered.
 const derivedEpoch = ref(0);
-jest.mock("../../changes/live/useWorkspaceLive", () => ({
+jest.mock("../../../../models/workspace/changes/useWorkspaceLive", () => ({
     changeEpochOf: () => 0,
     derivedEpochOf: () => derivedEpoch.value,
 }));

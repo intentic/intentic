@@ -1,0 +1,194 @@
+import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
+import { unstubbed } from "@intentic/testing";
+import type { LandOutcome } from "./land.js";
+import { services } from "../../harness/route-services.testing.js";
+import { beginTurn } from "../actor/conversation-actors.testing.js";
+import {
+    type LandBooks,
+    type LandingDecision,
+    landedFrame,
+    landedOutcomeOf,
+    landingDecision,
+    type LandingDeps,
+    type LandingHooks,
+    landTurn,
+    settleLandBooks,
+} from "./turn-landing.js";
+import { unlinkedMessage } from "../worktrees/checkout-link.js";
+import { noteLandHeldForWake, takeLandHeldForWake } from "./wake-held.js";
+import type { AgentWorktrees } from "../worktrees/worktrees.js";
+
+const hold: Rule = {
+    id: "hold-all",
+    label: "Hold everything",
+    moment: "agent.finished",
+    action: { kind: "verdict", verdict: "hold" },
+    enabled: true,
+};
+const allow: Rule = {
+    id: "allow-all",
+    label: "Land everything",
+    moment: "agent.finished",
+    action: { kind: "verdict", verdict: "allow" },
+    enabled: true,
+};
+// Written when a check could still hold work; a turn that reaches its land always ended clean now, so this matches none.
+const allowFailing: Rule = { ...allow, id: "allow-failing", label: "Land failing work", when: { outcome: ["checks-failed"] } };
+
+// No check takes part: nothing checks the work when it lands, and CI checks what the owner pushes.
+describe("a land decision", () => {
+    const decisions: [string, readonly Rule[], boolean | undefined, LandingDecision][] = [
+        ["with no rule and no override holds, quietly", [], undefined, { mode: "measure", writes: [] }],
+        ["with the override on lands, whatever the table says", [hold], true, { mode: "check", writes: [] }],
+        ["with the override off holds, quietly", [allow], false, { mode: "measure", writes: [] }],
+        ["under an allowing rule lands, and stamps it", [allow], undefined, { mode: "check", writes: [{ kind: "fired", rule: "allow-all" }] }],
+        [
+            "under a holding rule holds, stamps it and says so",
+            [hold],
+            undefined,
+            {
+                mode: "measure",
+                writes: [
+                    { kind: "fired", rule: "hold-all" },
+                    { kind: "held", content: '"Hold everything" held this work on its branch instead of landing it.' },
+                ],
+            },
+        ],
+        [
+            "under a rule naming the retired checks-failed outcome is decided by the rest of the table",
+            [allowFailing, hold],
+            undefined,
+            {
+                mode: "measure",
+                writes: [
+                    { kind: "fired", rule: "hold-all" },
+                    { kind: "held", content: '"Hold everything" held this work on its branch instead of landing it.' },
+                ],
+            },
+        ],
+        ["with the override on lands past a rule naming the retired checks-failed outcome", [allowFailing], true, { mode: "check", writes: [] }],
+    ];
+    test.each(decisions)("%s", (_case, rules, override, decision) => {
+        expect(landingDecision(rules, { repos: ["root"], outcome: "clean" }, override)).toStrictEqual(decision);
+    });
+});
+
+const outcome = (change: Partial<LandOutcome>): LandOutcome => ({
+    landed: false,
+    changed: true,
+    repos: [],
+    diff: { files: 1, insertions: 1, deletions: 0 },
+    adjudicated: false,
+    ...change,
+});
+
+test.each([
+    ["held on its branch", outcome({ held: true }), "ready"],
+    ["in the main tree", outcome({ landed: true }), "landed"],
+    ["neither", outcome({}), "conflict"],
+] as const)("a changed land that is %s settles as %s", (_case, landed, settled) => {
+    expect(landedOutcomeOf(landed)).toBe(settled);
+});
+
+describe("the landed frame", () => {
+    test("says what reached the tree and what the reconciler started", () => {
+        expect(landedFrame(outcome({ landed: true }), { missing: 2, started: ["web"], deferred: false })).toStrictEqual({
+            kind: "landed",
+            landed: true,
+            deps: { missing: 2, started: ["web"], deferred: false },
+        });
+    });
+
+    test("names the conflicts and the hold, and nothing it does not have", () => {
+        const conflicts = [{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" as const }], clean: 0 }];
+        expect(landedFrame(outcome({ conflicts }), undefined)).toStrictEqual({ kind: "landed", landed: false, conflicts });
+        expect(landedFrame(outcome({ held: true }), undefined)).toStrictEqual({ kind: "landed", landed: false, held: true });
+    });
+});
+
+describe("a turn that may not land", () => {
+    // Only the registry is real: any other store the land reached for would name itself.
+    const registered = async (isolated: boolean): Promise<LandingDeps> => {
+        const { agents, conversations } = services();
+        await beginTurn(conversations, { conversationId: "c", isolated, prompt: "p", profile: { agent: "claude", harness: "native" } }, 1);
+        return unstubbed<LandingDeps>("deps", { agents, conversations });
+    };
+    const hooks = unstubbed<LandingHooks>("hooks", {});
+    // The fixers run once the land is sure to go on; what they ran on, in order, for the test to read.
+    const fixing = (): { readonly hooks: LandingHooks; readonly fixed: unknown[] } => {
+        const fixed: unknown[] = [];
+        return { hooks: unstubbed<LandingHooks>("hooks", { fix: async (span) => void fixed.push(span) }), fixed };
+    };
+    const books = (): LandBooks => ({ span: [{ repo: "root", from: "a", dir: "/w" }], branch: "agent/c", outcome: undefined, reconciled: false });
+    const drain = async (frames: AsyncIterable<unknown>): Promise<unknown[]> => {
+        const out: unknown[] = [];
+        for await (const frame of frames) {
+            out.push(frame);
+        }
+        return out;
+    };
+    test.each([
+        ["because it failed", { failed: true, aborted: false }],
+        ["because it was stopped", { failed: false, aborted: true }],
+    ] as const)("%s lands nothing and reconciles nothing", async (_case, ending) => {
+        const deps = await registered(true);
+        const kept = books();
+        const frames = await drain(
+            landTurn(deps, hooks, { conversationId: "c", prompt: "p", autoLand: true, awaitingWake: false, sync: async () => [], ...ending }, kept),
+        );
+        expect(frames).toStrictEqual([]);
+        expect(kept).toStrictEqual(books());
+    });
+
+    // Auto-land is on and no rule holds anything, so only the wake it awaits can be what stops this land: past the guard,
+    // the fixers would run and the unstubbed settings store would name itself. What counts as awaiting a wake is the
+    // turn's close's to say (turn-close.ts), from what the conversation holds once its wakes are armed.
+    test("because it ended to wait on a wake it armed lands nothing, fixes nothing and reconciles nothing", async () => {
+        const deps = await registered(true);
+        const kept = books();
+        const { hooks: fixer, fixed } = fixing();
+        const turn = { conversationId: "c", prompt: "p", autoLand: true, failed: false, aborted: false, awaitingWake: true, sync: async () => [] };
+        expect(await drain(landTurn(deps, fixer, turn, kept))).toStrictEqual([]);
+        expect(fixed).toStrictEqual([]);
+        expect(kept).toStrictEqual(books());
+        // Kept, with the turn's own answer to landing, for if the wake goes away without firing (wake-held-land.ts).
+        expect(takeLandHeldForWake(deps.conversations, "c")).toStrictEqual({ autoLand: true });
+    });
+
+    test("that failed clears the land an earlier close kept for a wake: it never lands by itself", async () => {
+        const deps = await registered(true);
+        noteLandHeldForWake(deps.conversations, "c", { autoLand: undefined });
+        const turn = { conversationId: "c", prompt: "p", autoLand: true, failed: true, aborted: false, awaitingWake: true, sync: async () => [] };
+        expect(await drain(landTurn(deps, hooks, turn, books()))).toStrictEqual([]);
+        expect(takeLandHeldForWake(deps.conversations, "c")).toBeUndefined();
+    });
+
+    test("awaiting nothing, the same turn runs the repository's fixers on its span first, then goes on to decide its land", async () => {
+        const deps = await registered(true);
+        const { hooks: fixer, fixed } = fixing();
+        const turn = { conversationId: "c", prompt: "p", autoLand: true, failed: false, aborted: false, awaitingWake: false, sync: async () => [] };
+        await expect(drain(landTurn(deps, fixer, turn, books()))).rejects.toThrow("deps.sandboxSettings.get was called, and this test did not stub it");
+        expect(fixed).toStrictEqual([books().span]);
+    });
+
+    test("because the conversation is not isolated lands nothing either", async () => {
+        const kept = books();
+        const turn = { conversationId: "c", prompt: "p", autoLand: true, failed: false, aborted: false, awaitingWake: false, sync: async () => [] };
+        expect(await drain(landTurn(await registered(false), hooks, turn, kept))).toStrictEqual([]);
+        expect(kept).toStrictEqual(books());
+    });
+});
+
+// A land that breaks rather than refuses stays on the card until one goes through; before, the books an ended turn
+// settles only logged it, and the card rested on a standing read off the main repo's copy of a branch that never moved.
+describe("a land that breaks", () => {
+    test("while an ended turn's books settle is kept on the card, in the words it broke with", async () => {
+        const { agents, conversations, perf, logger } = services();
+        await beginTurn(conversations, { conversationId: "c", isolated: true, prompt: "p", profile: { agent: "claude", harness: "native" } }, 1);
+        await agents.recordWorktree("c", [{ repo: "root", base: "a".repeat(40) }]);
+        // The checkout lost its link and could not be re-linked: every land stops at its first step.
+        const agentWorktrees = unstubbed<AgentWorktrees>("worktrees", { relink: async () => ["root"] });
+        await settleLandBooks({ agents, conversations, perf, logger, agentWorktrees }, "c");
+        expect(agents.get("c")?.landFailure).toEqual({ reason: unlinkedMessage(["root"]), code: "unlinked", at: expect.any(Number) });
+    });
+});

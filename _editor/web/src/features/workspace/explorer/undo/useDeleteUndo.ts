@@ -2,9 +2,9 @@ import { commandShortcut } from "../../../../workbench/commands/useCommands";
 import { t } from "@intentic/ui/i18n";
 import { localFace } from "../../../../app/environments/local";
 import { useNotifications } from "../../../../workbench/notifications/notifications";
-import { type DeleteBatch, takeDelete } from "./deleteUndo";
+import { type DeleteBatch, takeDelete } from "../../../../models/workspace/tree/deleteUndo";
 import { restoredReceipt } from "../entryNames";
-import { useWorkspaceTree } from "../useWorkspaceTree";
+import { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
 
 // The command Mod+Z runs; the page that binds it registers it under this name.
 export const UNDO_DELETE = `workspace.undoDelete`;

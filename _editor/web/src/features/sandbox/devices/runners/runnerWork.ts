@@ -1,4 +1,5 @@
-import type { OffloadKind, OffloadRecord, SandboxSettings } from "@intentic/sandbox-contract";
+import type { OffloadKind, OffloadRecord } from "@intentic/sandbox-contract/schemas/offload";
+import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import { t } from "@intentic/ui/i18n";
 import { kindTitle } from "../../agent-settings/behaviour/offloadRows";
 

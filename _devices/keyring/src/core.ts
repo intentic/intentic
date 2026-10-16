@@ -9,7 +9,7 @@ import {
     type KeyringSyncItem,
     type KeyringSyncPeer,
     type SealedBox,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/keyring";
 import { keyFingerprint, newSealKeyPair, seal, unseal } from "@intentic/sandbox-contract/keyring-seal";
 import type { z } from "zod";
 import { askpassMatch, parseAskpassPrompt } from "./askpass/askpass.js";

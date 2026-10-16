@@ -1,12 +1,13 @@
 import { type FileHandle, open, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join, relative, sep } from "node:path";
-import type { LogFileEntry } from "@intentic/sandbox-contract";
+import type { LogFileEntry } from "@intentic/sandbox-contract/schemas/logs";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { forkedExec } from "@intentic/base/git";
 import { MARKER_FILE } from "../system/boot/restarts/boot-marker.js";
 import { RESTART_INTENT_FILE, RESTARTS_FILE } from "../system/boot/restarts/restart-record.js";
 import { logsRoot } from "../seams/logs-root.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
+import { undefinedIfMissing } from "@intentic/base/errors";
 
 // Daemon-owned debug logs under historyRoot/logs: terminal captures (terminals/), intentic CLI runs (intentic-runs/),
 // daemon.log, and resource-metrics.jsonl. Kept under historyRoot, outside the agent's /work mount.
@@ -79,13 +80,9 @@ const walkFiles = async (root: string): Promise<string[]> => {
 export const listLogFiles = async (root: string): Promise<LogFileEntry[]> => {
     const files = await Promise.all(
         (await walkFiles(root)).filter((path) => !isStaging(path)).map(async (path) => {
-            try {
-                const info = await stat(path);
-                return { name: relative(root, path).split(sep).join("/"), sizeBytes: info.size, modifiedAt: Math.round(info.mtimeMs) };
-            } catch {
-                // Raced a prune delete, the file is simply gone.
-                return undefined;
-            }
+            // Raced a prune delete, the file is simply gone.
+            const info = await stat(path).catch(undefinedIfMissing);
+            return info === undefined ? undefined : { name: relative(root, path).split(sep).join("/"), sizeBytes: info.size, modifiedAt: Math.round(info.mtimeMs) };
         }),
     );
     return files.filter((file) => file !== undefined).toSorted((a, b) => b.modifiedAt - a.modifiedAt);
@@ -185,11 +182,10 @@ export const pruneLogFiles = async (root: string): Promise<void> => {
     const files: PrunedFile[] = [];
     const staged: PrunedFile[] = [];
     for (const path of (await walkFiles(root)).filter((candidate) => !KEPT.has(relativeName(root, candidate)))) {
-        try {
-            const info = await stat(path);
+        // Undefined when already gone.
+        const info = await stat(path).catch(undefinedIfMissing);
+        if (info !== undefined) {
             (isStaging(path) ? staged : files).push({ path, size: info.size, mtimeMs: info.mtimeMs });
-        } catch {
-            // Already gone.
         }
     }
     const now = Date.now();

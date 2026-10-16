@@ -1,4 +1,4 @@
-import type { TranscriptCredentialOffer } from "@intentic/sandbox-contract";
+import type { TranscriptCredentialOffer } from "@intentic/sandbox-contract/events/transcript";
 import { credentialLane, offerStatus } from "./cardStatus";
 
 // Pins offerStatus only where the credential card could drift from the shared spend-card logic, and credentialLane, the

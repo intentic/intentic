@@ -86,6 +86,10 @@ const clear = (): void => {
             class="pointer-events-none absolute top-1/2 -translate-y-1/2 text-subtle"
             :class="variant === `panel` ? `left-3 text-xs` : `left-2 text-2xs`"
         />
+        <!-- allow(inputs): THE RECIPE IS COMPUTED, not absent: `inputClass` is `field-bare` plus the right-hand room
+             this bar actually needs, which depends on how many controls it has (none, a clear "x", or the `Aa` switch
+             beside it). A gate that reads only the template cannot follow a computed, and the alternative — inlining
+             three padding variants at the call site — is the thing this gate exists to prevent. -->
         <input
             ref="input"
             v-bind="passAttrs"

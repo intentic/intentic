@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
-import { type AgentEvent, rawRoutePath } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { rawRoutePath } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import type { AgentTool } from "./agent-tools.js";
 
 // Every MCP endpoint the daemon hosts for a turn, behind one door (`/mcp/<name>`, turn-mounts.routes.ts): the turn's

@@ -1,4 +1,5 @@
-import type { FleetMachine, MachineLoad, RunnerFacts } from "@intentic/sandbox-contract";
+import type { FleetMachine, MachineLoad } from "@intentic/sandbox-contract/schemas/offload";
+import type { RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { fleetMachine, machineLoad, type RunnerReading, type SessionFit, suggestionFor } from "./fleet-advice.js";
 
 // Which machine a new session should start on. The verdicts are read by a person deciding where their work goes, so

@@ -1,8 +1,8 @@
 import { SingleFlight } from "@intentic/base/async";
-import { CLAUDE_SEED_MODELS } from "@intentic/sandbox-contract";
+import { CLAUDE_SEED_MODELS } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { Logger } from "pino";
 import { z } from "zod";
-import { isEntitlementRefusalText } from "../../agent/providers/failure-sentences.js";
+import { isEntitlementRefusalText } from "../../engines/failure-sentences.js";
 import type { ProviderRefusalStore } from "../../usage/provider-refusals.js";
 import { CLAUDE_CLI_USER_AGENT, type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
 import type { ClaudeSeatStore } from "./claude-seats.js";

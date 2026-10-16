@@ -1,4 +1,4 @@
-import { projectDirNameOf, RESERVED_PROJECT_DIR_NAMES } from "@intentic/sandbox-contract";
+import { projectDirNameOf, RESERVED_PROJECT_DIR_NAMES } from "@intentic/sandbox-contract/ids/project-dir";
 import type { Config } from "../env.config.js";
 
 // A PROJECT SANDBOX is made for one folder on the owner's computer, synced live into `/work/<name>`

@@ -1,6 +1,6 @@
 import { pino } from "pino";
 import { SteeringQueue } from "../../checkpoints/agent-steering.js";
-import { memoryFleet } from "../../../testing.js";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { createHeldCards, type HeldOutcome } from "../../../guard/held-cards.js";
 import { turnCloser } from "./turn-close.js";
 

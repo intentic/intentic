@@ -1,4 +1,4 @@
-import type { AgentJob } from "@intentic/sandbox-contract";
+import type { AgentJob } from "@intentic/sandbox-contract/schemas/agents";
 import { jobPhase, runningJobs } from "../jobPhase";
 
 const job = (over: Partial<AgentJob> = {}): AgentJob => ({ id: `job-1`, label: `Build`, session: `agent-1`, startedAt: 1_000, ...over });

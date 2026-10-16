@@ -1,7 +1,7 @@
 // Pins the team-chat threads row: it opens on the daemon's own default, writes its own key and nothing else, and keeps
 // to the bounds the save accepts, writing back the number it kept.
 import "@intentic/testing/dom";
-import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -11,7 +11,7 @@ const patch = jest.fn((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
-jest.mock(`../../overview/useSandboxSettings`, () => ({
+jest.mock(`../../../../models/sandbox/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, refusal: ref(undefined), dropped: ref(undefined), error: ref(undefined), isLoading: ref(false) }),
 }));
 

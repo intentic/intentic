@@ -1,7 +1,7 @@
 // The open-file dispatcher mounted for real: which surface a tab ends on, and what it hands that surface. jsdom, since
 // what is asserted is what is on screen.
 import "@intentic/testing/dom";
-import type { WorkspaceFile } from "@intentic/sandbox-contract";
+import type { WorkspaceFile } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { type App, computed, createApp, defineComponent, h, nextTick, provide, ref, useSlots } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { REVEAL_DELAY_MS } from "@intentic/ui";
@@ -11,7 +11,7 @@ import { REVEAL_DELAY_MS } from "@intentic/ui";
 // promise), and a read the viewer cancels fails the way fetch fails it, with an AbortError.
 let answer: (path: string) => WorkspaceFile | Promise<WorkspaceFile> = (path) => ({ present: false, path });
 const reads: { path: string; agent: string | undefined }[] = [];
-jest.mock("../../files/fileWindow", () => ({
+jest.mock("../../../../models/workspace/files/fileWindow", () => ({
     FILE_WINDOW_BYTES: 4 * 1024 * 1024,
     readFileWindow: (path: string, opts?: { signal?: AbortSignal; scope?: { agent: string | undefined } }) => {
         reads.push({ path, agent: opts?.scope?.agent });
@@ -30,7 +30,7 @@ jest.mock("../../../../client/sandbox/sandboxClient", () => ({
     sandboxJson: () => new Promise(() => undefined),
 }));
 // The tree's write half and tier: the owner's, with nothing written here.
-jest.mock("../../explorer/useWorkspaceTree", () => ({
+jest.mock("../../../../models/workspace/tree/useWorkspaceTree", () => ({
     useWorkspaceTree: () => ({
         saveText: () => Promise.resolve(),
         run: (work: () => Promise<void>) => work(),
@@ -61,8 +61,8 @@ const { default: FileViewer } = await import("../FileViewer.vue");
 const { registerViewer } = await import("../../../../workbench/views/viewerRegistry");
 const { externalDirtyPaths } = await import("../../files/externalDirty");
 const { VIEW_SCOPE, workspaceAgent } = await import("../../../../app/workspaceScope");
-const { useEditBuffers } = await import("../../files/useEditBuffers");
-const { markWorkspaceChanged } = await import("../../changes/live/useWorkspaceLive");
+const { useEditBuffers } = await import("../../../../models/workspace/files/useEditBuffers");
+const { markWorkspaceChanged } = await import("../../../../models/workspace/changes/useWorkspaceLive");
 const { signalConnection } = await import("../../../../client/sandbox/useSandbox");
 
 // The sandbox answering, as the connection driver says it: a frame on an open stream. Every test starts there; the ones

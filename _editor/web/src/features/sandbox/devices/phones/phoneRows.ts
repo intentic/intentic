@@ -1,4 +1,4 @@
-import type { PhoneSummary } from "@intentic/sandbox-contract";
+import type { PhoneSummary } from "@intentic/sandbox-contract/schemas/phone";
 import { t } from "@intentic/ui/i18n";
 
 // One phone as the Devices board lists it: whether the agent can reach it now, and what it is. A phone is asleep most

@@ -1,7 +1,8 @@
-import type { AgentEvent, ToolCallContent, ToolCallLocation, ToolKind } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { ToolCallContent, ToolCallLocation, ToolKind } from "@intentic/sandbox-contract/events/requests";
 import { toolCategoryOf } from "@intentic/agent-context/tool-calls";
-import { isContextOverflowText } from "../../agent/providers/failure-sentences.js";
-import { workspacePath } from "../../agent/tools/tool-calls.js";
+import { isContextOverflowText } from "../../engines/failure-sentences.js";
+import { workspacePath } from "../../sessions/vocabulary/tool-calls.js";
 import { opt } from "../../opt.js";
 import { isRateLimited } from "../decorators/vendor-errors.js";
 import { type MuseEvent, type MuseItem, type MuseToolArgs, type MuseTurnError, shellResultOf, toolArgsOf } from "./muse-wire.js";

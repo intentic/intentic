@@ -2,13 +2,10 @@
 // job dragged or picked onto another setup moves that job alone. Mounted, since what's tested is the click-through round
 // trip.
 import "@intentic/testing/dom";
-import {
-    humanizeModelId,
-    MODEL_ROLES,
-    type ModelPin,
-    type SandboxSettings,
-    SandboxSettingsSchema,
-} from "@intentic/sandbox-contract";
+import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
+import { MODEL_ROLES } from "@intentic/sandbox-contract/models/model-roles";
+import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
@@ -31,7 +28,7 @@ const patch = jest.fn((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
-jest.mock(`../../overview/useSandboxSettings`, () => ({
+jest.mock(`../../../../models/sandbox/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({
         settings,
         patch,
@@ -50,11 +47,11 @@ const CATALOGS: Record<string, readonly { value: string; label: string }[]> = {
 };
 const connected = ref<readonly string[]>([`codex`, `claude`]);
 
-jest.mock(`../../../chat/session/access`, () => ({ providerReady: (provider: string) => connected.value.includes(provider) }));
+jest.mock(`../../../../models/providers/access`, () => ({ providerReady: (provider: string) => connected.value.includes(provider) }));
 // Empty `providerModels` unless a test fills it: puts every model on the static effort scale, the state every fixture
 // here assumes, and leaves the presets nothing to suggest from.
 const providerModels = ref<Record<string, readonly { value: string; label: string; helperOnly?: string }[]>>({});
-jest.mock(`../../../chat/accounts/providerCatalog`, () => ({
+jest.mock(`../../../../models/providers/providerCatalog`, () => ({
     endpointProviders: ref([]),
     providerModels,
     demandCatalog: () => undefined,

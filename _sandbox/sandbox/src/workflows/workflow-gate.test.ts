@@ -1,4 +1,4 @@
-import type { Workflow, WorkflowRun, WorkflowStepRun } from "@intentic/sandbox-contract";
+import type { Workflow, WorkflowRun, WorkflowStepRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { gateVerdictOf } from "./workflow-gate.js";
 
 // One path reaches `fail`; every other way a run ends reaches `blocked`. A regression letting a failed step, a stopped

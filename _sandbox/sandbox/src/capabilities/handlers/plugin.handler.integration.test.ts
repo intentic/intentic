@@ -4,7 +4,7 @@ import { readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { gitFullHead, gitHead } from "@intentic/base/git";
 import { createTerminalRunner } from "../../terminal/terminal-run.js";
 import {

@@ -1,4 +1,5 @@
-import { DaemonHealthReadingSchema, RelinkAnswerSchema, type RelinkAnswer, type RelinkRequest } from "@intentic/sandbox-contract";
+import { DaemonHealthReadingSchema } from "@intentic/sandbox-contract/schemas/system";
+import { RelinkAnswerSchema, type RelinkAnswer, type RelinkRequest } from "@intentic/sandbox-contract/schemas/platform-link";
 import { z } from "zod";
 import { apiClient } from "../../../lib/useApi";
 import { useSandbox } from "../../../client/sandbox/useSandbox";

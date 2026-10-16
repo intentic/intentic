@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createEngine, estimateTokens, type QueryRequest, type Scope } from "@intentic/iq-engine";
-import type { WorkspaceSearchResult } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchResult } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import { anchorsOf } from "./anchors.js";
 import { type BenchConfig, CONFIGS, needsModels } from "./configs.js";
 import { ensureIndex, ensureModels, headSha, indexDirFor, packageRoot, repoRoot } from "./repos.js";

@@ -1,4 +1,5 @@
-import { type AdmissionPolicy, COMMAND_CLASS_LABELS } from "@intentic/sandbox-contract";
+import type { AdmissionPolicy } from "@intentic/sandbox-contract/schemas/agent";
+import { COMMAND_CLASS_LABELS } from "@intentic/sandbox-contract/policy/command-classes";
 import { childSpawn, commandRun, outboundSend, secretSend, sessionStart, wakeSourceOf } from "./actions.js";
 import { defineGuardedAction, guard, type GuardedAction, HOLD, isGuardedAction, listGuardedActions } from "./guard.js";
 

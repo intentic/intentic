@@ -1,4 +1,4 @@
-import type { CiJobsResponse, PipelineRun } from "@intentic/sandbox-contract";
+import type { CiJobsResponse, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { useQueries } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { failedOf, type JobFailureRun, recurringFailures } from "./failureHistory";

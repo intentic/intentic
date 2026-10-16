@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AutomationRun, AutomationSummary } from "@intentic/sandbox-contract";
+import type { AutomationRun, AutomationSummary } from "@intentic/sandbox-contract/schemas/automations";
 import { localZone } from "@intentic/sandbox-contract/time";
 import { Button, formatDateTime, Icon, type IconName, ToggleSwitch } from "@intentic/extension-ui";
 import { computed } from "vue";

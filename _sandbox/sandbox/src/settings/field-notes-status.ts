@@ -1,4 +1,5 @@
-import { asZone, cronOptions, type FieldNotesStatus, UTC, type Zone } from "@intentic/sandbox-contract";
+import { asZone, cronOptions, UTC, type Zone } from "@intentic/sandbox-contract/time/zone";
+import type { FieldNotesStatus } from "@intentic/sandbox-contract/schemas/settings";
 import { Cron } from "croner";
 import { zoneOf } from "../automations/schedule-zone.js";
 import { join } from "node:path";

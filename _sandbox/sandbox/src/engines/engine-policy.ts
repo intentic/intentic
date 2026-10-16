@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { type EngineChannel, EngineChannelSchema, type EngineId, ENGINE_IDS } from "@intentic/sandbox-contract";
+import { type EngineChannel, EngineChannelSchema, type EngineId, ENGINE_IDS } from "@intentic/sandbox-contract/schemas/engines";
 import { z } from "zod";
 import { opt } from "../opt.js";
 import { defineDocument } from "../store/evolution/documents.js";

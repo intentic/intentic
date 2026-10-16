@@ -1,10 +1,11 @@
 import { t } from "@intentic/ui/i18n";
-import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { noticeOf } from "@intentic/ui/async";
 import type { Ref } from "vue";
-import { archiveAbove, isArchiveContent } from "../../files/archiveEntries";
-import { isLeaving, type Provisional, provisionalAt } from "../../files/provisionalEntries";
-import type { useWorkspaceTree } from "../useWorkspaceTree";
+import { archiveAbove, isArchiveContent } from "../../../../models/workspace/files/archiveEntries";
+import { isLeaving, type Provisional, provisionalAt } from "../../../../models/workspace/files/provisionalEntries";
+import type { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
 import { deadLink, dropDirOf, type Row } from "./treeRows";
 
 // What any file surface may do to an entry: nothing to a private (children inherit it) or provisional path, no archive write.

@@ -1,4 +1,5 @@
-import { fenceHoldsPersona, type Persona } from "@intentic/sandbox-contract";
+import { fenceHoldsPersona } from "@intentic/sandbox-contract/policy/persona-home";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { Caller } from "../auth/auth.js";

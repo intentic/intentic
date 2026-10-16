@@ -15,9 +15,9 @@ import { memoryAutomationsStore } from "../automations/automations-slice.testing
 import { memoryCapabilitiesStore, memorySecretVault } from "../capabilities/capabilities-slice.testing.js";
 import { removeWorkspacePath } from "../workspace/files/workspace-files.js";
 import { statePath } from "../state-paths.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
-import { approveExtension, extensionApprovals } from "./extension-approvals.js";
+import { approveExtension, extensionApprovals } from "../capabilities/extension-inventory/extension-approvals.js";
 import { extensionDirsOf, prepareExtensionDirs } from "./runtime/extension-state.js";
 
 // Removal, over the daemon's HTTP surface. The claims worth holding: the plan names the connections configured from

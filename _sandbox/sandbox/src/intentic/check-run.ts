@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import type { IntenticLine } from "@intentic/sandbox-contract";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import { whenAborted } from "@intentic/base/async";
 import type { Services } from "../composition.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";

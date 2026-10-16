@@ -5,15 +5,15 @@ import { join } from "node:path";
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { createApp } from "../app.js";
 import { workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
-import { approveExtension } from "../extensions/extension-approvals.js";
-import { extensionInventory } from "../extensions/installed-extensions.js";
+import { approveExtension } from "../capabilities/extension-inventory/extension-approvals.js";
+import { extensionInventory } from "../capabilities/extension-inventory/installed-extensions.js";
 import { approveHookSet, gateSettingsHooks } from "../guard/hook-approvals.js";
 import type { HookPlace } from "../guard/settings-hooks.js";
 import { clientFor, errorCode } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { fileSafetyPolicyStore } from "../safety/safety-policy-store.js";
 import { commandPolicyLines, memoryOwnerGrants } from "../personas/owner-grants.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 
 // The Access tab's What you have allowed, over the daemon's HTTP surface: the yeses that name no conversation sit in one

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ui } from "@intentic/ui";
-import { namesThinking } from "@intentic/sandbox-contract";
-import type { DescribedPin } from "../../../chat/models/modelPins";
-import ProviderLogo from "../../../chat/accounts/ProviderLogo.vue";
+import { namesThinking } from "@intentic/sandbox-contract/models/model-order";
+import type { DescribedPin } from "../../../../models/providers/modelPins";
+import ProviderLogo from "../../../../parts/providers/ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
 import { modelsPath } from "../../../../lib/routes/modelsPath";
 

@@ -4,14 +4,14 @@ import { mapPool } from "@intentic/base/async";
 import { escapeRegExp } from "@intentic/base/escape";
 import { rankByFuzzy } from "@intentic/base/fuzzy";
 import { refuse } from "@intentic/contract-serve";
-import {
-    includeMatcher,
-    referenceTails,
-    type WorkspaceSearchGroup,
-    type WorkspaceSearchHit,
-    type WorkspaceSearchResult,
-    type WorkspaceSearchSpan,
-} from "@intentic/sandbox-contract";
+import { includeMatcher } from "@intentic/sandbox-contract/policy/search-globs";
+import { referenceTails } from "@intentic/sandbox-contract/text/path-refs";
+import type {
+    WorkspaceSearchGroup,
+    WorkspaceSearchHit,
+    WorkspaceSearchResult,
+    WorkspaceSearchSpan,
+} from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import { cleanRelPath, resolveExisting, segmentsOf } from "./paths.js";
 import { type SweptFile, sweep } from "./sweep.js";
 

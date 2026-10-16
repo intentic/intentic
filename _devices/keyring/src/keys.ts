@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { isMissing } from "@intentic/base/errors";
 import { writeSecretFile } from "@intentic/local-agent";
-import { KeyringPublicKeySchema } from "@intentic/sandbox-contract";
+import { KeyringPublicKeySchema } from "@intentic/sandbox-contract/schemas/keyring";
 import { newSealKeyPair } from "@intentic/sandbox-contract/keyring-seal";
 import { z } from "zod";
 import { KeyPairSchema, SandboxPinSchema, type SandboxPin } from "./vault.js";

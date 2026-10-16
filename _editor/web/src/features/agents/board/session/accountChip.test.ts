@@ -1,4 +1,4 @@
-import type { OauthAccount } from "@intentic/sandbox-contract";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { accountBadge, shortAccount } from "./accountChip";
 
 const account = (over: Partial<OauthAccount> & Pick<OauthAccount, "id" | "label">): OauthAccount => ({ connectedAt: 1, ...over });

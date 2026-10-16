@@ -1,4 +1,5 @@
-import type { AgentEvent, TodoItem } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
 import { createFrameLedger, type FrameLedger } from "../../verification/agent-verification.js";
 import { createReachFrameLedger, type ReachFrameLedger } from "../../verification/agent-reach.js";
 import { createViewFrameLedger, type ViewFrameLedger } from "../../verification/agent-viewing.js";

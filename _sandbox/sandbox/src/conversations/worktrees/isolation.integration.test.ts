@@ -6,7 +6,7 @@ import { basename, join } from "node:path";
 import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { MIRRORED_DIRS } from "@intentic/constants/mirror-roots";
 import { repoRoot } from "@intentic/constants/node";
-import { SHARED_STATE_PATHS } from "@intentic/sandbox-contract";
+import { SHARED_STATE_PATHS } from "@intentic/sandbox-contract/state/workspace-state";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { Logger } from "pino";
 import { unstubbed } from "@intentic/testing";

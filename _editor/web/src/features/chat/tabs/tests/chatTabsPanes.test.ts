@@ -4,8 +4,8 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
-import { useChat } from "../../run/useChat";
-import { draftConversation, reveal } from "../../panel/useChat-reveal";
+import { useChat } from "../../../../models/conversations/run/useChat";
+import { draftConversation, reveal } from "../../../../models/conversations/panel/useChat-reveal";
 // Store half of "New agent" (agentActions.startAgent); this suite's fixture for extra tabs.
 const newChat = () => {
     const conversation = draftConversation();

@@ -11,7 +11,7 @@ import { analyticsAvailable, analyticsChoice, chooseAnalytics } from "../../app/
 import { hold, type NotificationInput, type NotificationTone } from "../../workbench/notifications/notifications";
 import { onScreen } from "../../workbench/window/onScreen";
 import { type SandboxAvailability, sandboxRequiresGate } from "../../features/sandbox/overview/availability";
-import { RESTART_PATIENCE_MS, restartExpected, type RestartWork } from "../../features/sandbox/live/sandboxRestart";
+import { RESTART_PATIENCE_MS, restartExpected, type RestartWork } from "../../models/sandbox/live/sandboxRestart";
 import { useLocalShortcut } from "../../client/endpoint/localShortcut";
 import { useEndpoint } from "../../client/endpoint/useEndpoint";
 import { useSandbox } from "../../client/sandbox/useSandbox";

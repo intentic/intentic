@@ -3,6 +3,7 @@
 // into a `tool` message, so until those images are moved, any trial turn that looked at a screenshot was refused.
 // OpenAI's own API restricts tool content the same way, so this normalizes the wire format rather than patching one
 // upstream.
+import { parseJsonOr } from "@intentic/base/json";
 
 // Fields read below are declared, so reads type as `unknown` rather than tripping the index-signature rule; the index
 // signature is what lets an unrecognized field survive the rewrite.
@@ -63,13 +64,7 @@ const liftedFrom = (entry: unknown): Stripped | undefined => {
 };
 
 const parsedBody = (body: string): { root: Json; messages: readonly unknown[] } | undefined => {
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(body);
-    } catch {
-        return undefined;
-    }
-    const root = objectOf(parsed);
+    const root = objectOf(parseJsonOr(body, undefined));
     return root === undefined || !Array.isArray(root.messages) ? undefined : { root, messages: root.messages };
 };
 

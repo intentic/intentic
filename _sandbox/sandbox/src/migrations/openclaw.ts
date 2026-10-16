@@ -1,5 +1,5 @@
 import { parseEnv } from "node:util";
-import { asZone } from "@intentic/sandbox-contract";
+import { asZone } from "@intentic/sandbox-contract/time/zone";
 import { z } from "zod";
 import {
     asArray,
@@ -18,6 +18,7 @@ import {
     text,
 } from "./adapter-shared.js";
 import { parseJson5ish } from "./json5ish.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Reads `~/.openclaw` into a migration plan: pure, translate judgment-free, refuse by name, never throw. The workspace
 // path is relocatable (`agents.defaults.workspace`); an archive missing it gets a needs-action rather than guessing at
@@ -66,13 +67,12 @@ const holdsLogin = (profile: AuthProfile): boolean =>
 // when it is not JSON. Accepts a nested `{profiles: {...}}` shape or a flat one. The provider is the profile's own
 // `provider`, else the name before its colon (`anthropic:default`).
 export const openclawProfileKeys = (raw: string): { readonly keys: readonly ProfileKey[]; readonly oauth: readonly string[] } | undefined => {
-    let file: z.infer<typeof ProfilesSchema>;
-    try {
-        file = ProfilesSchema.safeParse(JSON.parse(raw)).data ?? {};
-    } catch {
-        // allow(silent-catch): not JSON is the answer itself, which the plan words as a refused line.
+    const json = parseJsonOr(raw, undefined);
+    if (json === undefined) {
+        // Not JSON is the answer itself, which the plan words as a refused line.
         return undefined;
     }
+    const file: z.infer<typeof ProfilesSchema> = ProfilesSchema.safeParse(json).data ?? {};
     const keys: ProfileKey[] = [];
     const oauth: string[] = [];
     for (const [name, entry] of Object.entries(ProfilesSchema.safeParse(file["profiles"]).data ?? file).toSorted(([left], [right]) => left.localeCompare(right))) {

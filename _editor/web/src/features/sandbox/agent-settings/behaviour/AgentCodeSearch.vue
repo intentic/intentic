@@ -6,7 +6,7 @@ import { RouterLink } from "vue-router";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useSavings } from "../../usage/useSavings";
-import { useSandboxSettings } from "../../overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { useFieldNotes } from "./useFieldNotes";
 import { commitCount, asPercent } from "../models/numberInputs";
 import MeasurementPanel from "../models/MeasurementPanel.vue";

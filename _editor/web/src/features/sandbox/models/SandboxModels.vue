@@ -1,13 +1,10 @@
 <script setup lang="ts">
 import TourMark from "../../tour/TourMark.vue";
-import {
-    type AgentProvider,
-    endpointProvider,
-    type KeyedProvider,
-    type NativeProvider,
-    type ProviderKey,
-    providerSpec,
-} from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { endpointProvider } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { KeyedProvider } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
+import { type NativeProvider, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
+import type { ProviderKey } from "@intentic/sandbox-contract/state/arrival";
 import { Button, Icon, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onMounted, ref, useId, useTemplateRef, watch } from "vue";
@@ -17,12 +14,12 @@ import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { foundToOffer } from "../../../lib/foundOnComputer";
 import { useOperation } from "../../../workbench/operations/operations";
-import { defaultModelFor, endpointProviders } from "../../chat/accounts/providerCatalog";
-import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
-import { refreshConnections } from "../../chat/accounts/useChat-accounts";
-import { rememberPick } from "../../chat/run/turnDefaults";
-import { useChat } from "../../chat/run/useChat";
-import { accessKnown, providerReady } from "../../chat/session/access";
+import { defaultModelFor, endpointProviders } from "../../../models/providers/providerCatalog";
+import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
+import { refreshConnections } from "../../../models/conversations/accounts/useChat-accounts";
+import { rememberPick } from "../../../models/conversations/run/turnDefaults";
+import { useChat } from "../../../models/conversations/run/useChat";
+import { accessKnown, providerReady } from "../../../models/providers/access";
 import LocalModelsPanel from "./LocalModelsPanel.vue";
 import { localPrefetchStopped } from "./localPrefetch";
 import type { ModelSource, ModelSourceStanding } from "./modelSources";

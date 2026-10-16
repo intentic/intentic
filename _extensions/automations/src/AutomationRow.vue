@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AutomationRun, AutomationSummary, AutomationTemplate, Trigger } from "@intentic/sandbox-contract";
+import type { AutomationRun, AutomationSummary, AutomationTemplate, Trigger } from "@intentic/sandbox-contract/schemas/automations";
 import { localZone } from "@intentic/sandbox-contract/time";
 import {
     type ActionItem,

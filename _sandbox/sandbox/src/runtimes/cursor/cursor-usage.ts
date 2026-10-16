@@ -1,4 +1,5 @@
-import type { AgentProvider, ModelRef } from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import type { ModelRef } from "@intentic/sandbox-contract/models/plan-pools";
 import type { HeadroomSource } from "../../usage/headroom.js";
 import {
     type ModelLabels,

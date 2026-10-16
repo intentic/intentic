@@ -1,4 +1,5 @@
-import type { AgentEvent, AskQuestion, RequestDocument } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AskQuestion, RequestDocument } from "@intentic/sandbox-contract/events/requests";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
@@ -6,7 +7,7 @@ import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-
 import { sdk } from "../../engines/claude-sdk.js";
 import { pageTools, type PageToolsDeps } from "./page-tools.js";
 import { imageBlock, loadAttachments } from "../prompt/attachment-images.js";
-import { answerFiles, formatAnswers } from "../tools/question-answers.js";
+import { answerFiles, formatAnswers } from "../../sessions/vocabulary/question-answers.js";
 import { opt } from "../../opt.js";
 
 // The `ui` server: `ask`, a question card the turn parks on until a person answers it, beside the page tools where the

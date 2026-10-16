@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { pidFileBody } from "@intentic/local-agent";
-import type { PortSummary } from "@intentic/sandbox-contract";
+import type { PortSummary } from "@intentic/sandbox-contract/schemas/ports";
 import { unstubbed } from "@intentic/testing";
 import { stubGlobal } from "@intentic/testing/bun";
 import type { MirroredPort, Pairing, SkippedPort } from "../config.js";

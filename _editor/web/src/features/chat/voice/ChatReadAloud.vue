@@ -3,7 +3,7 @@ import { ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { readAloud } from "./readAloud";
-import { useSpeechPlayer } from "./speechPlayer";
+import { useSpeechPlayer } from "../../../models/voice/speechPlayer";
 
 // Reads one reply aloud, whole: its code announced rather than spelled, its paths and links shortened (the sandbox's
 // voice-text.ts). One press reads it, the next stops it. The press shows THAT it took (a spinner, then Stop); the card in

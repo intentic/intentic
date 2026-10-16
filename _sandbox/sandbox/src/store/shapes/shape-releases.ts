@@ -1,4 +1,4 @@
-import { isNewer } from "@intentic/sandbox-contract";
+import { isNewer } from "@intentic/sandbox-contract/state/versions";
 
 // Frozen by release: the shape generator records a document's new shape `unreleased`, and a later one before the next
 // release replaces it (no release ever wrote a file in the intermediate shape). Once a release tag holds it, as the

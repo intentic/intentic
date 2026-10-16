@@ -1,4 +1,5 @@
 import readline from "node:readline/promises";
+import { errorMessage } from "@intentic/base/errors";
 import { RequestError } from "@agentclientprotocol/sdk";
 import { createDaemonClient } from "./daemon-client.js";
 import { writeConfig } from "./config.js";
@@ -24,7 +25,7 @@ export const runLogin = async (): Promise<number> => {
     } catch (error) {
         // A RequestError's message is only its JSON-RPC category ("Internal error"); what the sandbox said is in `details`.
         const details = error instanceof RequestError ? (error.data as { details?: unknown } | undefined)?.details : undefined;
-        console.error(`\nLogin failed: ${typeof details === "string" ? details : error instanceof Error ? error.message : String(error)}`);
+        console.error(`\nLogin failed: ${typeof details === "string" ? details : errorMessage(error)}`);
         return 1;
     } finally {
         rl.close();

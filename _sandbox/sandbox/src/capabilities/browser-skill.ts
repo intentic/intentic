@@ -2,7 +2,7 @@
 // Chromium and Xvfb are the `browser` feature pack (image-packs/browser.Dockerfile), resolved via image/packs.ts.
 // One skill per kind, never per account: accounts are data, a roster block plus the live mcp__accounts__roster tool.
 
-import type { BrowserConfig, IdentityConfig } from "@intentic/sandbox-contract";
+import type { BrowserConfig, IdentityConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 
 // How many roster ids show before collapsing to a count; shared with account-skills.ts's tail.
 const ROSTER_IDS_IN_DESCRIPTION = 4;

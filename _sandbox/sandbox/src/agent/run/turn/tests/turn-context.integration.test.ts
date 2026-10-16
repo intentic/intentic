@@ -4,8 +4,9 @@ import { join } from "node:path";
 import { createResidentEngine, type QueryOutcome, type ResidentEngine } from "@intentic/iq-engine";
 import type { Logger } from "pino";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { retrievalEvidenceOf, retrieveTurnContext, TURN_CONTEXT_NOTE_HEADER, type TurnContextDeps } from "../turn-context.js";
-import { stripTurnPreamble, withTurnPreamble } from "../../../prompt/turn-preamble.js";
+import { retrievalEvidenceOf, retrieveTurnContext, type TurnContextDeps } from "../turn-context.js";
+import { withTurnPreamble } from "../../../prompt/turn-preamble.js";
+import { TURN_CONTEXT_NOTE_HEADER, stripTurnPreamble } from "../../../../sessions/vocabulary/prompt-envelope.js";
 
 // Pins pre-injection's refusals and its two guarantees: a bad retrieval never delays a turn past its deadline and never
 // fails one.

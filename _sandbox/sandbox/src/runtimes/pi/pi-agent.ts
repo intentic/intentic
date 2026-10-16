@@ -1,4 +1,7 @@
-import { type AcpAgentConfig, type AgentCommand, type AgentEvent, PI } from "@intentic/sandbox-contract";
+import type { AcpAgentConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { AgentCommand } from "@intentic/sandbox-contract/events/requests";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { PI } from "@intentic/sandbox-contract/models/agent-runtimes";
 import { whenAborted, withDeadline } from "@intentic/base/async";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { imageBlock } from "../../agent/prompt/attachment-images.js";

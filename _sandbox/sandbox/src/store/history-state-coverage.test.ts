@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
-import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract";
+import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract/state/history-state";
 import { stateDocuments } from "../bootstrap/state-registry.js";
 
 // Same guard as workspace-state-coverage but for /history: scans daemon source for every historyRoot-based path and

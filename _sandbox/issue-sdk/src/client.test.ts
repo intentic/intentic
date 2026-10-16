@@ -1,4 +1,4 @@
-import type { IssuePublicConfig } from "@intentic/sandbox-contract";
+import type { IssuePublicConfig } from "@intentic/sandbox-contract/schemas/issues";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { createClient, type IssueClient } from "./client.js";
 

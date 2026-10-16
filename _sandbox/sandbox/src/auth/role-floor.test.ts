@@ -1,4 +1,4 @@
-import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract";
+import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract/state/workspace-state";
 import { guestReach, memberRefusal, routeFloor } from "./role-floor.js";
 
 describe("routeFloor", () => {

@@ -1,4 +1,4 @@
-import type { WorkspaceTree } from "@intentic/sandbox-contract";
+import type { WorkspaceTree } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { rpcKey } from "../queryKeys";
 import { queryClient, UNPERSISTED } from "../queryPersistence";
 

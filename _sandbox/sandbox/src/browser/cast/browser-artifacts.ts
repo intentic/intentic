@@ -1,7 +1,7 @@
 import { basename, extname, join, relative, resolve, sep } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { pathExists } from "@intentic/base/fs";
-import type { ToolCallContent } from "@intentic/sandbox-contract";
+import type { ToolCallContent } from "@intentic/sandbox-contract/events/requests";
 import { stateRelPath } from "../../state-paths.js";
 import { insideRel } from "@intentic/base/contained";
 

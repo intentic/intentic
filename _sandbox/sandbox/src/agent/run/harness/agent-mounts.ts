@@ -1,7 +1,8 @@
-import type { Capability, Persona } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { pluginDirsOf } from "../../../capabilities/plugin-dirs.js";
 import type { Services } from "../../../composition.js";
-import { type ExtensionHost, extensionAgentDirsOf, extensionGranted } from "../../../extensions/installed-extensions.js";
+import { type ExtensionHost, extensionAgentDirsOf, extensionGranted } from "../../../capabilities/extension-inventory/installed-extensions.js";
 import { personaKitPlugin } from "../../../personas/persona-kit.js";
 
 // One Claude Code plugin dir a turn loads, named the way the Skills list names the skills inside it.

@@ -1,11 +1,11 @@
 import { shallowRef } from "vue";
 import { excerptOf, type Reading, type ReadAloudView, readAloud, readAloudNotice } from "./readAloud";
-import type { SpeechEnd, SpeechPlayer, SpeechPlayerState } from "./speechPlayer";
+import type { SpeechEnd, SpeechPlayer, SpeechPlayerState } from "../../../models/voice/speechPlayer";
 
 // What the person is told while a reply is read aloud: the stage in words while the press can only spin, Stop on the
 // card for a reply scrolled away, and the reason when it fails. A stop they asked for is not news.
 
-jest.mock(`../../sandbox/session/wsTicket`, () => ({ socketUrl: async () => undefined }));
+jest.mock(`../../../client/sandbox/streams/wsTicket`, () => ({ socketUrl: async () => undefined }));
 
 const read: Reading = { key: `read:m1`, excerpt: `Fixed the login form` };
 const view = (over: Partial<ReadAloudView>): ReadAloudView => ({ state: `preparing`, speaking: read.key, progress: undefined, notice: undefined, ...over });

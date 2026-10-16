@@ -1,9 +1,10 @@
 import "@intentic/testing/dom";
-import type { AgentAttention, ConversationQueue } from "@intentic/sandbox-contract";
-import { NO_ATTENTION } from "../../../../agents/fleet/agentStatus";
+import type { AgentAttention } from "@intentic/sandbox-contract/schemas/agents";
+import type { ConversationQueue } from "@intentic/sandbox-contract/schemas/agent";
+import { NO_ATTENTION } from "../../../../../models/agent-status/agentStatus-lanes";
 import { createApp, h, nextTick, ref, shallowRef } from "vue";
-import * as useAgentsOriginal from "../../../../agents/fleet/useAgents";
-import * as sessionsOriginal from "../../../run/useChat-sessions";
+import * as useAgentsOriginal from "../../../../../models/fleet/useAgents";
+import * as sessionsOriginal from "../../../../../models/conversations/run/useChat-sessions";
 
 // Pins what keeps a pane on the chat it shows: the typewriter runs in the focused pane alone, and a chat this pane is
 // not streaming hydrates on the roster's transitions, never on the turn it streamed itself.
@@ -27,7 +28,7 @@ const { roster, hydrateOnce, refreshAfterSleep, onScreen } = await (async () => 
 })();
 // Held before the mock replaces the module's binding, which would otherwise answer with the mock itself.
 const { useAgents } = useAgentsOriginal;
-jest.mock("../../../../agents/fleet/useAgents", () => ({
+jest.mock("../../../../../models/fleet/useAgents", () => ({
     ...useAgentsOriginal,
     // Every card the daemon sends carries its attention block; a row here names only the waits it is about.
     useAgents: () => ({
@@ -38,11 +39,11 @@ jest.mock("../../../../agents/fleet/useAgents", () => ({
         },
     }),
 }));
-jest.mock("../../../run/useChat-sessions", () => ({ ...sessionsOriginal, hydrateOnce, refreshAfterSleep }));
+jest.mock("../../../../../models/conversations/run/useChat-sessions", () => ({ ...sessionsOriginal, hydrateOnce, refreshAfterSleep }));
 jest.mock("../../../../../workbench/window/onScreen", () => ({ onScreen }));
 
 const { usePaneAttach } = await import("../paneAttach");
-const { Conversation } = await import("../../../session/conversation");
+const { Conversation } = await import("../../../../../models/conversations/session/conversation");
 type Chat = InstanceType<typeof Conversation>;
 
 let unmount: (() => void) | undefined;

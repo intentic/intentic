@@ -1,8 +1,9 @@
-import { type AgentHarness, type AgentProvider, loopLabel } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { loopLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { t } from "@intentic/ui/i18n";
-import { modelLabelFor } from "../accounts/providerCatalog";
-import { offeredLoops, selectedLoop } from "../models/offeredLoops";
-import { accessKnown, providerReadyOn } from "../session/access";
+import { modelLabelFor } from "../../../models/providers/providerCatalog";
+import { offeredLoops, selectedLoop } from "../../../models/providers/offeredLoops";
+import { accessKnown, providerReadyOn } from "../../../models/providers/access";
 
 // What a composer's model control reads as: one rule for the pill's own face and for the accessible name the pane
 // writes beside it, which must not drift.

@@ -1,4 +1,4 @@
-import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
+import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { messages } from "./i18n";

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import type { GitChange } from "@intentic/sandbox-contract";
+import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
 import type { Logger } from "pino";
 import type { IsolatedAgent, RepoRecord } from "../../conversations/registry/agents-store.js";
 import type { ReferenceView } from "./resolve-reference.js";

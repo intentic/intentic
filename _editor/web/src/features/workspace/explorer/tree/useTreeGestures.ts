@@ -1,8 +1,9 @@
-import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import type { Ref } from "vue";
 import { clickIntent } from "../../../../lib/multiSelect";
-import { opensAsFolder } from "../../files/archiveEntries";
-import type { OpenMode } from "../../tabs/workspaceTabs";
+import { opensAsFolder } from "../../../../models/workspace/files/archiveEntries";
+import type { OpenMode } from "../../../../models/workspace/tabs/workspaceTabs";
 import { consumeSuppressedClick } from "../transfer/useEntryDrag";
 import { type KeyIntent, keyIntent } from "./treeKeys";
 import { holdsRows, type MoreRow, type Row } from "./treeRows";

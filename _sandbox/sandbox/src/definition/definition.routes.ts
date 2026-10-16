@@ -1,4 +1,4 @@
-import { WorkspacePublishSchema } from "@intentic/sandbox-contract";
+import { WorkspacePublishSchema } from "@intentic/sandbox-contract/state/definition";
 import type { Context } from "hono";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
@@ -6,11 +6,12 @@ import type { AppEnv } from "../app-env.js";
 import { createDefinitions } from "./apply-definition.js";
 import { DefinitionFormatError } from "./definition.js";
 import { publishWorkspace, workspaceRemote, WorkspaceRemoteError } from "./workspace-repo.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // Outbound definition (sandbox.toml); definition.ts covers the bundle half. Owner-gated: derive and diff only read;
 // publish creates a private repo on a connected git host and pushes /work to it.
 
-export const createDefinitionRoutes = (services: Services) => {
+const createDefinitionRoutes = (services: Services) => {
     const definitions = createDefinitions(services);
     return {
         /** GET /definition */
@@ -66,3 +67,14 @@ export const createDefinitionRoutes = (services: Services) => {
         },
     };
 };
+
+// The definition, outbound: `sandbox.toml` derived and diffed, and the workspace repo it names.
+export const definitionRawRoutes = defineRawRoutes((services: Services) => {
+    const definition = createDefinitionRoutes(services);
+    return {
+        "GET /definition": definition.derive,
+        "POST /definition/diff": definition.diff,
+        "GET /definition/workspace": definition.workspace,
+        "POST /definition/workspace/publish": definition.publish,
+    };
+});

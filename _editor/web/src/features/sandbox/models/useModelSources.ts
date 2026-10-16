@@ -1,10 +1,12 @@
-import { isTrialProvider, KeyedProviderSchema, NATIVE_PROVIDERS, providerLabel, providerSpec } from "@intentic/sandbox-contract";
+import { isTrialProvider, providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
+import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
+import { NATIVE_PROVIDERS, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { computed, type ComputedRef } from "vue";
-import { translatorAccounts } from "../../chat/accounts/providerAccounts";
-import { endpointProviders, trialStatus } from "../../chat/accounts/providerCatalog";
-import { accountsOf, subscriptionOnly } from "../../chat/accounts/useChat-accounts";
-import { hasSignIn } from "../../chat/session/access";
-import { accountFacts, accountState, formatReset, routedAccountFacts } from "../../chat/session/usageStatus";
+import { translatorAccounts } from "../../../models/providers/providerAccounts";
+import { endpointProviders, trialStatus } from "../../../models/providers/providerCatalog";
+import { accountsOf, subscriptionOnly } from "../../../models/conversations/accounts/useChat-accounts";
+import { hasSignIn } from "../../../models/providers/access";
+import { accountFacts, accountState, formatReset, routedAccountFacts } from "../../../models/providers/usageStatus";
 import { type AccountReading, type ModelSource, type ModelSourceInput, modelSources } from "./modelSources";
 
 // The live inputs to modelSources.ts, read off the same stores every picker reads: a provider's own accounts and its

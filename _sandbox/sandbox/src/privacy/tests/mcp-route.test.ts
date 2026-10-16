@@ -1,9 +1,9 @@
-import type { PrivacyShieldPolicy } from "@intentic/sandbox-contract";
+import type { PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
 import { Hono } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import { createMcpRoute } from "../gateway/mcp-route.js";
 import { privacySliceFake } from "../privacy-slice.testing.js";
-import { pesel } from "../detect/tests/ids.testing.js";
+import { pesel } from "@intentic/privacy-detect/testing";
 import { tokenOf } from "../tokens.js";
 
 // The masking proxy a hooked runtime's (Cursor's) MCP calls go through, over the real shield and a stand-in server: the

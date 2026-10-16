@@ -1,4 +1,4 @@
-import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract";
+import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { fleetLimit } from "./fleet-limit.js";
 
 /* ONE RULE FOR "IS THIS FLEET SPENT FOR THIS MODEL". */

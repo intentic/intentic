@@ -2,12 +2,12 @@
 import { ui } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { PROVIDER_VENDOR } from "@intentic/sandbox-contract";
-import { accessKnown, trialExhausted } from "../session/access";
-import { providerDisplayLabel } from "./providerCatalog";
-import { turnDefaults } from "../run/turnDefaults";
-import { useChat } from "../run/useChat";
-import { usePaneView } from "../panel/useChat-view";
+import { PROVIDER_VENDOR } from "@intentic/sandbox-contract/models/agent-catalog";
+import { accessKnown, trialExhausted } from "../../../models/providers/access";
+import { providerDisplayLabel } from "../../../models/providers/providerCatalog";
+import { turnDefaults } from "../../../models/conversations/run/turnDefaults";
+import { useChat } from "../../../models/conversations/run/useChat";
+import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
 import { useRole } from "../../../client/sandbox/useRole";
 import { MODELS_PATH, modelsHref } from "../../../lib/routes/modelsPath";

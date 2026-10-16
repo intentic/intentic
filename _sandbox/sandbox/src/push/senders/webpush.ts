@@ -1,4 +1,4 @@
-import type { PushNotification, WebPushChannel } from "@intentic/sandbox-contract";
+import type { PushNotification, WebPushChannel } from "@intentic/sandbox-contract/schemas/push";
 import webpush, { WebPushError } from "web-push";
 import { DEAD, type ChannelSend } from "./send.js";
 

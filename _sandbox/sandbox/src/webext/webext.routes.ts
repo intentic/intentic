@@ -1,10 +1,16 @@
-import { type WebExtSecretAnswer, WebExtSecretRequestSchema, WebExtSessionExportSchema, WebExtSessionImportSchema } from "@intentic/sandbox-contract";
+import {
+    type WebExtSecretAnswer,
+    WebExtSecretRequestSchema,
+    WebExtSessionExportSchema,
+    WebExtSessionImportSchema,
+} from "@intentic/sandbox-contract/schemas/webext";
 import type { Context } from "hono";
 import type { Services } from "../composition.js";
 import { bearerPeer } from "../peers/peer-store.js";
 import { ticketTag } from "./secret-tickets.js";
 import { exportBrowserSession } from "./session-export.js";
 import { importBrowserSession } from "./session-import.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // The credential doors of a connected browser (see also webext-peer.ts): `/system/webext/session` is where a
 // handed-over site session arrives; `/system/webext/lend` is the same door outbound, collecting a sandbox account's
@@ -15,7 +21,7 @@ import { importBrowserSession } from "./session-import.js";
 // here; the payload is never logged and the answer never quotes it.
 export type WebExtRoutesDeps = Pick<Services, "webexts" | "workspace" | "capabilities" | "logger">;
 
-export const createWebExtSessionRoute =
+const createWebExtSessionRoute =
     (services: WebExtRoutesDeps) =>
     async (c: Context): Promise<Response> => {
         const id = await bearerPeer(services.webexts, c);
@@ -36,7 +42,7 @@ export const createWebExtSessionRoute =
 
 // Answers with the cookies on this response rather than over the socket, since an MCP result is something the model
 // reads; the log line names the account and site, never the jar.
-export const createWebExtLendRoute =
+const createWebExtLendRoute =
     (services: WebExtRoutesDeps) =>
     async (c: Context): Promise<Response> => {
         const id = await bearerPeer(services.webexts, c);
@@ -89,3 +95,11 @@ export const createWebExtSecretRoute =
             ? c.json({ ok: true, value: redeemed.value } satisfies WebExtSecretAnswer, 200)
             : c.json({ ok: false, message: redeemed.refusal } satisfies WebExtSecretAnswer, redeemed.status);
     };
+
+// A browser's credential doors: `session` moves a site sign-in in, `lend` moves one back out, `secret` hands it one stored
+// secret to type for a ticket the daemon gave it (secret-tickets.ts).
+export const webextRawRoutes = defineRawRoutes((services: WebExtRoutesDeps & Pick<Services, "secretTickets">) => ({
+    "POST /system/webext/session": createWebExtSessionRoute(services),
+    "POST /system/webext/lend": createWebExtLendRoute(services),
+    "POST /system/webext/secret": createWebExtSecretRoute(services),
+}));

@@ -2,7 +2,7 @@
 import { CopyButton } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { type FailureFactKey, failureDetails } from "./providerFailure";
+import { type FailureFactKey, failureDetails } from "../../../../models/conversations/transcript/providerFailure";
 
 // Everything a failure row folded behind its one line (providerFailure.ts), opened under it: the provider's prose with
 // its paragraphs and links kept, the ids a support request asks for, each with its own copy, and the whole message to

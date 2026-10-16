@@ -4,7 +4,8 @@ import { extensionDir, extensionRead } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { sha256Text } from "../workspace/files/workspace-files.js";
-import { installedExtensions } from "./installed-extensions.js";
+import { installedExtensions } from "../capabilities/extension-inventory/installed-extensions.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 export type ExtensionBundleRouteDeps = Pick<Services, "workspace" | "files" | "capabilities" | "config" | "git">;
 
@@ -14,7 +15,7 @@ export type ExtensionBundleRouteDeps = Pick<Services, "workspace" | "files" | "c
 // immutable per commit), and the content hash for a workspace one, whose dir is live-edited and has no commit
 // to stand for it. An install running from its source checkout (extension-dev.ts) is hashed too: its bundle moves
 // with every rebuild while the pinned sha does not, and a 304 would keep serving the browser the old build.
-export const createExtensionBundleRoute =
+const createExtensionBundleRoute =
     (services: ExtensionBundleRouteDeps) =>
     async (c: Context<AppEnv, "/extensions/:id/bundle">): Promise<Response> => {
         const id = c.req.param("id");
@@ -36,3 +37,8 @@ export const createExtensionBundleRoute =
         }
         return c.body(source, 200, { "content-type": "text/javascript; charset=utf-8", etag });
     };
+
+// An extension's prebuilt ESM bundle.
+export const extensionBundleRawRoutes = defineRawRoutes((services: ExtensionBundleRouteDeps) => ({
+    "GET /extensions/{id}/bundle": createExtensionBundleRoute(services),
+}));

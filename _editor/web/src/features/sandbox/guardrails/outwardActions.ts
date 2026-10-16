@@ -1,11 +1,6 @@
-import {
-    type AdmissionPolicy,
-    type AdmissionRule,
-    effectiveActionRule,
-    OUTWARD_ACTION_KEYS,
-    outwardActionService,
-    type SandboxSettings,
-} from "@intentic/sandbox-contract";
+import type { AdmissionPolicy, AdmissionRule } from "@intentic/sandbox-contract/schemas/agent";
+import { effectiveActionRule, OUTWARD_ACTION_KEYS, outwardActionService } from "@intentic/sandbox-contract/schemas/data-protection";
+import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import type { PickerOption } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { SPAWN_KEY } from "./spawnPosture";

@@ -9,7 +9,7 @@ import { IconStub } from "@intentic/ui/testing";
 
 // Settings already loaded and sandbox reachable, so the blocked notice never renders.
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable: ref(true) }) }));
-jest.mock(`./useSandboxSettings`, () => ({
+jest.mock(`../../../models/sandbox/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings: ref({}), error: ref(undefined), dropped: ref(undefined), patch: async () => undefined }),
 }));
 

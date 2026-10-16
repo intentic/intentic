@@ -1,5 +1,5 @@
 import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic/capability-catalog";
-import type { ServiceKind } from "@intentic/sandbox-contract";
+import type { ServiceKind } from "@intentic/sandbox-contract/schemas/inventory";
 import { t } from "@intentic/ui/i18n";
 
 // INVENTORY_SERVICES says what each self-hosted service is in English; its name is the vendor's and stays. These are

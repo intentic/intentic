@@ -3,12 +3,13 @@ import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { ExportBusyError, isReadyExport, listExports, openExport, removeExport, startExport } from "./exports.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // Environment bundle: this sandbox's two volumes packed for a move, and the restore that unpacks one. Raw Hono handles
 // the arbitrary-size streams on both ends; owner-only, since export reads every credential and restore overwrites the
 // workspace. An export is an artifact, not a response: it lands in a directory and survives the tab that asked for it.
 
-export const createBundleRoutes = (services: Services) => ({
+const createBundleRoutes = (services: Services) => ({
     /** GET /bundles */
     list: async (c: Context<AppEnv>): Promise<Response> => {
         const denied = await ownerDenied(services, c);
@@ -76,4 +77,16 @@ export const createBundleRoutes = (services: Services) => ({
             "Cache-Control": "no-store",
         });
     },
+});
+
+// The environment bundle: owner-only exports, plus the ticketed download the browser navigates to.
+export const bundleRawRoutes = defineRawRoutes((services: Services) => {
+    const bundles = createBundleRoutes(services);
+    return {
+        "GET /bundles": bundles.list,
+        "POST /bundles": bundles.start,
+        "DELETE /bundles": bundles.remove,
+        "POST /bundles/ticket": bundles.ticket,
+        "GET /bundles/download": bundles.download,
+    };
 });

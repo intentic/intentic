@@ -1,14 +1,11 @@
 import type { HookTimer } from "../run/hook-timing.js";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
-import type {
-    AdmissionRule,
-    AgentCapabilities,
-    AgentEvent,
-    CommandJudgeMode,
-    PermissionMode,
-    SystemPromptMode,
-    TurnNote,
-} from "@intentic/sandbox-contract";
+import type { AdmissionRule, PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { CommandJudgeMode } from "@intentic/sandbox-contract/policy/safety-policy";
+import type { SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { TurnPlacement } from "../../conversations/worktrees/isolation.js";
 import type { AccountsServerFactory } from "../../browser/tools/accounts-tools.js";
 import type { ClassifiedInstall } from "../../environment/runtime-installs.js";

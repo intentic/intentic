@@ -4,7 +4,7 @@ import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter, type Router, RouterView } from "vue-router";
 import type { CloseQuestion } from "../features/workspace/tabs/useCloseGuard";
-import { useEditBuffers } from "../features/workspace/files/useEditBuffers";
+import { useEditBuffers } from "../models/workspace/files/useEditBuffers";
 
 // The window's close, held back by the app for unsaved edits, is answered by the shell whichever screen it is on: Files
 // coming and going takes nothing with it. Until 2026-10-12 only Files listened, and a folder window left on This

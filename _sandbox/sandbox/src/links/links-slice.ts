@@ -1,11 +1,12 @@
 import { join } from "node:path";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { AgentTool } from "../agent/tools/agent-tools.js";
 import type { TurnLease } from "../agent/tools/turn-mounts.js";
 import type { Logger } from "pino";
-import type { Services } from "../composition.js";
+import type { CompositionCore, Services } from "../composition.js";
 import { turnStandingOf } from "../conversations/actor/turn-standing.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
+import { defineSlice } from "../seams/slice.js";
 import { fileInboundLinks, type InboundLinks, inboundLinksDocument } from "./inbound-links.js";
 import { createLinkedChildren, type LinkedChildren, linkedChildrenDocument } from "./linked-children.js";
 import { linkMountsOf } from "./link-mounts.js";
@@ -21,7 +22,7 @@ export interface LinksSlice {
     readonly linkMounts: (granted: readonly Capability[], lease: Pick<TurnLease, "open">, conversationId: string | undefined) => AgentTool[];
 }
 
-export const createLinksSlice = ({
+const createLinksSlice = ({
     historyRoot,
     logger,
     whole,
@@ -56,3 +57,8 @@ export const createLinksSlice = ({
         linkMountsOf({ conversations: { holdings: (holding) => whole().conversations.holdings(holding) }, about: linkedChildren.about }, granted, lease, conversationId);
     return { inboundLinks, linkedChildren, linkMounts };
 };
+
+export const linksSlice = defineSlice<LinksSlice>({
+    build: ({ config, logger, whole }: Pick<CompositionCore, "config" | "logger" | "whole">) =>
+        createLinksSlice({ historyRoot: config.historyRoot, logger, whole }),
+});

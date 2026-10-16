@@ -1,13 +1,7 @@
-import {
-    type ConversationPrompt,
-    REPO_CHECKS_FILE,
-    type RepoChecksList,
-    RUN_TARGETS_FILE,
-    RunTargetsFileSchema,
-    type RunTargetsList,
-    type SandboxHandlerOutput,
-    type SavingsReport,
-} from "@intentic/sandbox-contract";
+import type { ConversationPrompt } from "@intentic/sandbox-contract/schemas/system-prompt";
+import { REPO_CHECKS_FILE, type RepoChecksList, type SavingsReport } from "@intentic/sandbox-contract/schemas/settings";
+import { RUN_TARGETS_FILE, RunTargetsFileSchema, type RunTargetsList } from "@intentic/sandbox-contract/schemas/run-targets";
+import type { SandboxHandlerOutput } from "@intentic/sandbox-contract/protocol/procedure-types";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { WEB_RUN_JSON } from "../fixture/workspace";
 import { STARTED_AT } from "./roster";

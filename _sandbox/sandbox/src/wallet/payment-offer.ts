@@ -1,5 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
-import { hostCovers, normalizeHost, normalizeHostPattern, type PaymentOffer, type WalletConfig } from "@intentic/sandbox-contract";
+import { hostCovers, normalizeHost, normalizeHostPattern } from "@intentic/sandbox-contract/policy/secret-hosts";
+import type { PaymentOffer } from "@intentic/sandbox-contract/events/requests";
+import type { WalletConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { atomicToUsd, usdcNetworkOf, usdToAtomic } from "@intentic/sandbox-contract/x402";
 import { type CardDeps, cardRun, type LiveCard, raiseRequest, type SettledCard, whyOf } from "../guard/card-offers.js";
 import { type HeldAnswer, type HoldDeps, createHeldAsks } from "../guard/held-asks.js";

@@ -67,7 +67,7 @@ export const startAppRest = (deps: AppRestDeps, options: { readonly idleMs: numb
             if (!deps.running(key)) {
                 continue;
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of apps, each a read of the socket tables
+            // a handful of apps, each a read of the socket tables
             const inUse = await deps.inUse?.(key).catch((error: unknown) => {
                 deps.logger.warn({ err: error, app: key }, "app rest: could not tell whether a workspace app is in use");
                 return false;
@@ -84,7 +84,7 @@ export const startAppRest = (deps: AppRestDeps, options: { readonly idleMs: numb
             }
             rested.add(key);
             deps.logger.info({ app: key, quietMs: now - lastSeen }, "app rest: nobody around, resting a workspace app until somebody is");
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of apps, stopped one after another
+            // a handful of apps, stopped one after another
             await Promise.resolve(deps.stop(key)).catch((error: unknown) => deps.logger.warn({ err: error, app: key }, "app rest: could not stop a workspace app"));
         }
     };

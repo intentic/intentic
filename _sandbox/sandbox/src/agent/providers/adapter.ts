@@ -1,4 +1,8 @@
-import type { AgentCapabilities, AgentEvent, AgentProvider, Capability, RoutedAgentTurn, SandboxSettings } from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentProvider, RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import type { TurnPersona } from "../../personas/personas.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
 import type { TurnTrim } from "../prompt/window/context-trim.js";

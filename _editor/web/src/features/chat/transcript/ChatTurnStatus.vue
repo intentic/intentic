@@ -3,10 +3,10 @@ import { formatElapsed, Icon } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { formatWhen } from "@intentic/ui/format";
-import { agentStatusMeta, CLOCK_FROM_MS, currentAction } from "../../agents/fleet/agentStatus";
-import { sandboxNow } from "../../agents/fleet/sandboxClock";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { usePaneView } from "../panel/useChat-view";
+import { agentStatusMeta, CLOCK_FROM_MS, currentAction } from "../../../models/agent-status/agentStatus-meta";
+import { sandboxNow } from "../../../models/agent-status/sandboxClock";
+import { useAgents } from "../../../models/fleet/useAgents";
+import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import ThinkingRosette from "./ThinkingRosette.vue";
 import { useT } from "@intentic/ui/i18n";
 

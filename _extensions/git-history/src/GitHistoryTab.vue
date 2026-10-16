@@ -18,7 +18,8 @@ import {
     vAction,
     vSkeletonSource,
 } from "@intentic/extension-ui";
-import type { GitActionResult, GitChange, GitCommit, GitDiffSide } from "@intentic/sandbox-contract";
+import type { GitActionResult, GitCommit } from "@intentic/sandbox-contract/schemas/git/git-history";
+import type { GitChange, GitDiffSide } from "@intentic/sandbox-contract/schemas/git/git";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import BranchSwitcher from "./BranchSwitcher.vue";
 import { host } from "./host.js";

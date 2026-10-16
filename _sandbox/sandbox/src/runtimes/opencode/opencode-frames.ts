@@ -1,7 +1,7 @@
 import type { OpenCodeEvent } from "@opencode/client";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { displayNameOf, toolTarget } from "@intentic/agent-context/tool-calls";
-import { editDiffContent, toolLocations } from "../../agent/tools/tool-calls.js";
+import { editDiffContent, toolLocations } from "../../sessions/vocabulary/tool-calls.js";
 import { toolCallOpened, type TurnTokens } from "../decorators/vendor-events.js";
 
 // OpenCode 2's events as frames, the parts a turn's own session and its subagents' sessions share: tool cards, and what

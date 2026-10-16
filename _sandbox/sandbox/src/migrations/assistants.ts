@@ -1,6 +1,8 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { ArrivalHost, ArrivalReport, AssistantSource, Capability, ModelPin } from "@intentic/sandbox-contract";
+import type { ArrivalHost, ArrivalReport, AssistantSource } from "@intentic/sandbox-contract/state/arrival";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { spawnableProviders } from "../agent/subagents/spawn-catalog.js";
 import { ENV_FILE } from "@intentic/scaffold";
 import { capabilityCtx } from "../capabilities/capability.js";

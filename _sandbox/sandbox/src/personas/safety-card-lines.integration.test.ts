@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
+import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
 import pino from "pino";
 import { clearNewestRun } from "../store/newest-run.js";
 import { convergeState, resetStateStatus, type StateRoots } from "../store/evolution/state-convergence.js";

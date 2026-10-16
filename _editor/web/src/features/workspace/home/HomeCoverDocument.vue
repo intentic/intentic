@@ -1,17 +1,17 @@
 <!-- One folder's cover on the home: the chosen file read and drawn in place, or, when the folder has none, where one is. -->
 <script setup lang="ts">
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { Code, formatBytes, Markdown, SkeletonSnapshot, ui, useLatest, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
-import { resolveFile } from "../explorer/fileType";
-import { readFileWindow } from "../files/fileWindow";
-import { openFileRefFromEvent } from "../files/refs/openFileRef";
+import { resolveFile } from "../../../models/workspace/tree/fileType";
+import { readFileWindow } from "../../../models/workspace/files/fileWindow";
+import { openFileRefFromEvent } from "../../../models/workspace/files/openFileRef";
 import { workspaceAgent, workspaceDir } from "../../../app/workspaceScope";
-import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
-import { quickLookPlan } from "./quickLookContent";
-import { documentPicture, picture } from "./thumbnails";
+import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
+import { quickLookPlan } from "../../../models/workspace/home/quickLookContent";
+import { documentPicture, picture } from "../../../models/workspace/home/thumbnails";
 
 // Reads the file it is handed, never the listing: HomeCover decides which file answers for the folder, and this draws it
 // the way its tab would, read-only. Markdown is prose, other text is highlighted, a picture is drawn; anything else

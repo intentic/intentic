@@ -1,8 +1,8 @@
-import type { EditorContext } from "@intentic/sandbox-contract";
+import type { EditorContext } from "@intentic/sandbox-contract/schemas/agent";
 import { computed, type ComputedRef, type Ref, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { useEditorSelection } from "../../workspace/files/useEditorSelection";
-import { useWorkspaceTabs } from "../../workspace/tabs/useWorkspaceTabs";
+import { useEditorSelection } from "../../../models/workspace/files/useEditorSelection";
+import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 
 // The file the user is looking at, offered to the next message as an opt-in chip: the live Monaco selection,
 // else the active file tab. Gated on the Workspace being the visible area, since both sources it reads

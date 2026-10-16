@@ -1,16 +1,10 @@
 import { noteAudit } from "../audit/audit-http.js";
-import {
-    type Fence,
-    type SystemEvent,
-    type TerminalsList,
-    type UsageAccount,
-    fenceReaches,
-    RAW_ROUTE_NAMES,
-    rawRouteFingerprints,
-    SANDBOX_ROUTE_NAMES,
-    sandboxRouteFingerprints,
-    systemContract,
-} from "@intentic/sandbox-contract";
+import { type Fence, fenceReaches } from "@intentic/sandbox-contract/policy/fence-paths";
+import type { SystemEvent } from "@intentic/sandbox-contract/events/system-events";
+import type { TerminalsList } from "@intentic/sandbox-contract/schemas/terminal";
+import type { UsageAccount } from "@intentic/sandbox-contract/schemas/providers/usage";
+import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
+import { systemContract } from "@intentic/sandbox-contract/contracts/system.contract";
 import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, PANEL_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { errorMessage } from "@intentic/base/errors";
 import { implement, ORPCError } from "@orpc/server";
@@ -329,7 +323,7 @@ export const createSystemRoutes = (services: Services) => {
             try {
                 return await updater.configure(input);
             } catch (error) {
-                throw new ORPCError("CONFLICT", { message: error instanceof Error ? error.message : String(error) });
+                throw new ORPCError("CONFLICT", { message: errorMessage(error) });
             }
         }),
         // What the daemon couldn't read in `.intentic/` manifests. The three hand-edited ones are re-read here before

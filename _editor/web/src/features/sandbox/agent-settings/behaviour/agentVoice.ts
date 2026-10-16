@@ -9,7 +9,7 @@ import {
     type VoicesView,
     voiceEngineOf,
     voiceNameOf,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/voice";
 import { formatCount, formatFixed } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 

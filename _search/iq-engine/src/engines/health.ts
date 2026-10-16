@@ -1,4 +1,4 @@
-import type { WorkspaceSearchFreshness } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchFreshness } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import type { SqliteDb } from "@intentic/base/sqlite";
 import type { FileEntry, Scope } from "../types.js";
 import { filterScope } from "../workspace/scan.js";

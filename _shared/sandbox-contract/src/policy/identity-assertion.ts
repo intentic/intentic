@@ -1,4 +1,5 @@
 import { createPrivateKey, createPublicKey, randomBytes, sign as edSign, verify as edVerify } from "node:crypto";
+import { parseJsonWith } from "@intentic/base/json";
 import { z } from "zod";
 import { SANDBOX_ID } from "../ids/tunnel-ids.js";
 
@@ -92,14 +93,7 @@ const AssertionPayloadSchema = z.object({
     jti: z.string().min(16),
 });
 
-const parsePayload = (payload: Buffer): z.infer<typeof AssertionPayloadSchema> | undefined => {
-    try {
-        return AssertionPayloadSchema.safeParse(JSON.parse(payload.toString("utf8"))).data;
-    } catch {
-        // allow(silent-catch): a payload that is not JSON is an invalid assertion, which undefined is how this says.
-        return undefined;
-    }
-};
+const parsePayload = (payload: Buffer): z.infer<typeof AssertionPayloadSchema> | undefined => parseJsonWith(payload.toString("utf8"), AssertionPayloadSchema);
 
 // Verifies an assertion against the platform's public key at nowMs; undefined for any way of being invalid (wrong
 // prefix, bad signature, malformed claim, expired, issued in the future, living longer than the daemon allows). The

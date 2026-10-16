@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { assertPath, assertScope, rootsOf, ScopeError, withinRoots } from "./policy.js";
 
 const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({

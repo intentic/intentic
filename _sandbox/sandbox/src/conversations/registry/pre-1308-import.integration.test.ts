@@ -2,12 +2,13 @@ import { lstat, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "n
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import type { SystemPromptDisclosure, TranscriptRow } from "@intentic/sandbox-contract";
+import type { SystemPromptDisclosure } from "@intentic/sandbox-contract/schemas/system-prompt";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import pino from "pino";
-import { sqliteTurnCheckpoints, type TurnCheckpoint } from "../../agent/checkpoints/turn-checkpoints.js";
-import { filePromptRecord } from "../../agent/prompt/prompt-record.js";
-import { sqliteTurnJournal } from "../../agent/run/turn/turn-journal.js";
-import { sqliteWatchJournal } from "../../agent/verification/watch-journal.js";
+import { sqliteTurnCheckpoints, type TurnCheckpoint } from "../../store/journals/turn-checkpoints.js";
+import { filePromptRecord } from "../../store/journals/prompt-record.js";
+import { sqliteTurnJournal } from "../../store/journals/turn-journal.js";
+import { sqliteWatchJournal } from "../../store/journals/watch-journal.js";
 import { migrateOnThreads } from "../../sessions/record/record-migration.js";
 import { sessionsDir } from "../../sessions/session-store.js";
 import { fileTranscriptRecord, legacyTranscriptFile, transcriptFile } from "../../sessions/transcript-record.js";
@@ -16,7 +17,7 @@ import { conversationsDbPath, openConversationsDb } from "../../store/conversati
 import { clearNewestRun } from "../../store/newest-run.js";
 import { convergeState, resetStateStatus, type StateRoots } from "../../store/evolution/state-convergence.js";
 import type { StepContext, StructuralStep } from "../../store/evolution/state-steps.js";
-import { conversationEntry } from "../../testing.js";
+import { conversationEntry } from "./agents-store.testing.js";
 import { type Composition, type PersistedAgent, type RepoRecord, sqliteAgentsStore } from "./agents-store.js";
 import { importRecordPath, pre1308ImportStep } from "./pre-1308-import.js";
 

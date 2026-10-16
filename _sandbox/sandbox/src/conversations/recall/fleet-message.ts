@@ -1,6 +1,9 @@
-import { type AgentCapabilities, type AgentHarness, type AgentProvider, capabilitiesOf, peerMessagePrompt } from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { peerMessagePrompt } from "@intentic/sandbox-contract/events/agent-words";
 import { parentOfActor } from "../../auth/principal.js";
-import { sessionFor } from "../../agent/providers/accounts/routing.js";
+import { sessionFor } from "../registry/routing.js";
 import type { Services } from "../../composition.js";
 import { conversationTaintSource, PEER_SOURCE, taintWords } from "../../guard/turn-taint.js";
 import { opt } from "../../opt.js";

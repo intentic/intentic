@@ -1,5 +1,6 @@
 import type { ContractRouterClient } from "@orpc/contract";
-import type { MemberRole, sandboxContract } from "@intentic/sandbox-contract";
+import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { sandboxContract } from "@intentic/sandbox-contract";
 
 import { createApp } from "../app.js";
 import { clientFor, errorCode, proven, rejectForbidden } from "../harness/route-client.testing.js";

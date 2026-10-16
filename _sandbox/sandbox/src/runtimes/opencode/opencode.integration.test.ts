@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { CredentialEntry, OpenCodeClient, OpenCodeEvent } from "@opencode/client";
-import { humanizeModelId } from "@intentic/sandbox-contract";
+import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
 import { unstubbed } from "@intentic/testing";
 import { createOpenCodeService, type OpenCodeService } from "./opencode.js";
 import { createXaiCatalog, openCodeCredentials } from "./opencode-credentials.js";

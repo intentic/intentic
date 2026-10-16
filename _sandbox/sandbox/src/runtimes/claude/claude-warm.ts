@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { ProviderWarm, WarmReplay, WarmTurn } from "../../agent/providers/provider-module.js";
 import type { HarnessCredential, TurnHooks, TurnSpec } from "../../agent/providers/agent-request.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";

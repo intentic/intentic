@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { promisify } from "node:util";
 import { packageRoot } from "@intentic/constants/node";
-import { StatePlanSchema } from "@intentic/sandbox-contract";
+import { StatePlanSchema } from "@intentic/sandbox-contract/schemas/state-plan";
 import { membersDocument } from "./auth/auth.js";
 import { passkeysDocument } from "./auth/passkeys/passkey-store.js";
 import { heldWakesDocument } from "./automations/held-wakes-store.js";

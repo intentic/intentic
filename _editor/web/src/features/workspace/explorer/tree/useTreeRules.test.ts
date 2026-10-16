@@ -1,9 +1,9 @@
 import "@intentic/testing/dom";
 import { STATE_DIR } from "@intentic/constants";
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { dir, file, treeSurface } from "../../../../testing/treeSurface";
-import { markFailed, noteArriving, noteLeaving } from "../../files/provisionalEntries";
+import { markFailed, noteArriving, noteLeaving } from "../../../../models/workspace/files/provisionalEntries";
 import type { Row } from "./treeRows";
 
 // Pins what a file surface lets a verb touch: never a locked, leaving or unlisted path, nor an archive's contents.

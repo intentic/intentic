@@ -1,7 +1,7 @@
 import type { ConversationActors } from "../conversations/actor/conversation-actors.js";
 import { liveTurnConversations } from "../conversations/actor/conversation-holdings.js";
 import type { InvariantCheck } from "../invariants/invariants.js";
-import type { TurnJournal } from "./run/turn/turn-journal.js";
+import type { TurnJournal } from "../store/journals/turn-journal.js";
 
 // Ensures every live turn is journaled: intentic's own flows (updates, approvals, dev swaps) recreate the container,
 // and a turn missing from the journal simply ends, work lost. Journal writes are deliberately best-effort; this checks

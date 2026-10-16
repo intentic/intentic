@@ -1,6 +1,6 @@
 import { parentPort, workerData } from "node:worker_threads";
 import { errorMessage } from "@intentic/base/errors";
-import type { WorkspaceTreeDelta } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeDelta } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import type { Logger } from "pino";
 import { post, serveCalls } from "@intentic/base/worker-calls";
 import { createResidentTree } from "../files/resident-tree.js";

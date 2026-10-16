@@ -1,4 +1,6 @@
-import { type AgentRunPick, ciFixConversationId, type PipelineRun } from "@intentic/sandbox-contract";
+import type { AgentRunPick } from "@intentic/sandbox-contract/schemas/agent";
+import { ciFixConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { errorMessage } from "@intentic/base/errors";
 import { isInfraStep } from "@intentic/constants/ci-infra-steps";
 import type { Logger } from "pino";

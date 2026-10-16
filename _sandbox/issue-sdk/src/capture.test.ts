@@ -1,4 +1,4 @@
-import type { IssueReport } from "@intentic/sandbox-contract";
+import type { IssueReport } from "@intentic/sandbox-contract/schemas/issues";
 import { type Capture, reportFrom, startCapture } from "./capture.js";
 
 let live: Capture | undefined;

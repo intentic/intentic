@@ -1,12 +1,13 @@
-import { type DeviceCommandResult, readDevRebuildLog } from "@intentic/sandbox-contract";
+import { parseJsonWith } from "@intentic/base/json";
+import { type DeviceCommandResult, readDevRebuildLog } from "@intentic/sandbox-contract/schemas/devices";
 import { computed, type ComputedRef, reactive } from "vue";
 import { z } from "zod";
 import { type DevRebuildLayers, type DevRebuildStage, rebuildFraction, readRebuildProgress, stageStart } from "./devRebuildStages";
-import { runDeviceCommand } from "../../devices/useDevices";
+import { runDeviceCommand } from "../../../../models/sandbox/devices/useDevices";
 import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
-import { expectRestart, RESTART_PATIENCE_MS, type RestartQuiet } from "../../live/sandboxRestart";
-import { removeStoredValue, storedValue, storeValue } from "../../../../lib/browserStorage";
+import { expectRestart, RESTART_PATIENCE_MS, type RestartQuiet } from "../../../../models/sandbox/live/sandboxRestart";
+import { removeStoredValue, storedValue, storeValue } from "../../../../app/storage/browserStorage";
 import { beginHubWork, hubWorkKey } from "../../../../workbench/hub/hubWork";
 import { t } from "@intentic/ui/i18n";
 import { useNow } from "@intentic/ui/async";
@@ -154,14 +155,8 @@ const restartOf = (slug: string, startedAt: number): RestartRecord | undefined =
     if (text === undefined) {
         return undefined;
     }
-    let value: unknown;
-    try {
-        value = JSON.parse(text);
-    } catch {
-        // allow(silent-catch): a half-written or hand-edited record is no record at all; the reload dates contact afresh.
-        return undefined;
-    }
-    const record = RestartRecordSchema.safeParse(value).data;
+    // A half-written or hand-edited record is no record at all; the reload dates contact afresh.
+    const record = parseJsonWith(text, RestartRecordSchema);
     if (record === undefined || record.heardAt < startedAt || record.stageAt.swap < startedAt) {
         return undefined;
     }

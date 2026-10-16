@@ -14,7 +14,7 @@ flowchart LR
 
 ## Why a need is not a parked card
 
-A parked card (plan, question, permission, payment, a per-use credential) holds a turn at one moment: when the turn ends, the card ends. Connecting GitHub or pasting an API key takes minutes, and the person often answers after the agent has finished everything else. So a need is stored on its own ([`needs-store.ts`](../../_sandbox/sandbox/src/needs/needs-store.ts)), keeps its card answerable after the turn ends and across a restart, and wakes the conversation when it is met ([`needs.ts`](../../_sandbox/sandbox/src/needs/needs.ts)), through the same door a condition watch uses ([`wake-delivery.ts`](../../_sandbox/sandbox/src/agent/run/turn/wake-delivery.ts)).
+A parked card (plan, question, permission, payment, a per-use credential) holds a turn at one moment: when the turn ends, the card ends. Connecting GitHub or pasting an API key takes minutes, and the person often answers after the agent has finished everything else. So a need is stored on its own ([`needs-store.ts`](../../_sandbox/sandbox/src/needs/needs-store.ts)), keeps its card answerable after the turn ends and across a restart, and wakes the conversation when it is met ([`needs.ts`](../../_sandbox/sandbox/src/needs/needs.ts)), through the same door a condition watch uses ([`wake-delivery.ts`](../../_sandbox/sandbox/src/seams/wake-delivery.ts)).
 
 ## The agent's side
 

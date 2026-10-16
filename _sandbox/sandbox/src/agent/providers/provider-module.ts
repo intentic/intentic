@@ -1,16 +1,10 @@
-import type {
-    AgentCapabilities,
-    AgentEvent,
-    EngineId,
-    LoginStart,
-    LoginStatus,
-    Model,
-    NativeProvider,
-    OauthAccount,
-    SecretInventoryEntry,
-    TranslatorAccounts,
-    TranslatorProvider,
-} from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { EngineId } from "@intentic/sandbox-contract/schemas/engines";
+import type { LoginStart, LoginStatus, Model, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import type { NativeProvider, TranslatorProvider } from "@intentic/sandbox-contract/models/provider-specs";
+import type { SecretInventoryEntry } from "@intentic/sandbox-contract/schemas/secrets";
+import type { TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { Logger } from "pino";
 import { engineReady } from "../../engines/engine-resolve.js";
 import type { Config } from "../../env.config.js";

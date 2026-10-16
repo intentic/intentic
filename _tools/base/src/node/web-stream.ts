@@ -13,7 +13,7 @@ export async function* chunksOf<T>(stream: ReadableStream<T>): AsyncGenerator<T>
     const reader = stream.getReader();
     try {
         for (;;) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one stream, read in order
+            // one stream, read in order
             const { done, value } = await reader.read();
             if (done) {
                 return;

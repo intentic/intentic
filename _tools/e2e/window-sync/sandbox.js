@@ -1,3 +1,3 @@
-import { activeSandboxId } from "../../../_editor/web/src/lib/activeSandbox.ts";
+import { activeSandboxId } from "../../../_editor/web/src/app/storage/activeSandbox.ts";
 
 export const useSandbox = () => ({ activeSandboxId });

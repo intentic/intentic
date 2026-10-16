@@ -6,7 +6,7 @@ import { errnoCode, isMissing, undefinedIfMissing } from "@intentic/base/errors"
 import { writeFileAtomic } from "@intentic/base/fs";
 import { decodeUtf16Window, UTF16_PROBE, utf16ByBom } from "@intentic/base/utf16-text";
 import { isUtf8, trimUtf8Window } from "@intentic/base/utf8-text";
-import type { WorkspaceFilePresentSchema } from "@intentic/sandbox-contract";
+import type { WorkspaceFilePresentSchema } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import type { z } from "zod";
 
 // A workspace file's text whole, for callers that bound their own read size; undefined only when missing or a

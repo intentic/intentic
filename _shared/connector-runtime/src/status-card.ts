@@ -1,4 +1,4 @@
-import type { ListenerPlanItem, ListenerStep } from "@intentic/sandbox-contract";
+import type { ListenerPlanItem, ListenerStep } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import { currentStep, elapsedOf, formatElapsed, stepPhrase, type TurnProgress } from "./progress.js";
 
 // What a chat's status card says about a turn, before any platform draws it: where the turn stands (working, done,

@@ -1,6 +1,6 @@
 import type { CapabilityContribution, ExtensionManifest } from "@intentic/extension-manifest";
 import { capabilityEffects } from "./effects.js";
-import { CapabilityKindSchema } from "@intentic/sandbox-contract";
+import { CapabilityKindSchema } from "@intentic/sandbox-contract/schemas/capabilities";
 
 // The cli arm specifically; `Partial<CapabilityContribution>` over the discriminated union would let an override widen
 // `kind` back to the whole union.

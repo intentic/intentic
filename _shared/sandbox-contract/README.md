@@ -119,6 +119,33 @@ flowchart LR
   fails while the lock and the schemas disagree. `_tools/checks/contract-shrink.mjs` fails CI for a pushed branch
   that shrinks it with no commit declaring the break (`type!:` or `Breaking-Note:`); nothing checks the push itself.
 
+## Imports
+
+Import a name from the module that declares it: `@intentic/sandbox-contract/<path under src, without the extension>`,
+for example `import { AgentSchema } from "@intentic/sandbox-contract/schemas/agents"`. The package's `./*` export maps
+every such path to `src/` under the `@intentic/src` condition and to `dist/` otherwise, beside the older named subpaths
+(`./chores`, `./time`, …). The bare `@intentic/sandbox-contract` is for what `src/index.ts` defines itself:
+`sandboxContract`, the route tables and lookups bound to it, and the container paths it re-exports for extensions.
+(2026-10-16: the barrel re-exported nearly every module and was edited by every change that added one; it is being
+retired, not kept as a convenience.)
+
+`scripts/subpath-imports.mjs` rewrites barrel imports to that form. It resolves each name to its declaring module with the
+TypeScript checker, splits an import per module, keeps `type`, aliases and the file's quote style, and also moves
+`import("…")` destructurings, `jest.mock`/`mock.module` factories and generator templates whose names all come from one
+module. Whatever it cannot place it lists as a site for a person. On a branch that conflicts with the rewrite, take
+the branch's side of each import conflict and run it again over what the branch touched; it reads the declaring modules,
+not the barrel, so it still places names the slimmed `index.ts` no longer re-exports:
+
+```sh
+node _shared/sandbox-contract/scripts/subpath-imports.mjs --dry-run <dirs or files>   # what would change, and why not
+node _shared/sandbox-contract/scripts/subpath-imports.mjs <dirs or files>             # rewrite
+node _shared/sandbox-contract/scripts/subpath-imports.mjs --check <dirs or files>     # exit 1 if anything would change
+```
+
+The lock (`src/state/contract-lock.ts`) walks every module of `src/` (`src/state/contract-modules.ts`) rather than the
+barrel's namespace, and refuses two modules exporting different schemas under one name. `scripts/write-aggregate.mjs
+--check` holds `sandboxContract` to the files in `src/contracts/`.
+
 ## Key files
 
 - [src/index.ts](src/index.ts) — `sandboxContract`, the route tables derived from it, and every public export.

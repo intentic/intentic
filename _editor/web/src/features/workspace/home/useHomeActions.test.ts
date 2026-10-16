@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { unstubbed } from "@intentic/testing";
 import { effectScope, nextTick, ref } from "vue";
@@ -14,7 +14,7 @@ const TREE = [dir(`docs`, [SUB, A, B])];
 
 let current = fakeTreeStore(TREE);
 const uploads = { enqueue: jest.fn(() => Promise.resolve()), enqueueFromDataTransfer: jest.fn() };
-jest.mock(`../explorer/useWorkspaceTree`, () => ({ useWorkspaceTree: () => current.store }));
+jest.mock(`../../../models/workspace/tree/useWorkspaceTree`, () => ({ useWorkspaceTree: () => current.store }));
 jest.mock(`../files/upload/useUploadQueue`, () => ({ useUploadQueue: () => uploads }));
 const { useHomeActions } = await import(`./useHomeActions`);
 

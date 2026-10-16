@@ -3,9 +3,9 @@
 import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { createApp, h } from "vue";
-import type { CapabilitySummary } from "@intentic/sandbox-contract";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
-import type { ConnectionState } from "../model/connections";
+import type { ConnectionState } from "../../../models/capabilities/connections";
 import { IconStub } from "@intentic/ui/testing";
 
 // Row reaches a router only through the rebuild hand-off, which none of these cases takes.

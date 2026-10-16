@@ -1,14 +1,8 @@
+import { SPAWN_NOTE_HEADER } from "../../sessions/vocabulary/prompt-envelope.js";
+
 // The `agents` CLI teaching for runtimes with a shell but no seam to mount the spawn tool (Codex, OpenCode, Pi, ACP
 // agents); Claude Code and Cursor get MCP/custom tools instead, so this would repeat them. Sent once, on the opening
 // turn, only where children.ts armSupervisor actually allowed it.
-
-export const SPAWN_NOTE_HEADER = "## Spawning subagents";
-// Chat-row title; kept in sync with SPAWN_NOTE_HEADER.
-export const SPAWN_NOTE_TITLE = "Spawning subagents";
-// What the note opened with before a spawned agent was called a subagent like every other; still read out of the
-// prompts records already hold (turn-preamble.ts).
-export const LEGACY_SPAWN_NOTE_HEADER = "## Spawning child agents";
-export const LEGACY_SPAWN_NOTE_TITLE = "Spawning child agents";
 
 // Models are not named here: the note is composed once on the opening turn and carried for every turn after, so a
 // listing would go stale; `agents providers` answers that when actually asked.

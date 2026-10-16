@@ -1,5 +1,5 @@
 /* THE ONE WAY THE APP NAMES A MODEL. */
-import { modelLabelFor, perProvider, providerDisplayLabel, providerModels, providerModelsState, readCatalogsWith } from "./providerCatalog";
+import { modelLabelFor, perProvider, providerDisplayLabel, providerModels, providerModelsState, readCatalogsWith } from "../../../models/providers/providerCatalog";
 
 // The loader as a label reaches it; recorded, never run, so each read is one the resolver itself asked for.
 const reads = jest.fn<(provider: string) => void>();

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { EnrollHostInput, InventoryEntry } from "@intentic/sandbox-contract";
+import type { EnrollHostInput, InventoryEntry } from "@intentic/sandbox-contract/schemas/inventory";
 import { ENV_FILE, hostSshKeyVar } from "@intentic/scaffold";
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";

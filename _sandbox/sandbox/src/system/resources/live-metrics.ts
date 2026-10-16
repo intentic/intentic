@@ -3,7 +3,14 @@ import { availableParallelism, freemem, loadavg, totalmem } from "node:os";
 import { performance } from "node:perf_hooks";
 import { cachedAsync } from "@intentic/base/held";
 import { countedBytesOf, swapFullOf } from "@intentic/constants/memory-room";
-import type { DaemonUsage, ProcessGroupMetrics, ProcessRole, SandboxMetrics, SandboxUsage, SessionMetrics } from "@intentic/sandbox-contract";
+import type {
+    DaemonUsage,
+    ProcessGroupMetrics,
+    ProcessRole,
+    SandboxMetrics,
+    SandboxUsage,
+    SessionMetrics,
+} from "@intentic/sandbox-contract/schemas/metrics";
 import { DAEMON_OWNER, ONE_SHOT_OWNER } from "../../seams/workload-stamp.js";
 import { type CgroupReading, readCgroup, readText } from "./cgroup.js";
 import { createProcessScanner, listPids, type ProcSource, type ProcUnits, procUnits, scanProcesses } from "./process-scan.js";

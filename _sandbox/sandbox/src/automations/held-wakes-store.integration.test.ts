@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ManifestUnreadableError } from "../store/json-file.js";
-import type { AutomationApproval } from "@intentic/sandbox-contract";
+import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
 import { fileHeldWakesStore, HeldWakeNotApproved, type ReleasedWake } from "./held-wakes-store.js";
 
 // The queue of wakes held for a person, over real files under a temp history root: where a hold sits, who can let it out,

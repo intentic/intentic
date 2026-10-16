@@ -1,7 +1,7 @@
-import type { CapabilityKind, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { CapabilityKind, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { updateBrief } from "@intentic/sandbox-contract/chores";
-import { auditBrief } from "../../sandbox/extensions/extensionBrief";
-import { type FormValues, isCommitSha } from "./form";
+import { auditBrief } from "../../../models/sandbox/extensionBrief";
+import { type FormValues, isCommitSha } from "../../../models/capabilities/form";
 
 // Having an agent read an extension before its install is approved: offered once the form pins a commit, and read as
 // a diff when an edit moves an install to another commit. Pure over the form's answers.

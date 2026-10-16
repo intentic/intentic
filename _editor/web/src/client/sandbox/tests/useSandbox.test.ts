@@ -24,7 +24,7 @@ const { queryClient } = await import("../../../lib/queryPersistence");
 const { setDaemonBoot } = await import("../useDaemonBoot");
 const { signalConnection, useSandbox } = await import("../useSandbox");
 const { rememberListed, rememberedAccount } = await import("../../directory/deviceDirectory");
-const { activeSandboxId } = await import("../../../lib/activeSandbox");
+const { activeSandboxId } = await import("../../../app/storage/activeSandbox");
 
 const summary = (id: string): SandboxSummary => ({
     id,

@@ -1,4 +1,4 @@
-import { type GateVerdict, GateVerdictSchema } from "@intentic/sandbox-contract";
+import { type GateVerdict, GateVerdictSchema } from "@intentic/sandbox-contract/schemas/workflows";
 import { clientTimeoutMs, dialOf, exitOf, GateExchangeError, gateExchange, type GateDeps, parseArgs, readVerdict, WAIT_DEFAULT_S } from "./gate.js";
 
 test("a URL, some words, and nothing else is a call with the defaults", () => {

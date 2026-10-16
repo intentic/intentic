@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SkillDraft, SkillSummary } from "@intentic/sandbox-contract";
+import type { SkillDraft, SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
 import { BrandMark, Button, CopyButton, DisclosureRow, Icon, MarkdownDocument, StatusBadge } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";

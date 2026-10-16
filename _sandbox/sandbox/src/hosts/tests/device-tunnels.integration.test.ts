@@ -1,7 +1,7 @@
 import { once } from "node:events";
 import { type AddressInfo, connect, createServer, type Server, type Socket } from "node:net";
 import { createAdaptorServer, type WebSocketServerLike } from "@hono/node-server";
-import type { DialLoopback } from "@intentic/sandbox-contract";
+import type { DialLoopback } from "@intentic/sandbox-contract/schemas/device-artifacts";
 import { Hono } from "hono";
 import type { Logger } from "pino";
 import { WebSocket, WebSocketServer } from "ws";

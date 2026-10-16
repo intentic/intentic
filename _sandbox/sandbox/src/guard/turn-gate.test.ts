@@ -2,7 +2,7 @@ import { vendorSubject } from "./command-guard.js";
 import { createTurnGate, type TurnGateInput, turnIsGated } from "./turn-gate.js";
 import { conversationTainted } from "./turn-taint.js";
 import { parkedCards } from "../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);

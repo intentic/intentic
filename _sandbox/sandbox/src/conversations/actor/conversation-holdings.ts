@@ -1,4 +1,5 @@
-import type { AgentEvent, AttachFrame, TranscriptRow } from "@intentic/sandbox-contract";
+import type { AgentEvent, AttachFrame } from "@intentic/sandbox-contract/events/agent-events";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 
 // What conversations hold beside their state, by kind: each conversation's share sits on its actor, every item's id is
 // indexed to its holder, and what no conversation holds waits in a bucket of its own. The actors registry lends each

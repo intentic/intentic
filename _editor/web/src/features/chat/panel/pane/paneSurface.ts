@@ -1,21 +1,21 @@
-import type { SubagentSession } from "@intentic/sandbox-contract";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
 import type { Router } from "vue-router";
 import { useRole } from "../../../../client/sandbox/useRole";
-import { useAgents } from "../../../agents/fleet/useAgents";
-import { agentSeed } from "../../../agents/fleet/useAgents-actions";
-import { summonChat } from "../../run/summon";
-import { agentTabOf } from "../useChat-reveal";
-import { snapshotTab } from "../../tabs/tabSnapshot";
+import { useAgents } from "../../../../models/fleet/useAgents";
+import { agentSeed } from "../../../../models/fleet/useAgents-actions";
+import { summonChat } from "../../../../models/conversations/run/summon";
+import { agentTabOf } from "../../../../models/conversations/panel/useChat-reveal";
+import { snapshotTab } from "../../../../models/conversations/tabs/tabSnapshot";
 import { fileLinkDecorator } from "../../../../lib/markdown/renderMarkdown";
 import { navigateInApp } from "../../../../workbench/window/mainWindow";
-import { openWorkTerminal } from "../../../terminal/useWorkTerminals";
-import { openWorkspaceRef } from "../../../workspace/files/refs/openFileRef";
-import { picture } from "../../../workspace/home/thumbnails";
-import type { Conversation } from "../../session/conversation";
-import type { ChatSurface } from "../../tools/chatToolSurface";
-import { agentToolChildren } from "../../transcript/agentTranscript";
+import { openWorkTerminal } from "../../../../models/terminal/useWorkTerminals";
+import { openWorkspaceRef } from "../../../../models/workspace/files/openFileRef";
+import { picture } from "../../../../models/workspace/home/thumbnails";
+import type { Conversation } from "../../../../models/conversations/session/conversation";
+import type { ChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
+import { agentToolChildren } from "../../../../models/conversations/transcript/agentTranscript";
 import type { useShotViewer } from "../../transcript/shots/useShotViewer";
-import { openLinkedSubagent } from "../../../agents/fleet/linkedSubagent";
+import { openLinkedSubagent } from "../../../../models/fleet/linkedSubagent";
 
 // What a pane's tool cards can lead to: the chat's own checkout, terminal and browser, the calls a delegation's card
 // holds in the chat's record, navigating in the app's own window, and the roster's word on the subagents its calls

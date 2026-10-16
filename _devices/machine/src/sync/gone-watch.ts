@@ -48,7 +48,7 @@ const liftPauses = async (seams: FateSeams, pairings: readonly Pairing[], reason
     let lifted = 0;
     for (const pairing of pairings.filter((held) => held.fileSyncPausedFor !== undefined && reasons.includes(held.fileSyncPausedFor))) {
         resumeWatcherPausedSync(seams.mutagen, pairing);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+        // state is a single file; serial keeps the writes ordered
         await setFileSyncPausedFor(pairingKey(pairing), undefined);
         lifted += 1;
     }
@@ -75,7 +75,7 @@ export const sandboxSaidGone = async (seams: FateSeams, sandboxId: string, by: G
     }
     await setSandboxGone(first.sandboxId, { since: now, checkedAt: now, by });
     for (const pairing of pairings) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing's pause and its marker at a time
+        // one pairing's pause and its marker at a time
         await pauseFor(seams, pairing, "gone");
     }
     await seams.releaseForwards(first.sandboxId);
@@ -145,17 +145,17 @@ export const checkKeptHere = async (
         if (verdict === "here") {
             const slug = slugs.find((candidate) => answer.listed?.includes(candidate));
             if (slug !== undefined && held.some((pairing) => pairing.icSlug !== slug)) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+                // state is a single file; serial keeps the writes ordered
                 await setIcSlug(sandboxId, slug);
             }
             // Back in ic's listing (restored from its trash): what ic itself said is withdrawn by ic. The edge's verdict
             // is the platform's, and only the sandbox answering withdraws that.
             if (held.some((pairing) => pairing.goneBy === "local")) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+                // ditto
                 await sandboxAnswered(seams, sandboxId);
             }
         } else if (verdict === "gone" && held.some(keptHere) && !answering(sandboxId)) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             await sandboxSaidGone(seams, sandboxId, "local");
         }
     }
@@ -179,7 +179,7 @@ export const checkContainers = async (
     for (const [sandboxId, held] of bySandbox(pairings)) {
         const docker = held.find((pairing) => pairing.transport === "docker" && pairing.container !== undefined && pairing.goneSince === undefined);
         if (docker?.container !== undefined) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one engine call per sandbox reached through Docker, a handful at most
+            // one engine call per sandbox reached through Docker, a handful at most
             await followContainer(seams, { sandboxId, held, container: docker.container, docker }, await state(docker.container, docker.sandboxUrl), {
                 answering: answering(sandboxId),
                 askIc,
@@ -230,7 +230,7 @@ const followContainer = async (
 const pauseForContainer = async (seams: FateSeams, sandbox: DockerSandbox, reason: "container-missing" | "container-trashed"): Promise<void> => {
     let paused = 0;
     for (const pairing of sandbox.held) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+        // state is a single file; serial keeps the writes ordered
         paused += (await pauseFor(seams, pairing, reason)) ? 1 : 0;
     }
     if (paused === 0) {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { maskCredentialMaterial } from "@intentic/sandbox-contract";
+import { maskCredentialMaterial } from "@intentic/sandbox-contract/policy/credential-material";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 
 // What the router does to @playwright/mcp's two network tools before their answer reaches the transcript. Upstream

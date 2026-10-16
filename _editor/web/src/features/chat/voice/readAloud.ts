@@ -1,7 +1,7 @@
 import { t } from "@intentic/ui/i18n";
 import { shallowRef } from "vue";
 import { hold, type NotificationInput, useNotifications } from "../../../workbench/notifications/notifications";
-import { type SpeechPlayer, type SpeechPlayerState, useSpeechPlayer } from "./speechPlayer";
+import { type SpeechPlayer, type SpeechPlayerState, useSpeechPlayer } from "../../../models/voice/speechPlayer";
 
 // The Read aloud press (ChatReadAloud) and what it tells the person while it works. The press itself only has room for a
 // glyph, and the wait before the first word can be long (a voice downloading the first time, a sentence made on the

@@ -1,14 +1,14 @@
 <!-- The version an install pins to: resolved from the repository above rather than pasted in, since nobody should have
      to fetch a 40-character commit sha off a web page to install something. -->
 <script setup lang="ts">
-import type { RemoteRefs } from "@intentic/sandbox-contract";
+import type { RemoteRefs } from "@intentic/sandbox-contract/schemas/git/remote-refs";
 import type { CapabilityField } from "@intentic/extension-manifest";
 import { Picker, ui } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { isCommitSha } from "../model/form";
+import { isCommitSha } from "../../../models/capabilities/form";
 import { initialChoice, MANUAL_KEY, refFor, refGroups, refKey, refSummary, shortSha } from "../model/refs";
-import { readRemoteRefs } from "./useCapabilities";
+import { readRemoteRefs } from "../../../models/capabilities/useCapabilities";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

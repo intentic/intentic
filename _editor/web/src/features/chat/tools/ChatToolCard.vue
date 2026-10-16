@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { linkedConversationHref, openLinkedSubagent } from "../../agents/fleet/linkedSubagent";
+import { linkedConversationHref, openLinkedSubagent } from "../../../models/fleet/linkedSubagent";
 import type { IconName } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
-import type { TranscriptTool } from "@intentic/sandbox-contract";
-import { useChatSurface } from "./chatToolSurface";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import { useChatSurface } from "../../../models/conversations/tools/chatToolSurface";
 import ChatCodeBody from "../transcript/ChatCodeBody.vue";
 import ChatDocumentBody from "../transcript/cards/ChatDocumentBody.vue";
 import ChatToolDiff from "./ChatToolDiff.vue";

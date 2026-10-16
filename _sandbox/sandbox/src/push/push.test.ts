@@ -1,4 +1,4 @@
-import type { PushNotification } from "@intentic/sandbox-contract";
+import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import { unstubbed } from "@intentic/testing";
 import pino from "pino";
 import webpush from "web-push";

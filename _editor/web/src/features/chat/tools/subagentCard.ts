@@ -1,4 +1,5 @@
-import type { SubagentSession, TranscriptSubagent } from "@intentic/sandbox-contract";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
+import type { TranscriptSubagent } from "@intentic/sandbox-contract/events/transcript";
 
 // A subagent as the card of the call that started it shows it, whichever mechanism started it: what its turn recorded,
 // brought up to date by the roster while the roster still holds it. A spawned subagent outlives the turn that started it,

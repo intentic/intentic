@@ -5,9 +5,9 @@ import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
-import { useRunners } from "../../devices/runners/useRunners";
-import { useSandboxSettings } from "../../overview/useSandboxSettings";
-import type { SessionsPlacement } from "@intentic/sandbox-contract";
+import { useRunners } from "../../../../models/sandbox/devices/useRunners";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
+import type { SessionsPlacement } from "@intentic/sandbox-contract/schemas/offload";
 import { HERE, kindDetail, kindTitle, sessionsOptions, targetOptions, unavailableRunner, withCommandTarget, withSessions } from "./offloadRows";
 
 // "Where heavy work runs" (settings `offload`): each kind of heavy command an agent runs, either here or on a runner on

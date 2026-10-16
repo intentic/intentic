@@ -1,4 +1,6 @@
-import { HISTORY_STATE_FILES, STORAGE_CLEANABILITY, StorageCategoryIdSchema, WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
+import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract/state/history-state";
+import { STORAGE_CLEANABILITY, StorageCategoryIdSchema } from "@intentic/sandbox-contract/schemas/metrics";
+import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspace-state";
 import { categoryFolders, classifyStoragePath, isProtectedStoragePath, locateStoragePath, type StorageRootKind } from "./storage-catalog.js";
 
 // The table every scan sizes by and every clean asks right before it removes a path. What matters most is the

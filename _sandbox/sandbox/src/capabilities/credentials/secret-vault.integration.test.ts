@@ -3,7 +3,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { type Capability, VAULTED } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import { type CapabilitiesStore, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "../capabilities-store.js";
 import { capabilitySecretsDocument, fileSecretVault, type SecretVault } from "./secret-vault.js";
 

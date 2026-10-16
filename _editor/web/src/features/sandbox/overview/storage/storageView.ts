@@ -1,4 +1,4 @@
-import type { StorageCategoryUsage, StorageScan } from "@intentic/sandbox-contract";
+import type { StorageCategoryUsage, StorageScan } from "@intentic/sandbox-contract/schemas/metrics";
 
 // How the Disk card reads a scan: what the scan could not account for, how full the volume is, and what each
 // category's button offers. Pure, so the card draws decisions rather than making them.

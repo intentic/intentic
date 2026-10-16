@@ -168,7 +168,7 @@ test("a used profile keeps everything the person set beside them", async () => {
 test("a Preferences file it cannot read is left for Chromium", async () => {
     for (const raw of ["{not json", JSON.stringify({ intl: "not a section" })]) {
         const broken = profileWith(raw);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- two files, one at a time
+        // two files, one at a time
         await seedPreferences(broken, ["en"]);
         expect(readFileSync(join(broken, "Default", "Preferences"), "utf8")).toBe(raw);
     }

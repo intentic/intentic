@@ -6,7 +6,8 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
-import { type EngineId, isNewer } from "@intentic/sandbox-contract";
+import type { EngineId } from "@intentic/sandbox-contract/schemas/engines";
+import { isNewer } from "@intentic/sandbox-contract/state/versions";
 import { readPack } from "../image/packs.js";
 
 // Per-engine table: what package upstream publishes it as, what a working install looks like, and what proves a copy

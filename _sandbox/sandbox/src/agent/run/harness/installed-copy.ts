@@ -3,7 +3,7 @@ import { isAbsolute, join } from "node:path";
 import { isMissing } from "@intentic/base/errors";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { extensionIdOf, type ExtensionManifest } from "@intentic/extension-manifest";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { extensionDir, extensionRootOf, extensionsRoot, readExtensionManifest } from "../../../capabilities/extension-dirs.js";
 import { statusPaths } from "../../../git/changes/changes.js";
 import { parseRemote, remoteUrlsOf } from "../../../git/remote/remote-urls.js";

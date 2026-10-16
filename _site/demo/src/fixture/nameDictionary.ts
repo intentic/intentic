@@ -1,4 +1,9 @@
-import { PRIVACY_DICTIONARY_SAMPLE_MAX, type PrivacyDictionary, type PrivacyNameList, type PrivacyNameWord } from "@intentic/sandbox-contract";
+import {
+    PRIVACY_DICTIONARY_SAMPLE_MAX,
+    type PrivacyDictionary,
+    type PrivacyNameList,
+    type PrivacyNameWord,
+} from "@intentic/sandbox-contract/schemas/privacy";
 
 // The privacy shield's name dictionary as a fresh sandbox reports it: the daemon's own lists with their real counts and
 // sources (src/privacy/name-dictionary.ts), and a few words of each, so the search has something to browse and a name

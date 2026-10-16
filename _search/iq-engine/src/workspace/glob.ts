@@ -1,4 +1,4 @@
-import { globRegExp } from "@intentic/sandbox-contract";
+import { globRegExp } from "@intentic/sandbox-contract/policy/search-globs";
 
 // A scope filter's glob as a RegExp over forward-slash relative paths. The matching itself is the contract's, Bun.Glob's
 // reading of every construct, so `iq` and the search box admit the same files; what stays here is how `iq` reads a

@@ -1,4 +1,6 @@
-import type { HostGuardSetting, ProgramAsk, SecretHostGuard } from "@intentic/sandbox-contract";
+import type { HostGuardSetting } from "@intentic/sandbox-contract/policy/secret-hosts";
+import type { ProgramAsk } from "@intentic/sandbox-contract/events/requests";
+import type { SecretHostGuard } from "@intentic/sandbox-contract/schemas/secrets";
 import { type CardDeps, cardRun, type LiveCard, raiseRequest } from "../../guard/card-offers.js";
 import { secretSend } from "../../guard/actions.js";
 import { guard } from "../../guard/guard.js";

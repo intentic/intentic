@@ -1,5 +1,5 @@
 import { oneLine } from "@intentic/base/one-line";
-import type { IssueBreadcrumb } from "@intentic/sandbox-contract";
+import type { IssueBreadcrumb } from "@intentic/sandbox-contract/schemas/issues";
 
 // What happened before a crash, kept as a bounded ring buffer (count and per-message length capped) since this patches
 // globals on someone else's page. Not instrumented:

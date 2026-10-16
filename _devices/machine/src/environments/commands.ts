@@ -50,12 +50,12 @@ export const adoptRunningDistros = async (log: Log): Promise<void> => {
     const held = await heldDistros();
     const running = ((await listDistros({ running: true })) ?? []).filter((distro) => !held.includes(distro));
     for (const distro of running) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one distro at a time; each is a wsl.exe round trip
+        // one distro at a time; each is a wsl.exe round trip
         const has = await execBounded("wsl.exe", ["-d", distro, "--exec", "sh", "-c", HAS_RESIDENT_SH], { timeoutMs: 30_000 })
             .then(() => true)
             .catch(() => false);
         if (has) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             await updateMachineConfig((config) => withChild(config, distro));
             log(`${distro} runs an agent too: it is kept running from this side now.`);
         }

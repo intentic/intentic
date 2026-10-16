@@ -1,4 +1,5 @@
-import { LOCKED_STATE_ENTRIES, PLAN_DOCUMENTS_DIR, STATE_DIR } from "@intentic/sandbox-contract";
+import { LOCKED_STATE_ENTRIES, PLAN_DOCUMENTS_DIR } from "@intentic/sandbox-contract/state/workspace-state";
+import { STATE_DIR } from "@intentic/sandbox-contract";
 import { lockedFileEntries, lockedFile } from "../lockedFile";
 
 describe(`lockedFile`, () => {

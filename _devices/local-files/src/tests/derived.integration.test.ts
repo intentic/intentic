@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type SystemEvent, SystemEventSchema } from "@intentic/sandbox-contract";
+import { type SystemEvent, SystemEventSchema } from "@intentic/sandbox-contract/events/system-events";
 import { DerivedTexts } from "../derived.js";
 import { Grants } from "../grants.js";
 import { askerOf, docxOf, localServer, xlsxOf } from "../testing.js";

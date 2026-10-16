@@ -1,6 +1,6 @@
 import { generateKeyPairSync } from "node:crypto";
 import type { HostReport } from "@intentic/api-contract";
-import { sandboxSubdomain } from "@intentic/sandbox-contract";
+import { sandboxSubdomain } from "@intentic/sandbox-contract/ids/hostnames";
 import { verifyIdentityAssertion } from "@intentic/sandbox-contract/identity-assertion";
 import { verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";

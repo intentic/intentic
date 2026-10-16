@@ -1,6 +1,6 @@
-import type { RewindResult } from "@intentic/sandbox-contract";
+import type { RewindResult } from "@intentic/sandbox-contract/schemas/history";
 import { rewindConversation, type RewindDeps } from "./rewind.js";
-import type { TurnCheckpoint } from "./turn-checkpoints.js";
+import type { TurnCheckpoint } from "../../store/journals/turn-checkpoints.js";
 
 const CONVERSATION = "conv-1";
 // The message the rewind means: the third in the record, as the reader saw it there.

@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { gitCheckout, gitClone, gitFullHead, gitHead } from "@intentic/base/git";
-import type { AgentEvent, AgentTurn, ExtensionUpdate } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { ExtensionUpdate } from "@intentic/sandbox-contract/schemas/extension-updates";
 import { unstubbed } from "@intentic/testing";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { createApp } from "../app.js";
@@ -18,7 +20,7 @@ import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.test
 import { makeWorkspaceDir, moveWorkspacePath, readWorkspaceFile, removeWorkspacePath } from "../workspace/files/workspace-files.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import type { Services } from "../composition.js";
-import { readExtensionEnablement } from "./extension-enablement.js";
+import { readExtensionEnablement } from "../capabilities/extension-inventory/extension-enablement.js";
 import { checkExtensionUpdates, readExtensionUpdateState, writeUpdatePolicy } from "./extension-updates.js";
 
 // Update lifecycle end-to-end (discover, preview, apply, revert), driven over the daemon's HTTP surface, browser-style.

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
-import { useSandboxSettings } from "../../overview/useSandboxSettings";
-import { autoLandRule, autoVersionRule, NAMED_RULES } from "../../environment/rules";
-import { useRules } from "../../environment/useRules";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
+import { autoLandRule, autoVersionRule, NAMED_RULES } from "../../../../models/sandbox/environment/rules";
+import { useRules } from "../../../../models/sandbox/environment/useRules";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 

@@ -1,8 +1,8 @@
 <!-- Binds <EffortMeter> to a Conversation: which effort rungs the current model offers, which one is set, and where a click writes. -->
 <script setup lang="ts">
 import { computed } from "vue";
-import type { Conversation } from "../session/conversation";
-import { effortsFor } from "../models/run-settings/effortScale";
+import type { Conversation } from "../../../models/conversations/session/conversation";
+import { effortsFor } from "../../../models/providers/effortScale";
 import EffortMeter from "./EffortMeter.vue";
 
 const {

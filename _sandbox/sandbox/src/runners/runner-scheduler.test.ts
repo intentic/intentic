@@ -1,4 +1,4 @@
-import type { RunnerSummary } from "@intentic/sandbox-contract";
+import type { RunnerSummary } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { credentialsTravel, placeFanOut, runnerSlots } from "./runner-scheduler.js";
 
 // Where a spawned agent lands when nobody chose: run per fan-out member, so a wrong rule piles a whole fleet onto one

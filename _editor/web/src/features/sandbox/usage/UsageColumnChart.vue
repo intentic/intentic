@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { providerGroupLabel } from "../../chat/accounts/providerCatalog";
+import { providerGroupLabel } from "../../../models/providers/providerCatalog";
 import { niceMax, providerColor, type SpendBucket } from "./usageChart";
 import { formatMoney } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";

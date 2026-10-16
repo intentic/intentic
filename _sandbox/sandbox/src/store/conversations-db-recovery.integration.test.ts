@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { sqliteAgentsStore } from "../conversations/registry/agents-store.js";
-import { conversationEntry } from "../testing.js";
+import { conversationEntry } from "../conversations/registry/agents-store.testing.js";
 import { conversationUnit } from "./conversation-units.js";
 import { openConversationsDbAtBoot } from "./conversations-db-recovery.js";
 import { conversationsDbPath, ConversationsUpgradeError, openConversationsDb } from "./conversations-db.js";

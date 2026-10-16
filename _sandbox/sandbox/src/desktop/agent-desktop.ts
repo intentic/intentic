@@ -4,7 +4,7 @@ import { Socket } from "node:net";
 import { createInterface } from "node:readline";
 import { exec } from "@intentic/base/git";
 import { type Desktop, DesktopError, desktop } from "@intentic/desktop-automation";
-import type { DesktopState, DesktopWindow } from "@intentic/sandbox-contract";
+import type { DesktopState, DesktopWindow } from "@intentic/sandbox-contract/schemas/terminal";
 import { adoptDisplay, type Display, displayOf, ensureDisplay } from "../browser/cast/display.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 

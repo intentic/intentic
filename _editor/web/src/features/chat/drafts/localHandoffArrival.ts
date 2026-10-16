@@ -1,11 +1,11 @@
 import { t } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
 import type { RouteLocationNormalizedLoaded } from "vue-router";
-import { router } from "../../../router";
+import { navigation } from "../../../workbench/navigation/navigation";
 import { useNotifications } from "../../../workbench/notifications/notifications";
-import { startAgent } from "../../agents/fleet/agentActions";
+import { startAgent } from "../../../models/fleet/agentActions";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { drawsChat } from "../run/chatEcho";
+import { drawsChat } from "../../../models/conversations/run/chatEcho";
 import { type LocalHandoff, takeHandoff } from "./localHandoff";
 import { queueAttachment } from "./pendingAttachments";
 
@@ -62,7 +62,7 @@ export const startLocalHandoff = (signedIn: () => boolean): void => {
     if (ready === undefined) {
         const { activeSandboxId, reachable } = useSandbox();
         const canShow = computed(
-            () => signedIn() && activeSandboxId.value !== undefined && reachable.value && drawsChat.value && inShell(router.currentRoute.value),
+            () => signedIn() && activeSandboxId.value !== undefined && reachable.value && drawsChat.value && inShell(navigation().currentRoute.value),
         );
         ready = () => canShow.value;
         watch(canShow, bringWaiting);

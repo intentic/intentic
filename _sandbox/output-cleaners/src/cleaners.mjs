@@ -8,7 +8,6 @@ import { basename, dirname, join } from "node:path";
 import * as util from "node:util";
 
 // CSI sequences, OSC sequences (title sets, hyperlinks), and lone two-byte escapes; always stripped as noise.
-// eslint-disable-next-line no-control-regex
 export const ANSI = /\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g;
 
 // A spinner/progress bar redraws one line with \r: keep only the final frame. Always applied as noise.

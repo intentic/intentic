@@ -1,11 +1,6 @@
-import type {
-    AgentCapabilities,
-    PromptBase,
-    PromptSection,
-    PromptSectionSource,
-    SystemPromptDisclosure,
-    SystemPromptMode,
-} from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { PromptBase, PromptSection, PromptSectionSource, SystemPromptDisclosure } from "@intentic/sandbox-contract/schemas/system-prompt";
+import type { SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
 import { PERSONA_NOTE_HEADER, PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { tmuxRunEnabled } from "../tools/agent-terminals.js";
 import { FIELD_NOTES_NOTE_HEADER, FIELD_NOTES_NOTE_TITLE } from "@intentic/agent-context/field-notes";
@@ -13,11 +8,11 @@ import { intenticSystemPrompt } from "./intentic-prompt.js";
 import { presetSystemPrompt } from "./preset-prompt.js";
 import { GUIDANCE_HEADER, GUIDANCE_TITLE } from "./guidance.js";
 import { harnessGuidance, type PromptRequest, promptInputOf, terminalMounted } from "./system-prompt.js";
-import { MEMORY_NOTE_HEADER, MEMORY_NOTE_TITLE } from "./workspace-memory.js";
+import { MEMORY_NOTE_HEADER, MEMORY_NOTE_TITLE } from "../../sessions/vocabulary/prompt-envelope.js";
 
 // Read off the request the adapter was handed, never recomposed from settings: what was sent, not what would be now.
 
-// Each piece is found by the header it opens with, the same anchors turn-preamble.ts splits at.
+// Each piece is found by the header it opens with, the same anchors sessions/vocabulary/prompt-envelope.ts splits at.
 const APPENDED: readonly { readonly header: string; readonly title: string; readonly source: PromptSectionSource }[] = [
     { header: GUIDANCE_HEADER, title: GUIDANCE_TITLE, source: "guidance" },
     { header: PERSONA_NOTE_HEADER, title: PERSONA_NOTE_TITLE, source: "persona" },

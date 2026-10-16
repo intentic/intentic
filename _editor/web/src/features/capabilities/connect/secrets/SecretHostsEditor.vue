@@ -2,11 +2,11 @@
 import { Notice, type NoticeModel, ui, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
-import { normalizeHostPattern, SECRET_HOSTS_MAX } from "@intentic/sandbox-contract";
+import { normalizeHostPattern, SECRET_HOSTS_MAX } from "@intentic/sandbox-contract/policy/secret-hosts";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
 import type { SecretRow } from "../../../sandbox/secrets/secretRows";
-import { useCredentialGates, useSecretHosts } from "./useSecrets";
+import { useCredentialGates, useSecretHosts } from "../../../../models/capabilities/useSecrets";
 
 // The host guard, the second half of a secret's "Needs approval" section, under the named approver: on, a use goes
 // unasked only to the hosts listed here and anything else waits for a click in the chat; off, it never asks. Off for most

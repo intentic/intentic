@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { KeyringSource } from "@intentic/sandbox-contract";
+import type { KeyringSource } from "@intentic/sandbox-contract/schemas/keyring";
 import { CopyButton } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";

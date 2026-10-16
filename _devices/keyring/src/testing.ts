@@ -1,4 +1,4 @@
-import type { KeyringGrant, KeyringGrantTarget } from "@intentic/sandbox-contract";
+import type { KeyringGrant, KeyringGrantTarget } from "@intentic/sandbox-contract/schemas/keyring";
 import { grantNonce, type KeyringKeyPair, newSealKeyPair, newSignKeyPair, signGrant } from "@intentic/sandbox-contract/keyring-seal";
 import { noAudit, type AuditRecord } from "./audit.js";
 import { BackendReader } from "./backends.js";

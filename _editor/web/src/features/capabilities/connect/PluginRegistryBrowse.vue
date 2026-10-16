@@ -1,12 +1,13 @@
 <!-- Lists what a plugin registry repository publishes; picking a row fills the url, commit and path fields of the install form below it. -->
 <script setup lang="ts">
 import { isShaPinned, type RegistryEntry } from "@intentic/registry";
-import type { CapabilityKind, Marketplace } from "@intentic/sandbox-contract";
+import type { CapabilityKind } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { Marketplace } from "@intentic/sandbox-contract/schemas/marketplace";
 import { BrandMark, Button, type NoticeModel, RowGroup, RowNote, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
-import { browseMarketplace } from "./useCapabilities";
-import { checksOk, checksProblem, checksTip } from "../../sandbox/extensions/discoverListing";
+import { browseMarketplace } from "../../../models/capabilities/useCapabilities";
+import { checksOk, checksProblem, checksTip } from "../../../models/sandbox/discoverListing";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

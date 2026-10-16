@@ -1,6 +1,6 @@
 import { slugOfHostname } from "@intentic/sandbox-run/slug";
 import type { z } from "zod";
-import type { DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract";
+import type { DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract/schemas/devices";
 import { type CardDeps, cardRun, type LiveCard, raiseRequest, whyOf } from "../guard/card-offers.js";
 import { type HeldAnswer, type HoldDeps, createHeldAsks } from "../guard/held-asks.js";
 import { wakeWords } from "../guard/held-cards.js";
@@ -8,6 +8,7 @@ import { type CliAnswer, jsonAnswer, refusalAnswer } from "../http/cli-answer.js
 import { SANDBOX_RECOVERY_DAYS } from "@intentic/api-contract";
 import { FleetProvisionedSchema, FleetRemovedSchema, FleetSandboxesSchema } from "@intentic/api-contract/ingress";
 import { answerError, type FleetSandbox, type ProvisionedSandbox } from "./fleet-client.js";
+import { parseJsonWith } from "@intentic/base/json";
 
 // CREATING A SANDBOX, the whole path: the owner's card, the platform's claim, the machine's `ic`. And taking one away,
 // behind the same card: on the machine that runs it when this sandbox reaches that machine, else the account row alone. Shaped like the
@@ -61,12 +62,8 @@ export const slugOf = (hostname: string): string => slugOfHostname(hostname) ?? 
 
 // A platform body read through its route's own schema, or undefined when it is not that.
 const bodyAs = <T>(schema: z.ZodType<T>, body: string): T | undefined => {
-    try {
-        return schema.safeParse(JSON.parse(body)).data;
-    } catch {
-        // allow(silent-catch): a body that is not JSON (a proxy's 502 page) reads as none, which every caller refuses by name.
-        return undefined;
-    }
+    // A body that is not JSON (a proxy's 502 page) reads as none, which every caller refuses by name.
+    return parseJsonWith(body, schema);
 };
 
 const provisionedFrom = (body: string): ProvisionedSandbox | undefined => bodyAs(FleetProvisionedSchema, body);

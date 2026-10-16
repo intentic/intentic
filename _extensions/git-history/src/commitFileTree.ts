@@ -1,4 +1,4 @@
-import type { GitChange } from "@intentic/sandbox-contract";
+import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
 
 // Turns a commit's flat changed-file list into a collapsible directory tree with VSCode-style compact folders: a
 // directory holding only one subdirectory merges into one row ("sandbox / src"). Pure and unit-tested; the caller owns

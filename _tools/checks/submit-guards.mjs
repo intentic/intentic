@@ -11,7 +11,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { finish } from "./lib/report.mjs";
-import { byName, installedModule, packages, root, VUE_FILE, walk, workspaceSource } from "./lib/repo.mjs";
+import { byName, exportEntry, installedModule, packages, root, VUE_FILE, walk, workspaceSource } from "./lib/repo.mjs";
 
 const vueHost = packages.find(({ pkg }) => pkg.dependencies?.vue !== undefined || pkg.devDependencies?.vue !== undefined);
 const compiler = vueHost === undefined ? undefined : installedModule(vueHost.dir, "vue/compiler-sfc");
@@ -211,7 +211,7 @@ const packageSource = (specifier) => {
     if (owner === undefined) {
         return ELSEWHERE;
     }
-    const entry = owner.pkg.exports?.[segments.length > depth ? `./${segments.slice(depth).join("/")}` : "."];
+    const entry = exportEntry(owner.pkg.exports, segments.length > depth ? `./${segments.slice(depth).join("/")}` : ".");
     const shipped = typeof entry === "string" ? entry : entry?.default;
     return workspaceSource(specifier) ?? (typeof shipped === "string" ? join(owner.dir, shipped) : undefined);
 };

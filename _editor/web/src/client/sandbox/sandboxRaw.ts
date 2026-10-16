@@ -1,12 +1,11 @@
+import { fillRoutePath } from "@intentic/sandbox-contract/protocol/raw/route-path";
 import {
-    fillRoutePath,
     RAW_JSON_ROUTES,
     type RawJsonInput,
     type RawJsonOutput,
     type RawJsonRouteKey,
-    type RawRouteParams,
-    rawRoutePath,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/protocol/raw/raw-json-routes";
+import { type RawRouteParams, rawRoutePath } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { jsonBody } from "./jsonBody";
 import { sandboxJson } from "./sandboxClient";
 import { staleDaemonReason } from "./useDaemonRoutes";

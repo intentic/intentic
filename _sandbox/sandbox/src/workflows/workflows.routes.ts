@@ -1,11 +1,6 @@
-import {
-    type Workflow,
-    workflowFaults,
-    workflowRunFaults,
-    type WorkflowRun,
-    workflowsContract,
-    type WorkflowSummary,
-} from "@intentic/sandbox-contract";
+import type { Workflow, WorkflowRun, WorkflowSummary } from "@intentic/sandbox-contract/schemas/workflows";
+import { workflowFaults, workflowRunFaults } from "@intentic/sandbox-contract/text/workflow-faults";
+import { workflowsContract } from "@intentic/sandbox-contract/contracts/workflows.contract";
 import { implement, ORPCError } from "@orpc/server";
 import { archiveAgents } from "../conversations/registry/archive.js";
 import { operatorHere } from "../auth/operator.js";

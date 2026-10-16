@@ -1,4 +1,5 @@
-import { PAGE_TEXT_CAP, type TranscriptRow } from "@intentic/sandbox-contract";
+import { PAGE_TEXT_CAP } from "@intentic/sandbox-contract/text/transcript-page";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 
 // How a row is kept. What is long moves out of line (record-blobs.ts) and the row keeps a pointer: a tool output at
 // least this long keeps its start, and a delegation's calls at least this long in all keep their count. A page needs

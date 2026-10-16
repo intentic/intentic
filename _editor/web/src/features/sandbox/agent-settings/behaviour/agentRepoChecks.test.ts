@@ -2,7 +2,7 @@
 // have read, so the row has to show the command itself, and a declaration that changed since they agreed has to read as
 // held rather than as running.
 import "@intentic/testing/dom";
-import type { RepoChecksSummary } from "@intentic/sandbox-contract";
+import type { RepoChecksSummary } from "@intentic/sandbox-contract/schemas/settings";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -11,7 +11,7 @@ import { timeAgo } from "@intentic/ui";
 const repos = ref<RepoChecksSummary[] | undefined>([]);
 const adopt = jest.fn();
 
-jest.mock(`../../environment/useRepoChecks`, () => ({
+jest.mock(`../../../../models/sandbox/environment/useRepoChecks`, () => ({
     useRepoChecks: () => ({ repos, adopt, pending: ref(undefined), error: ref(undefined), isLoading: ref(false), busy: ref(false) }),
 }));
 

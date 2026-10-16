@@ -4,13 +4,13 @@
 import "@intentic/testing/dom";
 import { unstubbed } from "@intentic/testing";
 import { computed, ref, shallowRef } from "vue";
-import { perProvider, providerModels } from "../../accounts/providerCatalog";
-import type { ComposerSelection } from "../../session/composerSelection";
-import type { Conversation } from "../../session/conversation";
-import { UNPICKED } from "../../session/selectionReducer";
-import { observeRoster, resetSandboxClock } from "../../../agents/fleet/sandboxClock";
+import { perProvider, providerModels } from "../../../../models/providers/providerCatalog";
+import type { ComposerSelection } from "../../../../models/conversations/session/composerSelection";
+import type { Conversation } from "../../../../models/conversations/session/conversation";
+import { UNPICKED } from "../../../../models/conversations/session/selectionReducer";
+import { observeRoster, resetSandboxClock } from "../../../../models/agent-status/sandboxClock";
 import { liveOf, modelOrProvider } from "../cardView";
-import { startedHere } from "../tabFacts";
+import { startedHere } from "../../../../models/conversations/tabs/tabFacts";
 
 beforeEach(() => {
     providerModels.value = {

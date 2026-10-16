@@ -1,9 +1,9 @@
 // Needs jsdom: whether a row animates is what this component renders, and only a mounted render can show that.
 import "@intentic/testing/dom";
-import type { TodoItem } from "@intentic/sandbox-contract";
+import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
 import { type App, createApp, h } from "vue";
 import ChatTodoList from "../ChatTodoList.vue";
-import type { ChecklistView } from "../transcript";
+import type { ChecklistView } from "../../../../models/conversations/transcript/transcript";
 import { IconStub } from "@intentic/ui/testing";
 
 const LIST: TodoItem[] = [

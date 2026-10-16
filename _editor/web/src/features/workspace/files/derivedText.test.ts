@@ -1,5 +1,5 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { WorkspaceDerived } from "@intentic/sandbox-contract";
+import type { WorkspaceDerived } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // The rpc client builds a link at import time, so the daemon call is the seam: the predicates are pure, and what the

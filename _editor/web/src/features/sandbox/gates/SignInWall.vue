@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DaemonSession } from "@intentic/sandbox-contract";
+import type { DaemonSession } from "@intentic/sandbox-contract/schemas/system";
 import { Button, Notice, type NoticeModel, ui, useTheme, vAction } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import FocusTrap from "primevue/focustrap";

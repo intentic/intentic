@@ -8,13 +8,13 @@ import { Button, EmptyState, Notice, type NoticeModel, probePreview, probePrevie
 import { useNow, usePoll } from "@intentic/ui/async";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
-import type { PanelLaunch } from "@intentic/sandbox-contract";
-import { frameSandbox, type PreviewTarget } from "./previewModel";
+import type { PanelLaunch } from "@intentic/sandbox-contract/schemas/panels";
+import { frameSandbox, type PreviewTarget } from "../../models/preview/previewModel";
 import { loopbackPreviewUrl } from "./previewLane";
 import type { PhoneModel } from "./phoneModels";
 import PreviewStage from "./PreviewStage.vue";
 import { useEndpoint } from "../../client/endpoint/useEndpoint";
-import { useTerminalPanel } from "../terminal/useTerminalPanel";
+import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import { useOperations } from "../../workbench/operations/operations";
 import { onScreen } from "../../workbench/window/onScreen";
 import { useT } from "@intentic/ui/i18n";

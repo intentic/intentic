@@ -1,17 +1,12 @@
-import {
-    type AgentEvent,
-    type AgentProvider,
-    breakArmed,
-    KeyedProviderSchema,
-    type ProviderRefusal,
-    reportsPlanLimits,
-    RETRY_LADDER_TRIES,
-    type TodoItem,
-    type TurnBreak,
-    type TurnBreakPolicy,
-} from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { breakArmed, RETRY_LADDER_TRIES, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
+import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
+import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
 import type { LimitWay, limitWayOf } from "../../models/limit-way.js";
-import { mentionsSpentAllowance } from "../../providers/failure-sentences.js";
+import { mentionsSpentAllowance } from "../../../engines/failure-sentences.js";
 import { OUTAGE_MAX_ATTEMPTS, type OutageState } from "../../providers/provider-health.js";
 import type { VerificationStanding } from "../../verification/agent-verification.js";
 import type { RefreshOptions } from "../../../usage/headroom.js";

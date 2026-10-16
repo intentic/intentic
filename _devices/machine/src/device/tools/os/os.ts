@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { parseJsonWith } from "@intentic/base/json";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import {
-    type DeviceScopes,
     IC_OS_NOT_INTENTIC_OS_EXIT,
     icOsChannelArgs,
     icOsRebootArgs,
@@ -19,7 +20,7 @@ import {
     IntenticOsUpdateCheckSchema,
     type IntenticOsUpdateOp,
     IntenticOsUpdateOpSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/intentic-os";
 import { type McpTool, textResult, tool } from "@intentic/sandbox-contract/peer-mcp-server";
 import { prettifyError, z } from "zod";
 import { assertScope } from "../../policy.js";
@@ -167,13 +168,8 @@ export const intenticOsFactsOf = (text: string | undefined): IntenticOsFacts | u
     if (text === undefined) {
         return undefined;
     }
-    try {
-        const release = IntenticOsReleaseSchema.safeParse(JSON.parse(text));
-        return release.success ? intenticOsFactsFrom(release.data) : undefined;
-    } catch {
-        // allow(silent-catch): a release.json that is not JSON says nothing about the OS, the same as none
-        return undefined;
-    }
+    const release = parseJsonWith(text, IntenticOsReleaseSchema);
+    return release === undefined ? undefined : intenticOsFactsFrom(release);
 };
 
 export const readIntenticOs = async (release: string = INTENTIC_OS_RELEASE_PATH): Promise<IntenticOsFacts | undefined> =>

@@ -1,5 +1,5 @@
 import { mkdir, rm } from "node:fs/promises";
-import { type ExitObservation, ExitObservationSchema } from "@intentic/sandbox-contract";
+import { type ExitObservation, ExitObservationSchema } from "@intentic/sandbox-contract/schemas/exit";
 import { z } from "zod";
 import { writeJsonFile } from "../store/json-file.js";
 import { readJsonMarker } from "../store/plain-files/json-marker.js";

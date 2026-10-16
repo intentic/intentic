@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
-import { DEFAULT_SAFETY_POLICY, type SafetyPolicy } from "@intentic/sandbox-contract";
+import { DEFAULT_SAFETY_POLICY, type SafetyPolicy } from "@intentic/sandbox-contract/policy/safety-policy";
 
 // The owner's safety policy on disk (.intentic/config/safety.md); the judge reads it before a flagged command. A text
 // file, not a manifest: it travels verbatim, with no shape to validate. `custom` reflects whether the file exists, not

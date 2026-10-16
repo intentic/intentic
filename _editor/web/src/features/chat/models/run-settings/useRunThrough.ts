@@ -1,18 +1,19 @@
 import type { IconName, Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { NoticeModel } from "@intentic/ui/async";
-import { type LoopDesign, loopFromDesign, type Workflow } from "@intentic/sandbox-contract";
+import { type LoopDesign, loopFromDesign } from "@intentic/sandbox-contract/schemas/loops";
+import type { Workflow } from "@intentic/sandbox-contract/schemas/workflows";
 import { computed, type ComputedRef, type Ref, ref } from "vue";
 import { useRouter } from "vue-router";
-import { useAgents } from "../../../agents/fleet/useAgents";
-import { useLoopDesigns } from "../../../agents/fleet/useLoopDesigns";
-import { startLoop, stopLoop } from "../../../agents/fleet/useLoops";
-import { useWorkflowRuns } from "../../../agents/fleet/useWorkflowRuns";
+import { useAgents } from "../../../../models/fleet/useAgents";
+import { useLoopDesigns } from "../../../../models/fleet/useLoopDesigns";
+import { startLoop, stopLoop } from "../../../../models/fleet/useLoops";
+import { useWorkflowRuns } from "../../../../models/fleet/useWorkflowRuns";
 import { useOperations } from "../../../../workbench/operations/operations";
 import { navigateInApp } from "../../../../workbench/window/mainWindow";
 import { useListedView, WORKFLOWS } from "../../../../workbench/views/listedViews";
-import type { Conversation } from "../../session/conversation";
-import { openRunInChat } from "../../run/openRun";
+import type { Conversation } from "../../../../models/conversations/session/conversation";
+import { openRunInChat } from "../../../../models/fleet/openRun";
 
 // The one control for what the next message runs through, mutually exclusive states, in this precedence:
 //

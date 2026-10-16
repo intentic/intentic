@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { syncFolder } from "@intentic/sandbox-contract";
+import { syncFolder } from "@intentic/sandbox-contract/ids/hostnames";
 import { Button, type DeviceSandboxGroup, ui } from "@intentic/ui";
 import { computed } from "vue";
 import type { DeviceOps } from "../runners/deviceOps";
-import { type DeviceRow, managerOf, type MachineRow } from "../deviceRows";
+import { type DeviceRow, managerOf, type MachineRow } from "../../../../models/sandbox/devices/deviceRows";
 import { environmentTitle } from "../machineEnvironments";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";

@@ -1,5 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
-import { type Capability, endpointIdOf, isTrialProvider, type RoutedAgentTurn } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { endpointIdOf, isTrialProvider } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import {
     type AgentAdapter,
     armPlan,
@@ -12,7 +14,7 @@ import {
 } from "../../agent/providers/adapter.js";
 import type { MuseCredential } from "../../agent/providers/agent-request.js";
 import { routedModel } from "../../agent/providers/harness-credentials.js";
-import { withAttachments } from "../../agent/prompt/attachment-note.js";
+import { withAttachments } from "../../sessions/vocabulary/attachment-note.js";
 import { releasingMounts } from "../../agent/tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";

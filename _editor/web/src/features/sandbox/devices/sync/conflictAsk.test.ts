@@ -1,4 +1,4 @@
-import type { DeviceConflict } from "@intentic/sandbox-contract";
+import type { DeviceConflict } from "@intentic/sandbox-contract/schemas/devices";
 import { conflictAsk, type ConflictSubject } from "./conflictAsk";
 
 // A turn started from a button is unwatched, so what it's told is the whole feature: each assertion is a way

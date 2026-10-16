@@ -1,4 +1,5 @@
-import { type AgentProvider, roomiestAccount } from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { roomiestAccount } from "@intentic/sandbox-contract/models/plan-pools";
 import type { Services } from "../../composition.js";
 import { serviceabilities, type ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
 import { breakPolicyFor } from "../run/turn/turn-resume.js";

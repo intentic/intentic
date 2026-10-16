@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { WorkspaceTreeDelta } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeDelta } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { waitFor } from "@intentic/testing/bun";
 import pino from "pino";
 import { walkWorkspaceTree } from "../files/workspace-tree.js";

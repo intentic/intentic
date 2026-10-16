@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import type { ResidentEngine } from "@intentic/iq-engine";
-import type { DerivedSide, WorkspaceChildren, WorkspaceDerived, WorkspaceTree } from "@intentic/sandbox-contract";
+import type { DerivedSide } from "@intentic/sandbox-contract/schemas/diff";
+import type { WorkspaceChildren, WorkspaceDerived, WorkspaceTree } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import type { Logger } from "pino";
 import type { BlobSource } from "../derived/derived-blob.js";
 import type { Config } from "../env.config.js";

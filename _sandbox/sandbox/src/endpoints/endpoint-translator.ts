@@ -1,4 +1,5 @@
-import { type Capability, type EndpointConfig, TRIAL_ENDPOINT_ID } from "@intentic/sandbox-contract";
+import type { Capability, EndpointConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import { TRIAL_ENDPOINT_ID } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { Services } from "../composition.js";
 import { trialCompatEntry } from "../trial/trial-endpoint.js";
 import { parseHeaders, versionedBase } from "./endpoint-config.js";

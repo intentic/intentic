@@ -1,5 +1,5 @@
 import { mocked } from "@intentic/testing/bun";
-import type { ResolveAsk } from "../fleet/agentActions";
+import type { ResolveAsk } from "../../../models/fleet/agentActions";
 
 // The board's presses: which channel each outcome reports on, and a second press on a card while its first is out.
 // Browser-needing modules and agentActions are stubbed; the per-card store is real, with an empty roster under it.
@@ -20,7 +20,7 @@ const stub = {
     stoppedJobs: new Set<string>(),
 };
 
-jest.mock("../fleet/useAgents", () => ({
+jest.mock("../../../models/fleet/useAgents", () => ({
     useAgents: () => ({
         fleet: stub.fleet,
         refresh: async () => undefined,
@@ -34,15 +34,15 @@ jest.mock("../fleet/useAgents", () => ({
         agentById: (id: string) => stub.agents.get(id),
     }),
 }));
-jest.mock("../fleet/fleetScope", () => ({ otherFleet: { value: [] } }));
+jest.mock("../../../models/fleet/fleetScope", () => ({ otherFleet: { value: [] } }));
 jest.mock("../../../workbench/notifications/notifications", () => ({
     useNotifications: () => ({
         say: (message: string) => stub.said.push(message),
     }),
 }));
-jest.mock("../../sandbox/live/fleetAcross", () => ({ refreshAcross: () => undefined, otherBoxes: { value: [] } }));
-jest.mock("../fleet/useAgents-registry", () => ({ registry: { value: [] } }));
-jest.mock("../fleet/agentActions", () => ({
+jest.mock("../../../models/sandbox/live/fleetAcross", () => ({ refreshAcross: () => undefined, otherBoxes: { value: [] } }));
+jest.mock("../../../models/fleet/useAgents-registry", () => ({ registry: { value: [] } }));
+jest.mock("../../../models/fleet/agentActions", () => ({
     askAgentToResolve: jest.fn(() => new Promise((settle) => stub.asks.push(settle))),
     landAgent: jest.fn(() => new Promise((settle) => stub.lands.push(settle))),
     discardAgent: jest.fn(async () => undefined),
@@ -51,8 +51,8 @@ jest.mock("../fleet/agentActions", () => ({
     nothingLanded: () => stub.nothingLanded,
 }));
 
-const { askAgentToResolve, landAgent } = await import("../fleet/agentActions");
-const { pendingOn } = await import("../fleet/useAgents-provisional");
+const { askAgentToResolve, landAgent } = await import("../../../models/fleet/agentActions");
+const { pendingOn } = await import("../../../models/fleet/useAgents-provisional");
 const { useAgentDrag } = await import("./useAgentDrag");
 
 afterEach(() => {

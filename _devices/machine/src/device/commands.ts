@@ -2,7 +2,7 @@ import { rm } from "node:fs/promises";
 import { pollUntil } from "@intentic/base/async";
 import { plural } from "@intentic/base/format";
 import { explain, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
-import { PeerEnrollmentAnswerSchema } from "@intentic/sandbox-contract";
+import { PeerEnrollmentAnswerSchema } from "@intentic/sandbox-contract/schemas/peer-enrollment";
 import type { CommandContext } from "@stricli/core";
 import { buildCommand, machineUi, type Narration, sandboxUrlOf } from "../cli-ui.js";
 import { postWhileWarming } from "../daemon-base.js";
@@ -215,7 +215,7 @@ export const dropUnreachableLinks = async (ui: Ui): Promise<void> => {
     }
     ui.act(`Dropping ${plural(gone.length, "unreachable link")}`);
     for (const { url } of gone) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one read-modify-write per link: the config is rewritten whole
+        // one read-modify-write per link: the config is rewritten whole
         await removeLinks(url);
     }
     const left = await readLinks();

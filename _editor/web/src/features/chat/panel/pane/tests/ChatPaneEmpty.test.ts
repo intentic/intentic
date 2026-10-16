@@ -9,8 +9,8 @@ jest.mock(`vue-router`, () => ({
     RouterLink: RouterLinkStub as never,
 }));
 
-const { endpointProviders, endpointsLoaded, trialStatus } = await import("../../../accounts/providerCatalog");
-const { accountsLoaded, providerAccounts } = await import("../../../accounts/providerAccounts");
+const { endpointProviders, endpointsLoaded, trialStatus } = await import("../../../../../models/providers/providerCatalog");
+const { accountsLoaded, providerAccounts } = await import("../../../../../models/providers/providerAccounts");
 const { default: ChatPaneEmpty } = await import("../ChatPaneEmpty.vue");
 const noAccounts = providerAccounts.value;
 

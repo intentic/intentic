@@ -1,4 +1,4 @@
-import { type RawRouteKey, rawRoutePath } from "@intentic/sandbox-contract";
+import { type RawRouteKey, rawRoutePath } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { daemon, sockets } from "./daemon";
 import { openTabSnapshot } from "./fixture/openChats";
 import { demoMode } from "./mode";

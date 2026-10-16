@@ -1,7 +1,7 @@
 import { resetSandboxScope, sandboxRef } from "@intentic/extension-api";
 import { watch } from "vue";
-import { loadArchived } from "../../agents/fleet/useAgents-registry";
-import { loadAccountStatus } from "../../chat/accounts/useChat-accounts";
+import { loadArchived } from "../../../models/fleet/useAgents-registry";
+import { loadAccountStatus } from "../../../models/conversations/accounts/useChat-accounts";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 
 // The one place a sandbox switch resets anything: every module-level value about one sandbox is declared through the

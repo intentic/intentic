@@ -1,6 +1,7 @@
 import { anySignal } from "@intentic/base/async";
 import type { Log } from "@intentic/local-agent";
-import { SANDBOX_ID, sandboxIdFromUrl } from "@intentic/sandbox-contract";
+import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
+import { sandboxIdFromUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import { redeemWhileWarming } from "@intentic/sandbox-contract/pairing-redeem";
 import { localDaemonUrlInsecure } from "@intentic/sandbox-run";
 
@@ -65,7 +66,7 @@ export const resolveDaemonBase = async (sandboxUrl: string, fetchImpl: FetchImpl
         if (index === candidates.length - 1) {
             return { base: candidate, local: false }; // The floor: the registry's own answer, taken on trust.
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Candidate order is the fallback order.
+        // Candidate order is the fallback order.
         if (expected !== undefined && (await probeDaemonBase(candidate, expected, fetchImpl))) {
             return { base: candidate, local: true };
         }

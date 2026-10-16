@@ -11,7 +11,7 @@ import { openDocument } from "../store/open-document.js";
 // until somebody takes it back. It used to be a bullet appended to .intentic/config/safety.md, which an agent edits as
 // freely as its owner does, which nothing listed and which only a hand edit could take back; rejected. Approved hook
 // sets and approved extensions are owner-wide yeses too, and stay in their own digest-pinned ledgers under the history
-// root (guard/hook-approvals.ts, extensions/extension-approvals.ts) which the same list reads.
+// root (guard/hook-approvals.ts, capabilities/extension-inventory/extension-approvals.ts) which the same list reads.
 
 const CommandPolicyGrantSchema = z.object({
     line: z.string().min(1),

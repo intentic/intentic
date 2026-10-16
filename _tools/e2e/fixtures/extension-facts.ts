@@ -1,4 +1,5 @@
-import type { CapabilitySummary, PanelSummary } from "@intentic/sandbox-contract";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { PanelSummary } from "@intentic/sandbox-contract/schemas/panels";
 
 // Minimal facts under which every registration in `_extensions/*` and coreViews.ts activates at least once; a real
 // fresh sandbox has nothing connected, so this is a seeded stand-in.

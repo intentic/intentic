@@ -2,6 +2,7 @@ import type { IngressInput, IngressOutput } from "@intentic/api-contract/ingress
 import type { Config } from "../env.config.js";
 import type { CliAnswer } from "../http/cli-answer.js";
 import { callPlatform } from "../system/platform-relay.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // The owner's ACCOUNT as this sandbox can reach it: the four calls behind the `sandboxes` CLI, each authenticated by
 // the provisioning token on the `fleet` capability rather than by this sandbox's own connect token. Buffered, because
@@ -36,14 +37,11 @@ export type ProvisionedSandbox = IngressOutput<"fleetProvision">;
 // The platform's refusals are already sentences written for a person, so they are read out rather than re-worded; a
 // body that is not JSON at all is the one case this has to write its own line for.
 export const answerError = (answer: { readonly status: number; readonly body: string }): string => {
-    try {
-        const parsed = JSON.parse(answer.body) as { error?: unknown; message?: unknown };
-        const stated = typeof parsed.error === "string" ? parsed.error : typeof parsed.message === "string" ? parsed.message : undefined;
-        if (stated !== undefined && stated !== "") {
-            return stated;
-        }
-    } catch {
-        /* Not JSON: fall through to the raw text, which is what a proxy or a 502 page answers with. */
+    // Not JSON: fall through to the raw text, which is what a proxy or a 502 page answers with.
+    const parsed = parseJsonOr(answer.body, undefined) as { error?: unknown; message?: unknown } | null | undefined;
+    const stated = typeof parsed?.error === "string" ? parsed.error : typeof parsed?.message === "string" ? parsed.message : undefined;
+    if (stated !== undefined && stated !== "") {
+        return stated;
     }
     const raw = answer.body.trim();
     return raw === "" ? `the platform answered ${answer.status} with nothing to say` : raw.slice(0, 300);

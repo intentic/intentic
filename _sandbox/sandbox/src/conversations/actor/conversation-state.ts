@@ -1,6 +1,11 @@
-import type { AgentJob, AgentNeed, AgentSummary, AgentWatch, KeepWarm, ParkKind, ProgramAsk, TodoItem, TurnProof, TurnReach } from "@intentic/sandbox-contract";
-import type { TurnCheckpoint } from "../../agent/checkpoints/turn-checkpoints.js";
-import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
+import type { AgentJob, AgentSummary, AgentWatch, TurnProof, TurnReach } from "@intentic/sandbox-contract/schemas/agents";
+import type { AgentNeed } from "@intentic/sandbox-contract/schemas/needs";
+import type { KeepWarm } from "@intentic/sandbox-contract/schemas/keep-warm";
+import type { ParkKind } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { ProgramAsk, TodoItem } from "@intentic/sandbox-contract/events/requests";
+import { localZone, nextDayStartIn, type Zone } from "@intentic/sandbox-contract/time/zone";
+import type { TurnCheckpoint } from "../../store/journals/turn-checkpoints.js";
+import type { JournalledTurn } from "../../store/journals/turn-journal.js";
 import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
 import type { FailedEnding } from "../registry/agents-store.js";
 import { holdOf, NO_QUEUE, type TurnQueue, waitingOf } from "./conversation-queue.js";
@@ -228,3 +233,9 @@ export const activityLive = (state: ConversationState): boolean => state.phase.k
  */
 export const awaitingWake = (state: ConversationState): boolean =>
     state.watches.length > 0 || (holdOf(state.queue) === undefined && waitingOf(state.queue).some((item) => item.voice !== "person"));
+
+// The CLI child inherits this process's zone and writes its prompt's date in it, whatever zone anybody reading is in.
+export const cliZone = (): Zone => localZone();
+
+// When the CLI's prompt date (agent/run/prompt-fingerprint.ts `promptDay`) next changes.
+export const nextPromptDayAt = (now: number = Date.now(), zone: Zone = cliZone()): number => nextDayStartIn(now, zone);

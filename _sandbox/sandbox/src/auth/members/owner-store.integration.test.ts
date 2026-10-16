@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { pino } from "pino";
 import { z } from "zod";
-import { testConfig } from "../../testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import { fileOwnerStore, ownerDocument, OwnerUnreadableError } from "../auth.js";
 import { createAuthSlice } from "../auth-slice.js";
 

@@ -1,11 +1,10 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
-import { withRuntimeHistory } from "../agent/providers/runtime-history.js";
-import { withAttachmentNote } from "../agent/prompt/attachment-note.js";
+import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract/events/resume";
+import { withRuntimeHistory } from "./vocabulary/runtime-history.js";
+import { withAttachmentNote } from "./vocabulary/attachment-note.js";
 import { LANDING_CHECKS_NOTE } from "../agent/prompt/checks-note.js";
 import { composeWirePrompt } from "../agent/prompt/turn-preamble.js";
-import { SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE } from "../agent/subagents/spawn-note.js";
 import {
     createRecentSessions,
     listWorkspaceSessions,
@@ -16,6 +15,7 @@ import {
 } from "./sessions.js";
 import { openSearchIndex } from "./search-index.js";
 import { readSessionLines } from "./transcript-search.js";
+import { SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE } from "./vocabulary/prompt-envelope.js";
 
 // Fakes the SDK store: `listSessions` is newest-first, `getSessionMessages` returns Anthropic-shaped turns.
 const listSessions = jest.fn();

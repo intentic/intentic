@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { type DocumentScan, namedDocumentPaths, withProducedDocuments } from "./produced-documents.js";
 
 /* A finished command's documents onto its card: which calls are asked about, what the scan is told, and where the

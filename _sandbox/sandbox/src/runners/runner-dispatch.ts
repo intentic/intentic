@@ -1,16 +1,10 @@
 import { opt } from "../opt.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-    type AgentEvent,
-    type AgentTurn,
-    canonicalHarness,
-    type RoutedAgentTurn,
-    type RunnerSync,
-    type RunnerSyncLine,
-    type RunnerTurn,
-    runnerIncomingRef,
-} from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentTurn, RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import { canonicalHarness } from "@intentic/sandbox-contract/models/agent-catalog";
+import { type RunnerSync, type RunnerSyncLine, type RunnerTurn, runnerIncomingRef } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { defaultGit } from "@intentic/base/git";
 import { whenAborted } from "@intentic/base/async";
 import { mainBranchOf } from "../git/agent-refs.js";

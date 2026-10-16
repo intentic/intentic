@@ -1,4 +1,5 @@
-import { type MemberRole, roleAtLeast, type SessionOwner } from "@intentic/sandbox-contract";
+import { type MemberRole, roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import type { SessionOwner } from "@intentic/sandbox-contract/schemas/agents";
 import { areasCover } from "../auth/fleet-scope.js";
 
 // Who may make a member answerable for a conversation (agents.assign): its owner hands it over, a maintainer or the

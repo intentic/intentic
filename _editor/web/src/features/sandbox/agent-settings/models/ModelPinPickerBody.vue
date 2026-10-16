@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { type AgentHarness, type AgentProvider, type ModelPin, termsOf } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider, ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import { termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import ModelPicker from "../../../chat/models/ModelPicker.vue";
 import PickerRunSettings from "../../../chat/models/run-settings/PickerRunSettings.vue";
-import ProviderLogo from "../../../chat/accounts/ProviderLogo.vue";
+import ProviderLogo from "../../../../parts/providers/ProviderLogo.vue";
 import LoopTermsRow from "../../../chat/models/LoopTermsRow.vue";
 import LoopChips from "../../../chat/models/LoopChips.vue";
 import LoopLimitsRow from "../../../chat/models/LoopLimitsRow.vue";
-import { limitationsOn, offeredLoops, selectedLoop } from "../../../chat/models/offeredLoops";
-import type { PickerEntry } from "../../../chat/models/modelPickerState";
-import { providerDisplayLabel } from "../../../chat/accounts/providerCatalog";
-import { carryPinKnobs, defaultPinRunSettings, honoredPinKnobs, usePickerRunSettings } from "../../../chat/models/run-settings/pickerRunSettings";
-import { useChat } from "../../../chat/run/useChat";
+import { limitationsOn, offeredLoops, selectedLoop } from "../../../../models/providers/offeredLoops";
+import type { PickerEntry } from "../../../../models/conversations/accounts/modelPickerState";
+import { providerDisplayLabel } from "../../../../models/providers/providerCatalog";
+import { carryPinKnobs, defaultPinRunSettings, honoredPinKnobs, usePickerRunSettings } from "../../../../models/providers/pickerRunSettings";
+import { useChat } from "../../../../models/conversations/run/useChat";
 import { useT } from "@intentic/ui/i18n";
 
 // Full app model picker (composer's ModelPicker), pointed at one entry of a pinned list. No account control: that's a

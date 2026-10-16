@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { TranscriptTool } from "@intentic/sandbox-contract";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import ChatToolCard from "./ChatToolCard.vue";
 import ChatToolGroup from "./ChatToolGroup.vue";
 import { type ToolEntry, groupConsecutiveTools } from "./toolGrouping";

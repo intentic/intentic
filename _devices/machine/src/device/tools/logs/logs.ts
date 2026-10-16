@@ -1,9 +1,10 @@
 import { open, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { errorMessage } from "@intentic/base/errors";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { parseJsonWith } from "@intentic/base/json";
 import { homeDir } from "@intentic/local-agent";
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { z } from "zod";
 import { agentLogPath, baseDir, runLogPath } from "../../../config.js";
 import { auditPath } from "../../config.js";
@@ -58,8 +59,8 @@ const agentFiles = (): readonly { readonly path: string; readonly kind: DeviceLo
 ];
 
 const statOf = async (path: string): Promise<{ size: number; mtimeMs: number } | undefined> => {
-    // allow(silent-catch): a file that is not there is not listed
-    const info = await stat(path).catch(() => undefined);
+    // A file that is not there is not listed.
+    const info = await stat(path).catch(undefinedIfMissing);
     return info?.isFile() === true ? { size: info.size, mtimeMs: info.mtimeMs } : undefined;
 };
 
@@ -147,15 +148,9 @@ const auditPasses = (line: string, { tool, failedOnly }: LogFilter): boolean => 
     if (tool === undefined && failedOnly !== true) {
         return true;
     }
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(line);
-    } catch {
-        // allow(silent-catch): a torn line (a crash mid-write) is not a call, and a filtered read is about calls
-        return false;
-    }
-    const entry = AuditLineSchema.safeParse(parsed);
-    return entry.success && (tool === undefined || entry.data.tool === tool) && (failedOnly !== true || !entry.data.ok);
+    // A torn line (a crash mid-write) is not a call, and a filtered read is about calls.
+    const entry = parseJsonWith(line, AuditLineSchema);
+    return entry !== undefined && (tool === undefined || entry.tool === tool) && (failedOnly !== true || !entry.ok);
 };
 
 // The lines a read answers with, last `lines` of those that pass. Pure; throws on a grep that is not a pattern.

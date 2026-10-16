@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
-import type { ExtensionSummary, ExtensionUpdatePolicy } from "@intentic/sandbox-contract";
+import type { ExtensionSummary, ExtensionUpdatePolicy } from "@intentic/sandbox-contract/schemas/extension-updates";
 import { Notice, SegmentedControl, ui } from "@intentic/ui";
 import { computed } from "vue";
 import { useOperations } from "../../../workbench/operations/operations";

@@ -1,5 +1,5 @@
 import { t } from "@intentic/ui/i18n";
-import { rawRouteUrl } from "@intentic/sandbox-contract";
+import { rawRouteUrl } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { normalizeDaemonUrl } from "../../lib/daemonUrl";
 
 // One-step alternative to provision+run+wait: nothing is provisioned, so the browser itself verifies the pasted

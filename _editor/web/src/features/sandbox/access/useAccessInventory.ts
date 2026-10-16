@@ -1,7 +1,7 @@
 import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
-import { useRunners } from "../devices/runners/useRunners";
+import { useRunners } from "../../../models/sandbox/devices/useRunners";
 
 // Counts every machine door into the sandbox besides a person or control token (webhooks, workflow gates, CI hooks,
 // paired machines), for the Access tab's "what still has a way in" question. Reads and counts only; each count is

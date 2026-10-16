@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { pick, repoPaths, seeded, words } from "./fixtures.js";
 
 const TOOLS = [

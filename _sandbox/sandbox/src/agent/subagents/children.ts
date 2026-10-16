@@ -6,29 +6,15 @@ import { landByHandLeased } from "../../conversations/land/land-by-hand.js";
 import { landTargetOf } from "../../conversations/land/land-target.js";
 import type { Caller } from "../../auth/auth.js";
 import { parentOfActor } from "../../auth/principal.js";
-import type {
-    AgentCapabilities,
-    AgentEvent,
-    AgentHarness,
-    AgentProvider,
-    AskQuestion,
-    ChildAgentAsk,
-    ChildMove,
-    ChildRun,
-    LimitPolicy,
-    ResumeReason,
-    TurnProfile,
-} from "@intentic/sandbox-contract";
-import {
-    canonicalHarness,
-    capabilitiesOf,
-    childRunOf,
-    loopLabel,
-    loopOf,
-    newConversationId,
-    PROVIDERS,
-    sameChildRun,
-} from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentHarness, AgentProvider, TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
+import type { AskQuestion, ChildAgentAsk, ChildMove, ChildRun } from "@intentic/sandbox-contract/events/requests";
+import type { LimitPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
+import type { ResumeReason } from "@intentic/sandbox-contract/events/resume";
+import { canonicalHarness, capabilitiesOf, loopLabel, loopOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
+import { childRunOf, sameChildRun } from "@intentic/sandbox-contract/events/child-run";
+import { newConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { cardDeps } from "../../conversations/actor/card-deps.js";
 import { raiseRequest } from "../../guard/card-offers.js";
 import { type Holding, type LiveRun, liveRunOf, turnRunOf } from "../../conversations/actor/conversation-holdings.js";
@@ -41,7 +27,7 @@ import { conversationTaintSource, markConversationTaint, RUNTIME_SOURCE } from "
 import { killCauseOf, killNote, runtimeKilled } from "./child-death.js";
 import { noteChildWork } from "./child-verification.js";
 import { spawnBlocked, spawnCatalogText, type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
-import { mentionsSpentAllowance } from "../providers/failure-sentences.js";
+import { mentionsSpentAllowance } from "../../engines/failure-sentences.js";
 import { spentRung } from "../models/role-model-quota.js";
 import {
     blockedMoveReporter,
@@ -55,7 +41,7 @@ import {
     type SubagentTurn,
     type SubagentWaitOptions,
 } from "./subagents.js";
-import { bookedRerunWords, childLandingWords, sayToParent } from "./child-lands.js";
+import { bookedRerunWords, childLandingWords, sayToParent } from "../../conversations/land/child-lands.js";
 import {
     type ChildStanding,
     descendantsOf,
@@ -67,7 +53,7 @@ import {
 } from "./family-cancel.js";
 import { filePausedChildren } from "./paused-children.js";
 import { waitForWork, type WorkWaitOutcome } from "./work-wait.js";
-import { deliverWake } from "../run/turn/wake-delivery.js";
+import { deliverWake } from "../../seams/wake-delivery.js";
 import { spokenBy } from "../../seams/turn-speaker.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";

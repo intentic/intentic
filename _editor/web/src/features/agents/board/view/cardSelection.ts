@@ -1,21 +1,22 @@
-import type { SubagentSession, WorkflowRun } from "@intentic/sandbox-contract";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
+import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { computed, onScopeDispose, ref, type Ref, watch } from "vue";
 import type { LocationQuery, Router } from "vue-router";
 import { clickIntent, rangeSelect } from "../../../../lib/multiSelect";
 import { afterPaint } from "../../../../lib/afterPaint";
 import { uuid } from "../../../../lib/uuid";
-import { showParkedChat } from "../../../chat/panel/chatPanelLayout";
-import { agentTabOf } from "../../../chat/panel/useChat-reveal";
-import { showingRunGraph } from "../../../chat/run/chatRun";
-import { traceFocus } from "../../../chat/run/focusTrace";
-import type { Summons } from "../../../chat/run/summon";
-import type { Strip } from "../../../chat/tabs/tabFacts";
-import { drillTarget } from "../../fleet/agentStatus";
-import { isRemote } from "../../fleet/fleetScope";
-import { agentSeed } from "../../fleet/useAgents-actions";
-import type { FleetAgent } from "../../fleet/useAgents-fleet";
+import { showParkedChat } from "../../../../models/conversations/panel/chatPanelLayout";
+import { agentTabOf } from "../../../../models/conversations/panel/useChat-reveal";
+import { showingRunGraph } from "../../../../models/conversations/run/chatRun";
+import { traceFocus } from "../../../../models/conversations/run/focusTrace";
+import type { Summons } from "../../../../models/conversations/run/summon";
+import type { Strip } from "../../../../models/conversations/tabs/tabFacts";
+import { drillTarget } from "../../../../models/agent-status/agentStatus-attention";
+import { isRemote } from "../../../../models/fleet/fleetScope";
+import { agentSeed } from "../../../../models/fleet/useAgents-actions";
+import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import type { ViewEvent } from "./boardView";
-import { openLinkedSubagent } from "../../fleet/linkedSubagent";
+import { openLinkedSubagent } from "../../../../models/fleet/linkedSubagent";
 
 // Which card the board points at and what a press on one does: the ring follows the chat's own selection unless a link
 // just focused a card, a click opens the chat as a look rather than navigating, a modified click composes panes, and a

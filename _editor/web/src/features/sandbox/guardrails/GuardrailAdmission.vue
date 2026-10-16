@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { AdmissionPolicy, AdmissionRule } from "@intentic/sandbox-contract";
+import type { AdmissionPolicy, AdmissionRule } from "@intentic/sandbox-contract/schemas/agent";
 import { Notice, Picker, Row, RowGroup, RowNote } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { useSandboxSettings } from "../overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import { ADMISSION_KEYS, type AdmissionKey, admissionOptions } from "./outwardActions";
 
 // Whether work started from outside may run at all, per kind of trigger (`settings.admission`): run, wait in Approvals,

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { errorMessage } from "@intentic/base/errors";
-import { isNewer } from "@intentic/sandbox-contract";
+import { isNewer } from "@intentic/sandbox-contract/state/versions";
 import { releaseAssetUrl } from "../release.js";
 import { verifySignedSums } from "./release-signature.js";
 
@@ -109,7 +109,7 @@ export const verifyReleaseFiles = async (
         if (expected === undefined) {
             throw new Error(`the SHA256SUMS of v${version} lists no ${file.name}`);
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one file at a time; there are at most two
+        // one file at a time; there are at most two
         const actual = await fileSha256(file.path);
         if (actual !== expected) {
             throw new Error(`the downloaded ${file.name} is not the one v${version} published (SHA-256 ${actual}, its SHA256SUMS says ${expected})`);

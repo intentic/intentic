@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
-import type { BundleExport } from "@intentic/sandbox-contract";
+import type { BundleExport } from "@intentic/sandbox-contract/schemas/environment";
 import { sandboxSlugOf } from "@intentic/sandbox-run";
 import type { Services } from "../composition.js";
 import { packBundle } from "./bundle.js";

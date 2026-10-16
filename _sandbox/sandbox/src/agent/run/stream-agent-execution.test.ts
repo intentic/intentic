@@ -1,7 +1,9 @@
-import { type AgentDomainPolicy, type AgentEvent, type SandboxSettings, SandboxSettingsSchema, type TurnNote } from "@intentic/sandbox-contract";
+import { type AgentDomainPolicy, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
-import * as turnEnvironment from "../../capabilities/turn-env.js";
+import * as turnEnvironment from "./harness/turn-env.js";
 import * as repoSync from "../../workspace/layout/sync-repos.js";
 import * as turnPlanning from "./turn/turn-plan.js";
 import { AGENT_DOMAIN_NOT_READY } from "../../workload/domain/agent-domain-rollout.js";
@@ -39,7 +41,7 @@ const pureTurn = (services: Services): PureTurn => {
     return turn;
 };
 
-jest.mock("../../capabilities/turn-env.js", () => ({
+jest.mock("./harness/turn-env.js", () => ({
     ...originalEnvironment,
     turnCliEnv: async (services: Services) => {
         pureTurn(services).operations.push("environment");
@@ -68,7 +70,7 @@ const { streamAgent } = await import("./stream-agent.js");
 afterEach(() => turns.clear());
 afterAll(() => {
     // suites also uses --isolate, but return these exports for a caller running several files in one registry.
-    jest.mock("../../capabilities/turn-env.js", () => originalEnvironment);
+    jest.mock("./harness/turn-env.js", () => originalEnvironment);
     jest.mock("../../workspace/layout/sync-repos.js", () => originalRepoSync);
     jest.mock("./turn/turn-plan.js", () => originalPlanning);
 });

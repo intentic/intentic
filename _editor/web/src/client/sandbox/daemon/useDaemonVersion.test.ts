@@ -1,5 +1,5 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import { OLDEST_SUPPORTED_DAEMON } from "@intentic/sandbox-contract";
+import { OLDEST_SUPPORTED_DAEMON } from "@intentic/sandbox-contract/state/daemon-floor";
 import { daemonTooOld, daemonVersion, oldestSupportedDaemon, setDaemonVersion } from "./useDaemonVersion";
 
 describe(`useDaemonVersion`, () => {

@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ChorePackage, ChoreShape, ChoreSignals } from "@intentic/sandbox-contract";
+import type { ChorePackage, ChoreShape, ChoreSignals } from "@intentic/sandbox-contract/schemas/maintenance";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { readWorkspaceManifests } from "../workspace/deps/package-graph.js";
 import type { Services } from "../composition.js";

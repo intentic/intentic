@@ -5,10 +5,10 @@ import { computed } from "vue";
 import RunCommand from "../../../components/RunCommand.vue";
 import { daemonVersion, oldestSupportedDaemon } from "../../../client/sandbox/daemon/useDaemonVersion";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useServingSlug } from "../environment/servingSlug";
-import { useHostRunning } from "../devices/useDevices";
+import { useServingSlug } from "../../../models/sandbox/environment/servingSlug";
+import { useHostRunning } from "../../../models/sandbox/devices/useDevices";
 import SandboxUpdateCard from "../overview/version/SandboxUpdateCard.vue";
-import { updateCommand } from "./updateCommand";
+import { updateCommand } from "../../../models/sandbox/environment/updateCommand";
 import GateCard from "./GateCard.vue";
 
 // Shown in place of the sandbox's pages when its daemon is older than the oldest this app supports

@@ -1,7 +1,7 @@
 import { type CapabilityCatalogEntry, type CapabilityEffect, capabilityEffects } from "@intentic/capability-catalog";
 import { type CapabilityContribution, contributionDiscriminator, type ExtensionManifest } from "@intentic/extension-manifest";
-import type { CapabilityKind } from "@intentic/sandbox-contract";
-import { type FormValues, fieldConfig } from "./form";
+import type { CapabilityKind } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type FormValues, fieldConfig } from "../../../models/capabilities/form";
 
 // What a tile adds to the sandbox, read through capabilityEffects with the contribution behind it: the form's live
 // "This will add to your sandbox" panel, and the consequences badged on the grid's tile.

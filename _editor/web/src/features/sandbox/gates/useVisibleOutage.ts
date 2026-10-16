@@ -2,7 +2,7 @@ import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch, type ComputedRef } from "vue";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { onScreen } from "../../../workbench/window/onScreen";
-import { restartExpected } from "../live/sandboxRestart";
+import { restartExpected } from "../../../models/sandbox/live/sandboxRestart";
 import { useDiagnosis } from "../diagnosis/useDiagnosis";
 import { type DiagnosisNotice, presentDiagnosis } from "../diagnosis/presentation";
 import { recoveryDue } from "./recovery";

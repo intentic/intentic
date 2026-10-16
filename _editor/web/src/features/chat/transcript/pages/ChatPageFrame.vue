@@ -1,15 +1,18 @@
 <script lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 // Drawings whose errors this window already reported, and whether the agent heard: kept across mounts, so scrolling a
 // page out of the chat and back neither says it twice nor forgets that it was said.
 const toldPages = new Map<string, boolean>();
 </script>
 
 <script setup lang="ts">
-import { deliverableKindOf, type McpAppData, type Page, PAGE_ERRORS_MAX, PAGE_MAX_HEIGHT, sizedFirst } from "@intentic/sandbox-contract";
+import { deliverableKindOf } from "@intentic/sandbox-contract/text/documents";
+import { type McpAppData, PAGE_ERRORS_MAX, sizedFirst } from "@intentic/sandbox-contract/text/pages";
+import { type Page, PAGE_MAX_HEIGHT } from "@intentic/sandbox-contract/events/requests";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
-import { useChatSurface } from "../../tools/chatToolSurface";
-import { setHtmlPreviewed } from "../../../workspace/viewers/html/htmlPreviewed";
+import { useChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
+import { setHtmlPreviewed } from "../../../../models/workspace/viewers/htmlPreviewed";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { initializeResult, type PageAsk, pageRefusal, pageResult, readPageAsk, themeMessage, toolInputMessage, toolResultMessage } from "./pageBridge";
 import { buildPageDocument } from "./pageDocument";
@@ -177,7 +180,7 @@ const callTool = async (id: string | number, name: string, args: Record<string, 
         const answer = await sandboxRpc.pages.appCall({ page: props.page.path, name, arguments: args, pressed: pressedHere() });
         post(pageResult(id, (answer.result ?? {}) as Record<string, unknown>));
     } catch (error) {
-        refuse(id, error instanceof Error ? error.message : String(error));
+        refuse(id, errorMessage(error));
     }
 };
 

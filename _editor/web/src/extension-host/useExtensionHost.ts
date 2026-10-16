@@ -1,8 +1,8 @@
 import { activeLocale } from "@intentic/ui/i18n";
 import { watch } from "vue";
-import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
-import { usePanels } from "../features/extensions/usePanels";
-import { activeSandboxId } from "../lib/activeSandbox";
+import { useCapabilities } from "../models/capabilities/useCapabilities";
+import { usePanels } from "../models/extensions/usePanels";
+import { activeSandboxId } from "../app/storage/activeSandbox";
 import { useSandbox } from "../client/sandbox/useSandbox";
 import type { HostBindings } from "./apiImpl";
 import { loadExtensions, retireExtensions } from "./loader";

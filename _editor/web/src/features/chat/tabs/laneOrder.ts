@@ -1,4 +1,4 @@
-import { finishedLaneOrder } from "../../agents/fleet/useAgents-fleet";
+import { finishedLaneOrder } from "../../../models/fleet/useAgents-fleet";
 import type { OpenChat } from "./cardView";
 import { laneOfTab } from "./tabs";
 

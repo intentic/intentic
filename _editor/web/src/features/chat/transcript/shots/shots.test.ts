@@ -1,8 +1,8 @@
 // Which pictures a turn stands for at its end, and in what order: the calls' own image entries, a delegation's
 // included, a file shown twice kept once where it was last shown, and the user's own attachments left out.
 import { STATE_DIR } from "@intentic/constants";
-import type { TranscriptTool } from "@intentic/sandbox-contract";
-import type { ChatMessage, ChatTurn } from "../transcript";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import type { ChatMessage, ChatTurn } from "../../../../models/conversations/transcript/transcript";
 import type { ShotLook } from "./shotLook";
 import { attachedPathsOf, type ChatShot, shotKey, shotName, shotsByTurn, shotsOfTurn, sortShots } from "./shots";
 

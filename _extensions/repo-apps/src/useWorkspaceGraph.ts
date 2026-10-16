@@ -1,4 +1,9 @@
-import type { PackageModules, WorkspaceComponent, WorkspaceDepEdge, WorkspacePackage } from "@intentic/sandbox-contract";
+import type {
+    PackageModules,
+    WorkspaceComponent,
+    WorkspaceDepEdge,
+    WorkspacePackage,
+} from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
 

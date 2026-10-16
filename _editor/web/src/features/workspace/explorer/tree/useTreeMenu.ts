@@ -1,10 +1,11 @@
-import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { parentDir } from "@intentic/ui/path";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
 import { type EntryMenuInput, type EntryVerbs, entryMenuItems } from "../entryMenu";
 import type { RowAction } from "../rowActions";
-import type { useWorkspaceTree } from "../useWorkspaceTree";
+import type { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
 import type { useTreeRules } from "./useTreeRules";
 import type { MultiSelect } from "../../../../lib/multiSelect";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { Row, RowGroup, SkeletonRows, SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
 import { computed } from "vue";
-import { useRepoChecks } from "../../environment/useRepoChecks";
+import { useRepoChecks } from "../../../../models/sandbox/environment/useRepoChecks";
 import { useSandboxOutline } from "../../overview/useSandboxOutline";
-import RepoCheckRow from "./RepoCheckRow.vue";
+import RepoCheckRow from "../../../../components/RepoCheckRow.vue";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

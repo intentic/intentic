@@ -1,4 +1,4 @@
-import { FIRE_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
+import { FIRE_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract/schemas/automations";
 import type { Context } from "hono";
 import { presentedDoorToken } from "../auth/tokens/door-tokens.js";
 import type { Services } from "../composition.js";
@@ -7,6 +7,7 @@ import { readBoundedText } from "../http/bounded-body.js";
 import { remoteIpOf } from "../http/remote-ip.js";
 import { doorAdmission } from "./door-admission.js";
 import { fireAutomation, PAYLOAD_MAX } from "./scheduler.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // POST /automations/:id/fire wakes an event automation from a webhook, authenticated by the door token (`?token=` or
 // `Authorization: Bearer`) and enforced even in loopback, unlike /enroll. The body reaches the guard as
@@ -26,7 +27,7 @@ const ceilingRefusal = (id: string, dailyMax: number | undefined, ip: string | u
     return refused === "rate" ? "rate limited" : "this webhook has reached today's limit";
 };
 
-export const createAutomationFireRoute =
+const createAutomationFireRoute =
     (services: Services) =>
     async (c: Context<AppEnv, "/automations/:id/fire">): Promise<Response> => {
         const automation = await services.automations.get(c.req.param("id"));
@@ -61,3 +62,6 @@ export const createAutomationFireRoute =
         }).catch((error: unknown) => services.logger.error({ err: error, automation: automation.id }, "automation run failed"));
         return c.json({ ok: true });
     };
+
+// An event automation's webhook, on the automation's own token.
+export const automationFireRawRoutes = defineRawRoutes((services: Services) => ({ "POST /automations/{id}/fire": createAutomationFireRoute(services) }));

@@ -1,25 +1,19 @@
 <script setup lang="ts">
-import {
-    type AccountState,
-    type AgentProvider,
-    type KeyedProvider,
-    KeyedProviderSchema,
-    loopDoors,
-    loopLabel,
-    loopOf,
-    mintedVariants,
-    type OauthAccount,
-    providerSpec,
-} from "@intentic/sandbox-contract";
+import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { type KeyedProvider, KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
+import { loopDoors, loopLabel, loopOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { mintedVariants, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { Button, formatMoney, formatTokens, Icon, Notice, type NoticeModel, RowGroup, RowNote, timeAgo, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, useTemplateRef } from "vue";
-import { accountsOutdated } from "../../chat/accounts/accountsOutdated";
-import { translatorAccounts } from "../../chat/accounts/providerAccounts";
-import { accountsOf, subscriptionOnly } from "../../chat/accounts/useChat-accounts";
-import { offeredLoops } from "../../chat/models/offeredLoops";
-import { useChat } from "../../chat/run/useChat";
-import { hasSignIn } from "../../chat/session/access";
+import { accountsOutdated } from "../../../models/providers/accountsOutdated";
+import { translatorAccounts } from "../../../models/providers/providerAccounts";
+import { accountsOf, subscriptionOnly } from "../../../models/conversations/accounts/useChat-accounts";
+import { offeredLoops } from "../../../models/providers/offeredLoops";
+import { useChat } from "../../../models/conversations/run/useChat";
+import { hasSignIn } from "../../../models/providers/access";
 import {
     type AccountFacts,
     accountFacts,
@@ -29,8 +23,8 @@ import {
     type PlanHeadroom,
     planHeadroom,
     routedAccountFacts,
-} from "../../chat/session/usageStatus";
-import SandboxOutdatedNotice from "../overview/version/SandboxOutdatedNotice.vue";
+} from "../../../models/providers/usageStatus";
+import SandboxOutdatedNotice from "../../../parts/sandbox/SandboxOutdatedNotice.vue";
 import ConnectionRow from "../secrets/ConnectionRow.vue";
 import EstatePicker from "../secrets/EstatePicker.vue";
 import ConnectAttempt from "./ConnectAttempt.vue";

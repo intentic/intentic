@@ -3,12 +3,14 @@ import { dirname, join } from "node:path";
 import { keyedLock } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { syncDirectories } from "@intentic/base/fs";
-import { isConversationId, type TranscriptRow, TranscriptRowSchema } from "@intentic/sandbox-contract";
+import { isConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { type TranscriptRow, TranscriptRowSchema } from "@intentic/sandbox-contract/events/transcript";
 import { conversationsRoot, conversationUnit, quarantinedUnits } from "../store/conversation-units.js";
 import { getBlob, hashOf, putBlob, sweepBlobs } from "./record/record-blobs.js";
 import { type Converted, convertLegacy, framesByTurn, keptLines, type PutBlob } from "./record/record-convert.js";
 import { appendLog, current, frameOfRow, type LogIndex, openLog, readFrame, repairLog, writeLog } from "./record/record-log.js";
 import { blobNamesIn, callsOf, keptLine, previewOf, wholeOf } from "./record/record-rows.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // One zstd log per conversation (sessions/record/record-log.ts), in its unit on the HISTORY volume, a frame appended per
 // settled turn and made durable before the append resolves. Not the live path; a running turn is served from its frame
@@ -86,10 +88,8 @@ export interface TranscriptRecord {
 // Parses one stored line through `read`: whole, as a page reads it, or with its delegations' calls. A row that fails
 // the current schema, or a line that is not JSON, is dropped rather than failing the whole read.
 const rowOf = async (line: string, read: (stored: unknown) => unknown): Promise<TranscriptRow[]> => {
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(line);
-    } catch {
+    const parsed = parseJsonOr(line, undefined);
+    if (parsed === undefined) {
         return [];
     }
     const message = TranscriptRowSchema.safeParse(await read(parsed));
@@ -124,7 +124,7 @@ const scanBack = async (at: Taken, end: number, { turns, maxRows, maxBytes }: Pa
     let seen = 0;
     let bytes = 0;
     for (let index = end - 1; index >= 0; index -= 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- each row decides whether the page needs the one before it.
+        // each row decides whether the page needs the one before it.
         const taken = await at(index);
         // Never checked against an empty page: a single turn larger than the whole budget is still served, since
         // withholding it would leave the chat with nothing to show at all.
@@ -263,7 +263,7 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
     const allLines = async (path: string, index: LogIndex): Promise<string[]> => {
         const all: string[] = [];
         for (let frame = 0; frame < index.frames.length; frame += 1) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- frames in order, each cached for the next read.
+            // frames in order, each cached for the next read.
             all.push(...(await linesOf(path, index, frame)));
         }
         return all;
@@ -330,7 +330,7 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
         const index = await openLog(path);
         const lines: string[] = [];
         for (const frame of index?.frames ?? []) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- frames in order.
+            // frames in order.
             lines.push(...(await readFrame(path, frame)));
         }
         return lines;
@@ -353,7 +353,7 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
             .map((entry) => transcriptFile(historyRoot, entry.name));
         const setAside = (await quarantinedUnits(historyRoot)).map((dir) => join(dir, RECORD_NAME));
         for (const record of [...live, ...setAside]) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one record at a time; the sweep is never waited on.
+            // one record at a time; the sweep is never waited on.
             for (const line of await scanned(record)) {
                 for (const hash of blobNamesIn(line)) {
                     referenced.add(hash);
@@ -476,7 +476,7 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
             const index = legacy === undefined ? await indexed(path) : undefined;
             const count = legacy?.length ?? index?.rows ?? 0;
             for (let at = count - 1; at >= 0; at -= 1) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- newest first, and the first hit ends the search.
+                // newest first, and the first hit ends the search.
                 const line = legacy === undefined ? await lineAt(path, index!, at) : (legacy[at] ?? "");
                 const found = (await rowOf(line, calls)).find(match);
                 if (found !== undefined) {
@@ -525,7 +525,7 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
                 const { frame, line } = frameOfRow(index, keepRows);
                 const kept: string[][] = [];
                 for (let at = 0; at < frame; at += 1) {
-                    // oxlint-disable-next-line eslint/no-await-in-loop -- frames in order.
+                    // frames in order.
                     kept.push([...(await linesOf(path, index, at))]);
                 }
                 kept.push((await linesOf(path, index, frame)).slice(0, line));

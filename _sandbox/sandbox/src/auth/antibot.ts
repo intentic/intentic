@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual, createHash } from "node:crypto";
-import type { PowChallenge, WebchatConfig, WebchatMessage } from "@intentic/sandbox-contract";
+import type { PowChallenge, WebchatConfig, WebchatMessage } from "@intentic/sandbox-contract/schemas/automations";
 
 // The bot ceiling for an anonymous endpoint (two flavours), shared by the Visitor chat widget and the bug intake: both
 // face a browser with no credential.

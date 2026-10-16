@@ -1,9 +1,11 @@
-import { FENCE, ladderIsEmpty, type SafetyDecision, type SafetyVerdict, type SetupLadder } from "@intentic/sandbox-contract";
+import { FENCE } from "@intentic/sandbox-contract/text/model-answer";
+import { ladderIsEmpty, type SetupLadder } from "@intentic/sandbox-contract/models/model-setups";
+import type { SafetyDecision, SafetyVerdict } from "@intentic/sandbox-contract/policy/safety-policy";
 import type { Services } from "../../composition.js";
 import { type AgentExecutionContext, withAgentExecution } from "../../workload/agent-execution.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 import { taintWords } from "../../guard/turn-taint.js";
-import type { RoleAnswer } from "../models/role-answer.js";
+import type { RoleAnswer } from "../../engines/role-answer.js";
 import { askRoleModel } from "../models/role-model.js";
 
 // Whether a command should run, judged by a model against the owner's policy. POLICY and FACTS are trusted

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { parseJsonOr } from "@intentic/base/json";
 import { CHANNEL, CONFIG_ELEMENT_ID, viewerMessage, type EditorPageConfig, type PageMessage } from "../../src/protocol.js";
 import { changePoint, exportDocument, frameWindow, markSaved } from "./frame.js";
 import { prepareEditorFrame, type FrameHooks } from "./guards/index.js";
@@ -39,13 +40,9 @@ const note = (text: string): void => {
 
 const readConfig = (): EditorPageConfig | undefined => {
     const text = document.getElementById(CONFIG_ELEMENT_ID)?.textContent ?? ``;
-    try {
-        // SAFETY: the backend renders this element from an EditorPageConfig (browser-page.ts); nothing else writes it.
-        return text === `` ? undefined : (JSON.parse(text) as EditorPageConfig);
-    } catch {
-        // allow(silent-catch): a page without a readable config is answered with the note below.
-        return undefined;
-    }
+    // A page without a readable config is answered with the note below.
+    // SAFETY: the backend renders this element from an EditorPageConfig (browser-page.ts); nothing else writes it.
+    return text === `` ? undefined : (parseJsonOr(text, undefined) as EditorPageConfig | undefined);
 };
 
 // The exported bytes an `onlyoffice-file-stream` message carries, or undefined for any other message.

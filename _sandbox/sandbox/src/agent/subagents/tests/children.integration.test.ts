@@ -1,12 +1,9 @@
-import {
-    type AgentEvent,
-    type AgentTurn,
-    agentWordsOf,
-    type LimitPolicy,
-    type SandboxSettings,
-    type SubagentSession,
-    withRuntimeDefaults,
-} from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { type AgentTurn, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
+import { agentWordsOf } from "@intentic/sandbox-contract/events/agent-words";
+import type { LimitPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
+import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
 import type { MemoryReading } from "@intentic/constants/memory-room";
 import { listSubagentSessions, noteSubagentTask, resetSubagents, type SubagentWaitOutcome, waitForSubagent } from "../subagents.js";
 import type { Services } from "../../../composition.js";
@@ -18,7 +15,7 @@ import { breakPolicyFor } from "../../run/turn/turn-resume.js";
 import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTaint } from "../../../guard/turn-taint.js";
 import { unstubbed } from "@intentic/testing";
 import { reportChildTurn } from "../child-report.js";
-import { childLandingWords } from "../child-lands.js";
+import { childLandingWords } from "../../../conversations/land/child-lands.js";
 import { filePausedChildren } from "../paused-children.js";
 import {
     adoptChildTurn,
@@ -44,7 +41,10 @@ import type { Fleet } from "../../../conversations/registry/agents-registry.js";
 import { conversationProfile, type Postures } from "../../../conversations/registry/agents-store.js";
 import { createDomainEvents, type DomainEventMap } from "../../../seams/domain-events.js";
 import type { RoutedTurn, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
-import { beginTurn, conversationEntry, drivenBy, fakeTurns, memoryFleet } from "../../../testing.js";
+import { beginTurn } from "../../../conversations/actor/conversation-actors.testing.js";
+import { conversationEntry } from "../../../conversations/registry/agents-store.testing.js";
+import { drivenBy, fakeTurns } from "../../../seams/turn-starter.testing.js";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 
 // One fleet's actors for every spawn here, and the cards parked in them: what a parent's own wait and answer read.
 const actors = memoryFleet().conversations;
@@ -56,7 +56,6 @@ const cards = parkedCards(actors);
 // `turns` collects what the pump was asked to run; `events` is what the child says back. The generator ending settles
 // the record.
 const fakeTurn = (turns: TurnInput[], events: AgentEvent[] = [{ kind: "done" }]): TurnStarter["stream"] =>
-    // eslint-disable-next-line require-yield
     async function* fake(input: TurnInput) {
         turns.push(input);
         yield* events;

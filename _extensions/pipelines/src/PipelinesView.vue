@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { errorMessage } from "@intentic/base/errors";
-import type { CiRepo, FixResume, PipelineRun } from "@intentic/sandbox-contract";
+import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import type { FixResume } from "@intentic/sandbox-contract/state/fix-attempt-plan";
 import type { CiFix } from "./fixes/ciFixes";
 import {
     Icon,

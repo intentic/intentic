@@ -5,7 +5,7 @@ import {
     type KeyringRefusalCode,
     type KeyringShareMode,
     type SignedKeyringGrant,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/keyring";
 import { verifyGrant } from "@intentic/sandbox-contract/keyring-seal";
 import { z } from "zod";
 import type { EntryPatch, EntryRules, ShareInfo } from "./protocol.js";

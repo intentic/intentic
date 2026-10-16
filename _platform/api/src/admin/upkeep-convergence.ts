@@ -1,6 +1,6 @@
 import type { HostReport } from "@intentic/api-contract";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
-import { compareVersions } from "@intentic/sandbox-contract";
+import { compareVersions } from "@intentic/sandbox-contract/state/versions";
 import type { AdminDigestLine } from "./admin-digest.js";
 import { DAY_MS } from "../durations.js";
 import { hostReportsOf, reporterOf } from "../sandbox/host-report.js";

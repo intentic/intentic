@@ -1,4 +1,4 @@
-import { HOST_NATIVE_ENVIRONMENT, type DeviceFacts } from "@intentic/sandbox-contract";
+import { HOST_NATIVE_ENVIRONMENT, type DeviceFacts } from "@intentic/sandbox-contract/schemas/hosts";
 import { waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import { bootstrapEnvironments, bootstrapTargets, forgetBootstrap, reviveSilentWindows, silenceOf } from "../environment-bootstrap.js";

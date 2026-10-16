@@ -1,4 +1,4 @@
-import type { CapabilitySummary } from "@intentic/sandbox-contract";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { z } from "zod";
 
 // One linked sandbox as the Devices board draws it, read off its link card's last status: answering (its terms in the

@@ -1,14 +1,8 @@
 import { createHash } from "node:crypto";
 import { parseEnv } from "node:util";
 import { errorMessage } from "@intentic/base/errors";
-import {
-    type Capability,
-    CapabilitySchema,
-    type EndpointProtocol,
-    type ProviderKey,
-    type ProviderKeySource,
-    type ProviderKeysApplied,
-} from "@intentic/sandbox-contract";
+import { type Capability, CapabilitySchema, type EndpointProtocol } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { ProviderKey, ProviderKeySource, ProviderKeysApplied } from "@intentic/sandbox-contract/state/arrival";
 import { z } from "zod";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { capabilitiesDocument } from "../capabilities/capabilities-store.js";
@@ -23,6 +17,7 @@ import { hostCapabilities } from "./assistants.js";
 import { hermesAuthKeys } from "./hermes.js";
 import { callTool, listDir, separatorOf } from "./host-scan.js";
 import { AUTH_PROFILES_PATH, openclawProfileKeys } from "./openclaw.js";
+import { parseJsonWith } from "@intentic/base/json";
 
 // The model API keys already on the owner's computer, offered as model endpoints. Reads a short, fixed list of files
 // off a connected device (no walk), and takes only plain API keys out of them: an OAuth login is bound to the install
@@ -100,15 +95,8 @@ const keyValue = (value: string | undefined): string | undefined => {
 // A file's text, already read off the device, as JSON into `schema`; undefined for text that is not JSON, or JSON of
 // another shape. Opens nothing: the device's own read did.
 const parsedJson = <Schema extends z.ZodType>(schema: Schema, raw: string | undefined): z.infer<Schema> | undefined => {
-    if (raw === undefined) {
-        return undefined;
-    }
-    try {
-        return schema.safeParse(JSON.parse(raw)).data;
-    } catch {
-        // allow(silent-catch): a file that is not JSON holds no key, which is the answer.
-        return undefined;
-    }
+    // A file that is not JSON holds no key, which is the answer.
+    return raw === undefined ? undefined : parseJsonWith<z.infer<Schema>>(raw, schema);
 };
 
 // A `.env` as node reads one: every value a string.

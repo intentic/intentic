@@ -1,5 +1,5 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
-import { capabilitiesOf } from "@intentic/sandbox-contract";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { SliceFakeContext } from "../harness/slice-fake.testing.js";
 import { toolCardOf, toolChildrenOf, transcriptPageOf } from "./agent-transcript.js";
 import { openSearchIndex } from "./search-index.js";

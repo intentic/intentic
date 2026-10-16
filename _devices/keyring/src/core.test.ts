@@ -2,7 +2,7 @@ import type { KeyringOp, KeyringResponse } from "./protocol.js";
 import { unseal } from "@intentic/sandbox-contract/keyring-seal";
 import { sealForKeyring } from "./seal.js";
 import { fakeSandbox, type Harness, keyringHarness, passwordRules } from "./testing.js";
-import type { KeyringShareMode } from "@intentic/sandbox-contract";
+import type { KeyringShareMode } from "@intentic/sandbox-contract/schemas/keyring";
 
 const SECRET = "fortinet-password-123";
 

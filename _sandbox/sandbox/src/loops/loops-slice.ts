@@ -1,4 +1,6 @@
 import { join } from "node:path";
+import type { CompositionCore } from "../composition.js";
+import { defineSlice } from "../seams/slice.js";
 import type { WorkflowRunsStore, WorkflowsStore } from "../workflows/workflows-store.js";
 import { fileLoopDesignsStore, fileLoopsStore, loopDesignsDocument, type LoopDesignsStore, loopsDocument, type LoopsStore } from "./loops-store.js";
 
@@ -17,8 +19,13 @@ export interface LoopsSlice {
 // The members workflows/ builds, which composition.ts adds: building them here would close loops -> workflows -> loops.
 export type WorkflowsMembers = "workflows" | "workflowRuns";
 
+// The loops half of the slice, the one this module builds.
+export type LoopsOwnMembers = Omit<LoopsSlice, WorkflowsMembers>;
+
 // Builds the loops half of the slice: two documents under the workspace root, nothing else read.
-export const createLoopsSlice = (workspaceRoot: string): Omit<LoopsSlice, WorkflowsMembers> => ({
-    loops: fileLoopsStore(join(workspaceRoot, loopsDocument.path)),
-    loopDesigns: fileLoopDesignsStore(join(workspaceRoot, loopDesignsDocument.path)),
+export const loopsSlice = defineSlice<LoopsOwnMembers>({
+    build: ({ workspace }: Pick<CompositionCore, "workspace">) => ({
+        loops: fileLoopsStore(join(workspace.root, loopsDocument.path)),
+        loopDesigns: fileLoopDesignsStore(join(workspace.root, loopDesignsDocument.path)),
+    }),
 });

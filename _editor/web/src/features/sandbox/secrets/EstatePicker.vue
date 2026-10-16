@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { mintedVariants } from "@intentic/sandbox-contract";
+import { mintedVariants } from "@intentic/sandbox-contract/models/provider-specs";
 import { SegmentedControl } from "@intentic/ui";
 import { computed } from "vue";
 

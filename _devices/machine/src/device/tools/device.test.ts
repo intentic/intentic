@@ -1,5 +1,5 @@
 import { DesktopError,desktopPointing,ElementRefs,FrameLog,pointingFor,shoot } from "@intentic/desktop-automation";
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type Caller, calling, createIndicator, type Indicator, PAUSE_HOTKEY } from "../indicator.js";
 import { ScopeError } from "../policy.js";

@@ -1,4 +1,4 @@
-import { type CiJobsResponse, isPipelineInFlight, type PipelineJob, type PipelineRun } from "@intentic/sandbox-contract";
+import { type CiJobsResponse, isPipelineInFlight, type PipelineJob, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { computed, type Ref, watch } from "vue";
 import { host } from "./host";
 

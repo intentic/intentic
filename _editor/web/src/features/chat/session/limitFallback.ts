@@ -1,5 +1,7 @@
-import { type AgentProvider, type ModelRef, type OauthAccount, roomiestAccount } from "@intentic/sandbox-contract";
-import { accountFacts, accountState } from "./usageStatus";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { type ModelRef, roomiestAccount } from "@intentic/sandbox-contract/models/plan-pools";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import { accountFacts, accountState } from "../../../models/providers/usageStatus";
 
 // Offers an account with headroom to continue a refused turn on, as a free alternative to the session-limit reset
 // (limitReset.ts), which reopens the same account's window via a weekly grant instead. The same verdict and the same

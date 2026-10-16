@@ -1,4 +1,4 @@
-import type { LoopDesign } from "@intentic/sandbox-contract";
+import type { LoopDesign } from "@intentic/sandbox-contract/schemas/loops";
 import { t } from "@intentic/ui/i18n";
 
 // The contract's loopDesignLine in the reader's language: what ends the loop, then how far it may try. The rule is the

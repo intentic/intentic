@@ -1,4 +1,5 @@
-import type { SubagentSession, TranscriptSubagent } from "@intentic/sandbox-contract";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
+import type { TranscriptSubagent } from "@intentic/sandbox-contract/events/transcript";
 import { subagentView } from "./subagentCard";
 
 // Pins what a card says of the subagent its call started, in-process and spawned alike: the turn's record, brought up

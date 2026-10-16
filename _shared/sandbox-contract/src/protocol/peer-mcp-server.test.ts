@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { z } from "zod";
 import { createMcpServer, type McpAuditEntry, textResult, tool } from "./peer-mcp-server.js";
 
@@ -32,7 +33,7 @@ const build = () => {
         ],
         noSuchTool: (name) => `This peer has no tool called "${name}".`,
         refused: (error) => error instanceof Refused,
-        errorMessage: (error) => (error instanceof Error ? error.message : String(error)),
+        errorMessage,
         audit: (entry) => void audits.push(entry),
     });
     return { handle, audits };

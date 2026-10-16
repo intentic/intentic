@@ -107,7 +107,7 @@ export const collectDeployments = async (
 
     const deployments = Object.values(graph.resources)
         .filter((resource) => resource.type === "deployment")
-        // oxlint-disable-next-line oxc/no-map-spread -- conditional spreads omit optional keys, required under exactOptionalPropertyTypes
+        // conditional spreads omit optional keys, required under exactOptionalPropertyTypes
         .map((node) => {
             const { registry, owner, repoName, tag, domain, port, env } = deploymentInputs.parse(node.inputs);
             const komodoId = liveIds.get(node.id);

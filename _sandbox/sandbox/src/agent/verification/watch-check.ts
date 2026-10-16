@@ -5,6 +5,7 @@ import { namespaceTargetOf, nsenterArgv } from "../../workload/namespace-entry.j
 import { sandboxEnv } from "../../conversations/worktrees/turn-sandbox.js";
 import { redirectCommand } from "../../conversations/worktrees/worktree-redirect.js";
 import { runCheck } from "../../workload/run-check.js";
+import { errorMessage } from "@intentic/base/errors";
 
 // A watch check runs in the world its arming turn saw: that turn's namespace rebuilt, or its paths rewritten likewise.
 
@@ -102,7 +103,7 @@ const mountedCheck = async (command: string, options: CheckOptions, plan: Isolat
     try {
         view = await prepareMountView(plan);
     } catch (error) {
-        return { exitCode: undefined, output: "", broken: `its conversation's view of the workspace could not be prepared: ${error instanceof Error ? error.message : String(error)}` };
+        return { exitCode: undefined, output: "", broken: `its conversation's view of the workspace could not be prepared: ${errorMessage(error)}` };
     }
     try {
         return await namespacedCheck(command, options, (trailer) => isolationScript(view.fstab, trailer), plan.root);
@@ -118,7 +119,7 @@ const sandboxedCheck = async (command: string, options: CheckOptions, plan: Isol
     try {
         anchor = await startAnchor(plan);
     } catch (error) {
-        return { exitCode: undefined, output: "", broken: `its conversation's sandbox could not be built: ${error instanceof Error ? error.message : String(error)}` };
+        return { exitCode: undefined, output: "", broken: `its conversation's sandbox could not be built: ${errorMessage(error)}` };
     }
     try {
         const entry = nsenterArgv(namespaceTargetOf(anchor), anchor.cwd, "bash", ["-lc", command]);

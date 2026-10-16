@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import type { SandboxMetrics } from "@intentic/sandbox-contract";
+import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
 import { Meter, type Tip, ui } from "@intentic/ui";
 import { formatBinaryBytes, formatPercent } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { agentDisplayTitle } from "../fleet/agentStatus";
-import { useAgents } from "../fleet/useAgents";
-import { openById } from "../fleet/useAgents-actions";
-import { HEAVY_SESSION_SHARE } from "./liveMetrics";
+import { agentDisplayTitle } from "../../../models/agent-status/agentStatus-meta";
+import { useAgents } from "../../../models/fleet/useAgents";
+import { openById } from "../../../models/fleet/useAgents-actions";
+import { HEAVY_SESSION_SHARE } from "../../../models/sandbox/liveMetrics";
 import { useSandboxReadout } from "./sandboxFigures";
 
 // The panel the status bar's metrics segment opens above it: every figure the bar leaves out, grouped by

@@ -2,7 +2,11 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { type AgentEvent, type AgentTurn, LOOP_DIR, type Workflow, type WorkflowStep, workflowFaults } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import { LOOP_DIR } from "@intentic/sandbox-contract/schemas/loops";
+import type { Workflow, WorkflowStep } from "@intentic/sandbox-contract/schemas/workflows";
+import { workflowFaults } from "@intentic/sandbox-contract/text/workflow-faults";
 import { unstubbed } from "@intentic/testing";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../composition.js";
@@ -10,7 +14,9 @@ import { fileLoopsStore } from "../loops/loops-store.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js";
 import { abandonRun, openRun, resumeWorkflowExecution, runWorkflow, stopWorkflowRun, workflowRunning } from "./workflow-runner.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
-import { drivenBy, memoryFleet, unpinnedRouting } from "../testing.js";
+import { drivenBy } from "../seams/turn-starter.testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
+import { unpinnedRouting } from "../agent/run/turn/turn-routing.testing.js";
 import { createDomainEvents } from "../seams/domain-events.js";
 import { restartResume } from "../agent/run/turn/restart-resume-policy.js";
 
@@ -245,7 +251,6 @@ test("a step whose model was refused fails the run instead of reporting a done s
     const refusal = "Your organization has disabled Claude subscription access for Claude Code";
     const design = workflow([step("attempt", { output: { kind: "none" } }), step("after", { needs: ["attempt"], output: { kind: "none" } })]);
     const run = await services.workflowRuns.start(openRun(design, REPOS, 1));
-    // eslint-disable-next-line require-yield
     await runWorkflow(
         drivenBy(services, async function* refused() {
             yield { kind: "error", message: refusal } as AgentEvent;

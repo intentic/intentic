@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { LoginStatus, OauthAccount } from "@intentic/sandbox-contract";
+import type { LoginStatus, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { Services } from "../../composition.js";
 import { forgetAccountState, sameAccount, signInIdentity } from "../../agent/providers/accounts/account-identity.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";

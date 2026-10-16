@@ -4,18 +4,19 @@ import {
     type AgentAccess,
     type CredentialReach,
     type EditScope,
-    type GrantedRole,
     type MemberSelf,
     MemberGrantSchema,
     memberAccess,
-    orgMembersOnlyRefusal,
     tierOf,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/members";
+import type { GrantedRole } from "@intentic/sandbox-contract/schemas/shared";
+import { orgMembersOnlyRefusal } from "@intentic/sandbox-contract/policy/org-locks";
 import type { Context } from "hono";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
 import { type PersonaReachDeps, reachablePersonas } from "../../personas/persona-reach.js";
 import { ownershipDenied, unavailableIfUnreadable } from "../owner-gates.js";
+import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { orgAdmits } from "../../org/org-roster.js";
 import { revokeHeld } from "./revoke-held.js";
 
@@ -127,7 +128,7 @@ const guestReachRefusal = async (services: PersonaReachDeps, grant: { role: Gran
 
 // A roster this build cannot read is refused rather than replaced (auth.ts `fileMembersStore`), so a grant or a removal
 // over it answers 503 (`unavailableIfUnreadable`) and leaves every socket and ticket as it was.
-export const createMembersRoutes = (services: MembersRoutesDeps) => ({
+const createMembersRoutes = (services: MembersRoutesDeps) => ({
     /** GET /members */
     list: async (c: Context<AppEnv>): Promise<Response> => {
         const denied = await ownershipDenied(services, c);
@@ -219,4 +220,16 @@ export const createMembersRoutes = (services: MembersRoutesDeps) => ({
             return c.json({ ok: true });
         });
     },
+});
+
+// Shared-access roster, gated by ownership rather than the operating gate other privileged routes use.
+export const membersRawRoutes = defineRawRoutes((services: MembersRoutesDeps) => {
+    const members = createMembersRoutes(services);
+    return {
+        "GET /members": members.list,
+        "POST /members": members.add,
+        "DELETE /members": members.remove,
+        "DELETE /members/self": members.removeSelf,
+        "GET /members/self": members.self,
+    };
 });

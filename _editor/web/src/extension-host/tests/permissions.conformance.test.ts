@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import type { IntenticApi } from "@intentic/extension-api";
 import { type ExtensionManifest, ExtensionManifestSchema, extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-manifest";
-import { type ContractRoute, requestPathFor, SANDBOX_ROUTES } from "@intentic/sandbox-contract";
+import { type ContractRoute, requestPathFor } from "@intentic/sandbox-contract/protocol/routes";
+import { SANDBOX_ROUTES } from "@intentic/sandbox-contract";
 
 // Conformance: every daemon route a first-party extension calls must be declared in its manifest's permissions.sandbox,
 // or apiImpl.ts throws at runtime.
@@ -288,9 +289,9 @@ describe.each(everyExtension)("%s's typed calls are gated exactly as its string 
             const input = inputOf(route);
             const path = requestPathFor(route, input);
             const [group = ``, procedure = ``] = route.name.split(`.`);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one call at a time: both doors write the one evidence log
+            // one call at a time: both doors write the one evidence log
             const typed = await doorOutcome(() => (api.sandbox.rpc as unknown as Procedures)[group]![procedure]!(input));
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // as above
             const json = await doorOutcome(() => api.sandbox.json(path, { method: route.method }));
             outcomes.push({ route: route.name, typed, json });
         }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { QueuedMessage } from "@intentic/sandbox-contract";
+import type { QueuedMessage } from "@intentic/sandbox-contract/schemas/agent";
 import { Icon, type TooltipValue, useDevice } from "@intentic/ui";
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
@@ -7,7 +7,7 @@ import { basename } from "@intentic/ui/path";
 import { computed, ref, useTemplateRef, watch } from "vue";
 import ChatAttachmentStrip from "../../composer/ChatAttachmentStrip.vue";
 import { attachmentPreview } from "../../drafts/attachmentPreviews";
-import { usePaneView } from "../../panel/useChat-view";
+import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import ChatImageThumb from "../attachments/ChatImageThumb.vue";
 
 /* One message that did not go out, drawn as the prompt it would have been (its words, its pictures) with an edge that says it was not sent, and its one door: a person's words go back into the composer to be edited there (and sent, or booked, again), anyone else's are removed. */

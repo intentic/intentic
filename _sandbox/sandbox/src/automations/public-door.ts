@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { PowChallenge } from "@intentic/sandbox-contract";
+import type { PowChallenge } from "@intentic/sandbox-contract/schemas/automations";
 import type { Context } from "hono";
 import { antiBotAccepted, mintChallenge, type AntiBotAnswer } from "../auth/antibot.js";
 import type { Services } from "../composition.js";

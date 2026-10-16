@@ -1,4 +1,9 @@
-import { STORAGE_CLEANABILITY, StorageCategoryIdSchema, type StorageCategoryUsage, type StorageScan } from "@intentic/sandbox-contract";
+import {
+    STORAGE_CLEANABILITY,
+    StorageCategoryIdSchema,
+    type StorageCategoryUsage,
+    type StorageScan,
+} from "@intentic/sandbox-contract/schemas/metrics";
 import { storageCategoryText } from "./storageCategories";
 import { cleanOffer, freeableBytes, shareOfCounted, splitCategories, uncountedBytes } from "./storageView";
 

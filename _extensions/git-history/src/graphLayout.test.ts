@@ -1,4 +1,4 @@
-import type { GitCommit } from "@intentic/sandbox-contract";
+import type { GitCommit } from "@intentic/sandbox-contract/schemas/git/git-history";
 import { computeGraphLayout } from "./graphLayout";
 
 // A minimal commit: only sha/parents drive the layout; the rest is render-only.

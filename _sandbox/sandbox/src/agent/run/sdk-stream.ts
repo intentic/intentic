@@ -4,15 +4,12 @@
 import type { Options, Query, SDKAssistantMessage, SDKMessage, SDKUserMessage, SlashCommand, TerminalReason } from "@anthropic-ai/claude-agent-sdk";
 import { within } from "@intentic/base/async";
 import { sdk } from "../../engines/claude-sdk.js";
-import {
-    type AgentEvent,
-    type FastModeState,
-    type PermissionMode,
-    PermissionModeSchema,
-    type PromptFingerprint,
-    type TodoItem,
-    type UsageWindow,
-} from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { FastModeState } from "@intentic/sandbox-contract/schemas/providers/fast-mode";
+import { type PermissionMode, PermissionModeSchema } from "@intentic/sandbox-contract/schemas/agent";
+import type { PromptFingerprint } from "@intentic/sandbox-contract/schemas/keep-warm";
+import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
+import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { agentSessionName, browserSessionName } from "@intentic/sandbox-contract/session-names";
 import { browserServerOfTool } from "../../browser/sessions/browser-sessions.js";
 import { localCommandText, unknownCommandName } from "../providers/agent-commands.js";
@@ -28,12 +25,12 @@ import { noteRetryCause } from "./turn/turn-pulse.js";
 import { promptFingerprint } from "./prompt-fingerprint.js";
 import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type SubagentTurn } from "../subagents/subagents.js";
 import { endJobTheCliStopped, noteJobNotice, noteJobShell, noteModelRequest } from "../tools/jobs/background-jobs.js";
-import { TaskChecklist } from "./task-checklist.js";
+import { TaskChecklist } from "../../sessions/vocabulary/task-checklist.js";
 import { PageDrafts } from "../pages/page-draft.js";
 import { PAGE_TOOL_NAMES } from "../pages/page-names.js";
 import type { ChecklistSeed } from "./task-store.js";
 import { displayNameOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
-import { type CalledTool, editDiffContent, mayShowPicture, resultContent, toolInput, toolLocations } from "../tools/tool-calls.js";
+import { type CalledTool, editDiffContent, mayShowPicture, resultContent, toolInput, toolLocations } from "../../sessions/vocabulary/tool-calls.js";
 
 // What a turn needs from the SDK: the message stream and the session's slash-command list. `supportedCommands` is
 // optional since a fake stream used in tests has none.

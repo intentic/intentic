@@ -1,51 +1,13 @@
-import type { AgentJob, AgentStatus, AgentWatch } from "@intentic/sandbox-contract";
+import type { AgentJob, AgentStatus, AgentWatch } from "@intentic/sandbox-contract/schemas/agents";
 import { formatWhen } from "@intentic/ui/format";
 import { useAudience } from "../../../../app/useAudience";
-import {
-    type AgentStanding,
-    agentStandingMeta,
-    agentStatusMeta,
-    attentionCalls,
-    attentionCards,
-    activityLine,
-    attentionReason,
-    awaitingUser,
-    currentAction,
-    blocked,
-    callsOwner,
-    heardByParent,
-    type ClientAgentStatus,
-    conflictIsYours,
-    drillTarget,
-    landedAway,
-    landedDelivery,
-    landFailure,
-    laneOf,
-    standingFrom,
-    limitBack,
-    limitCorner,
-    limitCountdown,
-    memoryCorner,
-    memoryHeld,
-    onlyOwnerCanAnswer,
-    promptHeldJob,
-    promptLine,
-    type RimAgent,
-    reviewAction,
-    scheduledSend,
-    scheduledCount,
-    scheduledWhen,
-    selfStart,
-    selfStartTicks,
-    sendCorner,
-    standingChip,
-    tileRim,
-    turnInFlight,
-    unfinishedMark,
-    unregistered,
-    watchLine,
-    watching,
-} from "../agentStatus";
+import { attentionReason, drillTarget, landFailure, reviewAction } from "../../../../models/agent-status/agentStatus-attention";
+import { scheduledWhen, standingChip, unfinishedMark } from "../../../../models/agent-status/agentStatus-chips";
+import { attentionCalls, attentionCards, callsOwner, laneOf, type RimAgent, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
+import { agentStandingMeta, agentStatusMeta, activityLine, currentAction } from "../../../../models/agent-status/agentStatus-meta";
+import { type AgentStanding, awaitingUser, blocked, heardByParent, type ClientAgentStatus, conflictIsYours, standingFrom, memoryHeld, onlyOwnerCanAnswer, promptHeldJob, scheduledSend, scheduledCount, turnInFlight, unregistered, watching } from "../../../../models/agent-status/agentStatus-standing";
+import { limitBack, limitCorner, limitCountdown, memoryCorner, promptLine, selfStart, selfStartTicks, sendCorner, watchLine } from "../../../../models/agent-status/agentStatus-clock";
+import { landedAway, landedDelivery } from "../agentStatus-land";
 
 // No mocks: agentStatus is a pure-function leaf, apart from the fleet store's chain through useChat and the router.
 const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
@@ -629,7 +591,7 @@ describe("a spent allowance", () => {
     });
 });
 
-// The same two-level fold for what happens when a turn breaks now lives in chat/run/endings/turnBreak.ts, one question per
+// The same two-level fold for what happens when a turn breaks now lives in models/conversations/endings/turnBreak.ts, one question per
 // ending rather than a boolean per switch; turnBreak.test.ts covers its precedence.
 
 // The identity tile's rim: how far round, and in what ink. One function, because the board card and the rail card

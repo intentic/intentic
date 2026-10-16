@@ -1,5 +1,5 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
-import type { Rule } from "@intentic/sandbox-contract";
+import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import { EDIT_COMMAND_CEILING_MS, type EditCommandRun, fileEditedReviewer } from "./file-edited.js";
 
 const rule = (over: Partial<Rule> = {}): Rule => ({

@@ -1,4 +1,4 @@
-import type { Device, DeviceAgentOp } from "@intentic/sandbox-contract";
+import type { Device, DeviceAgentOp } from "@intentic/sandbox-contract/schemas/devices";
 // The kit's DOM-free subpath, not the barrel: this module is pure, and its tests run without a document.
 import {
     type AgentAction,
@@ -9,8 +9,8 @@ import {
     agentSkewNote,
     restartAgent,
 } from "@intentic/ui/device-agent";
-import { agentBehind, deviceReconnecting } from "./deviceFacts";
-import type { DeviceRow, MachineRow } from "./deviceRows";
+import { agentBehind, deviceReconnecting } from "../../../models/sandbox/devices/deviceFacts";
+import type { DeviceRow, MachineRow } from "../../../models/sandbox/devices/deviceRows";
 import { environmentTitle } from "./machineEnvironments";
 import { t } from "@intentic/ui/i18n";
 

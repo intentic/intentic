@@ -3,7 +3,7 @@ import type { HostedBuildState, HostedBuildStatus } from "@intentic/api-contract
 import { errorMessage } from "@intentic/base/errors";
 import { hostedTier } from "@intentic/constants";
 import type { HostedBuild, PrismaClient } from "@intentic/prisma";
-import { isOfficialSandboxImage, lintOverlay, overlayBase, rewriteOverlayBase } from "@intentic/sandbox-contract";
+import { isOfficialSandboxImage, lintOverlay, overlayBase, rewriteOverlayBase } from "@intentic/sandbox-contract/policy/overlay-lint";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { flyBuildMachineConfig } from "@intentic/sandbox-run/fly";
 import type { Logger } from "pino";
@@ -560,7 +560,7 @@ const enforceAppShape = async (config: Config, logger: Logger, build: BuildRow):
             { app: build.machine.appName, machine: machine.id, build: build.id },
             `hosted build: a machine nobody made is in a sandbox's app; destroying it`,
         );
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one at a time, and there is normally none
+        // one at a time, and there is normally none
         await destroyMachine(config.hosted.flyApiToken, build.machine.appName, machine.id, { force: true }).catch((err: unknown) =>
             logger.error({ err, app: build.machine.appName, machine: machine.id }, `hosted build: destroying a stray machine failed`),
         );
@@ -574,9 +574,9 @@ export const reconcileHostedBuilds = async (prisma: PrismaClient, config: Config
     const { flyApiToken, buildTimeoutMinutes } = config.hosted;
     for (const build of building) {
         const age = now() - build.createdAt.getTime();
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one small read per build in flight
+        // one small read per build in flight
         await enforceAppShape(config, logger, build);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+        // as above
         const detail = await getMachineDetail(flyApiToken, build.machine.appName, build.builderMachineId).catch((error: unknown) => {
             if (isFlyGone(error)) {
                 return `gone` as const;
@@ -585,7 +585,6 @@ export const reconcileHostedBuilds = async (prisma: PrismaClient, config: Config
             return undefined;
         });
         if (detail === `gone`) {
-            // oxlint-disable-next-line eslint/no-await-in-loop
             await finishHostedBuild(prisma, config, logger, build, { error: `the builder disappeared before it reported` });
             continue;
         }
@@ -594,7 +593,6 @@ export const reconcileHostedBuilds = async (prisma: PrismaClient, config: Config
             if (age < REPORT_GRACE_MS) {
                 continue;
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop
             await finishHostedBuild(prisma, config, logger, build, {
                 ...(detail.exitCode === undefined ? {} : { exitCode: detail.exitCode }),
                 error: detail.oomKilled
@@ -608,20 +606,17 @@ export const reconcileHostedBuilds = async (prisma: PrismaClient, config: Config
         // Reached with no reading too: the timeout is the platform's own and needs no answer from Fly to hold.
         if (age > buildTimeoutMinutes * 60_000 + TIMEOUT_GRACE_MS) {
             logger.warn({ build: build.id, app: build.machine.appName }, `hosted build: builder past its timeout; destroying it`);
-            // oxlint-disable-next-line eslint/no-await-in-loop
             await finishHostedBuild(prisma, config, logger, build, { error: `the build ran past ${buildTimeoutMinutes} minutes and was stopped` });
         }
     }
     // A guard whose build is no longer building (a crash between verdict and release) opens again.
     const guarded = await prisma.hostedMachine.findMany({ where: { buildingId: { not: null } }, select: { id: true, buildingId: true } });
     for (const row of guarded) {
-        // oxlint-disable-next-line eslint/no-await-in-loop
         const inFlight = await prisma.hostedBuild.findFirst({
             where: { id: row.buildingId ?? ``, state: BUILD_STATES.building },
             select: { id: true },
         });
         if (inFlight === null) {
-            // oxlint-disable-next-line eslint/no-await-in-loop
             await prisma.hostedMachine.updateMany({ where: { id: row.id, buildingId: row.buildingId }, data: { buildingId: null } });
         }
     }

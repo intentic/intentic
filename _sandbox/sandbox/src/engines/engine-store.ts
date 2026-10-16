@@ -1,7 +1,7 @@
 import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
-import { type EngineId, type EngineQuarantine, EngineQuarantineSchema } from "@intentic/sandbox-contract";
+import { type EngineId, type EngineQuarantine, EngineQuarantineSchema } from "@intentic/sandbox-contract/schemas/engines";
 import { z } from "zod";
 import { opt } from "../opt.js";
 import { defineDocument } from "../store/evolution/documents.js";

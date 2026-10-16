@@ -1,6 +1,6 @@
+import type { AgentHarness } from "@intentic/sandbox-contract/schemas/agent";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import {
-    type AgentHarness,
-    type Capability,
     type PersonalDataClass,
     PRIVACY_REPLACEMENTS_MAX,
     type PrivacyKnownSource,
@@ -8,8 +8,8 @@ import {
     type PrivacyLedgerAction,
     type PrivacyShieldPolicy,
     type PrivacyShieldStatus,
-} from "@intentic/sandbox-contract";
-import { detectPersonalData, normalizeAllowed } from "./detect/detect.js";
+} from "@intentic/sandbox-contract/schemas/privacy";
+import { detectPersonalData, normalizeAllowed } from "@intentic/privacy-detect";
 import { type ClassCounts, createMasker, createMaskMemo, type EntityRecognizer, type Masker, type Replacement } from "./masker.js";
 import type { PrivacyImageArchive } from "./privacy-images.js";
 import type { PrivacyLedger } from "./privacy-ledger.js";

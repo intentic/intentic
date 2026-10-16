@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { ProjectInstallMode } from "@intentic/sandbox-contract";
+import type { ProjectInstallMode } from "@intentic/sandbox-contract/policy/safety-policy";
 import { Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import { computed } from "vue";
-import { useSandboxSettings } from "../overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
 // Whether an agent's own project install (pnpm add, npm install, uv sync) runs, asks first, or is refused. Where it

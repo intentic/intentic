@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import type { TranscriptTool } from "@intentic/sandbox-contract";
-import { useChatSurface } from "./chatToolSurface";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import { useChatSurface } from "../../../models/conversations/tools/chatToolSurface";
 import ChatToolCard from "./ChatToolCard.vue";
 import { type ToolGroup, groupDiffSummary } from "./toolGrouping";
 import { delegates, present } from "./toolPresentation";

@@ -1,4 +1,12 @@
-import { type runnerContract,type NeedsAction,type RunnerFacts,RUNNER_HEARTBEAT_MS,type RunnerHello,RunnerHelloSchema,type RunnerSummary } from "@intentic/sandbox-contract";
+import type { runnerContract } from "@intentic/sandbox-contract/contracts/runner.contract";
+import type { NeedsAction } from "@intentic/sandbox-contract/policy/needs-action";
+import {
+    type RunnerFacts,
+    RUNNER_HEARTBEAT_MS,
+    type RunnerHello,
+    RunnerHelloSchema,
+    type RunnerSummary,
+} from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { ContractRouterClient } from "@orpc/contract";
 import { z } from "zod";
 import type { Services } from "../composition.js";

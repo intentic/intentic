@@ -1,10 +1,10 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { unstubbed } from "@intentic/testing";
 import type { AgentRequest, TurnHooks, TurnPolicy, TurnTools } from "../../agent/providers/agent-request.js";
 import { TMUX_RUN_BIN } from "../../terminal/terminal-run.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { NO_TURN } from "../daemon-tools/policy-gate.js";
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import { createPiHooks, piSessionKey, piToolName, UNREADABLE_CALL } from "./pi-hooks.js";

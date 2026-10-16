@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type { SandboxUsage } from "@intentic/sandbox-contract";
+import type { SandboxUsage } from "@intentic/sandbox-contract/schemas/metrics";
 
 // The sandbox's own cgroup v2 figures, raw, for CPU, pressure and the minute log; /proc/pressure describes the host and
 // stands in only where the cgroup keeps none. Whether there is room is not read here: that is the resource budget's one

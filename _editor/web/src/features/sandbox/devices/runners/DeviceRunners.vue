@@ -5,13 +5,13 @@ import { noticeFrom } from "@intentic/ui/async";
 import { useOperation, useOperations } from "../../../../workbench/operations/operations";
 import DeviceOpFailure from "./DeviceOpFailure.vue";
 import { type RunnerFailure, type RunnerOp, runnerFailure } from "./runnerFailure";
-import { createRunner, removeRunner, syncRunnerSettings, updateRunner, useRunners } from "./useRunners";
+import { createRunner, removeRunner, syncRunnerSettings, updateRunner, useRunners } from "../../../../models/sandbox/devices/useRunners";
 import { lastRun, sentTo } from "./runnerWork";
 import { beginDeviceWork } from "./deviceWork";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
-import { useSandboxSettings } from "../../overview/useSandboxSettings";
-import { type DeviceRow, type MachineRow, managerOf } from "../deviceRows";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
+import { type DeviceRow, type MachineRow, managerOf } from "../../../../models/sandbox/devices/deviceRows";
 import { environmentTitle } from "../machineEnvironments";
 import { useT } from "@intentic/ui/i18n";
 

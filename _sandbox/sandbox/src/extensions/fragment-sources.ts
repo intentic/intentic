@@ -1,10 +1,11 @@
 import { join } from "node:path";
-import { type Capability, invalidExtensionFragment } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { invalidExtensionFragment } from "@intentic/sandbox-contract/policy/overlay-lint";
 import { contributionFor, contributionFragmentPath, contributionPackName, contributionRegistry } from "../capabilities/contributions.js";
 import { packFragment, readPack } from "../image/packs.js";
 import { registry } from "../capabilities/registry.js";
 import { extensionDir, extensionRead, extensionRootOf, readExtensionManifest } from "../capabilities/extension-dirs.js";
-import { enabledExtensions } from "./installed-extensions.js";
+import { enabledExtensions } from "../capabilities/extension-inventory/installed-extensions.js";
 import type { Services } from "../composition.js";
 
 // Single resolver for every Dockerfile fragment a capability contributes. Core handlers return trusted code that may

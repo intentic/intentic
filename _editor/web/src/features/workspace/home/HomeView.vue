@@ -1,6 +1,7 @@
 <!-- The home: the folder being looked at as large tiles, folders first and files by kind or by date, with a quick look on hover; or read through one file name in every folder. -->
 <script setup lang="ts">
-import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { ContextMenu, formatCount, SegmentedControl, SkeletonSnapshot, useHoverIntent, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
@@ -12,18 +13,18 @@ import { explorerShows, technicalHidden } from "../explorer/explorerFilter";
 import { consumeSuppressedClick, useEntryDrag } from "../explorer/transfer/useEntryDrag";
 import { deadLink } from "../explorer/tree/treeRows";
 import { focusInput } from "@intentic/ui/inline-rename";
-import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
-import { opensAsFolder } from "../files/archiveEntries";
+import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
+import { opensAsFolder } from "../../../models/workspace/files/archiveEntries";
 import { requestCaret } from "../files/caretRequest";
-import { withProvisionalEntries } from "../files/provisionalEntries";
+import { withProvisionalEntries } from "../../../models/workspace/files/provisionalEntries";
 import { workspaceDir } from "../../../app/workspaceScope";
-import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
+import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import { type GridKey, isGridKey, moveInGrid } from "./homeGrid";
 import { bandOfIndex, homeLayout } from "./homeLayout";
 import { dateLine } from "./homeDates";
 import { type HomeArrange, homeGroups, homeOrder, labelsShown } from "./homeOrder";
 import { contentMatches, nameMatches, RESULTS_CAP } from "./homeResults";
-import { HOME_DIR_ACTIONS, HOME_SEARCH, useHome } from "./useHome";
+import { HOME_DIR_ACTIONS, HOME_SEARCH, useHome } from "../../../models/workspace/home/useHome";
 import { useHomeActions } from "./useHomeActions";
 import HomeCover from "./HomeCover.vue";
 import HomeCoverPicker from "./HomeCoverPicker.vue";

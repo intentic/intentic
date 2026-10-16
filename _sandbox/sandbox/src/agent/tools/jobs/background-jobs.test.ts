@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pino } from "pino";
-import { memoryWatchJournal } from "../../verification/watch-journal.js";
+import { memoryWatchJournal } from "../../../store/journals/watch-journal.js";
 import { startWatcherRuntime, type WatcherRuntime } from "../../verification/watchers.js";
 import { adoptBackgroundJobs, completionCheck, jobNote } from "./background-adoption.js";
 import {
@@ -26,7 +26,8 @@ import {
     settledBackgroundJobs,
     sweepJobEnds,
 } from "./background-jobs.js";
-import { fakeTurns, memoryFleet } from "../../../testing.js";
+import { fakeTurns } from "../../../seams/turn-starter.testing.js";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { awaitingWake } from "../../../conversations/actor/conversation-state.js";
 import { turnCloser } from "../../run/placement/turn-close.js";
 import { createHeldCards } from "../../../guard/held-cards.js";

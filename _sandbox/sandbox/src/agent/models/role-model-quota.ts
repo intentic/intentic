@@ -1,4 +1,6 @@
-import { KeyedProviderSchema, type ModelChoice, renewsInWords } from "@intentic/sandbox-contract";
+import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
+import type { ModelChoice } from "@intentic/sandbox-contract/models/model-pins";
+import { renewsInWords } from "@intentic/sandbox-contract/models/model-offer";
 import type { Services } from "../../composition.js";
 import { askableLimit, type TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import { accountFactsOf } from "../../usage/serviceability/serviceability.js";

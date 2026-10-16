@@ -1,4 +1,4 @@
-import type { WorkspaceSearchSpan, WorkspaceSearchTag } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchSpan, WorkspaceSearchTag } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import type { EngineResult, RankedGroup, RankedHit } from "../types.js";
 import { classPrior } from "./prior.js";
 import { pathTokens } from "./tokens.js";

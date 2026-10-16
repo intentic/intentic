@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import type { MemberRole } from "@intentic/sandbox-contract";
-import { roleAtLeast } from "@intentic/sandbox-contract";
+import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { Caller } from "../auth.js";
 
 // One-shot tickets for the WebSocket upgrades (/system/terminal, /system/browser-profile, /system/browser-view): minted

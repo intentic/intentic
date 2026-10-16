@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SandboxMetrics } from "@intentic/sandbox-contract";
+import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
 import { ResizeSeam, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, useId } from "vue";

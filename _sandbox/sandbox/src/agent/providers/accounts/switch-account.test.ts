@@ -1,8 +1,9 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { unstubbed } from "@intentic/testing";
 import { services } from "../../../harness/route-services.testing.js";
 import type { Services } from "../../../composition.js";
-import { beginTurn, conversationEntry } from "../../../testing.js";
+import { beginTurn } from "../../../conversations/actor/conversation-actors.testing.js";
+import { conversationEntry } from "../../../conversations/registry/agents-store.testing.js";
 import { switchAccount } from "./switch-account.js";
 
 // The one command that moves who pays. A conversation's account is the daemon's record; this is the only write to it

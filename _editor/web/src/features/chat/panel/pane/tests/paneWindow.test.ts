@@ -1,7 +1,7 @@
 import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { effectScope, nextTick, ref } from "vue";
-import type { ChatMessage, ChatTurn } from "../../../transcript/transcript";
+import type { ChatMessage, ChatTurn } from "../../../../../models/conversations/transcript/transcript";
 import { nextBudget, useRowBudget, windowTurns } from "../paneWindow";
 
 // The rows of a chat drawn: its newest, then more a slice at a time at idle up to a window, the rest as the reader climbs.

@@ -1,7 +1,8 @@
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DeviceSandbox, DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceSandbox } from "@intentic/sandbox-contract/schemas/devices";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { ScopeError } from "../policy.js";
 import {
     createSandbox,

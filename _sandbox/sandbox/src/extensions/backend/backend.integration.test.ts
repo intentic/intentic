@@ -4,19 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pollUntil } from "@intentic/base/async";
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { createApp } from "../../app.js";
 import type { Services } from "../../composition.js";
 import { services } from "../../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../../capabilities/capabilities-slice.testing.js";
-import { testConfig } from "../../testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import { workspaceExtensionsRoot } from "../../capabilities/extension-dirs.js";
 import { workspacePaths } from "../../workspace/workspace.js";
-import { approveExtension } from "../extension-approvals.js";
+import { approveExtension } from "../../capabilities/extension-inventory/extension-approvals.js";
 import { createExtensionBackend, type ExtensionBackend, type ExtensionBackendOptions } from "./backend-supervisor.js";
 import { extensionMcpToolsOf } from "./extension-mcp.js";
 import { performApprovedAction } from "../../approvals/approval-performers.js";
-import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 
 // Extension backend system end-to-end against a real spawned host process (supervisor, /x proxy, containment rules).
 // Slow (node spawn + health poll); it catches seams the unit tests fake.
@@ -86,7 +86,7 @@ const harness = (
     const backend = createExtensionBackend(
         () => holder.current!,
         0,
-        // eslint-disable-next-line no-console -- the test host's forwarded lines are noise unless it fails
+        // the test host's forwarded lines are noise unless it fails
         { info: () => {}, warn: console.warn, error: console.error } as unknown as Services["logger"],
         options,
     );

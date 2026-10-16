@@ -1,3 +1,4 @@
+import { parseJsonWith } from "@intentic/base/json";
 import type { RouteLocationNormalized, RouteLocationRaw } from "vue-router";
 import { z } from "zod";
 import { localFace } from "../../../app/environments/local";
@@ -63,21 +64,11 @@ const fromBase64Url = (value: string): string | undefined => {
     }
 };
 
-// JSON text as the value it spells, or undefined for text that isn't JSON.
-const parsedJson = (text: string): ReturnType<typeof JSON.parse> => {
-    try {
-        return JSON.parse(text);
-    } catch {
-        // allow(silent-catch): text that isn't JSON carries no handoff, which is the answer.
-        return undefined;
-    }
-};
-
 /** The handoff a `?handoff=` value carries, or undefined for one that doesn't decode or doesn't validate. */
 export const parseHandoff = (raw: string): LocalHandoff | undefined => {
     const text = fromBase64Url(raw);
-    const parsed = text === undefined ? undefined : HandoffSchema.safeParse(parsedJson(text));
-    return parsed?.success === true ? parsed.data : undefined;
+    // Text that isn't JSON carries no handoff, which is the answer.
+    return text === undefined ? undefined : parseJsonWith(text, HandoffSchema);
 };
 
 // This tab's session storage, or undefined where the browser refuses it (storage blocked): nothing is kept then, and
@@ -102,11 +93,11 @@ export const keepHandoff = (handoff: LocalHandoff, now: number = Date.now()): vo
 
 // The kept handoff while it is fresh; undefined for none, a stale one, or one that no longer reads.
 const kept = (now: number): LocalHandoff | undefined => {
-    const stored = KeptSchema.safeParse(parsedJson(tabStorage()?.getItem(HANDOFF_KEY) ?? ``));
-    if (!stored.success || now - stored.data.at > HANDOFF_STALE_MS) {
+    const stored = parseJsonWith(tabStorage()?.getItem(HANDOFF_KEY) ?? ``, KeptSchema);
+    if (stored === undefined || now - stored.at > HANDOFF_STALE_MS) {
         return undefined;
     }
-    const { at: _arrived, ...handoff } = stored.data;
+    const { at: _arrived, ...handoff } = stored;
     return handoff;
 };
 

@@ -1,5 +1,10 @@
 import { wrapOutsideContent } from "@intentic/base/outside-text";
-import { type Capability,grantSite,type webextContract,WEBEXT_HEARTBEAT_MS,WEBEXT_TICKET_TOOL,type WebExtFacts,type WebExtHello,WebExtHelloSchema,type WebExtScopes,type WebExtSummary } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { grantSite } from "@intentic/sandbox-contract/schemas/needs";
+import type { webextContract } from "@intentic/sandbox-contract/contracts/webext.contract";
+import { WEBEXT_HEARTBEAT_MS, type WebExtHello, WebExtHelloSchema } from "@intentic/sandbox-contract/protocol/doors/webext-protocol";
+import { WEBEXT_TICKET_TOOL } from "@intentic/sandbox-contract/protocol/doors/webext-links";
+import type { WebExtFacts, WebExtScopes, WebExtSummary } from "@intentic/sandbox-contract/schemas/webext";
 import type { ContractRouterClient } from "@orpc/contract";
 import { z } from "zod";
 import type { MountCall } from "../agent/tools/turn-mounts.routes.js";

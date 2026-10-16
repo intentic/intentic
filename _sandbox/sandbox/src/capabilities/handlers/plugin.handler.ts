@@ -1,4 +1,4 @@
-import type { PluginConfig } from "@intentic/sandbox-contract";
+import type { PluginConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { capabilityJobSession } from "../../terminal/terminal-session.js";
 import type { CapabilityHandler } from "../capability.js";
 import { checkoutInto } from "../git-checkout.js";

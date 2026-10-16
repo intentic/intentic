@@ -1,5 +1,5 @@
 import { extensionIdOf } from "@intentic/extension-manifest";
-import { extensionsContract } from "@intentic/sandbox-contract";
+import { extensionsContract } from "@intentic/sandbox-contract/contracts/extensions.contract";
 import { implement, ORPCError } from "@orpc/server";
 import { invalidateContributions } from "../capabilities/contributions.js";
 import { extensionDir, extensionRootOf, readExtensionManifest } from "../capabilities/extension-dirs.js";
@@ -7,10 +7,10 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { opt } from "../opt.js";
 import { pathExists } from "@intentic/base/fs";
-import { checkDevCheckout, devSummaryOf, forgetExtensionDev, readExtensionDev, touchExtensionDev, writeExtensionDev } from "./extension-dev.js";
+import { checkDevCheckout, devSummaryOf, forgetExtensionDev, readExtensionDev, touchExtensionDev, writeExtensionDev } from "../capabilities/extension-inventory/extension-dev.js";
 import { callerConversation, devTargetOf, resolveDevPath, sourceCheckoutOf } from "./extension-dev-source.js";
 import { followExtensionDirs, reconcileListenerProcesses } from "./extension-processes.js";
-import { extensionInventory, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
+import { extensionInventory, type InstalledExtension, installedExtensions } from "../capabilities/extension-inventory/installed-extensions.js";
 
 // Dev mode's verbs (extension-dev.ts says what it is): the agent's `extension` CLI drives all four on the agent token,
 // the Extensions tab's way back calls devClear. Spread into the extensions routes, whose contract they belong to.

@@ -1,10 +1,10 @@
-import { personaModels } from "@intentic/sandbox-contract";
+import { personaModels } from "@intentic/sandbox-contract/schemas/personas";
 import { t } from "@intentic/ui/i18n";
 import { computed, type Ref, watch } from "vue";
-import { usePersonas } from "../../../sandbox/personas/usePersonas";
-import { roleSources } from "../../accounts/roleModel";
+import { usePersonas } from "../../../../models/sandbox/personas/usePersonas";
+import { roleSources } from "../../../../models/providers/roleModel";
 import type { ChatRouting } from "../../routing/chatRoute";
-import type { Conversation } from "../../session/conversation";
+import type { Conversation } from "../../../../models/conversations/session/conversation";
 
 // Who one pane's chat is to the outside world: the pick lives on the conversation (ComposerSelection.actsAs); this adds
 // the card behind the id, the one state worth interrupting the composer for, and the pick itself.

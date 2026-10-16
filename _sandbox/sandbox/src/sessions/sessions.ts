@@ -1,28 +1,22 @@
 import { cachedAsync } from "@intentic/base/held";
 import { sdk } from "../engines/claude-sdk.js";
-import {
-    AskQuestionSchema,
-    type MatchSnippet,
-    settledRequests,
-    type TodoItem,
-    type ToolCallContent,
-    type TranscriptQuestion,
-    type TranscriptRow,
-    type TranscriptTool,
-    resumeNoticeRow,
-    unspokenPromptRow,
-} from "@intentic/sandbox-contract";
+import { AskQuestionSchema, type TodoItem, type ToolCallContent } from "@intentic/sandbox-contract/events/requests";
+import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agents";
+import { settledRequests } from "@intentic/sandbox-contract/policy/request-status";
+import type { TranscriptQuestion, TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import { resumeNoticeRow } from "@intentic/sandbox-contract/events/resume";
+import { unspokenPromptRow } from "@intentic/sandbox-contract/events/agent-words";
 import { z } from "zod";
 import { compactedRow } from "@intentic/sandbox-contract/transcript-fold";
-import { ASK_TOOL_NAMES, parseAnswers } from "../agent/tools/question-answers.js";
-import { TaskChecklist } from "../agent/run/task-checklist.js";
+import { ASK_TOOL_NAMES, parseAnswers } from "./vocabulary/question-answers.js";
+import { TaskChecklist } from "./vocabulary/task-checklist.js";
 import { displayNameOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
-import { type CalledTool, editDiffContent, mayShowPicture, resultContent, resultText, toolLocations } from "../agent/tools/tool-calls.js";
+import { type CalledTool, editDiffContent, mayShowPicture, resultContent, resultText, toolLocations } from "./vocabulary/tool-calls.js";
 import { browserOutputDir } from "../browser/cast/browser-artifacts.js";
-import { flatSpokenWords, parsePromptEnvelope, storedPromptTitle } from "../agent/prompt/turn-preamble.js";
 import { rootRelative } from "./turn-transcript.js";
 import type { SearchIndex } from "./search-index.js";
 import { matchLines, sessionOverlay } from "./transcript-search.js";
+import { flatSpokenWords, parsePromptEnvelope, storedPromptTitle } from "./vocabulary/prompt-envelope.js";
 
 // The index's own search, passed in rather than imported, since this module knows how to ask what a session said, not
 // where the index lives.

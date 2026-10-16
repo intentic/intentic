@@ -2,11 +2,12 @@
 // would be the FALLBACK model's rather than the one that will run — so there is no meter at all. Same rule
 // ChatModelPicker keeps for the rest of the run settings under Auto; this is the control that lives outside it.
 import "@intentic/testing/dom";
-import { type AgentProvider, capabilitiesOf } from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { type App, computed, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import type { Conversation } from "../session/conversation";
-import { effortsFor } from "../models/run-settings/effortScale";
+import type { Conversation } from "../../../models/conversations/session/conversation";
+import { effortsFor } from "../../../models/providers/effortScale";
 import ComposerEffort from "./ComposerEffort.vue";
 
 const PROVIDER = `claude` as const satisfies AgentProvider;

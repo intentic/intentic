@@ -1,4 +1,4 @@
-import type { WorkspaceTree } from "@intentic/sandbox-contract";
+import type { WorkspaceTree } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 
 // Shares one workspace walk between the callers asking for it at the same moment. The walk is ~350ms of syscalls and a
 // few thousand microtasks on the daemon's single loop, and it is requested by every open editor tab, every agent scope

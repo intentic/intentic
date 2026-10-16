@@ -42,6 +42,7 @@ on:
           - mobile
           - tidy
           - ci-audit
+          - nav-trend
 
 concurrency:
   group: nightly
@@ -885,3 +886,49 @@ jobs:
       - run: node _tools/scripts/ci/ci-audit.mjs --runs 100 --logs >> "$GITHUB_STEP_SUMMARY"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # WHAT THE CODEBASE COSTS AN AGENT TO READ, NIGHT OVER NIGHT. `_tools/nav` measures the tree in tokens (size, shape,
+  # what a lookup costs); this keeps each night's measurement as an artifact and writes the delta from the last kept
+  # one into the job summary, so a slow drift shows up as a trend rather than as a surprise in the next decomposition
+  # round. It fails nothing: a number moving the wrong way is a reading, and the summary step cannot fail the job.
+  # Hosted for the same reason as ci-audit: it needs typescript and the Actions API, nothing from the fleet.
+  nav-trend:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'nav-trend' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    timeout-minutes: 20
+    steps:
+      # Full history: the measurement names its commit, and the summary's provenance reads the span between two.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+      # nav parses with the root's typescript and nothing else, so only the root importer is installed.
+      - run: pnpm install --frozen-lockfile --ignore-scripts --filter @intentic-monorepo/root
+      - run: node _tools/nav/run.mjs measure --out "$RUNNER_TEMP/nav-trend/nav.json"
+      - uses: ./.github/actions/upload-artifact-retry
+        with:
+          name: nav-trend
+          path: ${{ runner.temp }}/nav-trend/nav.json
+          if-no-files-found: error
+          retention-days: 90
+      - id: previous
+        run: node _tools/nav/trend.mjs previous-run >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - if: steps.previous.outputs.run-id != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nav-trend
+          path: ${{ runner.temp }}/nav-trend-previous
+          run-id: ${{ steps.previous.outputs.run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      # With no previous record the summary says so; with one, it is the before → after table.
+      - continue-on-error: true
+        run: node _tools/nav/trend.mjs summary "$RUNNER_TEMP/nav-trend-previous/nav.json" "$RUNNER_TEMP/nav-trend/nav.json"

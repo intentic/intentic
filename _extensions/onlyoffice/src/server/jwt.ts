@@ -1,4 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { parseJsonOr } from "@intentic/base/json";
+import { isRecord } from "@intentic/base/escape";
 
 // HS256 JSON Web Tokens, the one algorithm ONLYOFFICE Docs signs and checks with. Node builtins only: this bundle runs
 // with nothing else.
@@ -13,12 +15,8 @@ export const signJwt = (payload: Record<string, unknown>, secret: string): strin
 };
 
 const parseSegment = (segment: string): Record<string, unknown> | undefined => {
-    try {
-        const parsed: unknown = JSON.parse(Buffer.from(segment, "base64url").toString("utf8"));
-        return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : undefined;
-    } catch {
-        return undefined;
-    }
+    const parsed = parseJsonOr(Buffer.from(segment, "base64url").toString("utf8"), undefined);
+    return isRecord(parsed) ? parsed : undefined;
 };
 
 // The payload of a token this secret signed with HS256, else undefined: a wrong algorithm, a bad signature and a

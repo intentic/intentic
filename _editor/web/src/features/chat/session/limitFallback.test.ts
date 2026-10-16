@@ -1,9 +1,10 @@
 // Pins which account fallbackAccount may offer a refused turn, and every case where it must offer none.
-import type { AccountUsage, OauthAccount } from "@intentic/sandbox-contract";
+import type { AccountUsage } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { fallbackAccount as offer, fallbackLabel } from "./limitFallback";
 import { judgedOauth } from "../../../testing/judgedAccounts";
-import { providerRefusals, setAccountUsage, usageByAccount } from "../accounts/providerAccounts";
-import { SPENT_UTILIZATION } from "@intentic/sandbox-contract";
+import { providerRefusals, setAccountUsage, usageByAccount } from "../../../models/providers/providerAccounts";
+import { SPENT_UTILIZATION } from "@intentic/sandbox-contract/models/plan-pools";
 
 const account = (id: string, extra: Partial<OauthAccount> = {}): OauthAccount => ({
     id,

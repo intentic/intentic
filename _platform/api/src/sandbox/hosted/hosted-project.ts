@@ -1,4 +1,4 @@
-import { projectDirNameOf } from "@intentic/sandbox-contract";
+import { projectDirNameOf } from "@intentic/sandbox-contract/ids/project-dir";
 import type { Config } from "../../config.js";
 import { getMachineLaunch } from "./fly/fly.js";
 

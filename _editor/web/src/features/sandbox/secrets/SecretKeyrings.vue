@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SandboxKeyring } from "@intentic/sandbox-contract";
+import type { SandboxKeyring } from "@intentic/sandbox-contract/schemas/secrets";
 import { BrandMark, Button, Notice, type NoticeModel, Row, RowGroup, RowNote, StatusBadge, type StatusVariant, ui, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";

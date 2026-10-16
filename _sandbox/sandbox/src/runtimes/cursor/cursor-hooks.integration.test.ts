@@ -4,14 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { AMBIGUOUS_TURN } from "../daemon-tools/policy-gate.js";
 import { createLogger } from "../../logger.js";
 import { createCursorHookService, type CursorHookService, type CursorHookShield } from "./cursor-hooks.js";
 import { unshieldedCommand } from "./cursor-hook-script.js";
 import { cursorHookShield } from "./cursor-shield.js";
-import { pesel } from "../../privacy/detect/tests/ids.testing.js";
+import { pesel } from "@intentic/privacy-detect/testing";
 import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
 
 // Cursor's turn hooks end to end: the generated script runs as a real child process, not a stub. Cursor itself reading

@@ -8,7 +8,8 @@ import { test } from "node:test";
 import { CHECKS } from "../../checks/manifest.mjs";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { adoptedOf, allowanceOf, tightenedOf } from "../../checks/lib/ratchet.mjs";
-import { crates, fixChange, tightenBaselines, touchedCrates } from "./fixers.mjs";
+import { crates, fixChange, regenerateDaemonIndexes, regenerateLayerTables, tightenBaselines, touchedCrates } from "./fixers.mjs";
+import { touchesTables } from "../tools/layer-tables.mjs";
 
 test("a crate is touched only by a path inside it, and build output is never walked", () => {
     const root = mkdtempSync(join(tmpdir(), "crates-"));
@@ -20,6 +21,45 @@ test("a crate is touched only by a path inside it, and build output is never wal
         assert.deepEqual(crates(root).sort(), ["app/src-tauri", "tools/ic"]);
         assert.deepEqual(touchedCrates(root, ["tools/ic/src/main.rs", "tools/icing/x.rs", "README.md"]), ["tools/ic"]);
         assert.deepEqual(touchedCrates(root, []), []);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test("a layers table is regenerated only for a layers.json or a README beside one", () => {
+    const root = mkdtempSync(join(tmpdir(), "layers-"));
+    try {
+        mkdirSync(join(root, "pkg/src"), { recursive: true });
+        mkdirSync(join(root, "plain"), { recursive: true });
+        writeFileSync(join(root, "pkg/layers.json"), "{}");
+        assert.equal(touchesTables(root, "pkg/layers.json"), true);
+        assert.equal(touchesTables(root, "pkg/README.md"), true);
+        assert.equal(touchesTables(root, "plain/README.md"), false);
+        assert.equal(touchesTables(root, "pkg/src/a.ts"), false);
+        // Nothing in scope: the check is never started, even in a tree that lacks it.
+        assert.equal(regenerateLayerTables(root, ["plain/README.md"]), false);
+        assert.equal(regenerateLayerTables(root, ["pkg/layers.json"]), false);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test("the daemon's indexes are regenerated only for a daemon source, and count as written only when the writer says so", () => {
+    const root = mkdtempSync(join(tmpdir(), "indexes-"));
+    const writer = join(root, "_sandbox/sandbox/scripts/write-indexes.mjs");
+    const ranMarker = join(root, "ran");
+    try {
+        // No writer in the tree: nothing to run, whatever changed.
+        assert.equal(regenerateDaemonIndexes(root, ["_sandbox/sandbox/src/app.ts"]), false);
+        mkdirSync(join(root, "_sandbox/sandbox/scripts"), { recursive: true });
+        const stub = (said) => writeFileSync(writer, `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(ranMarker)}, "");\nconsole.log(${JSON.stringify(said)});\n`);
+        stub("daemon indexes: wrote src/app-raw-routes.ts (1 documents, 0 steps, 1 raw route tables)");
+        assert.equal(regenerateDaemonIndexes(root, ["_sandbox/sandbox/README.md", "_shared/sandbox-contract/src/index.ts"]), false);
+        assert.throws(() => readFileSync(ranMarker), { code: "ENOENT" });
+        assert.equal(regenerateDaemonIndexes(root, ["_sandbox/sandbox/src/app.ts"]), true);
+        assert.equal(readFileSync(ranMarker, "utf8"), "");
+        stub("daemon indexes: current (1 documents, 0 steps, 1 raw route tables)");
+        assert.equal(regenerateDaemonIndexes(root, ["_sandbox/sandbox/src/app.ts"]), false);
     } finally {
         rmSync(root, { recursive: true, force: true });
     }

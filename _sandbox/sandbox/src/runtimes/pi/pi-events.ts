@@ -1,7 +1,8 @@
-import type { AgentEvent, ToolCallContent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { ToolCallContent } from "@intentic/sandbox-contract/events/requests";
 import { displayNameOf, toolTarget } from "@intentic/agent-context/tool-calls";
-import { diffContent, resultText, toolLocations, workspacePath } from "../../agent/tools/tool-calls.js";
-import { isContextOverflowText } from "../../agent/providers/failure-sentences.js";
+import { diffContent, resultText, toolLocations, workspacePath } from "../../sessions/vocabulary/tool-calls.js";
+import { isContextOverflowText } from "../../engines/failure-sentences.js";
 import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
 import { toolCallOpened, type TurnCapture, usageTotals, type VendorEventMapper } from "../decorators/vendor-events.js";
 

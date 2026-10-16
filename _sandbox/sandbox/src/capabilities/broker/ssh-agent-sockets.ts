@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:net";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { writeFileAtomic } from "@intentic/base/fs";
-import { isConversationId } from "@intentic/sandbox-contract";
+import { isConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { type SshAgentDeps, type SshPrincipal, serveSshAgent } from "./ssh-agent.js";
 
 // Where the sandbox's ssh agent listens: one Unix socket for the owner's own terminal and one per conversation, all in

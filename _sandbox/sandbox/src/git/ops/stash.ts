@@ -1,5 +1,6 @@
 import { defaultGit, type GitRunner } from "@intentic/base/git";
-import type { GitChange, StashEntry } from "@intentic/sandbox-contract";
+import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
+import type { StashEntry } from "@intentic/sandbox-contract/schemas/git/git-history";
 import { parseNameStatusZ, parseNumstatZ } from "../changes/changes-porcelain.js";
 import { gitFailureReason } from "../git.js";
 

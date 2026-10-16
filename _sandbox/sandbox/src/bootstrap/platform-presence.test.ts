@@ -1,10 +1,14 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import { pino } from "pino";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import type { ApprovalSummary, AutomationApproval, TurnBreakPolicy } from "@intentic/sandbox-contract";
-import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import type { ApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
+import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
+import type { TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
-import { beginTurn, fleetStoreOver, memoryFleet, noPresences } from "../testing.js";
+import { beginTurn } from "../conversations/actor/conversation-actors.testing.js";
+import { fleetStoreOver, memoryFleet } from "../conversations/registry/agents-registry.testing.js";
+import { noPresences } from "../conversations/land/landed-presence.testing.js";
 import { memoryAutomationsStore } from "../automations/automations-slice.testing.js";
 import type { AutomationRecord } from "../automations/automations-store.js";
 import { automationRecord } from "../harness/route-stores.testing.js";

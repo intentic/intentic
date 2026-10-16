@@ -1,7 +1,7 @@
 import { sandboxRef } from "@intentic/extension-api";
-import { isProjectDirName } from "@intentic/sandbox-contract";
-import { activeSandboxId } from "../lib/activeSandbox";
-import { storedValue, storeValue } from "../lib/browserStorage";
+import { isProjectDirName } from "@intentic/sandbox-contract/ids/project-dir";
+import { activeSandboxId } from "./storage/activeSandbox";
+import { storedValue, storeValue } from "./storage/browserStorage";
 
 // Which project the whole shell is looking at: one repository under the workspace root, or everything. A sandbox-wide
 // selection, not a view's: the workspace roots at it, the agents board files conversations under it, and every

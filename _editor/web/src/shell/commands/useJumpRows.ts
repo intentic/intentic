@@ -9,16 +9,16 @@ import { formatChord, isApplePlatform } from "../../workbench/commands/keybindin
 import { recentCommandIds, rememberCommand } from "../../workbench/commands/recentCommands";
 import { commandLabel, commands, executeCommand, type RegisteredCommand } from "../../workbench/commands/useCommands";
 import { effectiveKeybinding } from "../../workbench/commands/useKeymap";
-import { agentDisplayTitle, agentStatusMeta } from "../../features/agents/fleet/agentStatus";
-import { previewOf } from "../../features/chat/panel/useChat-strip";
+import { agentDisplayTitle, agentStatusMeta } from "../../models/agent-status/agentStatus-meta";
+import { previewOf } from "../../models/conversations/panel/useChat-strip";
 import { sessionIdFrom } from "../../features/agents/fleet/sessionRef";
-import { useAgents } from "../../features/agents/fleet/useAgents";
+import { useAgents } from "../../models/fleet/useAgents";
 import { useRole } from "../../client/sandbox/useRole";
-import { useTerminalsQuery } from "../../features/terminal/terminalsQuery";
-import { useTerminalPanel } from "../../features/terminal/useTerminalPanel";
+import { useTerminalsQuery } from "../../models/terminal/terminalsQuery";
+import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import { fuzzyScore } from "@intentic/base/fuzzy";
-import { useFuzzyFiles } from "../../features/workspace/search/useFuzzyFiles";
-import { useWorkspaceTabs } from "../../features/workspace/tabs/useWorkspaceTabs";
+import { useFuzzyFiles } from "../../models/workspace/search/useFuzzyFiles";
+import { useWorkspaceTabs } from "../../models/workspace/tabs/useWorkspaceTabs";
 
 // Every source the palette can answer from, as one list of rows: the fleet, the workspace's files, the sandbox's
 // terminals and the command registry. Each kind ranks its own rows (jumpSearch orders the kinds against each other),

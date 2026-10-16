@@ -1,4 +1,5 @@
-import type { deviceContract, DeviceScopes } from "@intentic/sandbox-contract";
+import type { deviceContract } from "@intentic/sandbox-contract/contracts/device.contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { createORPCClient, ORPCError } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { RPCLink } from "@orpc/client/websocket";

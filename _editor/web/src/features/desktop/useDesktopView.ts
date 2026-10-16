@@ -1,8 +1,8 @@
 import { errorMessage } from "@intentic/base/errors";
 import { onScopeDispose, ref, type Ref, watch } from "vue";
 import { keyMessage, pointerMessage, wheelGauge, type DesktopKey, type DesktopMouse, type DesktopPointerAction, type DesktopText } from "./desktopInput";
-import { type ScreencastMessage, useScreencast } from "../browsers/useScreencast";
-import { socketUrl } from "../sandbox/session/wsTicket";
+import { type ScreencastMessage, useScreencast } from "../../models/browsers/useScreencast";
+import { socketUrl } from "../../client/sandbox/streams/wsTicket";
 
 // The sandbox's own desktop over /system/desktop-view (the daemon's desktop/desktop-view.ts): H.264 of the whole
 // display, or of one window on it, into a canvas, and, once the owner takes over, their pointer and keys back onto it.

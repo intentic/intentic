@@ -8,7 +8,7 @@ import {
     LinkMessageSchema,
     LinkRequestDecisionSchema,
     LinkTaskSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/links";
 import type { Context } from "hono";
 import type { z } from "zod";
 import type { AppEnv } from "../app-env.js";
@@ -17,6 +17,7 @@ import { ownerDenied } from "../auth/owner-gates.js";
 import { opt } from "../opt.js";
 import type { ResolvedLink, StoredLinkTask } from "./inbound-links.js";
 import { answerTask, askTask, decideTask, type LinkRefusal, type LinkTaskDeps, messageTask, statusAfter, statusOf, stopTask } from "./link-tasks.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // The two halves of a link as routes. The owner's (`/system/links`): mint one, change its terms, revoke it, answer a task
 // that waits on them; each refused to anyone below the operating tier, like a control token's. The link doors (`/link`):
@@ -269,3 +270,22 @@ export const createLinkRoutes = (deps: LinkRoutesDeps) => {
         },
     };
 };
+
+// Linked sandboxes: the owner's links for other sandboxes of theirs (mint, terms, revoke, a waiting task's answer), and
+// the doors those sandboxes hand tasks through, each reaching only the conversations its own link opened.
+export const linkRawRoutes = defineRawRoutes((services: Parameters<typeof linkRoutesDepsOf>[0]) => {
+    const links = createLinkRoutes(linkRoutesDepsOf(services));
+    return {
+        "GET /system/links": links.list,
+        "POST /system/links": links.mint,
+        "POST /system/links/{id}": links.update,
+        "DELETE /system/links/{id}": links.revoke,
+        "POST /system/links/{id}/requests/{request}": links.decide,
+        "GET /link": links.hello,
+        "POST /link/conversations": links.ask,
+        "GET /link/conversations/{id}": links.status,
+        "POST /link/conversations/{id}/messages": links.message,
+        "POST /link/conversations/{id}/answer": links.answer,
+        "POST /link/conversations/{id}/stop": links.stop,
+    };
+});

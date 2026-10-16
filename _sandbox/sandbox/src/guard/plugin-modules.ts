@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { HookModule } from "@intentic/sandbox-contract";
+import type { HookModule } from "@intentic/sandbox-contract/schemas/approvals";
 import { errorMessage } from "@intentic/base/errors";
 import { isRecord } from "@intentic/base/escape";
 

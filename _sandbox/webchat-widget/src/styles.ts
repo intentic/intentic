@@ -1,4 +1,4 @@
-import type { WebchatPublicConfig } from "@intentic/sandbox-contract";
+import type { WebchatPublicConfig } from "@intentic/sandbox-contract/schemas/automations";
 import { DEFAULT_ACCENT, onAccent, parseHex } from "@intentic/sandbox-contract/embed";
 
 // Stylesheet as a string, not a .css file, so the embed stays one script with no second request to fail. `all: initial`

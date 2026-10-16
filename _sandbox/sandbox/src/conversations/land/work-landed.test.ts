@@ -1,6 +1,6 @@
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
-import { conversationEntry, isolatedAgent } from "../../testing.js";
+import { conversationEntry, isolatedAgent } from "../registry/agents-store.testing.js";
 import { joined, NO_QUEUE, type TurnQueue } from "../actor/conversation-queue.js";
 import { type ConversationState, freshRuntime, idleConversation } from "../actor/conversation-state.js";
 import type { PersistedAgent, RepoRecord } from "../registry/agents-store.js";

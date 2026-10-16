@@ -4,7 +4,7 @@
 import "@intentic/testing/dom";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
-import type { ForticlientConnection } from "@intentic/sandbox-contract";
+import type { ForticlientConnection } from "@intentic/sandbox-contract/schemas/vpn";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
 
@@ -20,7 +20,7 @@ jest.mock(`vue-router`, () => ({
 
 // Stubbed to an empty-but-settled sandbox (no capabilities, no extension tiles, no tunnels); the vpn tile comes
 // from the static catalog regardless, so it, its form, and the import block are the whole subject.
-jest.mock(`./connect/useCapabilities`, () => ({
+jest.mock(`../../models/capabilities/useCapabilities`, () => ({
     useCapabilities: () => ({
         recommendationFor: () => undefined,
         capabilities: ref([]),
@@ -37,13 +37,13 @@ jest.mock(`./connect/useCapabilities`, () => ({
     readRemoteRefs: jest.fn(async () => ({ refs: [] })),
     probeCapability: jest.fn(),
 }));
-jest.mock(`../extensions/useExtensions`, () => ({
+jest.mock(`../../models/extensions/useExtensions`, () => ({
     useExtensions: () => ({ contributionOf: () => undefined, enabled: ref([]), extensions: ref([]), settled: ref(true) }),
 }));
 // The Extension tile's signpost reads two counts from here; empty renders the sentence without them, a first-visit
 // state.
 jest.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
-jest.mock(`../terminal/useBackgroundProcesses`, () => ({
+jest.mock(`../../models/terminal/useBackgroundProcesses`, () => ({
     useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: jest.fn(), stop: jest.fn() }),
     viewProcessLogs: jest.fn(),
 }));
@@ -57,7 +57,7 @@ jest.mock(`./connect/hosts/HostConnectDialog.vue`, () => ({ default: defineCompo
 // read here.
 const importForticlient = jest.fn<(xml: string) => Promise<ForticlientConnection[]>>();
 // The whole composable, not just its list: <LiveLinkRows> both opens and lists, reading `error` on every render.
-jest.mock(`../sandbox/devices/useLiveLinks`, () => ({
+jest.mock(`../../models/sandbox/devices/useLiveLinks`, () => ({
     importForticlient: (xml: string) => importForticlient(xml),
     useLiveLinks: () => ({ links: ref([]), error: ref(undefined), open: jest.fn(), close: jest.fn() }),
 }));

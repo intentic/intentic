@@ -1,5 +1,6 @@
 import type { HookCallbackMatcher, HookEvent, HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { type Fence, type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract";
+import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
+import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
 import { personaScopeHooks, personaScopeOf } from "./persona-scope.js";
 import { turnPersona } from "./personas.js";
 

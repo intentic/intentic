@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { type Pump, pumpTcpWebSocket } from "@intentic/base/ws-tcp-pump";
 import { upgradeWebSocket, type WebSocketLike } from "@hono/node-server";
-import { SshHostKeySchema } from "@intentic/sandbox-contract";
+import { SshHostKeySchema } from "@intentic/sandbox-contract/schemas/devices";
 import type { WSContext } from "hono/ws";
 import type { WebSocket } from "ws";
 import type { Services } from "../composition.js";

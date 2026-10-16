@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import {
     ContextMenu,
     explorerColorClass,
@@ -23,13 +24,13 @@ import { commandShortcut } from "../../../workbench/commands/useCommands";
 import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import { viewersOfPath } from "../../../workbench/presence/usePresence";
 import { useLayout } from "../../../workbench/window/useLayout";
-import { usePersonas } from "../../sandbox/personas/usePersonas";
-import { isRecentlyChanged } from "../changes/live/useWorkspaceLive";
+import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
+import { isRecentlyChanged } from "../../../models/workspace/changes/useWorkspaceLive";
 import { lensRefuses } from "../directory-ui/personaReach";
-import { opensAsFolder } from "../files/archiveEntries";
+import { opensAsFolder } from "../../../models/workspace/files/archiveEntries";
 import { requestCaret } from "../files/caretRequest";
 import { type CoverMark, useCover } from "../home/useCover";
-import type { OpenMode } from "../tabs/workspaceTabs";
+import type { OpenMode } from "../../../models/workspace/tabs/workspaceTabs";
 import { ancestorDirs } from "./revealPath";
 import type { RowAction } from "./rowActions";
 import { specialChip } from "./specialPaths";
@@ -43,7 +44,7 @@ import { useTreeRows } from "./tree/useTreeRows";
 import { useTreeWindow } from "./tree/useTreeWindow";
 import TreeSkeleton from "./tree/TreeSkeleton.vue";
 import { useEmptyDirs } from "./useEmptyDirs";
-import { useFileNesting } from "./useFileNesting";
+import { useFileNesting } from "../../../models/workspace/tree/useFileNesting";
 import { type ProjectFocus, projectFocusRows } from "./projectFocus";
 
 // Recursive file tree and file-management surface: verbs act on the whole selection via useWorkspaceTree, with a file

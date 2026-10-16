@@ -1,4 +1,4 @@
-import type { PushChannel, PushNotification } from "@intentic/sandbox-contract";
+import type { PushChannel, PushNotification } from "@intentic/sandbox-contract/schemas/push";
 
 // What every transport owes push.ts's fan-out: one settled verdict per channel, never a rejection.
 // `dead` means this channel can never be sent to again and the row must be forgotten; anything else is a transient to

@@ -1,8 +1,9 @@
+import { parseJsonWith } from "@intentic/base/json";
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { computed, ref, watch } from "vue";
 import { z } from "zod";
-import { activeSandboxId } from "../../lib/activeSandbox";
-import type { LineJump } from "../../features/workspace/tabs/workspaceTabs";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
+import type { LineJump } from "../../models/workspace/tabs/workspaceTabs";
 import { readWindowState, writeWindowState } from "../window/windowStore";
 
 // THE SIDE PANEL'S TABS: what the reader opened beside the section the rail put in the main area. Each tab shows one
@@ -72,12 +73,8 @@ const StoredStateSchema = z.object({
 
 // An unreadable payload counts as nothing remembered; the panel opens empty.
 const readStored = (raw: string): z.infer<typeof StoredStateSchema> | undefined => {
-    try {
-        return StoredStateSchema.safeParse(JSON.parse(raw)).data;
-        // allow(silent-catch): Malformed stored JSON restores an empty panel, never unchecked tabs.
-    } catch {
-        return undefined;
-    }
+    // Malformed stored JSON restores an empty panel, never unchecked tabs.
+    return parseJsonWith(raw, StoredStateSchema);
 };
 
 // Drops a second copy of a tab, which would collide on its key, and any focus naming a tab that did not survive.

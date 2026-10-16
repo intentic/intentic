@@ -1,16 +1,18 @@
-import type { AgentCommand, Persona, RunnerSummary } from "@intentic/sandbox-contract";
+import type { AgentCommand } from "@intentic/sandbox-contract/events/requests";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { RunnerSummary } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { computed, nextTick, type Ref, ref, watch } from "vue";
-import { otherBoxes } from "../../../sandbox/live/fleetAcross";
-import { modelLabelFor } from "../../accounts/providerCatalog";
+import { otherBoxes } from "../../../../models/sandbox/live/fleetAcross";
+import { modelLabelFor } from "../../../../models/providers/providerCatalog";
 import type { QuickPick, QuickPickSources } from "../../composer/composerQuickPick";
 import { drillMention, fileMention, mentionQueryAt, replaceMention } from "../../composer/useMentions";
-import { type SendLater, timeChoices } from "../../composer/later/sendLater";
-import { chatPickable, isOlderEntry, pickerEntries } from "../../models/modelPickerState";
-import { effortsFor } from "../../models/run-settings/effortScale";
-import { ensureProviderCommands, loadAllProviderModels } from "../../models/useChat-catalog";
-import { providerReady } from "../../session/access";
-import type { Conversation } from "../../session/conversation";
-import type { ConversationView } from "../useChat-view";
+import { type SendLater, timeChoices } from "../../../../models/conversations/drafts/sendLater";
+import { chatPickable, isOlderEntry, pickerEntries } from "../../../../models/conversations/accounts/modelPickerState";
+import { effortsFor } from "../../../../models/providers/effortScale";
+import { ensureProviderCommands, loadAllProviderModels } from "../../../../models/conversations/accounts/useChat-catalog";
+import { providerReady } from "../../../../models/providers/access";
+import type { Conversation } from "../../../../models/conversations/session/conversation";
+import type { ConversationView } from "../../../../models/conversations/panel/useChat-view";
 import { placeConversation } from "./composerControls";
 
 // The two lists that open over one pane's composer as it is typed into: an `@`-token at the caret opens the picker over

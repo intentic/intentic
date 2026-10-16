@@ -1,0 +1,466 @@
+import { sandboxValue } from "@intentic/extension-api";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { useNow } from "@intentic/ui/async";
+import { computed, effectScope, watch } from "vue";
+import { attentionCards, type FleetLane, laneOf, NO_ATTENTION } from "../agent-status/agentStatus-lanes";
+import { awaitingUser, blocked, type ClientAgentStatus, heardByParent, scheduledSend, turnInFlight, unregistered } from "../agent-status/agentStatus-standing";
+import { closedDrafts } from "../conversations/drafts/closedDrafts";
+import { type TabFacts, unasked } from "../conversations/tabs/tabFacts";
+import type { StoredTab } from "../conversations/tabs/tabSnapshot";
+import { rememberedProviderFor } from "../conversations/run/turnDefaults";
+import { useChat } from "../conversations/run/useChat";
+import { chatStrip, draftsInTransit } from "../conversations/panel/useChat-strip";
+import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
+import { onScreen } from "../../workbench/window/onScreen";
+import { asStarted, endedHere, overlaid, withdrawnHere } from "./useAgents-provisional";
+import { parentOf } from "../agent-status/ownership";
+import { archived, heldWakes, markSeen, registry, sameEntries, snapshotFingerprint } from "./useAgents-registry";
+import { sandboxNow } from "../agent-status/sandboxClock";
+
+// Fleet view: registry (authoritative status/branch/cost) merged with open tabs by conversationId (live state),
+// producing the lanes and counts the board draws. Derived only; the roster lives in useAgents-registry.
+
+// Merge of the registry and open tabs by conversationId; an open, unregistered conversation is a draft card until
+// its first turn registers it. `status` widens the wire enum with that client-only draft state.
+export interface FleetAgent extends Omit<AgentSummary, "status"> {
+    readonly status: AgentSummary["status"] | ClientAgentStatus;
+    // Sandbox this card's agent is in; absent means the active one, set only for another box's roster entry.
+    readonly sandboxId?: string;
+    readonly open: boolean;
+    readonly unread: boolean;
+    // Unsent words in this open tab (any window of this browser); false for a draft written on another device.
+    // Says only THAT there are words. The words themselves are `chatPreviews`, looked up by id where they are
+    // drawn: a field here would rebuild this whole list on every character typed anywhere.
+    readonly unsent: boolean;
+    // When the composer first held something unsent, so the mark can show how long it's been standing.
+    readonly draftAt?: number;
+}
+
+// How many finished entries show before the rest collapse behind one row; older ones remain reachable.
+// Six rather than seven: Finished is the only self-filling lane, so it decides how tall the board reads, and the
+// fold below it is one press away. The number is small on purpose — the lane is a ledger you skim, not the work.
+export const FINISHED_WINDOW = 6;
+
+// Landed work the workspace no longer holds; the card offers Land again, not a receipt. Not when an agent took it out,
+// which was its doing on purpose, so the card offers nothing to put back (agentStatus.landedAway).
+export const finishedNeedsReland = (agent: Pick<FleetAgent, "landedPresence">): boolean =>
+    agent.landedPresence !== undefined &&
+    agent.landedPresence.present < agent.landedPresence.landed &&
+    agent.landedPresence.removedBy?.kind !== `agent`;
+
+// Every finished card that still owes a press or has words at risk; such a card is never done with (doneWith), so
+// the rail keeps its row without a press.
+export const finishedNeedsAction = (agent: Pick<FleetAgent, "unsent" | "unfinished" | "status" | "landedPresence">): boolean =>
+    agent.unsent || agent.unfinished !== undefined || agent.status === `ready` || agent.status === `landing` || finishedNeedsReland(agent);
+
+// Nothing left for the reader to do with this chat: settled in Finished, owing no press, and already looked at.
+// The rail is a working set, so this is what lets a tab leave it without a press (useChat-tabs.releaseDone); the
+// board is the record and keeps its card either way.
+// Unread is the grace, and it does most of the work: a chat that finished while the reader was elsewhere keeps its
+// row until they have read it. A workflow step waives it, since a step is read through its run's row and never had
+// a row of its own to be read in. An unregistered card is excluded outright: with no registry entry there is no
+// account of whether the work is over, only this browser's guess.
+export const doneWith = (agent: FleetAgent): boolean =>
+    !unregistered(agent.status) && laneOf(agent) === `finished` && !finishedNeedsAction(agent) && (!agent.unread || agent.workflow !== undefined);
+
+// The card's last event, agent's or reader's: when the turn ended (`updatedAt` on a settled card is finish/land time
+// only, never the last observe frame), or when the composer took words, whichever is later. A chat closed with a draft
+// in it has no finish time at all, so the draft's own instant is what places it.
+const finishedRecency = (agent: FleetAgent): number => Math.max(agent.unfinished?.at ?? agent.updatedAt, agent.draftAt ?? 0);
+
+// Caps browsing, not existence, and never order: the lane already decided that (finishedLaneOrder), and a window
+// that re-sorted would hoist a stale press back over the finish that just happened. The cap is the lane's own head,
+// FINISHED_WINDOW cards and no more — a card owing a press rides in by ranking there (pinnedRank), never by growing
+// the window past what the board should read as. Shared by both Finished lanes.
+export const windowFinished = <T>(
+    finished: readonly T[],
+    selectedId: string | undefined,
+    idOf: (entry: T) => string,
+): { shown: T[]; hidden: number } => {
+    const kept = new Set(finished.slice(0, FINISHED_WINDOW).map(idOf));
+    // A selection past the fold joins the window where the lane puts it, not at either end; an id no longer in the
+    // lane matches nothing.
+    if (selectedId !== undefined) {
+        kept.add(selectedId);
+    }
+    const shown = finished.filter((entry) => kept.has(idOf(entry)));
+    return { shown, hidden: finished.length - shown.length };
+};
+
+// Built from the stored tab alone, since no daemon row or open tab exists for it; carries its origin sandbox so
+// actions address the right daemon. `updatedAt` is 0, since being set aside isn't activity.
+const closedCard = (tab: StoredTab): FleetAgent => ({
+    id: tab.conversationId,
+    status: tab.session === undefined ? `draft` : `resumed`,
+    // Falls back the same as a fresh conversation, so a tab persisted before picking anything can still open.
+    provider: tab.provider ?? rememberedProviderFor(),
+    harness: tab.harness ?? `native`,
+    updatedAt: 0,
+    attention: NO_ATTENTION,
+    // No tab anywhere for this card; its × forgets it rather than closing it.
+    open: false,
+    unread: false,
+    unsent: true,
+    draftAt: tab.draftAt,
+    // Model the composer held when closed: queued work whose spend is already decided.
+    ...(tab.model === undefined ? {} : { model: tab.model }),
+    ...(tab.title === undefined ? {} : { title: tab.title }),
+    ...(tab.session === undefined ? {} : { sessionId: tab.session.id }),
+    ...(tab.box === undefined ? {} : { sandboxId: tab.box }),
+});
+
+// That one composer holds something unsent, and when it first did; the instant is optional (a pre-stamp snapshot
+// restore has none). The words are not here — see FleetAgent.unsent.
+interface UnsentTab {
+    readonly at?: number;
+}
+
+// One open tab the fleet has never registered (from the strip, tabFacts.ts), named only by its own unsent
+// preview, never a title fallback. `turn` fields exist only on a `starting` card, until the registry lands it.
+const draftCard = (tab: TabFacts, held: UnsentTab | undefined): FleetAgent => ({
+    id: tab.id,
+    status: tab.standing,
+    provider: tab.provider,
+    harness: tab.harness,
+    updatedAt: 0,
+    attention: NO_ATTENTION,
+    open: true,
+    unread: false,
+    unsent: held !== undefined,
+    draftAt: held?.at,
+    ...(tab.box === undefined ? {} : { sandboxId: tab.box }),
+    ...(tab.title === undefined ? {} : { title: tab.title }),
+    ...(tab.sessionId === undefined ? {} : { sessionId: tab.sessionId }),
+    // The send's instant is this browser's; the card's clock counts on the sandbox's (sandboxClock.ts).
+    ...(tab.turn === undefined
+        ? {}
+        : { model: tab.model, ...tab.turn, startedAt: tab.turn.startedAt === undefined ? undefined : sandboxNow(tab.turn.startedAt) }),
+    ...(tab.standing === `draft` && held !== undefined ? { model: tab.model } : {}),
+});
+
+// A turn this browser sent that the roster cannot have answered for yet, returning the instant it went. The board's
+// one client-side reading of a registered agent's status: a send is known here a whole round trip (POST → begin →
+// persist → /events) before the frame that would move the card, and a card that stays in Finished after the press
+// reads as a press that missed. Refusal needs no rollback — `standingOf` stops saying `starting` the moment the local
+// turn ends, and the roster's own status is what the card falls back to. A board press claims its card before this.
+// Bounded two ways: the daemon must believe the conversation settled (a parked card keeps its lane, whatever this
+// window is streaming), and the turn must be newer than the roster's last word about it, so a strip left behind by a
+// dead window can never hold a card in Active.
+const sendingNow = (agent: AgentSummary, tab: TabFacts | undefined): number | undefined => {
+    if (tab?.standing !== `starting` || turnInFlight(agent) || awaitingUser(agent)) {
+        return undefined;
+    }
+    // Put on the sandbox's clock first: it is weighed against the sandbox's `updatedAt`, and drawn as the card's start.
+    const startedAt = tab.turn?.startedAt === undefined ? undefined : sandboxNow(tab.turn.startedAt);
+    return startedAt !== undefined && startedAt > agent.updatedAt ? startedAt : undefined;
+};
+
+// Sort weight: attention first, then in-flight turns and fresh drafts, then most recent activity.
+const weight = (entry: FleetAgent): number =>
+    blocked(entry) ? 0 : turnInFlight(entry) || entry.status === `awaiting` || entry.status === `draft` ? 1 : 2;
+
+// Same stabilization as the roster: reuses the previous FleetAgent when its derived fields are unchanged, so Vue
+// can skip re-rendering cards whose agent didn't move.
+// Sandbox-scoped: its cached cards are one daemon's objects.
+const fleetStable = sandboxValue(() => new Map<string, FleetAgent>());
+const stableFleet = sandboxValue<FleetAgent[]>(() => []);
+
+const stabilizeFleetEntry = (entry: FleetAgent): FleetAgent => {
+    const cached = fleetStable.value.get(entry.id);
+    if (cached !== undefined && snapshotFingerprint(cached) === snapshotFingerprint(entry)) {
+        return cached;
+    }
+    fleetStable.value.set(entry.id, entry);
+    return entry;
+};
+
+// Clears the memo tied to the connection's roster; a reconnect's snapshot is new objects.
+export const forgetFleet = (): void => {
+    fleetStable.value.clear();
+    stableFleet.value = [];
+};
+
+// Chats closed with the message still in them, plus those whose words a click here just handed to a composer the
+// chat's own window has not yet shown back (draftsInTransit): drawn as they were until it does, so the card the click
+// landed on stays put. One entry per conversation, the set's own first.
+const setAsideTabs = computed<readonly StoredTab[]>(() => {
+    const kept = new Set(closedDrafts.value.map((tab) => tab.conversationId));
+    return [...closedDrafts.value, ...draftsInTransit.value.filter((tab) => !kept.has(tab.conversationId))];
+});
+
+// A conversation that never ran, leaving with the last message it waited to send, which this window has taken back into
+// its composer: from the press its card is that composer's draft, where it stood (Active), and never the sandbox's row
+// on its way out. That row goes idle with an empty queue first and is forgotten only once the conversation's records
+// are gone, seconds later, and read alone it stood in Finished for them, then vanished, then came back as a draft.
+// Also after the answer, for a row a roster frame still lists (TurnClient.takingBack). A conversation that has run, or
+// that keeps anything else waiting, is more than the message, and its row is the card.
+export const leavesWithItsMessage = (
+    tab: Pick<TabFacts, "standing" | "takingBack">,
+    row: Pick<AgentSummary, "turns" | "sessionId" | "queue"> | undefined,
+): boolean =>
+    tab.standing === `draft` &&
+    tab.takingBack !== undefined &&
+    (row === undefined ||
+        ((row.turns ?? 0) === 0 && row.sessionId === undefined && (row.queue?.items ?? []).every((item) => item.id === tab.takingBack)));
+
+// Unsent words in this browser: open composers plus chats closed with the message still in them; composers win any race.
+const unsentTabs = computed<ReadonlyMap<string, UnsentTab>>(
+    () =>
+        new Map([
+            ...setAsideTabs.value.map((tab): [string, UnsentTab] => [tab.conversationId, { at: tab.draftAt }]),
+            ...chatStrip.value.tabs.filter((tab) => tab.unsent).map((tab): [string, UnsentTab] => [tab.id, { at: tab.draftAt }]),
+        ]),
+);
+
+export const fleet = computed<FleetAgent[]>(() => {
+    // Single source for open tabs, titles and unsent state; never this window's own tab list.
+    const strip = chatStrip.value;
+    const openIds = new Set(strip.tabs.map((tab) => tab.id));
+    const carded = new Set(registry.value.map((agent) => agent.id));
+    const unsent = unsentTabs.value;
+    // Every open tab by conversation, for what only this browser knows about a registered agent: that a turn just went
+    // (`sendingNow`), or that a person just ended one (`endedHere`).
+    const live: ReadonlyMap<string, TabFacts> = new Map(strip.tabs.map((tab) => [tab.id, tab]));
+    // Draft = unregistered tab; `carded` stops an id the registry already rendered from rendering twice, unless the
+    // conversation is leaving with the message this tab took back (leavesWithItsMessage), when the tab's draft stands
+    // for it instead of the row. Excludes an empty placeholder tab (`unasked`); it joins the board itself once anything
+    // happens in it.
+    const rows = new Map(registry.value.map((agent) => [agent.id, agent] as const));
+    const leaving = new Set(strip.tabs.filter((tab) => leavesWithItsMessage(tab, rows.get(tab.id))).map((tab) => tab.id));
+    const drafts = strip.tabs
+        .filter((tab) => (leaving.has(tab.id) || (!tab.registered && !carded.has(tab.id))) && !unasked(tab))
+        .map((tab): FleetAgent => endedHere(draftCard(tab, unsent.get(tab.id)), tab));
+    // An archived agent stays off the board whatever its composer held; the words wait with it (withKeptWords).
+    const archivedIds = new Set(archived.value.map((agent) => agent.id));
+    // Chats closed with nothing but their unsent message: no roster row, archive entry, or open tab draws them
+    // otherwise. Stands as `draft` unless the closed chat had a session, in which case reopening resumes it.
+    const setAside = setAsideTabs.value
+        .filter((tab) => !openIds.has(tab.conversationId) && !carded.has(tab.conversationId) && !archivedIds.has(tab.conversationId))
+        .map((tab): FleetAgent => closedCard(tab));
+    const built = [
+        ...registry.value.flatMap((agent): FleetAgent[] => {
+            if (leaving.has(agent.id)) {
+                return [];
+            }
+            const tab = unsent.get(agent.id);
+            const card: FleetAgent = {
+                ...agent,
+                open: openIds.has(agent.id),
+                unread: !turnInFlight(agent) && agent.updatedAt > (agent.seenAt ?? 0),
+                unsent: tab !== undefined,
+                draftAt: tab?.at,
+            };
+            // `running`, not the client-only `starting`: this agent IS registered, and `starting` would seed its next
+            // tab as unregistered. The turn's own start rides with it, or the card's elapsed clock would count from
+            // the previous turn.
+            const open = live.get(agent.id);
+            const startedAt = sendingNow(agent, open);
+            const shown = overlaid(startedAt === undefined ? card : asStarted(card, startedAt), agent, undefined);
+            return shown === undefined ? [] : [endedHere(withdrawnHere(shown, open), open)];
+        }),
+        ...drafts,
+        ...setAside,
+    ].toSorted((a, b) => weight(a) - weight(b) || b.updatedAt - a.updatedAt);
+    const next = built.map(stabilizeFleetEntry);
+    const nextIds = new Set(next.map((agent) => agent.id));
+    for (const id of fleetStable.value.keys()) {
+        if (!nextIds.has(id)) {
+            fleetStable.value.delete(id);
+        }
+    }
+    if (sameEntries(stableFleet.value, next)) {
+        return stableFleet.value;
+    }
+    stableFleet.value = next;
+    return next;
+});
+
+// Words a closed chat left behind, by conversation, for an archived card to wear without rejoining the board.
+const keptWords = computed(() => new Map(closedDrafts.value.map((tab) => [tab.conversationId, tab.draftAt] as const)));
+
+/** An archived card as the archive view draws it: marked when a closed composer still holds its words. */
+export const withKeptWords = (agent: FleetAgent): FleetAgent =>
+    keptWords.value.has(agent.id) ? { ...agent, unsent: true, draftAt: keptWords.value.get(agent.id) } : agent;
+
+// Two headline counts, kept apart since the header renders both: blocked-on-user vs. merely unread.
+export const blocking = computed(() => fleet.value.filter(blocked).length);
+export const unread = computed(() => fleet.value.filter((agent) => agent.unread).length);
+// The rail badge names the Attention lane, as the board draws it (agentStatus.attentionCards): unread updates in Active
+// or Finished keep their card chip but do not claim the reader is needed, a child agent counts only through its
+// family's one card, and a held wake has no agent card yet and leads that lane on its own.
+export const attention = computed(() => attentionCards(fleet.value) + heldWakes.value.length);
+
+// Marks the focused conversation seen the moment it updates, but only while this window is on screen and watching
+// it; otherwise it stays unread for the badge.
+watch(
+    () => {
+        if (!onScreen.value) {
+            return undefined;
+        }
+        const watched = fleet.value.find((agent) => agent.id === useChat().active.value.conversationId);
+        return watched?.unread === true ? watched.id : undefined;
+    },
+    (id) => {
+        if (id !== undefined) {
+            markSeen(id);
+        }
+    },
+);
+
+// Tells the daemon which registered conversations this browser holds unsent words for, since the words never leave it:
+// without that, the unattended sweep archived a chat whose message was still waiting in a composer (archive.ts). Clears
+// only what this browser watched go, so one device with an empty composer cannot unmark another device's words.
+// Which conversations this browser has seen holding words: plain, not reactive, and as per-sandbox as the ids themselves.
+const heldHere = new Set<string>();
+// What was last asked of the daemon per conversation, so a roster frame landing before its answer does not ask again.
+const asked = new Map<string, boolean>();
+watch(
+    [unsentTabs, registry] as const,
+    ([tabs, agents]) => {
+        for (const agent of agents) {
+            const tab = tabs.get(agent.id);
+            const holds = tab !== undefined;
+            if (holds) {
+                heldHere.add(agent.id);
+            }
+            if (holds === (agent.unsentAt !== undefined)) {
+                asked.delete(agent.id);
+                if (!holds) {
+                    heldHere.delete(agent.id);
+                }
+                continue;
+            }
+            if ((!holds && !heldHere.has(agent.id)) || asked.get(agent.id) === holds) {
+                continue;
+            }
+            asked.set(agent.id, holds);
+            // A guest cannot write it; forgetting the ask lets the next change try again.
+            void sandboxRpc.agents.unsent({ id: agent.id, at: holds ? (tab.at ?? Date.now()) : null }).catch(() => asked.delete(agent.id));
+        }
+    },
+    { immediate: true },
+);
+
+// A finished, read chat stays in the rail until it has sat untouched this long (ms); a pinned one stays regardless.
+export const TIDY_AFTER_MS = 12 * 60 * 60 * 1000;
+
+// Minutes are the tidy's resolution: a twelve-hour rule gains nothing from a finer clock. It runs only while some chat is
+// done with, the only kind the tidy can let go. Detached: the rail's tidy is the window's, not any one component's.
+// `run()` returns undefined only for a stopped scope; this one is never stopped.
+// The wall clock the rail's tidy reads, the same in every sandbox.
+const tidyClock = effectScope(true).run(() => useNow(() => fleet.value.some(doneWith), 60_000))!;
+
+// The reader's last contact with a chat: its finish, their last read of it, or focus leaving it.
+const touchedAt = (agent: FleetAgent, leftAt: number | undefined): number => Math.max(agent.updatedAt, agent.seenAt ?? 0, leftAt ?? 0);
+
+/** Whether the rail may let this chat go: done with (doneWith) and untouched for TIDY_AFTER_MS. */
+export const tidyDue = (agent: FleetAgent, leftAt: number | undefined, now: number): boolean =>
+    doneWith(agent) && now - touchedAt(agent, leftAt) >= TIDY_AFTER_MS;
+
+// The whole verdict each frame, never a diff: only the tab store knows which chats were kept or pinned since.
+watch(
+    () => {
+        const strip = chatStrip.value;
+        const leftAt = new Map(strip.tabs.map((tab) => [tab.id, tab.leftAt] as const));
+        return fleet.value
+            .filter((agent) => agent.id !== strip.active && tidyDue(agent, leftAt.get(agent.id), tidyClock.value))
+            .map((agent) => agent.id);
+    },
+    (ids) => useChat().releaseDone(new Set(ids)),
+);
+
+// Whether the board may archive this card; not the same as being Finished, which trapped an errored agent with
+// nothing to land in Attention forever. True unless the agent has a live turn or is still awaiting the user:
+// - running/stopping: no, it's the live turn's worktree
+// - draft: no registry entry to archive
+// - awaiting/plan/question/permission: would bury the question
+// - a message booked for later: yes, and the sandbox cancels it with the archive (the card's hint says so), since
+//   filed away the conversation is done with and the message would only be refused there at its time
+// - error/conflict/stopped/landed/idle: yes
+export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "archivedAt" | "queue">): boolean =>
+    agent.archivedAt === undefined && !unregistered(agent.status) && !turnInFlight(agent) && !awaitingUser(agent);
+
+// What a press that does not name the card itself may file away (the lane's Clear, the children going with a parent):
+// what canArchive allows less a conversation with a message scheduled in it, whose cancel only a press on that card says.
+export const clearable = (agent: Pick<FleetAgent, "status" | "attention" | "archivedAt" | "queue">): boolean =>
+    canArchive(agent) && !scheduledSend(agent);
+
+// What Clear on the Finished lane files away: every card there the board may archive, less a child whose parent is still
+// at work. That child rides in its parent's tray as the parent's history (models/fleet/board/childFold.ts), and filing it alone
+// would strip the tray and leave the child loose in the archive; the family goes together once the parent is done.
+// A child whose stop its parent has moved past (agentStatus.heardByParent) is settled with its family as a Finished
+// child is, though its own standing reads Attention: it holds nothing live, and it goes when the family goes, or it
+// would be left loose in Attention with nobody under it to have heard it.
+export const clearableOf = (grouped: Record<FleetLane, readonly FleetAgent[]>): FleetAgent[] => {
+    const everyone = [...grouped.attention, ...grouped.active, ...grouped.finished];
+    const byId = new Map(everyone.map((agent) => [agent.id, agent] as const));
+    const heard = (agent: FleetAgent): boolean => {
+        const parent = byId.get(parentOf(agent.startedBy) ?? ``);
+        return parent !== undefined && heardByParent(agent, parent.updatedAt);
+    };
+    const liveAgents = [...grouped.attention.filter((agent) => !heard(agent)), ...grouped.active];
+    const live = new Set(liveAgents.map((agent) => agent.id));
+    // Nor a finished parent with anything under it still live: the board draws its card in that live lane, not in
+    // Finished (childFold lifts a family to the lane its children need), and filing it would leave them loose. Walked up
+    // every generation, stopping at an id already met so a record naming its own descendant ends the walk.
+    const startedBy = new Map(everyone.map((agent) => [agent.id, agent.startedBy] as const));
+    const liveFamilies = new Set<string>();
+    for (const agent of liveAgents) {
+        for (let id = parentOf(agent.startedBy); id !== undefined && !liveFamilies.has(id); id = parentOf(startedBy.get(id))) {
+            liveFamilies.add(id);
+        }
+    }
+    // Nor anything riding under a family something live lifted out of Finished: a child rides its eldest ancestor's
+    // card, so one live ancestor, or one with live work under it, puts the whole line in that card's tray.
+    const underLive = (agent: FleetAgent): boolean => {
+        const seen = new Set<string>();
+        for (let id = parentOf(agent.startedBy); id !== undefined && !seen.has(id); id = parentOf(startedBy.get(id))) {
+            if (live.has(id) || liveFamilies.has(id)) {
+                return true;
+            }
+            seen.add(id);
+        }
+        return false;
+    };
+    return [...grouped.finished, ...grouped.attention.filter(heard)].filter(
+        (agent) => clearable(agent) && !underLive(agent) && !liveFamilies.has(agent.id),
+    );
+};
+
+// Final tiebreaker for every lane's sort: without one, cards with equal `updatedAt` (common after a batch resume)
+// swap places every tick. The id itself is arbitrary, chosen only to stay the same next frame.
+const byId = (a: FleetAgent, b: FleetAgent): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+// One ordering for every Finished lane: a timeline, newest first. What a card still owes — a Land, a press, a check
+// left unfinished — is drawn on the card and never moves it, since ranking by state made a two-hour-old branch
+// outrank the session that had just ended, and a lane whose order does not track time cannot be read as a lane.
+// Unsent words are the one exception: they exist only in this browser, so a fold really does lose them.
+export const finishedLaneOrder = (a: FleetAgent, b: FleetAgent): number =>
+    Number(b.unsent) - Number(a.unsent) || finishedRecency(b) - finishedRecency(a) || byId(a, b);
+
+// Fresh drafts lead, then by startedAt (fixed for a turn's life) so a running agent won't jump every tick.
+export const activeLaneOrder = (a: FleetAgent, b: FleetAgent): number =>
+    Number(b.status === `draft`) - Number(a.status === `draft`) || (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt) || byId(a, b);
+
+// Newest news first.
+export const attentionLaneOrder = (a: FleetAgent, b: FleetAgent): number => b.updatedAt - a.updatedAt || byId(a, b);
+
+// Splits a flat list into the board's three lanes, factored out of `fleet` so the all-sandboxes board can apply
+// the same rule to a wider list (this fleet plus other boxes' summaries) without duplicating the sort.
+export const laneGroups = (agents: readonly FleetAgent[]): Record<FleetLane, FleetAgent[]> => {
+    const grouped: Record<FleetLane, FleetAgent[]> = { attention: [], active: [], finished: [] };
+    for (const agent of agents) {
+        grouped[laneOf(agent)].push(agent);
+    }
+    grouped.active.sort(activeLaneOrder);
+    grouped.attention.sort(attentionLaneOrder);
+    grouped.finished.sort(finishedLaneOrder);
+    return grouped;
+};
+
+export const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => laneGroups(fleet.value));
+
+// Resolves an id across both the live roster and the archive, since a detail page addressed by id must still find
+// an archived agent. Archive half only populates once loadArchived has run.
+export const agentById = (id: string): FleetAgent | undefined =>
+    fleet.value.find((agent) => agent.id === id) ?? archived.value.find((agent) => agent.id === id);

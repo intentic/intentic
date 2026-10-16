@@ -1,4 +1,7 @@
-import { type AgentCapabilities, type AgentHarness, type AgentProvider, capabilitiesOf, NATIVE_PROVIDERS } from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
 import type { AgentAdapter } from "../agent/providers/adapter.js";
 import type { ProviderModule } from "../agent/providers/provider-module.js";
 import { ACP_ADAPTER, type AcpAdapterDeps } from "./acp/acp-adapter.js";

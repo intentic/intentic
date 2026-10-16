@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { providerSpec } from "@intentic/sandbox-contract";
+import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { Icon, toneWash } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
+import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import type { ModelSourceStanding } from "./modelSources";
 import { isFreeTile, LOCAL_TILE, type TileKey, type TileTone } from "./providerGrid";
 

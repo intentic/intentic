@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
-import { sandboxSubdomain } from "@intentic/sandbox-contract";
+import { sandboxSubdomain } from "@intentic/sandbox-contract/ids/hostnames";
 import {
     AppBrand,
     Button,
@@ -26,17 +26,17 @@ import { desktopSetupStopLink, desktopTakesProjects, desktopVersion, openDesktop
 import { desktopInstaller } from "../../app/environments/desktopDownloads";
 import { openOnProject } from "../../app/projectScope";
 import { apiClient } from "../../lib/useApi";
-import { revealConversation } from "../agents/fleet/agentActions";
+import { revealConversation } from "../../models/fleet/agentActions";
 import { useAuth } from "../../client/auth/useAuth";
 import { useGoogleIdentity } from "../../client/auth/useGoogleIdentity";
 import CloudflareTokenField from "../capabilities/connect/CloudflareTokenField.vue";
-import { composingConversation } from "../chat/panel/useChat-reveal";
+import { composingConversation } from "../../models/conversations/panel/useChat-reveal";
 import { FOUND_QUERY, foundAfterSetup, landingAfterSetup } from "../../lib/foundOnComputer";
 import { useCloudflareZones } from "../extensions/useCloudflareZones";
 import { useSandbox } from "../../client/sandbox/useSandbox";
-import { activeSandboxId } from "../../lib/activeSandbox";
-import { mintSyncPairing } from "../sandbox/devices/sync/useDesktopSync";
-import { sandboxIdFromToken } from "../sandbox/session/sandboxIdFromToken";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
+import { mintSyncPairing } from "../../models/sandbox/devices/useDesktopSync";
+import { sandboxIdFromToken } from "../../models/sandbox/sandboxIdFromToken";
 import DesktopSetupProgress from "./DesktopSetupProgress.vue";
 import { setupUnderWay, tellSlowDownloadHosted, useDesktopSetup } from "./desktopSetup";
 import { useProjectHandoff } from "./hostedProject";

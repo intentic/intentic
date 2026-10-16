@@ -3,7 +3,7 @@ import {
     EnvironmentRebuildWhenIdleSchema,
     EnvironmentRemoveSchema,
     EnvironmentRuntimeDecisionSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/environment";
 import type { Context } from "hono";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
@@ -12,6 +12,12 @@ import type { RebuildWhenIdle } from "../hosts/rebuild-when-idle.js";
 import { readEnvironmentContents } from "./contents.js";
 import { approveEnvironment, decideRuntimeInstall, readEnvironment, rejectEnvironment, removeFromEnvironment } from "./environment.js";
 import { clearVersionCache } from "./version-probe.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
+import { sandboxSlugOf } from "@intentic/sandbox-run";
+import { workingNames } from "../bootstrap/working-now.js";
+import { manageDeviceSandbox } from "../hosts/device-reports.js";
+import { createRebuildWhenIdle } from "../hosts/rebuild-when-idle.js";
+import { fileRestartResume } from "../system/restart-resume.js";
 
 // The agent-proposed overlay Dockerfile (.intentic/config/environment.Dockerfile): members read it, only the owner
 // approves (copies it to the approved file) or rejects (deletes the proposal). The rebuild itself runs outside the
@@ -21,7 +27,7 @@ import { clearVersionCache } from "./version-probe.js";
 // `waiter` is the one rebuild waiting for this sandbox's agents to be idle; every answer below carries it, so the card
 // that asked, or any other page, sees it waiting, starting, or refused. Built by app.ts from the hosts' own verbs, since
 // hosts reach environment and importing them here would close a cycle.
-export const createEnvironmentRoutes = (services: Services, waiter: RebuildWhenIdle) => {
+const createEnvironmentRoutes = (services: Services, waiter: RebuildWhenIdle) => {
     const environmentNow = async (): Promise<Environment> => {
         const environment: Environment = { ...(await readEnvironment(services)), waitsForAgents: true };
         const wait = waiter.state();
@@ -146,3 +152,28 @@ export const createEnvironmentRoutes = (services: Services, waiter: RebuildWhenI
         },
     };
 };
+
+// The agent-proposed overlay Dockerfile: members read, the owner approves, rejects, runtime-installs a line, takes
+// one tool out, or has the rebuild wait until nothing a restart would cut is in flight.
+export const environmentRawRoutes = defineRawRoutes((services: Services) => {
+    const environment = createEnvironmentRoutes(
+        services,
+        createRebuildWhenIdle({
+            working: () => workingNames(services, "restart"),
+            relay: (host, flow) => manageDeviceSandbox(services, host, flow),
+            restartResume: fileRestartResume(services.config.historyRoot),
+            slug: () => sandboxSlugOf(services.config.sandbox.name),
+            logger: services.logger,
+        }),
+    );
+    return {
+        "GET /environment": environment.read,
+        "GET /environment/contents": environment.contents,
+        "POST /environment/approve": environment.approve,
+        "POST /environment/reject": environment.reject,
+        "POST /environment/runtime-install": environment.runtimeInstall,
+        "POST /environment/remove": environment.remove,
+        "POST /environment/rebuild-when-idle": environment.rebuildWhenIdle,
+        "DELETE /environment/rebuild-when-idle": environment.cancelRebuildWhenIdle,
+    };
+});

@@ -288,6 +288,7 @@ catalog:
   "@prisma/adapter-pg": 7.10.0
   "@prisma/client": 7.10.0
   "@puristic/env": 1.6.1
+  "@resvg/resvg-js": 2.6.2
   "@semantic-release/exec": 7.1.0
   "@shikijs/langs": 4.5.0
   "@shikijs/monaco": 4.5.0
@@ -295,6 +296,8 @@ catalog:
   "@slack/socket-mode": 3.1.0
   "@slack/web-api": 8.2.0
   "@stricli/core": 1.3.0
+  # Types for stryker.conf.mjs's options, held to core's own version.
+  "@stryker-mutator/api": 10.0.0
   # Mutation testing, behind the `test-strength` chore and opted into by stryker.conf.mjs at the repo root. A real
   # dependency rather than `pnpm dlx`: under dlx Stryker resolves its plugins from the working directory and finds none.
   "@stryker-mutator/core": 10.0.0
@@ -367,6 +370,8 @@ catalog:
   # generator declares in its own signatures, so a converter feeding that generator has to speak the same one.
   json-schema-typed: 8.0.2
   knip: 6.39.0
+  # GitHub Actions secrets are sealed boxes (_deploy/providers/src/github/github-api.ts).
+  libsodium-wrappers: 0.8.4
   mailparser: 3.9.36
   # fileq's docx deriver: docx → semantic HTML, which webq's markdown writer then renders.
   mammoth: 1.13.0
@@ -411,7 +416,7 @@ catalog:
   # site has to declare it even though astro carries the same optional dependency. astro 7.3 asks for ^0.35.4,
   # so the two share one copy without an override.
   sharp: 0.35.5
-  # The daemon's local speech-to-text (src/speech): k2-fsa's prebuilt N-API addon over its own ONNX Runtime,
+  # The daemon's local speech-to-text (_sandbox/speech): k2-fsa's prebuilt N-API addon over its own ONNX Runtime,
   # loaded only in the speech worker process. The per-platform binaries (linux-x64, linux-arm64) arrive as its
   # optionalDependencies, so each natively built image half installs its own; no install script runs.
   sherpa-onnx-node: 1.13.8

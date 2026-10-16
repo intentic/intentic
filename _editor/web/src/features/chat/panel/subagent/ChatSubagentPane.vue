@@ -1,24 +1,25 @@
 <script setup lang="ts">
-import type { SubagentSession, TranscriptTool } from "@intentic/sandbox-contract";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { usePollWhile } from "@intentic/ui/async";
 import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { agentDisplayTitle } from "../../../agents/fleet/agentStatus";
-import { subagentLive, useSubagentRoster } from "../../../agents/fleet/subagentRoster";
-import { useAgents } from "../../../agents/fleet/useAgents";
-import type { Conversation } from "../../session/conversation";
+import { agentDisplayTitle } from "../../../../models/agent-status/agentStatus-meta";
+import { subagentLive, useSubagentRoster } from "../../../../models/fleet/subagentRoster";
+import { useAgents } from "../../../../models/fleet/useAgents";
+import type { Conversation } from "../../../../models/conversations/session/conversation";
 import { tabLabel } from "../../tabs/tabs";
-import { CHAT_SURFACE } from "../../tools/chatToolSurface";
-import { subagentTranscript } from "../../transcript/agentTranscript";
+import { CHAT_SURFACE } from "../../../../models/conversations/tools/chatToolSurface";
+import { subagentTranscript } from "../../../../models/conversations/transcript/agentTranscript";
 import ChatPaneTurns from "../pane/ChatPaneTurns.vue";
 import { paneSurface } from "../pane/paneSurface";
 import { usePaneScroll } from "../pane/paneScroll";
 import ChatSubagentBar from "./ChatSubagentBar.vue";
 import { showRecord, subagentRecord } from "./subagentRecord";
-import { closeSubagent } from "./subagentView";
-import { conversationView, PANE_VIEW } from "../useChat-view";
+import { closeSubagent } from "../../../../models/conversations/panel/subagentView";
+import { conversationView, PANE_VIEW } from "../../../../models/conversations/panel/useChat-view";
 import { onScreen } from "../../../../workbench/window/onScreen";
 
 // A SUBAGENT ITS PARENT'S RUNTIME RAN IN-PROCESS, SHOWN IN THE PARENT'S COLUMN (subagentView.ts): its own transcript,

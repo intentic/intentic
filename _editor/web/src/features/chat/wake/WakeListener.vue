@@ -1,20 +1,20 @@
 <script setup lang="ts">
-import { WAKE_WORD_DEFAULT } from "@intentic/sandbox-contract";
+import { WAKE_WORD_DEFAULT } from "@intentic/sandbox-contract/schemas/speech";
 import { t } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, watch } from "vue";
 import { postDesktopNotice } from "../../../app/environments/desktopNotices";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { onScreen } from "../../../workbench/window/onScreen";
-import { startAgent } from "../../agents/fleet/agentActions";
-import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
+import { startAgent } from "../../../models/fleet/agentActions";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import { handsFreeOn } from "../composer/voice/useComposerVoice";
-import { summonChat, summonTurn } from "../run/summon";
-import type { Conversation } from "../session/conversation";
-import { active, conversations } from "../tabs/useChat-tabs";
-import { useSpeechPlayer } from "../voice/speechPlayer";
+import { summonChat, summonTurn } from "../../../models/conversations/run/summon";
+import type { Conversation } from "../../../models/conversations/session/conversation";
+import { active, conversations } from "../../../models/conversations/tabs/useChat-tabs";
+import { useSpeechPlayer } from "../../../models/voice/speechPlayer";
 import { cardWords } from "../voice/useVoiceTalk";
 import { spokenCardOf } from "../voice/voiceCards";
-import { useWakeListener, WAKE_HOLD_MS } from "./useWakeListener";
+import { useWakeListener, WAKE_HOLD_MS } from "../../../models/voice/useWakeListener";
 import WakeCard from "./WakeCard.vue";
 import { type WakeConversation, WakeDelivery } from "./wakeDelivery";
 import { startWakeDesktop } from "./wakeDesktop";

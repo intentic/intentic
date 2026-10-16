@@ -15,7 +15,7 @@ import type {
     KeyringTypeInput,
     KeyringTypeResult,
     SignedKeyringGrant,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/keyring";
 import { ORPCError } from "@orpc/server";
 import type { z } from "zod";
 

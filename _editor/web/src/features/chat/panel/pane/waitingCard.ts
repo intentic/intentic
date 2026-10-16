@@ -1,5 +1,5 @@
 import { flashElement, lessMotion } from "@intentic/ui/motion";
-import type { WaitKind } from "./pendingDecision";
+import type { WaitKind } from "../../../../models/conversations/panel/pendingDecision";
 
 // Where the waiting bar's press lands (ChatWaitingBar): the card for the ask the bar names, brought on screen, given the
 // keyboard, and ringed for a moment. A press that only scrolled moved nothing when the card was already on screen, and

@@ -1,7 +1,7 @@
 import "@intentic/testing/dom";
 import { freshImport } from "@intentic/testing/bun";
 import { sandboxSummary } from "../../testing/sandboxSummary";
-import { sandboxIdOfDaemonUrl } from "@intentic/sandbox-contract";
+import { sandboxIdOfDaemonUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import { mergeListed, type RememberedAccount } from "./deviceDirectory";
 
 // Pins what the device remembers: every list as listed, never a forgetting a list implies (a platform that forgot the

@@ -1,4 +1,5 @@
-import type { AgentReply, EditorContext } from "@intentic/sandbox-contract";
+import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { EditorContext } from "@intentic/sandbox-contract/schemas/agent";
 import type { Caller } from "../../../auth/auth.js";
 import type { Services } from "../../../composition.js";
 import { turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
@@ -6,7 +7,7 @@ import { opt } from "../../../opt.js";
 import type { Steer } from "../../../seams/turn-starter.js";
 import { resolveExistingWithin, resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
 import { steerTurn } from "../../checkpoints/agent-steering.js";
-import { withAttachmentNote } from "../../prompt/attachment-note.js";
+import { withAttachmentNote } from "../../../sessions/vocabulary/attachment-note.js";
 
 // applyReply and composeSteerText are functions rather than route bodies: a parent sandbox forwards a remote card's answer
 // and a person's steer to its runner too (the TurnStarter port), and a second copy would drift between the two paths.

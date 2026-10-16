@@ -1,11 +1,11 @@
 import "@intentic/testing/dom";
 import type { LocalFace } from "../../../../app/environments/local";
-import type { DeleteBatch } from "./deleteUndo";
+import type { DeleteBatch } from "../../../../models/workspace/tree/deleteUndo";
 
 // Pins what a delete's receipt promises: an Undo only for a batch this tab holds an id to take back by, and, in a local
 // window, where the files went instead. The daemon's store is the seam; the receipt is read off the notification lane.
 
-jest.mock("../useWorkspaceTree", () => ({
+jest.mock("../../../../models/workspace/tree/useWorkspaceTree", () => ({
     useWorkspaceTree: () => ({
         run: async (task: () => Promise<void>): Promise<void> => task(),
         restoreDeleted: async (): Promise<{ landed: readonly string[]; gone: number }> => ({ landed: [], gone: 0 }),

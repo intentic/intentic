@@ -1,4 +1,4 @@
-import type { GateVerdict, WorkflowRun, WorkflowStepRun, WorkflowStepState } from "@intentic/sandbox-contract";
+import type { GateVerdict, WorkflowRun, WorkflowStepRun, WorkflowStepState } from "@intentic/sandbox-contract/schemas/workflows";
 
 // What a finished run says to a pipeline: exactly one condition reaches `fail` (the step ran, wrote its field, and the
 // value doesn't ship); everything else reaches `blocked`, since the gate never got to judge. Read off the run's own

@@ -2,32 +2,15 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { noteChildWork } from "../child-verification.js";
-import {
-    closeSubagents,
-    listSubagentSessions,
-    noteSpawnedChild,
-    noteSubagentSpawn,
-    noteSubagentTask,
-    openSpawnedChild,
-    pairLiveSubagents,
-    resetSubagents,
-    settleSpawnedChild,
-    subagentCountsOf,
-    subagentHooks,
-    subagentInParentTree,
-    subagentEndingReported,
-    KEEP_SETTLED,
-    waitForSubagent,
-    type SubagentTaskMessage,
-    type SubagentTurn,
-} from "../subagents.js";
-import { memoryFleet } from "../../../testing.js";
+import { closeSubagents, listSubagentSessions, noteSpawnedChild, noteSubagentSpawn, noteSubagentTask, openSpawnedChild, pairLiveSubagents, resetSubagents, settleSpawnedChild, subagentHooks, subagentInParentTree, subagentEndingReported, KEEP_SETTLED, waitForSubagent, type SubagentTaskMessage, type SubagentTurn } from "../subagents.js";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { startTurnRun } from "../../run/turn/turn-runs.js";
 import { createDomainEvents } from "../../../seams/domain-events.js";
 import type { TurnStarter } from "../../../seams/turn-starter.js";
 import { turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
+import { subagentCountsOf } from "../../../conversations/actor/subagent-roster.js";
 
 // One fleet's actors, which hold every record the registry under test files.
 const actors = memoryFleet().conversations;

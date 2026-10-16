@@ -1,17 +1,19 @@
 import { conversationReader, registryProvenance } from "../../auth/scope/conversation-reader.js";
 import type { Context } from "hono";
-import { AgentHarnessSchema } from "@intentic/sandbox-contract";
+import { AgentHarnessSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { z } from "zod";
 import { listSubagentSessions, type SubagentWaitUntil } from "./subagents.js";
 import { waitForWork, workWaitAnswer } from "./work-wait.js";
 import { soleLiveConversation } from "../../conversations/actor/conversation-holdings.js";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
-import { childLandingWords } from "./child-lands.js";
+import { childLandingWords } from "../../conversations/land/child-lands.js";
 import { childReportOf, pendingQuestionOf, supervisorFor } from "./children.js";
 import { spawnCatalogText, spawnableProviders } from "./spawn-catalog.js";
 import { markSpentByHand, unmarkSpentByHand } from "../../usage/observed-accounts.js";
 import { opt } from "../../opt.js";
+import { defineRawRoutes } from "../../http/raw-route-server.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // The `agents` CLI's shell door onto the child-agent service, using the same engine as the in-process tool calls.
 // Scoped to the agent token; the real gate is the arming planTurn already recorded (children.ts armSupervisor), not the
@@ -84,14 +86,10 @@ const waitBody = (text: string): unknown => {
     if (text.trim() === "") {
         return {};
     }
-    try {
-        return JSON.parse(text);
-    } catch {
-        return undefined;
-    }
+    return parseJsonOr(text, undefined);
 };
 
-export const createChildrenRoutes = (services: Services) => ({
+const createChildrenRoutes = (services: Services) => ({
     /** POST /children/spawn — start a child; answers `{ok:true,id}` the moment it is queued, before any wait for memory. */
     spawn: async (c: Context<AppEnv>): Promise<Response> => {
         const conversationId = conversationOf(services, c);
@@ -305,4 +303,27 @@ export const createChildrenRoutes = (services: Services) => ({
                 : listSubagentSessions(services.conversations).filter((session) => session.conversationId === conversationId);
         return c.json({ sessions });
     },
+});
+
+// The child-agent surface: start a full agent on any connected provider, park for input, list this conversation's
+// children.
+// The gate is the arming recorded at plan time, since the agent token names the sandbox, never a persona; scoped
+// like `services`/`capabilities`.
+export const childrenRawRoutes = defineRawRoutes((services: Services) => {
+    const childrenRoutes = createChildrenRoutes(services);
+    return {
+        "POST /children/spawn": childrenRoutes.spawn,
+        // What a child could be started on now, with each model's remaining allowance.
+        "GET /children/providers": childrenRoutes.providers,
+        "POST /children/providers/spent": childrenRoutes.markSpent,
+        "POST /children/wait": childrenRoutes.wait,
+        "POST /children/send": childrenRoutes.send,
+        "POST /children/answer": childrenRoutes.answer,
+        "POST /children/cancel": childrenRoutes.cancel,
+        "POST /children/merge": childrenRoutes.merge,
+        // A task handed to another of the owner's sandboxes over a link card, and which ones this turn may hand work to.
+        "POST /children/delegate": childrenRoutes.delegate,
+        "GET /children/links": childrenRoutes.links,
+        "GET /children": childrenRoutes.list,
+    };
 });

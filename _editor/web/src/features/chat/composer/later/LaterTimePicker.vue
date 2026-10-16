@@ -18,7 +18,7 @@ import {
     parseClock,
     stepClock,
 } from "./laterCalendar";
-import { bookable, SOONEST_SEND_MS } from "./sendLater";
+import { bookable, SOONEST_SEND_MS } from "../../../../models/conversations/drafts/sendLater";
 
 /* A time of the reader's own, inside the send-later panel: the thirty days a booking can land on as the weeks they
    fall in, a time of day typed or pressed, and the line that says when that sends. Nothing to press to keep it: the

@@ -23,7 +23,7 @@ const bootScript = (): string => {
 const literal = <T>(name: string): T => {
     const source = new RegExp(`var ${name} = ([\\s\\S]*?);\\n`, `u`).exec(html)?.[1];
     expect(source, `index.html declares no ${name}`).toEqual(expect.any(String));
-    // oxlint-disable-next-line no-new-func -- reading our own checked-in literal, not input
+    // reading our own checked-in literal, not input
     return new Function(`return (${source})`)() as T;
 };
 
@@ -35,7 +35,7 @@ const paintedLang = (languages: readonly string[], stored?: string): string => {
     }
     Object.defineProperty(globalThis.navigator, `languages`, { value: languages, configurable: true });
     document.documentElement.removeAttribute(`lang`);
-    // oxlint-disable-next-line no-new-func -- running our own checked-in script, not input
+    // running our own checked-in script, not input
     new Function(bootScript())();
     return document.documentElement.getAttribute(`lang`) ?? ``;
 };

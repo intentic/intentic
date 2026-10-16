@@ -1,5 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { PushNotification } from "@intentic/sandbox-contract";
+import { parseJsonOr } from "@intentic/base/json";
+import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import { createSign } from "node:crypto";
 import type { Config } from "../config.js";
 import type { ApnsForwarder, ApnsOutcome } from "./apns.js";
@@ -28,16 +29,13 @@ interface ServiceAccount {
     readonly token_uri?: string;
 }
 
+// A key that is not JSON is as unusable as one missing its fields; the caller reports both as no service account.
 const parseAccount = (raw: string): ServiceAccount | undefined => {
-    try {
-        const parsed = JSON.parse(raw) as Partial<ServiceAccount>;
-        return typeof parsed.project_id === "string" && typeof parsed.client_email === "string" && typeof parsed.private_key === "string"
-            ? (parsed as ServiceAccount)
-            : undefined;
-    } catch {
-        // allow(silent-catch): JSON.parse's only failure here is a key that is not JSON, as unusable as one missing its fields; the caller reports both as no service account.
-        return undefined;
-    }
+    // SAFETY: the three fields signing needs are checked by type below before the account is believed.
+    const parsed = parseJsonOr(raw, undefined) as Partial<ServiceAccount> | null | undefined;
+    return typeof parsed?.project_id === "string" && typeof parsed.client_email === "string" && typeof parsed.private_key === "string"
+        ? (parsed as ServiceAccount)
+        : undefined;
 };
 
 const base64url = (data: string): string => Buffer.from(data).toString("base64url");

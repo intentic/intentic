@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { IntenticLine } from "@intentic/sandbox-contract";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import { ORPCError } from "@orpc/server";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { tunnelEntry, type TunnelKindName } from "./tunnel-links.js";

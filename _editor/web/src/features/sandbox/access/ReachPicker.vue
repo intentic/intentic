@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { type CapabilitySummary, type CredentialReach, REACHABLE_CREDENTIAL_KINDS } from "@intentic/sandbox-contract";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type CredentialReach, REACHABLE_CREDENTIAL_KINDS } from "@intentic/sandbox-contract/schemas/members";
 import { BrandMark, SegmentedControl, SkeletonRows, ui } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
-import { capabilitiesKey, fetchCapabilities } from "../../capabilities/connect/useCapabilities";
-import { capabilityTile } from "../../capabilities/model/tiles";
-import { useExtensions } from "../../extensions/useExtensions";
+import { capabilitiesKey, fetchCapabilities } from "../../../models/capabilities/useCapabilities";
+import { capabilityTile } from "../../../models/capabilities/tiles";
+import { useExtensions } from "../../../models/extensions/useExtensions";
 import { type ReachDraft, toggledReach } from "./accessGrant";
 import { useT } from "@intentic/ui/i18n";
 

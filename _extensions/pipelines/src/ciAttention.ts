@@ -1,4 +1,4 @@
-import type { CiRunsResponse, PipelineRun } from "@intentic/sandbox-contract";
+import type { CiRunsResponse, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import type { ViewBadge } from "@intentic/extension-api";
 import { sandboxPoll } from "@intentic/extension-api";
 import { failureStreaks, streakTooltip } from "./ciStreaks";

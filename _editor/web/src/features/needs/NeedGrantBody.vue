@@ -1,11 +1,11 @@
 <!-- A grant need's own answer: allow it for this conversation, or on the persona for every conversation wearing it. -->
 <script setup lang="ts">
-import type { GrantNeed, GrantScope, Need } from "@intentic/sandbox-contract";
+import type { GrantNeed, GrantScope, Need } from "@intentic/sandbox-contract/schemas/needs";
 import { Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import ChatDecisionButton from "../chat/transcript/cards/ChatDecisionButton.vue";
+import ChatDecisionButton from "../../components/ChatDecisionButton.vue";
 import { useNeedAnswer } from "./needAnswer";
-import { useNeeds } from "./useNeeds";
+import { useNeeds } from "../../models/needs/useNeeds";
 
 const t = useT();
 

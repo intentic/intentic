@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
-import { EMAIL_SIGN_IN_OFF } from "@intentic/sandbox-contract";
+import { EMAIL_SIGN_IN_OFF } from "@intentic/sandbox-contract/schemas/system";
 import GateCard from "./GateCard.vue";
 import { computed } from "vue";
 import { useAuth } from "../../../client/auth/useAuth";

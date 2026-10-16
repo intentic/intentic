@@ -2,7 +2,7 @@ import { readdir, rm, stat } from "node:fs/promises";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { join } from "node:path";
 import type { Logger } from "pino";
-import { isConversationId } from "@intentic/sandbox-contract";
+import { isConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { conversationsRoot, conversationUnit } from "../../store/conversation-units.js";
 import { siblingModule, workerPool } from "@intentic/base/worker-calls";
 import { type FileTranscriptRecord, legacyTranscriptFile, transcriptFile } from "../transcript-record.js";
@@ -61,17 +61,17 @@ const plainRecords = async (historyRoot: string): Promise<Plain[]> => {
         if (!entry.isDirectory() || !isConversationId(entry.name)) {
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one directory at a time keeps the pass off the shared I/O pool.
+        // one directory at a time keeps the pass off the shared I/O pool.
         const names = await readdir(conversationUnit(historyRoot, entry.name)).catch((): string[] => []);
         if (names.includes(PREPARED_NAME)) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above.
+            // as above.
             await rm(join(conversationUnit(historyRoot, entry.name), PREPARED_NAME), { force: true });
         }
         if (!names.includes(LEGACY_NAME)) {
             continue;
         }
         const legacy = legacyTranscriptFile(historyRoot, entry.name);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- as above.
+        // as above.
         const info = await stat(legacy).catch(undefinedIfMissing);
         if (info !== undefined) {
             found.push({ conversationId: entry.name, legacy, size: info.size, mtimeMs: info.mtimeMs });
@@ -121,7 +121,7 @@ export const migrateRecords = async (deps: MigrationDeps, signal?: AbortSignal):
                 return;
             }
             next += 1;
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a lane converts one record at a time.
+            // a lane converts one record at a time.
             await one(record);
         }
     };

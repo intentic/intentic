@@ -1,4 +1,4 @@
-import type { SharedConversation } from "@intentic/sandbox-contract";
+import type { SharedConversation } from "@intentic/sandbox-contract/schemas/share";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";

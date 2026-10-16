@@ -1,6 +1,6 @@
 import { computed } from "vue";
-import { useCapabilities } from "../capabilities/connect/useCapabilities";
-import { useExtensions } from "./useExtensions";
+import { useCapabilities } from "../../models/capabilities/useCapabilities";
+import { useExtensions } from "../../models/extensions/useExtensions";
 
 // Logged-in browser accounts dressed for display: a capability's id is the account (`reddit-work`), its `platform` is
 // the site (`reddit`), and only the site has a logo. Brand comes from the same contributed cards /capabilities uses, so

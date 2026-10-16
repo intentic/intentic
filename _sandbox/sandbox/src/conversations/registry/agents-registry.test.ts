@@ -2,21 +2,26 @@ import { opt } from "../../opt.js";
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import { waitFor } from "@intentic/testing/bun";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { AgentEvent, AgentSummary, LandConflictReason, ProgramAsk } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentSummary, LandConflictReason } from "@intentic/sandbox-contract/schemas/agents";
+import type { ProgramAsk } from "@intentic/sandbox-contract/events/requests";
 import { noteSubagentTask, resetSubagents, type SubagentTaskMessage, type SubagentTurn } from "../../agent/subagents/subagents.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
-import { beginTurn, conversationEntry, fleetStoreOver, isolatedAgent, noPresences } from "../../testing.js";
+import { beginTurn } from "../actor/conversation-actors.testing.js";
+import { conversationEntry, isolatedAgent } from "./agents-store.testing.js";
+import { fleetStoreOver } from "./agents-registry.testing.js";
+import { noPresences } from "../land/landed-presence.testing.js";
 import type { BeginOutcome, BeginTurn } from "../actor/conversation-decide.js";
 import { openConversationsDb } from "../../store/conversations-db.js";
 import { createFleet, type FleetStore } from "./agents-registry.js";
 import { restoreLimitHolds } from "../actor/limit-hold.js";
 import { pino } from "pino";
 import { type PersistedAgent, type Remover, sqliteAgentsStore, worktreeOf } from "./agents-store.js";
-import { sqliteTurnCheckpoints } from "../../agent/checkpoints/turn-checkpoints.js";
-import { type JournalledTurn, sqliteTurnJournal } from "../../agent/run/turn/turn-journal.js";
+import { sqliteTurnCheckpoints } from "../../store/journals/turn-checkpoints.js";
+import { type JournalledTurn, sqliteTurnJournal } from "../../store/journals/turn-journal.js";
 import type { LandedPresence, LandedPresences } from "../land/landed-presence.js";
 import type { LandStanding, LandStandings } from "../land/standing.js";
-import { nextPromptDayAt } from "../../agent/run/prompt-fingerprint.js";
+import { nextPromptDayAt } from "../actor/conversation-state.js";
 
 // Hand-dialed stand-in for land standing; real derivation needs a git repo per case (standing.integration.test.ts).
 // This suite only pins the projection: which half wins, and what each surface reads off it.

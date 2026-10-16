@@ -1,7 +1,7 @@
 <!-- Confirms sharing a conversation, which is irreversible once opened. -->
 <script setup lang="ts">
 import { Button, ui, CopyButton, Icon, Modal, Notice } from "@intentic/ui";
-import type { ShareDetail, SharedConversation } from "@intentic/sandbox-contract";
+import type { ShareDetail, SharedConversation } from "@intentic/sandbox-contract/schemas/share";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useOperation } from "../../../workbench/operations/operations";

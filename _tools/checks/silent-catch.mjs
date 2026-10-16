@@ -13,7 +13,7 @@ import { root, subjectFiles } from "./lib/repo.mjs";
 
 const CODE = /\.(ts|tsx|mts|cts|js|mjs|cjs|vue)$/;
 // A suite asserts on failures on purpose, and generated or vendored output is fixed at its source.
-const EXEMPT = /(\.(test|spec|bench)\.[cm]?[jt]sx?$|(^|\/)(e2e|dist|node_modules|vendor)\/|\/testing\.ts$|\.d\.[cm]?ts$)/;
+const EXEMPT = /(\.(test|spec|bench)\.[cm]?[jt]sx?$|(^|\/)(e2e|dist|node_modules|vendor)\/|\/testing\.ts$|\.testing\.ts$|\.d\.[cm]?ts$)/;
 const GENERATED = [`_site/site/public/`, `_editor/web/public/ext-shims/`, `_sandbox/sandbox/operator-templates/`];
 // This file spells every shape it looks for.
 const SELF = `_tools/checks/silent-catch.mjs`;

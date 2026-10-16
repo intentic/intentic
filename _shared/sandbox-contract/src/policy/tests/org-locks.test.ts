@@ -1,4 +1,5 @@
-import { RAW_ROUTE_LIST, SANDBOX_ROUTES, sandboxRouteFor } from "../../index.js";
+import { RAW_ROUTE_LIST } from "../../protocol/raw/raw-routes.js";
+import { SANDBOX_ROUTES, sandboxRouteFor } from "../../index.js";
 import { type OrgPolicy, OrgPolicySchema, orgPinnedGroups, orgUnknownPins } from "../../schemas/organisation.js";
 import { ORG_BOUND_ROUTES, ORG_SECTION_ROUTES, orgLockRefusal, orgPinRefusal, orgSectionOfRoute } from "../org-locks.js";
 

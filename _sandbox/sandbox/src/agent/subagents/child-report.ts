@@ -1,8 +1,9 @@
-import { childReportPrompt, type TurnProfile } from "@intentic/sandbox-contract";
+import { childReportPrompt } from "@intentic/sandbox-contract/events/agent-words";
+import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import type { Logger } from "pino";
 import { parentOfActor } from "../../auth/principal.js";
-import { deliverWake, type WakeDoors } from "../run/turn/wake-delivery.js";
-import { bookedRerunWords } from "./child-lands.js";
+import { deliverWake, type WakeDoors } from "../../seams/wake-delivery.js";
+import { bookedRerunWords } from "../../conversations/land/child-lands.js";
 import { childVerification } from "./child-verification.js";
 import { familyEnded } from "./family-cancel.js";
 import { randomUUID } from "node:crypto";

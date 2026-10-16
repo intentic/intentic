@@ -1,4 +1,4 @@
-import type { GitOperation } from "@intentic/sandbox-contract";
+import type { GitOperation } from "@intentic/sandbox-contract/schemas/git/git";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { type GitChange, isScratch, type ScratchPath } from "@intentic/sandbox-contract";
+import { type GitChange, isScratch, type ScratchPath } from "@intentic/sandbox-contract/schemas/git/git";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { EMPTY_TREE } from "../../workspace/layout/git-layout.js";
 import { readOnFeed } from "../feed/checkout-feed.js";

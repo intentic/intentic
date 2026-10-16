@@ -2,20 +2,20 @@
 // could not run a turn, which sent them off to connect an account they did not need — the same beat access.ts already
 // names for the chat's own gate, on a list that never consulted the endpoint half at all.
 import "@intentic/testing/dom";
-import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { accountsLoaded, providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
-import { acpProviders, endpointProviders, endpointsLoaded, trialStatus } from "../../chat/accounts/providerCatalog";
+import { TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
+import { accountsLoaded, providerAccounts, translatorAccounts } from "../../../models/providers/providerAccounts";
+import { acpProviders, endpointProviders, endpointsLoaded, trialStatus } from "../../../models/providers/providerCatalog";
 import { PUBLISH_ANCHOR } from "../access/publishAnchor";
 import { effectScope } from "vue";
-import { UPDATE_ACTION_ANCHOR } from "./version/updateAnchor";
+import { UPDATE_ACTION_ANCHOR } from "../../../models/sandbox/updateAnchor";
 
 // The four seams this list reads besides the accounts: each is a live query elsewhere, and none of them decides
 // whether a turn can run, which is the only question these tests ask.
-jest.mock(`../../capabilities/connect/secrets/useSecrets`, () => ({ useMissingSecretCount: () => ({ missingRequiredCount: { value: 0 } }) }));
-jest.mock(`../devices/useDevices`, () => ({ useSyncHealth: () => ({ stoppedOn: { value: [] }, heldPorts: { value: [] } }) }));
+jest.mock(`../../../models/capabilities/useSecrets`, () => ({ useMissingSecretCount: () => ({ missingRequiredCount: { value: 0 } }) }));
+jest.mock(`../../../models/sandbox/devices/useDevices`, () => ({ useSyncHealth: () => ({ stoppedOn: { value: [] }, heldPorts: { value: [] } }) }));
 // An approved recipe not yet built, only where a test says so; and the hosted build of it, none unless a test starts one.
 const pending: { value: { hash: string; content: string } | undefined } = { value: undefined };
-jest.mock(`../environment/useEnvironment`, () => ({ useEnvironment: () => ({ pending, proposal: { value: undefined } }) }));
+jest.mock(`../../../models/sandbox/environment/useEnvironment`, () => ({ useEnvironment: () => ({ pending, proposal: { value: undefined } }) }));
 const hostedBuild: { value: { state: `building`; hash: string; startedAt: string } | undefined } = { value: undefined };
 jest.mock(`../secrets/useHostedBuild`, () => ({ useHostedBuild: () => ({ build: hostedBuild, applied: { value: undefined } }) }));
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({
@@ -26,7 +26,7 @@ const update = { available: false, staged: false };
 // Work held here alone, with no repository to push it to, only where a test says so.
 const unbacked = { value: false };
 jest.mock(`./backup/useUnbackedWork`, () => ({ useUnbackedWork: () => ({ unbacked }) }));
-jest.mock(`./version/useSandboxVersion`, () => ({
+jest.mock(`../../../models/sandbox/useSandboxVersion`, () => ({
     useSandboxVersion: () => ({ updateAvailable: { value: update.available }, updateStaged: { value: update.staged } }),
 }));
 

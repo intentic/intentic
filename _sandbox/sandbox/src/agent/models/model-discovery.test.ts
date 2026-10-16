@@ -1,5 +1,5 @@
-import { humanizeModelId } from "@intentic/sandbox-contract";
-import { expireTimeouts, stalledFetch } from "../../testing.js";
+import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
+import { expireTimeouts, stalledFetch } from "../../http/fetch.testing.js";
 import { DISCOVERY_TIMEOUT_MS, idCatalog, listModels, suggestedModels, unrankedCatalog } from "./model-discovery.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });

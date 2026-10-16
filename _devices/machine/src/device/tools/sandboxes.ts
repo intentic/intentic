@@ -8,14 +8,14 @@ import { explain, homeDir } from "@intentic/local-agent";
 import {
     type DeviceSandbox,
     DeviceSandboxSchema,
-    type DeviceScopes,
     icForgetShapeArgs,
     icPowerArgs,
     icShapeArgs,
     type SandboxResourcesAsk,
     type SandboxShapeFields,
     type SandboxShapeWhen,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/devices";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { z } from "zod";
 import { assertScope } from "../policy.js";
 import { ensureCurrentIc, icCandidates, icOutOfDate } from "./ic-binary.js";
@@ -84,7 +84,7 @@ export const fleet = async ({ current = true }: { readonly current?: boolean } =
     }
     const candidates = icCandidates(process.platform, homeDir());
     for (const [index, binary] of candidates.entries()) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; ENOENT means try the next
+        // candidates are tried in order; ENOENT means try the next
         const answer = await execBounded(binary, ["sandbox", "list", "--json"], { timeoutMs: LIST_TIMEOUT_MS, maxOutput: MAX_BUFFER }).catch(
             (error: NodeJS.ErrnoException & { stderr?: string }) => {
                 if (error.code === "ENOENT" && index < candidates.length - 1) {
@@ -500,7 +500,7 @@ export const runIcAttached = async (args: readonly string[]): Promise<number> =>
     await ensureCurrentIc();
     const candidates = icCandidates(process.platform, homeDir());
     for (const [index, binary] of candidates.entries()) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; ENOENT means try the next
+        // candidates are tried in order; ENOENT means try the next
         const code = await new Promise<number | "missing">((resolve, reject) => {
             const child = spawn(binary, [...args], { stdio: "inherit", windowsHide: true });
             child.once("error", (error: NodeJS.ErrnoException) => {

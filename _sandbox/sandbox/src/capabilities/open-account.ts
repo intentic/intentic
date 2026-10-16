@@ -1,5 +1,5 @@
-import type { Capability, IdentityConfig } from "@intentic/sandbox-contract";
-import { utcDayOf } from "@intentic/sandbox-contract";
+import type { Capability, IdentityConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import { utcDayOf } from "@intentic/sandbox-contract/time/zone";
 import type { Services } from "../composition.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { capabilityCtx } from "./capability.js";

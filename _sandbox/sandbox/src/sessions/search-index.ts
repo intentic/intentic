@@ -1,4 +1,4 @@
-import type { MatchSnippet } from "@intentic/sandbox-contract";
+import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agents";
 import { siblingModule, workerCalls } from "@intentic/base/worker-calls";
 import type { LineVia, SpokenLine } from "./transcript-search.js";
 

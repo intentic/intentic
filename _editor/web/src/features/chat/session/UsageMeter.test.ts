@@ -2,7 +2,7 @@
 // one run-on label, and the card opens beside the meter rather than over the column of rows being compared.
 import "@intentic/testing/dom";
 import { createApp, h, nextTick } from "vue";
-import { formatReset, type PlanHeadroom, type PlanLimitPool } from "./usageStatus";
+import { formatReset, type PlanHeadroom, type PlanLimitPool } from "../../../models/providers/usageStatus";
 import UsageMeter from "./UsageMeter.vue";
 
 // The @intentic/ui barrel calls window.matchMedia at import time (via useDevice), which jsdom doesn't provide.

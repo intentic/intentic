@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import type { PartialFileDiff } from "@intentic/sandbox-contract";
+import type { PartialFileDiff } from "@intentic/sandbox-contract/schemas/history";
 import { formatBytes } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { basename } from "@intentic/ui/path";
 import { computed } from "vue";
 import type { LineStat } from "@intentic/code-read";
 import { extensionOf, formatOf } from "@intentic/ui/file-format";
-import { rendersAsBytes } from "../explorer/fileType";
+import { rendersAsBytes } from "../../../models/workspace/tree/fileType";
 import { useLayout } from "../../../workbench/window/useLayout";
 import { compareViewerForExtension } from "../../../workbench/views/viewerRegistry";
-import { derivedDiffSource } from "../changes/diffRaw";
+import { derivedDiffSource } from "../../../models/workspace/changes/diffRaw";
 import BinaryDiffView from "./BinaryDiffView.vue";
 import CompareDiffView from "./CompareDiffView.vue";
 import DerivedDiffView from "./DerivedDiffView.vue";

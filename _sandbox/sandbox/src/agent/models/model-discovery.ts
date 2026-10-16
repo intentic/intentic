@@ -2,7 +2,8 @@
 // that returns undefined instead of throwing, and the `{ data: [{ id }] }` unwrap. Per-provider concerns (which ids are
 // chat models, which endpoints in what order) stay with the provider; an unnamed id reads through the contract's
 // humanizeModelId, the rule the app's labels share.
-import { compareUnrankedModelIds, humanizeModelId } from "@intentic/sandbox-contract";
+import { compareUnrankedModelIds } from "@intentic/sandbox-contract/models/model-order";
+import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
 
 // A set its source publishes unranked, as a catalog: ordered by compareUnrankedModelIds, its head the default.
 export const unrankedCatalog = <M extends { readonly id: string }>(models: readonly M[]): { models: M[]; default: string } => {

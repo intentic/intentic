@@ -1,17 +1,19 @@
 import { randomInt } from "node:crypto";
 import { briefDuration, clamp } from "@intentic/base/format";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
-import { profileOf, type TurnProfile, type WatchOutcome, watchWakePrompt } from "@intentic/sandbox-contract";
+import { profileOf, type TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
+import type { WatchOutcome } from "@intentic/sandbox-contract/events/transcript";
+import { watchWakePrompt } from "@intentic/sandbox-contract/events/watch-wake";
 import type { Logger } from "pino";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import type { Holding } from "../../conversations/actor/conversation-holdings.js";
 import { shellEnvOf } from "../../capabilities/cli-env.js";
-import { turnCliEnv } from "../../capabilities/turn-env.js";
+import { turnCliEnv } from "../run/harness/turn-env.js";
 import type { Services } from "../../composition.js";
 import { whenFileAppears } from "../tools/file-appears.js";
-import { deliverWake, type WakeDoors } from "../run/turn/wake-delivery.js";
+import { deliverWake, type WakeDoors } from "../../seams/wake-delivery.js";
 import { type CheckOptions, type CheckResult, type RunCheck, watchCheck, type WatchPlacement } from "./watch-check.js";
-import type { JournalledWatch, WatchJournal } from "./watch-journal.js";
+import type { JournalledWatch, WatchJournal } from "../../store/journals/watch-journal.js";
 
 // A daemon-owned condition watch wakes its conversation when it fires, times out or can no longer run, never silently.
 

@@ -1,11 +1,11 @@
 import { extensionIdOf } from "@intentic/extension-manifest";
-import type { ExtensionSummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
 import type { NoticeModel } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { extensionStatuses } from "../../../workbench/views/extensionStatuses";
 import { type Operation, operationsUnder } from "../../../workbench/operations/operations";
-import type { InstallOutcome } from "./discoverListing";
+import type { InstallOutcome } from "../../../models/sandbox/discoverListing";
 
 // Installs and updates started from Browse, kept in the operations ledger under one key per listing name rather than in
 // the view that starts them: switching to the Installed pill unmounts Browse while the clone runs on, and coming back

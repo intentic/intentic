@@ -1,9 +1,9 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { Persona } from "@intentic/sandbox-contract";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { createApp, h, nextTick, ref } from "vue";
-import * as roleModelOriginal from "../../../accounts/roleModel";
-import * as usePersonasOriginal from "../../../../sandbox/personas/usePersonas";
+import * as roleModelOriginal from "../../../../../models/providers/roleModel";
+import * as usePersonasOriginal from "../../../../../models/sandbox/personas/usePersonas";
 
 // Pins the persona half of a pane: a pick closes its picker, overrules the router and puts the persona's own model on;
 // the notice speaks only for a card that would fail the turn; a guest's chat wears its first card from the start.
@@ -20,15 +20,15 @@ const { personas, signedIn } = await (async () => {
         signedIn: vueRef<readonly string[]>([]),
     };
 })();
-jest.mock("../../../../sandbox/personas/usePersonas", () => ({
+jest.mock("../../../../../models/sandbox/personas/usePersonas", () => ({
     ...usePersonasOriginal,
     usePersonas: () => ({ personas, isConnected: (capability: string) => signedIn.value.includes(capability) }),
 }));
 // Claude connected, so a card's Claude model is one this sandbox can run.
-jest.mock("../../../accounts/roleModel", () => ({ ...roleModelOriginal, roleSources: ref([{ provider: `claude`, ready: true, models: [] }]) }));
+jest.mock("../../../../../models/providers/roleModel", () => ({ ...roleModelOriginal, roleSources: ref([{ provider: `claude`, ready: true, models: [] }]) }));
 
 const { usePanePersona } = await import("../panePersona");
-const { Conversation } = await import("../../../session/conversation");
+const { Conversation } = await import("../../../../../models/conversations/session/conversation");
 
 let unmount: (() => void) | undefined;
 const personaOf = (guest = false) => {

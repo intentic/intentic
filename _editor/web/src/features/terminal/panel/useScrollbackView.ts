@@ -1,4 +1,4 @@
-import type { TerminalScrollback } from "@intentic/sandbox-contract";
+import type { TerminalScrollback } from "@intentic/sandbox-contract/schemas/terminal";
 import { clipboardOf } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";

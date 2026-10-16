@@ -1,4 +1,4 @@
-import type { EnvironmentNeed, Need, NeedAsk, NeedSubject } from "@intentic/sandbox-contract";
+import type { EnvironmentNeed, Need, NeedAsk, NeedSubject } from "@intentic/sandbox-contract/schemas/needs";
 import type { AskContext, Gone, Met, NeedKindHandler, Resolved } from "../need-kinds.js";
 import type { ToolStanding } from "../../environment/environment.js";
 

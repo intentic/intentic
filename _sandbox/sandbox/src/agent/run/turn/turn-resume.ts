@@ -1,29 +1,18 @@
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentReply, ResumeRouting } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { type AgentTurn, profileOf, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
+import type { ParkedRequest, TodoItem } from "@intentic/sandbox-contract/events/requests";
 import {
-    type AgentEvent,
-    type AgentReply,
-    type AgentTurn,
-    type ParkedRequest,
     breakArmed,
-    cancelledRequests,
-    isAwaitingDecision,
-    profileOf,
-    REQUEST_FIELDS,
-    RESUME_NOTES,
-    type ResumeReason,
-    type ResumeRouting,
-    type HandoffMode,
-    type HandoffOffer,
     RETRY_LADDER_TRIES,
-    resumeNoteWith,
     retryLadderDelay,
-    type TodoItem,
-    type TranscriptRow,
     type TurnBreak,
     type TurnBreakPolicy,
-    withoutResumeNote,
-    withResumeNote,
-    withRuntimeDefaults,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/turn-break";
+import { cancelledRequests } from "@intentic/sandbox-contract/policy/request-status";
+import { isAwaitingDecision, REQUEST_FIELDS, type TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
+import { RESUME_NOTES, type ResumeReason, resumeNoteWith, withoutResumeNote, withResumeNote } from "@intentic/sandbox-contract/events/resume";
+import type { HandoffMode, HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import { SingleFlight } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { replaceRejectedToken } from "../../../runtimes/claude/claude-credentials.js";
@@ -31,10 +20,10 @@ import { planRevision } from "../../prompt/plan-revision.js";
 import type { Services } from "../../../composition.js";
 import { openingRows, openTurnTranscript, recordInterruptedTurn, recordTurnTranscript } from "../../../sessions/turn-transcript.js";
 import { POST_PLAN_MODE } from "../agent.js";
-import { formatAnswers } from "../../tools/question-answers.js";
+import { formatAnswers } from "../../../sessions/vocabulary/question-answers.js";
 import { outageRetryDue, outageRetryFired } from "../../providers/provider-health.js";
-import { type Routing, routingFor, sameLoop, sessionFor } from "../../providers/accounts/routing.js";
-import { consumeEntry, type JournalEntry, type JournalledTurn, parkedRestoreSpent, resumeBars, spendAttempt } from "./turn-journal.js";
+import { type Routing, routingFor, sameLoop, sessionFor } from "../../../conversations/registry/routing.js";
+import { consumeEntry, type JournalEntry, type JournalledTurn, parkedRestoreSpent, resumeBars, spendAttempt } from "../../../store/journals/turn-journal.js";
 import type { StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import { refusedBegin } from "../placement/turn-placement.js";
 import { routeTurn } from "./turn-routing.js";
@@ -101,7 +90,7 @@ export interface HeldTurn {
     readonly turnedAway?: boolean | undefined;
 }
 
-// Where a press sends the held turn, by the one routing rule (agent/providers/accounts/routing.ts), with the held turn's own
+// Where a press sends the held turn, by the one routing rule (conversations/registry/routing.ts), with the held turn's own
 // routing as the profile: naming no account keeps the held turn's on its provider, since only a person's explicit pick
 // (switchAccount, or an older editor's `account`) moves a conversation to another account.
 // A held turn is a stored copy, which a turn written before the port routed it may have left unnamed.

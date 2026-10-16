@@ -1,4 +1,6 @@
-import type { DeviceFacts, LoopbackCatch, LoopbackCatchEvent, WebExtFacts } from "@intentic/sandbox-contract";
+import type { DeviceFacts } from "@intentic/sandbox-contract/schemas/hosts";
+import type { LoopbackCatch, LoopbackCatchEvent } from "@intentic/sandbox-contract/schemas/loopback-catch";
+import type { WebExtFacts } from "@intentic/sandbox-contract/schemas/webext";
 import type { Services } from "../../../composition.js";
 import type { CatchingHub } from "./loopback-bridge.js";
 

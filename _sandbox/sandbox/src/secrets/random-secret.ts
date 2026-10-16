@@ -1,5 +1,5 @@
 import { randomBytes, randomInt } from "node:crypto";
-import type { SECRET_FORMATS } from "@intentic/sandbox-contract";
+import type { SECRET_FORMATS } from "@intentic/sandbox-contract/schemas/secrets";
 
 // The value `secrets generate` stores (secrets.routes.ts): `bytes` of randomness from the OS, spelled the way the reader
 // needs it. Never logged and never returned; only its length leaves.

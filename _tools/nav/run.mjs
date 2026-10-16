@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // What this costs an agent to work in, not the CPU; deterministic and offline, so results are reproducible.
-// - measure [--ref R]: full picture of one tree, written to JSON.
+// - measure [--ref R] [--label L | --out PATH]: full picture of one tree, written to baselines/L.json or PATH.
 // - targets [--top N]: files ranked by tokens the tree burns on each, not by size.
 // - compare A B: delta table between two measurements; refuses to mix tokenizers.
 // - calibrate: checks the token estimator's chars/token band.
@@ -15,18 +15,10 @@ import { buildTree } from "./lib/tree.mjs";
 import { runLookupSim } from "./lookup.mjs";
 import { measureShape } from "./metrics.mjs";
 import { arg } from "./lib/args.mjs";
+import { compareRows, glyphOf, n, pct } from "./lib/compare.mjs";
 
 const root = repoRoot(import.meta.url);
 
-const n = (value) => (typeof value === "number" ? value.toLocaleString("en-US") : String(value));
-const pct = (before, after) => {
-    if (!before) {
-        return "—";
-    }
-    const delta = ((after - before) / before) * 100;
-    const sign = delta > 0 ? "+" : "";
-    return `${sign}${delta.toFixed(1)}%`;
-};
 
 const measure = async () => {
     const ref = arg("ref", undefined);
@@ -156,53 +148,17 @@ const compare = () => {
         process.exit(2);
     }
 
-    const row = (label, a, b) => {
-        const moved = b - a;
-        const good = moved === 0 ? " " : moved < 0 ? "✓" : "✗";
-        console.log(`  ${good} ${label.padEnd(40)} ${n(a).padStart(12)} → ${n(b).padStart(12)}  ${pct(a, b).padStart(8)}`);
-    };
-
-    // A price, not a score: printed without a check/cross glyph, since module count and import edges rising is the cost
-    // of a decomposition, not a win or a loss.
-    const costRow = (label, a, b) => {
-        console.log(`  · ${label.padEnd(40)} ${n(a).padStart(12)} → ${n(b).padStart(12)}  ${pct(a, b).padStart(8)}`);
-    };
-
     console.log(`\n=== ${before.ref} @ ${before.head}  →  ${after.ref} @ ${after.head} ===`);
     provenance(before, after);
-
-    console.log("\nSIZE (read all three rows or none)");
-    row("physical lines", before.shape.lines.physical, after.shape.lines.physical);
-    row("code lines", before.shape.lines.code, after.shape.lines.code);
-    row("comment + blank lines", before.shape.lines.commentAndBlank, after.shape.lines.commentAndBlank);
-    costRow("test lines", before.shape.files.testLines, after.shape.files.testLines);
-    const physicalDrop = before.shape.lines.physical - after.shape.lines.physical;
-    const codeDrop = before.shape.lines.code - after.shape.lines.code;
-    if (physicalDrop > 0) {
-        const share = ((physicalDrop - codeDrop) / physicalDrop) * 100;
-        console.log(`    → ${share.toFixed(0)}% of the line reduction was comments and blanks, not code.`);
+    for (const { title, rows, notes } of compareRows(before, after)) {
+        console.log(`\n${title}`);
+        for (const row of rows) {
+            console.log(`  ${glyphOf(row)} ${row.label.padEnd(40)} ${n(row.before).padStart(12)} → ${n(row.after).padStart(12)}  ${pct(row.before, row.after).padStart(8)}`);
+        }
+        for (const note of notes) {
+            console.log(`    → ${note}`);
+        }
     }
-
-    console.log("\nAGENT COST");
-    row("naive: defining file tokens (p50)", before.bench.fileTokens.p50, after.bench.fileTokens.p50);
-    row("naive: defining file tokens (p90)", before.bench.fileTokens.p90, after.bench.fileTokens.p90);
-    row("naive: lookups over 128k tokens", before.bench.over128k, after.bench.over128k);
-    row("naive: total tokens if read whole", before.bench.totalTokensIfReadWhole, after.bench.totalTokensIfReadWhole);
-    row("skilled: tokens returned (mean)", before.lookup.tokensReturned.mean, after.lookup.tokensReturned.mean);
-    row("skilled: tokens returned (p50)", before.lookup.tokensReturned.p50, after.lookup.tokensReturned.p50);
-    pairedLookup(before, after);
-
-    console.log("\nSHAPE");
-    row("files over 2000 lines", before.shape.fileSize.over2000, after.shape.fileSize.over2000);
-    row("functions over 100 lines", before.shape.functions.over100, after.shape.functions.over100);
-    row("worst complexity", before.shape.complexity.max, after.shape.complexity.max);
-    row("longest if/else-if chain", before.shape.controlFlow.longestIfChain, after.shape.controlFlow.longestIfChain);
-
-    console.log("\nWHAT IT COST — these are SUPPOSED to get worse; the question is how much");
-    costRow("modules", before.shape.cost.modules, after.shape.cost.modules);
-    costRow("import edges", before.shape.cost.importEdges, after.shape.cost.importEdges);
-    costRow("mean fan-out", before.shape.cost.meanFanOut, after.shape.cost.meanFanOut);
-    costRow("largest import cycle", before.shape.cost.largestCycle, after.shape.cost.largestCycle);
     console.log("");
 };
 
@@ -226,19 +182,6 @@ const provenance = (before, after) => {
     }
     const touching = span(["rev-list", "--count", `${before.head}..${after.head}`, "--", "*.ts", "*.vue", "*.mjs"]);
     console.log(`    ${commits} commit(s) between these refs, ${touching || "?"} touching source. Everything below is ALL of them, not just yours.`);
-};
-
-// Only symbols present in both samples, compared to themselves; two independent random draws differ enough on their own
-// to manufacture a result.
-const pairedLookup = (before, after) => {
-    const shared = Object.keys(before.lookup.perSymbol).filter((name) => name in after.lookup.perSymbol);
-    if (shared.length < 50) {
-        console.log(`    → only ${shared.length} symbols in both samples; paired delta omitted as unreliable.`);
-        return;
-    }
-    const b = shared.reduce((total, name) => total + before.lookup.perSymbol[name], 0) / shared.length;
-    const a = shared.reduce((total, name) => total + after.lookup.perSymbol[name], 0) / shared.length;
-    console.log(`    → paired on ${n(shared.length)} symbols present in both: ${b.toFixed(0)} → ${a.toFixed(0)} tokens (${pct(b, a)})`);
 };
 
 // The whole-tree ratio is the only real assertion; per-shape rows are printed as information only, since honest

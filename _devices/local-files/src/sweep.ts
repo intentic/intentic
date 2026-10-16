@@ -1,7 +1,7 @@
 import type { Dirent } from "node:fs";
 import { readdir, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import type { IgnoreScope } from "@intentic/workspace-ignore";
 import { within } from "./paths.js";
 import { scopeAt } from "./walk.js";
@@ -73,7 +73,7 @@ const listed = async (root: string, folder: Folder, bounds: SweepBounds): Promis
         } else if (dirent.isFile() && bounds.wanted(path)) {
             files.push({ path, abs });
         } else if (dirent.isSymbolicLink() && bounds.wanted(path)) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- links are few, and each is resolved before the next is listed
+            // links are few, and each is resolved before the next is listed
             const real = await linkedFile(root, abs);
             if (real !== undefined) {
                 files.push({ path, abs: real });
@@ -98,7 +98,7 @@ export const sweep = async (root: string, bounds: SweepBounds): Promise<Swept> =
             if (files.length >= bounds.maxFiles || bounds.over()) {
                 return { files: files.slice(0, bounds.maxFiles), cut: true };
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- breadth first by design: a level lists before the next, under one bound
+            // breadth first by design: a level lists before the next, under one bound
             const found = await listed(root, folder, bounds);
             files.push(...found.files);
             next.push(...found.folders);

@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readTextIfExistsSync } from "@intentic/base/fs";
 import { isProfile, type Profile } from "@intentic/constants";
 
 // The sandbox half of a profile: a definition the platform hands a new machine as SANDBOX_DEFINITION_SEED, which the
@@ -26,10 +26,8 @@ export const definitionSeedFor = (profile: string | undefined): string | undefin
     }
     // A profile whose file is missing provisions a plain sandbox rather than failing the provision: the machine is what
     // the reader asked for, the decoration is not.
-    let toml: string;
-    try {
-        toml = readFileSync(join(DIR, `${profile}.sandbox.toml`), "utf8");
-    } catch {
+    const toml = readTextIfExistsSync(join(DIR, `${profile}.sandbox.toml`));
+    if (toml === undefined) {
         return undefined;
     }
     const seed = Buffer.from(toml, "utf8").toString("base64");

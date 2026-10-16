@@ -1,11 +1,11 @@
 // Needs jsdom: Dismiss beside Send threw away an answer already picked and ended the turn, so with an answer under way
 // it asks first.
 import "@intentic/testing/dom";
-import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract";
+import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract/state/workspace-state";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, h, nextTick, reactive } from "vue";
-import type { CardAnswer } from "../../session/cardReplies";
-import type { ChatMessage } from "../transcript";
+import type { CardAnswer } from "../../../../models/conversations/session/cardReplies";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import { forgetQuestionFiles, OTHER_LABEL, questionFiles, readQuestionDraft, writeQuestionDraft } from "../../drafts/questionDraft";
 import type { PendingAttachment } from "../../drafts/useChatAttachments";
 import ChatQuestionCard from "./ChatQuestionCard.vue";

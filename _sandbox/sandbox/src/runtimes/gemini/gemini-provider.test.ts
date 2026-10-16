@@ -1,7 +1,7 @@
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { context, servicesWith, turn } from "../../agent/run/turn/turn-plan.testing.js";
-import { testConfig } from "../../testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import { planGeminiTurn } from "./gemini-provider.js";
 import type { GeminiModel } from "./gemini-models.js";
 

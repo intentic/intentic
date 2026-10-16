@@ -1,4 +1,4 @@
-import { rawRouteUrl } from "@intentic/sandbox-contract";
+import { rawRouteUrl } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";

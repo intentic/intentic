@@ -1,15 +1,17 @@
 <!-- Shared session-card shell for every rail. -->
 <script setup lang="ts">
-import type { AgentProvider, MatchSnippet } from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agents";
 import { formatElapsed, type IconName, SegmentRing, timeAgo, type Tip } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
-import type { StandingChip, TileRim } from "../../agents/fleet/agentStatus";
-import { sandboxNow } from "../../agents/fleet/sandboxClock";
+import type { StandingChip } from "../../../models/agent-status/agentStatus-chips";
+import type { TileRim } from "../../../models/agent-status/agentStatus-lanes";
+import { sandboxNow } from "../../../models/agent-status/sandboxClock";
 import { markSegments } from "../../../lib/markSegments";
-import { useSelectionBlade } from "../../agents/board/cards/selectionBlade";
-import IdentityTile from "../../capabilities/connect/IdentityTile.vue";
+import { useSelectionBlade } from "../../../models/fleet/board/selectionBlade";
+import IdentityTile from "../../../parts/capabilities/IdentityTile.vue";
 import MatchLine from "../../../components/MatchLine.vue";
 import { useT } from "@intentic/ui/i18n";
 

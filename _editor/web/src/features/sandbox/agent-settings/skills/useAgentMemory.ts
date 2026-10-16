@@ -4,7 +4,7 @@ import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { mergeMemory } from "../../../extensions/memoryImport";
-import { useWorkspaceTree } from "../../../workspace/explorer/useWorkspaceTree";
+import { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
 
 // Module-level: the memory editor and import group share one file's draft and reload after a merge. Sandbox-scoped:
 // the file is one sandbox's, and a draft carried across a switch would be saved into the next one's.

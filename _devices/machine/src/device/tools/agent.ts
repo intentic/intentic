@@ -1,7 +1,7 @@
-import { readFile } from "node:fs/promises";
 import { pollUntil } from "@intentic/base/async";
+import { readTextIfExists } from "@intentic/base/fs";
 import { isProcessAlive, spawnDetached } from "@intentic/local-agent";
-import type { DeviceAgentOp } from "@intentic/sandbox-contract";
+import type { DeviceAgentOp } from "@intentic/sandbox-contract/schemas/devices";
 import { agentLogPath } from "../../config.js";
 import { installedBuild } from "../../installed.js";
 import { machineLauncher } from "../../resident/supervision.js";
@@ -32,7 +32,7 @@ const WATCH_TIMEOUT_MS = 20 * 60 * 1000;
 
 // What is in the log now, from `from` bytes on, as whole lines. Missing file means nothing yet.
 const readFrom = async (path: string, from: number): Promise<{ text: string; at: number }> => {
-    const raw = await readFile(path, "utf8").catch(() => "");
+    const raw = (await readTextIfExists(path)) ?? "";
     return { text: raw.slice(from), at: raw.length };
 };
 

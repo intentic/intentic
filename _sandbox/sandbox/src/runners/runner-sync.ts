@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { gitHeaderEnv } from "@intentic/base/git";
-import { type RunnerSync, runnerGitUrl, runnerIncomingRef } from "@intentic/sandbox-contract";
+import { type RunnerSync, runnerGitUrl, runnerIncomingRef } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { AgentWorktrees } from "../conversations/worktrees/worktrees.js";
 import { repoGitDir } from "../workspace/layout/git-layout.js";
 import type { RunnerIdentity } from "./runner-identity.js";

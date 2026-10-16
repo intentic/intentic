@@ -1,4 +1,4 @@
-import { type ProofMethod, ProofMethodSchema } from "@intentic/sandbox-contract";
+import { type ProofMethod, ProofMethodSchema } from "@intentic/sandbox-contract/schemas/system";
 import { z } from "zod";
 
 // WHICH PROOFS A DAEMON OPENS A SESSION FOR, read off its unauthenticated /health before any sign-in, since the route list

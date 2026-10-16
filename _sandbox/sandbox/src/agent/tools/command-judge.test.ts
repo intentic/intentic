@@ -1,5 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { readRoleAnswer, UnusableAnswerError } from "../models/role-answer.js";
+import { readRoleAnswer, UnusableAnswerError } from "../../engines/role-answer.js";
 import type { Services } from "../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { AgentDomainRefusedError, assertAgentExecutionContext, createAgentExecutionService, type AgentExecutionContext, type AgentExecutionLease } from "../../workload/agent-execution.js";

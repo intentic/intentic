@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
-import { HISTORY_STATE_FILES, type StateFile, stateFileFor, WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
+import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract/state/history-state";
+import { type StateFile, stateFileFor } from "@intentic/sandbox-contract/state/state-portability";
+import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspace-state";
 import type { z } from "zod";
 import type { Conversion, Granularity } from "./conversions.js";
 

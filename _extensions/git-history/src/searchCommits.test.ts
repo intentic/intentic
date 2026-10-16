@@ -1,4 +1,4 @@
-import type { GitCommit } from "@intentic/sandbox-contract";
+import type { GitCommit } from "@intentic/sandbox-contract/schemas/git/git-history";
 import { matchesSearch, searchWords } from "./searchCommits.js";
 
 const commit = (over: Partial<GitCommit> = {}): GitCommit => ({

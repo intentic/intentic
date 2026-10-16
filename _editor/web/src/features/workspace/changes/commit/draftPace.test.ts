@@ -1,4 +1,4 @@
-import type { LandedMessageDraft } from "@intentic/sandbox-contract";
+import type { LandedMessageDraft } from "@intentic/sandbox-contract/schemas/agents";
 import { draftPace, mergeSamples, paceSample, type PaceSample } from "./draftPace";
 
 // The commit field's ring fills against how long drafts usually take. What is pinned: which drafts teach it, which of

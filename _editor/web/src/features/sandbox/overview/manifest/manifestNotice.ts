@@ -1,4 +1,4 @@
-import type { ManifestProblem, ManifestProblemReport } from "@intentic/sandbox-contract";
+import type { ManifestProblem, ManifestProblemReport } from "@intentic/sandbox-contract/schemas/system";
 import { t } from "@intentic/ui/i18n";
 
 // Render-ready shape for a broken settings file: `file`/`impact` are the whole collapsed row; everything else

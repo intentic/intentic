@@ -17,8 +17,8 @@ import type { Logger } from "pino";
 import { tokenEquals } from "../../auth/auth.js";
 import { invalidateContributions } from "../../capabilities/contributions.js";
 import type { ExtensionGrant } from "../../auth/grants.js";
-import { extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../extension-readiness.js";
-import { enabledExtensions, type ExtensionHost, type InstalledExtension } from "../installed-extensions.js";
+import { extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../../capabilities/extension-inventory/extension-readiness.js";
+import { enabledExtensions, type ExtensionHost, type InstalledExtension } from "../../capabilities/extension-inventory/installed-extensions.js";
 import { listenerOwnershipOf } from "../listener/listener-state.js";
 import { prepareExtensionDirs } from "../runtime/extension-state.js";
 import {

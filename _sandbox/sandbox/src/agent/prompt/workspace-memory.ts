@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { insideRel } from "@intentic/base/contained";
 import { MEMORY_FILE } from "@intentic/constants";
+import { MEMORY_NOTE_HEADER } from "../../sessions/vocabulary/prompt-envelope.js";
 
 // The owner's standing instructions, composed by the daemon instead of left to each runtime's own discovery: the loops
 // disagree about both the filename and the ceiling (Claude Code walks cwd up to `/`, Codex stops at the enclosing
@@ -9,9 +10,6 @@ import { MEMORY_FILE } from "@intentic/constants";
 // ran under used to depend on which model served it. Pi is started with its own discovery off (`--no-context-files`,
 // runtimes/pi/pi-rpc.ts), so it reads them once, here. Read root first, then every folder down to where the turn starts, so a nested repo's file adds to the
 // workspace's rather than replacing it.
-
-export const MEMORY_NOTE_TITLE = "Standing instructions for this workspace";
-export const MEMORY_NOTE_HEADER = `## ${MEMORY_NOTE_TITLE}`;
 
 // Ceiling in characters (~4/token) over the whole block, since every turn of the session pays for it. A file that
 // would cross it is dropped whole and named, deepest first: half a rule still reads as a rule.

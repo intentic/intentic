@@ -1,5 +1,6 @@
 import { SingleFlight, within } from "@intentic/base/async";
-import type { AccountUsage, AgentProvider, UsageWindow } from "@intentic/sandbox-contract";
+import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { Logger } from "pino";
 import type { AccountUsageStore } from "./account-usage.js";
 import type { ParkedRead, UsageParkStore } from "./usage-parks.js";

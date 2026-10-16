@@ -1,5 +1,7 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentTurn, Capability, SandboxSettings } from "@intentic/sandbox-contract";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import { declaredChecks } from "../../rules/repo-checks.js";
 import { standing } from "../../rules/rules.js";
 import { jsExecutionServer } from "../../execution/js-tool.js";

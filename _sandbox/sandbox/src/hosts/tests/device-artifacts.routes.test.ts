@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { ARTIFACT_CHUNK_BYTES, type StageArtifact, type StageArtifactResult } from "@intentic/sandbox-contract";
+import { ARTIFACT_CHUNK_BYTES, type StageArtifact, type StageArtifactResult } from "@intentic/sandbox-contract/schemas/device-artifacts";
 import { Hono } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";

@@ -1,4 +1,4 @@
-import type { OauthAccount } from "@intentic/sandbox-contract";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { Logger } from "pino";
 import { z } from "zod";
 import { accountFiles } from "../../../agent/providers/accounts/account-files.js";

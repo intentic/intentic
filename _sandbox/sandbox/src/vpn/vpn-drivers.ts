@@ -1,4 +1,4 @@
-import type { VpnProvider } from "@intentic/sandbox-contract";
+import type { VpnProvider } from "@intentic/sandbox-contract/schemas/vpn";
 import { fortinetDriver } from "./fortinet.js";
 import { ipsecDriver } from "./ipsec.js";
 import type { VpnDriver } from "./vpn-driver.js";

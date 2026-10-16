@@ -1,5 +1,5 @@
 import { tmpdir } from "node:os";
-import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract";
+import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
 import { turnPersona } from "../personas/personas.js";
 import { jsExecutionPlanOf, nodeArgs, RECORD_READ_ROOTS } from "./js-runtime.js";
 

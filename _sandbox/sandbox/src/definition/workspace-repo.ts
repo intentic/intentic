@@ -3,21 +3,16 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { extensionIdOf } from "@intentic/extension-manifest";
-import type {
-    AutomationSchema,
-    NeedsAction,
-    DefinitionWorkspace,
-    WorkspacePublish,
-    WorkspacePublishResult,
-    WorkspaceRemote,
-} from "@intentic/sandbox-contract";
+import type { AutomationSchema } from "@intentic/sandbox-contract/schemas/automations";
+import type { NeedsAction } from "@intentic/sandbox-contract/policy/needs-action";
+import type { DefinitionWorkspace, WorkspacePublish, WorkspacePublishResult, WorkspaceRemote } from "@intentic/sandbox-contract/state/definition";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { isPublicPath } from "@intentic/workspace-ignore";
 import { z } from "zod";
 import { type GitHost, gitHostOf, githubHeaders } from "../capabilities/cli/git-access.js";
 import { parseExtensionManifest, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
-import { extensionEnablementDocument } from "../extensions/extension-enablement.js";
+import { extensionEnablementDocument } from "../capabilities/extension-inventory/extension-enablement.js";
 import { defaultBranchOf } from "../git/ops/publish-file.js";
 import { pushBranch, remoteState } from "../git/remote/remote.js";
 import { ROOT_BASELINE_CONFIG, ROOT_FRESH_CONFIG } from "../git/remote/root-repo.js";

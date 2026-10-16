@@ -1,11 +1,11 @@
 <!-- An environment need's own answer: this one tool's steps, approved alone, then the rebuild that brings it. -->
 <script setup lang="ts">
-import type { EnvironmentNeed, Need } from "@intentic/sandbox-contract";
+import type { EnvironmentNeed, Need } from "@intentic/sandbox-contract/schemas/needs";
 import { Code, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import ChatDecisionButton from "../chat/transcript/cards/ChatDecisionButton.vue";
+import ChatDecisionButton from "../../components/ChatDecisionButton.vue";
 import { useNeedAnswer } from "./needAnswer";
-import { useNeeds } from "./useNeeds";
+import { useNeeds } from "../../models/needs/useNeeds";
 
 const t = useT();
 

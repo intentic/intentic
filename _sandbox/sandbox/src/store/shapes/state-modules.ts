@@ -2,10 +2,12 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
-// Which modules define a stored document or a structural boot step, read from the source text rather than from what a
-// process happened to load: the one discovery the registry generator (write-state-shapes.ts) writes
-// src/bootstrap/state-registry.ts from, and the registry's test checks it against. Never shipped. Node imports and
-// erasable types only: scripts/conversion-checks-fresh.mjs runs it with plain `node`, before any tsx starts.
+// Which modules define a stored document, a structural boot step, a raw route table or a leaf slice, read from the source
+// text rather than from what a process happened to load: the one discovery scripts/write-indexes.mjs writes
+// src/bootstrap/state-registry.ts, src/app-raw-routes.ts and src/bootstrap/slices/slice-registry.ts from, and the
+// registry's test checks it against. Never
+// shipped. Node imports and erasable types only: scripts/write-indexes.mjs and scripts/conversion-checks-fresh.mjs run it
+// with plain `node`, before any tsx starts.
 
 export interface Definition {
     // Package-relative to src/, forward slashes, with its .ts extension.
@@ -19,8 +21,26 @@ export interface StateModules {
     readonly steps: readonly Definition[];
 }
 
-// The engine's own modules, which declare the definers rather than call them, and the registry this is read into.
-const SKIPPED = new Set(["store/evolution/documents.ts", "store/evolution/state-steps.ts", "bootstrap/state-registry.ts"]);
+// A leaf slice, with the type its members are declared under (its `defineSlice<Members>` argument).
+export interface SliceDefinition extends Definition {
+    readonly members: string;
+}
+
+export interface SourceDefinitions extends StateModules {
+    readonly rawRoutes: readonly Definition[];
+    readonly slices: readonly SliceDefinition[];
+}
+
+// The modules that declare the definers rather than call them, and the indexes this is read into.
+const SKIPPED = new Set([
+    "store/evolution/documents.ts",
+    "store/evolution/state-steps.ts",
+    "http/raw-route-server.ts",
+    "seams/slice.ts",
+    "bootstrap/state-registry.ts",
+    "app-raw-routes.ts",
+    "bootstrap/slices/slice-registry.ts",
+]);
 
 // Every source module the daemon ships, tests, fixtures and generated trees aside.
 const sourceFiles = async (dir: string): Promise<string[]> => {
@@ -37,15 +57,25 @@ const sourceFiles = async (dir: string): Promise<string[]> => {
     return nested.flat();
 };
 
-const CALL = /\bdefine(Document|Step)\s*[<(]/g;
-const EXPORTED = /^export const (\w+) = define(Document|Step)\s*[<(]/gm;
+const CALL = /\bdefine(Document|Step|RawRoutes|Slice)\s*[<(]/g;
+// A slice names its members' type as its one type argument, which the slice registry reads it under.
+const EXPORTED = /^export const (\w+) = define(Document|Step|RawRoutes|Slice)\s*(?:<(\w+)>\s*\(|[<(])/gm;
 
-// Every definition under `source` (the package's src/), in module then name order. A definition in any other form
-// than `export const name = defineDocument(…)` at a module's top level throws: the registry imports it by that name,
-// and one it cannot name would be a document the boot step and the pre-flight never see.
-export const stateModules = async (source: string): Promise<StateModules> => {
+// Every definition under `source` (the package's src/), each kind in module then name order. A definition in any other
+// form than `export const name = defineDocument(…)` (or defineStep, defineRawRoutes, defineSlice<Members>) at a module's
+// top level throws: an index imports it by that name, and one it cannot name would be a document the boot step never
+// sees, a route no table serves, or a slice nothing builds.
+export const sourceDefinitions = async (source: string): Promise<SourceDefinitions> => {
     const documents: Definition[] = [];
     const steps: Definition[] = [];
+    const rawRoutes: Definition[] = [];
+    const slices: SliceDefinition[] = [];
+    const listOf = (kind: string): Definition[] => {
+        if (kind === "Document") {
+            return documents;
+        }
+        return kind === "Step" ? steps : rawRoutes;
+    };
     const unnamed: string[] = [];
     for (const file of (await sourceFiles(source)).toSorted()) {
         const module = relative(source, file).split("\\").join("/");
@@ -58,15 +88,34 @@ export const stateModules = async (source: string): Promise<StateModules> => {
         if (calls !== exported.length) {
             unnamed.push(module);
         }
-        for (const [, name = "", kind] of exported) {
-            (kind === "Document" ? documents : steps).push({ module, name });
+        for (const [, name = "", kind = "", members] of exported) {
+            if (kind !== "Slice") {
+                listOf(kind).push({ module, name });
+            } else if (members === undefined) {
+                unnamed.push(module);
+            } else {
+                slices.push({ module, name, members });
+            }
         }
     }
     if (unnamed.length > 0) {
-        throw new Error(`define each stored document and boot step as \`export const name = defineDocument(…)\` (or defineStep) at the top level of its module: ${unnamed.join(", ")}`);
+        throw new Error(
+            `define each stored document, boot step, raw route table and leaf slice as \`export const name = defineDocument(…)\` (or defineStep, defineRawRoutes, defineSlice<Members>) at the top level of its module: ${unnamed.join(", ")}`,
+        );
     }
     const byName = (a: Definition, b: Definition): number => a.module.localeCompare(b.module) || a.name.localeCompare(b.name);
-    return { documents: documents.toSorted(byName), steps: steps.toSorted(byName) };
+    return {
+        documents: documents.toSorted(byName),
+        steps: steps.toSorted(byName),
+        rawRoutes: rawRoutes.toSorted(byName),
+        slices: slices.toSorted(byName),
+    };
+};
+
+// The stored documents and structural boot steps alone, which the shape generator and the registry's test read.
+export const stateModules = async (source: string): Promise<StateModules> => {
+    const { documents, steps } = await sourceDefinitions(source);
+    return { documents, steps };
 };
 
 // The first line of the generated shape checks, naming the inputs they were generated from (conversionChecksInputs).

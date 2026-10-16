@@ -3,7 +3,7 @@ import { Page } from "@intentic/ui";
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import SandboxDevices from "./SandboxDevices.vue";
-import { selectedKey } from "./deviceLinks";
+import { selectedKey } from "../../../models/sandbox/devices/deviceLinks";
 
 // The Devices view: what is on the other end of this sandbox, as a page of its own on the rail, the way This computer is
 // one in a local window. Until 2026-10-01 it was a section of the Sandbox hub, which kept it a click and a list away and

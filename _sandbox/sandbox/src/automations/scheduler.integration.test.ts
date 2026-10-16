@@ -1,12 +1,16 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentEvent, type AgentOrigin, type AgentTurn, type Automation, SandboxSettingsSchema, UTC } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentOrigin, AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import { UTC } from "@intentic/sandbox-contract/time/zone";
 import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import { unstubbed } from "@intentic/testing";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { z } from "zod";
-import { type JournalEntry, sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { type JournalEntry, sqliteTurnJournal } from "../store/journals/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import type { PersistedAgent } from "../conversations/registry/agents-store.js";
 import type { Services } from "../composition.js";
@@ -30,7 +34,8 @@ import {
     type TurnStream,
 } from "./scheduler.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
-import { conversationEntry, drivenBy } from "../testing.js";
+import { conversationEntry } from "../conversations/registry/agents-store.testing.js";
+import { drivenBy } from "../seams/turn-starter.testing.js";
 import { opt } from "../opt.js";
 
 // Touches automations/heldWakes/activity/turnJournal/workspace/logger/sandboxSettings, plus liveSessionIds and registry

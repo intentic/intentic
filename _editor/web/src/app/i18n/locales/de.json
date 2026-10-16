@@ -559,10 +559,6 @@
             "pasteIdIntoQuick": "Fügen Sie die ID in Quick Open ein, um von überall zu diesem Agenten zurückzukommen.",
             "sessionId": "Session-ID"
         },
-        "suggestedSessionBox": {
-            "ctrlEnter": "Strg+Enter",
-            "whatShouldAgentDo": "Was soll der Agent tun?"
-        },
         "workflowRunCard": {
             "archive": "Lauf archivieren",
             "archiveRun": "Diesen Lauf archivieren",

@@ -1,4 +1,7 @@
-import type { AgentRepoChanges, AgentSummary, FileDiff, RepoChanges, SessionSummary } from "@intentic/sandbox-contract";
+import type { AgentRepoChanges, RepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { FileDiff } from "@intentic/sandbox-contract/schemas/history";
+import type { SessionSummary } from "@intentic/sandbox-contract/schemas/sessions";
 import { buildDocx } from "./document";
 
 // THE DESK RECORDING: the same app on a workspace of documents rather than code, for the reader who came from

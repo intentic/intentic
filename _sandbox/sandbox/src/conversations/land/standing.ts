@@ -1,4 +1,4 @@
-import type { LandConflictReason } from "@intentic/sandbox-contract";
+import type { LandConflictReason } from "@intentic/sandbox-contract/schemas/agents";
 import { mapPool } from "@intentic/base/async";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { headSha } from "../../git/changes/changes.js";

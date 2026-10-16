@@ -1,4 +1,5 @@
-import type { Automation, ListenerMessage } from "@intentic/sandbox-contract";
+import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
+import type { ListenerMessage } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 
 // Which lane a listener message runs in, decided by who sent it (Automation.senders). A lane is what the fire wears
 // and whether a person has to release it; two senders resolving to different personas must never share a wake or a

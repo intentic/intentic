@@ -1,6 +1,6 @@
 import { queueWhole } from "./agent/tools/agent-terminals.js";
 import { join } from "node:path";
-import type { DeviceFacts, DeviceScopes, IntenticLine } from "@intentic/sandbox-contract";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { wakeLocalModel as wakeLocalModelServer } from "./capabilities/handlers/localmodel.handler.js";
@@ -20,7 +20,6 @@ import { cliProxyAuthDir, cliProxyConfigPath, cliProxyManagementUrl, createCliPr
 import { fileWorkflowRunsStore, fileWorkflowsStore, workflowRunsDocument, workflowsDocument } from "./workflows/workflows-store.js";
 import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./chores/chores-store.js";
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
-import { fileWalletLedger, walletLedgerDocument, type WalletLedgerStore } from "./wallet/wallet-ledger.js";
 import { createTrialService, type TrialService } from "./trial/trial.js";
 import { withTrialEndpoint } from "./trial/trial-endpoint.js";
 import { filePersonasStore, personasDocument, type PersonasStore } from "./personas/personas-store.js";
@@ -40,18 +39,10 @@ import { createHeadroomService } from "./usage/headroom.js";
 import { fileUsageParkStore, usageParksDocument } from "./usage/usage-parks.js";
 import { fileObservedLimitStore, observedLimitsDocument } from "./usage/observed-limits.js";
 import { cursorHeadroomSource } from "./runtimes/cursor/cursor-usage.js";
-import { approvalsDocument, type ApprovalsStore, fileApprovalsStore } from "./approvals/approvals-store.js";
 import { fileIssuesStore, issuesDocument } from "./issues/issues-store.js";
 import { fileInstallsStore, issueInstallsDocument } from "./store/installs.js";
-import { HOST_PEER, type HostAnnounced, type HostClient } from "./hosts/host-peer.js";
-import { hostDeviceReach } from "./hosts/self-host.js";
-import { createPeerHub, type PeerDoorDeps } from "./peers/peer-hub.js";
-import { filePeerStore } from "./peers/peer-store.js";
-import { filePeerTools } from "./peers/peer-tool-memory.js";
+import { filePeerTools, type PeerToolMemory } from "./peers/peer-tool-memory.js";
 import { fetchPresentation, type SandboxPresentation } from "./system/platform-client.js";
-import { enrolledFleet, syncPairBurns, type SyncMode } from "./peers/desktop-sync.js";
-import { pairings } from "./peers/enrollment.js";
-import { redeemCodes } from "./peers/redeem-codes.js";
 import type { Config } from "./env.config.js";
 import { keepCodeCounts } from "./git/changes/code-counts.js";
 import { createOpenCodeService } from "./runtimes/opencode/opencode.js";
@@ -68,7 +59,6 @@ import { createMintedSlice, type MintedSlice } from "./runtimes/minted/minted-pr
 import { createKimiSlice, type KimiSlice } from "./runtimes/kimi/kimi-provider.js";
 import { GROK_BUILD } from "./runtimes/grok-build/grok-build-cli.js";
 import { createCliParts } from "./runtimes/vendor-cli/vendor-cli-slice.js";
-import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
 import { removeCodexRollout } from "./runtimes/codex/codex-sessions.js";
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { createPanelUpstreamResolver, type PanelUpstreamResolver } from "./panels/panel-upstream.js";
@@ -79,11 +69,9 @@ import { createPortForwards } from "./ports/port-forwards.js";
 import { cachedScan, type ListeningPort, listenerFingerprint, scanListeningPorts, withOwningSessions } from "./ports/port-scan.js";
 import { transcriptSearchMetrics } from "./sessions/transcript-search.js";
 import { fileWebchatOutbox, outboxStreamFor, webchatOutboxDocument } from "./webchat/webchat-outbox.js";
-import { fileShareStore, sharesDocument, type ShareStore } from "./share/share-store.js";
-import { createSpeech, type Speech } from "./speech/transcribe.js";
+import { createSpeech, type Speech } from "@intentic/speech/transcribe";
 import { composeSpokenReply } from "./agent/models/spoken-reply.js";
-import { createVoice, type Voice } from "./speech/voice/voice.js";
-import { fileSafetyLog, type SafetyLog, safetyLogDocument } from "./safety/safety-log.js";
+import { createVoice, type Voice } from "@intentic/speech/voice/voice";
 import { createHeldCards, type HeldCards } from "./guard/held-cards.js";
 import { holdDepsOf } from "./guard/held-asks.js";
 import { heldCardWake } from "./agent/run/turn/held-card-wake.js";
@@ -92,7 +80,6 @@ import { fileSandboxSettingsStore, type SandboxSettingsStore, settingsDocument }
 import { agentDomainPolicyDocument, fileAgentDomainPolicy, type AgentDomainPolicyStore } from "./workload/domain/agent-domain-policy.js";
 import { createAgentExecutionService, type AgentExecutionService } from "./workload/agent-execution.js";
 import { forgetRunDir } from "./conversations/worktrees/domain-anchor.js";
-import { fileRuleFiringsStore, ruleFiringsDocument, type RuleFiringsStore } from "./rules/rule-firings.js";
 import { type DriftSweep, createDriftSweep } from "./environment/drift-sweep.js";
 import { fileRuntimeInstallsStore, runtimeInstallsDocument, type RuntimeInstallsStore } from "./environment/runtime-installs.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
@@ -112,38 +99,36 @@ import { type BootTracker, createBootTracker } from "./system/boot/boot.js";
 import { DAEMON_OWNER } from "./seams/workload-stamp.js";
 import { type PlatformTunnel, startPlatformTunnel } from "./system/listeners/local-tunnel.js";
 import { createResourceReaper, type ResourceReaper } from "./system/boot/reaper.js";
-import { createClientLogger, createPerfLogger } from "./logger.js";
-import { createPerfTracker } from "./system/resources/perf.js";
+import { createClientLogger, createPerfLogger, inLogContext } from "./logger.js";
+import { streamAgent } from "./agent/run/stream-agent.js";
+import { turnDoors } from "./agent/run/turn/turn-doors.js";
+import type { TurnEngine } from "./seams/turn-engine.js";
+import { askRoleModel, roleModelIsSet } from "./agent/models/role-model.js";
+import { cancelFamily, familyOf } from "./agent/subagents/children.js";
+import { cancelWatchersFor } from "./agent/verification/watchers.js";
+import { createPerfTracker, type PerfTracker } from "./system/resources/perf.js";
 import { panePids } from "./terminal/terminal-session.js";
 import { version } from "./version.js";
 import { internalTools } from "./agent/tools/agent-tools.js";
 import { backgroundJobSessions, keptJobDirs } from "./agent/tools/jobs/background-jobs.js";
 import { conversationBusy, turnInFlight } from "./agent/run/turn/turn-liveness.js";
 import { createTurnMounts, TURN_MOUNT_BASE, type TurnMounts } from "./agent/tools/turn-mounts.js";
-import { enabledExtensions, type ExtensionHost } from "./extensions/installed-extensions.js";
+import { enabledExtensions, type ExtensionHost } from "./capabilities/extension-inventory/installed-extensions.js";
 import { workspaceArrivedEmpty } from "./scaffold/starter-site.js";
 
 import { authRootOf, statePath } from "./state-paths.js";
 import { createAuthSlice, type AuthSlice } from "./auth/auth-slice.js";
-import type { HostsSlice } from "./hosts/hosts-slice.js";
-import { createDeviceTunnels } from "./hosts/device-tunnels.js";
-import { createRunGrants } from "./hosts/device-door.js";
-import { createWebextSlice, type WebextSlice } from "./webext/webext-slice.js";
-import { createPhonesSlice, type PhonesSlice } from "./phones/phone-slice.js";
-import { createRunnersSlice, type RunnersSlice } from "./runners/runners-slice.js";
-import { createLinksSlice, type LinksSlice } from "./links/links-slice.js";
 import { type AgentToolsMember, createCapabilitiesSlice, type CapabilitiesSlice } from "./capabilities/capabilities-slice.js";
 import { connectorHostDefaults } from "./capabilities/contributions.js";
 import { createSecretsSlice, type SecretsSlice } from "./secrets/secrets-slice.js";
 import { type BrokerSlice, createBrokerSlice } from "./capabilities/broker/broker-slice.js";
 import { createPrivacySlice, type PrivacySlice } from "./privacy/privacy-slice.js";
-import { createNeedsSlice, type NeedsSlice } from "./needs/needs-slice.js";
 import { grantsChanged } from "./needs/standing-grants.js";
 import { type ConversationGrants, conversationGrantsDocument, fileConversationGrants } from "./personas/conversation-grants.js";
 import { commandPolicyLines, fileOwnerGrants, type OwnerGrants, ownerGrantsDocument } from "./personas/owner-grants.js";
 import { createExtensionsSlice, type ExtensionsSlice } from "./extensions/extensions-slice.js";
 import { type AutomationsSlice, createAutomationsSlice, type IntakeMembers } from "./automations/automations-slice.js";
-import { createLoopsSlice, type LoopsSlice, type WorkflowsMembers } from "./loops/loops-slice.js";
+import type { LoopsSlice, WorkflowsMembers } from "./loops/loops-slice.js";
 import { type CiSlice, createCiSlice } from "./ci/ci-slice.js";
 import { createDepsSlice, type DepsSlice, type QueueMembers } from "./workspace/deps/deps-slice.js";
 import { createResourcesSlice, type ResourcesSlice } from "./system/resources/resources-slice.js";
@@ -153,7 +138,7 @@ import { createConversationsSlice, type ConversationsSlice } from "./conversatio
 import { createWorkspaceSlice, type DerivedMembers, type WorkspaceSlice } from "./workspace/workspace-slice.js";
 import { createSessionsSlice, type SessionsSlice } from "./sessions/sessions-slice.js";
 import { createProcessesSlice, type PortsMembers, type ProcessesSlice } from "./processes/processes-slice.js";
-import { createGitSlice, type GitSlice } from "./git/git-slice.js";
+import { buildLeafSlices, type LeafMembers, leafTeardown } from "./bootstrap/slices/slice-registry.js";
 
 // Wired once at boot for the route factories; a module should Pick only the seams it uses, not take Services whole,
 // unless it orchestrates most of the daemon.
@@ -170,19 +155,14 @@ export interface Services
         KimiSlice,
         MintedSlice,
         AuthSlice,
-        HostsSlice,
-        WebextSlice,
-        PhonesSlice,
-        RunnersSlice,
-        LinksSlice,
         CapabilitiesSlice,
         SecretsSlice,
         BrokerSlice,
         PrivacySlice,
-        NeedsSlice,
         ExtensionsSlice,
         AutomationsSlice,
-        LoopsSlice,
+        // The loops half is a leaf slice; workflows/ builds the other half, bridged below.
+        Pick<LoopsSlice, WorkflowsMembers>,
         CiSlice,
         DepsSlice,
         ResourcesSlice,
@@ -191,7 +171,7 @@ export interface Services
         WorkspaceSlice,
         SessionsSlice,
         ProcessesSlice,
-        GitSlice {
+        LeafMembers {
     readonly config: Config;
     readonly logger: Logger;
     // Sink for the browser's own reports; undefined when there's nowhere to write, and the route says so.
@@ -236,8 +216,6 @@ export interface Services
     // headless daemon can simply not have one. Resolves undefined whenever the platform can't answer — an export
     // must never fail over presentation.
     readonly presentation: () => Promise<SandboxPresentation | undefined>;
-    // Wallet's payment record, one row per attempt reaching policy, opened before and settled after the answer.
-    readonly walletLedger: WalletLedgerStore;
     // Whether this sandbox can chat before an AI account connects, and today's allowance; unset with no platform.
     readonly trial: TrialService;
     // Loopback TLS terminator for a dev platform; awaited by the translator's render so the address isn't a race.
@@ -254,8 +232,6 @@ export interface Services
     readonly chores: ChoresStore;
     // Background sweep keeping the probe cache from expiring; skipped entirely while any turn is live.
     readonly probeRunner: ProbeRunner;
-    // Things the agent prepared and may not do unasked; /approvals is the owner's approve/reject side.
-    readonly approvals: ApprovalsStore;
     // Activity log, outside /work: inbound wakes, sniffed calls, voice sessions, failures.
     readonly activity: ActivityStore;
     // The audit trail (historyRoot/audit/): hash-chained, segmented by month, pruned by `settings.audit`, forwarded to the
@@ -267,13 +243,10 @@ export interface Services
     readonly agentDomainPolicy: AgentDomainPolicyStore;
     // Daemon-issued admission and independently releasable invocation handles; placement alone grants no execution.
     readonly agentExecution: AgentExecutionService;
-    // Safety policy the judge is handed, and what it decided; a policy is a document, the log changes mid-turn.
+    // Safety policy the judge is handed, a document; what it decided is the log beside it (safety/safety-slice.ts).
     readonly safetyPolicy: SafetyPolicyStore;
-    readonly safetyLog: SafetyLog;
     // Device cards an agent stopped waiting on, held by its turn's close until they settle (guard/held-cards.ts).
     readonly heldCards: HeldCards;
-    // When each rule last fired; kept beside settings, not in them, so a firing isn't a config write.
-    readonly ruleFirings: RuleFiringsStore;
     // Runtime-install ledger: tools sessions installed at runtime, read by the Environment card and drift sweep.
     readonly runtimeInstalls: RuntimeInstallsStore;
     // Environment drift sweep: probes what the container has beyond the image, drafts steps for recurring installs.
@@ -282,15 +255,11 @@ export interface Services
     readonly push: PushStore;
     // Sends push notifications; notifyIfAway is suppressed while someone is actively watching, notify always fires.
     readonly pushSender: PushSender;
-    // Daemon-owned workspace snapshots on /history, outside agent reach: captured per turn and on an interval.
-    readonly history: WorkspaceHistory;
     readonly intentic: (run: IntenticRun, signal?: AbortSignal) => AsyncGenerator<IntenticLine>;
     // What turns and the fleet announce; `wireReactions` below subscribes what reacts to it.
     readonly events: DomainEvents;
     // Everything a stopped conversation holds (processes, terminals, browsers, temp), reclaimed on its own clock.
     readonly reaper: ResourceReaper;
-    // Which conversations are published as shareable pages; the index only, pages live in the workspace outbox.
-    readonly shares: ShareStore;
     // Dictation, heard on this machine: the composer's microphone and Discord's calls (speech/transcribe.ts).
     readonly speech: Speech;
     // Speaking replies aloud, on this machine or through the owner's own provider: the editor's player and Discord's
@@ -395,6 +364,24 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
     };
 };
 
+// The providers slice over the areas' shared parts: every native provider's module and every runtime's adapter, named
+// here since each runtime imports agent/.
+const providersSliceOf = (
+    shared: ReturnType<typeof createProviderAreas>["shared"],
+    deps: Pick<Parameters<typeof createProvidersSlice>[0], "historyRoot" | "conversations" | "whole" | "acpConnections">,
+): ProvidersSlice =>
+    createProvidersSlice({
+        ...shared,
+        ...deps,
+        providerModules: PROVIDER_MODULES,
+        adapters: RUNTIME_ADAPTERS,
+        acpAgent: createAcpAgent(deps.acpConnections),
+        // Pi sessions sit beside other AI-provider state under authRoot, so a stable dir keeps them resumable.
+        piAgent: createPiAgent(piSpawner(join(shared.authRoot, "pi", "sessions"))),
+        // A wake needs the finished Services to build a capability context, and the only caller is a turn.
+        wakeLocalModel: async (id) => wakeLocalModelServer(capabilityCtx(deps.whole()), id, LOCAL_MODEL_WAKE_MS),
+    });
+
 // Reaper keys to the same three facts as everything else: whose work, whether it's live, whether it's ours.
 const createReaper = ({ conversations, agents, events, logger }: Pick<Services, "conversations" | "agents" | "events" | "logger">): ResourceReaper =>
     createResourceReaper({
@@ -433,21 +420,6 @@ const createReaper = ({ conversations, agents, events, logger }: Pick<Services, 
         logger,
     });
 
-// The hosts slice, built here rather than beside its interface while the devices work reshapes hosts/.
-const createHostsSlice = ({ historyRoot, logger, peerTools, whole }: PeerDoorDeps & { readonly whole: () => Services }): HostsSlice => ({
-    hosts: filePeerStore(historyRoot, HOST_PEER.store),
-    // Reads only readings already held (hosts/self-host.ts), so composing a turn never waits on a laptop.
-    hostReach: (granted) => hostDeviceReach(whole(), granted),
-    syncFleet: () => enrolledFleet(historyRoot),
-    hostHub: createPeerHub<HostClient, HostAnnounced, DeviceFacts, DeviceScopes>(HOST_PEER.hub, logger, peerTools),
-    syncPairings: pairings<SyncMode>(syncPairBurns(historyRoot)),
-    redeemCodes: redeemCodes(),
-    // Never replayable, so no burn file: minted and spent in-process.
-    enrollTokens: pairings(),
-    deviceTunnels: createDeviceTunnels({ hub: () => whole().hostHub, logger }),
-    runGrants: createRunGrants(),
-});
-
 // Pane listing rides with the scan rather than behind it: both are cheap, and an unowned port is unactionable.
 const scanPortsWith = (logger: Logger) => async (): Promise<ListeningPort[]> => {
     const [listeners, panes] = await Promise.all([
@@ -465,6 +437,33 @@ const scanPortsWith = (logger: Logger) => async (): Promise<ListeningPort[]> => 
 // subsystems (daemon-boundaries): the builder's Omit<…> type names them, and this Pick of the same names is checked
 // against it, so leaving one out fails to compile.
 type BridgedMembers = DerivedMembers | PortsMembers | QueueMembers | IntakeMembers | WorkflowsMembers | AgentToolsMember;
+// The hand-ordered core every leaf slice is built from (bootstrap/slices/slice-registry.ts): the slices built below in the
+// order their dependencies ask for, and the members bridged beside them. A leaf picks what it reads of it, so one that
+// reaches past it fails to compile.
+export type CoreKeys =
+    | keyof WorkspaceSlice
+    | keyof AuthSlice
+    | keyof ConversationsSlice
+    | keyof ProcessesSlice
+    | keyof DepsSlice
+    | keyof CapabilitiesSlice
+    | keyof SecretsSlice
+    | keyof BrokerSlice
+    | keyof ExtensionsSlice
+    | keyof SessionsSlice
+    | keyof ProvidersSlice
+    | BridgedMembers;
+
+export interface CompositionCore extends Pick<Services, CoreKeys> {
+    readonly config: Config;
+    readonly logger: Logger;
+    readonly authRoot: string;
+    readonly perf: PerfTracker;
+    readonly peerTools: PeerToolMemory;
+    // The finished services, read only when a member is called, never while a slice is being built.
+    readonly whole: () => Services;
+}
+
 const createBridgedMembers = (deps: Pick<Services, "config" | "logger" | "workspace" | "heavyCommands">): Pick<Services, BridgedMembers> => {
     const { config, logger, workspace } = deps;
     const webchatOutbox = fileWebchatOutbox(join(workspace.root, webchatOutboxDocument.path));
@@ -530,7 +529,6 @@ const createDaemonMembers = (
         turnMounts: createTurnMounts({ baseUrl: () => `http://127.0.0.1:${config.sandbox.port}${TURN_MOUNT_BASE}` }),
         info: infoOf(config),
         presentation: () => fetchPresentation(config),
-        walletLedger: fileWalletLedger(join(workspace.root, walletLedgerDocument.path)),
         probeRunner: createProbeRunner({
             workspace,
             chores,
@@ -538,20 +536,15 @@ const createDaemonMembers = (
             wanted: async () => (await enabledExtensions(deps.manifestHost)).some((extension) => extension.id === "intentic.maintenance"),
             logger,
         }),
-        approvals: fileApprovalsStore(join(workspace.root, approvalsDocument.path)),
         // The owner's own file, plus the lines they allowed with Always, which live in ownerGrants and never in the file.
         safetyPolicy: fileSafetyPolicyStore(
             statePath(workspace.root, ".intentic/config/safety.md"),
             commandPolicyLines(ownerGrants, (message) => logger.warn(message)),
         ),
-        safetyLog: fileSafetyLog(join(workspace.root, safetyLogDocument.path)),
-        ruleFirings: fileRuleFiringsStore(join(workspace.root, ruleFiringsDocument.path)),
         driftSweep: createDriftSweep({ workspace, runtimeInstalls, conversations, logger }),
-        history: createWorkspaceHistory({ workspace, historyRoot: config.historyRoot, logger }),
         // Bound to the daemon logger so a CLI run's lifecycle is attributable from daemon.log.
         intentic: (run: IntenticRun, signal?: AbortSignal) => runIntentic(run, signal, logger),
-        shares: fileShareStore(join(config.historyRoot, sharesDocument.path)),
-        speech: createSpeech({ workspaceRoot: workspace.root, log: (message) => logger.info(`speech: ${message}`) }),
+        speech: createSpeech({ cacheDir: statePath(workspace.root, ".intentic/local/cache/"), log: (message) => logger.info(`speech: ${message}`) }),
         // Reads live sockets through the shared scan rather than the assigned port, since a monorepo can pin its own.
         panelUpstreamOf: createPanelUpstreamResolver({
             workspaceRoot: workspace.root,
@@ -567,7 +560,7 @@ const createDaemonMembers = (
 // every utterance, so a change is heard on the next one.
 const voiceOf = (whole: () => Services, workspaceRoot: string, logger: Services["logger"], settings: Services["sandboxSettings"]): Voice =>
     createVoice({
-        workspaceRoot,
+        cacheDir: statePath(workspaceRoot, ".intentic/local/cache/"),
         log: (message) => logger.info(`voice: ${message}`),
         settings: async () => (await settings.get()).voice,
         secret: async (name) => (await whole().secretRegistry()).find((secret) => secret.name === name)?.value,
@@ -581,10 +574,28 @@ const turnHold = (heldCards: HeldCards, conversations: Parameters<typeof turnRun
     holdDepsOf(heldCards, (conversationId) => turnRunOf(conversations, conversationId));
 
 // What deletes a purged Codex conversation's rollout, from the sandbox-wide CODEX_HOME beside the credentials.
+// The turn engine's doors, bound to streamAgent here, the one module that may name the turn body, and the rest of what
+// the fleet asks of the engine.
+const turnEngineOf = (whole: () => Services) => ({
+    turns: turnDoors(whole, (input, signal) =>
+        input.conversationId === undefined
+            ? streamAgent(whole(), input, signal)
+            : inLogContext({ conversationId: input.conversationId }, streamAgent(whole(), input, signal)),
+    ),
+    turnEngine: { askRoleModel, roleModelIsSet, familyOf, cancelFamily, cancelWatchersFor } satisfies TurnEngine,
+});
+
 const codexRolloutRemover =
     (authRoot: string) =>
     (threadId: string): Promise<void> =>
         removeCodexRollout(join(authRoot, "codex"), threadId);
+
+// Hoisted: the HTTP locks, the roster and the pins (compliance/org-pins.ts) the settings and the privacy shield are read
+// through all read the one policy this sandbox holds.
+const orgPolicyOf = (config: Config, authRoot: string, logger: Logger, whole: () => Services) => {
+    const orgPolicy = createOrgPolicyHolder({ authRoot, logger, fetch: platformOrgPolicyFetch(config) });
+    return { orgPolicy, orgPins: createOrgPins({ holder: orgPolicy, logger, whole }) };
+};
 
 // What the keyrings on the owner's computers are reached through: the device hub, composed after the secrets slice and so
 // read at each call, and the address the computers paired with, which every grant the sandbox signs names.
@@ -603,10 +614,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const { workspace } = workspaceSlice;
     const authRoot = authRootOf({ agentAuthDir: config.agentAuthDir, workspaceRoot: workspace.root });
     const agentDomainPolicy = fileAgentDomainPolicy(join(authRoot, agentDomainPolicyDocument.path));
-    // Hoisted: the HTTP locks, the roster and the pins (compliance/org-pins.ts) the settings and the privacy shield are
-    // read through all read the one policy this sandbox holds.
-    const orgPolicy = createOrgPolicyHolder({ authRoot, logger, fetch: platformOrgPolicyFetch(config) });
-    const orgPins = createOrgPins({ holder: orgPolicy, logger, whole });
+    const { orgPolicy, orgPins } = orgPolicyOf(config, authRoot, logger, whole);
     const providers = createProviderAreas(config, logger, authRoot, whole);
     // Who may call this daemon, and how: the roster, passkeys, sessions and every per-boot and per-extension token.
     const authSlice = createAuthSlice(config, workspace.root, logger, orgPolicy);
@@ -618,6 +626,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         logger,
         perf,
         whole,
+        ...turnEngineOf(whole),
         previousRunDied,
         cardSettled: (requestId, conversationId) => void whole().pushSender.withdraw(awaitingResolved(conversationId, `awaiting-${requestId}`)),
     });
@@ -729,16 +738,36 @@ export const createServices = (config: Config, logger: Logger): Services => {
     });
     // A review's code-only counts outlive the process: a restart reopening every review tab reads them back.
     keepCodeCounts(statePath(workspace.root, ".intentic/local/cache/", "code-counts.db"));
-    // One tool table per connected peer, shared by every door: what a turn lists for a machine or a browser that is
-    // asleep right now, and the reason a restart doesn't make one vanish from the next turn's tools.
-    const peerDoors = { historyRoot: config.historyRoot, logger, peerTools: filePeerTools(config.historyRoot, logger) };
     const bridged = createBridgedMembers({
         config,
         logger,
         workspace,
         heavyCommands: depsSlice.heavyCommands,
     });
-
+    const providersSlice = providersSliceOf(providers.shared, { historyRoot: config.historyRoot, conversations, whole, acpConnections });
+    // Every leaf slice (bootstrap/slices/slice-registry.ts), each built over this core alone.
+    const leaves = buildLeafSlices({
+        ...authSlice,
+        ...sessionsSlice.slice,
+        ...workspaceSlice,
+        ...processesSlice,
+        ...depsSlice,
+        ...conversationsParts.slice,
+        ...capabilitiesParts.slice,
+        ...secretsSlice,
+        ...brokerSlice,
+        ...extensionsSlice,
+        ...providersSlice,
+        ...bridged,
+        config,
+        logger,
+        authRoot,
+        perf,
+        // One tool table per connected peer, shared by every door: what a turn lists for a machine or a browser that is
+        // asleep right now, and the reason a restart doesn't make one vanish from the next turn's tools.
+        peerTools: filePeerTools(config.historyRoot, logger),
+        whole,
+    });
     const services: Services = {
         ...authSlice,
         ...sessionsSlice.slice,
@@ -759,7 +788,6 @@ export const createServices = (config: Config, logger: Logger): Services => {
             warn: (message, error) => logger.warn({ err: error }, message),
             pin: orgPins.privacyPin,
         }),
-        ...createNeedsSlice({ workspaceRoot: workspace.root, logger, whole }),
         ...extensionsSlice,
         ...createAutomationsSlice({
             workspaceRoot: workspace.root,
@@ -767,14 +795,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             logger,
             archived: (conversationId) => agents.entry(conversationId)?.archivedAt !== undefined,
         }),
-        ...createLoopsSlice(workspace.root),
         ...createCiSlice({ workspace, capabilities, config, logger }),
-        ...createGitSlice(),
-        ...createHostsSlice({ ...peerDoors, whole }),
-        ...createWebextSlice(peerDoors),
-        ...createPhonesSlice(peerDoors),
-        ...createRunnersSlice(peerDoors),
-        ...createLinksSlice({ historyRoot: config.historyRoot, logger, whole }),
         ...createResourcesSlice({
             workspaceRoot: workspace.root,
             perf,
@@ -785,23 +806,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
                 iq: workspaceSlice.iq.metrics(),
             }),
         }),
-        ...createProvidersSlice({
-            ...providers.shared,
-            historyRoot: config.historyRoot,
-            conversations,
-            whole,
-            acpConnections,
-            // Every native provider's module and every runtime's adapter, named here since each runtime imports agent/.
-            providerModules: PROVIDER_MODULES,
-            adapters: RUNTIME_ADAPTERS,
-            acpAgent: createAcpAgent(acpConnections),
-            // Pi sessions sit beside other AI-provider state under authRoot, so a stable dir keeps them resumable.
-            piAgent: createPiAgent(piSpawner(join(authRoot, "pi", "sessions"))),
-            // A wake needs the finished Services to build a capability context, and the only caller is a turn.
-            wakeLocalModel: async (id) => wakeLocalModelServer(capabilityCtx(whole()), id, LOCAL_MODEL_WAKE_MS),
-        }),
+        ...providersSlice,
         ...providers.areas,
         ...bridged,
+        ...leaves,
         ...createDaemonMembers({
             ...processesSlice,
             config,
@@ -879,8 +887,9 @@ export const servicesTeardown = (services: Services): readonly (() => unknown)[]
     () => services.ciHooks.stop(),
     () => services.announcer.stop(),
     () => services.orgPolicy.stop(),
+    // Each leaf slice's own stops, all synchronous (the org policy's poll, history's interval).
+    ...leafTeardown(services),
     () => services.reach.stop(),
-    () => services.history.stop(),
     () => services.processes.stopAll(),
     // Extension gateways and the backend host are direct children; stopped here or they outlive the daemon (the orphan
     // sweep is only a backstop).

@@ -4,12 +4,12 @@ import { noticeFrom } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
-import type { CredentialGateScope } from "@intentic/sandbox-contract";
+import type { CredentialGateScope } from "@intentic/sandbox-contract/schemas/secrets";
 import type { SecretRow } from "../../../sandbox/secrets/secretRows";
-import { reveal, useCredentialGates, useSecrets } from "./useSecrets";
+import { reveal, useCredentialGates, useSecrets } from "../../../../models/capabilities/useSecrets";
 import { useRole } from "../../../../client/sandbox/useRole";
 import ToggleSwitch from "primevue/toggleswitch";
-import SecretField from "./SecretField.vue";
+import SecretField from "../../../../parts/capabilities/SecretField.vue";
 import SecretHostsEditor from "./SecretHostsEditor.vue";
 import SecretCredentialPolicy from "./SecretCredentialPolicy.vue";
 import SecretDevicePanel from "./SecretDevicePanel.vue";
@@ -319,6 +319,10 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
                             <Icon name="trash" class="text-xs" />
                         </button>
                         <template v-else>
+                            <!-- allow(recipes): THE ARMED SECOND PRESS of a two-step remove, beside a neutral cancel:
+                                 red before the pointer reaches it is what says this one deletes. The danger tone is
+                                 neutral at rest, which is right for a first press and wrong for the confirmation of
+                                 one. -->
                             <button
                                 v-tooltip.top="t(`capabilities.secretEntryRow.confirmRemove`)"
                                 type="button"

@@ -1,4 +1,5 @@
-import type { DeviceFlowLine, DeviceSandboxFlow, StagedUpdate } from "@intentic/sandbox-contract";
+import type { DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract/schemas/devices";
+import type { StagedUpdate } from "@intentic/sandbox-contract/schemas/system";
 import { waitFor } from "@intentic/testing/bun";
 import type { RestartResume } from "../restart-resume.js";
 import {

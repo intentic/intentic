@@ -1,6 +1,7 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import type { Logger } from "pino";
-import type { AgentDomainPolicy, AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentDomainPolicy } from "@intentic/sandbox-contract/schemas/settings";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { unstubbed } from "@intentic/testing";
 import { waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../../../composition.js";
@@ -8,12 +9,13 @@ import { AGENT_DOMAIN_NOT_READY } from "../../../../workload/domain/agent-domain
 import { createAgentExecutionService } from "../../../../workload/agent-execution.js";
 import { streamAgent } from "../../stream-agent.js";
 import type { BeginRefusal } from "../../../../conversations/actor/conversation-decide.js";
-import type { JournalledTurn } from "../turn-journal.js";
+import type { JournalledTurn } from "../../../../store/journals/turn-journal.js";
 import { type AttachEntry, type AttachHead, turnRunOf } from "../../../../conversations/actor/conversation-holdings.js";
 import { createDomainEvents, type DomainEventMap } from "../../../../seams/domain-events.js";
 import type { TurnInput, TurnStarter } from "../../../../seams/turn-starter.js";
 import { openConversationsDb } from "../../../../store/conversations-db.js";
-import { beginTurn, fleetStoreOver, memoryFleet } from "../../../../testing.js";
+import { beginTurn } from "../../../../conversations/actor/conversation-actors.testing.js";
+import { fleetStoreOver, memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
 import { commandsOf, resetCommands } from "../../../providers/agent-commands.js";
 import { MAX_BACKLOG_FRAMES } from "../../../../seams/frame-backlog.js";
 import { startedByOf, startTurnRun, type TurnRun } from "../turn-runs.js";

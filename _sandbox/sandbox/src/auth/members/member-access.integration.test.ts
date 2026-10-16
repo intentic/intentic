@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 
-import { ATTACHMENTS_DIR, type MemberRole } from "@intentic/sandbox-contract";
+import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract/state/workspace-state";
+import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import { createApp } from "../../app.js";
 import type { AppEnv } from "../../app-env.js";
 import { services } from "../../harness/route-services.testing.js";

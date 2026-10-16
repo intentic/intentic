@@ -2,8 +2,8 @@
 <script setup lang="ts">
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { computed } from "vue";
-import { entryGuide } from "../model/catalogCopy";
-import { guideParts, guidePartsPrefixed, guideTokenUrl } from "./credentialGuide";
+import { entryGuide } from "../../../models/capabilities/catalogCopy";
+import { guideParts, guidePartsPrefixed, guideTokenUrl } from "../../../models/capabilities/credentialGuide";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

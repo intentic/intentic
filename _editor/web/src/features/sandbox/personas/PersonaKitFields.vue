@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type SkillDraft, type SkillSummary, SYSTEM_PROMPT_MAX, type SystemPromptMode } from "@intentic/sandbox-contract";
+import { type SkillDraft, type SkillSummary, SYSTEM_PROMPT_MAX, type SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
 import { DisclosureRow, Icon, MarkdownDocument, Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";

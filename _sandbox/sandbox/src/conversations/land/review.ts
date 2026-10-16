@@ -4,10 +4,10 @@ import type {
     AgentHistoryCommit,
     AgentRepoChanges,
     AgentRepoHistory,
-    LandConflict,
     OutsideCheckout,
     ScratchPath,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/git/git";
+import type { LandConflict } from "@intentic/sandbox-contract/schemas/agents";
 import { defaultGit } from "@intentic/base/git";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";

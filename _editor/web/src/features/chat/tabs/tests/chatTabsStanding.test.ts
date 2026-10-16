@@ -4,13 +4,13 @@
 // way on /agents and another in the chat window.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
-import { agentStatusMeta } from "../../../agents/fleet/agentStatus";
-import { setAgents } from "../../../agents/fleet/useAgents-registry";
-import type { FleetAgent } from "../../../agents/fleet/useAgents-fleet";
-import { openAgentConversation } from "../../panel/useChat-reveal";
+import { agentStatusMeta } from "../../../../models/agent-status/agentStatus-meta";
+import { setAgents } from "../../../../models/fleet/useAgents-registry";
+import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
+import { openAgentConversation } from "../../../../models/conversations/panel/useChat-reveal";
 import { queryClient } from "../../../../lib/queryPersistence";
 import { router } from "../../../../router/index";
 import ChatTabList from "../ChatTabList.vue";

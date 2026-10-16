@@ -1,8 +1,9 @@
 import { type AnnounceRefusal, apiContract, type BootReport, HostedStatusSchema, type SetupReport } from "@intentic/api-contract";
 import { FREE_TIER, hostedTier } from "@intentic/constants";
 import type { Prisma } from "@intentic/prisma";
-import type { MemberRole } from "@intentic/sandbox-contract";
-import { GrantedRoleSchema, localHostname } from "@intentic/sandbox-contract";
+import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import { GrantedRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
+import { localHostname } from "@intentic/sandbox-contract/ids/hostnames";
 import { implement, ORPCError } from "@orpc/server";
 import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";

@@ -1,4 +1,4 @@
-import type { OauthAccount } from "@intentic/sandbox-contract";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 

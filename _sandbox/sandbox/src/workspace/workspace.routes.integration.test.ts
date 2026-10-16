@@ -9,7 +9,8 @@ import sharp from "sharp";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { createResidentEngine, type HealthRequest, type QueryRequest } from "@intentic/iq-engine";
 
-import { HEALTH_LIMIT, includeGlobs } from "@intentic/sandbox-contract";
+import { HEALTH_LIMIT } from "@intentic/sandbox-contract/schemas/codebase-health";
+import { includeGlobs } from "@intentic/sandbox-contract/policy/search-globs";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE } from "@intentic/scaffold";
@@ -32,7 +33,7 @@ import { clientFor, errorCode, proven } from "../harness/route-client.testing.js
 import { fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";
 import { fakeFiles } from "./workspace-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 
 // Workspace routes, driven over the daemon's HTTP surface exactly as the browser drives them; split out of
 // app.integration.test.ts, which every route collided in. Fakes and client are shared (route-services.testing.ts and

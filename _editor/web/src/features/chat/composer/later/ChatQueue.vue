@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import type { QueuedMessage } from "@intentic/sandbox-contract";
+import type { QueuedMessage } from "@intentic/sandbox-contract/schemas/agent";
 import { Button, Icon, type SwipeAction, SwipeRow, type TooltipValue, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { useNow } from "@intentic/ui/async";
 import { basename } from "@intentic/ui/path";
 import { computed } from "vue";
 import { attachmentPreview } from "../../drafts/attachmentPreviews";
-import { usePaneView } from "../../panel/useChat-view";
-import { pickUpWhen, wakesHeldUntil } from "../../run/endings/pickUp";
+import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
+import { pickUpWhen, wakesHeldUntil } from "../../../../models/conversations/endings/pickUp";
 import ChatImageThumb from "../../transcript/attachments/ChatImageThumb.vue";
 
 // What waits for this conversation's next turn and will go by itself: the daemon's queue, the same in every window, with

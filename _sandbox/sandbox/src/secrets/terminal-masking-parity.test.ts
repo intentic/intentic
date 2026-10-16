@@ -1,5 +1,6 @@
 import * as terminal from "@intentic/output-cleaners/cleaners";
-import { CREDENTIAL_ISSUER_PREFIXES, CREDENTIAL_ISSUERS, maskCredentialMaterial, SECRET_REFERENCE } from "@intentic/sandbox-contract";
+import { CREDENTIAL_ISSUER_PREFIXES, CREDENTIAL_ISSUERS, maskCredentialMaterial } from "@intentic/sandbox-contract/policy/credential-material";
+import { SECRET_REFERENCE } from "@intentic/sandbox-contract/schemas/needs";
 import { ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { capabilitySecretsDocument } from "../capabilities/credentials/secret-vault.js";
 import { keyringCopiesDocument, RELEASED_VALUES_FILE } from "./device/keyring-stores.js";

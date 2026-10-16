@@ -1,8 +1,8 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { Loop } from "@intentic/sandbox-contract";
+import type { Loop } from "@intentic/sandbox-contract/schemas/loops";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
-import { readRoleAnswer, type RoleAsk } from "../agent/models/role-answer.js";
+import { readRoleAnswer, type RoleAsk } from "../engines/role-answer.js";
 import {
     AgentDomainRefusedError, assertAgentExecutionContext, createAgentExecutionService,
     type AgentExecutionContext, type AgentExecutionService,

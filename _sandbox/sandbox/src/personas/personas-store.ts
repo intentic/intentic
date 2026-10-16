@@ -1,4 +1,4 @@
-import { type Persona, PersonaSchema } from "@intentic/sandbox-contract";
+import { type Persona, PersonaSchema } from "@intentic/sandbox-contract/schemas/personas";
 import { drop, nested, rename, retype } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import type { IdListStore } from "../store/id-list-file.js";

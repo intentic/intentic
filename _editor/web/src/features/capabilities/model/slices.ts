@@ -1,10 +1,10 @@
-import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { CAPABILITY_CATEGORIES, type CapabilityCatalogEntry, instancesOf } from "@intentic/capability-catalog";
 import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { CapabilityScope } from "../connect/CapabilityRail.vue";
-import { categoryHint, categoryLabel } from "./catalogCopy";
-import { CATEGORY_ICONS } from "./tiles";
+import { categoryHint, categoryLabel } from "../../../models/capabilities/catalogCopy";
+import { CATEGORY_ICONS } from "../../../models/capabilities/tiles";
 
 // The catalog's slices: every tile with the facts the rail, the grid and the Connected slice read, the rail's rows,
 // and which tiles a slice and a filter leave on screen. Pure over the tile list; the page reads the slice off the URL.

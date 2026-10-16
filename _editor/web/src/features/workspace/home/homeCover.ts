@@ -1,6 +1,6 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { parentDir } from "@intentic/ui/path";
-import { opensAsFolder } from "../files/archiveEntries";
+import { opensAsFolder } from "../../../models/workspace/files/archiveEntries";
 import { byNaturalName } from "./homeOrder";
 
 // The cover: one file name read in every folder (README.md, package.json). The explorer tree lists folders alone and

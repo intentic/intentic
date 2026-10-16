@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { isInside } from "@intentic/base/contained";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { execBounded } from "@intentic/base/process";
-import type { DeviceScopes, StageArtifact, StageArtifactResult } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { StageArtifact, StageArtifactResult } from "@intentic/sandbox-contract/schemas/device-artifacts";
 import { baseDir } from "../../../config.js";
 import { assertScope } from "../../policy.js";
 

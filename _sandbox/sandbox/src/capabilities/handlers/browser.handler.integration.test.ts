@@ -3,14 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { CapabilityContribution } from "@intentic/extension-manifest";
 import { hasSession, markConnected } from "../../browser/sessions/session-store.js";
 import { packFragment, readPack } from "../../image/packs.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/files/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
 import { browserUrls, contributionRegistry } from "../contributions.js";
-import type { ExtensionHost } from "../../extensions/installed-extensions.js";
+import type { ExtensionHost } from "../extension-inventory/installed-extensions.js";
 import { echoConfig, secretField } from "../summary.js";
 import { browserHandler } from "./browser.handler.js";
 

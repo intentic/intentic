@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { SEALED_PAGE_POLICY, pageThemeCss } from "@intentic/sandbox-contract";
+import { SEALED_PAGE_POLICY, pageThemeCss } from "@intentic/sandbox-contract/text/pages";
 import { Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
-import type { PageDraftView } from "../../session/turnClient";
+import type { PageDraftView } from "../../../../models/conversations/session/turnClient";
 import { usePageTheme } from "./pageTheme";
 
 // A page as the agent is still writing it, drawn as its markup streams in, the way prose is. The browser's own HTML

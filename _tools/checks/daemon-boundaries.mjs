@@ -2,12 +2,14 @@
 // Daemon boundary drift, read by pattern since this runs pre-install: a module binding the whole Services it hands to
 // nothing (NARROW_TAKERS); a value import reaching a higher layer than its own (lib/daemon-layers.mjs, baselined, may only
 // shrink: baselines/daemon-layers.json); a value import between subsystems of one layer closing a cycle of any length
-// (baselined, may only shrink: baselines/daemon-cycles.json); and a Claude Agent SDK value taken around its loader or a
+// (baselined, may only shrink: baselines/daemon-cycles.json); a value import between subunits of one unit layers.json's
+// `subunits` lists closing a cycle (baselined, may only shrink: baselines/daemon-subunits.json); and a Claude Agent SDK value taken around its loader or a
 // diagnostic report asked for.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { daemonGraphs } from "./lib/daemon-graph.mjs";
+import { DAEMON_SUBUNITS } from "./lib/daemon-layers.mjs";
 import { importsOf } from "./lib/imports.mjs";
 import { ratchet } from "./lib/ratchet.mjs";
 import { finish } from "./lib/report.mjs";
@@ -16,6 +18,7 @@ import { root } from "./lib/repo.mjs";
 const src = join(root, "_sandbox/sandbox/src");
 const BASELINE_PATH = "_tools/checks/baselines/daemon-cycles.json";
 const LAYERS_BASELINE_PATH = "_tools/checks/baselines/daemon-layers.json";
+const PARTS_BASELINE_PATH = "_tools/checks/baselines/daemon-subunits.json";
 
 // Modules that bind the whole Services and hand it to nothing: none are left, so a new one fails until it names its
 // seams.
@@ -101,7 +104,7 @@ const reportCalls = sources.flatMap(({ file, text }) =>
 /* ---- 3. layers, and cycles within one --------------------------------------------------------------------- */
 
 // Value imports only, root files excluded on both ends, route and testing modules as the surface above every layer.
-const { cycles, upward, upwardSites, unplaced, valueEdges } = daemonGraphs(src, sources);
+const { cycles, partCycles, upward, upwardSites, unplaced, valueEdges } = daemonGraphs(src, sources);
 const { nodes, cycleEdges, closes } = cycles;
 
 // Each key is one standing `from -> to`, counted in import sites. Any daemon source a land changed can lower one.
@@ -124,6 +127,16 @@ const addedCycles = newEdges
     .sort()
     .map((edge) => closes(cycleEdges.get(edge)));
 
+// Each key is one standing edge between two subunits of a unit, which only a change inside that unit can move.
+const unitOfPart = (edge) => DAEMON_SUBUNITS.find((unit) => edge.startsWith(`${unit}/`) || edge.startsWith(`${unit} `));
+const { grown: newPartEdges } = ratchet("daemon-boundaries", "daemon-subunits", new Map([...partCycles.cycleEdges.keys()].map((edge) => [edge, 1])), {
+    touchedBy: (edge, path) => path.startsWith(`_sandbox/sandbox/src/${unitOfPart(edge)}/`),
+});
+const addedPartCycles = newPartEdges
+    .map(({ key }) => key)
+    .sort()
+    .map((edge) => partCycles.closes(partCycles.cycleEdges.get(edge)));
+
 const cycleSubsystems = new Set([...cycleEdges.values()].flat());
 const upwardSiteCount = [...upward.values()].reduce((sum, count) => sum + count, 0);
 finish(
@@ -145,11 +158,15 @@ finish(
             addedCycles,
         ],
         [
+            `A value import between subunits of one daemon unit (${DAEMON_SUBUNITS.join(", ")}) closes a cycle ${PARTS_BASELINE_PATH} does not hold (paths under _sandbox/sandbox/src/). Reach one way through a type-only import, a port the other part fills, or a module both import`,
+            addedPartCycles,
+        ],
+        [
             `Claude Agent SDK code reached around engines/claude-sdk.ts, or a diagnostic report asked for (paths under _sandbox/sandbox/src/). Read the SDK through sdk(), which names the CLI binary on every session: a report waits for every worker thread, and held the loop 8 s at boot`,
             [...sdkBypasses, ...reportCalls],
         ],
     ],
     [
-        `daemon-boundaries: ${narrowTakers.size} narrow takers of Services, ${upwardSiteCount} upward imports across ${upward.size} edges and ${cycleEdges.size} same-layer edges closing cycles among ${cycleSubsystems.size} subsystems, none new (${nodes.length} subsystems in cycles' reach, ${valueEdges} value imports between subsystems)`,
+        `daemon-boundaries: ${narrowTakers.size} narrow takers of Services, ${upwardSiteCount} upward imports across ${upward.size} edges and ${cycleEdges.size} same-layer edges closing cycles among ${cycleSubsystems.size} subsystems and ${partCycles.cycleEdges.size} edges closing cycles between the subunits of ${DAEMON_SUBUNITS.join(", ")}, none new (${nodes.length} subsystems in cycles' reach, ${valueEdges} value imports between subsystems)`,
     ],
 );

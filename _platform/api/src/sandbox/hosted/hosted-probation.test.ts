@@ -1,6 +1,6 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type FakeFly, installFakeFly } from "@intentic/testing/fly-fake";
-import { UPDATE_PROBATION } from "@intentic/sandbox-contract";
+import { UPDATE_PROBATION } from "@intentic/sandbox-contract/state/update-probation";
 import type { Config } from "../../config.js";
 import { MINUTE_MS } from "../../durations.js";
 import { fakeHostedAppLock, healthAnswer, machineAnswers, NO_HEALTH } from "../../testing.js";
@@ -154,7 +154,7 @@ describe(`a look at a machine on probation`, () => {
         for (const answers of [JOURNAL_FAILED, LOOPING]) {
             seeded(`started`, 60, answers);
             const { prisma } = prismaOf();
-            // eslint-disable-next-line no-await-in-loop -- one machine at a time
+            // one machine at a time
             const outcome = await watchHostedMachine(prisma, config, logger, candidate(60), NOW);
             expect(outcome.kind).toBe(`rolled-back`);
             unstubAllGlobals();

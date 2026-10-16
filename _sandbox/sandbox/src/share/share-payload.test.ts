@@ -1,4 +1,5 @@
-import { CREDENTIAL_MASK as MASK, holdsCredentialToken, type TranscriptRow } from "@intentic/sandbox-contract";
+import { CREDENTIAL_MASK as MASK, holdsCredentialToken } from "@intentic/sandbox-contract/policy/credential-material";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { sharePage } from "./share-page.js";
 import { redactSecrets, shareTranscript } from "./share-payload.js";
 

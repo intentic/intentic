@@ -5,7 +5,8 @@
 // jsdom: mounts the component tree and reads rendered text.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { type Device, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
+import { SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { setDaemonRoutes } from "../../../../client/sandbox/useDaemonRoutes";
 import { resetContractFreshness } from "../../../../client/sandbox/contractFreshness";
@@ -13,7 +14,7 @@ import { IconStub } from "@intentic/ui/testing";
 
 // Sandbox slug the printed restart command names, so it targets this machine's sandbox specifically, and the checkout
 // the dev image was built from, which is the folder the restart runs in.
-jest.mock(`../../environment/useEnvironment`, () => ({
+jest.mock(`../../../../models/sandbox/environment/useEnvironment`, () => ({
     useEnvironment: () => ({ slug: ref(`sandbox-abc123`), localImage: ref({ base: `intentic-sandbox:dev`, root: `/home/ada/intentic` }) }),
 }));
 
@@ -24,7 +25,7 @@ const severingCalls: string[] = [];
 // The daemon's device list, which the card's fallback reads to find a machine already talking to this sandbox:
 // empty stands for "nothing to offer", where only the command remains.
 const fleet = ref<Device[]>([]);
-jest.mock(`../../devices/useDevices`, () => ({
+jest.mock(`../../../../models/sandbox/devices/useDevices`, () => ({
     useHostHolding: () => hostId,
     useDevices: () => ({ devices: fleet, readAt: ref(0), error: ref(undefined), isLoading: ref(false), refetch: jest.fn() }),
     runSeveringDeviceCommand: (id: string, command: string) => {
@@ -37,8 +38,8 @@ let heldRestart: Promise<undefined> | undefined;
 
 const { default: SandboxBehindCard } = await import("./SandboxBehindCard.vue");
 const { forgetOperations } = await import("../../../../workbench/operations/operations");
-const { forgetRestarts, restartExpected } = await import("../../live/sandboxRestart");
-const { activeSandboxId } = await import("../../../../lib/activeSandbox");
+const { forgetRestarts, restartExpected } = await import("../../../../models/sandbox/live/sandboxRestart");
+const { activeSandboxId } = await import("../../../../app/storage/activeSandbox");
 
 // Baseline daemon level, plus the two ways it can diverge: a missing route, or one with a different shape.
 const LEVEL = [...SANDBOX_ROUTE_NAMES];

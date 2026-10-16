@@ -1,11 +1,11 @@
 import { t } from "@intentic/ui/i18n";
 import type { AddCapabilityInput, CapabilityCatalogEntry } from "@intentic/capability-catalog";
-import type { CapabilityProbe } from "@intentic/sandbox-contract";
+import type { CapabilityProbe } from "@intentic/sandbox-contract/schemas/capabilities";
 import { computed, getCurrentScope, onScopeDispose, type Ref } from "vue";
 import { useOperation } from "../../workbench/operations/operations";
 import type { CapabilityForm } from "./capabilityForm";
-import { probeCapability } from "./connect/useCapabilities";
-import { buildConfig } from "./model/form";
+import { probeCapability } from "../../models/capabilities/useCapabilities";
+import { buildConfig } from "../../models/capabilities/form";
 
 // The form's Test: lets the daemon dial the service the way the connection would (capabilities/probe.ts) and shows its
 // own words back. Offered only where a check exists; `checked: false` retires the button rather than claiming failure.

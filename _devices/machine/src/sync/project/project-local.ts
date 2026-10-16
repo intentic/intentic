@@ -5,6 +5,7 @@ import { basename, dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { errnoCode, undefinedIfMissing } from "@intentic/base/errors";
 import { renameOver, writeFileAtomic } from "@intentic/base/fs";
+import { parseJsonWith } from "@intentic/base/json";
 import { z } from "zod";
 import { type FileStamp, isPortablePath, type Listed } from "./project-files.js";
 
@@ -85,14 +86,7 @@ export const readListingRecord = async (path: string, localDir: string, remoteDi
     return { files: new Map(files), agreed: new Map(Object.entries(parsed.agreed)) };
 };
 
-const parseRecord = (raw: string): z.infer<typeof RecordSchema> | undefined => {
-    try {
-        return RecordSchema.safeParse(JSON.parse(raw)).data;
-    } catch {
-        // allow(silent-catch): a torn record is an empty one (above).
-        return undefined;
-    }
-};
+const parseRecord = (raw: string): z.infer<typeof RecordSchema> | undefined => parseJsonWith(raw, RecordSchema);
 
 export const writeListingRecord = async (path: string, localDir: string, remoteDir: string, record: ListingRecord): Promise<void> => {
     const files = Object.fromEntries([...record.files].map(([file, held]) => [file, [held.size, held.mtimeMs, held.ctimeMs, held.hash]]));
@@ -164,11 +158,11 @@ export const walkLocal = async (walk: LocalWalk): Promise<LocalListing> => {
                 continue;
             }
             if (entry.isDirectory()) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- depth-first, one directory at a time
+                // depth-first, one directory at a time
                 await visit(path);
                 continue;
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one file at a time keeps a large folder's walk bounded
+            // one file at a time keeps a large folder's walk bounded
             const listed = await entryOf(path, entry.isFile());
             if (listed !== undefined) {
                 listing.set(path, listed);
@@ -191,7 +185,7 @@ export const localTarget = async (root: string, path: string): Promise<string> =
     let target = root;
     for (const [at, part] of parts.entries()) {
         target = join(target, part);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- each step is read before the next is trusted
+        // each step is read before the next is trusted
         const info = await lstat(target).catch(undefinedIfMissing);
         if (info === undefined) {
             break;
@@ -258,10 +252,10 @@ const mkdirPlain = async (root: string, relative: string): Promise<void> => {
     let at = root;
     for (const part of relative.split("/")) {
         at = join(at, part);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- each level exists before the next is made in it
+        // each level exists before the next is made in it
         const info = await lstat(at).catch(undefinedIfMissing);
         if (info === undefined) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             await mkdirOne(at);
         } else if (info.isSymbolicLink() || !info.isDirectory()) {
             throw new Error(`${relative} is not a plain folder here`);
@@ -285,7 +279,7 @@ export const removeFile = async (root: string, path: string): Promise<void> => {
     await rm(await localTarget(root, path));
     const parts = path.split("/").slice(0, -1);
     while (parts.length > 0) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- innermost first, stopping at the first that holds anything
+        // innermost first, stopping at the first that holds anything
         const emptied = await rmdir(join(root, ...parts)).then(
             () => true,
             () => false,

@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { type AccountFix, providerLabel } from "@intentic/sandbox-contract";
+import type { AccountFix } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { Card, SearchBar, SkeletonSnapshot, type Tip, ui, vSkeletonSource } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
-import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
-import { accountsLoaded, providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
-import { refreshConnections } from "../../chat/accounts/useChat-accounts";
+import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
+import { accountsLoaded, providerAccounts, translatorAccounts } from "../../../models/providers/providerAccounts";
+import { refreshConnections } from "../../../models/conversations/accounts/useChat-accounts";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import {
     accountFixLabel,
@@ -30,7 +31,7 @@ import {
     poolResetNote,
     remainingFigure,
     usageTone,
-} from "../../chat/session/usageStatus";
+} from "../../../models/providers/usageStatus";
 import { useT } from "@intentic/ui/i18n";
 
 // How much of your plans is left, the section that must scale to a 36-connection fleet rather than one row per

@@ -1,7 +1,8 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PhoneFacts, RelayChannel } from "@intentic/sandbox-contract";
+import type { PhoneFacts } from "@intentic/sandbox-contract/schemas/phone";
+import type { RelayChannel } from "@intentic/sandbox-contract/schemas/push";
 import { filePhoneWake, WAKE_NOTIFICATION } from "./phone-wake.js";
 
 /* The wake channels the editor registers, as the sandbox keeps and uses them. */

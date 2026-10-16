@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { t } from "@intentic/ui/i18n";
 import { clipboardOf } from "@intentic/ui";
 import { basename, joinPath, parentDir } from "@intentic/ui/path";
@@ -11,7 +11,7 @@ import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { VERB_ROUTES } from "../entryMenu";
 import { movableInto, pastePairs } from "../transfer/explorerPaste";
 import { beginEntryDrag, useEntryDrag } from "../transfer/useEntryDrag";
-import type { useWorkspaceTree } from "../useWorkspaceTree";
+import type { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
 import { isUnlisted } from "./treeRows";
 import type { useInlineEdit } from "./useTreeEdits";
 import type { useTreeRules } from "./useTreeRules";

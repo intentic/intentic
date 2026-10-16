@@ -1,4 +1,5 @@
-import type { AgentEvent, ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind } from "@intentic/sandbox-contract/events/requests";
 import { toolCategoryOf } from "@intentic/agent-context/tool-calls";
 import { opt } from "../../opt.js";
 import type { PlanPhaseResult } from "./plan-mode.js";
@@ -80,7 +81,7 @@ export const toolCallOpened = (call: {
     readonly target?: string | undefined;
     readonly locations?: ToolCallLocation[] | undefined;
     readonly content?: ToolCallContent[] | undefined;
-    // The call's input as bounded JSON text, for a call with no target (agent/tools/tool-calls.ts `toolInput`).
+    // The call's input as bounded JSON text, for a call with no target (sessions/vocabulary/tool-calls.ts `toolInput`).
     readonly input?: string | undefined;
     readonly parentToolUseId?: string | undefined;
 }): Extract<AgentEvent, { kind: "tool_call" }> => ({

@@ -1,4 +1,5 @@
-import { EDGE_VERDICT_HEADER, edgeVerdictOf, type EdgeVerdict } from "@intentic/sandbox-contract";
+import { EDGE_VERDICT_HEADER, edgeVerdictOf } from "@intentic/sandbox-contract/protocol/edge-verdict";
+import type { EdgeVerdict } from "@intentic/sandbox-contract/netd/generated/browser-wire";
 
 // What Intentic's edge last said about each sandbox, kept where the connection machine can reach it. The edge is
 // the only party that can tell "this box is not dialled in" from "your network is down", and it can only say so on a

@@ -2,7 +2,10 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
-import { type AgentEvent, type AgentTurn, LOOP_DIR, type Workflow } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import { LOOP_DIR } from "@intentic/sandbox-contract/schemas/loops";
+import type { Workflow } from "@intentic/sandbox-contract/schemas/workflows";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { memoryDoorTokens } from "../auth/tokens/door-tokens.js";
@@ -13,7 +16,9 @@ import { createGateRoute, settledWithin } from "./gate.routes.js";
 import { PAYLOAD_MAX } from "../automations/scheduler.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
-import { drivenBy, memoryFleet, unpinnedRouting } from "../testing.js";
+import { drivenBy } from "../seams/turn-starter.testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
+import { unpinnedRouting } from "../agent/run/turn/turn-routing.testing.js";
 import { createDomainEvents } from "../seams/domain-events.js";
 
 // Gate route end to end: an identity-less runner posts, waits, and is told whether to ship. Each test uses its own

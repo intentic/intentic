@@ -1,11 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { chmodSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { access, chmod, chown, mkdir, open, rename, rm } from "node:fs/promises";
+import { chmodSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { access, chmod, chown, mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { keyedLock } from "../async.js";
-import { errnoCode } from "../errors.js";
+import { errnoCode, undefinedIfMissing } from "../errors.js";
+import { parseJsonWith, type SafeParser } from "../json.js";
 
 // Reachability, not shape: `access`, so a path this process cannot reach answers false, the same as a missing one.
 export const pathExists = async (path: string): Promise<boolean> =>
@@ -24,6 +25,24 @@ export const pathPresence = async (path: string): Promise<"present" | "absent" |
     } catch (error) {
         return errnoCode(error) === "ENOENT" ? "absent" : "unknown";
     }
+};
+
+// The file's text, or undefined when it or a directory on the way is not there; EACCES, EISDIR and EIO still throw.
+export const readTextIfExists = async (path: string): Promise<string | undefined> => await readFile(path, "utf8").catch(undefinedIfMissing);
+
+// readTextIfExists for a caller that cannot await.
+export const readTextIfExistsSync = (path: string): string | undefined => {
+    try {
+        return readFileSync(path, "utf8");
+    } catch (error) {
+        return undefinedIfMissing(error);
+    }
+};
+
+// The value `schema` reads out of the file, or undefined when it is missing, not JSON or refused; other failures throw.
+export const readJsonIfExists = async <T>(path: string, schema: SafeParser<T>): Promise<T | undefined> => {
+    const text = await readTextIfExists(path);
+    return text === undefined ? undefined : parseJsonWith(text, schema);
 };
 
 // Keyed by resolved path, so two handles on one file share one queue; the lock forgets a path once its queue drains.
@@ -48,7 +67,7 @@ export const renameOver = async (from: string, to: string): Promise<void> => {
             if (process.platform !== "win32" || attempt >= RENAME_ATTEMPTS || !TRANSIENT_RENAME.has((error as NodeJS.ErrnoException).code ?? "")) {
                 throw error;
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a bounded retry of one rename, serial by definition
+            // a bounded retry of one rename, serial by definition
             await sleep(RENAME_RETRY_MS);
         }
     }
@@ -67,7 +86,7 @@ type FileHandle = Awaited<ReturnType<typeof open>>;
 // A write call may take only part of its buffer; nothing is published until every byte landed.
 const writeAll = async (handle: FileHandle, bytes: Uint8Array): Promise<void> => {
     for (let offset = 0; offset < bytes.byteLength; ) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- each write resumes where the previous one stopped
+        // each write resumes where the previous one stopped
         const { bytesWritten } = await handle.write(bytes, offset, bytes.byteLength - offset);
         if (bytesWritten === 0) {
             throw new Error("file write made no progress");
@@ -128,7 +147,7 @@ export const syncDirectories = async (dirs: Iterable<string>, options: SyncDirec
         return;
     }
     for (const directory of directoriesToSync(dirs, options.upTo)) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- children are flushed before their parents, one handle at a time
+        // children are flushed before their parents, one handle at a time
         await syncOne(directory);
     }
 };
@@ -193,7 +212,7 @@ export const writeChunksAtomic = async (path: string, chunks: Iterable<Uint8Arra
         path,
         async (handle) => {
             for (const chunk of chunks) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- chunks go down in order
+                // chunks go down in order
                 await writeAll(handle, chunk);
             }
         },

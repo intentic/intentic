@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { methods } from "@agentclientprotocol/sdk";
-import type { Model } from "@intentic/sandbox-contract";
+import type { Model } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { z } from "zod";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import { opt } from "../../opt.js";
@@ -80,7 +80,7 @@ export const offeredModels = async (
         const efforts =
             choice.value === models.current
                 ? effortsOf(options)
-                : // oxlint-disable-next-line eslint/no-await-in-loop -- one session, switched model by model
+                : // one session, switched model by model
                   await connection.agent
                       .request(methods.agent.session.setConfigOption, { sessionId, configId: models.configId, value: choice.value })
                       .then(

@@ -1,4 +1,4 @@
-import type { PackageModules } from "@intentic/sandbox-contract";
+import type { PackageModules } from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
 import { cyclesAmong, stackOf, unitLinks } from "./layerModel";
 
 const link = (from: string, to: string, imports = 1) => ({ from, to, imports, sites: [`${from}/x.ts:1`] });

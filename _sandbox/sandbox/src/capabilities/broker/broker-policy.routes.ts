@@ -1,11 +1,12 @@
-import { type CredentialPolicy, secretsContract } from "@intentic/sandbox-contract";
+import type { CredentialPolicy } from "@intentic/sandbox-contract/schemas/secrets";
+import { secretsContract } from "@intentic/sandbox-contract/contracts/secrets.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
 import { isOwnerBearer } from "../../auth/owner-gates.js";
 import { contributionFor, contributionRegistry } from "../contributions.js";
 import { loadPrivateKey } from "../credentials/ssh-keys.js";
 import type { Services } from "../../composition.js";
-import type { ExtensionHost } from "../../extensions/installed-extensions.js";
+import type { ExtensionHost } from "../extension-inventory/installed-extensions.js";
 import type { CredentialPolicyStore } from "./broker-policy.js";
 import { brokerOf } from "./broker-routes.js";
 

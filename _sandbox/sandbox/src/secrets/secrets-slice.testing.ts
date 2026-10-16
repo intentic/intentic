@@ -1,6 +1,6 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { CredentialGate, CredentialGateKind, SecretProgramGuard } from "@intentic/sandbox-contract";
+import type { CredentialGate, CredentialGateKind, SecretProgramGuard } from "@intentic/sandbox-contract/schemas/secrets";
 import { createCredentialGrants } from "./credential-grants.js";
 import { REACH_ALL } from "./credential-reach.js";
 import { createDeviceSecrets } from "./device/device-secrets.js";

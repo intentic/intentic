@@ -5,7 +5,7 @@ import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { createApp } from "../app.js";
 import { clientFor } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 import { refreshReleaseNotes } from "./updates/release-notes.js";
 import { refreshLatestVersion } from "./updates/version-check.js";
 

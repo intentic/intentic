@@ -3,15 +3,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FIELD_NOTES_FILE } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
-import { type CredentialGate, type Persona, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
-import { conversationAfter, testConfig } from "../../../testing.js";
+import { conversationAfter } from "../../../conversations/registry/agents-store.testing.js";
+import { testConfig } from "../../../env.config.testing.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { base, budgetOn, context, memoryReading, servicesWith, turn } from "../turn/turn-plan.testing.js";
-import { LANDING_CHECKS_NOTE_TITLE } from "../../prompt/checks-note.js";
 import { type AdmittedTurnFacts, gatherTurnFacts, type TurnFacts } from "./turn-facts.js";
+import { LANDING_CHECKS_NOTE_TITLE } from "../../../sessions/vocabulary/prompt-envelope.js";
 
 // Which reads a turn pays for, named by the `turn.plan.*` span each is timed under: diagnostics read those names, and
 // a read skipped for a fact the turn already carries must stay skipped. What the facts decide is turn-decision.test.ts's.

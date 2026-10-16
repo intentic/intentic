@@ -1,9 +1,9 @@
 import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp, defineComponent, h, nextTick, ref, shallowRef } from "vue";
-import type { FleetLane } from "../../../fleet/agentStatus";
-import { NO_ATTENTION } from "../../../fleet/agentStatus";
-import type { FleetAgent } from "../../../fleet/useAgents-fleet";
+import type { FleetLane } from "../../../../../models/agent-status/agentStatus-lanes";
+import { NO_ATTENTION } from "../../../../../models/agent-status/agentStatus-lanes";
+import type { FleetAgent } from "../../../../../models/fleet/useAgents-fleet";
 import { FOLD_MS } from "@intentic/ui/motion";
 import { cardMove, laneHolding, useLaneMotion } from "../laneMotion";
 

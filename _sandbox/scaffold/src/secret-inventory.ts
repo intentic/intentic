@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { collectSecretUsage, type DesiredStateGraph } from "@intentic/graph";
-import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
+import type { SecretInventoryEntry } from "@intentic/sandbox-contract/schemas/secrets";
 import { ARTIFACT_FILE } from "./workspace-layout.js";
 
 const ENV_FILE = ".env";

@@ -1,5 +1,5 @@
 import { stubGlobal } from "@intentic/testing/bun";
-import type { WebchatMessage } from "@intentic/sandbox-contract";
+import type { WebchatMessage } from "@intentic/sandbox-contract/schemas/automations";
 import { EmbedError } from "@intentic/sandbox-contract/embed";
 import { fetchPending, sendMessage } from "./transport.js";
 

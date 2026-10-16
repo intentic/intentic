@@ -1,5 +1,5 @@
 // Pins what the scratch pad's header says a conversation is at: the last words someone said, as plain text.
-import type { TranscriptRow } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { lastWords, plainWords } from "./lastWords";
 
 const rows = (...list: unknown[]): TranscriptRow[] => list as TranscriptRow[];

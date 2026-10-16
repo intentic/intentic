@@ -1,4 +1,4 @@
-import type { ManifestProblemReport, ManifestRepair } from "@intentic/sandbox-contract";
+import type { ManifestProblemReport, ManifestRepair } from "@intentic/sandbox-contract/schemas/system";
 import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";

@@ -1,6 +1,6 @@
 // THE LEDGER BEHIND EVERY TURNING MARK ABOUT A MACHINE. What is pinned here is the part no component can hold: a run
 // outlives the page that started it, an agent run outlives its own call, and only a reading of the machine ends one.
-import type { Device } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 import {
     AGENT_RETURN_DEADLINE_MS,
     agentInFlight,

@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { MachineIdSchema } from "@intentic/sandbox-contract";
+import { writeFileAtomicSync } from "@intentic/base/fs";
+import { MachineIdSchema } from "@intentic/sandbox-contract/schemas/hosts";
 import { baseDir } from "./config.js";
 
 // WHICH COMPUTER THIS IS, minted once and kept: the id a sandbox joins this machine's enrollments, sync enrollment and
@@ -29,9 +30,7 @@ const read = (path: string): string | undefined => {
 // Temp-then-rename, so a reader never sees half an id.
 const write = (path: string, id: string): void => {
     mkdirSync(dirname(path), { recursive: true });
-    const part = `${path}.part`;
-    writeFileSync(part, `${id}\n`, { mode: 0o644 });
-    renameSync(part, path);
+    writeFileAtomicSync(path, `${id}\n`, 0o644);
 };
 
 // This machine's id. Synchronous on purpose: the Windows side spawns its distros' agents from a synchronous seam, and

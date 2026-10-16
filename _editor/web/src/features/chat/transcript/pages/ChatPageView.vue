@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { Page } from "@intentic/sandbox-contract";
+import type { Page } from "@intentic/sandbox-contract/events/requests";
 import { ConfirmDialog, Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { useChatSurface } from "../../tools/chatToolSurface";
+import { useChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
 import ChatPageFrame from "./ChatPageFrame.vue";
 import { usePageActions } from "./usePageActions";
 

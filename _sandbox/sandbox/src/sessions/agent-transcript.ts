@@ -1,5 +1,6 @@
-import { fitNestedTool, fitPageRow, type TranscriptRow, type TranscriptTool } from "@intentic/sandbox-contract";
-import type { TurnCheckpoint, TurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
+import { fitNestedTool, fitPageRow } from "@intentic/sandbox-contract/text/transcript-page";
+import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import type { TurnCheckpoint, TurnCheckpoints } from "../store/journals/turn-checkpoints.js";
 import { type SpokenLine, spokenLinesOf } from "./transcript-search.js";
 import { type TranscriptPage, type TranscriptRecord, type TranscriptWindow, windowOf } from "./transcript-record.js";
 

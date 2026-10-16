@@ -1,4 +1,4 @@
-import type { AuditActor, AuditRecord, AuditVerify } from "@intentic/sandbox-contract";
+import type { AuditActor, AuditRecord, AuditVerify } from "@intentic/sandbox-contract/schemas/audit";
 import type { IconName } from "@intentic/ui";
 import { formatDayHeading } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";

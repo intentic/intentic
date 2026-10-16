@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import type { EngineRow, EnginesView } from "@intentic/sandbox-contract";
+import type { EngineRow, EnginesView } from "@intentic/sandbox-contract/schemas/engines";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { waitFor, stubGlobal, mocked, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";

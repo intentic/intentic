@@ -1,4 +1,4 @@
-import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract";
+import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract/schemas/activity";
 import { formatDayMonth } from "@intentic/extension-ui/format";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";

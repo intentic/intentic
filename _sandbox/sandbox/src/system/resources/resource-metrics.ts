@@ -3,7 +3,7 @@ import { loadavg } from "node:os";
 import { join } from "node:path";
 import { monitorEventLoopDelay, performance, PerformanceObserver } from "node:perf_hooks";
 import { getHeapSpaceStatistics, getHeapStatistics } from "node:v8";
-import { PROCESS_ROLES, type ProcessRole } from "@intentic/sandbox-contract";
+import { PROCESS_ROLES, type ProcessRole } from "@intentic/sandbox-contract/schemas/metrics";
 import { startPeriodic } from "@intentic/base/async";
 import { gitRunCallers, gitRunCounts, gitSpawnStats } from "@intentic/base/git";
 import type { Logger } from "pino";

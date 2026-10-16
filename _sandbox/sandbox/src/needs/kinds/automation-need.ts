@@ -1,4 +1,5 @@
-import type { Automation, AutomationFirstCheck, AutomationNeed, Need, NeedAsk, NeedSubject } from "@intentic/sandbox-contract";
+import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
+import type { AutomationFirstCheck, AutomationNeed, Need, NeedAsk, NeedSubject } from "@intentic/sandbox-contract/schemas/needs";
 import { ORPCError } from "@orpc/server";
 import type { AskContext, Met, NeedKindHandler, Resolved } from "../need-kinds.js";
 

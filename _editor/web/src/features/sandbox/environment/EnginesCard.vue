@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { EngineRow } from "@intentic/sandbox-contract";
+import type { EngineRow } from "@intentic/sandbox-contract/schemas/engines";
 import {
     BrandMark,
     Button,

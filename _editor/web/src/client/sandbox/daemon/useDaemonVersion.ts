@@ -1,5 +1,6 @@
 import { sandboxRef } from "@intentic/extension-api";
-import { daemonBelowFloor, daemonVersionOfBuild, type Hello, OLDEST_SUPPORTED_DAEMON } from "@intentic/sandbox-contract";
+import { daemonBelowFloor, daemonVersionOfBuild, OLDEST_SUPPORTED_DAEMON } from "@intentic/sandbox-contract/state/daemon-floor";
+import type { Hello } from "@intentic/sandbox-contract/events/system-events";
 import { computed } from "vue";
 
 // Which release the active sandbox's daemon runs, read off the head of its /events hello's `build`, and whether that is

@@ -1,11 +1,11 @@
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { reactive, type Ref, ref } from "vue";
-import { collectDroppedFiles } from "../../workspace/explorer/transfer/dropEntries";
+import { collectDroppedFiles } from "../../../models/workspace/tree/dropEntries";
 import { forgetMedia, type MediaKind, rememberMedia } from "./attachmentPreviews";
 import { sandboxRawUpload } from "../../../client/sandbox/sandboxRawUpload";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
-import type { ChatAttachment } from "../transcript/transcript";
+import type { ChatAttachment } from "../../../models/conversations/transcript/transcript";
 import { uuid } from "../../../lib/uuid";
 
 // Files staged for the next turn: the composer chips, arriving via paperclip dialog, paste, or drop. Per-tab like the

@@ -1,5 +1,6 @@
 import { extname } from "node:path";
-import type { AgentEvent, ToolCallStatus } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { ToolCallStatus } from "@intentic/sandbox-contract/events/requests";
 
 // Records which rendered surfaces a turn edited and whether it observed one afterward, mirroring the proof ledger's
 // after-rule. What it finds is recorded on the conversation's card (AgentSummary.proof, turn-settlement.ts), never sent

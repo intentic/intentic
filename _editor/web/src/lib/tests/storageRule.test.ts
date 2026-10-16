@@ -2,11 +2,11 @@
 // rule is one predicate; what's pinned is that the three heavy reads actually carry the mark.
 import "@intentic/testing/dom";
 import { mirrors, UNPERSISTED } from "../queryPersistence";
-import { agentTranscriptKey } from "../../features/chat/transcript/agentTranscript";
+import { agentTranscriptKey } from "../../models/conversations/transcript/agentTranscript";
 import { agentFileDiffKey } from "../../features/agents/review/useAgentChanges";
-import { changesKey, fileDiffKey } from "../../features/workspace/changes/useChanges";
-import { sharedWorkspaceTreeKey, workspaceTreeKey } from "../../features/workspace/health/workspaceTreeKey";
-import { capabilitiesKey } from "../../features/capabilities/connect/useCapabilities";
+import { changesKey, fileDiffKey } from "../../models/changes/useChanges";
+import { sharedWorkspaceTreeKey, workspaceTreeKey } from "../../models/workspace/tree/workspaceTreeKey";
+import { capabilitiesKey } from "../../models/capabilities/useCapabilities";
 
 // The cache mirrors to disk whole, one clone per write, so an unmarked heavy entry taxes every other write and reads as
 // random stuttering. A background loader now fills it unpredictably, worth testing rather than only commenting.

@@ -1,4 +1,4 @@
-import type { WorkspaceModule, WorkspaceModules } from "@intentic/sandbox-contract";
+import type { WorkspaceModule, WorkspaceModules } from "@intentic/sandbox-contract/schemas/git/git";
 import { computed } from "vue";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { rpcKey } from "../../../lib/queryKeys";

@@ -5,7 +5,10 @@ import { waitFor, SETTLES } from "@intentic/testing/bun";
 
 import { createApp } from "../../app.js";
 
-import { type AgentEvent, RESUME_NOTES, type TranscriptRow, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { RESUME_NOTES } from "@intentic/sandbox-contract/events/resume";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { experimentArm } from "@intentic/agent-context/experiments";
 import { clientFor, collect, errorCode } from "../../harness/route-client.testing.js";
 import { gitOut, realCheckout } from "../../harness/route-fakes.testing.js";

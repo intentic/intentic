@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Services } from "../../composition.js";
 import { connectedTranslatorProviders, TRANSLATOR_BINARY_MISSING } from "../../agent/providers/translator.js";
 import { engineReady } from "../../engines/engine-resolve.js";

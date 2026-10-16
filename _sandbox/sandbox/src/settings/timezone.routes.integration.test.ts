@@ -1,4 +1,5 @@
-import { type SandboxSettings, SandboxSettingsSchema, ZoneSchema } from "@intentic/sandbox-contract";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import { ZoneSchema } from "@intentic/sandbox-contract/time/zone";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
 import type { Services } from "../composition.js";

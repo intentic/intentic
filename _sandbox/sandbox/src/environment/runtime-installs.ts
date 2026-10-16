@@ -6,7 +6,7 @@ import {
     type RuntimeInstallKind,
     type RuntimeInstallsFile,
     RuntimeInstallsFileSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/environment";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";

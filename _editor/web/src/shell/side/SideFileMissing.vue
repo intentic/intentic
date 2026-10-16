@@ -3,7 +3,7 @@ import { Button, EmptyState, Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { basename, parentDir } from "@intentic/ui/path";
 import { computed, ref, watch } from "vue";
-import { lookUpWorkspaceRef } from "../../features/workspace/files/refs/resolveFileRef";
+import { lookUpWorkspaceRef } from "../../models/workspace/files/resolveFileRef";
 import { useScopeTitle } from "../../features/workspace/health/scopeTitle";
 import { searchInQuickOpen, useQuickOpen } from "../../workbench/commands/useQuickOpen";
 import { FILE_SIDE_VIEW, fileSideInput, noteArrival } from "../../workbench/side/sideFileInput";

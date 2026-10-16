@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { SkillDraft, SkillSummary } from "@intentic/sandbox-contract";
+import type { SkillDraft, SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
 import { DisclosureRow, Row, RowGroup, RowNote, SearchBar, SkeletonRows, SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
 import { computed, ref } from "vue";
-import { useCapabilities } from "../../../capabilities/connect/useCapabilities";
-import { useExtensions } from "../../../extensions/useExtensions";
+import { useCapabilities } from "../../../../models/capabilities/useCapabilities";
+import { useExtensions } from "../../../../models/extensions/useExtensions";
 import { useSandboxOutline } from "../../overview/useSandboxOutline";
 import { useSkills } from "../../environment/useSkills";
 import SkillForm from "./SkillForm.vue";

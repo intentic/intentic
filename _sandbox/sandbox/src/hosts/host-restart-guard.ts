@@ -1,11 +1,5 @@
-import {
-    mayReachSandbox,
-    type OwnSandbox,
-    ProgramArgumentsSchema,
-    type ProgramReading,
-    SANDBOX_POWER_DOING,
-    sandboxPowerCommands,
-} from "@intentic/sandbox-contract";
+import { mayReachSandbox, type OwnSandbox, SANDBOX_POWER_DOING, sandboxPowerCommands } from "@intentic/sandbox-contract/policy/sandbox-power";
+import { ProgramArgumentsSchema, type ProgramReading } from "@intentic/sandbox-contract/policy/device-programs";
 import { z } from "zod";
 import type { Services } from "../composition.js";
 import { raiseRequest } from "../guard/card-offers.js";

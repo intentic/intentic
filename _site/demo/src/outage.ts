@@ -1,5 +1,7 @@
 import type { HostReport, SandboxHosted } from "@intentic/api-contract";
-import { EDGE_VERDICT_HEADER, type SandboxVitals, VITALS_PATH } from "@intentic/sandbox-contract";
+import { EDGE_VERDICT_HEADER } from "@intentic/sandbox-contract/protocol/edge-verdict";
+import type { SandboxVitals } from "@intentic/sandbox-contract/netd/generated/browser-wire";
+import { VITALS_PATH } from "@intentic/sandbox-contract/protocol/vitals";
 import { type DemoHandler, json } from "./transport";
 
 // WHICH OUTAGE this page load acts out, from `?outage=`, sticky per tab like the mode: the way to look at the

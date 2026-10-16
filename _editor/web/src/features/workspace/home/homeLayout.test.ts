@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { bandOfIndex, homeLayout, rowIndexOf } from "./homeLayout";
 import type { HomeGroup } from "./homeOrder";
 

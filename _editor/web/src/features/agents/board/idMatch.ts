@@ -1,4 +1,4 @@
-import type { FleetAgent } from "../fleet/useAgents-fleet";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 
 // The filter's id tier: a query that is one token is read as a handle as well as words, since that is the shape of every
 // id (`crisp-basin-z86j`), branch (`agent/crisp-basin-z86j`), session id (a UUID) and link

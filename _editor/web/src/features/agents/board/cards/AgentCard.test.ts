@@ -3,11 +3,12 @@
 // fact as soon as the agent has it, not only when a turn ends.
 import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
-import type { AgentSummary, ProgramAsk } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { ProgramAsk } from "@intentic/sandbox-contract/events/requests";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import type { PendingAction } from "../laneDrop";
-import type { FleetAgent } from "../../fleet/useAgents-fleet";
+import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import { IconStub } from "@intentic/ui/testing";
 
 // Import chain reads browser globals at import time; setup keeps the device desktop for the drill-in affordance.
@@ -15,7 +16,7 @@ import { IconStub } from "@intentic/ui/testing";
 // The words in a composer reach a card through this lookup, never through the card's own fields; stubbed so the
 // naming case below needs no tab store.
 const UNSENT_WORDS = `rename the landing page hero`;
-jest.mock("../../../chat/panel/useChat-strip", () => ({
+jest.mock("../../../../models/conversations/panel/useChat-strip", () => ({
     chatStrip: { value: { active: undefined, panes: [], tabs: [] } },
     draftsInTransit: { value: [] },
     chatPreviews: { value: { a4: `rename the landing page hero` } },
@@ -25,7 +26,7 @@ jest.mock("../../../chat/panel/useChat-strip", () => ({
 const { default: AgentCard } = await import("./AgentCard.vue");
 const { router } = await import("../../../../router/index");
 // Connected accounts module state; the card reads it to turn a session's account id into a name.
-const { providerAccounts } = await import("../../../chat/accounts/providerAccounts");
+const { providerAccounts } = await import("../../../../models/providers/providerAccounts");
 const { queryClient } = await import("../../../../lib/queryPersistence");
 const { rpcKey } = await import("../../../../lib/queryKeys");
 const NO_ACCOUNTS = providerAccounts.value;

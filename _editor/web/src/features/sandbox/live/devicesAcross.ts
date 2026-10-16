@@ -1,6 +1,6 @@
-import type { Device } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
-import { type AcrossRecord, createAcrossStore } from "./acrossSandboxes";
+import { type AcrossRecord, createAcrossStore } from "../../../models/sandbox/live/acrossSandboxes";
 
 // The machines every other sandbox of this owner can reach, read only while the recovery panel is up: when the active
 // sandbox has gone quiet, a sibling connected to the same machine can roll it back or start it from its own Devices page.

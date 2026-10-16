@@ -1,5 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { DeviceReport } from "@intentic/sandbox-contract";
+import type { DeviceReport } from "@intentic/sandbox-contract/schemas/devices";
 import { pairingItem, statusSummary } from "../../status.js";
 import { projectsHostChange, selectPairings, transportFor } from "../commands.js";
 import { attachedKey, isAttachedPairing, type Pairing, pairingKey, pairingProblem, withPairing } from "../config.js";

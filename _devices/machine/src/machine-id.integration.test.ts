@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MachineIdSchema } from "@intentic/sandbox-contract";
+import { MachineIdSchema } from "@intentic/sandbox-contract/schemas/hosts";
 import { MACHINE_ID_ENV, machineId } from "./machine-id.js";
 
 // Which computer this is: minted once and kept, and handed down to a distro's agent by its Windows side, so every

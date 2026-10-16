@@ -182,7 +182,7 @@ const AgentTurnFieldsSchema = z.object({
     // (withRuntimeDefaults), rather than refusing a turn a stale composer setting named.
     harness: AgentHarnessSchema.optional().describe("Which agentic loop runs the turn. Leave it out to use each provider's own."),
     // Intent, not a guess: absent continues on the conversation's own account, or picks by serviceability where there is
-    // none on this provider yet (agent/providers/accounts/routing.ts).
+    // none on this provider yet (conversations/registry/routing.ts).
     account: z
         .string()
         .optional()

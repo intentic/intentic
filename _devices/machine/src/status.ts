@@ -1,11 +1,12 @@
 import { plural } from "@intentic/base/format";
 import type { Footnote, Item, Tone, Ui } from "@intentic/local-agent";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { DeviceScopes, DeviceConflict, DeviceConflictChange, DevicePairing, DevicePort, DeviceReport } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { DeviceConflict, DeviceConflictChange, DevicePairing, DevicePort, DeviceReport } from "@intentic/sandbox-contract/schemas/devices";
 import type { PeerLinkState } from "@intentic/sandbox-contract/peer-dial";
 import type { CommandContext } from "@stricli/core";
 import { buildCommand, machineUi } from "./cli-ui.js";
-import { agentBuildSkew, agentStalled } from "@intentic/sandbox-contract";
+import { agentBuildSkew, agentStalled } from "@intentic/sandbox-contract/schemas/devices";
 import { auditPath, readLinks, readLinkStates } from "./device/config.js";
 import { PAUSE_HOTKEY, readPausedAt } from "./device/indicator.js";
 import { runLogPath } from "./config.js";

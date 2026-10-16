@@ -23,7 +23,7 @@ import {
     KeyringPointerSchema,
     SealedBoxSchema,
     SignedKeyringGrantSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/keyring";
 
 // The keyring's local pipe: one JSON line in, one JSON line out, one request per connection. A named pipe on Windows,
 // a unix socket in the keyring's own 0700 directory elsewhere (address.ts). Every caller is another process of the same

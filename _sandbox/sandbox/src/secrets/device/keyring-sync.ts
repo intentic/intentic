@@ -1,4 +1,5 @@
-import { type deviceContract, type KeyringSyncItem, KeyringSyncItemSchema, type KeyringSyncState } from "@intentic/sandbox-contract";
+import type { deviceContract } from "@intentic/sandbox-contract/contracts/device.contract";
+import { type KeyringSyncItem, KeyringSyncItemSchema, type KeyringSyncState } from "@intentic/sandbox-contract/schemas/keyring";
 import { keyFingerprint } from "@intentic/sandbox-contract/keyring-seal";
 import type { ContractRouterClient } from "@orpc/contract";
 import { ASKING_TIMEOUT_MS, keyringCodeOf, type KeyringLogger } from "./keyring-link.js";

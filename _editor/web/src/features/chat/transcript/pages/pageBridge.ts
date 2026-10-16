@@ -1,5 +1,7 @@
-import { PAGE_BRIDGE, PAGE_ERROR_CHARS, PAGE_VALUE_MAX, type PageTheme, pageValueText } from "@intentic/sandbox-contract";
-import { PreviewAskSchema } from "../../../workspace/viewers/html/htmlDocument";
+import { isRecord } from "@intentic/base/escape";
+import { PAGE_BRIDGE, PAGE_ERROR_CHARS, type PageTheme, pageValueText } from "@intentic/sandbox-contract/text/pages";
+import { PAGE_VALUE_MAX } from "@intentic/sandbox-contract/events/requests";
+import { PreviewAskSchema } from "../../../../models/workspace/viewers/htmlDocument";
 
 // What a page in the chat may say to the window around it, read where it arrives: the page's own scripts can post
 // anything, so every message is parsed here into one of a few asks, and anything else is nothing. Two dialects arrive.
@@ -30,8 +32,6 @@ export type PageAsk =
     | { readonly kind: "acknowledge"; readonly id: string | number; readonly result: Record<string, unknown> };
 
 type RequestId = string | number;
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === `object` && value !== null && !Array.isArray(value);
 
 const isId = (value: unknown): value is RequestId => typeof value === `string` || (typeof value === `number` && Number.isFinite(value));
 

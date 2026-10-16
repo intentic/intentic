@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 
 // A page as the model is still writing it: the tool call's arguments stream in as JSON text a few characters at a time
 // (`input_json_delta`), and the chat draws the page's markup as it arrives, the way it draws prose. This reads the

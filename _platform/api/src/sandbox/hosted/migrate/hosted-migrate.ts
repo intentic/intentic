@@ -528,7 +528,7 @@ export const sweepHostedMigrations = async (prisma: PrismaClient, config: Config
         );
         const machineGone =
             row.newMachineId === null ||
-            // oxlint-disable-next-line eslint/no-await-in-loop -- sequential teardown, gentle on a rate-limited API
+            // sequential teardown, gentle on a rate-limited API
             (await destroyMachine(config.hosted.flyApiToken, row.machine.appName, row.newMachineId, { force: true }).then(
                 () => true,
                 (error: unknown) => {
@@ -538,7 +538,6 @@ export const sweepHostedMigrations = async (prisma: PrismaClient, config: Config
             ));
         const volumeGone =
             row.newVolumeId === null ||
-            // oxlint-disable-next-line eslint/no-await-in-loop
             (await destroyVolume(config.hosted.flyApiToken, row.machine.appName, row.newVolumeId).then(
                 () => true,
                 (error: unknown) => {
@@ -549,7 +548,6 @@ export const sweepHostedMigrations = async (prisma: PrismaClient, config: Config
         if (!machineGone || !volumeGone) {
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop
         await closeFailed(prisma, row.machine.id, row.id, `failed`, new Error(`the run stopped in "${row.state}" and was collected`));
     }
     return stuck.length;

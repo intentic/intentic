@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { PersistedClient } from "@tanstack/query-persist-client-core";
 import { persistQueryClientRestore, persistQueryClientSave } from "@tanstack/query-persist-client-core";
 import { defaultShouldDehydrateQuery, QueryCache, QueryClient } from "@tanstack/vue-query";
@@ -39,7 +40,7 @@ export const queryClient = new QueryClient({
             const key = JSON.stringify(query.queryKey);
             console.warn(`query ${key} failed`, error);
             // Also durable: a read that failed in the owner's tab is otherwise invisible to whoever investigates it.
-            reportClient("query.failed", error instanceof Error ? error.message : String(error), { fields: { key: key.slice(0, 300) } });
+            reportClient("query.failed", errorMessage(error), { fields: { key: key.slice(0, 300) } });
         },
     }),
     defaultOptions: { queries: { staleTime: NAVIGATION_STALE_MS } },

@@ -1,4 +1,4 @@
-import { roleAtLeast } from "@intentic/sandbox-contract";
+import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
 import type { Caller } from "../auth.js";
 import { type Provenance, provenanceOf, visibleTo } from "../fleet-scope.js";

@@ -1,16 +1,16 @@
-import type { AgentAccess, CredentialReach, EditScope, GrantedRole, MemberRole, ProofMethod } from "@intentic/sandbox-contract";
+import type { AgentAccess, CredentialReach, EditScope } from "@intentic/sandbox-contract/schemas/members";
+import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { ProofMethod } from "@intentic/sandbox-contract/schemas/system";
 import {
     accessRefusal,
     AgentAccessSchema,
     CredentialReachSchema,
     EditScopeSchema,
-    EMAIL_SIGN_IN_OFF,
-    GrantedRoleSchema,
     memberAccess,
-    PLATFORM_KEY_UNKNOWN,
-    roleAtLeast,
     tierOf,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/members";
+import { EMAIL_SIGN_IN_OFF, PLATFORM_KEY_UNKNOWN } from "@intentic/sandbox-contract/schemas/system";
+import { GrantedRoleSchema, roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { isIdentityAssertion, verifyIdentityAssertion } from "@intentic/sandbox-contract/identity-assertion";
 import { isOwnerTicket, verifyOwnerTicket } from "@intentic/sandbox-contract/owner-ticket";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";

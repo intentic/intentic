@@ -11,8 +11,8 @@ const reads = { answer: [] as { name: string; description: string }[] };
 const commandReads = jest.fn(async (_input: ProcedureInput<`agent.commands`>) => ({ commands: reads.answer }));
 jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ agent: { commands: commandReads } }) }));
 
-import { providerCommands } from "./providerCatalog";
-import { ensureProviderCommands } from "../models/useChat-catalog";
+import { providerCommands } from "../../../models/providers/providerCatalog";
+import { ensureProviderCommands } from "../../../models/conversations/accounts/useChat-catalog";
 
 beforeEach(() => {
     commandReads.mockClear();

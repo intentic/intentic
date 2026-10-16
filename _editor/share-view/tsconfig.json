@@ -20,7 +20,8 @@
             "@intentic/ui/text-size": ["../../_editor/ui/src/composables/useTextSize.ts"],
             "@intentic/ui/time": ["../../_editor/ui/src/lib/timeWindow.ts"],
             "@intentic/sandbox-contract": ["../../_shared/sandbox-contract/src/index.ts"],
-            "@intentic/sandbox-contract/share-paths": ["../../_shared/sandbox-contract/src/ids/share-paths.ts"]
+            "@intentic/sandbox-contract/share-paths": ["../../_shared/sandbox-contract/src/ids/share-paths.ts"],
+            "@intentic/sandbox-contract/*": ["../../_shared/sandbox-contract/src/*"]
         }
     },
     "include": ["./src/**/*.ts", "./src/**/*.vue", "./env.d.ts"],

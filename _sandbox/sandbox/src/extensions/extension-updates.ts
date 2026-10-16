@@ -6,21 +6,21 @@ import { oneLine } from "@intentic/base/one-line";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import { diffPowers, extensionIdOf, type PowersDiff } from "@intentic/extension-manifest";
 import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import {
-    type AgentTurn,
     type ExtensionAdvisory,
     ExtensionAdvisorySchema,
-    type ExtensionConfig,
     type ExtensionHealth,
     ExtensionHealthSchema,
     type ExtensionUpdate,
     type ExtensionUpdatePolicy,
     ExtensionUpdateSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/extension-updates";
+import type { ExtensionConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { updateBrief } from "@intentic/sandbox-contract/chores";
 import { z } from "zod";
 import { capabilityCtx } from "../capabilities/capability.js";
-import { extensionDir, extensionRootOf, extensionsRoot, parseExtensionManifest, readExtensionManifest } from "../capabilities/extension-dirs.js";
+import { extensionDir, extensionRootOf, extensionsRoot, parseExtensionManifest, readExtensionManifest, extensionProcessKey } from "../capabilities/extension-dirs.js";
 import { previousDir, withCheckoutLock } from "../capabilities/git-checkout.js";
 import { browseMarketplace } from "../capabilities/marketplace.js";
 import { registry } from "../capabilities/registry.js";
@@ -30,10 +30,10 @@ import { defineDocument } from "../store/evolution/documents.js";
 import type { JsonFile } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
-import { readExtensionEnablement, writeExtensionEnablement } from "./extension-enablement.js";
-import { extensionProcessKey, processesDesired, reconcileListenerProcesses, startAutoStartProcesses } from "./extension-processes.js";
-import { extensionRuntimeAbsent } from "./extension-readiness.js";
-import { installedExtensions } from "./installed-extensions.js";
+import { readExtensionEnablement, writeExtensionEnablement } from "../capabilities/extension-inventory/extension-enablement.js";
+import { processesDesired, reconcileListenerProcesses, startAutoStartProcesses } from "./extension-processes.js";
+import { extensionRuntimeAbsent } from "../capabilities/extension-inventory/extension-readiness.js";
+import { installedExtensions } from "../capabilities/extension-inventory/installed-extensions.js";
 
 // Update lifecycle for git-installed extensions; five verbs share one fact base:
 // - check: compares the installed sha against the registry; a differing row is an update, a blocked row is an advisory.

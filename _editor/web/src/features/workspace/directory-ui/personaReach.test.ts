@@ -1,4 +1,4 @@
-import type { Persona } from "@intentic/sandbox-contract";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { lensPersonaId, lensRefuses, reachOf, reachTip } from "./personaReach";
 
 /* The lens is arithmetic on paths, and every one of these is a way it could be wrong on a real workspace: a fence that greys out the road to its own folder. */

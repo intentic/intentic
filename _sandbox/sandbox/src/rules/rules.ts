@@ -1,4 +1,5 @@
-import { globMatcher, type Rule, type RuleCondition, type RuleMoment, type RuleOutcome } from "@intentic/sandbox-contract";
+import { globMatcher } from "@intentic/sandbox-contract/policy/search-globs";
+import type { Rule, RuleCondition, RuleMoment, RuleOutcome } from "@intentic/sandbox-contract/schemas/settings";
 
 // Rule resolution is a pure function over data the caller already has: the owner's rules and the repositories' checks
 // as one list. `matching` returns what matched; the caller decides what an empty result means, since each moment's

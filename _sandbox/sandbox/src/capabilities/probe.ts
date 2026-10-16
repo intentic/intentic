@@ -1,10 +1,12 @@
 import { errorMessage } from "@intentic/base/errors";
 import { isRecord } from "@intentic/base/escape";
-import { type Capability, type CapabilityProbe, parseSseText, sseJson } from "@intentic/sandbox-contract";
+import type { Capability, CapabilityProbe } from "@intentic/sandbox-contract/schemas/capabilities";
+import { parseSseText, sseJson } from "@intentic/sandbox-contract/protocol/sse";
 import { versionedBase } from "../endpoints/endpoint-config.js";
 import { nodeRequest } from "../system/tls/node-request.js";
 import { type OAuthExchange, probeOAuth } from "./probe-oauth.js";
 import { contributionFor, type ResolvedContribution } from "./contributions.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Checks whether a entry's settings actually reach the service, turning a generic failure into a specific reason. A cli
 // entry declares its probe in the manifest; endpoint and mcp are handled directly since their check is the protocol
@@ -119,12 +121,8 @@ const whoAnswered = (answer: RawAnswer, path: string): string | undefined => {
             .find((message) => isRecord(message) && ("result" in message || "error" in message));
         return identityIn(reply, path);
     }
-    try {
-        return identityIn(JSON.parse(answer.body), path);
-    } catch {
-        // allow(silent-catch): a body that is not JSON (or was cut at the cap) names nobody; the service was still reached.
-        return undefined;
-    }
+    // A body that is not JSON (or was cut at the cap) names nobody; the service was still reached.
+    return identityIn(parseJsonOr(answer.body, undefined), path);
 };
 
 const runHttpProbe = async (probe: HttpProbe): Promise<CapabilityProbe> => {

@@ -35,7 +35,7 @@ const own = () => listBrowserSessions().find((session) => session.name === OWN_B
 const until = async (check: () => boolean, ms = 15_000): Promise<void> => {
     const deadline = Date.now() + ms;
     while (!check() && Date.now() < deadline) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- polling the session list until the page's address lands
+        // polling the session list until the page's address lands
         await new Promise((resolve) => setTimeout(resolve, 100));
     }
 };

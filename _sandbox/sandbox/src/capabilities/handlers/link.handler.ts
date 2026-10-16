@@ -1,4 +1,5 @@
-import { type CapabilityStatus, type LinkConfig, LinkConfigSchema, type LinkHello } from "@intentic/sandbox-contract";
+import { type CapabilityStatus, type LinkConfig, LinkConfigSchema } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { LinkHello } from "@intentic/sandbox-contract/schemas/links";
 import { opt } from "../../opt.js";
 import { linkHello } from "../../sandboxes/link-client.js";
 import type { CapabilityHandler } from "../capability.js";

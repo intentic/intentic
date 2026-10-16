@@ -215,7 +215,7 @@ export const sweepHostedAbuse = async (
         if (verdict === undefined) {
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep, gentle on the API
+        // sequential sweep, gentle on the API
         const action = await strike(prisma, config, logger, machine, verdict, now).catch((error: unknown) => {
             logger.error({ err: error, app: machine.appName }, `hosted abuse: acting on this machine failed; retried next tick`);
             return undefined;

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { errorMessage } from "@intentic/base/errors";
 import type { WriteKind, WriteOutcome } from "./save.js";
 
 // The page's two ways out for exported bytes: into the workspace file through the listener, or to the browser as a
@@ -35,7 +36,7 @@ export const writeDocument = async (fileUrl: string, bytes: ArrayBuffer, kind: W
             ? { written: true, path: answer.path, version: answer.version }
             : { failed: `the answer to the save was not understood` };
     } catch (error) {
-        return { failed: error instanceof Error ? error.message : String(error) };
+        return { failed: errorMessage(error) };
     }
 };
 

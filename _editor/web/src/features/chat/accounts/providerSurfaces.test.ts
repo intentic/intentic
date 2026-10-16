@@ -1,9 +1,10 @@
 // Every provider the contract knows must be servable by this app, walked from the spec table. Unlike
 // the daemon, the browser has no init check that fails loudly when a new provider is missing a tab, a
 // readiness rule, or a connect panel shape; each test below asks one such question of every provider.
-import { accessFor, modelsFor, NATIVE_PROVIDERS, PROVIDER_SPECS, providerLabel, providerSpec, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { accessBadge, connectPitch, hasSignIn, providerReady } from "../session/access";
-import { accountsLoaded, noTranslatorAccounts, providerAccounts, translatorAccounts } from "./providerAccounts";
+import { accessFor, modelsFor, providerLabel, TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
+import { NATIVE_PROVIDERS, PROVIDER_SPECS, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
+import { accessBadge, connectPitch, hasSignIn, providerReady } from "../../../models/providers/access";
+import { accountsLoaded, noTranslatorAccounts, providerAccounts, translatorAccounts } from "../../../models/providers/providerAccounts";
 import {
     acpProviders,
     endpointProviders,
@@ -12,7 +13,7 @@ import {
     perProvider,
     providerDisplayLabel,
     providerTabs,
-} from "./providerCatalog";
+} from "../../../models/providers/providerCatalog";
 
 beforeEach(() => {
     providerAccounts.value = perProvider(() => []);

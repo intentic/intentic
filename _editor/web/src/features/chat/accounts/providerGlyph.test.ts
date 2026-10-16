@@ -1,6 +1,6 @@
 /* WHAT A PROVIDER WITH NO BRAND MARK LOOKS LIKE. */
-import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { endpointProviders, providerGlyph } from "./providerCatalog";
+import { TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
+import { endpointProviders, providerGlyph } from "../../../models/providers/providerCatalog";
 
 beforeEach(() => {
     endpointProviders.value = [];

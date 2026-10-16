@@ -1,4 +1,7 @@
-import type { ParkKind, ResumeReason, TurnErrand, TurnSpeaker, WorkspaceEvent } from "@intentic/sandbox-contract";
+import type { ParkKind } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { ResumeReason } from "@intentic/sandbox-contract/events/resume";
+import type { TurnErrand, TurnSpeaker } from "@intentic/sandbox-contract/schemas/speaker";
+import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
 
 // What a turn and the fleet announce, delivered in-process to whatever reacts to it: a publisher names only the event,
 // and each reacting subsystem is subscribed in composition, so neither imports the other.

@@ -1,10 +1,14 @@
-import { type AgentEvent, type AgentTurn, type RoutedAgentTurn, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentTurn, RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { TurnContext } from "../../agent/providers/adapter.js";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { createLogger } from "../../logger.js";
-import { memoryFleet, testConfig, testTurnMounts } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
+import { testConfig } from "../../env.config.testing.js";
+import { testTurnMounts } from "../../agent/tools/turn-mounts.testing.js";
 import { rootExecution } from "../../workload/agent-execution.testing.js";
 import type { AcpTurnOptions } from "../acp/acp-agent.js";
 import type { AcpLaunch } from "../acp/acp-spawn.js";

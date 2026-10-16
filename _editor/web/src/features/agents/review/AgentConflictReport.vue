@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { LandConflict } from "@intentic/sandbox-contract";
+import type { LandConflict } from "@intentic/sandbox-contract/schemas/agents";
 import { Button, toneTint, useDevice } from "@intentic/ui";
 import { computed } from "vue";
-import { agentBlockers, blockersOf, causeLine, settingsOrigin, settingsPageName, userBlockers } from "./conflictResolution";
+import { agentBlockers, blockersOf, causeLine, settingsOrigin, settingsPageName, userBlockers } from "../../../models/conversations/review/conflictResolution";
 import { useT } from "@intentic/ui/i18n";
 
 // What a refused land is blocking, as one decision bar: how many files conflict, why in one line, and what happens

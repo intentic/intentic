@@ -1,7 +1,8 @@
 // Access tab's rendered text after an invite: which of its two writes (daemon grant, platform record/email) failed, and
 // refusal vs silence, must all read differently on screen.
 import "@intentic/testing/dom";
-import type { MemberRole, OwnerGrant, OwnerGrantKind, StandingGrants } from "@intentic/sandbox-contract";
+import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { OwnerGrant, OwnerGrantKind, StandingGrants } from "@intentic/sandbox-contract/schemas/needs";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
@@ -94,7 +95,7 @@ jest.mock(`../../../client/sandbox/useSandbox`, () => ({
 jest.mock(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => false }));
 // One assistant, homed in the support folder: which areas hand it over is read off where it starts, never picked.
 const personas = ref([{ id: `support`, label: `Support`, capabilities: [], workspace: { startIn: `support` } }]);
-jest.mock(`../personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
+jest.mock(`../../../models/sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
 // Two named parts of the workspace: one the assistant above works in, one nobody works in — the two answers a fence
 // can give.
 const areas = ref([

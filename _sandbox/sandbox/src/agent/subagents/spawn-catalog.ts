@@ -1,21 +1,16 @@
+import type { AccountUsage, UsageWindow, ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AgentLoop, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { loopsOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
 import {
-    type AccountUsage,
-    type AgentLoop,
-    loopsOf,
-    type AgentProvider,
     bindingWindow,
     gatingWindows,
     SPENT_UTILIZATION,
-    type UsageWindow,
-    type Model,
     type ModelRef,
-    NATIVE_PROVIDERS,
-    type NativeProvider,
-    type ProviderRefusal,
     type RefusalsOnFile,
-    PROVIDERS,
     serviceStates,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/models/plan-pools";
+import type { Model } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import type { Services } from "../../composition.js";
 import { askableLimit, type FleetReading, type TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import { observedOwnLimit } from "../../usage/observed-accounts.js";

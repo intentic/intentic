@@ -6,7 +6,7 @@ import {
     type LinkTerms,
     LinkTermsSchema,
     type InboundLinkSummary,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/links";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { tokenEquals } from "../auth/auth.js";

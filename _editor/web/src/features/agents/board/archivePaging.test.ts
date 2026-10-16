@@ -3,12 +3,12 @@
 // header count reporting the pile rather than the page.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
-import { useAgents } from "../fleet/useAgents";
-import { setAgents } from "../fleet/useAgents-registry";
+import { useAgents } from "../../../models/fleet/useAgents";
+import { setAgents } from "../../../models/fleet/useAgents-registry";
 import { router } from "../../../router";
 import AgentsView from "./AgentsView.vue";
 import { IconStub } from "@intentic/ui/testing";

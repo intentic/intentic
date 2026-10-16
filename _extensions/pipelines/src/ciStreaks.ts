@@ -1,4 +1,4 @@
-import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract";
+import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { t } from "./i18n.js";
 
 // Whether a branch is failing right now, judged on its last commit rather than its last run: near-simultaneous

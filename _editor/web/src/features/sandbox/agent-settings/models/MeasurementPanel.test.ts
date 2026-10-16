@@ -2,7 +2,7 @@
 // the populated panel is also measured in the source-backed demo at narrow desktop-pane widths.
 import "@intentic/testing/dom";
 import { type App, createApp, h, nextTick } from "vue";
-import type { TurnExperiment } from "@intentic/sandbox-contract";
+import type { TurnExperiment } from "@intentic/sandbox-contract/schemas/settings";
 import MeasurementPanel from "./MeasurementPanel.vue";
 import { tableOf } from "./experimentReadings";
 

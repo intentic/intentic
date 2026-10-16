@@ -1,6 +1,6 @@
-import type { CardStatus } from "./ChatCard.vue";
+import type { CardStatus } from "../../../../components/ChatCard.vue";
+import type { RequestDocument } from "@intentic/sandbox-contract/events/requests";
 import type {
-    RequestDocument,
     TranscriptBrowserHelp,
     TranscriptCapabilityOffer,
     TranscriptCredentialOffer,
@@ -10,10 +10,10 @@ import type {
     TranscriptPlan,
     TranscriptQuestion,
     TranscriptTerminalHelp,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/events/transcript";
 import { t } from "@intentic/ui/i18n";
 import { present } from "../../tools/toolPresentation";
-import type { ChatMessage } from "../transcript";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 
 // How each decision card signals it is over, replacing per-card v-if chains in ChatMessageView. `undefined` means still
 // live. `done` means the thing happened, `gone` means it didn't: a denied permission and any cancelled card are `gone`,

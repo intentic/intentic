@@ -1,4 +1,6 @@
-import { type AgentEvent, profileOf, type SnapshotTurn } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { profileOf } from "@intentic/sandbox-contract/schemas/agent";
+import type { SnapshotTurn } from "@intentic/sandbox-contract/schemas/history";
 import { landAgent, reportLockfileFailures } from "../../../conversations/land/land.js";
 import { intoOf, landTargetOf, underLeases } from "../../../conversations/land/land-target.js";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
@@ -11,7 +13,7 @@ import { checkpointWorktree } from "../../checkpoints/checkpoint-worktree.js";
 import { opt } from "../../../opt.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import type { PlacedTurnEnding, TurnCloser } from "./turn-close.js";
-import { keepLandFailure, landedFrame, settleLandBooks, settleParentBooks } from "./turn-landing.js";
+import { keepLandFailure, landedFrame, settleLandBooks, settleParentBooks } from "../../../conversations/land/turn-landing.js";
 import type { ReachWatch } from "./turn-reach.js";
 
 // Where a conversation's turn runs, as the one value its lifecycle is parameterized by: the runner, the main tree, or a

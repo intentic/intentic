@@ -1,8 +1,9 @@
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { WorkspaceModule } from "@intentic/sandbox-contract";
+import type { WorkspaceModule } from "@intentic/sandbox-contract/schemas/git/git";
 import { walkDirs } from "../layout/dir-walk.js";
 import { hasGitEntry } from "../layout/repo-discovery.js";
+import { readTextIfExists } from "@intentic/base/fs";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Modules of a repo: every directory with a self-naming package.json, as repo-relative dirs, used to group changed
 // files in review panels. A filesystem walk, not package-graph.ts's pnpm-workspace globs: grouping is about where a
@@ -15,10 +16,9 @@ const MAX_DIRS = 5_000;
 
 // The name a directory's manifest declares; undefined when there's no manifest, it doesn't parse, or it names nothing.
 const manifestName = async (dir: string): Promise<string | undefined> => {
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(await readFile(join(dir, "package.json"), "utf8"));
-    } catch {
+    const text = await readTextIfExists(join(dir, "package.json"));
+    const parsed = text === undefined ? undefined : parseJsonOr(text, undefined);
+    if (parsed === undefined) {
         return undefined;
     }
     const name = (parsed as { name?: unknown }).name;

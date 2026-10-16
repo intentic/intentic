@@ -346,6 +346,17 @@
                 "@intentic/src": "./src/text/shadow-text.ts",
                 "default": "./dist/text/shadow-text.js"
             }
+        },
+        "./json": {
+            "types": "./dist/json.d.ts",
+            "import": {
+                "@intentic/src": "./src/json.ts",
+                "default": "./dist/json.js"
+            },
+            "require": {
+                "@intentic/src": "./src/json.ts",
+                "default": "./dist/json.js"
+            }
         }
     },
     "scripts": {

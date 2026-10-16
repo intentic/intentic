@@ -1,4 +1,5 @@
-import { type Device, parseHostConnection } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
+import { parseHostConnection } from "@intentic/sandbox-contract/schemas/hosts";
 
 // A device row as a current daemon lists it: a row with a host key names the card that key is of beside it
 // (device-reports.ts), which the editor reads and never parses back out of the key. A suite that writes only the key

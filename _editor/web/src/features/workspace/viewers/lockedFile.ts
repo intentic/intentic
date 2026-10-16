@@ -1,4 +1,5 @@
-import { lockedWorkspaceEntry, STATE_DIR } from "@intentic/sandbox-contract";
+import { lockedWorkspaceEntry } from "@intentic/sandbox-contract/state/workspace-state";
+import { STATE_DIR } from "@intentic/sandbox-contract";
 import { basename } from "@intentic/ui/path";
 import { t } from "@intentic/ui/i18n";
 

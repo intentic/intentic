@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { RuntimeDomain } from "@intentic/sandbox-contract";
+import type { RuntimeDomain } from "@intentic/sandbox-contract/state/runtime-state";
 import { forkedExec } from "@intentic/base/git";
 import type { Logger } from "pino";
 import { onRuntimeChange, publishRuntimeChange } from "../seams/runtime-feed.js";

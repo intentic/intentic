@@ -1,6 +1,6 @@
 import { dagLayers } from "@intentic/base/dag";
 import type { DagEdge, DagNode } from "@intentic/extension-ui";
-import type { PipelineJob, PipelineStatus } from "@intentic/sandbox-contract";
+import type { PipelineJob, PipelineStatus } from "@intentic/sandbox-contract/schemas/ci";
 import { t } from "../i18n";
 
 // A run's flat job list becomes the layered graph both pipeline views render, from the best available source of shape:

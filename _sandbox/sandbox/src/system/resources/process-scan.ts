@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { endianness } from "node:os";
 import { mapPool } from "@intentic/base/async";
-import type { ProcessRole } from "@intentic/sandbox-contract";
+import type { ProcessRole } from "@intentic/sandbox-contract/schemas/metrics";
 import { DAEMON_GEN_ENV, DEADLINE_ENV, DETACHED_ENV, DETACHED_KINDS, type DetachedKind, WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { opt } from "../../opt.js";
 import { type ReadText, readText } from "./cgroup.js";
@@ -162,7 +162,7 @@ const isToolchain = (value: string): boolean => TOOLCHAIN.some((pattern) => patt
 const CONTAINER_CGROUP = /[/]docker[/]/u;
 const CONTAINER = /(^|[ /])(dockerd|containerd|docker-proxy|docker-init|runc)([ /-]|$)/u;
 
-// The daemon's own speech process (speech/speech-worker.ts) is one too: a gigabyte of weights while it is loaded.
+// The daemon's own speech process (@intentic/speech speech-worker.ts) is one too: a gigabyte of weights while it is loaded.
 const LOCAL_MODEL = /(^|[ /-])(llama-server|llama-cli|llamafile|ollama|speech-worker)([ /.-]|$)/u;
 
 const BROWSER = /chrom(e|ium)|firefox|webkit|playwright|browser-mcp|browser_server/u;

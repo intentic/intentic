@@ -8,8 +8,8 @@ import { createMemoryHistory, createRouter, type Router } from "vue-router";
 
 const opened: string[] = [];
 const heard = ref(false);
-jest.mock(`../../agents/fleet/useAgents-actions`, () => ({ openById: (id: string) => opened.push(id) }));
-jest.mock(`../../agents/fleet/useAgents-registry`, () => ({ rosterHeard: heard }));
+jest.mock(`../../../models/fleet/useAgents-actions`, () => ({ openById: (id: string) => opened.push(id) }));
+jest.mock(`../../../models/fleet/useAgents-registry`, () => ({ rosterHeard: heard }));
 
 const { useChatFocusLink } = await import(`./chatFocusLink`);
 

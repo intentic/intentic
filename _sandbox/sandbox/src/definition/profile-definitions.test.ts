@@ -15,7 +15,7 @@ const files = readdirSync(PROFILES_DIR).filter((name) => name.endsWith(`.sandbox
 // The rules a profile seeds are the same rows the Agent tab's own toggles write, and a toggle finds its row by id: a
 // seeded rule whose id has since been renamed there arrives as a stranger, so the promise reads as kept while the
 // switch the reader would look at stands off. Read as source because a daemon package cannot import the app's screens.
-const appRules = readFileSync(join(repoRoot(import.meta.url), `_editor/web/src/features/sandbox/environment/rules.ts`), `utf8`);
+const appRules = readFileSync(join(repoRoot(import.meta.url), `_editor/web/src/models/sandbox/environment/rules.ts`), `utf8`);
 // rules.ts labels each row through `t()`, so the name a profile writes is the English catalogue's text at the keys it asks.
 const catalogue = JSON.parse(readFileSync(join(repoRoot(import.meta.url), `_editor/web/src/app/i18n/locales/en.json`), `utf8`)) as Record<
     string,

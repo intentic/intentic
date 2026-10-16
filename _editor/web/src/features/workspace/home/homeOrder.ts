@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { type FileCategory, formatOf } from "@intentic/ui/file-format";
 import { t } from "@intentic/ui/i18n";
 import { type DateGroupKey, dateGroupOf } from "./homeDates";

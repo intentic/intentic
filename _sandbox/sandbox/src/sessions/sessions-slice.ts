@@ -1,7 +1,7 @@
 import { join } from "node:path";
-import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
+import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import type { Logger } from "pino";
-import type { TurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
+import type { TurnCheckpoints } from "../store/journals/turn-checkpoints.js";
 import type { PersistedAgent } from "../conversations/registry/agents-store.js";
 import type { AgentArchiveDeps } from "../conversations/registry/archive.js";
 import {

@@ -1,4 +1,4 @@
-import { capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract";
+import { capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
 import { promptReach, spokenList } from "./promptReach";
 
 /* The sentence under the System prompt control, asserted by SHAPE rather than by its words. */

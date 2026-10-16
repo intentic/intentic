@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { WEBEXT_PAIR_MESSAGE, WEBEXT_PAIRED_MESSAGE, webextPairingCode } from "@intentic/sandbox-contract";
+import { WEBEXT_PAIR_MESSAGE, WEBEXT_PAIRED_MESSAGE, webextPairingCode } from "@intentic/sandbox-contract/protocol/doors/webext-links";
 import { Button, Code, Modal, Notice } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { usePeerConnect, WEBEXT_DOOR } from "../../sandbox/devices/usePeerConnect";
+import { usePeerConnect, WEBEXT_DOOR } from "../../../models/sandbox/devices/usePeerConnect";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";
 

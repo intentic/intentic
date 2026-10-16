@@ -1,4 +1,6 @@
-import { HISTORY_STATE_FILES, type Portability, type StateFile, stateFileFor, WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
+import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract/state/history-state";
+import { type Portability, type StateFile, stateFileFor } from "@intentic/sandbox-contract/state/state-portability";
+import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspace-state";
 
 // Single source of truth for what happens to one path in a bundle; both the exporter and the restorer ask it, since a
 // bundle is hand-editable and the restorer must re-enforce, not just trust, what was packed.

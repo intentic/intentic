@@ -2,8 +2,8 @@
 import { Button } from "@intentic/ui";
 import { ref } from "vue";
 import { type Audience, useAudience } from "../../../app/useAudience";
-import { autoLandRule, autoVersionRule } from "../../sandbox/environment/rules";
-import { useRules } from "../../sandbox/environment/useRules";
+import { autoLandRule, autoVersionRule } from "../../../models/sandbox/environment/rules";
+import { useRules } from "../../../models/sandbox/environment/useRules";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useT } from "@intentic/ui/i18n";
 

@@ -1,4 +1,5 @@
-import { type KeyringRefusalCode, type KeyringTypeResult, secretsContract } from "@intentic/sandbox-contract";
+import type { KeyringRefusalCode, KeyringTypeResult } from "@intentic/sandbox-contract/schemas/keyring";
+import { secretsContract } from "@intentic/sandbox-contract/contracts/secrets.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
 import { noteAudit } from "../../audit/audit-http.js";

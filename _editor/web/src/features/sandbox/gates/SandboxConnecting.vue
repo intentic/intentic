@@ -6,7 +6,7 @@ import { RouterLink } from "vue-router";
 import { useSandboxSession } from "../../../client/session/sandboxSession";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useGoogleIdentity } from "../../../client/auth/useGoogleIdentity";
-import { restartExpected } from "../live/sandboxRestart";
+import { restartExpected } from "../../../models/sandbox/live/sandboxRestart";
 import { type ConnectionNotice, connectionNotice, stalledBody } from "./connectionNotice";
 import SandboxRecovery from "./SandboxRecovery.vue";
 import { useDiagnosisNotice, useRecoveryDue, useVisibleOutage } from "./useVisibleOutage";

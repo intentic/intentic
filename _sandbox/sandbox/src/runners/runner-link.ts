@@ -1,5 +1,5 @@
 import { createBackoff } from "@intentic/base/async";
-import { RUNNER_HEARTBEAT_MS, runnerConnectUrl } from "@intentic/sandbox-contract";
+import { RUNNER_HEARTBEAT_MS, runnerConnectUrl } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { dialPeer, PEER_LINK_BACKOFF, peerLinkSilenceMs, type PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import { RPCHandler } from "@orpc/server/websocket";
 import type { Services } from "../composition.js";

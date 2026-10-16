@@ -1,4 +1,4 @@
-import type { DeviceFacts } from "@intentic/sandbox-contract";
+import type { DeviceFacts } from "@intentic/sandbox-contract/schemas/hosts";
 import { unseal } from "@intentic/sandbox-contract/keyring-seal";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";

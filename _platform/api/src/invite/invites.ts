@@ -1,5 +1,5 @@
 import type { InviteRecord } from "@intentic/api-contract";
-import { GrantedRoleSchema } from "@intentic/sandbox-contract";
+import { GrantedRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
 
 // Long enough for the invitee to get to it; short enough that a stale link in an inbox goes dead.
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;

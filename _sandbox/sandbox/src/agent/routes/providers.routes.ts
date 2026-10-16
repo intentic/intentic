@@ -1,4 +1,6 @@
-import { endpointProvider, isTrialProvider, loopsOf, NATIVE_PROVIDERS, providersContract, TRIAL_LABEL } from "@intentic/sandbox-contract";
+import { endpointProvider, isTrialProvider, loopsOf, TRIAL_LABEL } from "@intentic/sandbox-contract/models/agent-catalog";
+import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
+import { providersContract } from "@intentic/sandbox-contract/contracts/providers.contract";
 import { implement } from "@orpc/server";
 import type { Services } from "../../composition.js";
 import type { OrpcContext } from "../../app-env.js";

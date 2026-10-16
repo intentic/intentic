@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Services } from "../../../composition.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import { opt } from "../../../opt.js";

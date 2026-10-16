@@ -1,4 +1,4 @@
-import type { AccountState } from "@intentic/sandbox-contract";
+import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { type AccountReading, modelSources, sourcesNeedingSomeone } from "./modelSources";
 
 // The overview at the top of Sandbox ▸ Models: one row per thing this sandbox can run a model on, and what needs a

@@ -1,5 +1,7 @@
 import { WORKLOAD_COST_BYTES } from "../workload/resource-budget.js";
-import { type AgentHarness, type AgentProvider, capabilitiesOf, type RunnerFacts, type RunnerSummary } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { RunnerFacts, RunnerSummary } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 
 // Where a spawned fan-out child runs, since nobody manually places one thirty times per workflow. Free slots decide
 // first, load only breaks ties: a load average lags a minute behind what this daemon already knows it dispatched.

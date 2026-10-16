@@ -1,17 +1,9 @@
-import {
-    COMMAND_CLASS_LABELS,
-    type CommandClass,
-    type CommandJudgeMode,
-    type CommandLocus,
-    DeviceScopesSchema,
-    hardRuleClasses,
-    matchCommand,
-    type ProgramKind,
-    type ProgramReading,
-    programInCall,
-    roleLadder,
-    type SafetyVerdict,
-} from "@intentic/sandbox-contract";
+import { COMMAND_CLASS_LABELS, matchCommand } from "@intentic/sandbox-contract/policy/command-classes";
+import type { CommandClass, CommandLocus } from "@intentic/sandbox-contract/schemas/agent";
+import { type CommandJudgeMode, hardRuleClasses, type SafetyVerdict } from "@intentic/sandbox-contract/policy/safety-policy";
+import { DeviceScopesSchema } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type ProgramKind, type ProgramReading, programInCall } from "@intentic/sandbox-contract/policy/device-programs";
+import { roleLadder } from "@intentic/sandbox-contract/models/model-setups";
 import { raiseRequest } from "../guard/card-offers.js";
 import { RoleModelUnsetError } from "../seams/role-model-unset.js";
 import type { LiveRun } from "../conversations/actor/conversation-holdings.js";

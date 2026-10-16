@@ -2,11 +2,11 @@
 import { Notice, type NoticeModel, ui, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
-import { KEYRING_PACKAGE_RE, KEYRING_PROGRAMS_MAX, KeyringProgramSchema } from "@intentic/sandbox-contract";
+import { KEYRING_PACKAGE_RE, KEYRING_PROGRAMS_MAX, KeyringProgramSchema } from "@intentic/sandbox-contract/schemas/keyring";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
 import type { SecretRow } from "../../../sandbox/secrets/secretRows";
-import { useCredentialGates, useSecretPrograms } from "./useSecrets";
+import { useCredentialGates, useSecretPrograms } from "../../../../models/capabilities/useSecrets";
 
 // The program guard, the host guard's counterpart for typing into windows: a sandbox-held secret typed into a window on
 // one of the owner's computers goes unasked only into a program listed here (or a phone app, by package) and, unless it

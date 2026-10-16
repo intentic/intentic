@@ -1,4 +1,5 @@
-import { accountsContract, type OauthAccount } from "@intentic/sandbox-contract";
+import { accountsContract } from "@intentic/sandbox-contract/contracts/accounts.contract";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { Services } from "../../composition.js";
 import { errorCode, routesClient } from "../../harness/route-client.testing.js";
 import { createAccountsRoutes } from "./accounts.routes.js";

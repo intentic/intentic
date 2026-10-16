@@ -1,4 +1,5 @@
-import type { DayWindowQuery, SavingsReport } from "@intentic/sandbox-contract";
+import type { DayWindowQuery } from "@intentic/sandbox-contract/schemas/providers/usage";
+import type { SavingsReport } from "@intentic/sandbox-contract/schemas/settings";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";

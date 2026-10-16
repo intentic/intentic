@@ -3,7 +3,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { pollUntil } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import type { IpsecVpnConfig, VpnConfig } from "@intentic/sandbox-contract";
+import type { IpsecVpnConfig, VpnConfig } from "@intentic/sandbox-contract/schemas/vpn";
 import { activeResolvers, toolMissing } from "../tunnel/net-probe.js";
 import type { VpnDriver, VpnProbe } from "./vpn-driver.js";
 import { connName, IPSEC_INCLUDE_DIR, ipsecConnPath, ipsecSecretsPath } from "./vpn-paths.js";

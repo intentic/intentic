@@ -4,14 +4,14 @@ import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import { CHAT_SURFACE, type ChatSurface } from "../../tools/chatToolSurface";
-import { htmlPreviewed, setHtmlPreviewed } from "../../../workspace/viewers/html/htmlPreviewed";
+import { CHAT_SURFACE, type ChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
+import { htmlPreviewed, setHtmlPreviewed } from "../../../../models/workspace/viewers/htmlPreviewed";
 import type { ChatDeliverable } from "./deliverables";
 
 // The conversation's results as the daemon serves them (resultFiles.ts), so a press here is a call to read, not a fetch.
 const read = jest.fn(async (_id: string, _path: string, _at?: string): Promise<Blob> => new Blob([`%PDF`], { type: `application/pdf` }));
 const saved = jest.fn(async (_id: string, _path: string, _at?: string): Promise<void> => undefined);
-jest.mock(`../../../workspace/viewers/results/resultFiles`, () => ({ readResult: read, saveResult: saved }));
+jest.mock(`../../../../models/workspace/viewers/resultFiles`, () => ({ readResult: read, saveResult: saved }));
 const { default: ChatTurnDeliverables } = await import(`./ChatTurnDeliverables.vue`);
 
 let app: App | undefined;

@@ -83,7 +83,7 @@ export const runRound = async (state: RoundState, targets: readonly string[], jo
             state.waits.set(slug, wait - 1);
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one ic run at a time is the point (see above)
+        // one ic run at a time is the point (see above)
         await runOne(state, slug, job, log);
     }
 };

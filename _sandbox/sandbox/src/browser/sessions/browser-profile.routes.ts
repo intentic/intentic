@@ -16,6 +16,8 @@ import type { Services } from "../../composition.js";
 import { redeemTicket } from "../../auth/tokens/ws-tickets.js";
 import { browserUrls, contributionKey, contributionRegistry } from "../../capabilities/contributions.js";
 import { identityLoginUrl } from "../../capabilities/handlers/identity.handler.js";
+import { defineRawRoutes } from "../../http/raw-route-server.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 type Socket = WSContext;
 
@@ -23,7 +25,7 @@ type Socket = WSContext;
 // authorized via token+connect query params, exempt from bearer middleware. An identity's accounts share one browser.
 // login: opens the sign-in page; marks the session connected when the owner finishes.
 // browse: opens the home page in an already-signed-in profile; marks nothing.
-export const createBrowserProfileRoute = (services: Services) =>
+const createBrowserProfileRoute = (services: Services) =>
     upgradeWebSocket((c) => {
         // Capability id of the entry this window drives; marked connected on done.
         let account: string | undefined;
@@ -255,10 +257,8 @@ export const createBrowserProfileRoute = (services: Services) =>
                 if (closed) {
                     return;
                 }
-                let message: ScreencastClientMessage;
-                try {
-                    message = JSON.parse(String(event.data)) as ScreencastClientMessage;
-                } catch {
+                const message = parseJsonOr(String(event.data), undefined) as ScreencastClientMessage | undefined;
+                if (message === undefined) {
                     return;
                 }
                 // A ping is answered before the window is up, so a slow launch isn't read as a dead socket; the rest
@@ -282,3 +282,6 @@ export const createBrowserProfileRoute = (services: Services) =>
             },
         };
     });
+
+// A browser-kind capability's own Chromium: a WebSocket on the platform profile, same auth as the terminal.
+export const browserProfileRawRoutes = defineRawRoutes((services: Services) => ({ "GET /system/browser-profile": createBrowserProfileRoute(services) }));

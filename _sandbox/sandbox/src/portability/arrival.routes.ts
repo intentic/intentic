@@ -1,4 +1,4 @@
-import { ArrivalApplySchema, ArrivalScanSchema, ProviderKeysApplySchema } from "@intentic/sandbox-contract";
+import { ArrivalApplySchema, ArrivalScanSchema, ProviderKeysApplySchema } from "@intentic/sandbox-contract/state/arrival";
 import type { Context } from "hono";
 import { ArrivalFormatError, ArrivalStaleError } from "../arrival-error.js";
 import { ownerDenied } from "../auth/owner-gates.js";
@@ -7,6 +7,7 @@ import type { AppEnv } from "../app-env.js";
 import { applyProviderKeys, listProviderKeys, providerKeyDeps } from "../migrations/provider-keys.js";
 import { MAX_UPLOAD_BYTES, UploadTooLargeError } from "../workspace/files/workspace-files-upload.js";
 import { createArrivals } from "./arrival.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // Everything arriving at this sandbox (sandbox.toml, an environment bundle, a packed foreign home) through one
 // preview-first pipeline, not three routes. Raw Hono handles the arbitrary-size upload stream; owner-only throughout.
@@ -25,7 +26,7 @@ const arrivalFailed = (error: unknown): { readonly error: string; readonly statu
     return error instanceof UploadTooLargeError ? { error: "that arrival is too large", status: 413 } : undefined;
 };
 
-export const createArrivalRoutes = (services: Services) => {
+const createArrivalRoutes = (services: Services) => {
     const arrivals = createArrivals(services);
     return {
         /** POST /arrivals/plan */
@@ -129,3 +130,17 @@ export const createArrivalRoutes = (services: Services) => {
         },
     };
 };
+
+// Arrivals: everything coming into this sandbox, through one preview-first pipeline.
+export const arrivalRawRoutes = defineRawRoutes((services: Services) => {
+    const arrivals = createArrivalRoutes(services);
+    return {
+        "POST /arrivals/plan": arrivals.plan,
+        "GET /arrivals/hosts": arrivals.hosts,
+        "POST /arrivals/scan": arrivals.scan,
+        "POST /arrivals/apply": arrivals.apply,
+        "GET /arrivals/keys": arrivals.keys,
+        "POST /arrivals/keys/apply": arrivals.applyKeys,
+        "DELETE /arrivals": arrivals.abandon,
+    };
+});

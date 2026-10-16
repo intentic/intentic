@@ -1,4 +1,4 @@
-import type { TerminalsList } from "@intentic/sandbox-contract";
+import type { TerminalsList } from "@intentic/sandbox-contract/schemas/terminal";
 import { computed, type ComputedRef } from "vue";
 import { host } from "./host";
 

@@ -4,21 +4,13 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
-import {
-    type AccountUsage,
-    bindingWindow,
-    cliProxyIdOf,
-    humanizeModelId,
-    type KeyedProvider,
-    KeyedProviderSchema,
-    type Model,
-    providerLabel,
-    providerSpec,
-    reportsPlanLimits,
-    SPENT_UTILIZATION,
-    type TranslatorAccounts,
-    type TranslatorStatus,
-} from "@intentic/sandbox-contract";
+import type { AccountUsage, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { bindingWindow, SPENT_UTILIZATION } from "@intentic/sandbox-contract/models/plan-pools";
+import { cliProxyIdOf, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
+import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
+import { type KeyedProvider, KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
+import type { Model, TranslatorStatus } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import { providerLabel, reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { Config } from "../../env.config.js";
 import type { Services } from "../../composition.js";
 import { type CompatEntry, compatYaml, endpointCompatEntries, translatedEndpoints } from "../../endpoints/endpoint-translator.js";
@@ -29,6 +21,7 @@ import { fleetLimit, type TurnLimit } from "../../usage/serviceability/fleet-lim
 import type { HeadroomSource } from "../../usage/headroom.js";
 import { authFileCooling, fetchTranslatorUsage, type TranslatorAuthFile } from "../../usage/translator-usage.js";
 import { superviseTranslator } from "./translator-supervisor.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // CLIProxyAPI: a bundled Go proxy holding the user's Codex/Grok/Kimi/Gemini subscriptions and re-serving them keyed by
 // model id, on every wire a loop here speaks: Anthropic Messages (the Claude Code harness), OpenAI Responses (native
@@ -59,10 +52,8 @@ export const authFilesOnDisk = async (authDir: string): Promise<TranslatorAuthFi
             if (raw === undefined) {
                 return [];
             }
-            let parsed: { type?: unknown; email?: unknown; project_id?: unknown; disabled?: unknown };
-            try {
-                parsed = JSON.parse(raw) as { type?: unknown; email?: unknown; project_id?: unknown; disabled?: unknown };
-            } catch {
+            const parsed = parseJsonOr(raw, undefined) as { type?: unknown; email?: unknown; project_id?: unknown; disabled?: unknown } | undefined;
+            if (parsed === undefined) {
                 // A file half-written by a login still polling; it counts on the next read.
                 return [];
             }

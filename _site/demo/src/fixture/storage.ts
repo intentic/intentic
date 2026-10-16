@@ -6,7 +6,7 @@ import {
     type StorageCleanResult,
     type StorageReport,
     type StorageScan,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/metrics";
 
 // What the demo box's disk holds, for the Overview's Disk card: the same 100 GiB volume the geek metrics read, most of
 // it the shop's own files and the agents' checkouts. A clean takes what its category could free and a later scan no

@@ -1,13 +1,13 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { AgentCommand } from "@intentic/sandbox-contract";
+import type { AgentCommand } from "@intentic/sandbox-contract/events/requests";
 import { useT } from "@intentic/ui/i18n";
 import { computed, createApp, h, nextTick, ref, shallowRef } from "vue";
-import { activeSandboxId } from "../../../../../lib/activeSandbox";
+import { activeSandboxId } from "../../../../../app/storage/activeSandbox";
 import { inputHistoryFor } from "../../../drafts/inputHistory";
-import { Conversation } from "../../../session/conversation";
-import type { ChatMessage } from "../../../transcript/transcript";
-import { conversationView } from "../../useChat-view";
+import { Conversation } from "../../../../../models/conversations/session/conversation";
+import type { ChatMessage } from "../../../../../models/conversations/transcript/transcript";
+import { conversationView } from "../../../../../models/conversations/panel/useChat-view";
 import { type PopoverList, useComposerKeys, useRecallRing } from "../composerKeys";
 import { runningTurn } from "../../../../../testing/runningTurn";
 

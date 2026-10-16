@@ -1,4 +1,4 @@
-import type { AutoUpdate, AutoUpdateHold } from "@intentic/sandbox-contract";
+import type { AutoUpdate, AutoUpdateHold } from "@intentic/sandbox-contract/schemas/updates";
 import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { formatUntil } from "@intentic/ui/time";

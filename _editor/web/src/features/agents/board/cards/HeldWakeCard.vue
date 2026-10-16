@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { Button, Icon, timeAgo, toneWash } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
-import type { AutomationApproval } from "@intentic/sandbox-contract";
+import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
 import { computed } from "vue";
-import OriginMark from "../../fleet/OriginMark.vue";
+import OriginMark from "../../../../parts/fleet/OriginMark.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Approvals-queue row drawn on the board, a sibling of an agent card, not one: no conversation exists until Approve is

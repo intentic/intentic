@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import type { AuditSettings, AuditStatus } from "@intentic/sandbox-contract";
+import type { AuditSettings } from "@intentic/sandbox-contract/schemas/data-protection";
+import type { AuditStatus } from "@intentic/sandbox-contract/schemas/audit";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";

@@ -1,9 +1,10 @@
 import { MEMORY_FILE, WORKSPACE_ROOT } from "@intentic/constants";
-import { isProjectDirName, RESERVED_PROJECT_DIR_NAMES, STARTER_REPO } from "@intentic/sandbox-contract";
+import { isProjectDirName, RESERVED_PROJECT_DIR_NAMES } from "@intentic/sandbox-contract/ids/project-dir";
+import { STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
 import { REPO_ROLES } from "@intentic/scaffold";
 import { IGNORED_DIRS, PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Config } from "../env.config.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 import { COMMON_EXCLUDES } from "../workspace/layout/git-layout.js";
 import { projectDirComplaint, projectDirOf, seedsStarterSite } from "./project-dir.js";
 

@@ -1,4 +1,4 @@
-import type { ExtensionSummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
 
 // Which build of an extension a browser holds, as the list names it: the pinned commit, or, for an install running from
 // its source checkout, the fingerprint of the bundle served from there. The loader records it per load and the

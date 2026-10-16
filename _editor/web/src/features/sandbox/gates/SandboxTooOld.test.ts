@@ -3,7 +3,7 @@
 // to run on its machine. A hosted sandbox has no machine of its owner's to run anything on, so it gets no command.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { OLDEST_SUPPORTED_DAEMON } from "@intentic/sandbox-contract";
+import { OLDEST_SUPPORTED_DAEMON } from "@intentic/sandbox-contract/state/daemon-floor";
 import { installI18n } from "@intentic/ui/i18n";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -11,10 +11,10 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 const active = ref<{ name?: string; hosted: object | null } | undefined>({ name: `workspace`, hosted: null });
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
 const slug = ref<string | undefined>(`sandbox-3c469e9d6c58`);
-jest.mock(`../environment/servingSlug`, () => ({ useServingSlug: () => slug }));
+jest.mock(`../../../models/sandbox/environment/servingSlug`, () => ({ useServingSlug: () => slug }));
 // The connected machine running it, when this sandbox reaches one; none unless a case says so.
 const runsOn = ref<string | undefined>(undefined);
-jest.mock(`../devices/useDevices`, () => ({ useHostRunning: () => runsOn }));
+jest.mock(`../../../models/sandbox/devices/useDevices`, () => ({ useHostRunning: () => runsOn }));
 // The update card is the Sandbox page's own, with its own tests; here it only has to be there.
 jest.mock(`../overview/version/SandboxUpdateCard.vue`, () => ({
     default: defineComponent({ render: () => h(`div`, { "data-update-card": `` }) }),

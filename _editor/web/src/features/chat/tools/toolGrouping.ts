@@ -1,4 +1,4 @@
-import type { TranscriptTool } from "@intentic/sandbox-contract";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { diffStat } from "./chatToolDiff";
 import { delegates } from "./toolPresentation";
 

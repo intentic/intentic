@@ -1,4 +1,8 @@
-import { type AgentReply,agentContract,type ConversationQueue,DEFAULT_PROVIDER,noticeCode,speakerVoice } from "@intentic/sandbox-contract";
+import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { agentContract } from "@intentic/sandbox-contract/contracts/agent.contract";
+import { type ConversationQueue, DEFAULT_PROVIDER } from "@intentic/sandbox-contract/schemas/agent";
+import { noticeCode } from "@intentic/sandbox-contract/events/sandbox-notice";
+import { speakerVoice } from "@intentic/sandbox-contract/schemas/speaker";
 import { type AuditNote, noteAudit } from "../../audit/audit-http.js";
 import { implement, ORPCError } from "@orpc/server";
 import { routeChat } from "../prompt/chat-router.js";

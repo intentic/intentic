@@ -1,4 +1,4 @@
-import type { PasskeysList } from "@intentic/sandbox-contract";
+import type { PasskeysList } from "@intentic/sandbox-contract/schemas/system";
 import { type NoticeModel, noticeFrom } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, ref, watch } from "vue";

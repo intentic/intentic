@@ -1,8 +1,9 @@
 import { type FSWatcher, watch } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { SCRATCH_MARK } from "@intentic/ext-onlyoffice/local-office";
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import { createIgnoreScope, IGNORED_DIRS, type IgnoreScope, toRelPath, walkMatchers } from "@intentic/workspace-ignore";
 import { TEMPORARY_MARK } from "./files.js";
 
@@ -92,7 +93,7 @@ const watchRecursively = (root: string, add: (path: string | undefined) => void,
             log(`watching ${root} stopped: ${error.message}`),
         );
     } catch (error) {
-        log(`cannot watch ${root}: ${error instanceof Error ? error.message : String(error)}`);
+        log(`cannot watch ${root}: ${errorMessage(error)}`);
         return undefined;
     }
 };
@@ -148,7 +149,7 @@ const watchFolders = (root: string, add: (path: string | undefined) => void, log
         for (const dirent of dirents) {
             const path = rel === `` ? dirent.name : `${rel}/${dirent.name}`;
             if (dirent.isDirectory() && !own.isIgnored(dirent.name, path, true) && !isLockedWorkspacePath(path)) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- depth first on purpose: the cap then keeps whole top folders rather than a thin layer of all of them
+                // depth first on purpose: the cap then keeps whole top folders rather than a thin layer of all of them
                 await watchDir(path, own);
             }
         }

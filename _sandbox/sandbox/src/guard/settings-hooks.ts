@@ -4,7 +4,7 @@ import { stat } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { insideRel } from "@intentic/base/contained";
 import { isRecord } from "@intentic/base/escape";
-import type { HookMarketplace, HookPlugin, HookScript, SettingsHook } from "@intentic/sandbox-contract";
+import type { HookMarketplace, HookPlugin, HookScript, SettingsHook } from "@intentic/sandbox-contract/schemas/approvals";
 import { frontmatterHooks } from "./frontmatter-hooks.js";
 import { enabledPluginsOf, installedPluginDirs, jsonIn, pluginHooks, skillFolderPlugins } from "./plugin-hooks.js";
 import { homeDir } from "../system/home-dir.js";

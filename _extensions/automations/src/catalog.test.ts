@@ -1,4 +1,4 @@
-import type { TriggerSource } from "@intentic/sandbox-contract";
+import type { TriggerSource } from "@intentic/sandbox-contract/schemas/automations";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { sourceWords } from "./catalog";

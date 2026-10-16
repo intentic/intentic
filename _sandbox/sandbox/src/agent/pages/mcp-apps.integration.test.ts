@@ -1,7 +1,8 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentEvent, readMcpAppData } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { readMcpAppData } from "@intentic/sandbox-contract/text/pages";
 import { callForApp, callResultOf, McpAppHost } from "./mcp-apps.js";
 
 // An MCP server's app drawn for one of its calls, and what the app may then ask of its server: against a fake server

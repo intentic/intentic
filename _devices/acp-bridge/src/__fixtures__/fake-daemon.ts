@@ -1,4 +1,5 @@
-import { type AgentEvent, type AgentReply, type AttachFrame, isTurnFact } from "@intentic/sandbox-contract";
+import { type AgentEvent, type AttachFrame, isTurnFact } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import type { DaemonClient } from "../daemon-client.js";
 

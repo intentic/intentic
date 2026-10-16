@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODELS } from "@intentic/sandbox-contract";
+import { LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODELS } from "@intentic/sandbox-contract/schemas/capabilities";
 import { estimatedModelMemory, fitsBudget, localModelFit, runsAtFullSpeed } from "./local-model-fit.js";
 
 // What the connect view sizes its offer against, read off a real workspace tree: which weights are already cached is a

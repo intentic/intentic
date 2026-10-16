@@ -1,4 +1,5 @@
-import { holdsRequest, type TodoItem } from "@intentic/sandbox-contract";
+import { holdsRequest } from "@intentic/sandbox-contract/events/transcript";
+import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
 import {
     changedNothing,
     type ChatMessage,
@@ -14,7 +15,7 @@ import {
     repeatedChecklistIds,
     turnsOf,
     unsaidError,
-} from "../transcript";
+} from "../../../../models/conversations/transcript/transcript";
 
 const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
 

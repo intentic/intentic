@@ -18,7 +18,7 @@ import { claudeStoreOf, type StoreOwner } from "../../sessions/session-store.js"
 import { mirroredDirs, overlaysDir, PACKAGE_STORE, type TurnIsolation } from "./isolation.js";
 import { coneFor, fencedComposition } from "./worktree-cone.js";
 import { addCheckoutOver } from "./checkout-aside.js";
-import type { Fence } from "@intentic/sandbox-contract";
+import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
 
 // A conversation's isolated checkout: one git worktree per workspace repo, root at <worktreesRoot>/<id>/, nested repos
 // at <id>/<repo>/, mirroring the /work layout.

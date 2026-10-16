@@ -2,7 +2,7 @@ import { sandboxRef } from "@intentic/extension-api";
 import { computed } from "vue";
 import { boolPreference, enumPreference, numberPreference } from "@intentic/ui/preference";
 import { useAudience } from "../../app/useAudience";
-import { activeSandboxId } from "../../lib/activeSandbox";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
 import type { ExplorerFilters } from "../../features/workspace/explorer/explorerFilter";
 import { iconRailScreenPx, useIconRailSize } from "./useIconRailSize";
 import { toAppPx } from "./uiScale";

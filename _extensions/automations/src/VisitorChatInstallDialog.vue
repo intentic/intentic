@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AutomationSummary } from "@intentic/sandbox-contract";
+import type { AutomationSummary } from "@intentic/sandbox-contract/schemas/automations";
 import { Button, CopyButton, Icon, Modal, Notice, noticeOf } from "@intentic/extension-ui";
 import { computed, ref, toRef } from "vue";
 import { since } from "./cronSchedule";

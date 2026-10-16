@@ -1,4 +1,6 @@
-import { type AccountUsage, type OauthAccount, preferredAccount, type ProviderRefusal, type TranslatorAccounts, type UsageWindow } from "@intentic/sandbox-contract";
+import type { AccountUsage, ProviderRefusal, TranslatorAccounts, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import { preferredAccount } from "@intentic/sandbox-contract/models/plan-pools";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { recordingLogger } from "../../harness/route-fakes.testing.js";

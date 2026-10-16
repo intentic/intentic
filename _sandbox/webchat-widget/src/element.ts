@@ -1,4 +1,4 @@
-import type { WebchatMessage, WebchatPublicConfig } from "@intentic/sandbox-contract";
+import type { WebchatMessage, WebchatPublicConfig } from "@intentic/sandbox-contract/schemas/automations";
 import { type EmbedEndpoint, EmbedError, escapeHtml, solveProofOfWork } from "@intentic/sandbox-contract/embed";
 import { solveTurnstile } from "./challenge.js";
 import {

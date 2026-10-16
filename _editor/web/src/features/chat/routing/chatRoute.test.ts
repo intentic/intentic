@@ -1,8 +1,10 @@
-import { type ChatRoute, type Persona, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import type { ChatRoute } from "@intentic/sandbox-contract/schemas/chat-route";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { effectScope, type EffectScope, type Ref, ref } from "vue";
 import type { ProcedureInput } from "../../../client/sandbox/sandboxRpc";
-import type { PickAction } from "../session/selectionReducer";
+import type { PickAction } from "../../../models/conversations/session/selectionReducer";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Pins the composer's half of routing: that nothing is read until the message is sent, that ONE call answers whichever
@@ -10,7 +12,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // what a send does with the answer. The daemon's own choosing is not what this tests.
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
-jest.mock(`../../sandbox/overview/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
+jest.mock(`../../../models/sandbox/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
 
 // `backend` names its own model, `social` names none: the two cases that decide whether a routed persona answers the
 // model question itself.
@@ -25,7 +27,7 @@ const personas = ref<Persona[]>([
     },
     { id: `social`, capabilities: [] },
 ]);
-jest.mock(`../../sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ personas }) }));
+jest.mock(`../../../models/sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ personas }) }));
 
 // A guest is never routed onto a persona: its chat wears one of its own from the start.
 const isGuest = ref(false);
@@ -36,7 +38,7 @@ const routeChat = jest.fn<(input: ProcedureInput<`agent.routeChat`>) => Promise<
 jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ agent: { routeChat } }) }));
 
 // Claude connected, nothing else: the backend persona's ladder resolves to its one pin.
-jest.mock(`../accounts/roleModel`, () => ({ roleSources: ref([{ provider: `claude`, ready: true, models: [] }]) }));
+jest.mock(`../../../models/providers/roleModel`, () => ({ roleSources: ref([{ provider: `claude`, ready: true, models: [] }]) }));
 
 const { SEND_WAIT_MS, chatRouteWait, useChatRoute } = await import("./chatRoute");
 type Chat = Parameters<typeof useChatRoute>[0] extends () => infer C ? C : never;

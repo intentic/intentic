@@ -2,7 +2,7 @@ import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import type { IsolationPlan, TurnPlacement } from "../../conversations/worktrees/isolation.js";
 import { forgetNamespaceEntry, registerMountEntry, type NamespaceEntryReference } from "../../workload/namespace-entry.js";
-import { syncHookOutput } from "../../testing.js";
+import { syncHookOutput } from "../run/harness/harness-hooks.testing.js";
 import { type DiagRequest, type DiagRunner, editDiagnosticsHooks, type ModulesProbe } from "./agent-diagnostics.js";
 import { EDIT_TOOLS } from "../../rules/edit-tools.js";
 import type { ShellEdit, ShellEditTracker } from "../tools/agent-shell-edits.js";

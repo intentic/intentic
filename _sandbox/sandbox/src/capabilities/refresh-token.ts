@@ -1,5 +1,6 @@
 import type { CapabilityContribution } from "@intentic/extension-manifest";
-import { type Capability, envSuffix } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { envSuffix } from "@intentic/sandbox-contract/policy/capability-env";
 import { ORPCError } from "@orpc/server";
 import { tokenEquals } from "../auth/token-equals.js";
 import type { CapabilitiesStore } from "./capabilities-store.js";

@@ -1,5 +1,5 @@
 import { type Periodic, startPeriodic } from "@intentic/base/async";
-import type { EnvironmentDrift } from "@intentic/sandbox-contract";
+import type { EnvironmentDrift } from "@intentic/sandbox-contract/schemas/environment";
 import type { Logger } from "pino";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { synthesizeAutoDrafts } from "./auto-drafts.js";

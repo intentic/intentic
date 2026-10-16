@@ -1,4 +1,4 @@
-import type { IntenticLine } from "@intentic/sandbox-contract";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import { ORPCError } from "@orpc/client";
 import { z } from "zod";
 import { acquireStreamSlot } from "./streamBudget";

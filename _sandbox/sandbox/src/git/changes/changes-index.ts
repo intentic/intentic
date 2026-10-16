@@ -1,6 +1,6 @@
 import { rmdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import type { ScratchPath } from "@intentic/sandbox-contract";
+import type { ScratchPath } from "@intentic/sandbox-contract/schemas/git/git";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { EMPTY_TREE } from "../../workspace/layout/git-layout.js";
 import { changedFiles, headSha } from "./changes.js";

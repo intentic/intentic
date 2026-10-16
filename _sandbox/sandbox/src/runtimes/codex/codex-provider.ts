@@ -1,5 +1,7 @@
 import { join } from "node:path";
-import type { AgentEvent, AgentProvider, AgentTurn, Capability } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentProvider, AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { Config } from "../../env.config.js";
 import { releasingMounts } from "../../agent/tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
@@ -16,7 +18,7 @@ import {
 } from "../../agent/providers/adapter.js";
 import type { AgentRequest, CodexCredential } from "../../agent/providers/agent-request.js";
 import { opt } from "../../opt.js";
-import { withAttachments } from "../../agent/prompt/attachment-note.js";
+import { withAttachments } from "../../sessions/vocabulary/attachment-note.js";
 import { type ProviderModule, translatorAccountEntries, translatorReady } from "../../agent/providers/provider-module.js";
 import { connectedTranslatorProviders } from "../../agent/providers/translator.js";
 import type { Services } from "../../composition.js";

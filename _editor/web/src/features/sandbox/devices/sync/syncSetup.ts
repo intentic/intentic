@@ -1,5 +1,5 @@
 import { shallowRef } from "vue";
-import { activeSandboxId } from "../../../../lib/activeSandbox";
+import { activeSandboxId } from "../../../../app/storage/activeSandbox";
 
 // TURNING SYNC ON OUTLIVES THE ROW IT WAS PRESSED ON. Setting up a folder restarts this machine's agent, so the row goes
 // offline and comes back while the press is still out, and the component holding the folder field is made again. Kept

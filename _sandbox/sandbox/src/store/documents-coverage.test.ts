@@ -96,7 +96,7 @@ const callArguments = (text: string, callee: string): string[] =>
 // cannot see, each named with why it stands. The list only shrinks.
 const RAW_JSON_WRITERS = [
     // What a conversation was last told, overwritten every turn; one an older shape wrote reads as none.
-    "agent/prompt/prompt-record.ts",
+    "store/journals/prompt-record.ts",
     // Claude Code's own settings.json: one key merged into a file whose shape another program owns.
     "sessions/session-store.ts",
     // Written synchronously as a failed boot exits, where no store's write queue can be waited on.

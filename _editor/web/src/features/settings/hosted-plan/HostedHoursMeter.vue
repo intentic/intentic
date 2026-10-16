@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { MachineHours } from "./hostedHours";
+import type { MachineHours } from "../../../models/hosted-plan/hostedHours";
 
 // One machine's hours, drawn the same way wherever they are shown (Billing's list, the sandbox's own Usage tab): whose
 // hours they are, one line about what is left, and a bar saying the same thing, so colour never carries it alone. Hours

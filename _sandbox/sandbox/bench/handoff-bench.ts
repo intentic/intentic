@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { query, type HookCallback, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { STATE_GROUP_DIR } from "@intentic/sandbox-contract";
+import { STATE_GROUP_DIR } from "@intentic/sandbox-contract/state/workspace-state";
 import { statePath } from "../src/state-paths.js";
 import {
     carrySession,

@@ -1,5 +1,5 @@
 import { retryAfterMs } from "@intentic/base/async";
-import type { UsageWindow, WindowGates } from "@intentic/sandbox-contract";
+import type { UsageWindow, WindowGates } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
 import type { HeadroomSource } from "../../usage/headroom.js";
 import { asNumber, asRecord, asString, clampPercent, readFailure, resetFromIso } from "../../usage/payload.js";

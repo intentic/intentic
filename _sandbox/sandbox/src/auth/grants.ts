@@ -1,5 +1,6 @@
 import { type ExtensionReach, extensionRouteReach, listenerSegmentOf } from "@intentic/extension-manifest";
-import { EXTENSION_TOKEN_HEADER, sandboxRouteFor } from "@intentic/sandbox-contract";
+import { EXTENSION_TOKEN_HEADER } from "@intentic/sandbox-contract/protocol/headers";
+import { sandboxRouteFor } from "@intentic/sandbox-contract";
 import { tokenEquals } from "./auth.js";
 import { type ControlTokens, ControlTokensUnreadableError, controlScoped, type ResolvedControlToken } from "./tokens/control-tokens.js";
 import type { Principal } from "./principal.js";

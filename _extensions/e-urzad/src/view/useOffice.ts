@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { computed, ref, type ComputedRef, type Ref } from "vue";
 import type { Snapshot } from "../core/snapshot.js";
 import { host } from "../host.js";
@@ -57,7 +58,7 @@ export const useOffice = (account: () => string, service: () => OfficeService, d
         try {
             await run();
         } catch (cause) {
-            failed.value = cause instanceof Error ? cause.message : String(cause);
+            failed.value = errorMessage(cause);
         } finally {
             active.value = undefined;
         }

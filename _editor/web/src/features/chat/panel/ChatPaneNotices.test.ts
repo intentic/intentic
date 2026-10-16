@@ -3,13 +3,15 @@
 // wrongly telling a working answer's reader their message had failed.
 import "@intentic/testing/dom";
 import type { HostedPlanState } from "@intentic/api-contract";
-import { type AgentProvider, type OauthAccount, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import { TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
 import { type App, createApp, defineComponent, h, nextTick, ref, shallowRef } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
 import { hostedLane, hostedMachine, hostedPlanState, spentHours } from "../../../testing/hostedPlan";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
-import type { ServingAccount } from "../accounts/servingAccount";
+import type { ServingAccount } from "../../../models/conversations/accounts/servingAccount";
 
 const provider = ref<AgentProvider>(TRIAL_PROVIDER);
 const reachable = ref(true);
@@ -21,8 +23,8 @@ const accounts = ref<OauthAccount[]>([]);
 const servingAccount = ref<ServingAccount | undefined>(undefined);
 
 // The pane's own view, injected as the real strip would from ChatPane, mounted here directly.
-jest.mock(`../models/useChat-catalog`, () => ({ loadTrialStatus }));
-jest.mock(`./useChat-view`, () => ({
+jest.mock(`../../../models/conversations/accounts/useChat-catalog`, () => ({ loadTrialStatus }));
+jest.mock(`../../../models/conversations/panel/useChat-view`, () => ({
     usePaneView: () => ({
         // Shallow, as the conversation list holds them (sandboxShallowRef): a deep ref would unwrap the selection's refs.
         conversation: shallowRef({ conversationId: `agent-1`, turn: { resume }, selection: { servingAccount } }),
@@ -43,11 +45,11 @@ jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ re
 // The plan state as the strip reads it: settable, so what counts as low is hostedHours.ts's own rule.
 const hostedPlan = ref<HostedPlanState | undefined>(undefined);
 const planOffered = ref(true);
-jest.mock(`../../settings/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ state: hostedPlan, offered: planOffered }) }));
+jest.mock(`../../../models/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ state: hostedPlan, offered: planOffered }) }));
 // An account whose one free machine, s1, has spent `usedMinutes` of the forty free hours.
 const spending = (usedMinutes: number): HostedPlanState =>
     hostedPlanState(hostedLane([hostedMachine(`s1`, spentHours(usedMinutes))], spentHours(usedMinutes)));
-jest.mock(`../../agents/fleet/useAgents`, () => ({
+jest.mock(`../../../models/fleet/useAgents`, () => ({
     useAgents: () => ({
         agentById: () => undefined,
         archived: ref([]),
@@ -67,7 +69,7 @@ jest.mock(`vue-router`, () => ({
     RouterLink: RouterLinkStub as never,
 }));
 
-const { trialStatus } = await import("../accounts/providerCatalog");
+const { trialStatus } = await import("../../../models/providers/providerCatalog");
 const { default: ChatPaneNotices } = await import("./ChatPaneNotices.vue");
 
 let app: App | undefined;

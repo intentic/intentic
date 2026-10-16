@@ -1,4 +1,4 @@
-import type { AutoUpdateInput } from "@intentic/sandbox-contract";
+import type { AutoUpdateInput } from "@intentic/sandbox-contract/schemas/updates";
 import { computed } from "vue";
 import { rpcPrefix } from "../../../../lib/queryKeys";
 import { queryClient } from "../../../../lib/queryPersistence";
@@ -7,7 +7,7 @@ import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { NOT_NOW_MS, notTodayUntil } from "./autoUpdate";
-import { useSandboxVersion } from "./useSandboxVersion";
+import { useSandboxVersion } from "../../../../models/sandbox/useSandboxVersion";
 
 // The owner's hands on an update that takes itself: the switch, a pause, and "now". Each answer is the daemon's own
 // state afterwards, and /info is read again rather than patched, so the card redraws from the daemon's word. The daemon

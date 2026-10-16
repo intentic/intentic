@@ -1,12 +1,10 @@
-import type { TurnNote } from "@intentic/sandbox-contract";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
+import { CONTEXT_NOTE_HEADER, CONTEXT_NOTE_TITLE } from "../../sessions/vocabulary/prompt-envelope.js";
 
 // Tells a model which repos it can and can't see: an absent directory looks identical to one that never existed, so a
 // model left to guess concludes the code is gone. Follows workspace-map.ts's rule: what's excluded is stated
 // explicitly, since a list that stops silently reads as complete. Rides the user message on the opening turn and after
 // a compaction, not the stable system prefix, since those are the only moments history can't carry it.
-
-export const CONTEXT_NOTE_HEADER = "## Context of this session";
-export const CONTEXT_NOTE_TITLE = "Context of this session";
 
 export interface ContextNoteInput {
     // Label (or id) of the persona card the composition read from; absent if set without one.

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { BrandMark, StatusBadge, type Tip } from "@intentic/ui";
 import { computed } from "vue";
-import { checksOk, checksProblem, checksTip, type DiscoverListing, splitListingName } from "./discoverListing";
+import { checksOk, checksProblem, checksTip, type DiscoverListing, splitListingName } from "../../../models/sandbox/discoverListing";
 import { useT } from "@intentic/ui/i18n";
 
 // One published extension, drawn as the same tile the catalog uses, at the same density: for names nobody knows yet,

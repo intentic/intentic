@@ -1,3 +1,4 @@
+import { parseJsonOr } from "@intentic/base/json";
 import { anySignal, SingleFlight } from "@intentic/base/async";
 import { computed, ref, watch } from "vue";
 import { reloadOnHotUpdate } from "../../app/hotReload";
@@ -8,11 +9,11 @@ import {
     type PasskeyRequired,
     PasskeyRequiredSchema,
     PLATFORM_KEY_UNKNOWN,
-    rawRouteUrl,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/system";
+import { rawRouteUrl } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { t } from "@intentic/ui/i18n";
 import { z } from "zod";
-import { passkeyNudgeKey, removeStoredValue, storedKeys, storedValue, storeValue } from "../../lib/browserStorage";
+import { passkeyNudgeKey, removeStoredValue, storedKeys, storedValue, storeValue } from "../../app/storage/browserStorage";
 import { accountWaysIn, emailOnly, signsInByEmail } from "../auth/signInMethods";
 import { useGoogleIdentity } from "../auth/useGoogleIdentity";
 import { healthAnswers, sandboxIdOf } from "../endpoint/endpoint";
@@ -133,18 +134,14 @@ const readStored = (sandboxId: string): StoredSession | undefined => {
     if (raw === undefined) {
         return undefined;
     }
-    try {
-        const parsed = JSON.parse(raw) as StoredSession;
-        return typeof parsed.token === `string` &&
-            parsed.token !== `` &&
-            Number.isFinite(parsed.expiresAt) &&
-            typeof parsed.email === `string` &&
-            parsed.email !== ``
-            ? parsed
-            : undefined;
-    } catch {
-        return undefined;
-    }
+    const parsed = parseJsonOr(raw, undefined) as StoredSession | null | undefined;
+    return typeof parsed?.token === `string` &&
+        parsed.token !== `` &&
+        Number.isFinite(parsed.expiresAt) &&
+        typeof parsed.email === `string` &&
+        parsed.email !== ``
+        ? parsed
+        : undefined;
 };
 
 const write = (sandboxId: string, session: StoredSession, broadcast = true): void => {

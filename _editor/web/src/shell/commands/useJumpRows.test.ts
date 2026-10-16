@@ -6,7 +6,7 @@ import { computed, effectScope, type Ref, ref } from "vue";
 // and the whole query read as a file's name, since there is no other kind to narrow to. The file search itself is the
 // seam (useFuzzyFiles), answering two paths for any query it is given.
 
-jest.mock("../../features/workspace/search/useFuzzyFiles", () => ({
+jest.mock("../../models/workspace/search/useFuzzyFiles", () => ({
     useFuzzyFiles: (query: Ref<string>, active: Ref<boolean>) => ({
         paths: computed(() => (active.value && query.value.length >= 1 ? [`src/app.ts`, `docs/apple.md`] : [])),
         floor: computed(() => 1),
@@ -18,7 +18,7 @@ jest.mock("../../features/workspace/search/useFuzzyFiles", () => ({
 }));
 
 const { useFileJumpRows } = await import("./useJumpRows");
-const { useWorkspaceTabs } = await import("../../features/workspace/tabs/useWorkspaceTabs");
+const { useWorkspaceTabs } = await import("../../models/workspace/tabs/useWorkspaceTabs");
 
 afterEach(() => resetSandboxScope());
 

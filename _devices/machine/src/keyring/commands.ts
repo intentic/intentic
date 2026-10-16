@@ -1,7 +1,8 @@
 import { plural } from "@intentic/base/format";
 import { askKeyring, type EntryInfo, type KeyringClientOptions, keyringPaths, KeyringUnavailable, sealForKeyring } from "@intentic/keyring";
 import type { AutostartKind, Item, Ui } from "@intentic/local-agent";
-import { civilDayIn, type KeyringShareMode, type KeyringState, localZone, type SealedBox } from "@intentic/sandbox-contract";
+import { civilDayIn, localZone } from "@intentic/sandbox-contract/time/zone";
+import type { KeyringShareMode, KeyringState, SealedBox } from "@intentic/sandbox-contract/schemas/keyring";
 import { buildChoiceParser, buildRouteMap, type CommandContext, numberParser } from "@stricli/core";
 import { buildCommand } from "../cli-ui.js";
 import { readLinks } from "../device/config.js";

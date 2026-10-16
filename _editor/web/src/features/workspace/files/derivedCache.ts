@@ -1,5 +1,5 @@
 import { sandboxValue } from "@intentic/extension-api";
-import type { WorkspaceDerived } from "@intentic/sandbox-contract";
+import type { WorkspaceDerived } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 
 // What a path's derived text answered last, for the life of this tab. The durable cache is on disk: the daemon keys a
 // shadow by the source file's content hash and re-derives only when that hash moves, so a reopened file was never being

@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import { secretsContract } from "@intentic/sandbox-contract";
+import { secretsContract } from "@intentic/sandbox-contract/contracts/secrets.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
 import { isOwnerBearer } from "../../auth/owner-gates.js";

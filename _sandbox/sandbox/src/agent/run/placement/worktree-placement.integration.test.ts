@@ -1,11 +1,12 @@
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AgentEvent, WorkspaceEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
 import type { ConversationWorktree } from "../../../conversations/worktrees/worktrees.js";
 import { gitOut, realCheckout, recordingLogger } from "../../../harness/route-fakes.testing.js";
 import { recordingTurnStores, services } from "../../../harness/route-services.testing.js";
-import { beginTurn } from "../../../testing.js";
-import { type LandBooks, landTurn } from "./turn-landing.js";
+import { beginTurn } from "../../../conversations/actor/conversation-actors.testing.js";
+import { type LandBooks, landTurn } from "../../../conversations/land/turn-landing.js";
 import { placedTurn, runnerPlacement } from "./turn-placement.js";
 import { type WorktreeRun, worktreePlacement, type WorktreeSteps } from "./worktree-placement.js";
 

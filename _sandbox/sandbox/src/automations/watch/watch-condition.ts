@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { WatchState } from "@intentic/sandbox-contract";
-import { classifyCommand } from "@intentic/sandbox-contract";
+import type { WatchState } from "@intentic/sandbox-contract/schemas/automations";
+import { classifyCommand } from "@intentic/sandbox-contract/policy/command-classes";
 import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { oneLine } from "@intentic/base/one-line";

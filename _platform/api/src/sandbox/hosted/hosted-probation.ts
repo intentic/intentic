@@ -1,6 +1,6 @@
 import { hostedTier } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
-import { judgeProbation, type ProbationLook, probationStep, UPDATE_PROBATION } from "@intentic/sandbox-contract";
+import { judgeProbation, type ProbationLook, probationStep, UPDATE_PROBATION } from "@intentic/sandbox-contract/state/update-probation";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { decryptSecret } from "../../crypto.js";
@@ -273,7 +273,7 @@ export const sweepHostedProbation = async (prisma: PrismaClient, config: Config,
     let rolledBack = 0;
     let kept = 0;
     for (const machine of machines) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep, gentle on Fly
+        // sequential sweep, gentle on Fly
         const outcome = await watchHostedMachine(prisma, config, logger, machine, now).catch((error): ProbationOutcome => {
             logger.error({ err: error, app: machine.appName }, `hosted probation: looking at the machine failed; looked at again next tick`);
             return skipped(`the look failed`);

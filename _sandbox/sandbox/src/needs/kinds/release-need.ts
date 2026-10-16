@@ -1,4 +1,5 @@
-import type { CredentialGate, Need, NeedAsk, NeedSubject, ReleaseNeed } from "@intentic/sandbox-contract";
+import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
+import type { Need, NeedAsk, NeedSubject, ReleaseNeed } from "@intentic/sandbox-contract/schemas/needs";
 import type { CredentialGrants } from "../../secrets/credential-grants.js";
 import type { AskContext, Met, NeedKindHandler, Resolved } from "../need-kinds.js";
 

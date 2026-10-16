@@ -1,4 +1,5 @@
-import { runnerSlug, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { runnerSlug } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import type { Services } from "../composition.js";
 import { adoptDefinitionSettings } from "../definition/apply-definition.js";
 import { emitDefinitionToml, parseDefinitionToml, settingsDefinition } from "../definition/definition.js";

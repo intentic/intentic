@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { CAPABILITY_CATALOG, localModelGb } from "@intentic/capability-catalog";
-import { humanizeModelId, type LocalModelFitResponse, LOCAL_MODEL_WINDOW_DEFAULT, type CapabilitySummary } from "@intentic/sandbox-contract";
+import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
+import type { LocalModelFitResponse } from "@intentic/sandbox-contract/contracts/endpoints.contract";
+import { LOCAL_MODEL_WINDOW_DEFAULT, type CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { Button, Icon, type IconName, type NoticeModel, Row, RowNote, SkeletonSnapshot, StatusBadge, type StatusVariant, ui, vSkeletonSource } from "@intentic/ui";
 import { computed, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { useOperation } from "../../../workbench/operations/operations";
-import { useCapabilities } from "../../capabilities/connect/useCapabilities";
-import { suggestName } from "../../capabilities/model/tiles";
+import { useCapabilities } from "../../../models/capabilities/useCapabilities";
+import { suggestName } from "../../../models/capabilities/tiles";
 import { useT } from "@intentic/ui/i18n";
 
 // The machine the reader already owns, inside the Local models panel (LocalModelsPanel). Two rungs and no arithmetic: one

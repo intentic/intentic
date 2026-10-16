@@ -1,4 +1,4 @@
-import { netdiskContract } from "@intentic/sandbox-contract";
+import { netdiskContract } from "@intentic/sandbox-contract/contracts/netdisk.contract";
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";

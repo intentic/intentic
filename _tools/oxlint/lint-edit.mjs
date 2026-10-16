@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // `node _tools/oxlint/lint-edit.mjs <file>`: autofixes the file silently, then reports only the diagnostics its HEAD
-// version did not have, under the root rules and the plugin tier (.oxlintrc.plugins.json, added.mjs). Exit 2 with the
-// report, else 0, including whenever it cannot measure (no binary, no git).
+// version did not have, under the root rules and the plugin tier (.oxlintrc.plugins.json, added.mjs), less complexity,
+// which the code-shape check reports. Exit 2 with the report, else 0, including whenever it cannot measure (no binary, no git).
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, extname, join, relative } from "node:path";
@@ -10,6 +10,9 @@ import { diagnosticsOf, introduced, LINTABLE, OXLINT_TIMEOUT_MS, oxlintIn, PLUGI
 
 // Rules a half-written file trips honestly, which `pnpm lint` still reads in CI's push check.
 const DEFERRED = new Set([`eslint(no-unused-vars)`]);
+
+// The complexity rule's findings, which the code-shape check (_tools/checks/code-shape.mjs) reports for the same edit.
+const heldElsewhere = (d) => d.code?.startsWith(`complexity(`) === true;
 
 // One fix can create what another rule repairs, so fixing repeats until a pass changes nothing, at most this often.
 const FIX_PASSES = 4;
@@ -129,7 +132,7 @@ const position = (text, offset) => {
 const report = (rel, text, fresh) => {
     const lines = fresh.map((d) => {
         const help = d.help ? `\n     ${d.help.replaceAll(`\n`, ` `)}` : ``;
-        return `  ${rel}${position(text, d.labels?.[0]?.span?.offset)}  ${d.code}\n     ${d.message.replaceAll(`\n`, ` `)}${help}`;
+        return `  ${rel}${position(text, d.labels?.[0]?.span?.offset)}  ${d.code ?? `unused-directive`}\n     ${d.message.replaceAll(`\n`, ` `)}${help}`;
     });
     return (
         `oxlint: ${fresh.length} new problem${fresh.length === 1 ? `` : `s`} in ${rel}, introduced by this edit; everything autofixable is already fixed.\n\n` +
@@ -153,11 +156,11 @@ const main = () => {
     }
 
     const judged = fixUntilSettled(oxlint, checkout, file);
-    const current = (lint(oxlint, checkout, file, judged) ?? []).filter((d) => !DEFERRED.has(d.code));
+    const current = (lint(oxlint, checkout, file, judged) ?? []).filter((d) => !DEFERRED.has(d.code) && !heldElsewhere(d));
     if (current.length === 0) {
         return 0;
     }
-    const baseline = baselineOf(oxlint, checkout, rel);
+    const baseline = baselineOf(oxlint, checkout, rel)?.filter((d) => !heldElsewhere(d));
     if (baseline === undefined) {
         return 0;
     }

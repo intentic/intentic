@@ -2,7 +2,8 @@ import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { unstubbed } from "@intentic/testing";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fakeCodexRunner, memoryFleet } from "../../testing.js";
+import { fakeCodexRunner } from "./codex-app-server.testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { createCodexAgent } from "./codex-agent.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 

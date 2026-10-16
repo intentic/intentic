@@ -2,27 +2,27 @@ import type { IconName } from "@intentic/ui";
 import type { ViewBadge } from "@intentic/extension-api";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
-import { roleAtLeast } from "@intentic/sandbox-contract";
-import { providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
-import { acpProviders, endpointProviders } from "../../chat/accounts/providerCatalog";
-import { accessKnown, providerReady } from "../../chat/session/access";
-import { useMissingSecretCount } from "../../capabilities/connect/secrets/useSecrets";
+import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { providerAccounts, translatorAccounts } from "../../../models/providers/providerAccounts";
+import { acpProviders, endpointProviders } from "../../../models/providers/providerCatalog";
+import { accessKnown, providerReady } from "../../../models/providers/access";
+import { useMissingSecretCount } from "../../../models/capabilities/useSecrets";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { DEVICES_PATH } from "../devices/deviceLinks";
-import { useSyncHealth } from "../devices/useDevices";
-import { useEnvironment } from "../environment/useEnvironment";
+import { DEVICES_PATH } from "../../../models/sandbox/devices/deviceLinks";
+import { useSyncHealth } from "../../../models/sandbox/devices/useDevices";
+import { useEnvironment } from "../../../models/sandbox/environment/useEnvironment";
 import { buildUnderWay, hostedBuildPhase } from "../environment/rebuild/hostedBuildPhase";
 import { REBUILD_ANCHOR } from "../environment/rebuildAnchor";
 import { useHostedBuild } from "../secrets/useHostedBuild";
-import { useSandboxVersion } from "./version/useSandboxVersion";
-import { UPDATE_ACTION_ANCHOR } from "./version/updateAnchor";
+import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
+import { UPDATE_ACTION_ANCHOR } from "../../../models/sandbox/updateAnchor";
 import { useSandboxBackup } from "./backup/useSandboxBackup";
 import { PUBLISH_ANCHOR } from "../access/publishAnchor";
 import { useUnbackedWork } from "./backup/useUnbackedWork";
 import { t } from "@intentic/ui/i18n";
 import { MODELS_PATH } from "../../../lib/routes/modelsPath";
-import { useExtensions } from "../../extensions/useExtensions";
+import { useExtensions } from "../../../models/extensions/useExtensions";
 
 // What the active sandbox needs from its owner, versus what's merely true of it: one list, split by `kind`, read
 // by the rail chip and the mobile menu so they agree. Lives as a badge on the chip, not a dismissible bar, since

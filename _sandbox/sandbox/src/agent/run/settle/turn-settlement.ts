@@ -1,4 +1,7 @@
-import { type AgentProvider, capabilitiesOf, KeyedProviderSchema, type TurnProof } from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
+import type { TurnProof } from "@intentic/sandbox-contract/schemas/agents";
 import type { Services } from "../../../composition.js";
 import type { TurnPlacement } from "../../../conversations/worktrees/isolation.js";
 import type { RefreshOptions } from "../../../usage/headroom.js";

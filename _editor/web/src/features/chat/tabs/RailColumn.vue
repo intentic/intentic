@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ResizeSeam } from "@intentic/ui";
-import { DEFAULT_RAIL_WIDTH, MAX_RAIL_WIDTH, MIN_RAIL_WIDTH, railWidth, setRailWidth } from "../../agents/board/columnWidth";
+import { DEFAULT_RAIL_WIDTH, MAX_RAIL_WIDTH, MIN_RAIL_WIDTH, railWidth, setRailWidth } from "../../../models/fleet/board/columnWidth";
 import { toAppPx, toScreenPx, uiLength } from "../../../workbench/window/uiScale";
 import { useT } from "@intentic/ui/i18n";
 

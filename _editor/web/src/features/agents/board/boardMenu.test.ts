@@ -2,15 +2,15 @@
 // Open row points the chat at that card. Unit-level rows are view/cardMenu.test.ts; this pins the board's wiring.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { t } from "@intentic/ui/i18n";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick } from "vue";
-import { useChat } from "../../chat/run/useChat";
-import { reviewAction } from "../fleet/agentStatus";
+import { useChat } from "../../../models/conversations/run/useChat";
+import { reviewAction } from "../../../models/agent-status/agentStatus-attention";
 import { queryClient } from "../../../lib/queryPersistence";
-import { setAgents } from "../fleet/useAgents-registry";
+import { setAgents } from "../../../models/fleet/useAgents-registry";
 import { router } from "../../../router";
 import AgentsView from "./AgentsView.vue";
 import { IconStub } from "@intentic/ui/testing";

@@ -1,11 +1,11 @@
 import { join } from "node:path";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { Logger } from "pino";
 import type { AgentTool } from "../agent/tools/agent-tools.js";
 import type { Services } from "../composition.js";
 import type { Config } from "../env.config.js";
 import { composeEnvironment } from "../environment/environment.js";
-import type { ExtensionHost } from "../extensions/installed-extensions.js";
+import type { ExtensionHost } from "./extension-inventory/installed-extensions.js";
 import { readWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { capabilitiesDocument, type CapabilitiesStore, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "./capabilities-store.js";
 import { contributionRegistry, invalidatingContributions, type ResolvedContribution } from "./contributions.js";

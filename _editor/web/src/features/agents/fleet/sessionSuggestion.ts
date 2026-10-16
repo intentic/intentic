@@ -1,7 +1,7 @@
-import { parsePinned } from "@intentic/sandbox-contract";
-import { Conversation } from "../../chat/session/conversation";
-import { summonTurn } from "../../chat/run/summon";
-import { openConversation, revealConversation } from "./agentActions";
+import { parsePinned } from "@intentic/sandbox-contract/models/model-pins";
+import { Conversation } from "../../../models/conversations/session/conversation";
+import { summonTurn } from "../../../models/conversations/run/summon";
+import { openConversation, revealConversation } from "../../../models/fleet/agentActions";
 
 // Suggests a specific piece of work with the turn already composed, so the app decides WHAT and the user decides IF:
 // nothing runs until send is pressed. Not in the tab strip while pending, so a dismissed proposal leaves no trace;

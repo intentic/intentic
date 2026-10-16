@@ -1,9 +1,11 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { unstubbed } from "@intentic/testing";
 import { createLogger } from "../../logger.js";
 import { openConversationsDb } from "../../store/conversations-db.js";
-import { beginTurn, fleetStoreOver, noPresences } from "../../testing.js";
+import { beginTurn } from "../actor/conversation-actors.testing.js";
+import { fleetStoreOver } from "./agents-registry.testing.js";
+import { noPresences } from "../land/landed-presence.testing.js";
 import type { BeginTurn } from "../actor/conversation-decide.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 import { createFleet, type FleetStore } from "./agents-registry.js";

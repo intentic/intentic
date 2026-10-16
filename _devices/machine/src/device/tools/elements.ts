@@ -10,7 +10,7 @@ import {
     type UiElement,
     viewFrame,
 } from "@intentic/desktop-automation";
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { calling, type Indicator, machineIndicator } from "../indicator.js";
 import { assertScope } from "../policy.js";
 import { assertTypable } from "./device.js";

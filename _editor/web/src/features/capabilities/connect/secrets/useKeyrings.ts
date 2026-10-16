@@ -1,4 +1,4 @@
-import type { SandboxKeyring } from "@intentic/sandbox-contract";
+import type { SandboxKeyring } from "@intentic/sandbox-contract/schemas/secrets";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";

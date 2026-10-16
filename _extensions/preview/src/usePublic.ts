@@ -1,4 +1,4 @@
-import type { PublicFile, PublishResult } from "@intentic/sandbox-contract";
+import type { PublicFile, PublishResult } from "@intentic/sandbox-contract/schemas/public";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";

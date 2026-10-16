@@ -2,7 +2,7 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { writeFileAtomicSync } from "@intentic/base/fs";
-import type { BootProgress } from "@intentic/sandbox-contract";
+import type { BootProgress } from "@intentic/sandbox-contract/events/system-events";
 import type { Logger } from "pino";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";

@@ -1,4 +1,5 @@
-import { CLAUDE_SEED_MODELS, type ProviderRefusal } from "@intentic/sandbox-contract";
+import { CLAUDE_SEED_MODELS } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { unstubbed } from "@intentic/testing";
 import type { ClaudeStore, StoredAccount } from "./claude-credentials.js";
 import { claudeSeatProbe, FIRST_RECHECK_MS, LONGEST_RECHECK_MS, type SeatProbeFetch } from "./claude-seat-check.js";

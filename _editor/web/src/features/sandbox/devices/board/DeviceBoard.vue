@@ -18,7 +18,7 @@ import DeviceBoardCard from "./DeviceBoardCard.vue";
 import PhoneRows from "../phones/PhoneRows.vue";
 import LinkedSandboxRows from "../links/LinkedSandboxRows.vue";
 import RecentlyDeleted from "../deleted/RecentlyDeleted.vue";
-import { fleetCounts, type MachineRow, type MachineStatus, machineVerdict, rowMatches, showFilter } from "../deviceRows";
+import { fleetCounts, type MachineRow, type MachineStatus, machineVerdict, rowMatches, showFilter } from "../../../../models/sandbox/devices/deviceRows";
 import { desktopApp } from "../../../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
 

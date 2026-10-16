@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Enforces the app's one field system (`ui-field-box`, in three variants and two sizes): no hand-styled
 // `<input>`/`<textarea>`, one focus state (primeng.css), no ring painted outside the border box, and no call site
-// restating a framed field's own geometry. Exceptions live in ALLOWED, keyed by file and exact class.
-import { at, blank, classWordsOf, finishFindings, tags, templateSource, templatesUnder, waiverList } from "./lib/templates.mjs";
+// restating a framed field's own geometry. Exceptions: `<!-- allow(inputs): <reason> -->` above the element.
+import { at, blank, classWordsOf, excusedAt, finishFindings, tags, templateSource, templatesUnder } from "./lib/templates.mjs";
 
 // What counts as what.
 
@@ -32,25 +32,12 @@ const RETIRED = /(?:^|\s)ui-field-input-error(?:\s|$)/u;
 
 // No tag-stack tracking here: every rule is about one element's own classes, so the walk stays flat.
 
-// Waivers keyed by path, then by the exact class string, with the reason it isn't the finding it looks like.
-const ALLOWED = new Map([
-    [
-        `_editor/ui/src/components/forms/SearchBar.vue`,
-        new Map([
-            [
-                `inputClass`,
-                `THE RECIPE IS COMPUTED, not absent: \`inputClass\` is \`field-bare\` plus the right-hand room this bar actually needs, which depends on how many controls it has (none, a clear "x", or the \`Aa\` switch beside it). A gate that reads only the template cannot follow a computed, and the alternative — inlining three padding variants at the call site — is the thing this gate exists to prevent.`,
-            ],
-        ]),
-    ],
-]);
-
 const tracked = templatesUnder(`_editor`, `_extensions`);
 const findings = [];
-const { waived, stale } = waiverList(ALLOWED, `input-tiers.mjs`);
 
 for (const path of tracked) {
-    const scan = blank(templateSource(path));
+    const source = templateSource(path);
+    const scan = blank(source);
 
     for (const { closing, name, attrs, index } of tags(scan)) {
         if (closing === `/`) {
@@ -58,6 +45,7 @@ for (const path of tracked) {
         }
         const classes = classWordsOf(attrs);
         const where = at(path, scan, index);
+        const excused = () => excusedAt(source, scan, index, `inputs`);
 
         const isNative = name === `input` || name === `textarea`;
         const type = /\btype="([^"]*)"/u.exec(attrs)?.[1] ?? (name === `textarea` ? `textarea` : `text`);
@@ -67,7 +55,7 @@ for (const path of tracked) {
         const isField = typed && !offscreen;
 
         // ── 1 · a field that never joined the design system
-        if (isField && !ON_SYSTEM.test(classes) && !waived(path, classes)) {
+        if (isField && !ON_SYSTEM.test(classes) && !excused()) {
             findings.push({
                 at: where,
                 why: `<${name}> is a field wearing none of the design system's: use \`ui.input()\` / \`ui.inputSm()\` for a framed one, \`ui.inputInline()\` where it replaces a line of text, or \`field-bare\` inside a \`ui-field-shell\` when the box around it draws the frame`,
@@ -81,14 +69,14 @@ for (const path of tracked) {
 
         // ── 2 · a focus state written by hand
         const focus = classes.match(HAND_FOCUS);
-        if (focus !== null && !waived(path, focus[0].trim())) {
+        if (focus !== null && !excused()) {
             findings.push({
                 at: where,
                 why: `\`${focus[0].trim()}\` is a focus state written at a call site: there is one, in primeng.css, and it is the axis this sweep was about — 9 answers across 128 fields, the commonest of them identical to the same field's hover`,
             });
         }
 
-        if (BARE_OUTLINE_NONE.test(classes) && !waived(path, `outline-none`)) {
+        if (BARE_OUTLINE_NONE.test(classes) && !excused()) {
             findings.push({
                 at: where,
                 why: `\`outline-none\` throws away the browser's focus ring and puts nothing back: the field classes already replace it with a rim and an inset ring, so this only removes the indicator on the one control that always owes one`,
@@ -97,7 +85,7 @@ for (const path of tracked) {
 
         // ── 3 · a ring that paints outside the border box
         const outward = classes.match(OUTWARD_RING);
-        if (outward !== null && !waived(path, outward[0].trim())) {
+        if (outward !== null && !excused()) {
             findings.push({
                 at: where,
                 why: `\`${outward[0].trim()}\` paints outside the border box, so it covers whatever sits beside it in a tight row and is CLIPPED by any ancestor with \`overflow: hidden|auto\` — a scroll pane, a rounded card, a dialog body. A field's focus state is drawn inward (\`--ui-field-focus-inset\`, tokens.css)`,
@@ -110,7 +98,7 @@ for (const path of tracked) {
             const geometry = classes
                 .split(` `)
                 .filter((c) => FIELD_GEOMETRY.test(` ${c} `))
-                .filter((c) => !waived(path, c));
+                .filter(() => !excused());
             if (geometry.length > 0) {
                 findings.push({
                     at: where,
@@ -121,7 +109,7 @@ for (const path of tracked) {
             const arbitrary = classes
                 .split(` `)
                 .filter((c) => ARBITRARY_TEXT.test(` ${c} `))
-                .filter((c) => !waived(path, c));
+                .filter(() => !excused());
             if (arbitrary.length > 0) {
                 findings.push({
                     at: where,
@@ -132,7 +120,7 @@ for (const path of tracked) {
 
         // ── 6 · a spelling the design system retired
         const retired = classes.match(RETIRED);
-        if (retired !== null && !waived(path, retired[0].trim())) {
+        if (retired !== null && !excused()) {
             findings.push({
                 at: where,
                 why: `\`ui-field-input-error\` is retired: \`ui-field-error-box\` re-points the rim and focus tokens instead of winning an \`!important\` fight over one border, so an invalid field that is also focused shows one state rather than two`,
@@ -140,8 +128,6 @@ for (const path of tracked) {
         }
     }
 }
-
-findings.push(...stale());
 
 finishFindings(
     findings,

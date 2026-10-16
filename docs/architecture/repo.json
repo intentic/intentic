@@ -30,8 +30,10 @@
                 "_sandbox/issue-sdk",
                 "_sandbox/ocr",
                 "_sandbox/output-cleaners",
+                "_sandbox/privacy-detect",
                 "_sandbox/sandbox",
                 "_sandbox/scaffold",
+                "_sandbox/speech",
                 "_sandbox/webchat-widget",
                 "_sandbox/webq"
             ]

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createKnownMatcher } from "../known-matcher.js";
 import { filePrivacyVault } from "../privacy-vault.js";
-import { luhn, pesel } from "../detect/tests/ids.testing.js";
+import { luhn, pesel } from "@intentic/privacy-detect/testing";
 
 // The vault is what makes a token mean one value forever: a provider holds old transcripts, so an index handed to a
 // second value would restore somebody else's data into a command. These pin the properties that guarantee it.

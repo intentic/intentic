@@ -1,4 +1,4 @@
-import type { TranscriptTool } from "@intentic/sandbox-contract";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { delegates as startsSubagent } from "./toolPresentation";
 
 // Summary of a turn's tool-call run for its node on the spine (ChatTurnAsides.vue): how many top-level calls it made (a

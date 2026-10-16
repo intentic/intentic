@@ -1,4 +1,4 @@
-import type { Device } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 import { containerNotices, hasContainerFault, offersReconnect, reconnectDoor } from "./containerHealth";
 
 const REACHABILITY_GAP = {

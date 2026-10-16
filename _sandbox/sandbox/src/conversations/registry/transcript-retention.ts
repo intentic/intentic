@@ -1,6 +1,5 @@
-import type { AgentStatus, AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentStatus, AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { parentOfActor } from "../../auth/principal.js";
-import { cancelWatchersFor } from "../../agent/verification/watchers.js";
 import type { ConversationActors } from "../actor/conversation-actors.js";
 import { type AgentArchiveDeps, forgetConversations } from "./archive.js";
 import { isIsolated, type PersistedAgent } from "./agents-store.js";
@@ -73,7 +72,7 @@ export const deleteAgedConversations = async (deps: TranscriptRetentionDeps, now
             continue;
         }
         try {
-            await cancelWatchersFor(id);
+            await deps.turnEngine?.cancelWatchersFor(id);
             await deps.reaper?.reapConversation(id, { force: true });
             if (isIsolated(entry)) {
                 await deps.agentWorktrees.remove(id, entry.placement.repos);

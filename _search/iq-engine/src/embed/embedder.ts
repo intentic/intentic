@@ -13,6 +13,7 @@ const POOLING = "mean";
 // `#pooling=cls`) whenever the model, the pooling or the normalisation changes. The mean-pooled, L2-normalised config
 // keeps the bare model id because that is what every existing cache and index already carries, so they stay warm. The
 // query prefix stays out: it shapes only query vectors, which are never stored.
+/** @alias */
 export const VECTOR_SPACE = MODEL_ID;
 
 // BGE convention: the retrieval prefix goes on queries only, never on passages.

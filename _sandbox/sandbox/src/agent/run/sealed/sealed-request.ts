@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { type AgentEvent, type AgentHarness, type AgentProvider, type RoutedAgentTurn, sendableThinking } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentHarness, AgentProvider, RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import { sendableThinking } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 import type { ArmPlan, TurnArmPlan, TurnContext } from "../../providers/adapter.js";
-import { readableProviderText } from "../../providers/provider-error-text.js";
+import { readableProviderText } from "../../../engines/provider-error-text.js";
 import { classifyFailure, type ErrorFrame, type FailureQueries } from "../frames/classify-failure.js";
 import { recordQueries } from "../frames/failure-queries.js";
 import { fileFailureWrites, providerAnswered } from "../frames/frame-effects.js";
@@ -197,7 +199,7 @@ const answerOf = async (
     let last: Error | undefined;
     for (let attempt = 0; attempt < 2; attempt += 1) {
         const own = new AbortController();
-        // oxlint-disable-next-line eslint/no-await-in-loop -- the second plan reads what the first run's refusal filed
+        // the second plan reads what the first run's refusal filed
         const planned = await plan(AbortSignal.any([request, own.signal]));
         if (!planned.ok) {
             throw last ?? new Error(planned.message);
@@ -205,7 +207,7 @@ const answerOf = async (
         if (planned.account !== undefined && refused.has(planned.account)) {
             break;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one run at a time, on the account the plan just chose
+        // one run at a time, on the account the plan just chose
         const outcome = await runOnce(services, ask, planned, deadline, () => own.abort());
         if ("answer" in outcome) {
             return outcome.answer;

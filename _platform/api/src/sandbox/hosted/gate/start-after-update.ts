@@ -23,7 +23,7 @@ export const startAfterUpdate = async (
 ): Promise<void> => {
     let lastError: unknown;
     for (let attempt = 1; attempt <= SETTLE_ATTEMPTS; attempt += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- settling is sequential by definition
+        // settling is sequential by definition
         const machine = await getMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error) => {
             lastError = error;
             return undefined;
@@ -32,19 +32,19 @@ export const startAfterUpdate = async (
         if (machine !== undefined) {
             lastError = undefined;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- cancellation must stop the settling loop before another start
+        // cancellation must stop the settling loop before another start
         await assertActive?.();
         if (machine !== undefined && RUNNING_STATES.has(machine.state)) {
             return;
         }
         // Still replacing (or unreadable): starting now would only earn the 412 above.
         if (machine !== undefined && machine.state !== `replacing`) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // as above
             await startMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error) => {
                 lastError = error;
             });
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+        // as above
         await delay(SETTLE_MS);
     }
     // Settled but still won't run: broken, not busy; the claim must fail rather than hand over a dead machine.

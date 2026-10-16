@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { AuditActor, AuditEvent } from "@intentic/sandbox-contract";
+import type { AuditActor, AuditEvent } from "@intentic/sandbox-contract/schemas/audit";
 import { sandboxRouteFor } from "@intentic/sandbox-contract";
 import type { Context, Next } from "hono";
 import type { AppEnv } from "../app-env.js";

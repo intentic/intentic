@@ -62,6 +62,19 @@ const sourceTarget = (node) => {
     return undefined;
 };
 
+// The `@intentic/src` target a `*` pattern gives a subpath no key names exactly, the longest-headed pattern first, as Node
+// picks one.
+const patternTarget = (exports, subpath) => {
+    const hits = Object.keys(exports ?? {})
+        .filter((key) => key.includes(`*`))
+        .map((key) => ({ key, head: key.slice(0, key.indexOf(`*`)), tail: key.slice(key.indexOf(`*`) + 1) }))
+        .filter(({ head, tail }) => subpath.startsWith(head) && subpath.endsWith(tail) && subpath.length >= head.length + tail.length)
+        .toSorted((a, b) => b.head.length - a.head.length);
+    const [hit] = hits;
+    const target = hit === undefined ? undefined : sourceTarget(exports[hit.key]);
+    return target?.replace(`*`, subpath.slice(hit.head.length, subpath.length - hit.tail.length));
+};
+
 export const sourceFirstWorkspace = () => ({
     name: `intentic:source-first-workspace`,
     // Ahead of `vite:resolve`, which picks dist/ and can externalize the package; answering first prevents both.
@@ -96,7 +109,7 @@ export const sourceFirstWorkspace = () => ({
             return null;
         }
 
-        const target = sourceTarget(manifest.exports?.[subpath]);
+        const target = sourceTarget(manifest.exports?.[subpath]) ?? patternTarget(manifest.exports, subpath);
         // No source entry is legitimate (a package may ship only built output); hand back to Vite, don't fail.
         return target === undefined ? null : join(directory, target);
     },

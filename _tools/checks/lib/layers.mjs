@@ -30,11 +30,23 @@ export const countSite = (counts, sites, key, site) => {
 };
 
 /**
- * A sink for one package's imports: `record(from, to, site)` files an import between two placed modules (each
- * `{ unit, layer, top, kind? }`, `layer` undefined for a directory no layer places) as an upward site, a same-layer edge
- * between two subsystems, an unplaced directory, or nothing (a downward import, or one inside a unit).
+ * The part of `unit` that `path` sits in: the unit's immediate subdirectory (`agent/turn`), or the unit itself for a
+ * module directly in it.
  */
-export const layeredSink = (addEdge) => {
+export const partOf = (unit, path) => {
+    const rest = path.slice(unit.length + 1).split("/");
+    return rest.length > 1 ? `${unit}/${rest[0]}` : unit;
+};
+
+/**
+ * A sink for one package's imports: `record(from, to, site)` files an import between two placed modules (each
+ * `{ unit, layer, top, path, kind? }`, `layer` undefined for a directory no layer places) as an upward site, a same-layer
+ * edge between two subsystems, an unplaced directory, or nothing (a downward import, or one inside a unit). An import
+ * inside a unit `subunits` lists is filed as an edge between its parts (`partOf`), where cycles are looked for too.
+ */
+export const layeredSink = (addEdge, parts = []) => {
+    const partedUnits = new Set(parts);
+    const betweenParts = new Map();
     const sameLayer = new Map();
     const upward = new Map();
     const upwardSites = new Map();
@@ -48,6 +60,12 @@ export const layeredSink = (addEdge) => {
             return;
         }
         if (to.unit === from.unit) {
+            if (partedUnits.has(from.unit)) {
+                const [fromPart, toPart] = [partOf(from.unit, from.path), partOf(to.unit, to.path)];
+                if (fromPart !== toPart) {
+                    addEdge(betweenParts, fromPart, toPart, site);
+                }
+            }
             return;
         }
         const direction = directionOf(from.layer, to.layer);
@@ -58,5 +76,5 @@ export const layeredSink = (addEdge) => {
             addEdge(sameLayer, from.unit, to.unit, site);
         }
     };
-    return { record, sameLayer, upward, upwardSites, unplaced };
+    return { record, sameLayer, betweenParts, upward, upwardSites, unplaced };
 };

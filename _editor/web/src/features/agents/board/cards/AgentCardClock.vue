@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { providerLabel } from "@intentic/sandbox-contract";
+import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { Button, formatElapsed, type Tip, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatWhen } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { sandboxNow } from "../../fleet/sandboxClock";
-import { activityIcon, promptLine, selfStart, selfStartTicks, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
-import { cacheCooling, cacheWarm, warmMark } from "../../fleet/prompt-cache/promptCache";
-import { effectivePolicy } from "../../../chat/run/endings/turnBreak";
+import { sandboxNow } from "../../../../models/agent-status/sandboxClock";
+import { activityIcon } from "../../../../models/agent-status/agentStatus-meta";
+import { turnInFlight, watching } from "../../../../models/agent-status/agentStatus-standing";
+import { promptLine, selfStart, selfStartTicks, watchLine } from "../../../../models/agent-status/agentStatus-clock";
+import { cacheCooling, cacheWarm, warmMark } from "../../../../models/fleet/promptCache";
+import { effectivePolicy } from "../../../../models/conversations/endings/turnBreak";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
-import type { FleetAgent } from "../../fleet/useAgents-fleet";
-import AgentCardDate from "./AgentCardDate.vue";
+import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
+import AgentCardDate from "../../../../parts/fleet/AgentCardDate.vue";
 
 // An agent card's "when" corner: the settled date, or the running elapsed, a watch, when it goes again by itself (a
 // limit's resend, a message held for memory or booked for later) or a cache countdown.

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { type Area, isSandboxPath } from "@intentic/sandbox-contract";
+import type { Area } from "@intentic/sandbox-contract/schemas/areas";
+import { isSandboxPath } from "@intentic/sandbox-contract/policy/fence-paths";
 import {
     Button,
     ConfirmDialog,

@@ -5,20 +5,22 @@ import {
     type DeviceAgentFlow,
     type DeviceGap,
     type DevicePairing,
-    type HostSummary,
     type DeviceFlowLine,
     type DeviceReport,
     type DeviceSandbox,
     type DeviceSandboxFlow,
     DeviceSandboxSchema,
+    environmentOf,
+    REPORT_QUIET_AFTER_MS,
+} from "@intentic/sandbox-contract/schemas/devices";
+import {
+    type HostSummary,
     DEVICE_FEATURE_RESHAPE_LATER,
     DEVICE_FEATURE_SET_SHAPE,
     DEVICE_FEATURE_BACKGROUND_PREPARE,
     deviceSupports,
-    environmentOf,
     HOST_NATIVE_ENVIRONMENT,
-    REPORT_QUIET_AFTER_MS,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/hosts";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";

@@ -2,9 +2,9 @@
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { type RouteLocationNamedRaw, RouterLink } from "vue-router";
-import { agentDisplayTitle } from "../../fleet/agentStatus";
-import { otherFleet } from "../../fleet/fleetScope";
-import { useAgents } from "../../fleet/useAgents";
+import { agentDisplayTitle } from "../../../../models/agent-status/agentStatus-meta";
+import { otherFleet } from "../../../../models/fleet/fleetScope";
+import { useAgents } from "../../../../models/fleet/useAgents";
 
 /* THE CONVERSATION THAT SPAWNED THIS ONE, in OriginMark's slot and grammar: provenance, so it leads the card's body. Only a
    child standing apart from its parent wears it, one asking something of the reader or still working under a parent

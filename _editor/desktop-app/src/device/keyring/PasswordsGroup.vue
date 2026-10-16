@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { KEYRING_NAME_RE, type KeyringShareMode } from "@intentic/sandbox-contract";
+import { KEYRING_NAME_RE, type KeyringShareMode } from "@intentic/sandbox-contract/schemas/keyring";
 import { Button, Notice, Row, RowGroup, RowNote, SegmentedControl, ui } from "@intentic/ui";
 import { formatTime } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";

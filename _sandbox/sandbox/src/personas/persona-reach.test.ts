@@ -1,4 +1,5 @@
-import type { Area, Persona } from "@intentic/sandbox-contract";
+import type { Area } from "@intentic/sandbox-contract/schemas/areas";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import type { ProvenCaller } from "../auth/auth.js";
 import { memoryAreasStore, memoryPersonasStore } from "../harness/route-stores.testing.js";
 import { reachablePersonas, refuseUnlessReachable } from "./persona-reach.js";

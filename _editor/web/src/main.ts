@@ -13,7 +13,7 @@ import { sandboxAnalyticsGate } from "./features/sandbox/analytics/analyticsGate
 import { useAuth } from "./client/auth/useAuth";
 import { startAudienceSync } from "./client/sandbox/audienceSync";
 import { dropOutdatedMirrors } from "./app/buildEpoch";
-import { dropTranscriptStore } from "./features/chat/transcript/transcriptCache";
+import { dropTranscriptStore } from "./models/conversations/transcript/transcriptCache";
 import { describeError, installClientDiagnostics, reportClient, sendClientDiagnosticsWith } from "./app/clientDiagnostics";
 import { postClientDiagnostics } from "./client/sandbox/clientReport";
 import { localFace } from "./app/environments/local";
@@ -26,7 +26,7 @@ import { installSkeletonPersistence } from "./lib/skeletonPersistence";
 import { installSelfHeal, purgeIfMarked, reportStartupError } from "./app/selfHeal";
 import { installDocumentAppearance } from "./features/settings/documentAppearance";
 import "./features/sandbox/switching/sandboxScope";
-import "./features/sandbox/switching/sandboxScreen";
+import "./models/sandbox/sandboxScreen";
 import "./extension-host/hostModules";
 import { coreViews } from "./core-views/coreViews";
 import { provideBuiltinViews } from "./workbench/views/registry";

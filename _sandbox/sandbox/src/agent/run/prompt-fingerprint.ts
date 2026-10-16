@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import type { Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { civilDayIn, localZone, nextDayStartIn, type PromptFingerprint, type Zone } from "@intentic/sandbox-contract";
+import { civilDayIn, type Zone } from "@intentic/sandbox-contract/time/zone";
+import type { PromptFingerprint } from "@intentic/sandbox-contract/schemas/keep-warm";
+import { cliZone } from "../../conversations/actor/conversation-state.js";
 
 // Only what the CLI announces at `init` and what the turn hands it; the request itself is never seen here.
 
@@ -8,13 +10,7 @@ type InitMessage = Extract<SDKMessage, { type: "system"; subtype: "init" }>;
 
 const short = (text: string): string => createHash("sha256").update(text).digest("hex").slice(0, 12);
 
-// The CLI child inherits this process's zone and writes its prompt's date in it, whatever zone anybody reading is in.
-const cliZone = (): Zone => localZone();
-
 export const promptDay = (now: Date = new Date(), zone: Zone = cliZone()): string => civilDayIn(now.getTime(), zone);
-
-// When `promptDay` next changes.
-export const nextPromptDayAt = (now: number = Date.now(), zone: Zone = cliZone()): number => nextDayStartIn(now, zone);
 
 // Tools and servers are left out: `init` lists them before slow servers connect, so only the cache's numbers can judge them.
 export const KEYED_PARTS: readonly string[] = ["version", "model", "system", "reasoning", "skills", "agents", "plugins", "style", "day"];

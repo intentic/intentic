@@ -1,21 +1,15 @@
-import {
-    type AgentEvent,
-    type AgentHarness,
-    type AgentProvider,
-    type ModelPin,
-    capabilitiesOf,
-    NATIVE_PROVIDERS,
-    type NativeProvider,
-    type SetupLadder,
-    setupsFromRoleLists,
-} from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentHarness, AgentProvider, ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
+import { type SetupLadder, setupsFromRoleLists } from "@intentic/sandbox-contract/models/model-setups";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import type { PerfFields } from "../../system/resources/perf.js";
 import { PROVIDER_MODULES } from "../../runtimes/runtime-table.js";
 import { askRoleModel, REFUSED_FOR_MS } from "./role-model.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
-import { sentenceAnswer } from "./role-answer.js";
+import { sentenceAnswer } from "../../engines/role-answer.js";
 import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
 import { AgentDomainRefusedError, agentInvocation, type AgentExecutionContext, type AgentExecutionLease } from "../../workload/agent-execution.js";
 import { rootExecution } from "../../workload/agent-execution.testing.js";

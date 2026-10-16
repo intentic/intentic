@@ -2,8 +2,8 @@
 import { Notice, Row, RowGroup, RowNote } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
-import { useSandboxSettings } from "../../overview/useSandboxSettings";
-import { useRepos } from "../../../workspace/explorer/useRepos";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
+import { useRepos } from "../../../../models/workspace/tree/useRepos";
 import { useT } from "@intentic/ui/i18n";
 
 // Per-repo switch for whether a commit gets a release note; the only place this feature turns on. A commit

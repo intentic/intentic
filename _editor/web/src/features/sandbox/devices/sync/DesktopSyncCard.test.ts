@@ -1,7 +1,7 @@
 // jsdom because the subject is what the card puts on screen. The card used to hold all of desktop sync; that
 // moved to a row per device in the Devices list (SandboxDevices.test.ts). What is left is minting a pairing.
 import "@intentic/testing/dom";
-import type { Device } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -13,7 +13,7 @@ const takeover = ref(false);
 // Whether the daemon has said this sandbox can sync; undefined while the one read of it is in flight.
 const available = ref<boolean | undefined>(true);
 const enable = jest.fn(async () => {});
-jest.mock(`./useDesktopSync`, () => ({
+jest.mock(`../../../../models/sandbox/devices/useDesktopSync`, () => ({
     useDesktopSync: () => ({
         canOperate,
         available,
@@ -41,7 +41,7 @@ const devices = ref<Device[]>([]);
 const installCalls: { hostId: string; command: string; ask?: { mode?: string; localDir?: string } }[] = [];
 // An answer the test holds back, for an install still running when the card closes.
 let pending: Promise<{ ok: boolean; message: string }> | undefined;
-jest.mock(`../useDevices`, () => ({
+jest.mock(`../../../../models/sandbox/devices/useDevices`, () => ({
     useDevices: () => ({ devices, error: ref(undefined), isLoading: ref(false), refetch: () => {} }),
     runDeviceCommand: (hostId: string, command: string, ask?: { mode?: string; localDir?: string }) => {
         installCalls.push({ hostId, command, ask });

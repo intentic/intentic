@@ -1,5 +1,5 @@
 import { localModelMemory } from "@intentic/capability-catalog";
-import type { CapabilityKind } from "@intentic/sandbox-contract";
+import type { CapabilityKind } from "@intentic/sandbox-contract/schemas/capabilities";
 import { t } from "@intentic/ui/i18n";
 import { formatMoney } from "@intentic/ui/format";
 

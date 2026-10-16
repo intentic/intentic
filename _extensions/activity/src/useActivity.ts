@@ -1,4 +1,4 @@
-import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract";
+import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract/schemas/activity";
 import { useInfiniteQuery } from "@tanstack/vue-query";
 import { computed, type Ref, watch } from "vue";
 import { sinceOf, type TimeWindow } from "@intentic/extension-ui";

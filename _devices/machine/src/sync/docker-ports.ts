@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
+import { parseJsonWith } from "@intentic/base/json";
 import type { Log } from "@intentic/local-agent";
 import { z } from "zod";
 import { type ExecResult, runProcess } from "./exec.js";
@@ -40,14 +41,7 @@ const hostPorts = (hostPort: string | undefined): number[] => {
     return Array.from({ length: high - low + 1 }, (_, index) => low + index);
 };
 
-const parseBindings = (json: string): z.infer<typeof BindingsSchema> | undefined => {
-    try {
-        return BindingsSchema.safeParse(JSON.parse(json)).data;
-    } catch {
-        // allow(silent-catch): bindings that are not JSON are a container this reader cannot speak for; every other line still stands
-        return undefined;
-    }
-};
+const parseBindings = (json: string): z.infer<typeof BindingsSchema> | undefined => parseJsonWith(json, BindingsSchema);
 
 interface Publisher {
     readonly name: string;

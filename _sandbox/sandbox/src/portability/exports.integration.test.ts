@@ -6,7 +6,7 @@ import type { Services } from "../composition.js";
 import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.testing.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { exportsDir, isReadyExport, listExports, openExport, removeExport, startExport, sweepStaleExports } from "./exports.js";
 

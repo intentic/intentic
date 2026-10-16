@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type { AdmissionRule } from "@intentic/sandbox-contract";
+import type { AdmissionRule } from "@intentic/sandbox-contract/schemas/agent";
 import { Notice, Picker, Row, RowGroup, RowNote } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { useExtensions } from "../../extensions/useExtensions";
+import { useExtensions } from "../../../models/extensions/useExtensions";
 import { actionLabel, serviceName } from "../data-protection/dataProtection";
-import { useSandboxSettings } from "../overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import { actionRules, ruleOptions, type ServiceRow, serviceRows, withServiceRule } from "./outwardActions";
 import { type Posture, postureOf, postures, withPosture } from "./spawnPosture";
 

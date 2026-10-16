@@ -2,7 +2,7 @@ import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { runnerFallback } from "./deviceFallback";
-import { DeviceFlowLostError } from "../useDevices";
+import { DeviceFlowLostError } from "../../../../models/sandbox/devices/useDevices";
 
 export type RunnerOp = "create" | "remove" | "update";
 

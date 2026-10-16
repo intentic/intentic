@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { TipRow, TooltipValue } from "@intentic/ui";
-import type { TranscriptTool } from "@intentic/sandbox-contract";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import ChatToolRows from "../../tools/ChatToolRows.vue";
 import ChatSpineNode from "./ChatSpineNode.vue";
-import { useToolCalls } from "../../tools/useToolCalls";
+import { useToolCalls } from "../../../../models/conversations/tools/useToolCalls";
 import { summarizeRun, type RunKind } from "../../tools/toolRun";
 import { useT } from "@intentic/ui/i18n";
 import { useAudience } from "../../../../app/useAudience";

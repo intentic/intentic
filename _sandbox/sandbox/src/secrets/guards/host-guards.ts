@@ -1,11 +1,5 @@
-import {
-    type CredentialGateKind,
-    hostAllowed,
-    normalizeHostPattern,
-    type SecretHostGuard,
-    SECRET_HOSTS_MAX,
-    type SecretInventoryEntry,
-} from "@intentic/sandbox-contract";
+import type { CredentialGateKind, SecretHostGuard, SecretInventoryEntry } from "@intentic/sandbox-contract/schemas/secrets";
+import { hostAllowed, normalizeHostPattern, SECRET_HOSTS_MAX } from "@intentic/sandbox-contract/policy/secret-hosts";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { openDocument } from "../../store/open-document.js";

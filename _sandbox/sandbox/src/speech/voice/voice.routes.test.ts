@@ -1,6 +1,9 @@
-import type { VoiceChunk } from "./cloud-voices.js";
+import type { VoiceChunk } from "@intentic/speech/voice/cloud-voices";
+import { Hono } from "hono";
+import type { AppEnv } from "../../app-env.js";
+import { serveRawRoutes } from "../../http/raw-route-server.js";
 import { createVoiceRoute } from "./voice.routes.js";
-import { type SpeakRequest, type Voice, VoiceUnprovisionedError } from "./voice.js";
+import { type SpeakRequest, type Voice, VoiceUnprovisionedError } from "@intentic/speech/voice/voice";
 
 /* The voice's HTTP door over a fake voice: what it hands the voice, and the audio it streams back. */
 
@@ -12,7 +15,7 @@ const voiceWith = (speak: (request: SpeakRequest) => AsyncGenerator<VoiceChunk>)
     close: () => {},
 });
 
-const appWith = (voice: Voice) => createVoiceRoute({ voice });
+const appWith = (voice: Voice): Hono<AppEnv> => serveRawRoutes(new Hono<AppEnv>(), createVoiceRoute({ voice }));
 
 test("POST /speech/say streams the speech as mono s16le at the rate its header names", async () => {
     let asked: SpeakRequest | undefined;

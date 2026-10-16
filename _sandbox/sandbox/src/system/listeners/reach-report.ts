@@ -1,6 +1,6 @@
 import type { Logger } from "pino";
 import { anySignal, createBackoff, Latest, sleep } from "@intentic/base/async";
-import { containerDrift } from "@intentic/sandbox-contract";
+import { containerDrift } from "@intentic/sandbox-contract/protocol/container-requirements";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Config } from "../../env.config.js";
 import type { BootTracker } from "../boot/boot.js";

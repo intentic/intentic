@@ -1,6 +1,6 @@
-import { planParts } from "@intentic/sandbox-contract";
-import type { CardAnswer } from "../session/cardReplies";
-import type { ChatMessage } from "../transcript/transcript";
+import { planParts } from "@intentic/sandbox-contract/text/title";
+import type { CardAnswer } from "../../../models/conversations/session/cardReplies";
+import type { ChatMessage } from "../../../models/conversations/transcript/transcript";
 
 // A card the agent is waiting on, said out loud and answered out loud, for a person talking to it hands-free: the
 // question with its options, the tool it wants, the plan it made. What they say next is read as the answer where it can

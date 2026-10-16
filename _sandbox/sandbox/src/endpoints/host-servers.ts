@@ -1,4 +1,5 @@
-import type { Capability, HostModelServer } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { HostModelServer } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import { z } from "zod";
 import { versionedBase } from "./endpoint-config.js";
 

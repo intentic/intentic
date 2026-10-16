@@ -2,7 +2,7 @@
 // sandbox has to come from the sandbox side. A session this browser already holds there names them; otherwise they
 // are asked, and an account with no Google sign-in has a passkey registered with the sandbox as its one way in.
 import "@intentic/testing/dom";
-import type { DaemonSession } from "@intentic/sandbox-contract";
+import type { DaemonSession } from "@intentic/sandbox-contract/schemas/system";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";

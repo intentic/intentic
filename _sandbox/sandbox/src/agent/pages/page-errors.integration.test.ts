@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { mcpAppDataScript } from "@intentic/sandbox-contract";
+import { mcpAppDataScript } from "@intentic/sandbox-contract/text/pages";
 import { type PageErrorsDeps, reportPageErrors } from "./page-errors.js";
 import { publishPage } from "./page-store.js";
 

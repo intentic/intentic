@@ -1,5 +1,5 @@
 import type { Log } from "@intentic/local-agent";
-import type { DeviceSandbox } from "@intentic/sandbox-contract";
+import type { DeviceSandbox } from "@intentic/sandbox-contract/schemas/devices";
 import { readMachineConfig } from "../../environments/machine.js";
 import { type IcRun, lastLine, newRoundState, type RoundState, type Rounds, runRound, startRounds, ticksToSkip } from "./ic-rounds.js";
 import { fleet, icBackgroundPrepareArgs, icInFlight, runIc } from "../tools/sandboxes.js";

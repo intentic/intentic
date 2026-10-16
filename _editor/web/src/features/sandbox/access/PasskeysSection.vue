@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PasskeySummary } from "@intentic/sandbox-contract";
+import type { PasskeySummary } from "@intentic/sandbox-contract/schemas/system";
 import { Button, Code, Notice, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { formatDate, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";

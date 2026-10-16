@@ -1,4 +1,4 @@
-import { isPipelineInFlight, type PipelineJob, type PipelineRun, type PipelineStatus } from "@intentic/sandbox-contract";
+import { isPipelineInFlight, type PipelineJob, type PipelineRun, type PipelineStatus } from "@intentic/sandbox-contract/schemas/ci";
 import { githubHeaders } from "../capabilities/cli/git-access.js";
 import { retryAfterMs } from "@intentic/base/async";
 import { BoundedMap, type CachedAsync, cachedAsync } from "@intentic/base/held";

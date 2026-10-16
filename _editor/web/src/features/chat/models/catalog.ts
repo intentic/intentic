@@ -1,7 +1,10 @@
 import type { IconName } from "@intentic/ui";
-import { type AgentCapabilities, type ModelBadge, modesFor, type PermissionMode } from "@intentic/sandbox-contract";
-import { agentStatusMeta } from "../../agents/fleet/agentStatus";
-import type { ConversationStatus } from "../session/conversation";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { ModelBadge } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import { modesFor } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
+import { agentStatusMeta } from "../../../models/agent-status/agentStatus-meta";
+import type { ConversationStatus } from "../../../models/conversations/session/conversation";
 import { t } from "@intentic/ui/i18n";
 
 // Chat UI metadata shared across surfaces: permission modes and small presentational helpers (tab status icon,

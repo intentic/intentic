@@ -48,7 +48,7 @@ const hang = (request: Request): Promise<Response> =>
 const sent = (call: number): Request | undefined => fetchMock.mock.calls[call]?.[0];
 const settle = async (): Promise<void> => {
     for (let turn = 0; turn < 10; turn += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- draining microtasks one turn at a time is the point
+        // draining microtasks one turn at a time is the point
         await Promise.resolve();
     }
 };

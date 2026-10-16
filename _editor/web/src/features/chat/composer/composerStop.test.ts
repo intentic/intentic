@@ -6,7 +6,7 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as useSandboxOriginal from "../../../client/sandbox/useSandbox";
-import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
+import * as useWorkflowRunsOriginal from "../../../models/fleet/useWorkflowRuns";
 import { runningTurn } from "../../../testing/runningTurn";
 
 // The import-time globals a mounted chat surface needs.
@@ -20,7 +20,7 @@ import { runningTurn } from "../../../testing/runningTurn";
 })();
 
 // Fleet roster and workflow ledger are irrelevant here; empty mocks keep polling out of it.
-jest.mock(`../../agents/fleet/useAgents`, () => {
+jest.mock(`../../../models/fleet/useAgents`, () => {
     return {
         useAgents: () => ({
             fleet: computed(() => []),
@@ -33,7 +33,7 @@ jest.mock(`../../agents/fleet/useAgents`, () => {
         }),
     };
 });
-jest.mock(`../../agents/fleet/useWorkflowRuns`, () => ({
+jest.mock(`../../../models/fleet/useWorkflowRuns`, () => ({
     ...useWorkflowRunsOriginal,
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));
@@ -71,8 +71,8 @@ jest.mock(`../../../client/sandbox/useSandbox`, () => {
 
 // Imported after the mocks, not above them: a static import links the panel's whole graph to the real modules
 // before a single jest.mock has run.
-const { providerAccounts } = await import("../accounts/providerAccounts");
-const { useChat } = await import("../run/useChat");
+const { providerAccounts } = await import("../../../models/providers/providerAccounts");
+const { useChat } = await import("../../../models/conversations/run/useChat");
 const { queryClient } = await import("../../../lib/queryPersistence");
 const { useLayout } = await import("../../../workbench/window/useLayout");
 const { router } = await import("../../../router");

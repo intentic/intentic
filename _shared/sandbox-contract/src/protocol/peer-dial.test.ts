@@ -158,11 +158,11 @@ test("a far end that never answers is reported a few times, then retried quietly
     try {
         const { link, sockets, said } = dialling(60_000);
         for (let attempt = 1; attempt <= 20; attempt += 1) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one attempt after another is the thing under test
+            // one attempt after another is the thing under test
             await waitFor(() => expect(sockets).toHaveLength(attempt));
             sockets.at(-1)?.errors();
             sockets.at(-1)?.drops(1006);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- the ladder's own wait, serial by construction
+            // the ladder's own wait, serial by construction
             await advanceTimersByTimeAsync(60_000);
         }
 
@@ -197,10 +197,10 @@ test("a link that comes back is loud again about the outage after it", async () 
     try {
         const { link, sockets, said } = dialling();
         for (let attempt = 1; attempt <= 5; attempt += 1) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one attempt after another is the thing under test
+            // one attempt after another is the thing under test
             await waitFor(() => expect(sockets).toHaveLength(attempt));
             sockets.at(-1)?.drops(1006);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- the ladder's own wait, serial by construction
+            // the ladder's own wait, serial by construction
             await advanceTimersByTimeAsync(1_000);
         }
         const whileQuiet = said.length;
@@ -273,10 +273,10 @@ test("a link nobody has answered in a long time rests between tries, and is neve
         const { link, sockets, said } = dialling(RUNG_MS);
         // Up to the threshold on the ordinary ladder: drop, wait its rung, get the next socket.
         for (let attempt = 1; attempt < LONG_OUTAGE_ATTEMPTS; attempt += 1) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one drop per attempt is serial by definition
+            // one drop per attempt is serial by definition
             await waitFor(() => expect(sockets).toHaveLength(attempt));
             sockets.at(-1)?.drops(1006);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             await advanceTimersByTimeAsync(RUNG_MS);
         }
         await waitFor(() => expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS));

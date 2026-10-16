@@ -1,4 +1,4 @@
-import type { WebchatConfig, WebchatMessage } from "@intentic/sandbox-contract";
+import type { WebchatConfig, WebchatMessage } from "@intentic/sandbox-contract/schemas/automations";
 import { createGoogleVerifier, type IdTokenVerifier } from "../auth/auth.js";
 import type { Services } from "../composition.js";
 

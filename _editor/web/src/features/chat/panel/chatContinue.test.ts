@@ -4,12 +4,12 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
-import type { Conversation } from "../session/conversation";
-import { providerAccounts, setAccountUsage } from "../accounts/providerAccounts";
+import type { Conversation } from "../../../models/conversations/session/conversation";
+import { providerAccounts, setAccountUsage } from "../../../models/providers/providerAccounts";
 import { judgedOauth } from "../../../testing/judgedAccounts";
 import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import { setDaemonRoutes } from "../../../client/sandbox/useDaemonRoutes";
-import { useChat } from "../run/useChat";
+import { useChat } from "../../../models/conversations/run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
 import { SANDBOX_BUSY_AFTER_MS } from "../../sandbox/overview/availability";
 import { useLayout } from "../../../workbench/window/useLayout";
@@ -19,8 +19,8 @@ import { IconStub } from "@intentic/ui/testing";
 import * as limitResetOriginal from "../session/limitReset";
 import { forgetOperations } from "../../../workbench/operations/operations";
 import * as useSandboxOriginal from "../../../client/sandbox/useSandbox";
-import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
-import * as useSandboxSettingsOriginal from "../../sandbox/overview/useSandboxSettings";
+import * as useWorkflowRunsOriginal from "../../../models/fleet/useWorkflowRuns";
+import * as useSandboxSettingsOriginal from "../../../models/sandbox/useSandboxSettings";
 
 // Import-time globals a mounted chat surface needs.
 (() => {
@@ -51,7 +51,7 @@ const { agentEntry, setBreakPolicy, sandboxSettings } = await (async () => {
     };
 })();
 // Fleet roster and workflow ledger the pane queries on mount; irrelevant here beyond the break policy, so answered empty.
-jest.mock(`../../agents/fleet/useAgents`, () => {
+jest.mock(`../../../models/fleet/useAgents`, () => {
     return {
         useAgents: () => ({
             fleet: computed(() => []),
@@ -64,11 +64,11 @@ jest.mock(`../../agents/fleet/useAgents`, () => {
         }),
     };
 });
-jest.mock(`../../sandbox/overview/useSandboxSettings`, () => ({
+jest.mock(`../../../models/sandbox/useSandboxSettings`, () => ({
     ...useSandboxSettingsOriginal,
     useSandboxSettings: () => ({ settings: sandboxSettings, patch: jest.fn() }),
 }));
-jest.mock(`../../agents/fleet/useWorkflowRuns`, () => ({
+jest.mock(`../../../models/fleet/useWorkflowRuns`, () => ({
     ...useWorkflowRunsOriginal,
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));

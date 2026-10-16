@@ -1,4 +1,4 @@
-import type { ExitProvider } from "@intentic/sandbox-contract";
+import type { ExitProvider } from "@intentic/sandbox-contract/schemas/exit";
 import type { ExitDriver } from "./exit-driver.js";
 import { torDriver } from "./tor.js";
 import { vpngateDriver } from "./vpngate.js";

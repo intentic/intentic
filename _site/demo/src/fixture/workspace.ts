@@ -1,21 +1,13 @@
-import type {
-    AgentChanges,
-    AgentRepoChanges,
-    FileDiff,
-    GitChanges,
-    LandConflict,
-    LandResult,
-    RepoChanges,
-    SessionSummary,
-    WorkspaceChildren,
-    WorkspaceResolve,
-    WorkspaceSearchGroup,
-    WorkspaceSearchResult,
-    WorkspaceSearchSpan,
-    WorkspaceTree,
-} from "@intentic/sandbox-contract";
+import type { AgentChanges, AgentRepoChanges, GitChanges, RepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
+import type { FileDiff } from "@intentic/sandbox-contract/schemas/history";
+import type { LandConflict, LandResult } from "@intentic/sandbox-contract/schemas/agents";
+import type { SessionSummary } from "@intentic/sandbox-contract/schemas/sessions";
+import type { WorkspaceChildren, WorkspaceResolve, WorkspaceTree } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
+import type { WorkspaceSearchGroup, WorkspaceSearchResult, WorkspaceSearchSpan } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { includeMatcher, MAX_REF_CANDIDATES, rankRefCandidates, referenceTails, RUN_TARGETS_FILE } from "@intentic/sandbox-contract";
+import { includeMatcher } from "@intentic/sandbox-contract/policy/search-globs";
+import { MAX_REF_CANDIDATES, rankRefCandidates, referenceTails } from "@intentic/sandbox-contract/text/path-refs";
+import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract/schemas/run-targets";
 import { demoQuiet, deskEdition, freshEdition } from "../mode";
 import { acceptanceFiles } from "./acceptance";
 import { SUPPORT_SWEEP_PATH, SUPPORT_SWEEP_SHOT } from "./browserShots";

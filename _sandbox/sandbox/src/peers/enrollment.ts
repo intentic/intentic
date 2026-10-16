@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import { derivedMachineId, parseHostConnection } from "@intentic/sandbox-contract";
+import { derivedMachineId, parseHostConnection } from "@intentic/sandbox-contract/schemas/hosts";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { tokenEquals } from "../auth/auth.js";
@@ -422,7 +422,7 @@ export const enrollments = <Shape extends z.ZodRawShape>(args: {
                 if (held === undefined || Object.entries(patch).every(([key, value]) => (held as Record<string, unknown>)[key] === value)) {
                     return undefined;
                 }
-                // oxlint-disable-next-line oxc/no-map-spread -- an entry is readonly; a fresh record is the point
+                // an entry is readonly; a fresh record is the point
                 return current.map((entry) => (entry.id === id ? ({ ...entry, ...patch } as Entry) : entry));
             });
         },

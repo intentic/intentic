@@ -1,4 +1,4 @@
-import type { WorkspaceSearchTag } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchTag } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import { fuzzyScore } from "@intentic/base/fuzzy";
 import { escapeRegExp } from "@intentic/base/escape";
 import type { SqliteDb } from "@intentic/base/sqlite";

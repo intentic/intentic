@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { HandoffMode, HandoffOffer } from "@intentic/sandbox-contract";
+import type { HandoffMode, HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import { SegmentedControl } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { handoffLine, handoffOptions } from "../run/endings/handoffChoice";
+import { handoffLine, handoffOptions } from "../../../models/conversations/endings/handoffChoice";
 
 // The pick-up card's second question for a spent allowance, asked the way its first one is (TurnBreakQuestion): how the
 // held turn continues once its cache is cold. Carry the session whole, trim its old tool output, or open a fresh session

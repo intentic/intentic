@@ -4,21 +4,28 @@ import { createCredentialGrants } from "../../secrets/credential-grants.js";
 import { REACH_ALL } from "../../secrets/credential-reach.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentTurn, type Persona, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
-import { conversationAfter, testConfig, memoryFleet, testTurnMounts } from "../../testing.js";
+import { conversationAfter } from "../../conversations/registry/agents-store.testing.js";
+import { testConfig } from "../../env.config.testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
+import { testTurnMounts } from "../tools/turn-mounts.testing.js";
 import { workspaceSetup } from "../../workspace/layout/workspace-setup.js";
-import { LANDING_CHECKS_NOTE_TITLE, LANDING_CHECKS_NOTE } from "./checks-note.js";
+import { LANDING_CHECKS_NOTE } from "./checks-note.js";
 import type { AgentRequest } from "../providers/agent-request.js";
 import type { TurnContext } from "../providers/adapter.js";
 import { planTurn } from "../run/turn/turn-plan.js";
 import { budgetOn } from "../run/turn/turn-plan.testing.js";
-import { composeWirePrompt, preambleNotes, stripTurnPreamble } from "./turn-preamble.js";
+import { composeWirePrompt } from "./turn-preamble.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "@intentic/agent-context/workspace-map";
 import { RUNTIME_ADAPTERS } from "../../runtimes/runtime-table.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
+import { LANDING_CHECKS_NOTE_TITLE, preambleNotes, stripTurnPreamble } from "../../sessions/vocabulary/prompt-envelope.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
@@ -218,7 +225,7 @@ test("a persona that drops the map gets none of it, however the sandbox is set",
     expect(plan).not.toHaveProperty("experiments.mapArm");
 });
 
-// Round-trips through the same registry dispatch uses (turn-preamble.ts INJECTED); this is what catches a note shipped
+// Round-trips through the same registry dispatch uses (sessions/vocabulary/prompt-envelope.ts INJECTED); this is what catches a note shipped
 // with a header the parser doesn't know.
 test("the map strips back off the stored message, and the chat is given a row for it", async () => {
     const root = await projectAt("wsmap-strip-", "shared");

@@ -1,7 +1,7 @@
 import type { DeviceSandboxGroup, Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, ref, type Ref } from "vue";
-import { type BatchAction, batchable, batchActions, type MachineRow } from "../deviceRows";
+import { type BatchAction, batchable, batchActions, type MachineRow } from "../../../../models/sandbox/devices/deviceRows";
 import type { DeviceOps } from "../runners/deviceOps";
 
 // SELECTING IS HOW THE LIST IS MANAGED. A tick box on every row and one bar above them (<SandboxBatchBar>): tick what

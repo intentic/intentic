@@ -1,4 +1,4 @@
-import { LOCAL_MODELS } from "@intentic/sandbox-contract";
+import { LOCAL_MODELS } from "@intentic/sandbox-contract/schemas/capabilities";
 import { estimatedModelMemory, fitsBudget, freeMemoryFrom, fullSpeedFrom, localModelOffers, memoryFrom, runsAtFullSpeed } from "./local-model-fit.js";
 
 // The arithmetic the connect view's offer and the start's admission check share. Reading the machine is the

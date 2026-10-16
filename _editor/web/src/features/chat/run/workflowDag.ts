@@ -1,6 +1,7 @@
 import type { DagEdge, DagNode, IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
-import { providerLabel, type Workflow, type WorkflowRun, type WorkflowStep, type WorkflowStepRun, type WorkflowStepState } from "@intentic/sandbox-contract";
+import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { Workflow, WorkflowRun, WorkflowStep, WorkflowStepRun, WorkflowStepState } from "@intentic/sandbox-contract/schemas/workflows";
 
 // A workflow run as a graph, for the chat panel's run diagram (ChatRunGraph) and its columns (runColumns). The Workflows
 // extension, which is installed from the registry rather than compiled in, draws its designer and run page with its own

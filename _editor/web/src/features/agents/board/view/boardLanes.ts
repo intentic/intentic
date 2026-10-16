@@ -1,15 +1,16 @@
-import type { AutomationApproval, WorkflowRun } from "@intentic/sandbox-contract";
+import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
+import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { t } from "@intentic/ui/i18n";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import { computed, type Ref } from "vue";
-import type { FleetLane } from "../../fleet/agentStatus";
-import type { SubagentRoster } from "../../fleet/subagentRoster";
-import { clearableOf, FINISHED_WINDOW, type FleetAgent, windowFinished } from "../../fleet/useAgents-fleet";
-import { insideRun, runMatches, runsInLane, runsNeedingYou } from "../../fleet/useWorkflowRuns";
+import type { FleetLane } from "../../../../models/agent-status/agentStatus-lanes";
+import type { SubagentRoster } from "../../../../models/fleet/subagentRoster";
+import { clearableOf, FINISHED_WINDOW, type FleetAgent, windowFinished } from "../../../../models/fleet/useAgents-fleet";
+import { insideRun, runMatches, runsInLane, runsNeedingYou } from "../../../../models/fleet/useWorkflowRuns";
 import type { DropTarget } from "../laneDrop";
 import { type BoardView, windowedIn } from "./boardView";
-import { useBoardTrays } from "./boardTrays";
-import { trayRows } from "./childFold";
+import { useBoardTrays } from "../../../../models/fleet/board/boardTrays";
+import { trayRows } from "../../../../models/fleet/board/childFold";
 import { firstRun } from "./firstScreen";
 
 // What each lane draws and what the board says about it: runs above their lane's cards, Finished capped at its window

@@ -2,12 +2,12 @@
 // and no column drawn for a chat that never arrived.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { WorkflowRun } from "@intentic/sandbox-contract";
+import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
-import { chatRun, showRun } from "../run/chatRun";
-import { useChat } from "../run/useChat";
-import { draftConversation, reveal } from "./useChat-reveal";
+import { chatRun, showRun } from "../../../models/conversations/run/chatRun";
+import { useChat } from "../../../models/conversations/run/useChat";
+import { draftConversation, reveal } from "../../../models/conversations/panel/useChat-reveal";
 // The store half of "New agent", as summons applies it (agentActions.startAgent); the fixture these suites use to open
 // extra tabs.
 const newChat = () => {
@@ -21,7 +21,7 @@ import { MIN_PANE_PX, useLayout } from "../../../workbench/window/useLayout";
 import { router } from "../../../router";
 import ChatPanel from "./ChatPanel.vue";
 import { IconStub } from "@intentic/ui/testing";
-import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
+import * as useWorkflowRunsOriginal from "../../../models/fleet/useWorkflowRuns";
 
 // useDevice reads matchMedia at module load (matches:false keeps it desktop, the only form factor with panes); jsdom
 // implements neither IntersectionObserver nor scrollIntoView.
@@ -38,10 +38,10 @@ import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
 const runs = ref<WorkflowRun[]>([]);
 // An empty roster avoids driving the real fleet queries in a test about which chat the panel shows; none of these
 // fixtures fork.
-jest.mock(`../../agents/fleet/useAgents`, () => {
+jest.mock(`../../../models/fleet/useAgents`, () => {
     return { useAgents: () => ({ fleet: computed(() => []), agentById: () => undefined }) };
 });
-jest.mock(`../../agents/fleet/useWorkflowRuns`, () => ({
+jest.mock(`../../../models/fleet/useWorkflowRuns`, () => ({
     ...useWorkflowRunsOriginal,
     useWorkflowRuns: () => ({ runs, designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));

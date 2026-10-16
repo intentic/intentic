@@ -30,6 +30,7 @@
     "devDependencies": {
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
+        "@resvg/resvg-js": "catalog:",
         "@types/bun": "catalog:",
         "esbuild": "catalog:"
     }

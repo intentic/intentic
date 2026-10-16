@@ -1,5 +1,5 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { BootProgress } from "@intentic/sandbox-contract";
+import type { BootProgress } from "@intentic/sandbox-contract/events/system-events";
 import { bootStartedAt, bootSteps, daemonReady, setDaemonBoot } from "./useDaemonBoot";
 
 const progress = (ready: boolean, ...steps: BootProgress["steps"]): BootProgress => ({ ready, startedAt: 1_000, steps });

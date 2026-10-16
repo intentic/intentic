@@ -1,4 +1,4 @@
-import type { AuditActor } from "@intentic/sandbox-contract";
+import type { AuditActor } from "@intentic/sandbox-contract/schemas/audit";
 import type { Caller } from "../auth/auth.js";
 import type { Principal } from "../auth/principal.js";
 

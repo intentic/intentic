@@ -2,7 +2,7 @@
 import { Icon, ui, Notice, Row, RowGroup, RowNote } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { useSandboxSettings } from "../../overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { commitCount } from "../models/numberInputs";
 import { postureOf } from "../../guardrails/spawnPosture";
 import { useT } from "@intentic/ui/i18n";

@@ -1,4 +1,4 @@
-import type { TurnExperiment, TurnMetricReading } from "@intentic/sandbox-contract";
+import type { TurnExperiment, TurnMetricReading } from "@intentic/sandbox-contract/schemas/settings";
 
 // One experiment as a results table: every reading is a row of the same shape, so a measured win lands in the same
 // column whichever reading it is. The old split into a headline and footnotes put the same kind of finding in two

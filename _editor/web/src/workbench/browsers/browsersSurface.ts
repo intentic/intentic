@@ -1,7 +1,8 @@
+import { parseJsonOr } from "@intentic/base/json";
 import { sandboxRef } from "@intentic/extension-api";
 import { computed } from "vue";
 import type { Router } from "vue-router";
-import { storedValue, storeValue } from "../../lib/browserStorage";
+import { storedValue, storeValue } from "../../app/storage/browserStorage";
 import { guestAllowedPath } from "../../lib/routes/guestPaths";
 import { openBeside, sideDocked } from "../side/sideTabs";
 import { handOffToMainWindow } from "../window/mainWindow";
@@ -33,18 +34,15 @@ const restore = (): StoredTabs => {
     const sandboxId = useSandbox().activeSandboxId.value;
     const raw = storedValue(tabsKey(sandboxId));
     if (raw !== undefined) {
-        try {
-            const parsed: unknown = JSON.parse(raw);
-            if (typeof parsed === `object` && parsed !== null && `pinned` in parsed && Array.isArray(parsed.pinned)) {
-                const pinned = parsed.pinned
-                    .filter((key): key is string => typeof key === `string`)
-                    .map(parseTabKey)
-                    .filter((tab): tab is PinnedTab => tab.kind !== `web`);
-                const front = `front` in parsed && typeof parsed.front === `string` ? parseTabKey(parsed.front) : WEB_FRONT;
-                return { pinned, front };
-            }
-        } catch {
-            // allow(silent-catch): a stored strip that is not JSON is no strip; the view opens on its start page.
+        // A stored strip that is not JSON is no strip; the view opens on its start page.
+        const parsed: unknown = parseJsonOr(raw, undefined);
+        if (typeof parsed === `object` && parsed !== null && `pinned` in parsed && Array.isArray(parsed.pinned)) {
+            const pinned = parsed.pinned
+                .filter((key): key is string => typeof key === `string`)
+                .map(parseTabKey)
+                .filter((tab): tab is PinnedTab => tab.kind !== `web`);
+            const front = `front` in parsed && typeof parsed.front === `string` ? parseTabKey(parsed.front) : WEB_FRONT;
+            return { pinned, front };
         }
     }
     const legacy = storedValue(legacyPreviewKey(sandboxId));

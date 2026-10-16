@@ -4,7 +4,7 @@ import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { useEndpoint } from "../../../client/endpoint/useEndpoint";
 import { scopeQuery, type ViewScope, workspaceScope } from "../../../app/workspaceScope";
-import { mediaUrl } from "./mediaUrl";
+import { mediaUrl } from "../../../models/workspace/files/mediaUrl";
 
 // Saves workspace entries onto this computer through the browser's own download manager, which streams them to disk:
 // nothing is held in the tab, whatever the size. One file downloads as itself (ranged, so a dropped download resumes);

@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { sleep } from "@intentic/base/async";
+import { parseJsonOr } from "@intentic/base/json";
+import { readTextIfExists } from "@intentic/base/fs";
 import { type AgentStoreOptions, storeRefreshTokenAsAgent } from "@intentic/connector-runtime";
 import { extensionStateDir } from "@intentic/sandbox-contract/workspace-state";
 import { type Account, bindingOf, cloudOf, DEFAULT_AUTHORITY, scopesFor } from "./accounts.js";
@@ -97,14 +99,11 @@ export const fileTokenCache = (root: string, account: Account): TokenCache => {
     const path = join(root, extensionStateDir("intentic.microsoft-365"), account.id.replaceAll(/[^a-z0-9_-]/g, "_"), "token.json");
     return {
         read: async (fingerprint, now) => {
-            try {
-                // SAFETY: only this function writes the file; a hand-edited one fails the fingerprint and expiry checks.
-                const cached = JSON.parse(await readFile(path, "utf8")) as { fingerprint?: string; token?: string; until?: number };
-                return cached.fingerprint === fingerprint && (cached.until ?? 0) > now ? cached.token : undefined;
-            } catch {
-                // allow(silent-catch): no file, or a truncated one, is simply no cached token.
-                return undefined;
-            }
+            // No file, or a truncated one, is simply no cached token.
+            const text = await readTextIfExists(path);
+            // SAFETY: only this function writes the file; a hand-edited one fails the fingerprint and expiry checks.
+            const cached = text === undefined ? undefined : (parseJsonOr(text, undefined) as { fingerprint?: string; token?: string; until?: number } | null | undefined);
+            return cached?.fingerprint === fingerprint && (cached.until ?? 0) > now ? cached.token : undefined;
         },
         write: async (fingerprint, token, until) => {
             // allow(silent-catch): best effort, a full or read-only disk must not stop a command holding a good token

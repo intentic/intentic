@@ -1,7 +1,11 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { HEALTH_LIMIT, includeGlobs, MAX_REF_CANDIDATES, previewUrl, workspaceContract } from "@intentic/sandbox-contract";
+import { HEALTH_LIMIT } from "@intentic/sandbox-contract/schemas/codebase-health";
+import { includeGlobs } from "@intentic/sandbox-contract/policy/search-globs";
+import { MAX_REF_CANDIDATES } from "@intentic/sandbox-contract/text/path-refs";
+import { previewUrl } from "@intentic/sandbox-contract/ids/hostnames";
+import { workspaceContract } from "@intentic/sandbox-contract/contracts/workspace.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -49,7 +53,8 @@ import {
 } from "./layout/workspace-fence.js";
 import { provenanceOf, refuseUnlessVisible } from "../auth/fleet-scope.js";
 import { callerEditFence, callerFence } from "../areas/area-scope.js";
-import type { Fence, GitChange } from "@intentic/sandbox-contract";
+import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
+import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
 import { publicAddressOf } from "../env.config.js";
 
 // Row cap for one /workspace/search page, sized to the virtualized list's visible rows.

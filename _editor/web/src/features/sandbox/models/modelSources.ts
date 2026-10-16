@@ -1,4 +1,6 @@
-import { type AccountState, type AgentProvider, NATIVE_PROVIDERS } from "@intentic/sandbox-contract";
+import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
 import { t } from "@intentic/ui/i18n";
 
 // EVERYTHING THIS SANDBOX CAN RUN A MODEL ON, one entry per source, which the grid's tiles and the Models row in the

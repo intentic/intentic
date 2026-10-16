@@ -1,7 +1,7 @@
 import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { type AccountUsage, TranslatorAccountsSchema, type UsageWindow } from "@intentic/sandbox-contract";
+import { type AccountUsage, TranslatorAccountsSchema, type UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { createCliProxyClient, renderConfig, TRANSLATOR_BINARY_MISSING } from "../translator.js";
 

@@ -3,8 +3,9 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
-import { RAW_ROUTE_LIST, SANDBOX_ROUTES } from "@intentic/sandbox-contract";
-import { promisedPaths } from "../extension-readiness.js";
+import { RAW_ROUTE_LIST } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
+import { SANDBOX_ROUTES } from "@intentic/sandbox-contract";
+import { promisedPaths } from "../../capabilities/extension-inventory/extension-readiness.js";
 
 // Every extension in this repository, held to what an outside author's would be held to before it ships: its manifest
 // parses, this build of the host activates it, every file it promises from source is there, and every route it

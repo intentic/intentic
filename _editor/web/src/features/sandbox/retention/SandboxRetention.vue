@@ -5,12 +5,12 @@ import {
     RETENTION_DAYS_MAX,
     type RetentionSettings,
     RetentionSettingsSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/data-protection";
 import { type IconName, Notice, Row, RowGroup, RowNote, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { commitCount } from "../agent-settings/models/numberInputs";
-import { useSandboxSettings } from "../overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 
 // Retention: how long this sandbox keeps each kind of record, in one table, so "how long do we keep it" has one answer.
 // The copies of what people and agents wrote (settings.retention) were Agent ▸ Finishing, beside the archive row, and

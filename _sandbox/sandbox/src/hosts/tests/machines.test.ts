@@ -2,19 +2,17 @@ import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { createPeerHub } from "../../peers/peer-hub.js";
 import { cardlessHosts, HOST_CARD_RULE, HOST_PEER, type HostClient, hostConnections, hostSummaries } from "../host-peer.js";
+import { type Device, environmentOf, machinesOf } from "@intentic/sandbox-contract/schemas/devices";
 import {
-    type Device,
     environmentKeyOf,
-    environmentOf,
     HOST_NATIVE_ENVIRONMENT,
     hostConnectionKey,
     type DeviceFacts,
-    type DeviceScopes,
-    machinesOf,
     parseHostConnection,
     windowsPathOf,
     wslPathOf,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/hosts";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 
 // The join behind "one PC, two doors": environments of one card are one computer by construction, and a distro with a
 // card of its own joins the machine whose id it carries (the id its Windows side handed it). A hostname is never the

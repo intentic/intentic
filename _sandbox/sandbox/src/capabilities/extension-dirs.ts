@@ -47,3 +47,8 @@ export const readExtensionManifest = async (dir: string): Promise<ExtensionManif
     const result = await parseExtensionManifest(dir);
     return "manifest" in result ? result.manifest : undefined;
 };
+
+// Service key for a declared extension process (`svc-ext-<id>-<name>`); dots in the id are sanitized.
+// Extension processes run under the service supervisor, never tmux; the prefix marks it apart from a dev panel.
+const EXTENSION_PROCESS_PREFIX = "ext-";
+export const extensionProcessKey = (id: string, name: string): string => `${EXTENSION_PROCESS_PREFIX}${id.replaceAll(".", "-")}-${name}`;

@@ -1,14 +1,14 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { createHeldCards } from "../../guard/held-cards.js";
 import { revokeGrant, standingGrants } from "../../needs/standing-grants.js";
 import { standingDeps } from "../../needs/standing-grants.testing.js";
 import { type ConversationGrants, fileConversationGrants } from "../../personas/conversation-grants.js";
 import { createCredentialGrants } from "../../secrets/credential-grants.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { createRulePrompts } from "./broker-prompts.js";
 import type { RuleAsk } from "./broker-gateway.js";
 

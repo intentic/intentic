@@ -111,6 +111,10 @@ const openPicker = (): void => {
             <template v-if="icon" #icon><Icon :name="icon" /></template>
         </Button>
         <!-- Disabled together with the primary half, never on its own, so nobody can configure a model for a click that can't run. -->
+        <!-- allow(buttons): A SPLIT BUTTON'S SEAM. Two buttons are welded into one control here, so the pair has to
+             lose the corners and the padding where they meet, or it reads as two buttons that happen to be touching.
+             This is the joint, not a tier being retuned: the tier is whatever the caller passed, and both halves take
+             it. -->
         <Button
             ref="caret"
             :size="size"

@@ -1,0 +1,91 @@
+{
+    "name": "@intentic/speech",
+    "version": "0.0.0",
+    "description": "speech, dictation and speaking on this machine: sherpa-onnx's Parakeet and Whisper hear, Kokoro and Piper speak, each in a process of its own, with the models fetched and pinned by digest",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_sandbox/speech"
+    },
+    "exports": {
+        "./transcribe": {
+            "types": "./dist/transcribe.d.ts",
+            "import": {
+                "@intentic/src": "./src/transcribe.ts",
+                "default": "./dist/transcribe.js"
+            },
+            "require": {
+                "@intentic/src": "./src/transcribe.ts",
+                "default": "./dist/transcribe.js"
+            }
+        },
+        "./wav": {
+            "types": "./dist/wav.d.ts",
+            "import": {
+                "@intentic/src": "./src/wav.ts",
+                "default": "./dist/wav.js"
+            },
+            "require": {
+                "@intentic/src": "./src/wav.ts",
+                "default": "./dist/wav.js"
+            }
+        },
+        "./voice/cloud-voices": {
+            "types": "./dist/voice/cloud-voices.d.ts",
+            "import": {
+                "@intentic/src": "./src/voice/cloud-voices.ts",
+                "default": "./dist/voice/cloud-voices.js"
+            },
+            "require": {
+                "@intentic/src": "./src/voice/cloud-voices.ts",
+                "default": "./dist/voice/cloud-voices.js"
+            }
+        },
+        "./voice/voice": {
+            "types": "./dist/voice/voice.d.ts",
+            "import": {
+                "@intentic/src": "./src/voice/voice.ts",
+                "default": "./dist/voice/voice.js"
+            },
+            "require": {
+                "@intentic/src": "./src/voice/voice.ts",
+                "default": "./dist/voice/voice.js"
+            }
+        },
+        "./voice/voice-audio": {
+            "types": "./dist/voice/voice-audio.d.ts",
+            "import": {
+                "@intentic/src": "./src/voice/voice-audio.ts",
+                "default": "./dist/voice/voice-audio.js"
+            },
+            "require": {
+                "@intentic/src": "./src/voice/voice-audio.ts",
+                "default": "./dist/voice/voice-audio.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "bun check -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "suites",
+        "test:watch": "suites --watch"
+    },
+    "dependencies": {
+        "@intentic/base": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "sherpa-onnx-node": "catalog:",
+        "tslib": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "tsx": "catalog:"
+    }
+}

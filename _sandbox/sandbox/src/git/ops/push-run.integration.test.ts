@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { PushRun } from "@intentic/sandbox-contract";
+import type { PushRun } from "@intentic/sandbox-contract/schemas/git/git";
 import { unstubbed } from "@intentic/testing";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";

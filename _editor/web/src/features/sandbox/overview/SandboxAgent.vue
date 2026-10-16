@@ -4,7 +4,7 @@ import { computed, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { MODELS_PATH, modelsPath } from "../../../lib/routes/modelsPath";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useSandboxSettings } from "./useSandboxSettings";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import AgentChangelog from "../agent-settings/behaviour/AgentChangelog.vue";
 import AgentChatPages from "../agent-settings/behaviour/AgentChatPages.vue";
 import AgentChecks from "../agent-settings/behaviour/AgentChecks.vue";

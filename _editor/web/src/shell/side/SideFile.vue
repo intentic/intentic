@@ -2,7 +2,7 @@
 import { computed, provide, ref, useId, watch } from "vue";
 import { CHROME_SCOPE } from "../../features/workspace/files/viewerChrome";
 import { VIEW_SCOPE } from "../../app/workspaceScope";
-import type { LineJump } from "../../features/workspace/tabs/workspaceTabs";
+import type { LineJump } from "../../models/workspace/tabs/workspaceTabs";
 import FileViewer from "../../features/workspace/viewers/FileViewer.vue";
 import { arrivalOf, FileSideInputSchema } from "../../workbench/side/sideFileInput";
 import type { SideInput } from "../../workbench/side/sideTabs";

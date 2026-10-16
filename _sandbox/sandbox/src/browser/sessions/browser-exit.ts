@@ -1,6 +1,7 @@
 import { within } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import type { BrowserConfig, Capability, ExitConfig, IdentityConfig } from "@intentic/sandbox-contract";
+import type { BrowserConfig, Capability, IdentityConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { ExitConfig } from "@intentic/sandbox-contract/schemas/exit";
 import { countryLocale } from "../../exit/exit-countries.js";
 import type { FingerprintPlace } from "./fingerprint.js";
 import { exitLink, proxyUrl, startExitOnce } from "../../exit/exit-links.js";

@@ -1,4 +1,5 @@
-import type { PersonaKit, SkillDraft } from "@intentic/sandbox-contract";
+import type { PersonaKit } from "@intentic/sandbox-contract/schemas/personas";
+import type { SkillDraft } from "@intentic/sandbox-contract/schemas/settings";
 import { useMutation } from "@tanstack/vue-query";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";

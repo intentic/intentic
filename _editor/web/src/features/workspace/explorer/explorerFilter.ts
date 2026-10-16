@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 
 // Shared predicate for the toolbar's ignored/hidden-tests/technical filters, so the desktop tree and mobile listing
 // agree on what a level holds. None truly hides: an ignored path opens by name, a hidden test or tooling file is a

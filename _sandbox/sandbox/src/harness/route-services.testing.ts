@@ -1,7 +1,8 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AuditEvent } from "@intentic/sandbox-contract";
-import { DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import type { AuditEvent } from "@intentic/sandbox-contract/schemas/audit";
+import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { unstubbed } from "@intentic/testing";
 import { type ProvidersFakeOverrides, providersSliceFake } from "../agent/providers/providers-slice.testing.js";
@@ -40,7 +41,8 @@ import { createOrgPolicyHolder } from "../org/org-policy.js";
 import { createBootTracker } from "../system/boot/boot.js";
 import { createReachReporter } from "../system/listeners/reach-report.js";
 import { resourcesSliceFake } from "../system/resources/resources-slice.testing.js";
-import { testConfig, testTurnMounts } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
+import { testTurnMounts } from "../agent/tools/turn-mounts.testing.js";
 import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { webextSliceFake } from "../webext/webext-slice.testing.js";
 import { phonesSliceFake } from "../phones/phone-slice.testing.js";
@@ -208,7 +210,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         agentExecution: createAgentExecutionService(() => context.self().agentDomainPolicy.get()),
         // Shipped policy: a planned turn snapshots it for the judge, so every route running a turn reads it.
         safetyPolicy: unstubbed("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
-        // An empty key store, in memory, as a fresh sandbox holds: every turn asks it (capabilities/turn-env.ts) and,
+        // An empty key store, in memory, as a fresh sandbox holds: every turn asks it (agent/run/harness/turn-env.ts) and,
         // holding none, binds no agent socket; a git card's hook files its key here. A suite about the agent builds its own.
         sshKeys: memorySshKeyStore(),
         // Leased by every planned turn: its browsers, peers and extension cards mount here.

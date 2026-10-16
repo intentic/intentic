@@ -3,13 +3,13 @@ import { STATE_DIR } from "@intentic/constants";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { useT } from "@intentic/ui/i18n";
 import { computed, createApp, h, nextTick, ref, shallowRef } from "vue";
-import { providerAccounts } from "../../../accounts/providerAccounts";
+import { providerAccounts } from "../../../../../models/providers/providerAccounts";
 import { viewerPlaceholder } from "../../../composer/composerIntent";
 import { inputHistoryFor } from "../../../drafts/inputHistory";
 import type { PendingAttachment } from "../../../drafts/useChatAttachments";
-import { Conversation } from "../../../session/conversation";
-import type { ChatMessage } from "../../../transcript/transcript";
-import { conversationView } from "../../useChat-view";
+import { Conversation } from "../../../../../models/conversations/session/conversation";
+import type { ChatMessage } from "../../../../../models/conversations/transcript/transcript";
+import { conversationView } from "../../../../../models/conversations/panel/useChat-view";
 import { useComposerSend } from "../composerSend";
 import { runningTurn } from "../../../../../testing/runningTurn";
 

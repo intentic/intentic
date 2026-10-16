@@ -1,4 +1,4 @@
-import type { PushRun } from "@intentic/sandbox-contract";
+import type { PushRun } from "@intentic/sandbox-contract/schemas/git/git";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Services } from "../../composition.js";

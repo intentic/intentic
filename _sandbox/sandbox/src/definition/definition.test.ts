@@ -1,4 +1,6 @@
-import { type SandboxDefinition, stateFileFor, WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
+import type { SandboxDefinition } from "@intentic/sandbox-contract/state/definition";
+import { stateFileFor } from "@intentic/sandbox-contract/state/state-portability";
+import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspace-state";
 import { join } from "node:path";
 import { ownerGrantsDocument } from "../personas/owner-grants.js";
 import { DEFINITION_SOURCES, DEFINITION_WORKSPACE, definitionDiff, DefinitionFormatError, emitDefinitionToml, parseDefinitionToml, settingsDefinition, settingsDrift, unreadableDefinition } from "./definition.js";

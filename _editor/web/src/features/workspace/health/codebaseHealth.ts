@@ -1,4 +1,4 @@
-import type { WorkspaceHotspot, WorkspaceKeyModule } from "@intentic/sandbox-contract";
+import type { WorkspaceHotspot, WorkspaceKeyModule } from "@intentic/sandbox-contract/schemas/codebase-health";
 import { hotspotAsk, moduleAsk, type RefactorAsk } from "./refactorAsk";
 import { t } from "@intentic/ui/i18n";
 import { formatFixed } from "@intentic/ui/format";

@@ -1,4 +1,4 @@
-import { settingsContract } from "@intentic/sandbox-contract";
+import { settingsContract } from "@intentic/sandbox-contract/contracts/settings.contract";
 import { settingsDiff } from "../audit/settings-diff.js";
 import { noteAudit } from "../audit/audit-http.js";
 import { join } from "node:path";
@@ -20,6 +20,7 @@ import { settingsDocument } from "./settings-store.js";
 import { versionedSettingsWrite } from "../seams/settings-versions.js";
 import { reconcileBakedSkills } from "./skills.js";
 import { requireAgentDomainRollout } from "../workload/domain/agent-domain-rollout.js";
+import { errorMessage } from "@intentic/base/errors";
 import { settingsPinRefusal } from "../compliance/org-pins.js";
 
 // `get` applies defaults when the manifest is absent, `set` overwrites it. `savings` reads whichever backend's ledger
@@ -54,7 +55,7 @@ export const createSettingsRoutes = (services: Services) => {
                 throw new ORPCError("FORBIDDEN", { message: "Only the signed-in owner may change the agent execution domain." });
             }
             try { requireAgentDomainRollout(input); } catch (error) {
-                throw new ORPCError("CONFLICT", { message: error instanceof Error ? error.message : String(error) });
+                throw new ORPCError("CONFLICT", { message: errorMessage(error) });
             }
             await services.agentDomainPolicy.set(input);
             return { ok: true } as const;

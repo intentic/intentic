@@ -1,6 +1,6 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type FakeFly, installFakeFly } from "@intentic/testing/fly-fake";
-import { CRASH_LOOP_RESTARTS } from "@intentic/sandbox-contract";
+import { CRASH_LOOP_RESTARTS } from "@intentic/sandbox-contract/state/update-probation";
 import type { Config } from "../../../config.js";
 import { healthAnswer, machineAnswers, NO_HEALTH } from "../../../testing.js";
 import {

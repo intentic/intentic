@@ -5,7 +5,7 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { STATE_DIR } from "@intentic/constants";
 import * as actualUi from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
-import { CHAT_SURFACE } from "../../tools/chatToolSurface";
+import { CHAT_SURFACE } from "../../../../models/conversations/tools/chatToolSurface";
 import { type ChatShot, shotKey } from "./shots";
 
 // Snapshotted before the mock replaces the module: a namespace is a live binding.
@@ -29,7 +29,7 @@ const originals = new Map<string, string>();
 // Every path a view was asked for, in order: the one on screen and the neighbours fetched ahead of the arrows.
 const viewAsks: string[] = [];
 const downloads: string[] = [];
-jest.mock("../../../workspace/home/thumbnails", () => ({
+jest.mock("../../../../models/workspace/home/thumbnails", () => ({
     picture: (_agent: string | undefined, path: string, size: string) => {
         if (size === `original`) {
             return originals.has(path) ? { url: originals.get(path) } : undefined;

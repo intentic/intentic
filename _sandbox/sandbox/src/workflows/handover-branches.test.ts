@@ -1,4 +1,4 @@
-import type { RepoBase } from "@intentic/sandbox-contract";
+import type { RepoBase } from "@intentic/sandbox-contract/schemas/agent";
 import type { GitRunner } from "@intentic/base/git";
 import { resolvedBranches } from "./handover-branches.js";
 

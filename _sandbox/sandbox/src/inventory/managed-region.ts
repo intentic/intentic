@@ -1,4 +1,4 @@
-import type { InventoryEntry } from "@intentic/sandbox-contract";
+import type { InventoryEntry } from "@intentic/sandbox-contract/schemas/inventory";
 import { readManagedRegion, writeManagedRegion } from "@intentic/scaffold";
 import type { ConfigStore } from "./config-store.js";
 

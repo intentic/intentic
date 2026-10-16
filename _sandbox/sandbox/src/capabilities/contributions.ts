@@ -1,7 +1,8 @@
 import { join } from "node:path";
 import { type CapabilityContribution, contributionDiscriminator, fieldApplies } from "@intentic/extension-manifest";
-import { type CapabilityKind, normalizeHostPattern } from "@intentic/sandbox-contract";
-import { enabledExtensions, type ExtensionHost, type InstalledExtension } from "../extensions/installed-extensions.js";
+import type { CapabilityKind } from "@intentic/sandbox-contract/schemas/capabilities";
+import { normalizeHostPattern } from "@intentic/sandbox-contract/policy/secret-hosts";
+import { enabledExtensions, type ExtensionHost, type InstalledExtension } from "./extension-inventory/installed-extensions.js";
 import type { CapabilityCtx } from "./capability.js";
 import { extensionRead } from "./extension-dirs.js";
 

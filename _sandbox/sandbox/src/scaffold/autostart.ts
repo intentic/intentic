@@ -84,7 +84,7 @@ export const runAutostart = async (services: AutostartDeps, only?: ReadonlySet<s
             continue;
         }
         try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of apps, started in the order recorded
+            // a handful of apps, started in the order recorded
             await services.processes.start(
                 key,
                 buildAppSpec({ repo: entry.repo, repoDir, pkg, app: entry.app, preview: { dev: entry.dev }, zone, sandboxId }),

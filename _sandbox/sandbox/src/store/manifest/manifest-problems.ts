@@ -1,6 +1,8 @@
 import { relative, sep } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
-import { isNewer, isReportedManifest, type ManifestProblem, type ManifestProblemReport } from "@intentic/sandbox-contract";
+import { isNewer } from "@intentic/sandbox-contract/state/versions";
+import { isReportedManifest } from "@intentic/sandbox-contract/state/workspace-state";
+import type { ManifestProblem, ManifestProblemReport } from "@intentic/sandbox-contract/schemas/system";
 import { version } from "../../version.js";
 import { newestRunVersion } from "../newest-run.js";
 

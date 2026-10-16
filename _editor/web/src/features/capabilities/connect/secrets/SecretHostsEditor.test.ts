@@ -4,7 +4,7 @@
 import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { createApp, h, nextTick, ref } from "vue";
-import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
+import type { SecretInventoryEntry } from "@intentic/sandbox-contract/schemas/secrets";
 import { type SecretRow, secretRow } from "../../../sandbox/secrets/secretRows";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -13,7 +13,7 @@ const setHosts = {
 };
 const isOwner = ref(true);
 
-jest.mock(`./useSecrets`, () => ({
+jest.mock(`../../../../models/capabilities/useSecrets`, () => ({
     useCredentialGates: () => ({ isOwner }),
     useSecretHosts: () => ({ setHosts }),
 }));

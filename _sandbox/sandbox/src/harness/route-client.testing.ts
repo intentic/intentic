@@ -7,7 +7,8 @@ import type { AnyRouter } from "@orpc/server";
 import type { Hono } from "hono";
 import { afterEach } from "bun:test";
 import { unstubAllEnvs } from "@intentic/testing/bun";
-import type { MemberRole, ProofMethod } from "@intentic/sandbox-contract";
+import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { ProofMethod } from "@intentic/sandbox-contract/schemas/system";
 import { ForbiddenError, type ProvenCaller } from "../auth/auth.js";
 import type { AppEnv, OrpcContext } from "../app-env.js";
 

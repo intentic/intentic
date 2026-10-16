@@ -20,7 +20,7 @@ export interface LocalSandboxes {
 // `ic sandbox list`, the text form: the one place ic names its trash ("removed, still recoverable").
 const icListingText = async (): Promise<string | undefined> => {
     for (const binary of icCandidates(process.platform, homeDir())) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- candidates in order; the first that runs answers
+        // candidates in order; the first that runs answers
         const answer = await execBounded(binary, ["sandbox", "list"], { timeoutMs: LIST_TIMEOUT_MS, maxOutput: 4 * 1024 * 1024 }).then(
             (ran) => ({ ran: true as const, stdout: ran.stdout }),
             (error: NodeJS.ErrnoException) => (error.code === "ENOENT" ? undefined : { ran: false as const, stdout: "" }),

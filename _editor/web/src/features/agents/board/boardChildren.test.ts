@@ -6,16 +6,18 @@
 // are view/childFold.test.ts; this pins the board's wiring.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { type AgentSummary, providerLabel, type SubagentSession } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
 import { t } from "@intentic/ui/i18n";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick } from "vue";
-import { useChat } from "../../chat/run/useChat";
-import { closeSubagent, subagentOnScreen } from "../../chat/panel/subagent/subagentView";
+import { useChat } from "../../../models/conversations/run/useChat";
+import { closeSubagent, subagentOnScreen } from "../../../models/conversations/panel/subagentView";
 import { rpcKey } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
-import { setAgents } from "../fleet/useAgents-registry";
+import { setAgents } from "../../../models/fleet/useAgents-registry";
 import { router } from "../../../router";
 import AgentsView from "./AgentsView.vue";
 import { IconStub } from "@intentic/ui/testing";

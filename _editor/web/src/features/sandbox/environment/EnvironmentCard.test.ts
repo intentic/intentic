@@ -2,7 +2,7 @@
 // can't gate on it): show the recipe and hide the tab, not the inventory itself (contents.integration.test.ts). And
 // where its one next step goes: first, above the contents and the runtime installs, never trailing them.
 import "@intentic/testing/dom";
-import type { Environment } from "@intentic/sandbox-contract";
+import type { Environment } from "@intentic/sandbox-contract/schemas/environment";
 import type { ContentsGroup } from "./useEnvironmentContents";
 import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, reactive, ref } from "vue";
@@ -39,7 +39,7 @@ const slug = ref<string | undefined>(`demo`);
 // Where the reader is; the attention list's link carries the rebuild's anchor.
 const route = reactive({ fullPath: `/sandbox/environment`, hash: `` });
 jest.mock(`vue-router`, () => ({ useRoute: () => route }));
-jest.mock(`./useEnvironment`, () => ({
+jest.mock(`../../../models/sandbox/environment/useEnvironment`, () => ({
     ENVIRONMENT_KEY: [`environment`],
     useEnvironment: () => ({
         state,
@@ -83,7 +83,7 @@ const sandboxJson = jest.fn(async (..._request: unknown[]): Promise<never> => {
 jest.mock(`../../../client/sandbox/sandboxClient`, () => ({ sandboxJson: (...request: unknown[]) => sandboxJson(...request) }));
 // Mocked as a module: agentActions reaches the shared query client and chat broadcast singletons, which
 // are out of this suite's subject and fail at import if left real.
-jest.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: () => `` }));
+jest.mock(`../../../models/fleet/agentActions`, () => ({ startAgent: () => `` }));
 // Each reaches the daemon on its own; mocked here only so mounting the card doesn't.
 jest.mock(`../../workspace/viewers/DiffView.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 jest.mock(`../../workspace/viewers/DiffToolbar.vue`, () => ({ default: defineComponent({ render: () => null }) }));

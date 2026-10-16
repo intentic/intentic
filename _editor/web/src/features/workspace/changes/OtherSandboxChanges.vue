@@ -15,8 +15,8 @@ import {
     silentChangeBoxes,
     subscribeChanges,
     uncommittedAcross,
-} from "./changesAcross";
-import { landOnAfterSwitch } from "../../sandbox/switching/sandboxScreen";
+} from "../../../models/workspace/changes/changesAcross";
+import { landOnAfterSwitch } from "../../../models/sandbox/sandboxScreen";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";
 

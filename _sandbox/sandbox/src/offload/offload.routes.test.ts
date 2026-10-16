@@ -1,4 +1,5 @@
-import { type OffloadFrame, type OffloadRun, offloadRef, type RunnerCommandFrame } from "@intentic/sandbox-contract";
+import type { OffloadFrame, OffloadRun } from "@intentic/sandbox-contract/schemas/offload";
+import { offloadRef, type RunnerCommandFrame } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { call } from "@orpc/server";
 import { unstubbed } from "@intentic/testing";
 import type { OrpcContext } from "../app-env.js";

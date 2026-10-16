@@ -1,4 +1,5 @@
-import type { AgentOrigin, Need } from "@intentic/sandbox-contract";
+import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
+import type { Need } from "@intentic/sandbox-contract/schemas/needs";
 import { outboxKeyOf } from "../webchat/webchat-outbox.js";
 
 // A need raised in a conversation that came from a channel (Slack, Telegram, Discord…) is said there too

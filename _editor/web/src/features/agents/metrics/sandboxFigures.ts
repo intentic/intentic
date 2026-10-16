@@ -1,9 +1,9 @@
-import { PROCESS_ROLES, type SandboxMetrics } from "@intentic/sandbox-contract";
+import { PROCESS_ROLES, type SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
 import type { Tip } from "@intentic/ui";
 import { formatBinaryBytes, formatFixed, formatPercent } from "@intentic/ui/format";
 import { type TypedT, useT } from "@intentic/ui/i18n";
 import { computed, type ComputedRef } from "vue";
-import { heaviestRoles, heaviestSessions, NEAR_LIMIT, PRESSURE_STALLING, PRESSURE_WORTH_SHOWING, sessionHeavy } from "./liveMetrics";
+import { heaviestRoles, heaviestSessions, NEAR_LIMIT, PRESSURE_STALLING, PRESSURE_WORTH_SHOWING, sessionHeavy } from "../../../models/sandbox/liveMetrics";
 
 // The board's geek metrics as the places that draw them read them: three gauges (CPU, memory, disk: the figures that run
 // out) for the quiet bar at the foot of the board, every other figure for the panel it opens, and one conversation's

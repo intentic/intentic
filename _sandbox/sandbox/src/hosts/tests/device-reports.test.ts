@@ -1,13 +1,11 @@
+import { type HostSummary, HOST_NATIVE_ENVIRONMENT, hostConnectionKey } from "@intentic/sandbox-contract/schemas/hosts";
 import {
-    type HostSummary,
     type DeviceFlowLine,
     type DeviceReport,
     type DeviceSandbox,
     type DeviceSandboxFlow,
-    HOST_NATIVE_ENVIRONMENT,
-    hostConnectionKey,
     hostRunningSandbox,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/devices";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { ORPCError } from "@orpc/server";
 import { waitFor } from "@intentic/testing/bun";

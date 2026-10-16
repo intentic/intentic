@@ -1,6 +1,11 @@
 import { statfs } from "node:fs/promises";
 import { basename, join, relative } from "node:path";
-import { STORAGE_CLEANABILITY, type StorageCategoryId, type StorageCategoryUsage, type StorageScan } from "@intentic/sandbox-contract";
+import {
+    STORAGE_CLEANABILITY,
+    type StorageCategoryId,
+    type StorageCategoryUsage,
+    type StorageScan,
+} from "@intentic/sandbox-contract/schemas/metrics";
 import { BROWSER_LOCK, type CleanCandidate, inFlight, planClean } from "./clean-plan.js";
 import { namedByProgram, type RunningProgram } from "./running-programs.js";
 import {

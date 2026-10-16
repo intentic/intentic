@@ -1,10 +1,10 @@
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { LoginStatus } from "@intentic/sandbox-contract";
+import type { LoginStatus } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { unstubbed } from "@intentic/testing";
 import { createLogger } from "../../logger.js";
-import { testConfig } from "../../testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
 import { identityIn } from "./vendor-cli-identity.js";
 import { deviceCodeOf } from "./vendor-cli-login.js";
@@ -89,7 +89,7 @@ const settledStatus = async (door: AccountDoor, handshake: string): Promise<Logi
         if (status.status !== "wait" || Date.now() > deadline) {
             return status;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- waiting on the CLI the attempt runs
+        // waiting on the CLI the attempt runs
         await new Promise((resolve) => setTimeout(resolve, 50));
     }
 };

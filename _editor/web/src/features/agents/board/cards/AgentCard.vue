@@ -17,18 +17,18 @@ import {
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { messageOr } from "@intentic/ui/async";
 import { computed, onScopeDispose, ref, useTemplateRef } from "vue";
-import { landRequestWork, requestLandAgent } from "../../fleet/agentActions";
+import { landRequestWork, requestLandAgent } from "../../../../models/fleet/agentActions";
 import { useOperation } from "../../../../workbench/operations/operations";
-import { refreshAcross } from "../../../sandbox/live/fleetAcross";
+import { refreshAcross } from "../../../../models/sandbox/live/fleetAcross";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { useAudience } from "../../../../app/useAudience";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
-import OriginMark from "../../fleet/OriginMark.vue";
+import OriginMark from "../../../../parts/fleet/OriginMark.vue";
 import AgentCardClock from "./AgentCardClock.vue";
 import AgentReactions from "./AgentReactions.vue";
 import OwnerMark from "../session/OwnerMark.vue";
 import ParentMark from "../session/ParentMark.vue";
-import { parentOf, sessionMark } from "../ownership";
+import { parentOf, sessionMark } from "../../../../models/agent-status/ownership";
 import { useAuth } from "../../../../client/auth/useAuth";
 import { presenceOthers } from "../../../../workbench/presence/usePresence";
 import UnsentMark from "../../../../components/UnsentMark.vue";
@@ -36,57 +36,37 @@ import WorkflowMark from "../../../../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../laneDrop";
 import type { CardOwnPresses } from "../view/cardMenu";
 import type { IdMatch } from "../idMatch";
-import {
-    activityLine,
-    agentDisplayTitle,
-    agentStandingMeta,
-    attentionReason,
-    conflictIsYours,
-    contextPct,
-    cornerInk,
-    type FamilyChip,
-    type FleetLane,
-    landedAway,
-    landedDelivery,
-    landFailure,
-    laneOf,
-    limited,
-    limitScheduled,
-    loopMeta,
-    memoryHeld,
-    reviewAction,
-    scheduledCount,
-    type StandingChip,
-    standingChip,
-    tileRim,
-    turnInFlight,
-    turnWorking,
-    unregistered,
-} from "../../fleet/agentStatus";
-import CardSeal from "./seal/CardSeal.vue";
+import { attentionReason, landFailure, reviewAction } from "../../../../models/agent-status/agentStatus-attention";
+import { type FamilyChip, type StandingChip, standingChip } from "../../../../models/agent-status/agentStatus-chips";
+import { type FleetLane, laneOf, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
+import { activityLine, agentDisplayTitle, agentStandingMeta, contextPct, cornerInk, loopMeta } from "../../../../models/agent-status/agentStatus-meta";
+import { conflictIsYours, limited, limitScheduled, memoryHeld, scheduledCount, turnInFlight, turnWorking, unregistered } from "../../../../models/agent-status/agentStatus-standing";
+import { landedAway, landedDelivery } from "../../fleet/agentStatus-land";
+import CardSeal from "../../../../parts/fleet/CardSeal.vue";
 import CardPermissionAsk from "./CardPermissionAsk.vue";
-import { cardProof, type ProofMark, sealStandsIn as standsIn } from "./seal/proofSeal";
-import { reachLine } from "./reachLine";
-import KeepWarmPanel from "../../fleet/prompt-cache/KeepWarmPanel.vue";
+import { cardProof, type ProofMark, sealStandsIn as standsIn } from "../../../../models/fleet/board/proofSeal";
+import { reachLine } from "../../../../models/fleet/board/reachLine";
+import KeepWarmPanel from "../../../../parts/fleet/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
 // user to exactly this place for exactly this refusal.
-import { type MatchSnippet, providerLabel } from "@intentic/sandbox-contract";
+import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agents";
+import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { sessionCategory } from "../../../../app/sessionCategory";
-import IdentityTile from "../../../capabilities/connect/IdentityTile.vue";
+import IdentityTile from "../../../../parts/capabilities/IdentityTile.vue";
 import MatchLine from "../../../../components/MatchLine.vue";
 import SessionChip from "../session/SessionChip.vue";
 import SessionMetrics from "../../metrics/SessionMetrics.vue";
-import ChildCount from "./ChildCount.vue";
-import { boxImageOf, boxNameOf } from "../../fleet/fleetScope";
+import ChildCount from "../../../../parts/fleet/ChildCount.vue";
+import { boxImageOf, boxNameOf } from "../../../../models/fleet/fleetScope";
 import { accountBadge } from "../session/accountChip";
-import { previewOf } from "../../../chat/panel/useChat-strip";
-import { useSelectionBlade } from "./selectionBlade";
-import { providerAccounts } from "../../../chat/accounts/providerAccounts";
+import { previewOf } from "../../../../models/conversations/panel/useChat-strip";
+import { useSelectionBlade } from "../../../../models/fleet/board/selectionBlade";
+import { providerAccounts } from "../../../../models/providers/providerAccounts";
 import { markSegments } from "../../../../lib/markSegments";
-import { settingsChip, useSettingsRefusal } from "../../review/settingsRefusal";
-import { useAgents } from "../../fleet/useAgents";
-import { canArchive, type FleetAgent } from "../../fleet/useAgents-fleet";
-import { modelLabelFor } from "../../../chat/accounts/providerCatalog";
+import { settingsChip, useSettingsRefusal } from "../../../../models/conversations/review/settingsRefusal";
+import { useAgents } from "../../../../models/fleet/useAgents";
+import { canArchive, type FleetAgent } from "../../../../models/fleet/useAgents-fleet";
+import { modelLabelFor } from "../../../../models/providers/providerCatalog";
 import { useT } from "@intentic/ui/i18n";
 import { formatChord, isApplePlatform } from "../../../../workbench/commands/keybindings";
 

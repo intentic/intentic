@@ -1,11 +1,7 @@
-import {
-    type AgentProvider,
-    endpointIdOf,
-    loopsOf,
-    type ModelRef,
-    preferredAccount,
-    providerSpec,
-} from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { endpointIdOf, loopsOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { type ModelRef, preferredAccount } from "@intentic/sandbox-contract/models/plan-pools";
+import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { ensureFreshToken, replaceRejectedToken } from "../../runtimes/claude/claude-credentials.js";
 import type { Services } from "../../composition.js";
 import { serviceabilities } from "../../usage/serviceability/serviceability.js";

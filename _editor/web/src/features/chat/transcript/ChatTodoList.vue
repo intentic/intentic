@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { IconName } from "@intentic/ui";
-import type { TodoItem } from "@intentic/sandbox-contract";
-import type { ChecklistView } from "./transcript";
+import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
+import type { ChecklistView } from "../../../models/conversations/transcript/transcript";
 import { useT } from "@intentic/ui/i18n";
 
 // A snapshot of the agent's task checklist (TaskCreate/TaskUpdate) at one point in the turn. The daemon rebuilds the

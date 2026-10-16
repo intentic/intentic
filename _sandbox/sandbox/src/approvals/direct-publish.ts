@@ -1,4 +1,4 @@
-import { messageLimitOf } from "@intentic/sandbox-contract";
+import { messageLimitOf } from "@intentic/sandbox-contract/policy/message-limits";
 import type { Services } from "../composition.js";
 import { deliverThroughGateway } from "../extensions/listener/listener-deliver.js";
 

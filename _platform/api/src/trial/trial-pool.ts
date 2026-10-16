@@ -1,5 +1,5 @@
 import { retryAfterMs } from "@intentic/base/async";
-import type { TrialHealth } from "@intentic/sandbox-contract";
+import type { TrialHealth } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import type { Config } from "../config.js";
 
 // Pool of intentic's own model keys, since a single free-tier key exhausts in minutes. A refusal quarantines just the

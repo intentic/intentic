@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { utcDayOf } from "@intentic/sandbox-contract";
+import { utcDayOf } from "@intentic/sandbox-contract/time/zone";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { boundedLog } from "../store/json-file.js";

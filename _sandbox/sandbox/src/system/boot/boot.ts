@@ -1,4 +1,4 @@
-import type { BootProgress, BootStep } from "@intentic/sandbox-contract";
+import type { BootProgress, BootStep } from "@intentic/sandbox-contract/events/system-events";
 import type { Logger } from "pino";
 
 // Tracks boot as named, declared steps rather than elapsed time, so a restart reads as progress instead of an outage.

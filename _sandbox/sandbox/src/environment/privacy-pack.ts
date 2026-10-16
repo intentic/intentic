@@ -1,4 +1,4 @@
-import type { PrivacyShieldPolicy } from "@intentic/sandbox-contract";
+import type { PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
 import type { Services } from "../composition.js";
 import { packFragment } from "../image/packs.js";
 

@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { coverChoices, coverIn, coverIndex, coverRank, coversBelow } from "./homeCover";
 
 const file = (path: string, extra: Partial<WorkspaceTreeEntry> = {}): WorkspaceTreeEntry => ({

@@ -1,3 +1,5 @@
+import { parseJsonOr } from "@intentic/base/json";
+import { isRecord } from "@intentic/base/escape";
 import { z } from "zod";
 import {
     type DisplayInfo,
@@ -123,14 +125,8 @@ export const parseWindowsJson = (json: string): WindowInfo[] => {
 // foreground" is an observation about the desktop, and a read that failed has not made one. A caller that
 // cannot tell the two apart reports an unreadable machine as an idle one.
 export const parseSessionJson = (json: string): SessionState | undefined => {
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(json);
-    } catch {
-        return undefined;
-    }
-    const record = parsed as Record<string, unknown> | null;
-    if (record === null || typeof record !== "object" || typeof record["locked"] !== "boolean") {
+    const record = parseJsonOr(json, undefined);
+    if (!isRecord(record) || typeof record["locked"] !== "boolean") {
         return undefined;
     }
     const id = String(record["id"] ?? "");

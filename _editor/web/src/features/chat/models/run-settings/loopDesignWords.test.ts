@@ -1,4 +1,4 @@
-import { type LoopDesign, loopDesignLine } from "@intentic/sandbox-contract";
+import { type LoopDesign, loopDesignLine } from "@intentic/sandbox-contract/schemas/loops";
 import { setLocale } from "@intentic/ui/i18n";
 import { loopDesignWords } from "./loopDesignWords";
 

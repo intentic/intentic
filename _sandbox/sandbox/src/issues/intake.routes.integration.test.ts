@@ -1,18 +1,15 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-    type ActivityEvent,
-    type AgentEvent,
-    type AgentTurn,
-    type Automation,
-    type IssueIngest,
-    type IssueReport,
-    SandboxSettingsSchema,
-} from "@intentic/sandbox-contract";
+import type { ActivityEvent } from "@intentic/sandbox-contract/schemas/activity";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
+import type { IssueIngest, IssueReport } from "@intentic/sandbox-contract/schemas/issues";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
-import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { sqliteTurnJournal } from "../store/journals/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import { automationConfig } from "../harness/route-stores.testing.js";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
@@ -23,7 +20,7 @@ import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { createIntakeRoutes } from "./intake.routes.js";
 import { fileIssuesStore, type IssuesStore } from "./issues-store.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
-import { drivenBy } from "../testing.js";
+import { drivenBy } from "../seams/turn-starter.testing.js";
 
 // Public ingest end to end: one of two doors a stranger can reach. What matters is the refusals and the arithmetic of
 // waking, a crash loop must cost file writes, not agent turns.

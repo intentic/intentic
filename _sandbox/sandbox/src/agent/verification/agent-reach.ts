@@ -1,14 +1,9 @@
 import { isAbsolute, posix, relative } from "node:path";
-import {
-    type AgentEvent,
-    inertRegions,
-    isLive,
-    STATE_GROUP_DIR,
-    TURN_REACH_LIST_MAX,
-    type ToolCallContent,
-    type ToolCallStatus,
-    type TurnReach,
-} from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { inertRegions, isLive } from "@intentic/sandbox-contract/text/shell-regions";
+import { STATE_GROUP_DIR } from "@intentic/sandbox-contract/state/workspace-state";
+import { TURN_REACH_LIST_MAX, type TurnReach } from "@intentic/sandbox-contract/schemas/agents";
+import type { ToolCallContent, ToolCallStatus } from "@intentic/sandbox-contract/events/requests";
 import { MAIN_MOUNT } from "../../conversations/worktrees/isolation.js";
 import { SHARED_STATE } from "../../workload/worktree-paths.js";
 import { commandExitCode } from "./agent-verification.js";

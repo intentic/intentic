@@ -2,13 +2,11 @@ import { TimeoutError, withDeadline } from "@intentic/base/async";
 import { escapeRegExp } from "@intentic/base/escape";
 import type { QueryRequest, ResidentEngine } from "@intentic/iq-engine";
 import type { Logger } from "pino";
+import { TURN_CONTEXT_NOTE_HEADER } from "../../../sessions/vocabulary/prompt-envelope.js";
 
 // Runs the user's prompt through the resident iq engine before the turn starts and prepends the ranked answer, so the
 // model opens with path:line anchors instead of spending tool calls finding them. Rides the user message, not a
 // callable tool or the system prompt: cheaper than a round trip and keeps the cached system prefix byte-stable.
-
-export const TURN_CONTEXT_NOTE_TITLE = "Workspace context found for this message";
-export const TURN_CONTEXT_NOTE_HEADER = "## Retrieved workspace context";
 
 // Hard token budget for the note; the renderer drops trailing groups to stay under it.
 const CONTEXT_BUDGET_TOKENS = 1200;

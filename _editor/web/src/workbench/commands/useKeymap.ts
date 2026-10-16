@@ -1,3 +1,4 @@
+import { parseJsonOr } from "@intentic/base/json";
 import type { Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
 
@@ -13,22 +14,18 @@ const read = (raw: string | null): Overrides => {
     if (raw === null) {
         return {};
     }
-    try {
-        const parsed: unknown = JSON.parse(raw);
-        if (typeof parsed !== `object` || parsed === null) {
-            return {};
-        }
-        // Keep only well-typed entries (chord string or null); drop anything else.
-        const clean: Record<string, string | null> = {};
-        for (const [command, chord] of Object.entries(parsed as Record<string, unknown>)) {
-            if (chord === null || typeof chord === `string`) {
-                clean[command] = chord;
-            }
-        }
-        return clean;
-    } catch {
+    const parsed = parseJsonOr(raw, undefined);
+    if (typeof parsed !== `object` || parsed === null) {
         return {};
     }
+    // Keep only well-typed entries (chord string or null); drop anything else.
+    const clean: Record<string, string | null> = {};
+    for (const [command, chord] of Object.entries(parsed)) {
+        if (chord === null || typeof chord === `string`) {
+            clean[command] = chord;
+        }
+    }
+    return clean;
 };
 
 // Exported so callers read it reactively and tests can seed it directly.

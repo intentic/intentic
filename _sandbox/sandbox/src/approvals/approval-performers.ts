@@ -1,13 +1,13 @@
 import { errnoCode, errorMessage } from "@intentic/base/errors";
 import type { ApprovedAction, ApprovedActionOutcome } from "@intentic/extension-api/runtime";
 import { extensionIdOf } from "@intentic/extension-manifest";
-import type { ActionApprovalSummary } from "@intentic/sandbox-contract";
+import type { ActionApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
 import { cachedEnabledExtensions } from "../capabilities/contributions.js";
 import type { Services } from "../composition.js";
 import { approvalRequestBody, ApprovedActionOutcomeSchema } from "../extensions/backend/backend-approvals.js";
 import { BACKEND_HOST_HEADER } from "../extensions/backend/backend-host-config.js";
 import { backendDown, heldTarget } from "../extensions/backend/extension-mcp.js";
-import type { ExtensionHost } from "../extensions/installed-extensions.js";
+import type { ExtensionHost } from "../capabilities/extension-inventory/installed-extensions.js";
 import type { SpentApproval } from "./approval-decisions.js";
 
 // An approved action that names a `performer`, handed to that extension's backend instead of an agent turn. Called by the

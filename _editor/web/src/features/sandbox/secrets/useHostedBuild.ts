@@ -2,8 +2,8 @@ import type { HostedBuildState, HostedBuildStatus } from "@intentic/api-contract
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, onScopeDispose, watch } from "vue";
 import { apiClient } from "../../../lib/useApi";
-import { ENVIRONMENT_KEY } from "../environment/useEnvironment";
-import { expectRestart, type RestartWork } from "../live/sandboxRestart";
+import { ENVIRONMENT_KEY } from "../../../models/sandbox/environment/useEnvironment";
+import { expectRestart, type RestartWork } from "../../../models/sandbox/live/sandboxRestart";
 import { t } from "@intentic/ui/i18n";
 
 // A hosted sandbox's environment build, as followed by the Environment card: the platform builds the overlay

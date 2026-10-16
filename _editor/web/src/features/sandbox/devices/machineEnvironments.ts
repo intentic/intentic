@@ -1,10 +1,11 @@
-import { deviceDistro, userDistrosOf } from "@intentic/sandbox-contract";
+import { deviceDistro } from "@intentic/sandbox-contract/schemas/devices";
+import { userDistrosOf } from "@intentic/sandbox-contract/schemas/hosts";
 import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { RouteLocationRaw } from "vue-router";
-import { deviceDoors, osLabel, osTitle } from "./deviceFacts";
-import { capabilityRoute } from "./deviceLinks";
-import type { DeviceRow, MachineRow } from "./deviceRows";
+import { deviceDoors, osLabel, osTitle } from "../../../models/sandbox/devices/deviceFacts";
+import { capabilityRoute } from "../../../models/sandbox/devices/deviceLinks";
+import type { DeviceRow, MachineRow } from "../../../models/sandbox/devices/deviceRows";
 
 // One environment of a many-sided machine as its row states it: the door its tools are named after, the shell
 // behind it, its home, and how this sandbox reaches it. Nothing here is a verdict; those come from deviceRows.

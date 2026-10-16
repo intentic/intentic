@@ -2,7 +2,7 @@ import { computed, type Ref } from "vue";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { WORKSPACE_APPS } from "../../lib/queryKeys";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
-import { usePanels } from "./usePanels";
+import { usePanels } from "../../models/extensions/usePanels";
 
 /* The apps living in workspace monorepos, via the daemon's per-repo apps routes (one round-trip per monorepo). */
 export function useWorkspaceApps(active: Ref<boolean>) {

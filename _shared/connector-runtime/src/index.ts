@@ -88,4 +88,4 @@ export type {
     ListenerStop,
     ListenerStopAnswer,
     ListenerTurnOpened,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/protocol/doors/listener-protocol";

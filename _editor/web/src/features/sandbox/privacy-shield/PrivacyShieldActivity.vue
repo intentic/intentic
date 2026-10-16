@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PersonalDataClass, PrivacyLedgerEntry, PrivacyProvider, PrivacyShieldPolicy } from "@intentic/sandbox-contract";
+import type { PersonalDataClass, PrivacyLedgerEntry, PrivacyProvider, PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
 import {
     Button,
     formatDateTime,
@@ -20,7 +20,7 @@ import { computed, ref } from "vue";
 import { type ActivityFinding, activityFindings, activitySummary, allowKey, excerptParts, findingTokens } from "./privacyShield";
 import PrivacyImagePeek from "./PrivacyImagePeek.vue";
 import PrivacyProviderMark from "./PrivacyProviderMark.vue";
-import { usePrivacyReveal } from "./usePrivacyShield";
+import { usePrivacyReveal } from "../../../models/sandbox/usePrivacyShield";
 
 // What the shield did lately, kept short: one line for every request the log holds, then the newest things worth a row
 // of their own: each value replaced, as the value, the token it became and the text around it as the provider read it,

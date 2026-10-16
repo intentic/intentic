@@ -4,8 +4,8 @@ import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { parseRemote } from "../git/remote/remote-urls.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
-import { type DevPlace, type DevRoots, worktreesRootOf } from "./extension-dev.js";
-import type { InstalledExtension } from "./installed-extensions.js";
+import { type DevPlace, type DevRoots, worktreesRootOf } from "../capabilities/extension-inventory/extension-dev.js";
+import type { InstalledExtension } from "../capabilities/extension-inventory/installed-extensions.js";
 
 // Which install a dev-mode verb means, and which checkout of its source it should run from. Kept apart from the routes:
 // the CLI's `extension list` asks the same questions without changing anything.

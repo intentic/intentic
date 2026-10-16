@@ -1,4 +1,5 @@
-import { rankRefCandidates, referenceTails, type WorkspaceTreeEntry, type WorkspaceTree } from "@intentic/sandbox-contract";
+import { rankRefCandidates, referenceTails } from "@intentic/sandbox-contract/text/path-refs";
+import type { WorkspaceTreeEntry, WorkspaceTree } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { type ViewScope, workspaceScope } from "../../app/workspaceScope";
 import { cachedWorkspaceTree } from "./workspaceTreeCache";
 

@@ -1,4 +1,4 @@
-import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
+import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { failureStreaks } from "./ciStreaks";
 import { t } from "./i18n.js";
 

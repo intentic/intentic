@@ -1,13 +1,12 @@
+import type { AccountState, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import {
-    type AccountState,
     gatingWindows,
     type ModelRef,
     type RefusalsOnFile,
     type ServiceFacts,
     serviceStates,
     SPENT_UTILIZATION,
-    type UsageWindow,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/models/plan-pools";
 
 // What the recorded quota says about a provider's fleet for one model. `withHeadroom` separates a real refusal from
 // CLIProxyAPI cooling a credential for another reason, since a fleet-wide proxy makes every refusal look quota-shaped.

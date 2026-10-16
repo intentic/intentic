@@ -1,5 +1,8 @@
 import { SPECIMEN_CHAT_ID, SPECIMEN_TRANSCRIPT } from "./specimen";
-import { type AgentHarness, type AgentProvider, producedDocumentPaths, type SandboxHandlerOutput, type TranscriptRow } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { producedDocumentPaths } from "@intentic/sandbox-contract/text/documents";
+import type { SandboxHandlerOutput } from "@intentic/sandbox-contract/protocol/procedure-types";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { DESK_REVIEW_ID, SEPTEMBER_AFTER, SEPTEMBER_BEFORE, SEPTEMBER_PAGE, SEPTEMBER_PAGE_PATH, SEPTEMBER_PRINT_PATH } from "./desk";
 import {

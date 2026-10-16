@@ -371,7 +371,7 @@ export const OwnerGrantSchema = z.discriminatedUnion("kind", [
         hooks: z.array(z.string()).describe("Each hook in the set in the daemon's words: when it runs and what it runs."),
         at: z.number().describe("When it was approved, in milliseconds."),
     }),
-    // A workspace extension approved for the powers it declared then (extensions/extension-approvals.ts).
+    // A workspace extension approved for the powers it declared then (capabilities/extension-inventory/extension-approvals.ts).
     z.object({
         kind: z.literal("extension"),
         id: z.string().describe("The extension, by its publisher.name id."),

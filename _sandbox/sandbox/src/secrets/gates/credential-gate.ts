@@ -1,4 +1,5 @@
-import type { CredentialGateKind, CredentialLane, CredentialOffer } from "@intentic/sandbox-contract";
+import type { CredentialGateKind, CredentialLane } from "@intentic/sandbox-contract/schemas/secrets";
+import type { CredentialOffer } from "@intentic/sandbox-contract/events/requests";
 import { type CardDeps, cardRun, type LiveCard, raiseRequest, whyOf } from "../../guard/card-offers.js";
 import { credentialUse } from "../../guard/actions.js";
 import { guard } from "../../guard/guard.js";

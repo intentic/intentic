@@ -1,20 +1,9 @@
-import {
-    type AccountUsage,
-    type AgentProvider,
-    type Model,
-    type ModelOffer,
-    type NativeProvider,
-    type OauthAccount,
-    type OfferedAccount,
-    type OfferedModel,
-    type OfferedWindow,
-    TRANSLATOR_PROVIDERS,
-    type TranslatorAccount,
-    type TranslatorProvider,
-    gatingWindows,
-    windowLive,
-    windowPeriod,
-} from "@intentic/sandbox-contract";
+import type { AccountUsage, TranslatorAccount } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import type { Model, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import type { ModelOffer, OfferedAccount, OfferedModel, OfferedWindow } from "@intentic/sandbox-contract/models/model-offer";
+import { type NativeProvider, TRANSLATOR_PROVIDERS, type TranslatorProvider } from "@intentic/sandbox-contract/models/provider-specs";
+import { gatingWindows, windowLive, windowPeriod } from "@intentic/sandbox-contract/models/plan-pools";
 import type { Services } from "../../composition.js";
 import { type FleetReading, fleetLimit } from "../../usage/serviceability/fleet-limit.js";
 import { providerAccountLists, providerReadiness, sharedProviderReads } from "../providers/provider-registry.js";

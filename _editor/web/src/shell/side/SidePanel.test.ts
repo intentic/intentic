@@ -6,7 +6,7 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 // Whether the chat's home is the side: the one fact the panel reads from the chat.
 const chatInSidePanel = ref(true);
-jest.mock("../../features/chat/panel/chatPanelLayout", () => ({ chatInSidePanel }));
+jest.mock("../../models/conversations/panel/chatPanelLayout", () => ({ chatInSidePanel }));
 
 const { default: SidePanel } = await import("./SidePanel.vue");
 const { closeAllTabs, openBeside, sideTabId, useSidePanel } = await import("../../workbench/side/sideTabs");

@@ -1,5 +1,7 @@
+import { errorMessage } from "@intentic/base/errors";
 import { sandboxRef } from "@intentic/extension-api";
-import { type Hello, RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
+import type { Hello } from "@intentic/sandbox-contract/events/system-events";
+import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { z } from "zod";
@@ -220,7 +222,7 @@ export const readFailure = (error: unknown): string => {
     if (error instanceof z.core.$ZodError) {
         return t(`sandbox.useDaemonRoutes.unexpectedShape`, { remedy: eitherSideOlderRemedy() });
     }
-    return error instanceof Error ? error.message : String(error);
+    return errorMessage(error);
 };
 
 // Why a call that reached route `name` still failed: the daemon has it, shaped differently, so it answers rather

@@ -1,7 +1,7 @@
-import type { Automation } from "@intentic/sandbox-contract";
-import { envSuffix } from "@intentic/sandbox-contract";
+import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
+import { envSuffix } from "@intentic/sandbox-contract/policy/capability-env";
 import { gatewayHeld, shellEnvOf } from "../../capabilities/cli-env.js";
-import { turnCliEnv } from "../../capabilities/turn-env.js";
+import { turnCliEnv } from "../../agent/run/harness/turn-env.js";
 import type { Services } from "../../composition.js";
 import { personaCliEnv, turnPersona } from "../../personas/personas.js";
 import { createCredentialGrants } from "../../secrets/credential-grants.js";

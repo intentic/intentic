@@ -2,10 +2,10 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, type Ref, watch } from "vue";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import type { ComposerVoice } from "../../composer/voice/useComposerVoice";
-import { useSpeechPlayer } from "../../voice/speechPlayer";
+import { useSpeechPlayer } from "../../../../models/voice/speechPlayer";
 import { type InputHistory, inputHistoryFor, recallStep } from "../../drafts/inputHistory";
-import type { Conversation } from "../../session/conversation";
-import type { ConversationView } from "../useChat-view";
+import type { Conversation } from "../../../../models/conversations/session/conversation";
+import type { ConversationView } from "../../../../models/conversations/panel/useChat-view";
 import type { ComposerPopovers } from "./composerPopovers";
 
 // One pane's composer keyboard: who gets each key, in order (an open list, then recall, then Escape's own ladder, then

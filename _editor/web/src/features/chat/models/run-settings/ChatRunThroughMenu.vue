@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Icon } from "@intentic/ui";
-import type { LoopDesign, Workflow } from "@intentic/sandbox-contract";
+import type { LoopDesign } from "@intentic/sandbox-contract/schemas/loops";
+import type { Workflow } from "@intentic/sandbox-contract/schemas/workflows";
 import { loopDesignWords } from "./loopDesignWords";
 import { computed } from "vue";
-import { useLoopDesigns } from "../../../agents/fleet/useLoopDesigns";
-import { useWorkflowRuns } from "../../../agents/fleet/useWorkflowRuns";
+import { useLoopDesigns } from "../../../../models/fleet/useLoopDesigns";
+import { useWorkflowRuns } from "../../../../models/fleet/useWorkflowRuns";
 import { useListedView, WORKFLOWS } from "../../../../workbench/views/listedViews";
 import { useT } from "@intentic/ui/i18n";
 

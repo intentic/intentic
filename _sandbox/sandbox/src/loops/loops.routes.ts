@@ -1,5 +1,6 @@
 import { conversationReader, registryProvenance } from "../auth/scope/conversation-reader.js";
-import { loopCanConverge, loopsContract } from "@intentic/sandbox-contract";
+import { loopCanConverge } from "@intentic/sandbox-contract/schemas/loops";
+import { loopsContract } from "@intentic/sandbox-contract/contracts/loops.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";

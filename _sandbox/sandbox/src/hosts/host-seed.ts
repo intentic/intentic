@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import { collidesWithReservedServer, type DeviceConfig } from "@intentic/sandbox-contract";
+import { collidesWithReservedServer } from "@intentic/sandbox-contract/policy/reserved-servers";
+import type { DeviceConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { z } from "zod";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { deviceHandler } from "../capabilities/handlers/device.handler.js";

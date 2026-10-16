@@ -1,15 +1,15 @@
-import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract";
+import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract/schemas/agents";
 import { keepPreviousData, useQuery } from "@tanstack/vue-query";
 import { useSettled } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { boolPreference } from "@intentic/ui/preference";
-import type { Conversation } from "../../chat/session/conversation";
-import { useChat } from "../../chat/run/useChat";
-import type { ChatSession } from "../../chat/run/useChat-sessions";
+import type { Conversation } from "../../../models/conversations/session/conversation";
+import { useChat } from "../../../models/conversations/run/useChat";
+import type { ChatSession } from "../../../models/conversations/run/useChat-sessions";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useAgents } from "../fleet/useAgents";
-import type { FleetAgent } from "../fleet/useAgents-fleet";
+import { useAgents } from "../../../models/fleet/useAgents";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 import { handleOf, type IdMatch, idMatchOf } from "./idMatch";
 import { rpcKey } from "../../../lib/queryKeys";
 

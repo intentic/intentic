@@ -5,14 +5,19 @@ import { join } from "node:path";
 
 import { stubEnv } from "@intentic/testing/bun";
 
-import { daemonVersionOfBuild, type Hello, projectRemoteDir, RAW_ROUTE_NAMES, type SandboxMetrics } from "@intentic/sandbox-contract";
+import { daemonVersionOfBuild } from "@intentic/sandbox-contract/state/daemon-floor";
+import type { Hello } from "@intentic/sandbox-contract/events/system-events";
+import { projectRemoteDir } from "@intentic/sandbox-contract/ids/project-dir";
+import { RAW_ROUTE_NAMES } from "@intentic/sandbox-contract";
+import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
 import { createApp } from "../app.js";
 
 import { createLogger } from "../logger.js";
 
 import { createBootTracker } from "./boot/boot.js";
 
-import { beginTurn, testConfig } from "../testing.js";
+import { beginTurn } from "../conversations/actor/conversation-actors.testing.js";
+import { testConfig } from "../env.config.testing.js";
 
 import { clientFor, proven, rejectForbidden } from "../harness/route-client.testing.js";
 import { rejectAuth } from "../auth/auth-slice.testing.js";

@@ -1,4 +1,4 @@
-import type { LoopDesign } from "@intentic/sandbox-contract";
+import type { LoopDesign } from "@intentic/sandbox-contract/schemas/loops";
 
 // Saved loops for the composer's run-through picker, alongside workflows. Two loops, one per ending kind: a command's
 // exit code, or a reviewer agreeing. Both carry a spend ceiling since a loop keeps spending after it's armed.

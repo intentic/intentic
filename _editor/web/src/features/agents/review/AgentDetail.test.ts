@@ -10,7 +10,7 @@ import { REVEAL_DELAY_MS } from "@intentic/ui/loading-reveal";
 import * as actualVueRouter from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
 import * as actualUi from "@intentic/ui";
-import * as actualAgentActions from "../fleet/agentActions";
+import * as actualAgentActions from "../../../models/fleet/agentActions";
 
 // What the second test turns: the form factor (a desktop page is the review, where a phone's is the chat) and whether
 // either half of the fleet has answered for this id yet. Defaults are the first test's world, restored after each.
@@ -54,15 +54,17 @@ jest.mock("../board/session/SessionIdentity.vue", () => ({ default: { render: ()
 // The phone's chats sheet hangs off the title; a header test only cares that the title is its handle.
 jest.mock("../../chat/tabs/ChatSwitcherSheet.vue", () => ({ default: { render: () => null } }));
 
-jest.mock("../fleet/agentStatus", () => ({
+jest.mock("../../../models/agent-status/agentStatus-meta", () => ({
     agentStatusMeta: () => ({ icon: `spinner`, spin: true, label: `Running`, class: `text-link` }),
+}));
+jest.mock("../../../models/agent-status/agentStatus-standing", () => ({
     unregistered: () => false,
     writingNow: () => true,
     blocked: () => false,
     turnInFlight: () => false,
 }));
 
-jest.mock("../fleet/useAgents", () => {
+jest.mock("../../../models/fleet/useAgents", () => {
     const agent = { id: `agent-1`, branch: `agent/agent-1`, status: `running`, title: `Readable mobile title` };
     return {
         useAgents: () => ({
@@ -79,7 +81,7 @@ jest.mock("../fleet/useAgents", () => {
     };
 });
 
-jest.mock("../../chat/run/useChat", () => {
+jest.mock("../../../models/conversations/run/useChat", () => {
     return {
         useChat: () => ({
             // `peek`/`unsent` are what the phone's focus-leave sweep checks (AgentDetail.sweepPeek); this agent is one
@@ -107,7 +109,7 @@ jest.mock("../../chat/run/useChat", () => {
     };
 });
 // Stubbed strip (nothing open) so this mount skips standing up the whole tab store for a header test.
-jest.mock("../../chat/panel/useChat-strip", () => ({
+jest.mock("../../../models/conversations/panel/useChat-strip", () => ({
     chatStrip: { value: { active: undefined, panes: [], tabs: [] } },
     draftsInTransit: { value: [] },
     chatPreviews: { value: {} },
@@ -129,7 +131,7 @@ jest.mock("./useAgentChanges", () => {
     };
 });
 
-jest.mock("../fleet/agentActions", () => ({ ...realAgentActions, requestLandAgent: jest.fn(async () => {}), startAgent: jest.fn() }));
+jest.mock("../../../models/fleet/agentActions", () => ({ ...realAgentActions, requestLandAgent: jest.fn(async () => {}), startAgent: jest.fn() }));
 jest.mock("../../../client/sandbox/useRole", () => ({ useRole: () => ({ canDrive: true, canReview: true, canShip: true }) }));
 
 const { default: AgentDetail } = await import("./AgentDetail.vue");

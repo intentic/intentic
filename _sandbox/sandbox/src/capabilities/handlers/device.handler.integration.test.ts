@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { stubEnv } from "@intentic/testing/bun";
-import type { ExtensionHost } from "../../extensions/installed-extensions.js";
+import type { ExtensionHost } from "../extension-inventory/installed-extensions.js";
 import { enrolledFleet, enrollSyncKey } from "../../peers/desktop-sync.js";
 import { HOST_PEER } from "../../hosts/host-peer.js";
 import { createPeerHub, type PeerClient } from "../../peers/peer-hub.js";
@@ -180,7 +180,7 @@ const pairedMachine = async () => {
     const hosts = filePeerStore(mkdtempSync(join(tmpdir(), "cap-history-")), HOST_PEER.store);
     const tokens = new Map<string, string>();
     for (const id of ["rog", "rog::wsl:archlinux", "rogue", "omen::wsl:archlinux"]) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- each enrollment rewrites the file whole
+        // each enrollment rewrites the file whole
         const enrolled = await hosts.enroll(hosts.mintPairing(id).token);
         tokens.set(id, enrolled?.token ?? "");
     }

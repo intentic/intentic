@@ -7,7 +7,7 @@ import {
     toolServersOf,
     walkMeaning,
 } from "@intentic/extension-manifest";
-import type { CapabilityKind } from "@intentic/sandbox-contract";
+import type { CapabilityKind } from "@intentic/sandbox-contract/schemas/capabilities";
 
 // Structured, computed side effects of adding a capability: pre-add disclosure and post-add strips, derived from the
 // same contribution data the handlers consume, so no per-card list can drift. Lives in the catalog, not the wire

@@ -1,6 +1,7 @@
 import { SingleFlight, sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import type { ExitConfig, ExitLink, ExitObservation, IntenticLine } from "@intentic/sandbox-contract";
+import type { ExitConfig, ExitLink, ExitObservation } from "@intentic/sandbox-contract/schemas/exit";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { notCarriedYet, type TunnelEntry, tunnelEntries } from "../tunnel/tunnel-links.js";
 import { markUp, upSince } from "../tunnel/tunnel-state.js";

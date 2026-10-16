@@ -1,4 +1,4 @@
-import { memoryFleet } from "../../../testing.js";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { type ChildStanding, cancelMoveFor, descendantsOf, type FamilyLink, familyCancels, familyEnded, markFamilyEnded } from "../family-cancel.js";
 
 // Which children stop when a conversation leaves the board, and how: the spawn tree below it, and what each child stands on.

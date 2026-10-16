@@ -2,7 +2,7 @@
 // why. The daemon refused each write, and the page rolled it back while keeping the reason to itself. jsdom: mounts the
 // group over the real settings composable, against a daemon that refuses.
 import "@intentic/testing/dom";
-import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { stubGlobal, waitFor } from "@intentic/testing/bun";
 import { IconStub } from "@intentic/ui/testing";
 import { VueQueryPlugin } from "@tanstack/vue-query";

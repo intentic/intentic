@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { computed, toRef } from "vue";
-import { type RunSettingsPatch, usePickerRunSettings } from "./pickerRunSettings";
+import { type RunSettingsPatch, usePickerRunSettings } from "../../../../models/providers/pickerRunSettings";
 import EffortMeter from "../../composer/EffortMeter.vue";
 import { useT } from "@intentic/ui/i18n";
 

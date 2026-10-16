@@ -1,9 +1,9 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { browserServersOf, type BrowserTurnTools } from "../../browser/tools/browser-tools.js";
 import { mcpToolsOf } from "../../capabilities/mcp-tools.js";
 import type { Services } from "../../composition.js";
 import { extensionMcpToolsOf } from "../../extensions/backend/extension-mcp.js";
-import type { ExtensionHost } from "../../extensions/installed-extensions.js";
+import type { ExtensionHost } from "../../capabilities/extension-inventory/installed-extensions.js";
 import { peerToolsOf } from "../../peers/peer-tools.js";
 import type { AgentTool } from "./agent-tools.js";
 import type { TurnLease } from "./turn-mounts.js";

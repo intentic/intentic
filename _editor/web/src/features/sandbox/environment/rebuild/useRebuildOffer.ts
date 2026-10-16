@@ -1,10 +1,10 @@
 import { computed } from "vue";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
-import { turnInFlight } from "../../../agents/fleet/agentStatus";
-import { useAgents } from "../../../agents/fleet/useAgents";
+import { turnInFlight } from "../../../../models/agent-status/agentStatus-standing";
+import { useAgents } from "../../../../models/fleet/useAgents";
 import { useHostedBuild } from "../../secrets/useHostedBuild";
-import { useEnvironment } from "../useEnvironment";
+import { useEnvironment } from "../../../../models/sandbox/environment/useEnvironment";
 import { hostedBuildPhase } from "./hostedBuildPhase";
 import { useHostedRebuildStart } from "./hostedRebuildStart";
 

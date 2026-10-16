@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AT_REST_KEY_FILE_ENV } from "@intentic/sandbox-contract";
+import { AT_REST_KEY_FILE_ENV } from "@intentic/sandbox-contract/schemas/data-protection";
 import { z } from "zod";
 import { accountFiles } from "../../agent/providers/accounts/account-files.js";
 import { fileSandboxSecrets } from "../../secrets/sandbox-secrets.js";

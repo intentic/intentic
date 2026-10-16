@@ -1,6 +1,6 @@
-import type { FleetAdvice, FleetMachine, MachineStanding } from "@intentic/sandbox-contract";
+import type { FleetAdvice, FleetMachine, MachineStanding } from "@intentic/sandbox-contract/schemas/offload";
 import { reactive } from "vue";
-import type { Conversation } from "../../session/conversation";
+import type { Conversation } from "../../../../models/conversations/session/conversation";
 
 // What the composer does with the fleet advice for one draft (settings `offload.sessions`): which machine its strip
 // offers, and where an automatic placement puts it. Pure decisions over the advice and what happened to the draft on

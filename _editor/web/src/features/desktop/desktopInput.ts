@@ -1,4 +1,4 @@
-import { viewportCoords } from "../browsers/viewportCoords";
+import { viewportCoords } from "../../models/browsers/viewportCoords";
 
 // What the owner's hands become on /system/desktop-view (the daemon's desktop-view.ts reads these): pointer events in
 // the picture's own pixels, keystrokes by their DOM names, and typed characters as text. Pure, so the view's socket

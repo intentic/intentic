@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PipelineJob } from "@intentic/sandbox-contract";
+import type { PipelineJob } from "@intentic/sandbox-contract/schemas/ci";
 import { DagGraph, Icon, toneTint, toneWash, ui, type DagNode } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { jobName, pipelineDag, type PipelineJobCluster, type PipelineStage, stageOfNode } from "./pipelineDag";

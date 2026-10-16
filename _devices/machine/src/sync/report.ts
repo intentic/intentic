@@ -1,7 +1,7 @@
-import { readFile } from "node:fs/promises";
 import { hostname, platform } from "node:os";
+import { readTextIfExists } from "@intentic/base/fs";
 import { livePidRecord } from "@intentic/local-agent";
-import type { DeviceAgent, DevicePairing, DevicePort, DeviceReport } from "@intentic/sandbox-contract";
+import type { DeviceAgent, DevicePairing, DevicePort, DeviceReport } from "@intentic/sandbox-contract/schemas/devices";
 import { runPidPath } from "../config.js";
 import { installedBuild } from "../installed.js";
 import { machineId } from "../machine-id.js";
@@ -18,7 +18,7 @@ import { backupSessionName, ensureMutagen, type LiveSession, readAllSessions, se
 // listeners keep it alive), so `running` alone can misreport a stopped mirror as healthy. Undefined means no pass has
 // finished yet.
 const lastTick = async (): Promise<number | undefined> => {
-    const raw = await readFile(mirrorHeartbeatPath, "utf8").catch(() => undefined);
+    const raw = await readTextIfExists(mirrorHeartbeatPath);
     const stamped = Number(raw?.trim());
     return Number.isFinite(stamped) && stamped > 0 ? stamped : undefined;
 };

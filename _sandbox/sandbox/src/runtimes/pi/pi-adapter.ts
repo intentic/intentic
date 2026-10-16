@@ -1,7 +1,9 @@
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { type AgentTurn, type Capability, PI_PROVIDER } from "@intentic/sandbox-contract";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { PI_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
 import {
     type AgentAdapter,
     armPlan,
@@ -12,7 +14,7 @@ import {
     type TurnArmPlan,
     type TurnContext,
 } from "../../agent/providers/adapter.js";
-import { withAttachments } from "../../agent/prompt/attachment-note.js";
+import { withAttachments } from "../../sessions/vocabulary/attachment-note.js";
 import { releasingMounts } from "../../agent/tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";

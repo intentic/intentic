@@ -1,15 +1,11 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import {
-    type AgentEvent,
-    childReportPrompt,
-    peerMessagePrompt,
-    RESUME_NOTES,
-    type TranscriptRow,
-    watchWakePrompt,
-    withResumeNote,
-} from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { childReportPrompt, peerMessagePrompt } from "@intentic/sandbox-contract/events/agent-words";
+import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract/events/resume";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
+import { watchWakePrompt } from "@intentic/sandbox-contract/events/watch-wake";
 import { foldTurn, TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
-import { withRuntimeHistory } from "../agent/providers/runtime-history.js";
+import { withRuntimeHistory } from "./vocabulary/runtime-history.js";
 import { restoredSessionMessages } from "./sessions.js";
 import { openingRows } from "./turn-transcript.js";
 

@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import type { Device } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 import { Button, ConfirmDialog, Icon, Notice, toneTint, ui } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { apiClient } from "../../../../lib/useApi";
 import { useOperation } from "../../../../workbench/operations/operations";
 import { containerNotices, offersReconnect, reconnectDoor } from "../../overview/containerHealth";
-import { manageDeviceSandbox, useDevices } from "../useDevices";
-import { deviceNotListing } from "../deviceRows";
+import { manageDeviceSandbox, useDevices } from "../../../../models/sandbox/devices/useDevices";
+import { deviceNotListing } from "../../../../models/sandbox/devices/deviceRows";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { beginDeviceWork, machineKeyOf } from "../runners/deviceWork";
-import { expectRestart } from "../../live/sandboxRestart";
+import { expectRestart } from "../../../../models/sandbox/live/sandboxRestart";
 import { doorsHolding, type MachineDoor } from "../../live/sandboxDoors";
 import { useDeviceRelays } from "../../live/useDeviceRelays";
 import { useT } from "@intentic/ui/i18n";

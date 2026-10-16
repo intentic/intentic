@@ -1,6 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { retryAfterMs } from "@intentic/base/async";
 import { fetchJsonResponse, type JsonValue } from "@intentic/base/fetch-json";
+import { parseJsonOr } from "@intentic/base/json";
 import type { Session } from "./session.js";
 
 // Every request to Google goes through here: authorization, retries, paging, and errors that name the fix. Google's
@@ -127,14 +128,7 @@ const jsonAttempt = async (url: string, sent: Sent): Promise<Answer<JsonValue>> 
     return { status: answer.status, headers: answer.headers, body: success ? answer.json : undefined, problem: success ? undefined : answer.json };
 };
 
-const parsedOrUndefined = (text: string): JsonValue | undefined => {
-    try {
-        // SAFETY: JSON.parse returns only JSON values; googleError reads the one field it knows by hand.
-        return JSON.parse(text) as JsonValue;
-    } catch {
-        return undefined;
-    }
-};
+const parsedOrUndefined = (text: string): JsonValue | undefined => parseJsonOr(text, undefined);
 
 // A download's bytes, which are not JSON, so it keeps its own fetch with the same deadline-and-abort pairing.
 const bytesAttempt = async (url: string, sent: Sent): Promise<Answer<Buffer>> => {

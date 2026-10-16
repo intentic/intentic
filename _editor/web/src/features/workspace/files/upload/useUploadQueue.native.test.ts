@@ -32,7 +32,7 @@ jest.mock(`./nativeCopy`, () => ({
             return `declined` as const;
         }
         for (const event of script) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- the app's reports arrive one after another
+            // the app's reports arrive one after another
             await Promise.resolve();
             onEvent(event);
         }

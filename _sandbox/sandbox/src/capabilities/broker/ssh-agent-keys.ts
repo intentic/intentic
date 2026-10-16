@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { ParsedKey } from "ssh2";
 import { gitHostOf } from "../cli/git-access.js";
 import { loadPrivateKey } from "../credentials/ssh-keys.js";

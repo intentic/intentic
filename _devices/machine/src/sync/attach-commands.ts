@@ -1,7 +1,7 @@
 import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { homeDir, type Log } from "@intentic/local-agent";
-import { isProjectDirName, projectRemoteDir } from "@intentic/sandbox-contract";
+import { isProjectDirName, projectRemoteDir } from "@intentic/sandbox-contract/ids/project-dir";
 import type { CommandContext } from "@stricli/core";
 import { buildCommand } from "../cli-ui.js";
 import { baseDir } from "../config.js";
@@ -181,7 +181,7 @@ const terminateSessions = async (names: readonly string[]): Promise<void> => {
     const mutagen = await ensureMutagen();
     const live = existingSyncSessions(mutagen, names);
     for (const batch of live === undefined ? names.map((name) => [name]) : live.length > 0 ? [live] : []) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one batch at a time, as the blocking call ran them
+        // one batch at a time, as the blocking call ran them
         await runProcess(mutagen, ["sync", "terminate", ...batch], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
     }
 };

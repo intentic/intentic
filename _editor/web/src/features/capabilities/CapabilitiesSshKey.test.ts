@@ -3,7 +3,8 @@
 // sandbox kept, never a key. Pasting your own key and signing in with a password still work beside it.
 import "@intentic/testing/dom";
 import type { AddCapabilityInput } from "@intentic/capability-catalog";
-import { type SshKey, stashedMarker, VAULTED } from "@intentic/sandbox-contract";
+import { type SshKey, stashedMarker } from "@intentic/sandbox-contract/schemas/capabilities";
+import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import { IconStub } from "@intentic/ui/testing";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -21,7 +22,7 @@ jest.mock(`vue-router`, () => ({
 const add = jest.fn<(input: AddCapabilityInput) => Promise<void>>(async () => {});
 const generateSshKey = jest.fn<() => Promise<SshKey>>();
 const capabilities = ref<{ id: string; kind: string; status: { state: string }; config: Record<string, string | number>; secrets: string[] }[]>([]);
-jest.mock(`./connect/useCapabilities`, () => ({
+jest.mock(`../../models/capabilities/useCapabilities`, () => ({
     useCapabilities: () => ({
         recommendationFor: () => undefined,
         capabilities,
@@ -36,19 +37,19 @@ jest.mock(`./connect/useCapabilities`, () => ({
     probeCapability: jest.fn(),
     readRemoteRefs: jest.fn(async () => ({ refs: [] })),
 }));
-jest.mock(`./ssh/generateSshKey`, () => ({ generateSshKey: () => generateSshKey() }));
-jest.mock(`../extensions/useExtensions`, () => ({
+jest.mock(`../../models/capabilities/generateSshKey`, () => ({ generateSshKey: () => generateSshKey() }));
+jest.mock(`../../models/extensions/useExtensions`, () => ({
     useExtensions: () => ({ contributionOf: () => undefined, enabled: ref([]), extensions: ref([]), settled: ref(true) }),
 }));
 jest.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
-jest.mock(`../terminal/useBackgroundProcesses`, () => ({
+jest.mock(`../../models/terminal/useBackgroundProcesses`, () => ({
     useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: jest.fn(), stop: jest.fn() }),
     viewProcessLogs: jest.fn(),
 }));
 jest.mock(`../composables/sandbox/useHostConnect`, () => ({
     useHostConnect: () => ({ hostFor: () => undefined, revoke: jest.fn(), refresh: jest.fn(), start: jest.fn(), stop: jest.fn() }),
 }));
-jest.mock(`../sandbox/devices/useLiveLinks`, () => ({
+jest.mock(`../../models/sandbox/devices/useLiveLinks`, () => ({
     importForticlient: jest.fn(),
     useLiveLinks: () => ({ links: ref([]), error: ref(undefined), open: jest.fn(), close: jest.fn() }),
 }));

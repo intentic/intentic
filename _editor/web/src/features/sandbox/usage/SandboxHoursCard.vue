@@ -4,8 +4,8 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import HostedHoursMeter from "../../settings/hosted-plan/HostedHoursMeter.vue";
-import { formatDayShort, machineHours, rungName } from "../../settings/hosted-plan/hostedHours";
-import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
+import { formatDayShort, machineHours, rungName } from "../../../models/hosted-plan/hostedHours";
+import { useHostedPlan } from "../../../models/hosted-plan/useHostedPlan";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 
 // WHETHER THIS SANDBOX'S AWAKE TIME COSTS HOURS, answered on the page about what the sandbox uses. A limit belongs

@@ -10,13 +10,13 @@ import { createApp } from "../app.js";
 
 import { workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 
-import { listenerProvidersOf } from "./installed-extensions.js";
+import { listenerProvidersOf } from "../capabilities/extension-inventory/installed-extensions.js";
 
 import { workspacePaths } from "../workspace/workspace.js";
 
 import { clientFor, errorCode } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 
 // Extensions routes, driven over the daemon's HTTP surface exactly as the browser does.
 // Fakes and the client are shared (route-services.testing.ts and its siblings).

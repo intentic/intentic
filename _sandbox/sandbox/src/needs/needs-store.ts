@@ -1,4 +1,4 @@
-import { isOpenNeed, type Need, NeedSchema, type NeedsFile } from "@intentic/sandbox-contract";
+import { isOpenNeed, type Need, NeedSchema, type NeedsFile } from "@intentic/sandbox-contract/schemas/needs";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";

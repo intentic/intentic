@@ -1,4 +1,4 @@
-import type { ApprovalsList, ApprovalSummary } from "@intentic/sandbox-contract";
+import type { ApprovalsList, ApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";

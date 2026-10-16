@@ -1,4 +1,4 @@
-import { KEYRING_GRANT_TTL_MAX_MS } from "@intentic/sandbox-contract";
+import { KEYRING_GRANT_TTL_MAX_MS } from "@intentic/sandbox-contract/schemas/keyring";
 
 // EVERY "ASK THE PERSON AT THIS COMPUTER" MOMENT goes through one Consent: a release under `each-use`, a typing that
 // misses an entry's rules, a value taken in, a widening edit, a pairing, an askpass answer, an upgrade. Each request

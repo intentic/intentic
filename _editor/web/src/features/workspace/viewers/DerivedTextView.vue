@@ -2,7 +2,7 @@
 import { Button, CopyButton, EmptyState, formatElapsed, formatTokens, Markdown, timeAgo, toneTint } from "@intentic/ui";
 import { messageOr, useLatest, useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
-import { changeEpochOf, derivedEpochOf } from "../changes/live/useWorkspaceLive";
+import { changeEpochOf, derivedEpochOf } from "../../../models/workspace/changes/useWorkspaceLive";
 import { firstDeriveAttempt, rememberedDerivedText } from "../files/derivedCache";
 import { deriveText, readDerivedText, type WorkspaceDerived } from "../files/derivedText";
 import { useOperation } from "../../../workbench/operations/operations";

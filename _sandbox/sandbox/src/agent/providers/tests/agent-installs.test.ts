@@ -1,7 +1,7 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { ClassifiedInstall } from "../../../environment/runtime-installs.js";
-import { syncHookOutput } from "../../../testing.js";
+import { syncHookOutput } from "../../run/harness/harness-hooks.testing.js";
 import { classifyImageInstalls, installSteeringHooks, projectInstallsOf } from "../agent-installs.js";
 
 const fire = async (hooks: ReturnType<typeof installSteeringHooks>, command: string, cwd = WORKSPACE_ROOT) => {

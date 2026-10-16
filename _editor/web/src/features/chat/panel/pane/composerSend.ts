@@ -1,4 +1,4 @@
-import type { EditorContext } from "@intentic/sandbox-contract";
+import type { EditorContext } from "@intentic/sandbox-contract/schemas/agent";
 import type { IconName, TooltipValue } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock, formatDayMonthTime, formatWeekdayTime } from "@intentic/ui/format";
@@ -25,17 +25,17 @@ import {
 } from "../../composer/composerIntent";
 import type { InputHistory } from "../../drafts/inputHistory";
 import { continueKeyHintOf } from "./continueKeyHint";
-import { bookingOf, laterLabel, type SendLater, type TurnBooking } from "../../composer/later/sendLater";
+import { bookingOf, laterLabel, type SendLater, type TurnBooking } from "../../../../models/conversations/drafts/sendLater";
 import type { RunThrough } from "../../models/run-settings/useRunThrough";
 import type { ChatRouting } from "../../routing/chatRoute";
-import { type ContinueOptions, type PickUp, pickUpReady, pickUpShort, wakesHeldUntil } from "../../run/endings/pickUp";
+import { type ContinueOptions, type PickUp, pickUpReady, pickUpShort, wakesHeldUntil } from "../../../../models/conversations/endings/pickUp";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
-import { formatReset } from "../../session/usageStatus";
-import { planFeedback } from "../../session/cardReplies";
+import { formatReset } from "../../../../models/providers/usageStatus";
+import { planFeedback } from "../../../../models/conversations/session/cardReplies";
 import { track } from "../../../../app/analytics";
-import { invalidateAgentTranscript } from "../../transcript/agentTranscript";
-import { type ChatAttachment, type ChatMessage, continuationFor } from "../../transcript/transcript";
-import type { ConversationView } from "../useChat-view";
+import { invalidateAgentTranscript } from "../../../../models/conversations/transcript/agentTranscript";
+import { type ChatAttachment, type ChatMessage, continuationFor } from "../../../../models/conversations/transcript/transcript";
+import type { ConversationView } from "../../../../models/conversations/panel/useChat-view";
 
 // What one pane's Send means and does. The meaning is composerIntent.ts's ladder read against this composer's state
 // (what it says, whether it may, what Stop and the queue will do); the doing is the press itself, in the precedence

@@ -1,4 +1,7 @@
-import { type AskQuestion, type ParkKind, planParts, type TranscriptPlan, type TranscriptRow } from "@intentic/sandbox-contract";
+import type { AskQuestion } from "@intentic/sandbox-contract/events/requests";
+import type { ParkKind } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { planParts } from "@intentic/sandbox-contract/text/title";
+import type { TranscriptPlan, TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import type { Services } from "../composition.js";
 import type { LiveRun } from "../conversations/actor/conversation-holdings.js";
 import { opt } from "../opt.js";

@@ -1,6 +1,6 @@
-import { PRIVACY_DICTIONARY_SAMPLE_MAX } from "@intentic/sandbox-contract";
-import { FIRST_NAMES_PL } from "../detect/data/first-names-pl.js";
-import { SURNAMES_PL } from "../detect/data/surnames-pl.js";
+import { PRIVACY_DICTIONARY_SAMPLE_MAX } from "@intentic/sandbox-contract/schemas/privacy";
+import { FIRST_NAMES_PL } from "@intentic/privacy-detect/data/first-names-pl";
+import { SURNAMES_PL } from "@intentic/privacy-detect/data/surnames-pl";
 import { lookUpName, nameDictionary } from "../name-dictionary.js";
 
 // The dictionary as the owner reads it on the privacy page: the detector's own lists, counted, and for a query what

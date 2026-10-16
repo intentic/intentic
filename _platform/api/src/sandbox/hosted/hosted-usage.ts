@@ -351,7 +351,7 @@ export const settleHostedStretches = async (prisma: PrismaClient, config: Config
         select: { id: true, sandboxId: true, tier: true, memoryMb: true, appName: true, machineId: true, wokeAt: true, sandbox: { select: { ownerId: true } } },
     });
     for (const machine of open) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- sequential, gentle on the Fly API
+        // sequential, gentle on the Fly API
         await settleHostedStretch(prisma, config, logger, { ...machine, ownerId: machine.sandbox.ownerId }).catch((error: unknown) =>
             logger.error({ err: error, app: machine.appName }, `hosted meter: settling failed; retried next tick`),
         );

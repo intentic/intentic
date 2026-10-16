@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type { CardlessHost } from "@intentic/sandbox-contract";
+import type { CardlessHost } from "@intentic/sandbox-contract/schemas/devices";
 import { Button, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { useRole } from "../../../../client/sandbox/useRole";
-import { withdrawDeviceKey } from "../useDevices";
+import { withdrawDeviceKey } from "../../../../models/sandbox/devices/useDevices";
 
 // (2026-10-15) Device keys no capability card holds: each still lets a computer knock on this sandbox, and no board draws
 // a machine for it, since a machine is drawn from its card. The daemon refuses such a key at the door, but only the

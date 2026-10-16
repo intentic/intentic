@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { json, serve, servedProcedures } from "@intentic/contract-serve";
 import type { LocalFolder, LocalOffice } from "@intentic/ext-onlyoffice/local-office";
-import { RAW_ROUTE_LIST, type RawRouteKey, SANDBOX_ROUTE_NAMES, sandboxRouteFor } from "@intentic/sandbox-contract";
+import { RAW_ROUTE_LIST, type RawRouteKey } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
+import { SANDBOX_ROUTE_NAMES, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { type Grant, type Grants, isHandoff, mayWrite } from "./grants.js";
 import { cleanRelPath, resolveExisting } from "./paths.js";
 import { type ProcedureContext, proceduresFor } from "./procedures.js";

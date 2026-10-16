@@ -1,4 +1,4 @@
-import type { PushNotification } from "@intentic/sandbox-contract";
+import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import type { TunnelReport } from "../netd/netd-link.js";
 import type { PreviewDeps } from "../panels/preview-routes.js";
 import { netdDoorRefusal, netdDoorServer, generationOf, tunnelReports } from "./netd-door.js";

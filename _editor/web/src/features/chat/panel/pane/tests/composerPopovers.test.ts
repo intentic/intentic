@@ -1,8 +1,11 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { AgentCommand, AgentProvider, Persona, RunnerSummary } from "@intentic/sandbox-contract";
+import type { AgentCommand } from "@intentic/sandbox-contract/events/requests";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { RunnerSummary } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { computed, createApp, h, nextTick, ref } from "vue";
-import * as catalogOriginal from "../../../models/useChat-catalog";
+import * as catalogOriginal from "../../../../../models/conversations/accounts/useChat-catalog";
 import { runningTurn } from "../../../../../testing/runningTurn";
 
 // Pins the two lists over the composer: what an `@` at the caret offers and withholds, what a pick writes into the
@@ -13,11 +16,11 @@ const { ensureProviderCommands, loadAllProviderModels } = {
     ensureProviderCommands: jest.fn<(target: AgentProvider) => Promise<void>>(async () => undefined),
     loadAllProviderModels: jest.fn<() => Promise<void>>(async () => undefined),
 };
-jest.mock("../../../models/useChat-catalog", () => ({ ...catalogOriginal, ensureProviderCommands, loadAllProviderModels }));
+jest.mock("../../../../../models/conversations/accounts/useChat-catalog", () => ({ ...catalogOriginal, ensureProviderCommands, loadAllProviderModels }));
 
 const { useComposerPopovers } = await import("../composerPopovers");
-const { Conversation } = await import("../../../session/conversation");
-const { conversationView } = await import("../../useChat-view");
+const { Conversation } = await import("../../../../../models/conversations/session/conversation");
+const { conversationView } = await import("../../../../../models/conversations/panel/useChat-view");
 
 const COMMANDS: AgentCommand[] = [
     { name: `review`, description: `Review the diff.` },

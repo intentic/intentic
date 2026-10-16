@@ -266,7 +266,7 @@ export const syncBeforeLand = async <Repo extends ComposedRepo>(
     if (onto.size === 0) {
         return entry.repos;
     }
-    // oxlint-disable-next-line oxc/no-map-spread -- a fresh record per repo is the point: these are the registry's own persisted rows
+    // a fresh record per repo is the point: these are the registry's own persisted rows
     const moved = entry.repos.map((composed): Repo => ({ ...composed, base: onto.get(composed.repo) ?? composed.base }));
     await recordWorktree(entry.id, moved);
     return moved;

@@ -1,5 +1,5 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
-import { memoryFleet } from "../../../../testing.js";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
 import { createDomainEvents } from "../../../../seams/domain-events.js";
 import { SteeringQueue } from "../../../checkpoints/agent-steering.js";
 import { steerComposed } from "../turn-interactions.js";

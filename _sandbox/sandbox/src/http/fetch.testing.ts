@@ -34,3 +34,40 @@ export const answeringFetch = (answer: (call: number) => Response): typeof fetch
         { preconnect: fetch.preconnect },
     );
 };
+
+// A connection that never answers: the request waits until its signal aborts, then rejects with the signal's reason,
+// as fetch does. A request sent with no deadline at all is rejected at once, naming that, so a test can't wait out
+// the hang detector instead. Pair it with `expireTimeouts()` to see the deadline pass without waiting it out.
+export const stalledFetch: typeof fetch = Object.assign(
+    (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+            const signal = init?.signal;
+            if (signal === undefined || signal === null) {
+                reject(new Error("stalledFetch: the request carried no deadline"));
+                return;
+            }
+            if (signal.aborted) {
+                reject(signal.reason);
+                return;
+            }
+            signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
+    { preconnect: fetch.preconnect },
+);
+
+// Every `AbortSignal.timeout(ms)` comes back already expired, as its deadline passing would leave it; `asked` lists
+// each ms requested. Restore with the returned spy's `mockRestore()`.
+export interface ExpiredTimeouts {
+    readonly asked: number[];
+    readonly mockRestore: () => void;
+}
+
+export const expireTimeouts = (): ExpiredTimeouts => {
+    const asked: number[] = [];
+    const spy = jest.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+        asked.push(ms);
+        return AbortSignal.abort(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
+    });
+    return { asked, mockRestore: () => spy.mockRestore() };
+};
+

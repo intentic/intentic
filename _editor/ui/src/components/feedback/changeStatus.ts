@@ -1,6 +1,6 @@
 /* Git's one-letter status vocabulary and the colour each letter is read in, the data behind <ChangeStatusMark>. The
  * vocabulary itself is the contract's (ChangeStatusSchema), the one every change list is parsed with. */
-import type { ChangeStatus } from "@intentic/sandbox-contract";
+import type { ChangeStatus } from "@intentic/sandbox-contract/schemas/git/git";
 import { toneInk } from "../../lib/tone.js";
 
 export type { ChangeStatus };

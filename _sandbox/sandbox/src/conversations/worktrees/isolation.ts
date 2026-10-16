@@ -6,7 +6,7 @@ import { basename, dirname, join } from "node:path";
 import { isMissing } from "@intentic/base/errors";
 import { sessionsDir } from "../../sessions/session-store.js";
 import { MIRRORED_DIRS } from "@intentic/constants/mirror-roots";
-import { type Fence, fenceAllows, fenceReaches, foldPath } from "@intentic/sandbox-contract";
+import { type Fence, fenceAllows, fenceReaches, foldPath } from "@intentic/sandbox-contract/policy/fence-paths";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { walkDirs } from "../../workspace/layout/dir-walk.js";
 import type { Logger } from "pino";
@@ -323,7 +323,11 @@ const isolationAvailable = async (historyRoot: string): Promise<boolean> => {
 // A mirror is only correct where the worktree has nothing of its own; mounting a tracked `dist` over it would hide
 // files the branch exists to change. Empty or absent means nothing of its own; anything else is hands off.
 const mirrorable = async (path: string): Promise<boolean> => {
-    const entry = await lstat(path).catch(() => undefined);
+    // Unreadable is hands off too, rather than a throw that would fail the whole isolation.
+    const entry = await lstat(path).catch((error) => (isMissing(error) ? undefined : null));
+    if (entry === null) {
+        return false;
+    }
     if (entry === undefined || entry.isSymbolicLink()) {
         return true;
     }

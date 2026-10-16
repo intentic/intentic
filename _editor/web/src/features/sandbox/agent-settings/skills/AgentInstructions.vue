@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type BuiltinPromptText, SYSTEM_PROMPT_MAX, type SystemPromptMode } from "@intentic/sandbox-contract";
+import { type BuiltinPromptText, SYSTEM_PROMPT_MAX, type SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
 import {
     Button,
     ConfirmDialog,
@@ -15,7 +15,7 @@ import {
 } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
-import { useSandboxSettings } from "../../overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { useTrimmedDraft } from "../../../../lib/useDraft";
 import { useOperation } from "../../../../workbench/operations/operations";
 import { promptReach, spokenList } from "./promptReach";

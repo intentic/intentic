@@ -49,7 +49,7 @@ flowchart LR
 - **Results one press away.** The documents a turn made (Word, OpenDocument, RTF, PDF, decks, sheets, web pages) are
   chips under its answer, each with Download and Print beside it (`features/chat/transcript/deliverables/`). A press on
   the chip opens the document in Files as before; a guest, who has no Files, gets it over the chat instead
-  (`features/workspace/viewers/results/ResultPreview.vue`), read through the daemon's route that serves a
+  (`parts/workspace/ResultPreview.vue`), read through the daemon's route that serves a
   conversation's recorded documents and nothing else (`resultFiles.ts`). The file viewer's bar has Download for every
   file and Print over a surface that reads as pages. Print copies what is on screen into a hidden frame of its own,
   with no script, no handler and nothing loaded from outside the app (`printRendered.ts`): a document keeps its page
@@ -105,7 +105,7 @@ flowchart LR
   (`lib/skeletonPersistence.ts`). The active sandbox's imprints are read before the first route mounts, and every
   other sandbox's at the first idle moment, so a switch draws them on its first frame. They survive a new build,
   which the query cache does not, and a sign-out clears both, along with everything else the account left in this
-  browser: the keys `lib/browserStorage.ts` declares as the account's (open chat tabs, closed drafts, recent prompts,
+  browser: the keys `app/storage/browserStorage.ts` declares as the account's (open chat tabs, closed drafts, recent prompts,
   question and commit drafts, which sandbox was open), the transcript mirror in IndexedDB, and the sandbox scope's
   module state. Device preferences (theme, language, layout) stay. One `/events` stream per active sandbox
   (`useSandboxLiveness.ts`) invalidates what each frame makes stale (`systemEvents.ts`). Push refreshes let an
@@ -329,9 +329,9 @@ One word per idea on screen and in code. The retired spellings are refused by
 | docked | A panel living in the main window, as opposed to floating in a window of its own (`floating.ts`) |
 | status bar | The line at the foot of the desktop window: the runtime chips (`shell/status-bar/`) and, opted in, the geek metrics' segment, which opens its panel above the bar (`features/agents/status-bar/`). On a phone, the metrics alone at the Agents board's foot |
 | subagent | Any agent another agent started: in-process by its runtime's own Agent tool, or spawned by the sandbox as a conversation of its own. Drawn one way wherever it shows, on the card of the call that started it (`features/chat/tools/subagentCard.ts`) and in its parent card's tray; how it was started changes only what else it offers, such as its own conversation. Not "child agent" |
-| tray | The rows hung under a board card, and under a card in the chat's list (`features/chat/tabs/chatTrays.ts`), for every subagent it started: the ones it spawned, which are conversations of their own, and the ones its runtime ran in-process, from the roster (`features/agents/fleet/subagentRoster.ts`). Open only under the card the reader is on, a card whose subagent is on screen, and every card while a filter is on, folding open and shut with what stands below sliding to make room, on the compositor (`features/agents/board/view/foldMotion.ts`); every other card counts its subagents on itself instead (`features/agents/board/cards/ChildCount.vue`) and keeps only a subagent asking the reader in sight. Open, asks and working ones in sight, stopped ones one row per thing they stopped on, settled ones folded behind a count (`features/agents/board/view/childFold.ts`). A row shows its subagent in the chat: a spawned one's own chat, an in-process one's transcript in its parent's column (`features/chat/panel/subagent/subagentView.ts`) |
+| tray | The rows hung under a board card, and under a card in the chat's list (`features/chat/tabs/chatTrays.ts`), for every subagent it started: the ones it spawned, which are conversations of their own, and the ones its runtime ran in-process, from the roster (`models/fleet/subagentRoster.ts`). Open only under the card the reader is on, a card whose subagent is on screen, and every card while a filter is on, folding open and shut with what stands below sliding to make room, on the compositor (`features/agents/board/view/foldMotion.ts`); every other card counts its subagents on itself instead (`parts/fleet/ChildCount.vue`) and keeps only a subagent asking the reader in sight. Open, asks and working ones in sight, stopped ones one row per thing they stopped on, settled ones folded behind a count (`models/fleet/board/childFold.ts`). A row shows its subagent in the chat: a spawned one's own chat, an in-process one's transcript in its parent's column (`models/conversations/panel/subagentView.ts`) |
 | quick bar | The parked chat's pill that opens into a scratch pad: the composer alone, open while the reader is in it (`ChatQuickBar.vue`). Open, a header names the chat and its last words and leads to /chat; it draws no transcript |
-| send later | When a message goes, when not now: a time, or once another agent's work lands (`features/chat/composer/later/sendLater.ts`). The send is a split button: its press (and Enter) sends now, its caret opens the menu, hours first (the next twelve whole hours), a day of one's own and another agent's land behind their rows (`ComposerSendLater.vue`); a pick there is the send, booked for then. A booking the words came back with (Edit) or typed at `@send:` shows on the press, which books it again. Booked messages wait in the conversation's queue, each on its own time, drawn as scheduled with its own Change and Send now (`features/chat/composer/later/bookings.ts`) |
+| send later | When a message goes, when not now: a time, or once another agent's work lands (`models/conversations/drafts/sendLater.ts`). The send is a split button: its press (and Enter) sends now, its caret opens the menu, hours first (the next twelve whole hours), a day of one's own and another agent's land behind their rows (`ComposerSendLater.vue`); a pick there is the send, booked for then. A booking the words came back with (Edit) or typed at `@send:` shows on the press, which books it again. Booked messages wait in the conversation's queue, each on its own time, drawn as scheduled with its own Change and Send now (`models/conversations/drafts/bookings.ts`) |
 | land when done | A conversation's own answer to whether its finished work lands by itself, the board menu's "Land automatically" reached from the composer (`features/chat/composer/composerLanding.ts`); a chat not on record yet carries it on its opening message |
 | quick look | A card a hover raises: a home tile's preview, a bigger picture, an attached file's first lines |
 | peek | A tab opened as a look, which closes when the reader moves on unless kept (`Conversation.peek`, the side panel's `peek`), and nothing else |
@@ -345,30 +345,40 @@ every reader's open panel.
 
 ## Layout
 
-The directories are layered, lowest first, and a value import may only reach its own layer or a lower one
-([layers.json](layers.json), checked by `editor-boundaries` and drawn by the Dependencies view): foundation (`lib/`,
-`app/`, `skins/`, `styles/`, `design-system/`), the client (`client/`), `components/`, the workbench (`workbench/`),
-`features/`, and composition (`shell/`, `core-views/`, `extension-host/`, `router/`, `local/`, `testing/`). Where a lower
+The directories under `src/` are layered, lowest first, and a value import may only reach its own layer or a lower
+one ([layers.json](layers.json), checked by `editor-boundaries` and drawn by the Dependencies view). Where a lower
 layer needs something only a higher one knows (the built-in views, the account, the transcript mirror), the higher side
-registers or hands it in at startup (`main.ts`).
+registers or hands it in at startup (`main.ts`). The router is one: the route table installs it into
+`workbench/navigation/navigation.ts` where it creates it, and everything below composition navigates and reads the
+route through `navigation()` rather than importing `router/index.ts`. Inside each unit `subunits` lists (`features/chat`, `features/sandbox`,
+`features/workspace`, `features/agents`), each immediate subdirectory and the unit's root files are subunits, and a new
+value import closing a cycle between two of them fails too (standing ones: `_tools/checks/baselines/editor-subunits.json`).
 
-| Directory | Holds |
-| --- | --- |
-| `lib/` | Query keys, persistence, storage, streams, the active sandbox id, file-reference grammar, route helpers (`lib/routes/`) and small utilities |
-| `app/` | Boot-time services: environment, i18n, analytics, diagnostics, self-heal, the project and workspace scope |
-| `skins/` | Whole-app looks; see [skins](src/skins/README.md) |
-| `styles/` | Self-hosted font faces |
-| `design-system/` | Suites for `@intentic/ui` components and composables, run in this app |
-| `client/` | The editor's clients of what it talks to: the platform account (`auth/`), and the sandbox daemon's session, endpoint, typed RPC and queries (`session/`, `endpoint/`, `sandbox/`), and the device's remembered sandboxes (`directory/`) |
-| `components/` | App-specific components not shared through [ui](../ui) that know no feature |
-| `workbench/` | The services and registries features are written against, one unit per directory: window layout, commands and keybindings, notifications, the operations ledger, presence, the hub, the side panel's tabs, the browser tab's chimes, web and native push, workspace events, and the view, viewer and document registries (`views/`) |
-| `features/` | One directory per screen: chat, workspace, terminal, agents, sandbox, setup ([setup](src/features/setup/README.md)), settings |
-| `shell/` | Workspace chrome that composes the features: desktop rail, mobile tab bar, the command palette and the commands that name features, the floating and popped-out panels, notification sources, the side panel |
-| `core-views/` | Rail views that stay in-app, and the frames that host an extension's view |
-| `extension-host/` | Extension loading, the `IntenticApi` implementation, host module sharing |
-| `router/` | Route table, auth and setup guards, prefetch |
-| `local/` | The desktop app's local window on a folder or document of this computer: its shell, place chip, Files, and the folder's own sandbox |
-| `testing/` | Fakes for suites: daemon client, router, workers |
+<!-- >>> generated from layers.json: edit it there, then run node _tools/checks/layer-tables.mjs --fix -->
+| Layer | Holds | Directories |
+| --- | --- | --- |
+| foundation | the app's own plumbing and generic helpers: the API client, query keys, markdown, environments, analytics | `lib/` `app/` `skins/` `styles/` `assets/` `design-system/` |
+| client | the editor's clients of what it talks to: the platform account and the sandbox daemon's session, endpoint, RPC and queries | `client/` |
+| components | UI parts shared by several features that know no feature | `components/` |
+| workbench | the services and registries features are written against, one unit per workbench/&lt;x> | `workbench/` |
+| models | domain state and projections several features read: daemon query stores, pure derivations and their words; renders nothing and knows no feature, one unit per models/&lt;x> | `models/` |
+| parts | Vue parts that draw one model several features show and know no feature: a provider's logo, an agent's seal, a secret's field; one unit per parts/&lt;x> | `parts/` |
+| features | one directory per product area; a feature may use another, but no two may form a cycle | `features/` |
+| composition | what puts the features on screen: the shell, the router, built-in views, the extension host, local windows | `core-views/` `extension-host/` `shell/` `local/` `router/` `testing/` |
+<!-- <<< end of generated layers.json -->
+
+`models/<topic>/` holds what features read across one another without rendering it: an agent's standing and the
+words for it (`models/agent-status/`), the capability, sandbox, extension and terminal query stores, the provider
+accounts and catalog (`models/providers/`), the chat store and its conversations (`models/conversations/`: `useChat`,
+its tabs, sessions, turns and transcripts), the fleet store (`models/fleet/`: `useAgents` and the board's helpers), the
+working tree's changes and history (`models/changes/`), voice input and the wake word (`models/voice/`), the
+workspace's shared helpers (`models/workspace/`), and the browsers, hosted-plan, preview and needs projections. Units
+import one way: conversations below fleet below changes. `parts/<topic>/` holds the Vue that draws one of those models
+for several features (a provider's logo, an agent's seal and its count of subagents, a secret's field, the notice that
+a sandbox is older), and `components/` the parts that read no model at all (a decision button, a command block). Route helpers live in `lib/routes/`; the whole-app looks are described in [skins](src/skins/README.md) and the first-run
+flow in [setup](src/features/setup/README.md). `components/` holds app-specific parts; parts shared beyond the app go to
+[ui](../ui). `local/` is the desktop app's window on a folder or document of this computer, and `testing/` holds the
+suites' fakes (daemon client, router, workers).
 
 ## Key files
 

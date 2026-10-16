@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { ManifestProblem } from "@intentic/sandbox-contract";
+import type { ManifestProblem } from "@intentic/sandbox-contract/schemas/system";
 import type { Logger } from "pino";
 import { z } from "zod";
 import { opt } from "../../../opt.js";

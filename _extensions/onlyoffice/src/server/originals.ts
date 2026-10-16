@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { copyFile, mkdir, readdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { writeFileAtomic } from "@intentic/base/fs";
-import { errorMessage } from "@intentic/base/errors";
+import { readTextIfExists, writeFileAtomic } from "@intentic/base/fs";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { parseJsonOr } from "@intentic/base/json";
 import { scratchBeside } from "./browser-engine.js";
 
 // What a document on the user's own computer held before this process first wrote over it, kept in the app's cache
@@ -34,14 +35,15 @@ interface MetaFields {
 const isMeta = (fields: MetaFields): fields is Meta => typeof fields.path === "string" && typeof fields.name === "string" && typeof fields.keptAt === "string";
 
 // Read by hand rather than trusted: a meta.json is only ever this module's, but a cache is anyone's to damage.
+// A meta.json that is not JSON names nothing to keep or restore.
 const metaOf = (text: string): Meta | undefined => {
-    try {
-        const fields: MetaFields = JSON.parse(text) ?? {};
-        return isMeta(fields) ? { path: fields.path, name: fields.name, keptAt: fields.keptAt } : undefined;
-    } catch {
-        // allow(silent-catch): a meta.json that is not JSON names nothing to keep or restore.
+    const parsed = parseJsonOr(text, undefined);
+    if (parsed === undefined) {
         return undefined;
     }
+    // SAFETY: MetaFields holds only unknowns, and isMeta checks each one's type before it is believed.
+    const fields = (parsed ?? {}) as MetaFields;
+    return isMeta(fields) ? { path: fields.path, name: fields.name, keptAt: fields.keptAt } : undefined;
 };
 
 // A kept copy's name: when it was kept, in a spelling every file system takes (no colons), then the document's name.
@@ -82,8 +84,8 @@ export class Originals {
     }
 
     async #meta(real: string): Promise<Meta | undefined> {
-        // allow(silent-catch): no meta.json is no original kept, the ordinary case for a document never saved here.
-        const text = await readFile(join(this.#folder(real), META), "utf8").catch(() => undefined);
+        // No meta.json is no original kept, the ordinary case for a document never saved here.
+        const text = await readTextIfExists(join(this.#folder(real), META));
         const meta = text === undefined ? undefined : metaOf(text);
         return meta?.path === real ? meta : undefined;
     }
@@ -151,8 +153,8 @@ export class Originals {
         return this.#serial(real, async () => {
             const meta = await this.#meta(real);
             const source = meta === undefined ? undefined : this.#keptFile(meta);
-            // allow(silent-catch): a kept copy swept or removed since its meta.json was written is nothing to restore.
-            if (source === undefined || (await stat(source).catch(() => undefined)) === undefined) {
+            // A kept copy swept or removed since its meta.json was written is nothing to restore.
+            if (source === undefined || (await stat(source).catch(undefinedIfMissing)) === undefined) {
                 return false;
             }
             const replaced = await this.#copyAside(real);
@@ -175,22 +177,22 @@ export class Originals {
     // Removes every copy kept more than a week ago, and a document's folder once nothing current is left in it.
     async sweep(): Promise<void> {
         const cutoff = this.#now() - KEEP_MS;
-        // allow(silent-catch): no folder yet is nothing to sweep.
-        const folders = await readdir(this.deps.dir).catch(() => []);
+        // No folder yet is nothing to sweep.
+        const folders = (await readdir(this.deps.dir).catch(undefinedIfMissing)) ?? [];
         for (const name of folders) {
             const folder = join(this.deps.dir, name);
-            // allow(silent-catch): a folder with no meta.json left to read names nothing current, and goes.
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one document's folder at a time, at start, off every request's path
-            const meta = metaOf((await readFile(join(folder, META), "utf8").catch(() => ``)) ?? ``);
+            // A folder with no meta.json left to read names nothing current, and goes.
+            // one document's folder at a time, at start, off every request's path
+            const meta = metaOf((await readTextIfExists(join(folder, META))) ?? ``);
             if (meta === undefined || Date.parse(meta.keptAt) < cutoff) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+                // as above
                 await rm(folder, { recursive: true, force: true });
                 continue;
             }
-            // allow(silent-catch): a folder gone since it was listed holds nothing left to sweep.
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
-            const old = (await readdir(folder).catch(() => [])).filter((file) => (keptTime(file) ?? Number.POSITIVE_INFINITY) < cutoff);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // A folder gone since it was listed holds nothing left to sweep.
+            // as above
+            const old = ((await readdir(folder).catch(undefinedIfMissing)) ?? []).filter((file) => (keptTime(file) ?? Number.POSITIVE_INFINITY) < cutoff);
+            // as above
             await Promise.all(old.map((file) => rm(join(folder, file), { force: true })));
         }
     }

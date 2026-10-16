@@ -2,7 +2,7 @@
 // What it pins: the names ride with the chip (the whole point of a reaction over a private bookmark), and a press
 // states an intent rather than flipping whatever the daemon happens to hold.
 import "@intentic/testing/dom";
-import type { AgentReaction } from "@intentic/sandbox-contract";
+import type { AgentReaction } from "@intentic/sandbox-contract/schemas/agents";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { PICKER_EMOJI, QUICK_EMOJI } from "./reactions";
@@ -34,9 +34,9 @@ jest.mock("@intentic/ui", () => {
         useDevice: () => ({ mobile: ref(false) }),
     };
 });
-jest.mock("../../fleet/agentActions", () => ({ reactToAgent: reacted }));
-jest.mock("../../fleet/useAgents", () => ({ useAgents: () => ({ refresh, notice: ref(undefined) }) }));
-jest.mock("../../../sandbox/live/fleetAcross", () => ({ refreshAcross: jest.fn() }));
+jest.mock("../../../../models/fleet/agentActions", () => ({ reactToAgent: reacted }));
+jest.mock("../../../../models/fleet/useAgents", () => ({ useAgents: () => ({ refresh, notice: ref(undefined) }) }));
+jest.mock("../../../../models/sandbox/live/fleetAcross", () => ({ refreshAcross: jest.fn() }));
 jest.mock("../../../../client/session/sandboxSession", () => ({ useSandboxSession: () => ({ presentedEmail: me }) }));
 
 const { default: AgentReactions } = await import("./AgentReactions.vue");

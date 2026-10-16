@@ -1,10 +1,11 @@
 <!-- What the pick's loop cannot do, straight off its declared record: one row (label-left/hint-right), the list behind a hover card, and the offered loop that lifts them all where there is one. -->
 <script setup lang="ts">
 import { computed } from "vue";
-import { type AgentHarness, type AgentProvider, loopLabel } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { loopLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { InfoHint } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { liftingLoop, limitationsOn, offeredLoops } from "./offeredLoops";
+import { liftingLoop, limitationsOn, offeredLoops } from "../../../models/providers/offeredLoops";
 
 const t = useT();
 

@@ -2,7 +2,7 @@
 // discriminator, the live answers (a typed name, a cloned URL) the panel follows, and the three consequences badged.
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, contributionEntry } from "@intentic/capability-catalog";
 import type { CapabilityContribution, ExtensionManifest } from "@intentic/extension-manifest";
-import type { CapabilityKind } from "@intentic/sandbox-contract";
+import type { CapabilityKind } from "@intentic/sandbox-contract/schemas/capabilities";
 import { contributionFor, formEffects, tileBadges } from "./effects";
 
 // A connector with a credential and a client binary to bake in: the two facts only its contribution knows.

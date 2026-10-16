@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, symlink, utimes, writeFile } from "
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { IGNORED_OUTPUTS_LISTED } from "@intentic/sandbox-contract";
+import { IGNORED_OUTPUTS_LISTED } from "@intentic/sandbox-contract/schemas/git/git";
 import { copyIntoMain, ignoredOutputsOf, isDeliverableName, isOutputPath, namedIgnoredOutputs } from "./ignored-outputs.js";
 
 // Against real git and a real worktree: what an ignore rule hides is git's answer, and whose file it is is the main

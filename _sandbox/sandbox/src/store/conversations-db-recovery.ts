@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import { errorMessage } from "@intentic/base/errors";
 import { HISTORY_ROOT } from "@intentic/constants";
-import { isConversationId } from "@intentic/sandbox-contract";
+import { isConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { Logger } from "pino";
 import { conversationsRoot } from "./conversation-units.js";
 import {

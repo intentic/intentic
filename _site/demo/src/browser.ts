@@ -1,4 +1,4 @@
-import type { BrowserSession, OpenBrowserResult } from "@intentic/sandbox-contract";
+import type { BrowserSession, OpenBrowserResult } from "@intentic/sandbox-contract/schemas/terminal";
 import { FEATURED_AGENT_ID } from "./fixture/fleet";
 import { checkoutPage, DOC_STEPS, docsPage, pricingPage, visitedPage } from "./fixture/storefront";
 import type { DemoSession, DemoSocket } from "./transport";

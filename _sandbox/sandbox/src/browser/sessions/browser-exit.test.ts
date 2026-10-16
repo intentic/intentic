@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { boundExitId } from "./browser-exit.js";
 import { profileOwner } from "./session-store.js";
 

@@ -1,4 +1,4 @@
-import { EDGE_VERDICT_HEADER, edgeVerdictIsFinal, edgeVerdictOf } from "@intentic/sandbox-contract";
+import { EDGE_VERDICT_HEADER, edgeVerdictIsFinal, edgeVerdictOf } from "@intentic/sandbox-contract/protocol/edge-verdict";
 import type { Pairing } from "./config.js";
 
 // A SANDBOX THAT NO LONGER EXISTS, AS POSITIVE EVIDENCE SAYS IT (2026-10-05). A pairing used to be dropped only on three

@@ -43,6 +43,7 @@
         "@intentic/graph": "workspace:*",
         "@intentic/sandbox-run": "workspace:*",
         "bcryptjs": "catalog:",
+        "libsodium-wrappers": "catalog:",
         "ssh2": "catalog:",
         "tslib": "catalog:",
         "zod": "catalog:"

@@ -1,8 +1,9 @@
-import type { AgentEvent, DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract/schemas/devices";
 import { type CreateAsk, createSandboxThroughFleet, type FleetGateDeps, type RemoveAsk, removeSandboxThroughFleet, slugOf } from "./fleet-gate.js";
 import { parkedCards } from "../conversations/actor/parked-cards.js";
 import { createHeldCards } from "../guard/held-cards.js";
-import { memoryFleet } from "../testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);

@@ -1,4 +1,4 @@
-import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { Logger } from "pino";
 import type { Services } from "../composition.js";

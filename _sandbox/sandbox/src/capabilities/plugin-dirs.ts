@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { statePath } from "../state-paths.js";
 
 // Where plugin checkouts live: .intentic/records/plugins/<id>, daemon-owned state beside capabilities.json, outside the

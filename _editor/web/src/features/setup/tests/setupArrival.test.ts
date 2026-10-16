@@ -1,5 +1,5 @@
 import type { SandboxSummary } from "@intentic/api-contract";
-import { projectDirNameFor } from "@intentic/sandbox-contract";
+import { projectDirNameFor } from "@intentic/sandbox-contract/ids/project-dir";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
 import {
     alreadyWorking,

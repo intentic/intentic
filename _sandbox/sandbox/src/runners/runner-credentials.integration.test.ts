@@ -1,6 +1,6 @@
 import type { AddressInfo } from "node:net";
 import { serve, type ServerType } from "@hono/node-server";
-import type { RunnerCredential } from "@intentic/sandbox-contract";
+import type { RunnerCredential } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { Hono } from "hono";
 import type { Services } from "../composition.js";
 import { createRunnerTranslatorProxyRoute, toRunnerCredential } from "./runner-credentials.routes.js";

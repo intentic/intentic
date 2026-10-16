@@ -1,4 +1,5 @@
-import type { MemberRole, PresenceUser } from "@intentic/sandbox-contract";
+import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { PresenceUser } from "@intentic/sandbox-contract/events/system-events";
 import { sandboxRef } from "@intentic/extension-api";
 import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";

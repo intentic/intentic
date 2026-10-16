@@ -147,7 +147,7 @@ const rightmost = (words: readonly string[], known: Vocabulary): AssistantAccess
     return undefined;
 };
 
-// The one `projectPersonaId` (web, features/sandbox/personas/projectPersona.ts) writes: `project-` and the project's
+// The one `projectPersonaId` (web, models/sandbox/personas/projectPersona.ts) writes: `project-` and the project's
 // path, labelled with its last segment. Renaming the label ends the match, and the new name is read like any other.
 const namedAfterItsRepo = ({ id, label }: PersonaLike): boolean => {
     if (label === undefined || !id.startsWith(`project-`)) {

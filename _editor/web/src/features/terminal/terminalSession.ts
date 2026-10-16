@@ -13,7 +13,7 @@ import { transportFor } from "./channel/webTransport";
 import { useEndpoint } from "../../client/endpoint/useEndpoint";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { liveSocket, type LiveSocket } from "../../client/session/liveSocket";
-import { socketAddress } from "../sandbox/session/wsTicket";
+import { socketAddress } from "../../client/sandbox/streams/wsTicket";
 import { type ChannelEvents, type TerminalChannel, socketChannel } from "./channel/terminalChannel";
 import { StreamSocket } from "./channel/streamSocket";
 import { editKeyBytes } from "./terminalEditKeys";
@@ -21,7 +21,7 @@ import { registerFilePathLinks } from "./links/terminalFileLinks";
 import { registerUrlLinks } from "./links/terminalUrlLinks";
 import { applyTerminalGrid, requestTerminalGrid, resetTerminalGrid, type TerminalSizing } from "./terminalSizing";
 import { terminalPaint } from "./terminalTheme";
-import { openLoopbackPreview } from "./portPreview";
+import { openLoopbackPreview } from "../../models/terminal/portPreview";
 import "@xterm/xterm/css/xterm.css";
 
 // One xterm bound to one tmux session over /system/terminal, always a WebSocket: spoken on a stream of the edge's

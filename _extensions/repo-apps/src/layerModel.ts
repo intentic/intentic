@@ -1,4 +1,4 @@
-import type { PackageModules, PackageUnit, PackageUnitEdge } from "@intentic/sandbox-contract";
+import type { PackageModules, PackageUnit, PackageUnitEdge } from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
 
 // One package's insides as the view draws them: a stack of rows, lowest at the bottom. With a layers.json the rows are
 // its layers, and the findings are what its boundary check would refuse: an import reaching a higher layer, a cycle

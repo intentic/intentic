@@ -16,7 +16,7 @@
 declare global {
     // Lives on the window, not this module, since this module is itself re-evaluated by the updates it exists to
     // catch.
-    // oxlint-disable-next-line eslint/no-var -- a `declare global` ambient must use var to reach globalThis
+    // a `declare global` ambient must use var to reach globalThis
     var intenticSingletonModules: Set<string> | undefined;
 }
 

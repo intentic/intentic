@@ -1,4 +1,4 @@
-import { stashedToken } from "@intentic/sandbox-contract";
+import { stashedToken } from "@intentic/sandbox-contract/schemas/capabilities";
 import { randomBytes } from "node:crypto";
 
 // Credentials the sandbox made for a form that has not been saved yet (a generated SSH key's private half), held in

@@ -1,6 +1,7 @@
 import type { SDKInformationalMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent, AgentNoticeLevel } from "@intentic/sandbox-contract";
-import { isSafeguardFlagText } from "../providers/failure-sentences.js";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentNoticeLevel } from "@intentic/sandbox-contract/events/agent-ui";
+import { isSafeguardFlagText } from "../../engines/failure-sentences.js";
 
 // The Claude Code loop's informational lines (`system`/`informational`: hook feedback, non-error status, a plugin's
 // words) onto the runtime-neutral agent UI lane (sandbox-contract events/agent-ui.ts):

@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { SandboxSettingsSchema, type SandboxSettings } from "@intentic/sandbox-contract";
+import { SandboxSettingsSchema, type SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { fileSandboxSettingsStore } from "./settings-store.js";
 

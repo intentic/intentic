@@ -1,3 +1,5 @@
+import { parseJsonOr } from "@intentic/base/json";
+import { isRecord } from "@intentic/base/escape";
 import type { Advisory, Bundle, DeadCode, Duplication, MutationScore, OutdatedPackage, ProbeFacts, ProbeId, UiScan } from "../schemas/maintenance.js";
 import type { IdiomRule } from "./stack.js";
 import {
@@ -46,12 +48,8 @@ const asObject = (text: string): Record<string, unknown> | undefined => {
     if (start === -1) {
         return undefined;
     }
-    try {
-        const parsed: unknown = JSON.parse(text.slice(start));
-        return typeof parsed === `object` && parsed !== null && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : undefined;
-    } catch {
-        return undefined;
-    }
+    const parsed = parseJsonOr(text.slice(start), undefined);
+    return isRecord(parsed) ? parsed : undefined;
 };
 
 const asString = (value: unknown): string | undefined => (typeof value === `string` && value !== `` ? value : undefined);

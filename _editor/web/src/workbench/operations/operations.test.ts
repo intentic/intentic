@@ -2,7 +2,7 @@
 // stops. What is pinned is the promise the ledger makes to a reader who leaves mid-run: the run, its log and its end
 // are still there when they come back, and only once they have read the end does it go.
 import { type EffectScope, effectScope, nextTick, ref } from "vue";
-import { activeSandboxId } from "../../lib/activeSandbox";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
 import { forgetHubWork, hubWorkRunning } from "../hub/hubWork";
 import { useNotifications } from "../notifications/notifications";
 import { dismissOperation, forgetOperations, operationAt, operationRunning, startOperation, useOperation, useOperations } from "./operations";

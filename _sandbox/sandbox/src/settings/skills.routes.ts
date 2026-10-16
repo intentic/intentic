@@ -1,4 +1,4 @@
-import { skillsContract } from "@intentic/sandbox-contract";
+import { skillsContract } from "@intentic/sandbox-contract/contracts/skills.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";

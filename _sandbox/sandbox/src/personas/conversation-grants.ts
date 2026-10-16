@@ -1,4 +1,10 @@
-import { type BrokerRulePass, type ConversationGrant, ConversationGrantSchema, GrantShelfSchema, type GrantSubject } from "@intentic/sandbox-contract";
+import {
+    type BrokerRulePass,
+    type ConversationGrant,
+    ConversationGrantSchema,
+    GrantShelfSchema,
+    type GrantSubject,
+} from "@intentic/sandbox-contract/schemas/needs";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 

@@ -1,7 +1,9 @@
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { cachedAsync } from "@intentic/base/held";
-import { compareUnrankedModelIds, type EndpointConfig, type HelperOnly, LOCAL_MODELS, type Model, ModelSchema } from "@intentic/sandbox-contract";
+import { compareUnrankedModelIds } from "@intentic/sandbox-contract/models/model-order";
+import { type EndpointConfig, LOCAL_MODELS } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type HelperOnly, type Model, ModelSchema } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { z } from "zod";
 import { opt } from "../opt.js";
 import { cacheFile } from "../store/open-document.js";

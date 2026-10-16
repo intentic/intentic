@@ -1,7 +1,8 @@
 // AgentSafetyJudge controls commandJudge's mode; the model applying it is chosen on the Models tab and only
 // named here.
 import "@intentic/testing/dom";
-import { type SandboxSettings, SandboxSettingsSchema, setupsFromRoleLists } from "@intentic/sandbox-contract";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import { setupsFromRoleLists } from "@intentic/sandbox-contract/models/model-setups";
 import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
@@ -12,7 +13,7 @@ const patch = jest.fn((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
-jest.mock(`../overview/useSandboxSettings`, () => ({
+jest.mock(`../../../models/sandbox/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 
@@ -23,8 +24,8 @@ const CATALOGS: Record<string, readonly { value: string; label: string }[]> = {
 };
 const connected = ref<readonly string[]>([`codex`, `claude`]);
 
-jest.mock(`../../chat/session/access`, () => ({ providerReady: (provider: string) => connected.value.includes(provider) }));
-jest.mock(`../../chat/accounts/providerCatalog`, () => ({
+jest.mock(`../../../models/providers/access`, () => ({ providerReady: (provider: string) => connected.value.includes(provider) }));
+jest.mock(`../../../models/providers/providerCatalog`, () => ({
     endpointProviders: ref([]),
     providerModels: ref({}),
     demandCatalog: () => undefined,

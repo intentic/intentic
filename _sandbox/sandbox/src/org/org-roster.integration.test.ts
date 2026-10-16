@@ -1,12 +1,13 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AuditEvent, OrgPolicy } from "@intentic/sandbox-contract";
+import type { AuditEvent } from "@intentic/sandbox-contract/schemas/audit";
+import type { OrgPolicy } from "@intentic/sandbox-contract/schemas/organisation";
 import { createApp } from "../app.js";
 import { fileMembersStore, membersDocument } from "../auth/auth.js";
 import { services } from "../harness/route-services.testing.js";
 import { createLogger } from "../logger.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 import { createOrgPolicyHolder } from "./org-policy.js";
 import { fencedMembers, orgAdmits, orgPersonDigest, reconcileOrgRoster } from "./org-roster.js";
 

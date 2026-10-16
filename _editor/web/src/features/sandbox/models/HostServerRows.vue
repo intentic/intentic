@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import type { HostModelServer } from "@intentic/sandbox-contract";
+import type { HostModelServer } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import { Button, RowNote } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { useOperation } from "../../../workbench/operations/operations";
-import { useCapabilities } from "../../capabilities/connect/useCapabilities";
+import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import ConnectionRow from "../secrets/ConnectionRow.vue";
 
 // The model servers already running on the computer that hosts this sandbox (Ollama, LM Studio, llama.cpp, vLLM), each

@@ -2,9 +2,10 @@
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { NATIVE_PROVIDERS, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { endpointProviders } from "../../accounts/providerCatalog";
-import { accessKnown, providerReady, trialPhase } from "../../session/access";
+import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
+import { TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
+import { endpointProviders } from "../../../../models/providers/providerCatalog";
+import { accessKnown, providerReady, trialPhase } from "../../../../models/providers/access";
 import { MODELS_PATH } from "../../../../lib/routes/modelsPath";
 
 const t = useT();

@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { readClaudeTranscript, type TranscriptCall } from "@intentic/agent-context/claude-transcript";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { toolLocations } from "../src/agent/tools/tool-calls.js";
+import { toolLocations } from "../src/sessions/vocabulary/tool-calls.js";
 import { createTurnMetrics, type TurnMetricsReading } from "@intentic/agent-context/turn-metrics";
 import { WORKSPACE_MAP_NOTE_HEADER } from "@intentic/agent-context/workspace-map";
 import { transcriptFiles } from "./transcripts.js";

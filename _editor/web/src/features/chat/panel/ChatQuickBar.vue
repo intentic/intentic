@@ -2,13 +2,13 @@
 import { Icon, isOverlayTarget, ProgressRing } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
-import { chatParked, quickBarShowAsk } from "./chatPanelLayout";
+import { chatParked, quickBarShowAsk } from "../../../models/conversations/panel/chatPanelLayout";
 import { chatBarSlot } from "../../../workbench/window/panelSlots";
-import { focusComposer } from "../tabs/useChat-tabs";
-import { useChat } from "../run/useChat";
+import { focusComposer } from "../../../models/conversations/tabs/useChat-tabs";
+import { useChat } from "../../../models/conversations/run/useChat";
 import { useT } from "@intentic/ui/i18n";
-import IdentityTile from "../../capabilities/connect/IdentityTile.vue";
-import { contextPct } from "../../agents/fleet/agentStatus";
+import IdentityTile from "../../../parts/capabilities/IdentityTile.vue";
+import { contextPct } from "../../../models/agent-status/agentStatus-meta";
 import { lastWords } from "./lastWords";
 
 // The parked chat's scratch pad: a pill over the bottom of the area that opens into the focused chat's own composer (the

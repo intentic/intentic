@@ -1,4 +1,6 @@
-import { type AgentProvider, NATIVE_PROVIDERS, reportsPlanLimits } from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
+import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { Services } from "../composition.js";
 import { type ObservedLimit, type ObservedReading, observedTurnLimit } from "./observed-limits.js";
 import type { TurnLimit } from "./serviceability/fleet-limit.js";

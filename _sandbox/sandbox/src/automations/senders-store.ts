@@ -1,4 +1,5 @@
-import { type ListenerMessage, type SenderSeen, SenderSeenSchema } from "@intentic/sandbox-contract";
+import type { ListenerMessage } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
+import { type SenderSeen, SenderSeenSchema } from "@intentic/sandbox-contract/schemas/automations";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";

@@ -1,13 +1,14 @@
-import type { Page, PublishResult } from "@intentic/sandbox-contract";
+import type { Page } from "@intentic/sandbox-contract/events/requests";
+import type { PublishResult } from "@intentic/sandbox-contract/schemas/public";
 import { writeClipboard } from "@intentic/ui/clipboard";
 import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { useOperation } from "../../../../workbench/operations/operations";
-import { usePaneView } from "../../panel/useChat-view";
-import { focusComposer } from "../../tabs/useChat-tabs";
-import { useChatSurface } from "../../tools/chatToolSurface";
-import { setHtmlPreviewed } from "../../../workspace/viewers/html/htmlPreviewed";
+import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
+import { focusComposer } from "../../../../models/conversations/tabs/useChat-tabs";
+import { useChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
+import { setHtmlPreviewed } from "../../../../models/workspace/viewers/htmlPreviewed";
 
 // What a reader can do with a page the agent showed, beyond using it: open it full size in the file viewer, put it on
 // the internet through the outbox, and take the words a button on it offered into the composer.

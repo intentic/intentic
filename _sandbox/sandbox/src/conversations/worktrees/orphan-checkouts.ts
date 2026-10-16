@@ -1,7 +1,7 @@
 import { lstat, mkdir, readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
-import { isConversationId } from "@intentic/sandbox-contract";
+import { isConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { Logger } from "pino";
 import type { UnitOwners } from "../../store/conversation-units.js";
 // Type only: a value import from system/ would close a cycle between the subsystems (daemon-boundaries).

@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
-import type { BrowserConfig } from "@intentic/sandbox-contract";
+import type { BrowserConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { clearMarker, clearSession, hasSession, moveMarker, moveSession } from "../../browser/sessions/session-store.js";
 import { packFragment } from "../../image/packs.js";
 import { loadedSkillFile } from "../../store/loaded-skills.js";

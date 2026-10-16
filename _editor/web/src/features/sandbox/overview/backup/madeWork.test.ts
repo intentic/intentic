@@ -1,5 +1,6 @@
 import { STATE_DIR } from "@intentic/constants";
-import type { GitChanges, GitLog } from "@intentic/sandbox-contract";
+import type { GitChanges } from "@intentic/sandbox-contract/schemas/git/git";
+import type { GitLog } from "@intentic/sandbox-contract/schemas/git/git-history";
 import { holdsWork, madeEntries, onlyStarter, starterStateOf } from "./madeWork";
 
 // What counts as work for "No repository to push this work to". A phone that had just signed up was told its work had

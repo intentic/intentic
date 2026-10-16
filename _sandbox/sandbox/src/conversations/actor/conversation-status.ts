@@ -1,4 +1,5 @@
-import type { AgentStatus, ParkKind, WaitingPermission } from "@intentic/sandbox-contract";
+import type { AgentStatus, WaitingPermission } from "@intentic/sandbox-contract/schemas/agents";
+import type { ParkKind } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { opt } from "../../opt.js";
 import type { LandStanding } from "../land/standing.js";
 import type { EndingStatus } from "../registry/agents-store.js";

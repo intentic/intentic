@@ -1,5 +1,5 @@
 import type { ExtensionManifest } from "@intentic/extension-manifest";
-import type { ExtensionSummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
 import { sandboxRef } from "@intentic/extension-api";
 import type { ProcedureOutput } from "../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";

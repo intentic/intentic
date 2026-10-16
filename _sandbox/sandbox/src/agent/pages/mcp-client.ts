@@ -1,5 +1,5 @@
 import { readCappedText } from "@intentic/base/capped-read";
-import { parseSseText, sseJson } from "@intentic/sandbox-contract";
+import { parseSseText, sseJson } from "@intentic/sandbox-contract/protocol/sse";
 import type { AgentTool } from "../tools/agent-tools.js";
 
 // The few MCP calls the daemon makes itself to host an MCP server's app (mcp-apps.ts): list the tools to learn which

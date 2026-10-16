@@ -1,5 +1,6 @@
 import { cachedAsync } from "@intentic/base/held";
-import { type EngineChannel, type EngineId, isNewer } from "@intentic/sandbox-contract";
+import type { EngineChannel, EngineId } from "@intentic/sandbox-contract/schemas/engines";
+import { isNewer } from "@intentic/sandbox-contract/state/versions";
 import { z } from "zod";
 import { ENGINE_DESCRIPTORS, engineDescriptor } from "./engine-descriptors.js";
 import { type EngineState, isQuarantined } from "./engine-store.js";

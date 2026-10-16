@@ -1,7 +1,8 @@
-import { type ModelPin, modelPinKey } from "@intentic/sandbox-contract";
+import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import { modelPinKey } from "@intentic/sandbox-contract/models/model-pins";
 import { computed, type ComputedRef } from "vue";
-import { pinKnobSummary } from "../../../chat/models/run-settings/pickerRunSettings";
-import { type DescribedPin, describePin } from "../../../chat/models/modelPins";
+import { pinKnobSummary } from "../../../../models/providers/pickerRunSettings";
+import { type DescribedPin, describePin } from "../../../../models/providers/modelPins";
 
 export { pinKnobSummary };
 

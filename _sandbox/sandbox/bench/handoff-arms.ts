@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import type { TranscriptRow } from "@intentic/sandbox-contract";
-import { withRuntimeHistory } from "../src/agent/providers/runtime-history.js";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
+import { withRuntimeHistory } from "../src/sessions/vocabulary/runtime-history.js";
 
 /* WHAT A CONTINUING SESSION IS HANDED AT A CUT, ONE BUILDER PER ARM.
 

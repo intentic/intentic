@@ -1,10 +1,10 @@
-import type { WorkflowRun } from "@intentic/sandbox-contract";
+import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, type Ref, watch } from "vue";
 import type { Router } from "vue-router";
-import { runPress } from "../../../chat/run/chatRun";
-import type { Strip } from "../../../chat/tabs/tabFacts";
+import { runPress } from "../../../../models/conversations/run/chatRun";
+import type { Strip } from "../../../../models/conversations/tabs/tabFacts";
 import { synthesizeSessions } from "../../fleet/synthesizeSessions";
 import { useOperations } from "../../../../workbench/operations/operations";
 import { WORKFLOWS } from "../../../../workbench/views/listedViews";

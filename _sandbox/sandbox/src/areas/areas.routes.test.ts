@@ -1,4 +1,4 @@
-import type { MemberRole } from "@intentic/sandbox-contract";
+import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import { call } from "@orpc/server";
 import { unstubbed } from "@intentic/testing";
 import type { OrpcContext } from "../app-env.js";

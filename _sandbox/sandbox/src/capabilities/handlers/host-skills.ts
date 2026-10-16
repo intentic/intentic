@@ -1,4 +1,6 @@
-import { type DeviceFacts, isIntenticOs, RUN_TARGETS_FILE } from "@intentic/sandbox-contract";
+import type { DeviceFacts } from "@intentic/sandbox-contract/schemas/hosts";
+import { isIntenticOs } from "@intentic/sandbox-contract/schemas/intentic-os";
+import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract/schemas/run-targets";
 
 // Substituted for `${tools}` in a host pack's SKILL.md: the core, cross-platform tool surface and rules; `${id}` is the
 // instance name. The OS-specific half is a separate pack per platform; one capability per machine namespaces tool names

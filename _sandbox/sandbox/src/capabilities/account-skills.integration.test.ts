@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { unstubbed } from "@intentic/testing";
 import { LEGACY_ACCOUNT_SKILL_MARKER, loadedSkillDir, loadedSkillFile, stampSkill, skillWriterOf } from "../store/loaded-skills.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";

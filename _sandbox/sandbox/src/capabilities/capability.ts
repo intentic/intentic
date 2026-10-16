@@ -1,4 +1,5 @@
-import type { CapabilityStatus, IntenticLine } from "@intentic/sandbox-contract";
+import type { CapabilityStatus } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import type { Services } from "../composition.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
 import { fleetWhoami } from "../sandboxes/fleet-client.js";

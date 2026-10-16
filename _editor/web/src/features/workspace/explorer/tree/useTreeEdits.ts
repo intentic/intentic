@@ -1,5 +1,6 @@
 import { t } from "@intentic/ui/i18n";
-import { isLockedWorkspacePath, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { parentDir } from "@intentic/ui/path";
 import { computed, type Ref, ref, shallowRef } from "vue";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
@@ -7,7 +8,7 @@ import { VERB_ROUTES } from "../entryMenu";
 import { newNameError } from "../entryNames";
 import type { LandedEntry } from "../fileNesting";
 import { noteUserCreatedDir } from "../useEmptyDirs";
-import type { useWorkspaceTree } from "../useWorkspaceTree";
+import type { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
 import { advanceEdit, IDLE, type InlineEdit, type InlineEditEvent, type InlineWrite } from "./inlineEdit";
 import type { useTreeRules } from "./useTreeRules";
 

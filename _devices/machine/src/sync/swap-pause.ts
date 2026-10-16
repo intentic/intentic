@@ -1,4 +1,4 @@
-import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
+import { sandboxIdFromUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import { slugOfDaemonUrl } from "@intentic/sandbox-run/slug";
 import type { SwapRecord } from "../device/sandbox-rounds/swap-records.js";
 import type { Pairing } from "./config.js";

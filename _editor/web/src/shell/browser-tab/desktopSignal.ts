@@ -1,9 +1,11 @@
 import { t } from "@intentic/ui/i18n";
-import { agentDisplayTitle, attentionReason, type AgentStanding } from "../../features/agents/fleet/agentStatus";
-import { fleet } from "../../features/agents/fleet/useAgents-fleet";
-import { heldWakes } from "../../features/agents/fleet/useAgents-registry";
-import { activeSandboxId } from "../../lib/activeSandbox";
-import { otherBoxes } from "../../features/sandbox/live/fleetAcross";
+import { attentionReason } from "../../models/agent-status/agentStatus-attention";
+import { agentDisplayTitle } from "../../models/agent-status/agentStatus-meta";
+import type { AgentStanding } from "../../models/agent-status/agentStatus-standing";
+import { fleet } from "../../models/fleet/useAgents-fleet";
+import { heldWakes } from "../../models/fleet/useAgents-registry";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
+import { otherBoxes } from "../../models/sandbox/live/fleetAcross";
 import { clearDesktopNotices, type DesktopNotice, desktopNotices, postDesktopNotice, withdrawDesktopNotice } from "../../app/environments/desktopNotices";
 import { CHIME_GAP_MS } from "../../workbench/browser-tab/chimes";
 import { noticeAsks, noticeFinished } from "../../workbench/browser-tab/tabPreferences";

@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
-import { EMAIL_SIGN_IN_OFF, type ProofMethod } from "@intentic/sandbox-contract";
+import { EMAIL_SIGN_IN_OFF, type ProofMethod } from "@intentic/sandbox-contract/schemas/system";
 import { mintIdentityAssertion } from "@intentic/sandbox-contract/identity-assertion";
 import { mintOwnerTicket } from "@intentic/sandbox-contract/owner-ticket";
 import {

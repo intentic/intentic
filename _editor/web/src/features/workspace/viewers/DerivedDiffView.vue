@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DerivedDiff, DerivedSide, DiffSourceQuery } from "@intentic/sandbox-contract";
+import type { DerivedDiff, DerivedSide, DiffSourceQuery } from "@intentic/sandbox-contract/schemas/diff";
 import { Button, EmptyState, formatElapsed, Notice } from "@intentic/ui";
 import { messageOr, useLatest, useNow } from "@intentic/ui/async";
 import { basename } from "@intentic/ui/path";

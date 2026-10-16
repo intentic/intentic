@@ -400,7 +400,6 @@
             "tooLargeToDeliver": "Za duże, by dostarczyć samo: naciśnij „Przenieś zmiany z powrotem” w oknie folderu",
             "yourFolder": "twój folder",
             "inChannel": " w {channel}",
-            "workedSince": "Pracował od Twojego ostatniego otwarcia, {when}",
             "subagents": "{count} podagent | {count} podagenty | {count} podagentów",
             "loopIteration": "Iteracja {iteration}/{max} · aż do: {goal}",
             "loopDone": "Cel osiągnięty po iteracji {iteration}",
@@ -674,10 +673,6 @@
             "copySessionId": "Kopiuj id sesji",
             "pasteIdIntoQuick": "Wklej id w Szybkim otwieraniu, żeby wrócić do tego agenta z dowolnego miejsca.",
             "sessionId": "Id sesji"
-        },
-        "suggestedSessionBox": {
-            "ctrlEnter": "Ctrl+Enter",
-            "whatShouldAgentDo": "Co ma zrobić agent?"
         },
         "workflowRunCard": {
             "archive": "Zarchiwizuj przebieg",

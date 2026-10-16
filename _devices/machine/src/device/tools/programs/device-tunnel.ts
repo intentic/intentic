@@ -1,7 +1,8 @@
 import { connect, type Socket } from "node:net";
 import { errorMessage } from "@intentic/base/errors";
 import { type Pump, pumpTcpWebSocket } from "@intentic/base/ws-tcp-pump";
-import type { DialLoopback, DeviceScopes } from "@intentic/sandbox-contract";
+import type { DialLoopback } from "@intentic/sandbox-contract/schemas/device-artifacts";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { assertScope } from "../../policy.js";
 
 // THIS MACHINE'S END OF A `devices reach` TUNNEL (the daemon's is hosts/device-tunnels.ts). The sandbox accepted a
@@ -22,7 +23,7 @@ const dialLocal = async (port: number): Promise<Socket> => {
     // 127.0.0.1 first; a dev server bound to `localhost` on a machine that resolves it to ::1 answers only there.
     for (const host of ["127.0.0.1", "::1"]) {
         try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- two addresses, the second only when the first refused
+            // two addresses, the second only when the first refused
             return await new Promise<Socket>((done, fail) => {
                 const socket = connect({ port, host });
                 socket.once("connect", () => {

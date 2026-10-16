@@ -1,5 +1,8 @@
 import { join } from "node:path";
-import { type AgentEvent, type AgentTurn, type Capability, PROVIDER_ACCESS } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { PROVIDER_ACCESS } from "@intentic/sandbox-contract/models/agent-catalog";
 import {
     attemptProbe,
     armPlan,
@@ -11,7 +14,7 @@ import {
     type TurnContext,
 } from "../../agent/providers/adapter.js";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
-import { withAttachments } from "../../agent/prompt/attachment-note.js";
+import { withAttachments } from "../../sessions/vocabulary/attachment-note.js";
 import { releasingMounts } from "../../agent/tools/turn-mounts.js";
 import { doorToolsOf, type DoorToolsDeps } from "../daemon-tools/door-tools.js";
 import {

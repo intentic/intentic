@@ -3,9 +3,9 @@
 // not throws.
 import "@intentic/testing/dom";
 import { type App, createApp, h, nextTick } from "vue";
-import type { TranscriptTool } from "@intentic/sandbox-contract";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { IconStub } from "@intentic/ui/testing";
-import { useToolCalls } from "../../tools/useToolCalls";
+import { useToolCalls } from "../../../../models/conversations/tools/useToolCalls";
 import { scrollersUnderShut } from "../../../../testing/scrollersUnderShut";
 import { shownText } from "../../../../testing/shownText";
 

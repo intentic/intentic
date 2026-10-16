@@ -1,4 +1,5 @@
-import type { TurnNote } from "@intentic/sandbox-contract";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
+import { LANDING_CHECKS_NOTE_HEADER, LANDING_CHECKS_NOTE_TITLE } from "../../sessions/vocabulary/prompt-envelope.js";
 
 // What a turn is told about checks: nothing holds its work back, a repository's own end-of-turn checks may say back once
 // what its change added (agent/run/turn-checks.ts) and nothing else checks it when it finishes or after it lands, the
@@ -6,13 +7,6 @@ import type { TurnNote } from "@intentic/sandbox-contract";
 // whatever fails on main (ci/main-fixer.ts). Said with "may" to every runtime, since only an isolated turn of the Claude
 // Code loop meets those checks. Sent on the opening message and after a compaction, like every standing note
 // (turn-premise.ts); it names no failures, so nothing it says goes stale between turns.
-
-export const LANDING_CHECKS_NOTE_TITLE = "Checks after landing";
-export const LANDING_CHECKS_NOTE_HEADER = "## Checks after landing";
-
-// The note this one replaced, still parsed out of prompts records hold (turn-preamble.ts), never sent.
-export const LEGACY_TURN_ENDING_NOTE_TITLE = "Automatic end-of-turn checks";
-export const LEGACY_TURN_ENDING_NOTE_HEADER = "## Automatic end-of-turn checks";
 
 export const LANDING_CHECKS_NOTE: TurnNote = {
     title: LANDING_CHECKS_NOTE_TITLE,

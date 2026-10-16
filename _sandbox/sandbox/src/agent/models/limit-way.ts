@@ -1,9 +1,11 @@
 import { tokensOfChars } from "@intentic/base/format";
-import type { AgentProvider, AgentTurn, HandoffOffer, TodoItem } from "@intentic/sandbox-contract";
+import type { AgentProvider, AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
+import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
 import type { Services } from "../../composition.js";
 import { handoffHistory } from "../../sessions/turn-transcript.js";
 import { handoffStateNote } from "../prompt/handoff-state.js";
-import { withRuntimeHistory } from "../providers/runtime-history.js";
+import { withRuntimeHistory } from "../../sessions/vocabulary/runtime-history.js";
 import { handoffOfferOf } from "../providers/limit-handoff.js";
 import { opt } from "../../opt.js";
 import type { VerificationStanding } from "../verification/agent-verification.js";

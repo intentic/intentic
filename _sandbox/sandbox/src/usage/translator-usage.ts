@@ -1,5 +1,9 @@
-import { type AccountUsage, type KeyedProvider, reportsPlanLimits, type UsageWindow, type WindowGates, wordsOf } from "@intentic/sandbox-contract";
+import type { AccountUsage, UsageWindow, WindowGates } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { KeyedProvider } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
+import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
+import { wordsOf } from "@intentic/sandbox-contract/models/plan-pools";
 import { asNumber, asRecord, asString, clampPercent, readFailure, resetFromIso } from "./payload.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Reader for the routed subscriptions (counterpart to claude-usage.ts); returns an AccountUsage only, storage and
 // merging live elsewhere.
@@ -52,14 +56,8 @@ const verificationUrl = (message: string | undefined): string | undefined => {
     if (trimmed?.startsWith("{") !== true) {
         return undefined;
     }
-    const details = ((): unknown => {
-        try {
-            return asRecord(asRecord(JSON.parse(trimmed) as unknown)?.[`error`])?.[`details`];
-        } catch {
-            // allow(silent-catch): a body that is not JSON names no verification page, and the bench still stands.
-            return undefined;
-        }
-    })();
+    // A body that is not JSON names no verification page, and the bench still stands.
+    const details = asRecord(asRecord(parseJsonOr(trimmed, undefined))?.[`error`])?.[`details`];
     for (const detail of Array.isArray(details) ? details : []) {
         const info = asRecord(detail);
         if (info?.[`reason`] !== `VALIDATION_REQUIRED`) {

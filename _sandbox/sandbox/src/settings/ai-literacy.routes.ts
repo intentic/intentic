@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { AI_LITERACY_TEXT, settingsContract } from "@intentic/sandbox-contract";
+import { AI_LITERACY_TEXT } from "@intentic/sandbox-contract/schemas/ai-literacy";
+import { settingsContract } from "@intentic/sandbox-contract/contracts/settings.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";
 import { noteAudit } from "../audit/audit-http.js";

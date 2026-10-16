@@ -1,5 +1,5 @@
 // Pins what a runner's row says about the work this sandbox sends it: the kinds that go there, and its last run.
-import type { OffloadRecord } from "@intentic/sandbox-contract";
+import type { OffloadRecord } from "@intentic/sandbox-contract/schemas/offload";
 import { lastRun, sentTo } from "./runnerWork";
 
 const kinds = [

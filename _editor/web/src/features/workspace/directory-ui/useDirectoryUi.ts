@@ -1,7 +1,7 @@
 import { STATE_DIR } from "@intentic/constants";
 import { messageOr } from "@intentic/ui/async";
 import { type BridgeCall, resolveBridgeCall } from "./directoryUiVerbs";
-import { readFileWindow } from "../files/fileWindow";
+import { readFileWindow } from "../../../models/workspace/files/fileWindow";
 import { sandboxJson } from "../../../client/sandbox/sandboxClient";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 

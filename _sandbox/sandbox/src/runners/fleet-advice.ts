@@ -1,18 +1,16 @@
 import { COST_BYTES, PERSON_RESERVE_BYTES, STALL_PERCENT, STALL_SUSTAINED_PERCENT } from "@intentic/constants/memory-room";
-import {
-    type AgentHarness,
-    type AgentProvider,
-    type FleetAdvice,
-    type FleetAdviceInput,
-    type FleetMachine,
-    type FleetUnfit,
-    type MachineLoad,
-    type MachineStanding,
-    type MachineStrain,
-    type RunnerFacts,
-    type SessionsPlacement,
-    withRuntimeDefaults,
-} from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
+import type {
+    FleetAdvice,
+    FleetAdviceInput,
+    FleetMachine,
+    FleetUnfit,
+    MachineLoad,
+    MachineStanding,
+    MachineStrain,
+    SessionsPlacement,
+} from "@intentic/sandbox-contract/schemas/offload";
+import type { RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { Services } from "../composition.js";
 import { opt } from "../opt.js";
 import { refreshRunnerFacts } from "./fleet-facts.js";

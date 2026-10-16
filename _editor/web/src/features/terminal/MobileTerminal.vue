@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useDevice } from "@intentic/ui";
 import { useRouter } from "vue-router";
-import { globalTerminalSource } from "./useTerminalPanel";
+import { globalTerminalSource } from "../../models/terminal/useTerminalPanel";
 import TerminalPanel from "./TerminalPanel.vue";
 
 /* The mobile terminal: the same sandbox-global tmux sessions the desktop panel docks below every view, as a full-screen route. */

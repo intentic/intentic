@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { type IconName, InlineRename, Row, toneFill } from "@intentic/ui";
 import UsageMeter from "../../chat/session/UsageMeter.vue";
-import type { PlanHeadroom } from "../../chat/session/usageStatus";
+import type { PlanHeadroom } from "../../../models/providers/usageStatus";
 import { useT } from "@intentic/ui/i18n";
 
 // One row for every line the AI-account list shows (native account, subscription, the empty and add placeholders, the

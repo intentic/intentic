@@ -1,4 +1,4 @@
-import { GateVerdictSchema } from "@intentic/sandbox-contract";
+import { GateVerdictSchema } from "@intentic/sandbox-contract/schemas/workflows";
 import { WAIT_DEFAULT_S } from "@intentic/gate";
 import {
     annotationOf,

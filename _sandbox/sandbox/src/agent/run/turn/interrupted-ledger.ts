@@ -1,7 +1,8 @@
-import { capabilitiesOf, withRuntimeDefaults } from "@intentic/sandbox-contract";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
-import type { JournalledTurn } from "./turn-journal.js";
+import type { JournalledTurn } from "../../../store/journals/turn-journal.js";
 
 // A turn a restart cut never settled, so it never wrote its ledger row: the turns ledger (diagnostics `turns`) showed
 // nothing minutes after a restart had cut every running session (2026-10-11). The boot pass that finds it in the

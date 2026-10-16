@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DataFlow, DataFlowGroup } from "@intentic/sandbox-contract";
+import type { DataFlow, DataFlowGroup } from "@intentic/sandbox-contract/schemas/compliance";
 import { type IconName, InfoHint, Notice, Row, RowGroup, SkeletonRows, type Tone, toneDot, toneInk } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";

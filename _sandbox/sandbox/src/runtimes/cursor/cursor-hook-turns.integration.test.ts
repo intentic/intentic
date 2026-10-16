@@ -4,7 +4,7 @@ import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { createLogger } from "../../logger.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";

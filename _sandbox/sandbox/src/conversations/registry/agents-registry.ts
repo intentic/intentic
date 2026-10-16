@@ -1,32 +1,27 @@
-import {
-    type AgentChecklist,
-    type AgentReaction,
-    type AgentStatus,
-    type AgentSummary,
-    breakArmed,
-    deriveTitle,
-    isTurnBreakPolicy,
-    keepWarmCap,
-    type LandConflictReason,
-    type LandedMessageDraft,
-    type LandingDelivery,
-    planParts,
-    type TodoItem,
-    type TurnBreak,
-    type TurnBreakPolicy,
-    type TurnProfile,
-    type UnfinishedWork,
-    type SessionOwner,
-} from "@intentic/sandbox-contract";
+import type {
+    AgentChecklist,
+    AgentReaction,
+    AgentStatus,
+    AgentSummary,
+    LandConflictReason,
+    LandedMessageDraft,
+    UnfinishedWork,
+    SessionOwner,
+} from "@intentic/sandbox-contract/schemas/agents";
+import { breakArmed, isTurnBreakPolicy, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
+import { deriveTitle, planParts } from "@intentic/sandbox-contract/text/title";
+import { keepWarmCap } from "@intentic/sandbox-contract/schemas/keep-warm";
+import type { LandingDelivery } from "@intentic/sandbox-contract/schemas/project-delivery";
+import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
+import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import { withGitCaller } from "@intentic/base/git";
 import { freshness } from "@intentic/base/held";
 import { oneLine } from "@intentic/base/one-line";
-import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../../agent/providers/failure-sentences.js";
-import { routingFor } from "../../agent/providers/accounts/routing.js";
-import type { JournalledTurn, TurnJournalRows } from "../../agent/run/turn/turn-journal.js";
+import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../../engines/failure-sentences.js";
+import { routingFor } from "./routing.js";
+import type { JournalledTurn, TurnJournalRows } from "../../store/journals/turn-journal.js";
 import { opt } from "../../opt.js";
 import { parentOfActor } from "../../auth/principal.js";
-import { subagentCountsOf } from "../../agent/subagents/subagents.js";
 import { liveRunOf } from "../actor/conversation-holdings.js";
 import { queueView } from "../actor/conversation-queue.js";
 import { restoredLimitHold } from "../actor/limit-hold.js";
@@ -34,7 +29,7 @@ import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-messag
 import type { ConversationUnits } from "../../store/conversation-units.js";
 import { type ConversationActors, type ConversationBooks, createConversationActors } from "../actor/conversation-actors.js";
 import type { BeginTurn, SettleFlush } from "../actor/conversation-decide.js";
-import { activityLive, awaitingWake, type ConversationState, type HeldRecord, NO_USAGE, type TurnUsage } from "../actor/conversation-state.js";
+import { activityLive, awaitingWake, type ConversationState, type HeldRecord, NO_USAGE, type TurnUsage, nextPromptDayAt } from "../actor/conversation-state.js";
 import { conversationStatus, parkedKinds, permissionAskOf } from "../actor/conversation-status.js";
 import {
     type AgentsStore,
@@ -57,7 +52,7 @@ import {
 import type { LandOutcome } from "../land/land.js";
 import { type LandedPresence, type LandedPresences, removerKey } from "../land/landed-presence.js";
 import type { LandStanding, LandStandings } from "../land/standing.js";
-import { nextPromptDayAt } from "../../agent/run/prompt-fingerprint.js";
+import { subagentCountsOf } from "../actor/subagent-roster.js";
 
 // The persisted half of the fleet: the in-memory entry list (loaded once, written through on persisted mutations), the
 // AgentSummary each card is projected as, and the roster's subscribers. Every card-visible change broadcasts the full
@@ -378,7 +373,7 @@ const freshEntry = (turn: BeginTurn, now: number): PersistedAgent => ({
 });
 
 // Each setting falls back to the last turn's, so a turn naming none keeps describing the agent by what it actually ran;
-// provider, harness and account are the one routing rule's (agent/providers/accounts/routing.ts), which never carries an account
+// provider, harness and account are the one routing rule's (conversations/registry/routing.ts), which never carries an account
 // onto a provider that did not mint it.
 const settingsOf = (existing: StoredProfile, profile: TurnProfile): StoredProfile => {
     const { provider, harness, account } = routingFor(existing, profile);

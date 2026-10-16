@@ -1,9 +1,9 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { armPlan } from "../adapter.js";
 import type { AgentRequest, TurnSpec } from "../agent-request.js";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { unstubbed } from "@intentic/testing";
-import { noIsolation } from "../../../testing.js";
+import { noIsolation } from "../../../conversations/worktrees/isolation.testing.js";
 import { rootExecution } from "../../../workload/agent-execution.testing.js";
 import { AgentDomainRefusedError, type AgentExecutionContext } from "../../../workload/agent-execution.js";
 import { forgetNamespaceEntry, registerMountEntry } from "../../../workload/namespace-entry.js";

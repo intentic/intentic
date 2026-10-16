@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { ui, ResponsiveOverlay, SkeletonRows, SkeletonSnapshot, vAction, vSkeletonSource } from "@intentic/ui";
 import { computed, ref, shallowRef } from "vue";
-import { sharedWorkspaceTreeKey } from "../../workspace/health/workspaceTreeKey";
+import { sharedWorkspaceTreeKey } from "../../../models/workspace/tree/workspaceTreeKey";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";

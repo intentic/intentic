@@ -4,7 +4,7 @@ import "@intentic/testing/dom";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { AddCapabilityInput } from "@intentic/capability-catalog";
-import type { CapabilityStatus, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { CapabilityStatus, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
 
@@ -20,7 +20,7 @@ jest.mock(`vue-router`, () => ({
 }));
 
 // Both entrys are contributed, not static; a device's permission switches come from the catalog, not the manifest.
-jest.mock(`../extensions/useExtensions`, () => ({
+jest.mock(`../../models/extensions/useExtensions`, () => ({
     useExtensions: () => ({
         contributionOf: () => undefined,
         extensions: ref([]),
@@ -70,7 +70,7 @@ const add = jest.fn<(input: AddCapabilityInput) => Promise<void>>(async (input) 
         { id: input.id, kind: entry === `linux` ? `device` : `browser`, status: applied, config: input.config, secrets: [] },
     ];
 });
-jest.mock(`./connect/useCapabilities`, () => ({
+jest.mock(`../../models/capabilities/useCapabilities`, () => ({
     useCapabilities: () => ({
         recommendationFor: () => undefined,
         capabilities,
@@ -89,7 +89,7 @@ jest.mock(`./connect/useCapabilities`, () => ({
 }));
 // Extension entry's signpost reads the registry cache; nothing here has browsed it.
 jest.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
-jest.mock(`../terminal/useBackgroundProcesses`, () => ({
+jest.mock(`../../models/terminal/useBackgroundProcesses`, () => ({
     useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: jest.fn(), stop: jest.fn() }),
     viewProcessLogs: jest.fn(),
 }));
@@ -98,7 +98,7 @@ jest.mock(`../composables/sandbox/useHostConnect`, () => ({
     useHostConnect: () => ({ hostFor: () => undefined, revoke: jest.fn(), refresh: jest.fn(), start: jest.fn(), stop: jest.fn() }),
 }));
 // LiveLinkRows opens as well as lists, so `error` must be present or the render throws.
-jest.mock(`../sandbox/devices/useLiveLinks`, () => ({
+jest.mock(`../../models/sandbox/devices/useLiveLinks`, () => ({
     importForticlient: jest.fn(),
     useLiveLinks: () => ({ links: ref([]), error: ref(undefined), open: jest.fn(), close: jest.fn() }),
 }));

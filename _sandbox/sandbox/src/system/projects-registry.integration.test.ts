@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import type { DevicePairing, DeviceReport } from "@intentic/sandbox-contract";
+import type { DevicePairing, DeviceReport } from "@intentic/sandbox-contract/schemas/devices";
 import {
     attachedProjectEntries,
     attachedProjects,

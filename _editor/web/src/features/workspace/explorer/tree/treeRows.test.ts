@@ -1,5 +1,5 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
-import type { Provisional } from "../../files/provisionalEntries";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
+import type { Provisional } from "../../../../models/workspace/files/provisionalEntries";
 import { barrenChainOf, barrenChildren } from "../emptyDirs";
 import {
     deadLink,

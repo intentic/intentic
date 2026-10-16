@@ -1,6 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, type Ref } from "vue";
-import { useAgents } from "../../agents/fleet/useAgents";
+import { useAgents } from "../../../models/fleet/useAgents";
 import { workspaceAgent } from "../../../app/workspaceScope";
 
 /* WHAT TO CALL THE CONVERSATION WHOSE COPY IS ON SCREEN: the Workspace's, or the one a surface reads (useViewScope). */

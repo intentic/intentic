@@ -1,6 +1,6 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
-import { type AutomationApproval, AutomationApprovalSchema } from "@intentic/sandbox-contract";
+import { type AutomationApproval, AutomationApprovalSchema } from "@intentic/sandbox-contract/schemas/automations";
 import { errorMessage } from "@intentic/base/errors";
 import { z } from "zod";
 import { decisionStanding, fieldsDigest, forgetApprovals, recordDecision } from "../approvals/approval-decisions.js";

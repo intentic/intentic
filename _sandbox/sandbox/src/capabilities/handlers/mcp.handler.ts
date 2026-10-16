@@ -1,4 +1,4 @@
-import type { McpConfig } from "@intentic/sandbox-contract";
+import type { McpConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { CapabilityHandler } from "../capability.js";
 
 // A single-shot reachability probe: the agent reaches the MCP over HTTP, so "healthy" ≈ it answers at all within

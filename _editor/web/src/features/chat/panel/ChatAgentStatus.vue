@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { usePaneView } from "./useChat-view";
+import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 
 // What the runtime's own extensions show while the turn runs (sandbox-contract events/agent-ui.ts): one quiet line per
 // status entry, just above the composer, under the extensions glyph so it never reads as the agent's own words. Live

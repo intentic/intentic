@@ -7,7 +7,7 @@ import { anyConnected } from "./ports/established.js";
 import { lastTerminalActivity } from "./system/idle-stop.js";
 import { connectedCount } from "./system/presence.js";
 import { startQuietWatch } from "./system/quiet-watch.js";
-import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
+import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
 import { startProviderBoot } from "./agent/providers/provider-registry.js";
 import { declareBootSteps, runBootSteps } from "./bootstrap/boot-chain.js";
 import { armSetupPairings } from "./bootstrap/boot-pairings.js";

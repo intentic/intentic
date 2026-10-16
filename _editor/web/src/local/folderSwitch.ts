@@ -1,7 +1,7 @@
 import { nextTick } from "vue";
 import { faceOf, type LocalFace, LOCAL_REPOINT_EVENT, localSandboxId, wearFace } from "../app/environments/local";
 import { useSandbox } from "../client/sandbox/useSandbox";
-import { landOnAfterSwitch } from "../features/sandbox/switching/sandboxScreen";
+import { landOnAfterSwitch } from "../models/sandbox/sandboxScreen";
 import { setPageTitle } from "../shell/browser-tab/tabTitle";
 
 // ANOTHER FOLDER IN THIS WINDOW'S PLACE, WITHOUT A RELOAD. The folder menu and an empty folder's offers point the window

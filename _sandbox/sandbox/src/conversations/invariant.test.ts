@@ -4,7 +4,7 @@ import type { AgentWorktrees } from "./worktrees/worktrees.js";
 import type { StrayStanding } from "./worktrees/stray-work.js";
 import { checks } from "./invariant.js";
 import { unstubbed } from "@intentic/testing";
-import { conversationEntry, isolatedAgent } from "../testing.js";
+import { conversationEntry, isolatedAgent } from "./registry/agents-store.testing.js";
 import type { PersistedAgent } from "./registry/agents-store.js";
 import { type HeldRecord, idleConversation } from "./actor/conversation-state.js";
 

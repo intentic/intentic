@@ -1,4 +1,5 @@
-import { followCommandRun, type GitBranch, type GitRemoteBranch } from "@intentic/sandbox-contract";
+import { followCommandRun } from "@intentic/sandbox-contract/policy/command-run";
+import type { GitBranch, GitRemoteBranch } from "@intentic/sandbox-contract/schemas/git/git";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";

@@ -2,7 +2,7 @@
 // Needs jsdom: this file's import chain reaches the app's theme, which touches the document as it loads.
 import "@intentic/testing/dom";
 import SandboxRecovery from "../../features/sandbox/gates/SandboxRecovery.vue";
-import { RESTART_PATIENCE_MS, type RestartWork } from "../../features/sandbox/live/sandboxRestart";
+import { RESTART_PATIENCE_MS, type RestartWork } from "../../models/sandbox/live/sandboxRestart";
 import type { DiagnosisNotice } from "../../features/sandbox/diagnosis/presentation";
 import { BUSY_CARD_AFTER_MS, diagnosisCard, outageCardShown, restartCard, type UploadState, uploadHeadline, uploadPhase } from "./notificationSources";
 

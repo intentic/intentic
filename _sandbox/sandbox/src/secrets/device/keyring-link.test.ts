@@ -1,4 +1,10 @@
-import { type KeyringGrant, type KeyringInboxItem, KEYRING_NONCE_RE, type KeyringTypeInput, type SignedKeyringGrant } from "@intentic/sandbox-contract";
+import {
+    type KeyringGrant,
+    type KeyringInboxItem,
+    KEYRING_NONCE_RE,
+    type KeyringTypeInput,
+    type SignedKeyringGrant,
+} from "@intentic/sandbox-contract/schemas/keyring";
 import { seal, unseal, verifyGrant } from "@intentic/sandbox-contract/keyring-seal";
 import { createKeyringLink, type KeyringLinkDeps } from "./keyring-link.js";
 import { fakeDevices, fakeKeyring, type FakeKeyring, memoryKeyringBook, memoryKeyringCopies, memoryReleasedValues, memorySandboxKeys, pointerOf, SANDBOX_URL } from "./keyring.testing.js";

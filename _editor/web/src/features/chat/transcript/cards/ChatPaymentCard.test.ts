@@ -1,11 +1,11 @@
 // Needs jsdom: a payment's Pay button was drawn for every reader, while the sandbox takes a payment's answer from the
 // owner alone (wallet/payment-offer.ts), so anyone else pressed a button that could only be refused.
 import "@intentic/testing/dom";
-import type { MemberRole } from "@intentic/sandbox-contract";
+import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, computed, createApp, h, ref } from "vue";
-import type { CardAnswer } from "../../session/cardReplies";
-import type { ChatMessage } from "../transcript";
+import type { CardAnswer } from "../../../../models/conversations/session/cardReplies";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import ChatPaymentCard from "./ChatPaymentCard.vue";
 
 const role = ref<MemberRole>(`owner`);

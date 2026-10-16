@@ -1,6 +1,6 @@
 import { codeLangForPath } from "@intentic/code-read";
 import { formatOf } from "@intentic/ui/file-format";
-import { rendersAsBytes, resolveFile, TEXT_EDIT_MAX_BYTES } from "../fileType";
+import { rendersAsBytes, resolveFile, TEXT_EDIT_MAX_BYTES } from "../../../../models/workspace/tree/fileType";
 
 // Empty (0-byte) files: text types stay editable (code/markdown); binary ones show the "empty" fallback.
 describe(`resolveFile empty files`, () => {

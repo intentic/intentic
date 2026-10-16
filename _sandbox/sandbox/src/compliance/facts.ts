@@ -1,15 +1,11 @@
 import { accessSync, constants } from "node:fs";
 import { z } from "zod";
-import {
-    AT_REST_KEY_FILE_ENV,
-    type AgentDomainPolicy,
-    type AnnounceState,
-    type Capability,
-    type PrivacyProvider,
-    type PrivacyShieldPolicy,
-    type SandboxSettings,
-    type SecretHostGuard,
-} from "@intentic/sandbox-contract";
+import { AT_REST_KEY_FILE_ENV } from "@intentic/sandbox-contract/schemas/data-protection";
+import type { AgentDomainPolicy, SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
+import type { AnnounceState } from "@intentic/sandbox-contract/schemas/platform-link";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { PrivacyProvider, PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
+import type { SecretHostGuard } from "@intentic/sandbox-contract/schemas/secrets";
 import type { Services } from "../composition.js";
 import { providerReadiness } from "../agent/providers/provider-registry.js";
 import { profileTraits } from "../system/boot/profile.js";

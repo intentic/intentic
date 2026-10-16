@@ -1,5 +1,5 @@
 import { defaultGit, type GitRunner } from "@intentic/base/git";
-import type { OriginAgent } from "@intentic/sandbox-contract";
+import type { OriginAgent } from "@intentic/sandbox-contract/schemas/git/git";
 import type { Logger } from "pino";
 import { headSha } from "../../git/changes/changes.js";
 import { mainLineUnder } from "./agent-changes.js";

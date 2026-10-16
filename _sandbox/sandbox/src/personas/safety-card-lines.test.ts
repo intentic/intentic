@@ -1,4 +1,4 @@
-import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
+import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
 import { LEGACY_ADDED_HEADING, LEGACY_ADDED_NOTE } from "../safety/safety-policy-store.js";
 import { takeCardLines } from "./safety-card-lines.js";
 

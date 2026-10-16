@@ -1,4 +1,4 @@
-import type { GitChange } from "@intentic/sandbox-contract";
+import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
 import { capRepoChanges, MAX_REPO_CHANGES } from "./git.routes.js";
 
 const changes = (count: number, prefix: string): GitChange[] =>

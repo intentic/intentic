@@ -1,4 +1,4 @@
-import type { DeviceReport } from "@intentic/sandbox-contract";
+import type { DeviceReport } from "@intentic/sandbox-contract/schemas/devices";
 import { serialLock } from "@intentic/base/async";
 import type { GitRunner } from "@intentic/base/git";
 import { ensureProjectRepo } from "../../git/remote/project-repo.js";

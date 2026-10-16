@@ -1,4 +1,5 @@
-import type { AgentSummary, SandboxMetrics } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
 
 // What GET /system/metrics answers on the demo box: a busy afternoon's readout that drifts between polls, so the
 // board's geek metrics are seen moving. Every running agent gets a line and a settled one none, as on a real sandbox,

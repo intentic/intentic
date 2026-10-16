@@ -1,6 +1,10 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { type ReadRestartIntent, ReadRestartIntentSchema, type RestartAction as ContractRestartAction } from "@intentic/sandbox-contract";
+import {
+    type ReadRestartIntent,
+    ReadRestartIntentSchema,
+    type RestartAction as ContractRestartAction,
+} from "@intentic/sandbox-contract/schemas/restart-intent";
 import { opt } from "../../../opt.js";
 import { readJsonMarkerSync } from "../../../store/plain-files/json-marker.js";
 

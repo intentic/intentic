@@ -1,6 +1,6 @@
 import { realpath, stat } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { isLockedWorkspacePath, isReviewableLockedPath } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath, isReviewableLockedPath } from "@intentic/sandbox-contract/state/workspace-state";
 
 // Resolves a repo-relative path against `dir`, refusing any that climbs outside via `../` or an absolute path.
 // Returns undefined for the dir itself or an escaping path.

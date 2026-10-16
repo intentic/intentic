@@ -1,4 +1,5 @@
-import { type AgentEvent, PARK_KINDS } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { PARK_KINDS } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { withCacheTtl } from "../turn/prompt-cache.js";
 import type { TurnFrames } from "./frame-reducers.js";
 

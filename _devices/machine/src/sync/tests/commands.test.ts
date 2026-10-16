@@ -1,14 +1,14 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import { DEV_VERSION } from "@intentic/sandbox-contract/state/versions";
 import {
-    DEV_VERSION,
     type DevicePairing,
     type DeviceReport,
     AGENT_STALL_AFTER_MS,
-    DeviceScopesSchema,
     SshHostKeySchema,
     type SyncEnrollmentAnswer,
     SyncEnrollmentAnswerSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/devices";
+import { DeviceScopesSchema } from "@intentic/sandbox-contract/schemas/capabilities";
 import { stubGlobal } from "@intentic/testing/bun";
 import type { Item } from "@intentic/local-agent";
 import { agentItem, agentNote, buildSkewItem, CONFLICTS_SETTLED, conflictItems, linkItem, pairingItem, statusSummary } from "../../status.js";

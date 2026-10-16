@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type { PrivacyProvider, PrivacyShieldPolicy } from "@intentic/sandbox-contract";
+import type { PrivacyProvider, PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
 import { RowGroup, SkeletonRows, SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { allowAdding } from "./privacyShield";
 import PrivacyShieldActivity from "./PrivacyShieldActivity.vue";
-import { shieldRefusal, usePrivacyLog, usePrivacyShield } from "./usePrivacyShield";
+import { shieldRefusal, usePrivacyLog, usePrivacyShield } from "../../../models/sandbox/usePrivacyShield";
 
 // What the privacy shield did, as Activity's Personal data part: every request it handled, and the values it replaced.
 // The settings it reads are the Privacy shield page's; the one write it makes, a value pressed as one to leave alone, is

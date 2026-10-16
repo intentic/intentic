@@ -1,4 +1,4 @@
-import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 
 // Every fork taken from a conversation, by the cut it was taken at, built once per roster: each turn of an open chat
 // asks for its own cut's forks (ChatForkCut), and filtering the whole fleet per turn on every roster frame made a long

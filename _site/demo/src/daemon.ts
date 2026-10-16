@@ -1,4 +1,4 @@
-import type { RawRouteKey } from "@intentic/sandbox-contract";
+import type { RawRouteKey } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { serve } from "@intentic/contract-serve";
 import { browserSession } from "./browser";
 import { procedures } from "./daemon/procedures";

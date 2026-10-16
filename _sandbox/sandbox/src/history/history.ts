@@ -5,7 +5,13 @@ import { join } from "node:path";
 import { pathExists } from "@intentic/base/fs";
 import { freshness } from "@intentic/base/held";
 import { oneLine } from "@intentic/base/one-line";
-import { type FileDiff, type Snapshot, type SnapshotChange, SnapshotTriggerSchema, type SnapshotTrigger } from "@intentic/sandbox-contract";
+import {
+    type FileDiff,
+    type Snapshot,
+    type SnapshotChange,
+    SnapshotTriggerSchema,
+    type SnapshotTrigger,
+} from "@intentic/sandbox-contract/schemas/history";
 import { defaultGit } from "@intentic/base/git";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";

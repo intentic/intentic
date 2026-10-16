@@ -6,10 +6,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { ContractRoute, SandboxCallInput, SandboxProcedure } from "@intentic/sandbox-contract";
+import type { ContractRoute } from "@intentic/sandbox-contract/protocol/routes";
+import type { SandboxCallInput, SandboxProcedure } from "@intentic/sandbox-contract/protocol/procedure-types";
 import { build } from "vite";
 
-type Contract = typeof import("@intentic/sandbox-contract");
+type Contract = typeof import("@intentic/sandbox-contract") & Pick<typeof import("@intentic/sandbox-contract/protocol/routes"), "requestPathFor">;
 type Daemon = typeof import("../src/daemon.ts");
 type Router = typeof import("../src/daemon/procedures.ts")["procedures"];
 
@@ -111,6 +112,7 @@ const ENTRIES = {
     devices: `src/fixture/devices.ts`,
     approvals: `src/fixture/approvals.ts`,
     contract: `@intentic/sandbox-contract`,
+    routes: `@intentic/sandbox-contract/protocol/routes`,
 } as const;
 
 const bundle = async (out: string): Promise<void> => {
@@ -466,7 +468,7 @@ const framesOf = async (reader: ReadableStreamDefaultReader<Uint8Array>): Promis
     let buffer = ``;
     let done = false;
     while (!done && frames.length < FRAMES && Date.now() < deadline) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a stream is read in order, one chunk after another
+        // a stream is read in order, one chunk after another
         const chunk = await Promise.race([reader.read(), new Promise<undefined>((resolve) => setTimeout(resolve, deadline - Date.now()))]);
         if (chunk?.value === undefined) {
             break;
@@ -535,7 +537,7 @@ const main = async (): Promise<number> => {
     const { daemon } = await loaded<Daemon>(out, `daemon`);
     const { procedures } = await loaded<typeof import("../src/daemon/procedures.ts")>(out, `procedures`);
     const { servedProcedures } = await loaded<typeof import("@intentic/contract-serve")>(out, `router`);
-    const contract = await loaded<Contract>(out, `contract`);
+    const contract: Contract = { ...(await loaded<Contract>(out, `contract`)), requestPathFor: (await loaded<Contract>(out, `routes`)).requestPathFor };
     const samples = samplesOf(await fixturesOf(out), Date.now());
     const sent = Object.entries(samples).flatMap(([group, inputs]) =>
         Object.entries(inputs).map(([name, input]) => ({ name: `${group}.${name}`, input })),
@@ -545,7 +547,7 @@ const main = async (): Promise<number> => {
         .map((name) => `${name}: served, but this run sends it nothing`);
     const tally = { answered: 0, refused: 0 };
     for (const { name, input } of sent) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one at a time, since the handlers share the fixture's live state
+        // one at a time, since the handlers share the fixture's live state
         const verdict = await verdictFor(contract, daemon, name, input);
         if (verdict.kind === `failed`) {
             failures.push(`${name}: ${verdict.why}`);

@@ -1,6 +1,7 @@
-import { PLAN_DOCUMENTS_DIR, STATE_DIR } from "@intentic/sandbox-contract";
+import { PLAN_DOCUMENTS_DIR } from "@intentic/sandbox-contract/state/workspace-state";
+import { STATE_DIR } from "@intentic/sandbox-contract";
 import { registerViewer, renderViewerForExtension } from "../../../../workbench/views/viewerRegistry";
-import { RAW_MAX_BYTES } from "../../explorer/fileType";
+import { RAW_MAX_BYTES } from "../../../../models/workspace/tree/fileType";
 import { resolveOpenFile } from "../openFile";
 
 // Order between the core's text resolver and the extensions' viewer registry: FileViewer itself has no per-format

@@ -1,0 +1,143 @@
+// jsdom: half of what's pinned here happens inside a mounted component (a run button naming its model from a
+// computed), the rest is the same read with no component at all.
+import "@intentic/testing/dom";
+import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import { setupsFromRoleLists } from "@intentic/sandbox-contract/models/model-setups";
+import { type App, createApp, defineComponent, h, nextTick, ref, watch } from "vue";
+
+// `agentRunChoice(role)` is the standing answer to which model a run-button click spends, kept per job role rather
+// than one shared unattended-work list, and handed to extensions as `api.models.agentRun(role)`. It is read from
+// places with no Vue setup context (a computed, a click handler, an extension), which is what these tests probe;
+// `pipeline-fix` here stands for any role.
+
+const { useAgentRunPick } = await import("@intentic/ui");
+const { queryClient } = await import("../../../lib/queryPersistence");
+const { rpcKey } = await import("../../../lib/queryKeys");
+const { providerAccounts } = await import("../../providers/providerAccounts");
+const { providerModels } = await import("../../providers/providerCatalog");
+const { agentRunChoice, shellModelPicking } = await import("./shellModelPicking");
+const { rememberPick } = await import("../run/turnDefaults");
+const { useChat } = await import("../run/useChat");
+
+// Keep this test independent of VueQueryPlugin so it proves no injection occurs.
+const mounted = (setup: () => () => unknown): App => {
+    const app = createApp(defineComponent({ setup }));
+    app.mount(document.createElement(`div`));
+    return app;
+};
+
+// Live reader count for the settings entry; one is the app's own, more means a read built a second observer (a
+// leak).
+const settingsObservers = (): number => queryClient.getQueryCache().find({ queryKey: rpcKey(`settings.get`) })?.observers.length ?? 0;
+
+beforeEach(() => {
+    jest.restoreAllMocks();
+});
+
+const ROLE = `pipeline-fix`;
+
+test(`the standing choice is readable with no component in scope`, () => {
+    expect(() => agentRunChoice(ROLE)).not.toThrow();
+});
+
+test(`a run button can re-read it from a click handler`, async () => {
+    const clicked = ref(0);
+    let failure: unknown;
+    const app = mounted(() => {
+        const pick = useAgentRunPick(() => shellModelPicking(), ROLE);
+        // A watcher callback is the same context a click handler runs in: no instance, no injection.
+        watch(clicked, () => {
+            try {
+                void pick.model.value.label;
+            } catch (error) {
+                failure = error;
+            }
+        });
+        return () => h(`div`);
+    });
+    clicked.value += 1;
+    await nextTick();
+    app.unmount();
+
+    expect(failure).toBeUndefined();
+});
+
+test(`re-reading it never adds a second reader of the settings`, async () => {
+    const tick = ref(0);
+    const app = mounted(() => {
+        const pick = useAgentRunPick(() => shellModelPicking(), ROLE);
+        return () => h(`div`, `${tick.value}:${pick.model.value.label}`);
+    });
+    const afterFirst = settingsObservers();
+    // Mimics the daemon's write, invalidating the computed: five real re-evaluations, not cached renders.
+    for (let round = 0; round < 5; round += 1) {
+        queryClient.setQueryData(rpcKey(`settings.get`), { modelSetups: [], roleSetups: {}, round });
+        tick.value += 1;
+        await nextTick();
+    }
+    const afterFive = settingsObservers();
+    app.unmount();
+
+    expect([afterFirst, afterFive]).toEqual([1, 1]);
+});
+
+// The run button shows the tier that will actually run: a pin with no chosen model takes it whole (turn-resume.ts),
+// but the daemon drops a Max pin with thinking off to `high` before sending (sendableEffort).
+const pinned = (pin: ModelPin): void => {
+    // Needs a credentialed account for the pin's provider, or the chain drops it (same as the daemon's resolver).
+    providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc`, label: `Claude` }] as never };
+    providerModels.value = {
+        ...providerModels.value,
+        claude: [{ label: `Claude Sonnet 4.6`, value: `claude-sonnet-4-6`, efforts: [`low`, `medium`, `high`, `xhigh`, `max`] }],
+    };
+    queryClient.setQueryData(rpcKey(`settings.get`), setupsFromRoleLists({ [ROLE]: [pin] }));
+};
+
+test(`the standing choice keeps the pinned top tier, and names it`, () => {
+    pinned({ provider: `claude`, model: `claude-sonnet-4-6`, effort: `max`, thinking: true });
+
+    const choice = agentRunChoice(ROLE);
+
+    expect({ provider: choice.provider, model: choice.model, effort: choice.effort, effortLabel: choice.effortLabel }).toEqual({
+        provider: `claude`,
+        model: `claude-sonnet-4-6`,
+        effort: `max`,
+        effortLabel: `Max`,
+    });
+});
+
+test(`the standing choice names the tier the run will actually use when the pin refuses its own`, () => {
+    pinned({ provider: `claude`, model: `claude-sonnet-4-6`, effort: `max`, thinking: false });
+
+    const choice = agentRunChoice(ROLE);
+
+    expect({ effort: choice.effort, effortLabel: choice.effortLabel }).toEqual({ effort: `high`, effortLabel: `High` });
+});
+
+/* A run entry carries every setting selected by its picker. */
+test(`the standing choice carries the whole pinned entry, not merely the pair and the tier`, () => {
+    pinned({ provider: `claude`, model: `claude-sonnet-4-6`, harness: `claude-code`, thinking: false, fast: true });
+
+    const choice = agentRunChoice(ROLE);
+
+    expect({ harness: choice.harness, thinking: choice.thinking, fast: choice.fast }).toEqual({
+        harness: `claude-code`,
+        thinking: false,
+        fast: true,
+    });
+});
+
+// C4: a run starts a conversation of its own, so with nothing pinned it opens on what a NEW chat would, never on
+// whatever the open chat was moved to. Pipelines' Fix sends this along, and a sandbox with no pin runs it.
+test(`with nothing pinned, the standing choice is the model a new chat would open on, not the open chat's`, () => {
+    queryClient.setQueryData(rpcKey(`settings.get`), { modelSetups: [], roleSetups: {} });
+    rememberPick({ provider: `claude`, value: `claude-sonnet-4-6` });
+    const open = useChat().active.value.selection;
+    open.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-4-6` } });
+    rememberPick({ provider: `zai`, value: `glm-4.6` });
+
+    const choice = agentRunChoice(ROLE);
+
+    expect([open.provider.value, open.model.value]).toEqual([`claude`, `claude-opus-4-6`]);
+    expect({ provider: choice.provider, model: choice.model }).toEqual({ provider: `zai`, model: `glm-4.6` });
+});

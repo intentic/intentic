@@ -2,7 +2,9 @@ import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { type AgentEvent, type AgentStatus, RETRY_LADDER_TRIES } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentStatus } from "@intentic/sandbox-contract/schemas/agents";
+import { RETRY_LADDER_TRIES } from "@intentic/sandbox-contract/schemas/turn-break";
 import { pino } from "pino";
 import {
     armSupervisor,
@@ -23,7 +25,7 @@ import {
     settledBackgroundJobs,
     sweepJobEnds,
 } from "../../agent/tools/jobs/background-jobs.js";
-import { memoryWatchJournal } from "../../agent/verification/watch-journal.js";
+import { memoryWatchJournal } from "../../store/journals/watch-journal.js";
 import {
     armWatcher,
     cancelWatcher,
@@ -37,7 +39,9 @@ import {
 import type { Services } from "../../composition.js";
 import { spawnServices } from "../../harness/spawn-services.testing.js";
 import type { TurnStarter } from "../../seams/turn-starter.js";
-import { drivenBy, fakeTurns, fleetStoreOver, noPresences } from "../../testing.js";
+import { drivenBy, fakeTurns } from "../../seams/turn-starter.testing.js";
+import { fleetStoreOver } from "../registry/agents-registry.testing.js";
+import { noPresences } from "../land/landed-presence.testing.js";
 import type { LandedPresences } from "../land/landed-presence.js";
 import type { LandStanding, LandStandings } from "../land/standing.js";
 import { openConversationsDb } from "../../store/conversations-db.js";

@@ -1,4 +1,4 @@
-import { RETRY_LADDER_TRIES, type TurnBreakPolicy } from "@intentic/sandbox-contract";
+import { RETRY_LADDER_TRIES, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { opt } from "../../../opt.js";
 import type { LimitWay } from "../../models/limit-way.js";
 import { OUTAGE_MAX_ATTEMPTS } from "../../providers/provider-health.js";

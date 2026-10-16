@@ -11,7 +11,7 @@ import {
     KeyringSyncItemSchema,
     KeyringSyncPeerSchema,
     SealedBoxSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/keyring";
 import { z } from "zod";
 import { BackendConfigSchema, BackendRefSchema, EntryInfoSchema, EntryRulesSchema, ShareInfoSchema } from "./protocol.js";
 

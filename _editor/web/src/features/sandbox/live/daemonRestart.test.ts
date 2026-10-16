@@ -27,9 +27,9 @@ jest.mock("../../../client/sandbox/sandboxClient", () => ({
     sandboxError: jest.fn(async () => new Error(`unused`)),
 }));
 
-import type { AgentSummary } from "@intentic/sandbox-contract";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { setAgents } from "../../agents/fleet/useAgents-registry";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { useAgents } from "../../../models/fleet/useAgents";
+import { setAgents } from "../../../models/fleet/useAgents-registry";
 import { queryClient } from "../../../lib/queryPersistence";
 import { applySystemEvent } from "./systemEvents";
 

@@ -1,4 +1,4 @@
-import type { TerminalSession } from "../terminalsQuery";
+import type { TerminalSession } from "../../../models/terminal/terminalsQuery";
 import { computed, ref, type Ref, watch } from "vue";
 
 // The terminal-handover ask: the active tab shows the ask meant for its own session, since the pane needing an answer

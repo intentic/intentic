@@ -1,6 +1,7 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { DeviceSwap } from "@intentic/sandbox-contract";
+import { readTextIfExists } from "@intentic/base/fs";
+import type { DeviceSwap } from "@intentic/sandbox-contract/schemas/device-swaps";
 import { icHome, slugOfRecord } from "./swap-records.js";
 
 /* COMPAT(ic-swaps): REMOVE THIS FILE IN THE RELEASE AFTER THE ONE THAT FIRST SHIPS `ic sandbox swaps` (the second release
@@ -72,8 +73,8 @@ export const swapsFromFiles = async (home: string = icHome(), now: number = Date
     const swaps = await Promise.all(
         names.map(async (name) => {
             const slug = slugOfRecord(name);
-            // allow(silent-catch): a record that vanished between the listing and the read is a swap that ended
-            const text = slug === undefined ? undefined : await readFile(join(home, name), "utf8").catch(() => undefined);
+            // A record that vanished between the listing and the read is a swap that ended.
+            const text = slug === undefined ? undefined : await readTextIfExists(join(home, name));
             return slug === undefined || text === undefined ? undefined : swapOfRecord(slug, text, now);
         }),
     );

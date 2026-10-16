@@ -2,8 +2,9 @@ import { readFile, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { writeFileAtomic } from "@intentic/base/fs";
+import { parseJsonOr } from "@intentic/base/json";
 import { writeSecretFile } from "@intentic/local-agent";
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { LONG_OUTAGE_ATTEMPTS, type PeerLinkState, type PeerOutage } from "@intentic/sandbox-contract/peer-dial";
 import { baseDir } from "../config.js";
 
@@ -39,12 +40,9 @@ export const stampLinkStates = async (links: Readonly<Record<string, LinkReading
 
 // Anything but a whole stamp is no answer; the next stamp is seconds away.
 const parseStamp = (raw: string | undefined): LinkStateStamp | undefined => {
-    try {
-        const parsed = raw === undefined ? undefined : (JSON.parse(raw) as Partial<LinkStateStamp>);
-        return typeof parsed?.at === "number" && parsed.links !== undefined ? { at: parsed.at, links: parsed.links } : undefined;
-    } catch {
-        return undefined;
-    }
+    // SAFETY: only `at` and `links` are read, and `at` is checked for a number before the stamp is believed.
+    const parsed = raw === undefined ? undefined : (parseJsonOr(raw, undefined) as Partial<LinkStateStamp> | null | undefined);
+    return typeof parsed?.at === "number" && parsed.links !== undefined ? { at: parsed.at, links: parsed.links } : undefined;
 };
 
 // What the agent last stamped, or undefined when there is no usable answer: no file, unreadable, or too old to be

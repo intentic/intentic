@@ -1,4 +1,4 @@
-import type { IssueSummary } from "@intentic/sandbox-contract";
+import type { IssueSummary } from "@intentic/sandbox-contract/schemas/issues";
 import { TITLE_MAX } from "../seams/conversation-title.js";
 
 // Everything a stranger's machine wrote sits under `untrusted`; everything the daemon knows for itself sits outside it,

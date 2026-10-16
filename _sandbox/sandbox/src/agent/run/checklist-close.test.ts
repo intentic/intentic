@@ -1,6 +1,6 @@
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { syncHookOutput } from "../../testing.js";
+import { syncHookOutput } from "./harness/harness-hooks.testing.js";
 import { checklistCloseHooks, checklistCloseNote } from "./checklist-close.js";
 import type { StoredTask } from "./task-store.js";
 import { taskStoreDir } from "./task-store.js";

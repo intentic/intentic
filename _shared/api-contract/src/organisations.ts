@@ -1,4 +1,5 @@
-import { OrgPolicyRulesSchema, PresetGroupSchema } from "@intentic/sandbox-contract";
+import { OrgPolicyRulesSchema } from "@intentic/sandbox-contract/schemas/organisation";
+import { PresetGroupSchema } from "@intentic/sandbox-contract/schemas/compliance";
 import { oc } from "@orpc/contract";
 import { z } from "zod";
 

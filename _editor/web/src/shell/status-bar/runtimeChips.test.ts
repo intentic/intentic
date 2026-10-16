@@ -1,4 +1,4 @@
-import type { BrowserSession } from "@intentic/sandbox-contract";
+import type { BrowserSession } from "@intentic/sandbox-contract/schemas/terminal";
 import { browsersChip, portsChip, terminalChip, vpnChip } from "./runtimeChips";
 
 // The rules that decide when each runtime chip is in the status bar: there while its thing is live or its page is in

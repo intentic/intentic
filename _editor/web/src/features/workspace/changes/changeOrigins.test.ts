@@ -1,4 +1,5 @@
-import type { GitChange, LandedMessageDraft, RepoChanges } from "@intentic/sandbox-contract";
+import type { GitChange, RepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
+import type { LandedMessageDraft } from "@intentic/sandbox-contract/schemas/agents";
 import { chipMessageNotice, commitMessageOf, draftReport, landedMessage, ORIGIN_HUES, originHue, originsOf, summarizeOrigins } from "./changeOrigins";
 
 const change = (path: string, status: GitChange[`status`] = `modified`): GitChange => ({ path, status });

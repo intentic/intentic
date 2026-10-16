@@ -1,17 +1,15 @@
+import type { AgentHarness } from "@intentic/sandbox-contract/schemas/agent";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import {
-    type AgentHarness,
-    type Capability,
     capabilitiesOf,
     endpointIdOf,
     endpointProvider,
     loopsOf,
-    type PrivacyProvider,
-    type PrivacyShieldPolicy,
-    PROVIDER_SPECS,
     providerLabel,
     TRIAL_ENDPOINT_ID,
-    trustedInConversation,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/models/agent-catalog";
+import { type PrivacyProvider, type PrivacyShieldPolicy, trustedInConversation } from "@intentic/sandbox-contract/schemas/privacy";
+import { PROVIDER_SPECS } from "@intentic/sandbox-contract/models/provider-specs";
 
 // Who may read personal data as it is. The owner names trusted providers, everywhere or in one conversation; a model
 // running on this machine is trusted whatever the list says, since nothing it reads leaves. Everything else is untrusted

@@ -1,4 +1,4 @@
-import { speakerActor, speakerOwner, type TurnSpeaker } from "@intentic/sandbox-contract";
+import { speakerActor, speakerOwner, type TurnSpeaker } from "@intentic/sandbox-contract/schemas/speaker";
 import type { Caller } from "../auth/auth.js";
 import type { Principal } from "../auth/principal.js";
 import { opt } from "../opt.js";

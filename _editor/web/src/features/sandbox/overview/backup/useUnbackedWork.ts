@@ -1,9 +1,10 @@
-import { STARTER_REPO, type GitRemoteRepo } from "@intentic/sandbox-contract";
+import { STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
+import type { GitRemoteRepo } from "@intentic/sandbox-contract/schemas/git/git-history";
 import { computed } from "vue";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
-import { fetchWorkspaceTree } from "../../../workspace/explorer/useWorkspaceTree";
-import { workspaceTreeKey } from "../../../workspace/health/workspaceTreeKey";
+import { fetchWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
+import { workspaceTreeKey } from "../../../../models/workspace/tree/workspaceTreeKey";
 import { holdsWork, onlyStarter, starterStateOf } from "./madeWork";
 
 // Whether this workspace holds work that exists only here: work somebody made (madeWork.ts says what counts), and no

@@ -1,6 +1,6 @@
 <!-- One hook set as the owner approves it: every hook with the file that declares it and exactly what it runs, each plugin's hooks module in plain words, the marketplaces settings add, then the files it runs by name, whose bytes the approval pins. -->
 <script setup lang="ts">
-import type { HookRequest, SettingsHook } from "@intentic/sandbox-contract";
+import type { HookRequest, SettingsHook } from "@intentic/sandbox-contract/schemas/approvals";
 import { computed } from "vue";
 import { moduleSentence, pluginOrigin } from "./hookSet.js";
 import { t } from "./i18n.js";

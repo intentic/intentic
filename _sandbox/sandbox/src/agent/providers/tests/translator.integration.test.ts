@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AccountUsage } from "@intentic/sandbox-contract";
+import type { AccountUsage } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { createCliProxyClient } from "../translator.js";
 

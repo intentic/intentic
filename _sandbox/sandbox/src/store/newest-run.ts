@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { writeFileAtomic } from "@intentic/base/fs";
-import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
+import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract/state/versions";
 import { z } from "zod";
 import { version } from "../version.js";
 import { stateRelPath } from "../state-paths.js";

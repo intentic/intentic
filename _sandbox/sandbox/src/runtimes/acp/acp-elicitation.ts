@@ -1,5 +1,7 @@
 import type { CreateElicitationRequest, CreateElicitationResponse, ElicitationContentValue } from "@agentclientprotocol/sdk";
-import type { AgentEvent, AgentReply, AskQuestion } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AskQuestion } from "@intentic/sandbox-contract/events/requests";
 import { z } from "zod";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
 

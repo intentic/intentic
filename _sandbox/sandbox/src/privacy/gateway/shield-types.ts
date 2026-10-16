@@ -1,4 +1,4 @@
-import type { PersonalDataClass, PrivacyReplacement } from "@intentic/sandbox-contract";
+import type { PersonalDataClass, PrivacyReplacement } from "@intentic/sandbox-contract/schemas/privacy";
 
 // What a wire format's walker is handed for one request: the text pass, the binary passes, and a tally. The walkers know
 // where each protocol keeps its text; this knows what to do with it. Kept apart from both so each protocol is a pure

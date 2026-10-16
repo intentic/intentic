@@ -1,4 +1,4 @@
-import type { ListenerDispatchFrame } from "@intentic/sandbox-contract";
+import type { ListenerDispatchFrame } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import { chunkMessage } from "./chunks.js";
 
 // A sink the daemon's ndjson turn-stream drives: delta(text) as the model types, end() when the turn finishes.

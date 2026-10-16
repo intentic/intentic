@@ -1,15 +1,12 @@
-import {
-    type Fence,
-    fenceAllows,
-    fenceIntersection,
-    fenceReaches,
-    isAttachmentPath,
-    type WorkspaceChildren,
-    type WorkspaceClassification,
-    type WorkspaceResolve,
-    type WorkspaceTree,
-    type WorkspaceTreeEntry,
-} from "@intentic/sandbox-contract";
+import { type Fence, fenceAllows, fenceIntersection, fenceReaches } from "@intentic/sandbox-contract/policy/fence-paths";
+import { isAttachmentPath } from "@intentic/sandbox-contract/state/workspace-state";
+import type {
+    WorkspaceChildren,
+    WorkspaceClassification,
+    WorkspaceResolve,
+    WorkspaceTree,
+    WorkspaceTreeEntry,
+} from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { ORPCError } from "@orpc/server";
 import { opt } from "../../opt.js";
 

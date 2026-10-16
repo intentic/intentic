@@ -38,10 +38,10 @@ export const writeHostFiles = async (
     const marker = `${kind.toUpperCase().replaceAll(/[^A-Z0-9]/gu, "_")}_FILE_EOF`;
     for (const [name, file] of Object.entries(files)) {
         const content = typeof file === "string" ? file : file.content;
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one session, one shell: the writes are sequential by construction
+        // one session, one shell: the writes are sequential by construction
         await execChecked(session, kind, `cat > ${dir}/${name} <<'${marker}'\n${content}${marker}`, `write ${dir}/${name}`);
         if (typeof file !== "string" && file.secret === true) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- must land before the next file's write
+            // must land before the next file's write
             await execChecked(session, kind, `chmod 600 ${dir}/${name}`, `chmod ${dir}/${name}`);
         }
     }

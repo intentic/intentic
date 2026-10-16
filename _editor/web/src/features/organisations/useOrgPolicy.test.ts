@@ -2,7 +2,8 @@
 // `org.policy`, and every hub open used to ask one anyway and show the error it came back as, which quoted the route.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { type OrgPolicyState, SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
+import type { OrgPolicyState } from "@intentic/sandbox-contract/schemas/organisation";
+import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import { type MaybeRefOrGetter, ref, toValue } from "vue";
 
 const asked: { enabled?: MaybeRefOrGetter<boolean> }[] = [];

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, statSync, utimesSync, writeFileS
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { AgentTool } from "../../agent/tools/agent-tools.js";
 import { createTurnMounts, type TurnLease } from "../../agent/tools/turn-mounts.js";
 import type { BrowserRouterFactory, RouterManifest } from "./browser-router.js";

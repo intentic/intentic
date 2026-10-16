@@ -20,7 +20,7 @@ jest.mock(`../../lib/imageDataUrl`, () => ({ fileToSquareDataUrl }));
 
 // Plan chip words are pinned in hostedHours.test.ts; mocked here to avoid needing a query client.
 const planBadge = ref<{ label: string; variant: string; detail: string } | undefined>(undefined);
-jest.mock(`./hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ planBadge }) }));
+jest.mock(`../../models/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ planBadge }) }));
 
 // Linking Google is the platform's sign-in client's, loaded at the press.
 const linkGoogle = jest.fn<(callbackPath?: string) => Promise<void>>().mockResolvedValue(undefined);

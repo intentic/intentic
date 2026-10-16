@@ -5,7 +5,7 @@ Measures what the codebase costs an agent to read, in tokens, and checks that a 
 ```mermaid
 flowchart LR
     tree["git tree<br/>working dir or --ref"] --> nav(["nav"])
-    nav -->|"measure"| json["baselines/*.json"]
+    nav -->|"measure"| json["baselines/*.json<br/>or --out"]
     json -->|"compare"| delta["before → after table"]
     nav -->|"targets"| rank["files ranked by burn"]
     nav -->|"gate snapshot · check"| surface["export surface<br/>+ frozen file hashes"]
@@ -16,6 +16,7 @@ flowchart LR
 - `targets` ranks files by burn: the tokens spent on a file across every lookup that lands in it.
 - `gate.mjs check` fails when an export that existed at the snapshot is gone or a frozen file (SQL, Prisma, migrations, locales, schemas, OpenAPI, the api and sandbox contracts) changed. Moving an export is free and growth is expected.
 - `baselines/` holds recorded measurements of older trees, so the repo's naming checks skip it.
+- `trend.mjs` is the nightly record (`nav-trend` in `.github/workflows/nightly.yml`): the job measures the tree with `--out`, keeps the JSON as a 90-day `nav-trend` artifact, finds the last nightly that kept one (`previous-run`, whatever that run's other tiers did), and writes the before → after table to the job summary (`summary`, the same rows as `compare` through `lib/compare.mjs`). It fails nothing; the first night says there is no previous record.
 - `structure-stats.mjs` reads conversation transcripts under `HISTORY_ROOT` to measure what finding a symbol costs, where `bench.mjs` measures opening one.
 
 ## What the numbers mean
@@ -32,6 +33,7 @@ flowchart LR
 ## Key files
 
 - [run.mjs](run.mjs) — `measure`, `targets`, `compare` and `calibrate`.
+- [lib/compare.mjs](lib/compare.mjs) — the before → after rows `compare` prints and the nightly trend renders.
 - [gate.mjs](gate.mjs) — `snapshot` and `check` of the export surface and frozen files.
 - [metrics.mjs](metrics.mjs) — the size, shape and cost numbers.
 - [lib/tokens.mjs](lib/tokens.mjs) — the token estimator and the optional real tokenizer.
@@ -44,4 +46,6 @@ node _tools/nav/gate.mjs snapshot --out _tools/nav/baselines/surface.json
 node _tools/nav/run.mjs targets --top 20
 node _tools/nav/gate.mjs check _tools/nav/baselines/surface.json
 node _tools/nav/run.mjs compare _tools/nav/baselines/baseline.json _tools/nav/baselines/head.json
+node _tools/nav/run.mjs measure --out /tmp/nav/after.json
+node _tools/nav/trend.mjs summary /tmp/nav/before.json /tmp/nav/after.json
 ```

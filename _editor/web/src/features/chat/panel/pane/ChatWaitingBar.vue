@@ -2,13 +2,13 @@
 import { Button, Icon, type IconName, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
-import { retryHydrate } from "../../run/useChat-sessions";
+import { retryHydrate } from "../../../../models/conversations/run/useChat-sessions";
 import { useHeldQueue } from "../../transcript/held/heldQueue";
 import { useMemoryAnswer } from "../../transcript/held/memoryAnswer";
-import { memoryShare, sendAnywayTip } from "../../transcript/held/memoryTip";
-import { usePaneView } from "../useChat-view";
+import { memoryShare, sendAnywayTip } from "../../../../models/conversations/transcript/memoryTip";
+import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import { useHeldLineSeen } from "./heldLineSeen";
-import { pendingCardReader, pendingDecisionOf, type WaitKind } from "./pendingDecision";
+import { pendingCardReader, pendingDecisionOf, type WaitKind } from "../../../../models/conversations/panel/pendingDecision";
 import { showWaitingCard, waitingCardIn } from "./waitingCard";
 
 // What waits on the reader, pinned right above the composer so it is on screen at any scroll position: the card the

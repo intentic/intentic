@@ -1,4 +1,4 @@
-import type { AgentAccess, MemberGrant, MemberSelf, MembersList, MembersRoster } from "@intentic/sandbox-contract";
+import type { AgentAccess, MemberGrant, MemberSelf, MembersList, MembersRoster } from "@intentic/sandbox-contract/schemas/members";
 import { computed, type ComputedRef, effectScope, type MaybeRefOrGetter, toValue } from "vue";
 import { invalidatePushedQueries } from "../../lib/pushInvalidation";
 import { SANDBOX_MEMBERS, SANDBOX_SELF_ACCESS } from "../../lib/queryKeys";

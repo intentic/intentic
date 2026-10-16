@@ -2,19 +2,20 @@
 // row redrawn under it (keyed on its label, which moves when a provider's catalog lands) took the picker's anchor away,
 // so the picker shut itself and the press that opened it read as doing nothing.
 import "@intentic/testing/dom";
-import type { ModelChoice, ModelPin } from "@intentic/sandbox-contract";
+import type { ModelChoice } from "@intentic/sandbox-contract/models/model-pins";
+import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // What each model is called, as the catalogs say it: before a provider's catalog lands its ids read humanized.
 const labels = ref<Record<string, string>>({ "gemini:gemini-3.1-pro": `Gemini 3 1 Pro`, "claude:claude-haiku-4-5": `Claude Haiku 4.5` });
-jest.mock(`../../../chat/models/modelPins`, () => ({
+jest.mock(`../../../../models/providers/modelPins`, () => ({
     describePin: (choice: ModelChoice | undefined, raw: string) =>
         choice === undefined
             ? { choice: undefined, label: raw, ready: false }
             : { choice, label: labels.value[`${choice.provider}:${choice.model}`] ?? raw, ready: true },
 }));
-jest.mock(`../../../chat/accounts/ProviderLogo.vue`, () => ({
+jest.mock(`../../../../parts/providers/ProviderLogo.vue`, () => ({
     __esModule: true,
     default: defineComponent({ render: () => h(`span`) }),
 }));

@@ -5,7 +5,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, ref, watch } from "vue";
 import { useLayout } from "../../../workbench/window/useLayout";
 import { withinScope } from "../../../app/projectScope";
-import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
+import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 import { coverChoices } from "./homeCover";
 
 // The names offered are the ones the loaded tree repeats across folders, most folders first, which is also what says

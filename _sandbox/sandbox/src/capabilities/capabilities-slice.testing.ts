@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { CapabilitiesSlice } from "./capabilities-slice.js";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 import type { SecretVault } from "./credentials/secret-vault.js";

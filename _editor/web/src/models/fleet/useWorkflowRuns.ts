@@ -1,0 +1,137 @@
+import type { Workflow, WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
+import { useMutation, useQueryClient } from "@tanstack/vue-query";
+import { computed } from "vue";
+import { rpcQuery } from "../../client/sandbox/rpcQuery";
+import { type ProcedureOutput, sandboxRpc } from "../../client/sandbox/sandboxRpc";
+import { optimisticUpdate } from "../../lib/optimistic";
+import { pushedKeys, rpcKey } from "../../lib/queryKeys";
+import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
+import type { FleetLane } from "../agent-status/agentStatus-lanes";
+import { blocked } from "../agent-status/agentStatus-standing";
+import type { FleetAgent } from "./useAgents-fleet";
+
+// Workflow runs for surfaces other than the workflows page: the fleet board and chat composer. A run gets its own
+// row, not a sixth agent, since it has no transcript, worktree or turn. Pushed via the daemon's `workflow-runs`
+// file-change key (core's, not the extension's, so the board still renders when workflows is off), never polled.
+
+// The ledger's own entry, which the writes below seed and file ahead of the daemon.
+const runsKey = rpcKey(`workflows.runs`);
+
+type Ledger = ProcedureOutput<`workflows.runs`>;
+
+// One run's filing date, set on the ledger as it is.
+const filed =
+    (runId: string, archivedAt: number | undefined) =>
+    (ledger: Ledger): Ledger => ({ ...ledger, runs: ledger.runs.map((run) => (run.runId === runId ? { ...run, archivedAt } : run)) });
+
+// Same three lanes as an agent, decided from the run's own state. `overspent`/`error` count as attention, not
+// finished, since those need a person's action.
+export const laneOfRun = (run: WorkflowRun, needsYou = false): FleetLane => {
+    // A step waiting on input puts the run, not the step, in Attention: the step's card isn't on the board.
+    if (needsYou || run.state === `failed` || run.state === `overspent` || run.state === `error`) {
+        return `attention`;
+    }
+    return run.state === `running` ? `active` : `finished`;
+};
+
+// Run ids with a step waiting on the user. Computed from the fleet, not the ledger: "blocked" is a live fact about
+// a conversation the run record doesn't carry.
+export const runsNeedingYou = (fleet: readonly FleetAgent[]): Set<string> =>
+    new Set(fleet.flatMap((agent) => (blocked(agent) && agent.workflow !== undefined ? [agent.workflow.runId] : [])));
+
+// A step is never its own card while its run is in the ledger: on the board while live, in the archive once
+// filed. A run rolled off the ledger releases its steps back to being ordinary agents.
+export const runIdsInLedger = (runs: readonly WorkflowRun[]): Set<string> => new Set(runs.map((run) => run.runId));
+
+export const insideRun = (agent: FleetAgent, ledger: ReadonlySet<string>): boolean =>
+    agent.workflow !== undefined && ledger.has(agent.workflow.runId);
+
+// Whether a run answers a search, since its steps can't answer for themselves. Matches on the run's name, its
+// request text, or any step via the board's own agent predicate.
+export const runMatches = (run: WorkflowRun, needle: string, fleet: readonly FleetAgent[], agentMatches: (agent: FleetAgent) => boolean): boolean =>
+    run.workflow.name.toLowerCase().includes(needle) ||
+    run.request?.toLowerCase().includes(needle) === true ||
+    fleet.some((agent) => agent.workflow?.runId === run.runId && agentMatches(agent));
+
+// Runs in a lane, shared by the board and rail. Finished is capped by the caller: a capped run hides its steps
+// too, so the caller must widen the window here along with its own.
+export const runsInLane = (runs: readonly WorkflowRun[], lane: FleetLane, window: number, needing: ReadonlySet<string>): WorkflowRun[] => {
+    const inLane = runs.filter((run) => laneOfRun(run, needing.has(run.runId)) === lane);
+    return lane === `finished` ? inLane.slice(0, window) : inLane;
+};
+
+// Titles of steps currently running, not the step count already shown on the card; answers what part of the
+// design is spending money now.
+export const runningTitles = (run: WorkflowRun): string[] =>
+    run.steps
+        .filter((step) => step.state === `running`)
+        .map((step) => run.workflow.steps.find((design) => design.id === step.stepId)?.title ?? step.stepId);
+
+export const spentOn = (run: WorkflowRun): number => run.steps.reduce((total, step) => total + (step.costUsd ?? 0), 0);
+
+export function useWorkflowRuns() {
+    const queryClient = useQueryClient();
+    // Everything the daemon's `workflow-runs` push reaches, the workflows extension's own entries included, so a write
+    // here refreshes that page as the push would.
+    const invalidate = async (): Promise<void> => {
+        await Promise.all(pushedKeys([`workflow-runs`]).map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+    };
+
+    // Every run the ledger holds, newest first; kept fresh by the ledger's file-change push.
+    const { query: runsQuery } = useSandboxQuery(rpcQuery(`workflows.runs`));
+
+    // Saved designs for the composer's picker; not polled, a stale entry costs a picker row, not a wrong run.
+    const { query: designsQuery } = useSandboxQuery(rpcQuery(`workflows.list`));
+
+    // Starts a run; resolves with the run as opened, its steps already `pending`. Seeds the runs cache (not just
+    // invalidates), so followers see it before the refetch lands.
+    const start = useMutation({
+        mutationFn: (input: { id: string; request?: string }): Promise<WorkflowRun> => sandboxRpc.workflows.run(input),
+        onSuccess: (run) => {
+            queryClient.setQueryData<Ledger>(runsKey, (held) => ({
+                ...held,
+                runs: [run, ...(held?.runs ?? []).filter((entry) => entry.runId !== run.runId)],
+            }));
+            return invalidate();
+        },
+    });
+
+    // Stops a run: unstarted steps never start; running steps are aborted like agent.stop and settle `stopped`.
+    // Unlike stopping a loop, this aborts the step's whole turn rather than waiting for the round to finish.
+    const stop = useMutation({
+        mutationFn: (runId: string) => sandboxRpc.workflows.stopRun({ runId }),
+        onSuccess: invalidate,
+    });
+
+    // The row moves on the press, filed in the cached ledger ahead of the daemon (a ledger read already in flight is
+    // cancelled, or it would paint the row back from before the press). A refusal puts back only that run's filing
+    // date: a whole-ledger snapshot put back would also undo whatever the ledger's own push brought in meanwhile. The
+    // read after the answer replaces the guess either way.
+    const fileOnPress = <R>(runId: string, archivedAt: number | undefined, write: () => Promise<R>): Promise<R> =>
+        optimisticUpdate(runsKey, filed(runId, archivedAt), write, {
+            undo: (current: Ledger, before: Ledger) => filed(runId, before.runs.find((run) => run.runId === runId)?.archivedAt)(current),
+            client: queryClient,
+        });
+
+    // Archives an ended run with its sessions (a step has no card of its own to archive separately). Lossless, like
+    // an agent's archive; restore brings run and sessions back together.
+    const archive = useMutation({
+        mutationFn: (runId: string) => fileOnPress(runId, Date.now(), () => sandboxRpc.workflows.archiveRun({ runId })),
+        onSettled: invalidate,
+    });
+
+    const unarchive = useMutation({
+        mutationFn: (runId: string) => fileOnPress(runId, undefined, () => sandboxRpc.workflows.unarchiveRun({ runId })),
+        onSettled: invalidate,
+    });
+
+    return {
+        // Every run the ledger holds, newest first, archived included; the caller decides what draws it.
+        runs: computed<WorkflowRun[]>(() => runsQuery.data.value?.runs ?? []),
+        designs: computed<Workflow[]>(() => designsQuery.data.value?.workflows ?? []),
+        start,
+        stop,
+        archive,
+        unarchive,
+    };
+}

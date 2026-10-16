@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { type AgentRunPicker, type Tip, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
-import { startAgent } from "../../agents/fleet/agentActions";
+import { startAgent } from "../../../models/fleet/agentActions";
 import { useT } from "@intentic/ui/i18n";
 
 // A Health row's refactor action, in the table's Suggested column: the sparkles, and on a wide pane the refactor's own

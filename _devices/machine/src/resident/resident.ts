@@ -502,9 +502,9 @@ export const runForeground = async (log: Log, { beforeSignIn = false }: { readon
     const runtime = runtimeOf(supervised, trial, started.kept, started.lease, log);
     log(`serving ${serving(started.served)}${beforeSignIn ? ", started by this PC before anyone signed in: the screen tools wait for a sign-in" : ""}`);
     for (;;) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- the tick loop itself, serial by definition
+        // the tick loop itself, serial by definition
         await tick(runtime, started.lease, log);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+        // ditto
         await sleep(TICK_MS);
     }
 };

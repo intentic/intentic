@@ -1,5 +1,5 @@
 import { computed } from "vue";
-import { chatInSidePanel } from "../../features/chat/panel/chatPanelLayout";
+import { chatInSidePanel } from "../../models/conversations/panel/chatPanelLayout";
 import { useSidePanel } from "../../workbench/side/sideTabs";
 import { shownSideTabs } from "../../workbench/side/sideViews";
 

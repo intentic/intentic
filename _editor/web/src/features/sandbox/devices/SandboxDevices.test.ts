@@ -1,18 +1,19 @@
 // jsdom because the subject is what a row puts on screen, not the derivation behind it (see deviceFacts.test.ts).
 import "@intentic/testing/dom";
 import { listedDevice } from "../../../testing/listedDevice";
-import { type CardlessHost, type Device, type MemberRole, roleAtLeast } from "@intentic/sandbox-contract";
+import type { CardlessHost, Device } from "@intentic/sandbox-contract/schemas/devices";
+import { type MemberRole, roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { RouteLocationRaw } from "vue-router";
 import PrimeVue from "primevue/config";
 import { groupNeedsAttention, groupSummary, menuVerbs, primaryVerb, sandboxGroups, tipText, type TooltipValue } from "@intentic/ui";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, computed, createApp, defineComponent, h, nextTick, reactive, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import * as sandboxContractOriginal from "@intentic/sandbox-contract";
+import * as sandboxContractOriginal from "@intentic/sandbox-contract/schemas/devices";
 import * as vueRouterOriginal from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
-import * as usePeerConnectOriginal from "./usePeerConnect";
-import * as useDevicesOriginal from "./useDevices";
+import * as usePeerConnectOriginal from "../../../models/sandbox/devices/usePeerConnect";
+import * as useDevicesOriginal from "../../../models/sandbox/devices/useDevices";
 
 // Import chain touches the app's environment and a media query at module eval; jsdom covers both (see
 // daemonRestart.test.ts).
@@ -39,7 +40,7 @@ const revokeCalls: string[] = [];
 // The one control that starts a turn rather than a command, recorded the same way: pins that it's offered and
 // what it hands the agent.
 const startedTurns: string[] = [];
-jest.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: string) => startedTurns.push(prompt ?? ``) }));
+jest.mock(`../../../models/fleet/agentActions`, () => ({ startAgent: (prompt?: string) => startedTurns.push(prompt ?? ``) }));
 // Container verbs, recorded the same way: which op left for which machine, and for `reshape`, what the form
 // asked for.
 const verbCalls: { hostId: string; slug: string; op: string; resources?: unknown; shape?: unknown; when?: string; to?: string }[] = [];
@@ -54,7 +55,7 @@ const agentCalls: { hostId: string; op: string }[] = [];
 // What each side answers the flow with; the default is an ordinary update, and a test that wants a refusal replaces it.
 const AGENT_UPDATED = { message: `Upgraded the agent: 1.183.0 → 1.186.0.`, settled: true };
 let agentAnswer: (hostId: string) => Promise<{ message: string | undefined; settled: boolean }> = () => Promise.resolve(AGENT_UPDATED);
-jest.mock(`./useDevices`, () => {
+jest.mock(`../../../models/sandbox/devices/useDevices`, () => {
     // deviceQuiet is real, so a row's freshness reads the same rule the app uses. Imported statically: a module
     // loaded inside a mock factory deadlocks bun's synchronous link of the graph that named it.
     return {
@@ -106,7 +107,7 @@ jest.mock(`./useDevices`, () => {
 // Reconnecting an unreachable machine mints a credential rather than running anything, so the pairing door is
 // recorded, not opened: which machine this page asked a command for is the whole of what it decides.
 const pairingsAsked: string[] = [];
-jest.mock(`./usePeerConnect`, () => ({
+jest.mock(`../../../models/sandbox/devices/usePeerConnect`, () => ({
     // The door's own descriptor is real, so the dialog is mounted on the same one the app opens.
     ...usePeerConnectOriginal,
     usePeerConnect: () => ({
@@ -147,11 +148,11 @@ jest.mock(`../../../client/sandbox/useSandbox`, () => ({
 // The release this sandbox knows about; mocked like useDevices since the subject is what a row says, and
 // staleness is part of that.
 const latest = ref<string | undefined>(`1.183.0`);
-jest.mock(`../overview/version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ latest }) }));
+jest.mock(`../../../models/sandbox/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ latest }) }));
 // The owner's per-device switches, so a row can say "Manage sandboxes is off" before a click; mocked since the
 // real hook needs vue-query's injected client.
 const capabilities = ref<{ id: string; kind: string; config: Record<string, string> }[]>([]);
-jest.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
+jest.mock(`../../../models/capabilities/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
 // ContainerHealthCard needs the active sandbox's boot report, which this file's useSandbox stub omits.
 jest.mock(`./health/ContainerHealthCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 jest.mock(`./sync/DesktopSyncCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
@@ -178,7 +179,7 @@ jest.mock(`vue-router`, () => ({
 let derivations = 0;
 // Taken before the mock: the namespace reflects the mock once it is installed, so the wrapper would call itself.
 const realAgentStalled = sandboxContractOriginal.agentStalled;
-jest.mock(`@intentic/sandbox-contract`, () => ({
+jest.mock(`@intentic/sandbox-contract/schemas/devices`, () => ({
     ...sandboxContractOriginal,
     agentStalled: ((...args: Parameters<typeof realAgentStalled>) => {
         derivations += 1;
@@ -193,7 +194,7 @@ const runnersList = ref<{ id: string; host?: string; online: boolean; parity?: s
 );
 // How adding a runner goes on the machine, swapped by a test that has to leave one running.
 let createRunnerFlow: (onLine?: (line: string) => void) => Promise<string> = () => Promise.resolve(`made`);
-jest.mock(`./runners/useRunners`, () => ({
+jest.mock(`../../../models/sandbox/devices/useRunners`, () => ({
     useRunners: () => ({ runners: runnersList, ready: runnersList, isLoading: ref(false), refetch: () => {} }),
     createRunner: (_host: string, _name: string, onLine?: (line: string) => void) => createRunnerFlow(onLine),
     removeRunner: () => Promise.resolve(`removed`),
@@ -203,7 +204,7 @@ jest.mock(`./runners/useRunners`, () => ({
     syncRunnerSettings: () => Promise.resolve(),
 }));
 
-const { boardRoute, deviceRoute } = await import("./deviceLinks");
+const { boardRoute, deviceRoute } = await import("../../../models/sandbox/devices/deviceLinks");
 const { devicesWorking, forgetDeviceWork, settleAgentRuns } = await import("./runners/deviceWork");
 const { forgetOperations } = await import("../../../workbench/operations/operations");
 const { default: SandboxDevices } = await import("./SandboxDevices.vue");
@@ -1682,7 +1683,7 @@ const startSelecting = async (el: HTMLElement): Promise<void> => {
 // A removal is a chain of awaits per row, and a tick only flushes what is already queued: this runs the queue out.
 const settle = async (): Promise<void> => {
     for (let turn = 0; turn < 10; turn += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- each tick is what queues the next, so they cannot overlap
+        // each tick is what queues the next, so they cannot overlap
         await nextTick();
     }
 };

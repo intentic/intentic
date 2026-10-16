@@ -1,10 +1,13 @@
 import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
-import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { unstubbed } from "@intentic/testing";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import type { TurnContext } from "../../agent/providers/adapter.js";
 import type { Services } from "../../composition.js";
-import { memoryFleet, testConfig, testTurnMounts } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
+import { testConfig } from "../../env.config.testing.js";
+import { testTurnMounts } from "../../agent/tools/turn-mounts.testing.js";
 import * as browserToolsOriginal from "../../browser/tools/browser-tools.js";
 import * as cursorSdkOriginal from "./cursor-sdk.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";

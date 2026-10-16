@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
 import type { Disposable } from "@intentic/extension-api";
 import { AnchoredOverlay, Avatar, browserOwnsClick, Notice, StatusBadge, useHoverMenu, vAction } from "@intentic/ui";
@@ -7,7 +8,7 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import { ACCOUNT } from "../workbench/commands/categories";
 import { registerCommand } from "../workbench/commands/useCommands";
 import { useAccount } from "../client/auth/useAccount";
-import { useHostedPlan } from "../features/settings/hosted-plan/useHostedPlan";
+import { useHostedPlan } from "../models/hosted-plan/useHostedPlan";
 import { environment } from "../app/environments/environment";
 import { useT } from "@intentic/ui/i18n";
 
@@ -70,7 +71,7 @@ const logout = async (): Promise<void> => {
     try {
         await account.signOut();
     } catch (error) {
-        signOutFailure.value = error instanceof Error ? error.message : String(error);
+        signOutFailure.value = errorMessage(error);
         // Said in the menu, pinned open: the palette's Sign out has no menu up to say it in.
         open.value = true;
         return;

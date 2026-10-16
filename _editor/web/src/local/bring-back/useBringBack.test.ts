@@ -2,7 +2,7 @@ import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp } from "vue";
 import { BRING_BACK_CAP, type SandboxChange } from "./bringBack";
-import { activeSandboxId } from "../../lib/activeSandbox";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
 import { forgetBringBack, useBringBack, useQuietChecks } from "./useBringBack";
 
 // Pins the link a bring-back sends: the changes the review showed and the reader chose, by name, and nothing at all when

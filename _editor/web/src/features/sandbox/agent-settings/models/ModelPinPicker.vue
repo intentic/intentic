@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ModelPin } from "@intentic/sandbox-contract";
+import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { ResponsiveOverlay } from "@intentic/ui";
 import ModelPinPickerBody from "./ModelPinPickerBody.vue";
 import { useT } from "@intentic/ui/i18n";

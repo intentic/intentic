@@ -1,5 +1,5 @@
 import type { HookCallbackMatcher } from "@anthropic-ai/claude-agent-sdk";
-import type { Rule } from "@intentic/sandbox-contract";
+import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import type { Logger } from "pino";
 import type { EditCommandRun } from "../../rules/file-edited.js";
 import { conditionHolds } from "../../rules/rules.js";

@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { KeyringOp, KeyringRequest } from "@intentic/keyring";
-import type { KeyringState, KeyringPointer, SealedBox, SignedKeyringGrant } from "@intentic/sandbox-contract";
+import type { KeyringState, KeyringPointer, SealedBox, SignedKeyringGrant } from "@intentic/sandbox-contract/schemas/keyring";
 
 // A KEYRING THAT ANSWERS FROM A SCRIPT, for the relay's and the CLI's tests (this repo's testing-file convention, kept out
 // of the build): a unix socket in a temp directory speaking the keyring's protocol, one JSON line in and one out, that

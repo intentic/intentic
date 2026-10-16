@@ -1,4 +1,4 @@
-import type { Model } from "@intentic/sandbox-contract";
+import type { Model } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import { unrankedCatalog } from "../../agent/models/model-discovery.js";
 import type { CliProxyClient } from "../../agent/providers/translator.js";

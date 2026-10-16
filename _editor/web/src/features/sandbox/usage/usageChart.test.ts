@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import type { UsageRollupRow } from "@intentic/sandbox-contract";
+import type { UsageRollupRow } from "@intentic/sandbox-contract/schemas/providers/usage";
 import {
     bucketFor,
     cacheHitRate,

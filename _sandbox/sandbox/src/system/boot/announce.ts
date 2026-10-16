@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Latest, SingleFlight, sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import type { AnnounceBody, IngressOutput } from "@intentic/api-contract/ingress";
-import type { AnnounceState, RelinkAnswer } from "@intentic/sandbox-contract";
+import type { AnnounceState, RelinkAnswer } from "@intentic/sandbox-contract/schemas/platform-link";
 import { INSTANCE_ENV } from "@intentic/sandbox-contract/netd-wire";
 import type { Logger } from "pino";
 import type { Config } from "../../env.config.js";

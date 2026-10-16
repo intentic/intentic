@@ -1,10 +1,5 @@
 <script setup lang="ts">
-import type {
-    ArrivalHost,
-    ArrivalPlan,
-    ArrivalReport,
-    AssistantSource,
-} from "@intentic/sandbox-contract";
+import type { ArrivalHost, ArrivalPlan, ArrivalReport, AssistantSource } from "@intentic/sandbox-contract/state/arrival";
 import { Button, Code, NoticeStack, Row, RowGroup, StatusBadge, ui, vAction } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import ToggleSwitch from "primevue/toggleswitch";

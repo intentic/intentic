@@ -1,4 +1,4 @@
-import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract";
+import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract/schemas/activity";
 import type { Caller } from "../auth/auth.js";
 import type { Provenance } from "../auth/fleet-scope.js";
 import { activityScope, resolveConnections } from "./activity.routes.js";

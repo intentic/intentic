@@ -1,6 +1,7 @@
-import { type AccountState, headroomState } from "@intentic/sandbox-contract";
+import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { headroomState } from "@intentic/sandbox-contract/models/plan-pools";
 import { capacityCounts, matchAccounts, pickerOrder } from "./pickerAccounts";
-import type { PlanHeadroom } from "../session/usageStatus";
+import type { PlanHeadroom } from "../../../models/providers/usageStatus";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // The two derivations behind a folded account list: the summary line a fold states in place of its
@@ -9,7 +10,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // pickerAccounts reaches useChat for live account lists; stub its side-effecting seams so import
 // stays inert.
 jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
-jest.mock("./useChat-accounts", () => ({
+jest.mock("../../../models/conversations/accounts/useChat-accounts", () => ({
     accountsOf: jest.fn(() => []),
     refreshConnections: jest.fn(async () => {}),
     subscriptionOnly: jest.fn(() => false),

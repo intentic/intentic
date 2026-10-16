@@ -1,4 +1,6 @@
-import { type Capability, type HostSummary, hostRunningSandbox } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { HostSummary } from "@intentic/sandbox-contract/schemas/hosts";
+import { hostRunningSandbox } from "@intentic/sandbox-contract/schemas/devices";
 import { sandboxSlugOf } from "@intentic/sandbox-run";
 import type { Services } from "../composition.js";
 import { heldHostDevices } from "./device-reports.js";

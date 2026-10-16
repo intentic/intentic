@@ -1,4 +1,5 @@
-import type { Info, UpdateOutcome } from "@intentic/sandbox-contract";
+import type { Info } from "@intentic/sandbox-contract/schemas/system";
+import type { UpdateOutcome } from "@intentic/sandbox-contract/schemas/updates";
 import { t } from "@intentic/ui/i18n";
 import { formatUntil } from "@intentic/ui/time";
 

@@ -10,7 +10,7 @@ import { createGunzip } from "node:zlib";
 import { promisify } from "node:util";
 import { SingleFlight } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import type { EngineId } from "@intentic/sandbox-contract";
+import type { EngineId } from "@intentic/sandbox-contract/schemas/engines";
 import { engineDescriptor, type EngineDescriptor } from "./engine-descriptors.js";
 import { activateVersion, collectGarbage, engineDir, engineVersionDir, installedVersions, quarantineVersion } from "./engine-store.js";
 import { forgetEngineResolution } from "./engine-resolve.js";

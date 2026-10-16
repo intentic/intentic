@@ -1,6 +1,7 @@
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { fieldApplies } from "@intentic/extension-manifest";
-import { type Capability, type CapabilityKind, CapabilitySchema, VAULTED } from "@intentic/sandbox-contract";
+import { type Capability, type CapabilityKind, CapabilitySchema } from "@intentic/sandbox-contract/schemas/capabilities";
+import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import { partitionSecretValues, pastedSecret, secretFieldsOf } from "./secret-fields.js";
 import { generateSshKey } from "./ssh-keys.js";
 

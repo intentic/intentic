@@ -1,7 +1,7 @@
 import type { Services } from "../../composition.js";
-import type { SpokenReplyAsk } from "../../speech/voice/voice.js";
+import type { SpokenReplyAsk } from "@intentic/speech/voice/voice";
 import { withAgentExecution } from "../../workload/agent-execution.js";
-import { sentenceAnswer } from "./role-answer.js";
+import { sentenceAnswer } from "../../engines/role-answer.js";
 import { askRoleModel, roleModelIsSet } from "./role-model.js";
 
 // The `spoken-reply` job, the speech voice's port filled from up here (composition.ts wires it into speech/voice):

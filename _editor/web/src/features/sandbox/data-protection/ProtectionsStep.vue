@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Measure, PresetItem } from "@intentic/sandbox-contract";
+import type { Measure, PresetItem } from "@intentic/sandbox-contract/schemas/compliance";
 import { Button, ConfirmDialog, InfoHint, Notice, type NoticeModel, Row, RowGroup, RowNote, SkeletonRows, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";

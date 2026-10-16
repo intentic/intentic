@@ -1,11 +1,13 @@
-import type { AgentOrigin, ListenerDeliver } from "@intentic/sandbox-contract";
+import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
+import type { ListenerDeliver } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import { z } from "zod";
 import { cachedEnabledExtensions } from "../../capabilities/contributions.js";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
 import { type OutboxSink, outboxKeyOf } from "../../webchat/webchat-outbox.js";
-import { extensionProcessKey } from "../extension-processes.js";
 import { listenerOwnership } from "./listener-state.js";
+import { extensionProcessKey } from "../../capabilities/extension-dirs.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Daemon's outbound leg of "speak as the agent": delivers to the origin the conversation came from.
 // A Visitor chat is answered in the daemon itself (the visitor's browser polls for it); every other provider goes over
@@ -41,11 +43,9 @@ export interface GatewayDelivery {
 const DeliveredBodySchema = z.object({ url: z.string().min(1) });
 
 export const gatewayDeliveryOf = (body: string): GatewayDelivery => {
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(body);
-    } catch {
-        // allow(silent-catch): a body that is not JSON is an older gateway's bare "ok", which names no link
+    const parsed = parseJsonOr(body, undefined);
+    if (parsed === undefined) {
+        // A body that is not JSON is an older gateway's bare "ok", which names no link.
         return {};
     }
     const named = DeliveredBodySchema.safeParse(parsed);

@@ -1,7 +1,7 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import { join } from "node:path";
-import { syncHookOutput } from "../../testing.js";
+import { syncHookOutput } from "../../agent/run/harness/harness-hooks.testing.js";
 import { browserArtifactHooks, browserOutputDir, screenshotImage } from "./browser-artifacts.js";
 
 const OUTPUT = browserOutputDir(WORKSPACE_ROOT);

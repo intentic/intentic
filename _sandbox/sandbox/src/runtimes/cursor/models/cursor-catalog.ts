@@ -1,5 +1,5 @@
 import type { ModelListItem } from "@cursor/sdk";
-import type { Model } from "@intentic/sandbox-contract";
+import type { Model } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { discoveredCatalog } from "../../../agent/models/model-catalog.js";
 import { cacheFile } from "../../../store/open-document.js";
 import type { CursorStore } from "../accounts/cursor-credentials.js";

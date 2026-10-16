@@ -1,4 +1,7 @@
-import { MODEL_ROLE_IDS, type ModelPin, type ModelSource, rolePins, type SetupSettings } from "@intentic/sandbox-contract";
+import { MODEL_ROLE_IDS } from "@intentic/sandbox-contract/models/model-roles";
+import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import type { ModelSource } from "@intentic/sandbox-contract/models/model-pins";
+import { rolePins, type SetupSettings } from "@intentic/sandbox-contract/models/model-setups";
 import {
     setupsView,
     type SetupsWrite,

@@ -1,11 +1,5 @@
-import {
-    type AccountUsage,
-    AccountUsageSchema,
-    bindingWindow,
-    type ModelRef,
-    type UsageUnread,
-    currentWindows,
-} from "@intentic/sandbox-contract";
+import { type AccountUsage, AccountUsageSchema, type UsageUnread } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { bindingWindow, type ModelRef, currentWindows } from "@intentic/sandbox-contract/models/plan-pools";
 import { z } from "zod";
 import { at, pinDefault } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";

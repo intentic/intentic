@@ -1,11 +1,13 @@
-import type { AgentEvent, Automation, OauthAccount } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
 import { services } from "../../../harness/route-services.testing.js";
-import { beginTurn } from "../../../testing.js";
+import { beginTurn } from "../../../conversations/actor/conversation-actors.testing.js";
 import { mergeSupersededAccounts, sameAccount, signInIdentity } from "./account-identity.js";
 import type { AccountDoor } from "../provider-module.js";
-import { routingFor } from "./routing.js";
+import { routingFor } from "../../../conversations/registry/routing.js";
 
 // Who an account is, once for every provider, and what becomes of a duplicate from before a reconnect reused its id.
 

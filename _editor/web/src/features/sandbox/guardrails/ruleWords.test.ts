@@ -1,4 +1,5 @@
-import { COMMAND_CLASS_LABELS, COMMAND_CLASS_PATTERNS, type CommandClass } from "@intentic/sandbox-contract";
+import { COMMAND_CLASS_LABELS, COMMAND_CLASS_PATTERNS } from "@intentic/sandbox-contract/policy/command-classes";
+import type { CommandClass } from "@intentic/sandbox-contract/schemas/agent";
 import { setLocale } from "@intentic/ui/i18n";
 import { commandClassWords, qualifierWords } from "./ruleWords";
 

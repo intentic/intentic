@@ -1,10 +1,10 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { parentOfActor } from "../../auth/principal.js";
 import type { Logger } from "pino";
-import { cancelFamily, type Family, type FamilyDeps, familyOf } from "../../agent/subagents/children.js";
+import type { Family, FamilyDeps } from "../../agent/subagents/children.js";
 import type { FamilyEnd } from "../../agent/subagents/family-cancel.js";
-import { cancelWatchersFor } from "../../agent/verification/watchers.js";
+import type { TurnEngine } from "../../seams/turn-engine.js";
 import type { TurnStarter } from "../../seams/turn-starter.js";
 import type { ResourceReaper } from "../../system/boot/reaper.js";
 import type { ConversationActors } from "../actor/conversation-actors.js";
@@ -53,6 +53,8 @@ export interface AgentArchiveDeps {
     // What stops the children a conversation leaving spawned, their running turns and booked re-runs (children.ts
     // cancelFamily). A suite that spawns nothing leaves it out.
     readonly turns?: Pick<TurnStarter, "stop">;
+    // What ends the children and watches of a conversation leaving; a suite that arms and spawns nothing leaves it out.
+    readonly turnEngine?: Pick<TurnEngine, "familyOf" | "cancelFamily" | "cancelWatchersFor">;
 }
 
 // The deps a family's end runs on, where these can stop a turn.
@@ -62,14 +64,14 @@ const familyDeps = (deps: AgentArchiveDeps): FamilyDeps | undefined =>
 // Read while the heads are still on the board, since a dispose takes the records of the children they supervise.
 const familyBelow = (deps: AgentArchiveDeps, heads: readonly string[]): Family | undefined => {
     const family = familyDeps(deps);
-    return family === undefined ? undefined : familyOf(family, heads);
+    return family === undefined ? undefined : deps.turnEngine?.familyOf(family, heads);
 };
 
 // Cancels what the family below them still runs or has booked; their conversations stay.
 const endFamily = async (deps: AgentArchiveDeps, family: Family | undefined, why: FamilyEnd): Promise<void> => {
     const door = familyDeps(deps);
     if (door !== undefined && family !== undefined) {
-        await cancelFamily(door, family, why);
+        await deps.turnEngine?.cancelFamily(door, family, why);
     }
 };
 
@@ -159,7 +161,7 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
         // After the registry write on purpose, so a half-failed archive can't kill shells of agents still on the board.
         // A watch goes too: its checks ran in the checkout just retired.
         for (const id of archived) {
-            await cancelWatchersFor(id);
+            await deps.turnEngine?.cancelWatchersFor(id);
             await deps.reaper?.reapConversation(id, { force: true });
         }
         // Their children stop with them, by hand, by the Clear and by the aged sweep alike: filed away first, so a child

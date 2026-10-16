@@ -1,5 +1,5 @@
 import { keyedLock } from "@intentic/base/async";
-import { type Issue, type IssueReport, IssueSchema, type IssueStatus, type IssueSummary } from "@intentic/sandbox-contract";
+import { type Issue, type IssueReport, IssueSchema, type IssueStatus, type IssueSummary } from "@intentic/sandbox-contract/schemas/issues";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDirectory } from "../store/open-document.js";
 import { ManifestUnreadableError } from "../store/json-file.js";

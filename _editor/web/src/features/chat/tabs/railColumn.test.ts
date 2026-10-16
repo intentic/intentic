@@ -8,7 +8,7 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import ChatTabs from "./ChatTabs.vue";
 import RailColumn from "./RailColumn.vue";
 import { chatFullSlot } from "../../../workbench/window/panelSlots";
-import { DEFAULT_RAIL_WIDTH, railWidth, setRailWidth } from "../../agents/board/columnWidth";
+import { DEFAULT_RAIL_WIDTH, railWidth, setRailWidth } from "../../../models/fleet/board/columnWidth";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router/index";
 

@@ -1,4 +1,4 @@
-import type { SharePayload } from "@intentic/sandbox-contract";
+import type { SharePayload } from "@intentic/sandbox-contract/events/transcript";
 import { sharePage } from "./share-page.js";
 
 // Pins that turning a conversation into markup on an unauthenticated public page is an injection surface; prompts

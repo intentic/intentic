@@ -1,5 +1,6 @@
 import type { ModelListItem, ModelParameterValue, ModelSelection } from "@cursor/sdk";
-import { humanizeModelId, type Model } from "@intentic/sandbox-contract";
+import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
+import type { Model } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 
 // Pure functions over Cursor.models.list()'s response, kept apart from the fetching service (cursor-catalog.ts) so the
 // mapping is testable without a credential. Nothing here is curated: a model Cursor adds tomorrow reaches the picker

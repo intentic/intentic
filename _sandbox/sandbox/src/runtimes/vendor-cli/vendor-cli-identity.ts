@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { z } from "zod";
 import type { CliIdentity } from "./vendor-cli.js";
+import { parseJsonWith } from "@intentic/base/json";
 
 // Who a CLI's fresh sign-in belongs to, read off the token file its login wrote: an `email` the file states outright, or
 // the one an OpenID token in it carries (both vendors' sign-ins are OAuth, and an ID token's claims are signed by the
@@ -15,12 +16,8 @@ const claimsOf = (token: string): z.infer<typeof ClaimsSchema> | undefined => {
     if (payload === undefined || !/^[\w-]+\.[\w-]+\.[\w-]+$/u.test(token)) {
         return undefined;
     }
-    try {
-        return ClaimsSchema.safeParse(JSON.parse(Buffer.from(payload, "base64url").toString("utf8"))).data;
-    } catch {
-        // allow(silent-catch): a three-part string whose middle is not JSON is not a token, which reads as no identity
-        return undefined;
-    }
+    // A three-part string whose middle is not JSON is not a token, which reads as no identity.
+    return parseJsonWith(Buffer.from(payload, "base64url").toString("utf8"), ClaimsSchema);
 };
 
 const JsonSchema: z.ZodType<Json> = z.lazy(() =>
@@ -55,7 +52,7 @@ export const emailIn = (document: Json): string | undefined => {
 // The first of these files (JSON) that names an email; none that do is a nameless sign-in.
 export const identityIn = async (paths: readonly string[]): Promise<CliIdentity> => {
     for (const path of paths) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- the first file that answers wins; the rest go unread
+        // the first file that answers wins; the rest go unread
         const text = await readFile(path, "utf8").catch(undefinedIfMissing);
         const parsed = text === undefined ? undefined : JsonSchema.safeParse(JSON.parse(text)).data;
         const email = parsed === undefined ? undefined : emailIn(parsed);

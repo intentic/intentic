@@ -1,7 +1,7 @@
 import { basename } from "@intentic/ui/path";
 import { computed } from "vue";
-import { usePaneView } from "../../panel/useChat-view";
-import type { ChatMessage } from "../transcript";
+import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 
 // A message that did not go out, as the chat draws it: the words wait in the conversation's queue (held), or the sandbox
 // kept the turn whole with its message above (`sandboxHeld`). Either way the reader sees their message, that it was not

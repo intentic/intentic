@@ -1,7 +1,8 @@
 import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { SANDBOX_ROUTE_NAMES, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import type { MenuItem } from "primevue/menuitem";
 import { unstubbed } from "@intentic/testing";
 import { ref } from "vue";

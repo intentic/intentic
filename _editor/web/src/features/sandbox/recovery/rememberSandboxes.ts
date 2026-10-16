@@ -6,7 +6,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { apiClient } from "../../../lib/useApi";
 import { useAuth } from "../../../client/auth/useAuth";
 import { SANDBOX_LIST_KEY } from "../../../client/sandbox/useSandbox";
-import { sandboxIdOfDaemonUrl } from "@intentic/sandbox-contract";
+import { sandboxIdOfDaemonUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import { forgetSandbox, missingSandboxes, noteUnknown, rememberListed } from "../../../client/directory/deviceDirectory";
 import { directMode } from "../../../client/directory/directState";
 

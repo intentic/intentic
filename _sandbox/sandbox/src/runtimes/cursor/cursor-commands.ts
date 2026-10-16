@@ -1,8 +1,9 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
-import type { AgentCommand } from "@intentic/sandbox-contract";
-import { stripTurnPreamble } from "../../agent/prompt/turn-preamble.js";
+import type { AgentCommand } from "@intentic/sandbox-contract/events/requests";
 import { parseSkillFile } from "../../skill-file.js";
+import { stripTurnPreamble } from "../../sessions/vocabulary/prompt-envelope.js";
+import { readTextIfExists } from "@intentic/base/fs";
 
 // Cursor's custom commands: one Markdown file per command under the project's `.cursor/commands/`, its name the file's
 // and its body the prompt it stands for. The SDK loads them for its own `/` but publishes no list back, so the daemon
@@ -35,8 +36,8 @@ export const cursorCommands = async (root: string): Promise<CursorCommand[]> => 
     const files = entries.filter((entry) => entry.isFile() && extname(entry.name) === ".md").map((entry) => entry.name);
     const commands = await Promise.all(
         files.map(async (file): Promise<CursorCommand | undefined> => {
-            // allow(silent-catch): a file that vanished between the listing and the read is no command
-            const text = await readFile(join(dir, file), "utf8").catch(() => undefined);
+            // A file that vanished between the listing and the read is no command.
+            const text = await readTextIfExists(join(dir, file));
             if (text === undefined) {
                 return undefined;
             }

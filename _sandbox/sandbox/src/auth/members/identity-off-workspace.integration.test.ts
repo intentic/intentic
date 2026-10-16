@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import pino from "pino";
-import { testConfig } from "../../testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import { clearNewestRun } from "../../store/newest-run.js";
 import { commitState, convergeState, resetStateStatus, type StateRoots } from "../../store/evolution/state-convergence.js";
 import type { StructuralStep } from "../../store/evolution/state-steps.js";

@@ -1,5 +1,5 @@
 import type { ModelListItem } from "@cursor/sdk";
-import { EFFORT_TIERS } from "@intentic/sandbox-contract";
+import { EFFORT_TIERS } from "@intentic/sandbox-contract/models/agent-catalog";
 import {
     CURSOR_DEFAULT_MODEL,
     effortParameterOf,

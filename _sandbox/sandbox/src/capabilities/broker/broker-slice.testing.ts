@@ -19,5 +19,5 @@ export const memorySshKeyStore = (initial: Readonly<Record<string, string>> = {}
     };
 };
 
-// The broker slice as a fresh sandbox has it: no ssh key held, so a turn binds no ssh agent socket (capabilities/turn-env.ts).
+// The broker slice as a fresh sandbox has it: no ssh key held, so a turn binds no ssh agent socket (agent/run/harness/turn-env.ts).
 export const brokerSliceFake = () => ({ sshKeys: memorySshKeyStore() }) satisfies Partial<BrokerSlice>;

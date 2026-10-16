@@ -1,5 +1,5 @@
+import type { deviceContract } from "@intentic/sandbox-contract/contracts/device.contract";
 import {
-    type deviceContract,
     KeyringRefusalCodeSchema,
     type KeyringDeviceKeys,
     type KeyringGrant,
@@ -9,10 +9,10 @@ import {
     type KeyringRefusalCode,
     type KeyringShareMode,
     type KeyringTypeResult,
-    type SandboxKeyring,
     type SealedBox,
     type SignedKeyringGrant,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/keyring";
+import type { SandboxKeyring } from "@intentic/sandbox-contract/schemas/secrets";
 import { grantNonce, keyFingerprint, seal, signGrant, unseal } from "@intentic/sandbox-contract/keyring-seal";
 import type { ContractRouterClient } from "@orpc/contract";
 import { z } from "zod";

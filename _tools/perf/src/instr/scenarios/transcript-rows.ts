@@ -1,4 +1,4 @@
-import { TranscriptRowSchema } from "@intentic/sandbox-contract";
+import { TranscriptRowSchema } from "@intentic/sandbox-contract/events/transcript";
 import { foldTurn, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import type { Scenario } from "../scenario.js";
 import { agentTurn } from "../turn.js";

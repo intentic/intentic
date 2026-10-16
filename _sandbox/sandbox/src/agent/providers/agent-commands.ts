@@ -1,4 +1,5 @@
-import type { AgentCommand, AgentProvider } from "@intentic/sandbox-contract";
+import type { AgentCommand } from "@intentic/sandbox-contract/events/requests";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 
 // The last slash-command list each provider published, populated from real turns rather than probes so it reflects the
 // workspace's actual config. In-memory and keyed by provider: a daemon restart re-learns on the next turn.

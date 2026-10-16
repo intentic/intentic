@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { MEMORY_FILE } from "@intentic/constants";
-import type { DevicePairing, DeviceReport } from "@intentic/sandbox-contract";
+import type { DevicePairing, DeviceReport } from "@intentic/sandbox-contract/schemas/devices";
 import { createLogger } from "../../logger.js";
 import { attachedProjectEntries, attachedProjects, registerProject } from "../../system/projects-registry.js";
 import { repoGitDir } from "../../workspace/layout/git-layout.js";

@@ -2,8 +2,9 @@ import "@intentic/testing/dom";
 import { t } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { type EffectScope, effectScope, nextTick, ref } from "vue";
-import { NO_ATTENTION, reviewAction } from "../../../fleet/agentStatus";
-import type { FleetAgent } from "../../../fleet/useAgents-fleet";
+import { reviewAction } from "../../../../../models/agent-status/agentStatus-attention";
+import { NO_ATTENTION } from "../../../../../models/agent-status/agentStatus-lanes";
+import type { FleetAgent } from "../../../../../models/fleet/useAgents-fleet";
 import { type MenuActions, type MenuFacts, menuItemsFor, useCardMenu } from "../cardMenu";
 
 // Pins what the one card menu offers for each card: opening and its page, the look's keep, the session name, the crossing

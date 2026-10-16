@@ -3,7 +3,9 @@ import { unstubbed } from "@intentic/testing";
 import type { Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { getEventListeners } from "node:events";
 import { homedir } from "node:os";
-import { type AgentEvent, type AgentReply, type PermissionMode, PermissionModeSchema } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { type PermissionMode, PermissionModeSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { stubEnv, unstubAllEnvs, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -16,7 +18,7 @@ import { EDIT_TOOLS } from "../../rules/edit-tools.js";
 import { LANDING_CHECKS_NOTE } from "../prompt/checks-note.js";
 import { composeWirePrompt } from "../prompt/turn-preamble.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { ONE_SHOT_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 
 // Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
@@ -92,7 +94,7 @@ const withoutTheGraceWait = async <T>(work: () => Promise<T>): Promise<T> => {
             if (settled) {
                 return await pending;
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- the loop IS the clock: one window per pass
+            // the loop IS the clock: one window per pass
             await advanceTimersByTimeAsync(1_000);
         }
     } finally {
@@ -1961,7 +1963,7 @@ const statusOf = async (conversationId: string, id: string): Promise<string | un
     const status = join(dir, "status");
     const deadline = Date.now() + 1_000;
     while (!existsSync(status) && Date.now() < deadline) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- the stop is not awaited by the fold, so this waits it out
+        // the stop is not awaited by the fold, so this waits it out
         await new Promise((resolve) => setTimeout(resolve, 20));
     }
     return existsSync(status) ? readFileSync(status, "utf8").trim() : undefined;

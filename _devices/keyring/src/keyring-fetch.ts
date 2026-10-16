@@ -1,4 +1,4 @@
-import { type KeyringSandboxKeys, KeyringSandboxKeysSchema } from "@intentic/sandbox-contract";
+import { type KeyringSandboxKeys, KeyringSandboxKeysSchema } from "@intentic/sandbox-contract/schemas/keyring";
 
 // A sandbox's keyring keys, fetched from its own address over TLS (GET /keyring/keys): the one source the keyring
 // trusts for them, so a relay that swapped them in a share request would be talking past it. The address a device

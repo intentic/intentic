@@ -1,4 +1,4 @@
-import type { DeviceSandbox } from "@intentic/sandbox-contract";
+import type { DeviceSandbox } from "@intentic/sandbox-contract/schemas/devices";
 import { autoBackupArgs, autoTidyArgs, backupNews, backupTargets, newBackupState, runBackupRound, runTidy, tidyNews } from "./auto-backup.js";
 
 /* The daily round's DECISIONS, without timers or an ic: which sandboxes it copies, and what each answer is logged as. */

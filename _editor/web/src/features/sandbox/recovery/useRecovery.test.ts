@@ -1,5 +1,5 @@
 import type { AdoptionTicket, SandboxLookup, SandboxSummary } from "@intentic/api-contract";
-import type { RelinkAnswer, RelinkRequest } from "@intentic/sandbox-contract";
+import type { RelinkAnswer, RelinkRequest } from "@intentic/sandbox-contract/schemas/platform-link";
 import { ORPCError } from "@orpc/client";
 import { unstubbed } from "@intentic/testing";
 import type { RememberedSandbox } from "../../../client/directory/deviceDirectory";

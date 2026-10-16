@@ -1,4 +1,4 @@
-import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
+import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspace-state";
 import { DEFINITION_SOURCES, DEFINITION_WORKSPACE } from "./definition.js";
 
 // Every versioned config manifest must appear in DEFINITION_SOURCES or DEFINITION_WORKSPACE; otherwise a new config

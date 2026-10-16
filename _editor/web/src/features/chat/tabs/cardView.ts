@@ -1,27 +1,20 @@
 import type { IconName } from "@intentic/ui";
-import { type MatchSnippet, providerLabel } from "@intentic/sandbox-contract";
+import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agents";
+import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { sessionCategory } from "../../../app/sessionCategory";
-import {
-    activityIcon,
-    activityLine,
-    agentStatusMeta,
-    cornerInk,
-    endingByHand,
-    type StandingChip,
-    standingChip,
-    type TileRim,
-    tileRim,
-    turnInFlight,
-} from "../../agents/fleet/agentStatus";
-import { cardProof, type ProofMark } from "../../agents/board/cards/seal/proofSeal";
-import { type ReachLine, reachLine } from "../../agents/board/cards/reachLine";
-import { type CacheCooling, cacheCooling, type WarmMark, warmMark } from "../../agents/fleet/prompt-cache/promptCache";
-import { snapshotFingerprint } from "../../agents/fleet/useAgents-registry";
-import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
-import { sandboxNow } from "../../agents/fleet/sandboxClock";
-import { modelLabelFor } from "../accounts/providerCatalog";
+import { type StandingChip, standingChip } from "../../../models/agent-status/agentStatus-chips";
+import { type TileRim, tileRim } from "../../../models/agent-status/agentStatus-lanes";
+import { activityIcon, activityLine, agentStatusMeta, cornerInk } from "../../../models/agent-status/agentStatus-meta";
+import { endingByHand, turnInFlight } from "../../../models/agent-status/agentStatus-standing";
+import { cardProof, type ProofMark } from "../../../models/fleet/board/proofSeal";
+import { type ReachLine, reachLine } from "../../../models/fleet/board/reachLine";
+import { type CacheCooling, cacheCooling, type WarmMark, warmMark } from "../../../models/fleet/promptCache";
+import { snapshotFingerprint } from "../../../models/fleet/useAgents-registry";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
+import { sandboxNow } from "../../../models/agent-status/sandboxClock";
+import { modelLabelFor } from "../../../models/providers/providerCatalog";
 import { statusIcon, statusLabel } from "../models/catalog";
-import type { Conversation } from "../session/conversation";
+import type { Conversation } from "../../../models/conversations/session/conversation";
 import { isArchived, originOf, tabLabel } from "./tabs";
 import { t } from "@intentic/ui/i18n";
 

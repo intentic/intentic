@@ -5,10 +5,11 @@ import { basename, join } from "node:path";
 import { SingleFlight } from "@intentic/base/async";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { parseSidecarFront, sidecarBody, sidecarPathFor } from "@intentic/fileq/sidecar";
-import type { DerivedSide } from "@intentic/sandbox-contract";
+import type { DerivedSide } from "@intentic/sandbox-contract/schemas/diff";
 import { readWorkspaceFileWindow } from "../workspace/files/workspace-files.js";
 import { stateRelPath } from "../state-paths.js";
 import { defaultExec, DERIVE_TIMEOUT_MS, FILEQ_MAX_BUFFER, isMissingBinary, runFailure, stdoutOf, withFileqSlot, type ExecFn } from "./fileq.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Text of bytes that are not a workspace file: a blob at a rev-spec, the before side of a document's diff. fileq keys
 // shadows by path and keeps only the current version's, so a past version is rendered here from a temporary copy and
@@ -77,12 +78,8 @@ const parseAnswer = (stdout: string): ReadAnswer | undefined => {
     if (line === undefined) {
         return undefined;
     }
-    try {
-        const answer: unknown = JSON.parse(line);
-        return typeof answer === "object" && answer !== null && typeof (answer as ReadAnswer).path === "string" ? (answer as ReadAnswer) : undefined;
-    } catch {
-        return undefined;
-    }
+    const answer: unknown = parseJsonOr(line, undefined);
+    return typeof answer === "object" && answer !== null && typeof (answer as ReadAnswer).path === "string" ? (answer as ReadAnswer) : undefined;
 };
 
 // fileq's own reason for a refusal, from the one line it prints before exiting 1.

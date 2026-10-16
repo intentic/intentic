@@ -7,7 +7,7 @@ import {
     type PrivacyProvider,
     type PrivacyShieldMode,
     type PrivacyShieldPolicy,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/privacy";
 import {
     Button,
     formatDate,
@@ -29,7 +29,7 @@ import { ledgerTime, withClass } from "./privacyShield";
 import PrivacyNameDictionary from "./PrivacyNameDictionary.vue";
 import PrivacyNeverMasked from "./PrivacyNeverMasked.vue";
 import PrivacyTrustedProviders from "./PrivacyTrustedProviders.vue";
-import { shieldRefusal, usePrivacyShield, usePrivacySources } from "./usePrivacyShield";
+import { shieldRefusal, usePrivacyShield, usePrivacySources } from "../../../models/sandbox/usePrivacyShield";
 
 // The privacy shield: whether personal data is kept from model providers the owner does not trust, and what the
 // gateway in front of them looks for. Off by default, so off draws the switch alone; the rest appears once the shield

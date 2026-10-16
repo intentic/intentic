@@ -1,7 +1,7 @@
 import "@intentic/testing/dom";
 import { desktopSyncLink } from "../../../app/environments/desktop";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
-import type { SyncPairing } from "../../sandbox/devices/sync/useDesktopSync";
+import type { SyncPairing } from "../../../models/sandbox/devices/useDesktopSync";
 import { type ProjectHandoffHost, useProjectHandoff } from "../hostedProject";
 import { setupProjectOf } from "../setupArrival";
 

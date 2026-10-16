@@ -1,4 +1,5 @@
-import { type NativeProvider, nativeProvidersIn } from "@intentic/sandbox-contract";
+import { parseJsonWith } from "@intentic/base/json";
+import { type NativeProvider, nativeProvidersIn } from "@intentic/sandbox-contract/models/provider-specs";
 import type { LocationQuery, LocationQueryValue, RouteLocationRaw } from "vue-router";
 import { z } from "zod";
 import { modelsPath } from "./routes/modelsPath";
@@ -55,13 +56,9 @@ export const takeFound = (now: number = Date.now()): NativeProvider[] => {
     if (raw === null) {
         return [];
     }
-    try {
-        const kept = KeptSchema.safeParse(JSON.parse(raw)).data;
-        return kept !== undefined && now - kept.at <= FOUND_STALE_MS ? nativeProvidersIn(kept.found) : [];
-    } catch {
-        // allow(silent-catch): a kept value that no longer reads names nothing.
-        return [];
-    }
+    // A kept value that no longer reads names nothing.
+    const kept = parseJsonWith(raw, KeptSchema);
+    return kept !== undefined && now - kept.at <= FOUND_STALE_MS ? nativeProvidersIn(kept.found) : [];
 };
 
 /* THE OFFER, for Connect wherever it is reached from. A folder's own sandbox, made from its desktop window, opens the
@@ -100,13 +97,9 @@ export const rememberedOffer = (now: number = Date.now()): NativeProvider[] => {
     if (raw === null) {
         return [];
     }
-    try {
-        const kept = KeptSchema.safeParse(JSON.parse(raw)).data;
-        return kept !== undefined && now - kept.at <= OFFER_STALE_MS ? nativeProvidersIn(kept.found) : [];
-    } catch {
-        // allow(silent-catch): a remembered value that no longer reads offers nothing.
-        return [];
-    }
+    // A remembered value that no longer reads offers nothing.
+    const kept = parseJsonWith(raw, KeptSchema);
+    return kept !== undefined && now - kept.at <= OFFER_STALE_MS ? nativeProvidersIn(kept.found) : [];
 };
 
 /** What Sandbox ▸ Models offers as found on this computer: what its address names, else the remembered offer. */

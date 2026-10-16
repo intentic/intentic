@@ -6,8 +6,8 @@ import type {
     PasskeySummary,
     RegistrationOptionsJSON,
     RegistrationResponse,
-} from "@intentic/sandbox-contract";
-import { utcDayOf } from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/system";
+import { utcDayOf } from "@intentic/sandbox-contract/time/zone";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";

@@ -1,6 +1,7 @@
 import http from "node:http";
 import type { Readable } from "node:stream";
 import { errnoCode, errorMessage } from "@intentic/base/errors";
+import { parseJsonOr } from "@intentic/base/json";
 import type { BrowserRoutes } from "./browser-routes.js";
 import { relayUpgrade } from "./upgrade-relay.js";
 import { endedPage } from "./host-page.js";
@@ -105,10 +106,8 @@ const callbackClaims = (req: http.IncomingMessage, rawBody: string, secret: stri
         const wrapped = fromHeader["payload"];
         return typeof wrapped === "object" && wrapped !== null ? (wrapped as Record<string, unknown>) : fromHeader;
     }
-    let body: unknown;
-    try {
-        body = JSON.parse(rawBody);
-    } catch {
+    const body = parseJsonOr(rawBody, undefined);
+    if (body === undefined) {
         return undefined;
     }
     const token = typeof body === "object" && body !== null ? (body as { token?: unknown }).token : undefined;

@@ -1,4 +1,6 @@
-import { type AgentSummary, type AgentTurn, ciFixConversationId, fixAttemptId } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import { ciFixConversationId, fixAttemptId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { type FixAttemptDeps, startFixAttempt } from "./fix-attempts.js";
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };

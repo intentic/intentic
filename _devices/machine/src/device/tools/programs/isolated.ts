@@ -112,7 +112,7 @@ export const windowsSandboxRunning = async (): Promise<boolean> => {
 // Closes it: the VM is discarded with everything in it.
 export const stopWindowsSandbox = async (): Promise<void> => {
     for (const name of SANDBOX_CLIENTS) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- three names, one after another so the client goes first
+        // three names, one after another so the client goes first
         // allow(silent-catch): taskkill fails for a client that is not running, which is the state this wants.
         await execBounded("taskkill", ["/IM", name, "/T", "/F"], { timeoutMs: 30_000 }).catch(() => undefined);
     }

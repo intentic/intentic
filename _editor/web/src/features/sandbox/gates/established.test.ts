@@ -4,10 +4,10 @@ import { computed, shallowRef } from "vue";
 const tree = shallowRef<object | undefined>(undefined);
 const roster = shallowRef<object[]>([]);
 
-jest.mock("../../workspace/explorer/useWorkspaceTree", () => ({
+jest.mock("../../../models/workspace/tree/useWorkspaceTree", () => ({
     useWorkspaceTree: () => ({ hasSnapshot: computed(() => tree.value !== undefined) }),
 }));
-jest.mock("../../agents/fleet/useAgents-registry", () => ({ registry: roster }));
+jest.mock("../../../models/fleet/useAgents-registry", () => ({ registry: roster }));
 
 const { useSandboxEstablished } = await import("./established");
 

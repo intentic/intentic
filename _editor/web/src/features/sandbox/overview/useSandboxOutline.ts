@@ -1,5 +1,5 @@
 import { computed, type Ref } from "vue";
-import { activeSandboxId } from "../../../lib/activeSandbox";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
 import { useLoadingReveal } from "@intentic/ui";
 
 // Whether a sandbox view should show its outline, so no tab has to know the thresholds itself: useLoadingReveal

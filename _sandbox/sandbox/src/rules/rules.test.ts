@@ -1,4 +1,4 @@
-import type { Rule } from "@intentic/sandbox-contract";
+import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import { conditionHolds, landingVerdict, matching, reposOf } from "./rules.js";
 
 const rule = (over: Partial<Rule> & Pick<Rule, "id" | "moment" | "action">): Rule => ({

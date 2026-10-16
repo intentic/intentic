@@ -1,5 +1,7 @@
 import type { ResourceType } from "@intentic/resources";
-import { GrantedRoleSchema, MemberRoleSchema, PushNotificationSchema, WalletNetworkSchema } from "@intentic/sandbox-contract";
+import { GrantedRoleSchema, MemberRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
+import { PushNotificationSchema } from "@intentic/sandbox-contract/schemas/push";
+import { WalletNetworkSchema } from "@intentic/sandbox-contract/schemas/capabilities";
 import { z } from "zod";
 import { BootReportSchema, HostReportSchema, SetupReportSchema } from "./ingress/ingress-schemas.js";
 

@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import type { BrowserPage, BrowserSession } from "@intentic/sandbox-contract";
+import type { BrowserPage, BrowserSession } from "@intentic/sandbox-contract/schemas/terminal";
 import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import type { Browser, BrowserContext, Dialog, Page } from "playwright";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
@@ -388,7 +388,7 @@ export const browserSessionNewTab = async (name: string): Promise<{ readonly pag
     // The `page` event normally lands before newPage resolves; a few ticks cover a connection that orders them the
     // other way, after which the tab is answered without an id rather than waited on.
     for (let tick = 0; tick < TAB_ID_TICKS && idOf() === undefined; tick += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- waiting on one event, a handful of ticks at most
+        // waiting on one event, a handful of ticks at most
         await sleep(TAB_ID_TICK_MS);
     }
     return { page, id: idOf() };

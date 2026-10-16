@@ -3,8 +3,8 @@ import { Button, ui, Modal, Notice } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { useT } from "@intentic/ui/i18n";
 import { useOperation } from "../../../workbench/operations/operations";
-import { startAgent } from "../../agents/fleet/agentActions";
-import { extensionBrief } from "./extensionBrief";
+import { startAgent } from "../../../models/fleet/agentActions";
+import { extensionBrief } from "../../../models/sandbox/extensionBrief";
 import { SECTION } from "./extensionWork";
 
 // Creates a running extension, not a project: the dialog only asks for a name, and further decisions are made by

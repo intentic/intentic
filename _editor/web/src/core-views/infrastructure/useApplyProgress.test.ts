@@ -23,8 +23,8 @@ jest.mock("../../client/sandbox/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({ intentic: { apply: (async () => ({})) as never, applyEvents: applyEvents as never } }),
 }));
 jest.mock("@tanstack/vue-query", () => ({ useQueryClient: () => ({ invalidateQueries: async () => undefined }) }));
-jest.mock("../../features/terminal/terminalsQuery", () => ({ useTerminalsQuery: () => ({ sessions }), listTerminals: async () => sessions.value }));
-jest.mock("../../features/terminal/useTerminalPanel", () => ({ useTerminalPanel: () => ({ openFocused: () => undefined }) }));
+jest.mock("../../models/terminal/terminalsQuery", () => ({ useTerminalsQuery: () => ({ sessions }), listTerminals: async () => sessions.value }));
+jest.mock("../../models/terminal/useTerminalPanel", () => ({ useTerminalPanel: () => ({ openFocused: () => undefined }) }));
 
 const { useApplyProgress } = await import("./useApplyProgress");
 

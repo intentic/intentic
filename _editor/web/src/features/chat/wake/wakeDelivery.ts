@@ -1,8 +1,8 @@
 import { type Ref, ref, shallowRef } from "vue";
 import { track } from "../../../app/analytics";
-import type { WakeRequest } from "./phraseGate";
+import type { WakeRequest } from "../../../models/voice/phraseGate";
 import { alternativeOf, routeWake, type WakeRoute, type WakeSituation, type WakeTarget } from "./wakeRoute";
-import { askedForNew } from "./wakeWord";
+import { askedForNew } from "../../../models/voice/wakeWord";
 
 // Where a request said to the agent by name goes, and the moment before it goes. The rule is wakeRoute.ts's; this is the
 // doing: the words wait GLANCE_MS on a card that says where they are bound, which the reader may send at once, send to

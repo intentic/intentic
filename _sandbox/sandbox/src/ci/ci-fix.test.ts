@@ -1,4 +1,5 @@
-import { NATIVE_PROVIDERS, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
 import { AttemptRefused } from "../conversations/fix/fix-attempts.js";

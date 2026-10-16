@@ -1,5 +1,5 @@
 import type { SDKAssistantMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { TurnAllowance } from "../providers/harness-credentials.js";
 import type { TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import {
@@ -9,7 +9,7 @@ import {
     isUnsentParameterRefusalText,
     mentionsSpentAllowance,
     versionFloorOf,
-} from "../providers/failure-sentences.js";
+} from "../../engines/failure-sentences.js";
 import { opt } from "../../opt.js";
 import type { RefusalPoint } from "./refusal-fork.js";
 

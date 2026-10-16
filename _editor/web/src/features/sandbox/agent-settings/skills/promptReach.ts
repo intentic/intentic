@@ -1,4 +1,4 @@
-import { capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract";
+import { capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
 import { t } from "@intentic/ui/i18n";
 
 // Groups providers by what they do with the system prompt (replace, append, or nothing at all), read from the daemon's own

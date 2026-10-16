@@ -1,18 +1,18 @@
+import { type AgentProvider, AgentProviderSchema, DEFAULT_PROVIDER } from "@intentic/sandbox-contract/schemas/agent";
 import {
-    type AgentProvider,
-    AgentProviderSchema,
     type RunnerCredential,
     RunnerCredentialRefreshRequestSchema,
     RunnerCredentialRequestSchema,
     runnerTranslatorPath,
-    DEFAULT_PROVIDER,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { Context } from "hono";
 import { replaceRejectedToken } from "../runtimes/claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import type { HarnessCredentialsResult } from "../agent/providers/harness-credentials.js";
 import { REQUEST_REFRAMED, RESPONSE_REFRAMED, forwardHeaders } from "../http/forward-headers.js";
 import { bearerPeer } from "../peers/peer-store.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
+import { resolveHarnessCredentials } from "../agent/providers/harness-credentials.js";
 
 // A runner's turns spend this sandbox's model providers through three bearer-authenticated routes:
 // POST /system/runners/credentials: resolves one turn's credential, stripped to what may travel.
@@ -59,7 +59,7 @@ export type CredentialResolver = (input: {
     readonly model?: string;
 }) => Promise<HarnessCredentialsResult>;
 
-export const createRunnerCredentialsRoute =
+const createRunnerCredentialsRoute =
     (services: Pick<Services, "runners" | "logger" | "config">, resolve: CredentialResolver) =>
     async (c: Context): Promise<Response> => {
         const runner = await bearerPeer(services.runners, c);
@@ -84,7 +84,7 @@ export const createRunnerCredentialsRoute =
         return c.json(toRunnerCredential(resolved, services.config.translator.url, services.config.claudeCodeOauthToken));
     };
 
-export const createRunnerCredentialRefreshRoute =
+const createRunnerCredentialRefreshRoute =
     (services: Pick<Services, "runners" | "logger" | "claudeStore">) =>
     async (c: Context): Promise<Response> => {
         const runner = await bearerPeer(services.runners, c);
@@ -131,3 +131,10 @@ export const createRunnerTranslatorProxyRoute =
         // neither its encoding nor its framing goes on to the runner.
         return new Response(upstream.body, { status: upstream.status, headers: forwardHeaders(upstream.headers, RESPONSE_REFRAMED) });
     };
+
+// The credential doors: per-turn access tokens, mid-turn re-mints, translator behind the runner's own bearer.
+export const runnerCredentialRawRoutes = defineRawRoutes((services: Services) => ({
+    "POST /system/runners/credentials": createRunnerCredentialsRoute(services, (input) => resolveHarnessCredentials(services, input)),
+    "POST /system/runners/credentials/refresh": createRunnerCredentialRefreshRoute(services),
+    "ALL /system/runners/translator/*": createRunnerTranslatorProxyRoute(services),
+}));

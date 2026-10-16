@@ -11,9 +11,10 @@ import {
     type RepoChecksSummary,
     type Rule,
     type RuleFirings,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/settings";
 import type { Services } from "../composition.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
+import { parseJsonWith } from "@intentic/base/json";
 
 /* WHAT A REPOSITORY ASKS TO HAVE RUN ON ITS OWN CODE, read from the repository rather than from this sandbox's settings. */
 
@@ -263,12 +264,8 @@ const gitText = async (dir: string, args: readonly string[]): Promise<string | u
 
 // One version's checks; one that does not parse (a commit caught mid-edit) offers none.
 const checksIn = (text: string): RepoCheck[] | undefined => {
-    try {
-        return RepoChecksFileSchema.parse(JSON.parse(text)).checks;
-    } catch {
-        // allow(silent-catch): a version that does not parse agreed to nothing; the versions around it still count
-        return undefined;
-    }
+    // A version that does not parse agreed to nothing; the versions around it still count.
+    return parseJsonWith(text, RepoChecksFileSchema)?.checks;
 };
 
 /** A repository's declaration as each commit that changed it left it, newest first. A version that no longer parses

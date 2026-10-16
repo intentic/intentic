@@ -1,4 +1,4 @@
-import type { AssistantSource } from "@intentic/sandbox-contract";
+import type { AssistantSource } from "@intentic/sandbox-contract/state/arrival";
 import { t } from "@intentic/ui/i18n";
 
 // Per-tool instructions for migrating setup to another device, as data (testable, keeps the card about layout).

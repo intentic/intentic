@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { REPO_CHECKS_FILE } from "@intentic/sandbox-contract";
+import { REPO_CHECKS_FILE } from "@intentic/sandbox-contract/schemas/settings";
 import { agreedChecks, declarationHistory, declarationOf, earlierDeclarations, fingerprintOf } from "./repo-checks.js";
 
 // A real repository: what an owner agreed to is read back off the commits that changed the declaration, so a check

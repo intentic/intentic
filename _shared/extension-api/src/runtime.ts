@@ -5,6 +5,7 @@ import { createBackoff, sleep, within } from "@intentic/base/async";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { FetchJsonError, fetchJson } from "@intentic/base/fetch-json";
 import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
+import { parseJsonWith } from "@intentic/base/json";
 import { sandboxRouteAllowed } from "@intentic/extension-manifest/permissions";
 import type * as SandboxContract from "@intentic/sandbox-contract";
 import { readDocument } from "@intentic/sandbox-contract/documents";
@@ -202,18 +203,11 @@ const splitLines = (buffer: string) => {
 // The values a frame carries for its listeners, or undefined for a line this version cannot read (not JSON, or a kind a
 // newer daemon sends), which is skipped rather than fatal.
 const frameOf = (line: string): { readonly kind: ExtensionEventKind; readonly values: readonly string[] } | undefined => {
-    let raw: unknown;
-    try {
-        raw = JSON.parse(line);
-    } catch {
-        // allow(silent-catch): a line that is not JSON is a frame this version cannot read, skipped like an unknown kind
+    // A line that is not JSON is a frame this version cannot read, skipped like an unknown kind.
+    const event = parseJsonWith(line, ExtensionEventSchema);
+    if (event === undefined) {
         return undefined;
     }
-    const parsed = ExtensionEventSchema.safeParse(raw);
-    if (!parsed.success) {
-        return undefined;
-    }
-    const event = parsed.data;
     switch (event.kind) {
         case "heartbeat":
             return undefined;

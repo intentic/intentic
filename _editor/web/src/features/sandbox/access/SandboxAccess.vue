@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { InviteDelivery, InviteRecord } from "@intentic/api-contract";
-import type { MemberGrant } from "@intentic/sandbox-contract";
+import type { MemberGrant } from "@intentic/sandbox-contract/schemas/members";
 import {
     Avatar,
     Button,

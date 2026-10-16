@@ -1,4 +1,4 @@
-// oxlint-disable unicorn/consistent-function-scoping -- the rule is exactly wrong for this file: every helper
+// the rule is exactly wrong for this file: every helper
 // Each helper is nested inside the function that uses it, since executeScript serializes and re-parses that
 // function inside the page, where nothing else in this module exists.
 import type { PageElement } from "@intentic/browser/page";

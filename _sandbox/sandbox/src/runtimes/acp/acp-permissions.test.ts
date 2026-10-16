@@ -1,11 +1,11 @@
 import type { RequestPermissionRequest } from "@agentclientprotocol/sdk";
-import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
+import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
 import { unstubbed } from "@intentic/testing";
 import { type CommandGuard, type CommandWhere, createCommandGuard } from "../../guard/command-guard.js";
 import { createTurnTaint, NO_TAINT } from "../../guard/turn-taint.js";
 import { decidePermission } from "./acp-permissions.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);

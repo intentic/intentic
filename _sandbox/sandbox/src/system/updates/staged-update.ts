@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import { type PreparingUpdate, PreparingUpdateSchema, type StagedUpdate, StagedUpdateSchema, type UpdateOutcome, UpdateOutcomeSchema } from "@intentic/sandbox-contract";
+import { type PreparingUpdate, PreparingUpdateSchema, type StagedUpdate, StagedUpdateSchema } from "@intentic/sandbox-contract/schemas/system";
+import { type UpdateOutcome, UpdateOutcomeSchema } from "@intentic/sandbox-contract/schemas/updates";
 import type { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { readJsonMarker } from "../../store/plain-files/json-marker.js";

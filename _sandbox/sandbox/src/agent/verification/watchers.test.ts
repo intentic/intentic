@@ -1,9 +1,10 @@
-import type { AgentTurn } from "@intentic/sandbox-contract";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import { pino } from "pino";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
-import { type FakeTurns, fakeTurns, memoryFleet } from "../../testing.js";
-import { memoryWatchJournal, type WatchJournal } from "./watch-journal.js";
+import { type FakeTurns, fakeTurns } from "../../seams/turn-starter.testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
+import { memoryWatchJournal, type WatchJournal } from "../../store/journals/watch-journal.js";
 import {
     armWatcher,
     armedWatcherCount,

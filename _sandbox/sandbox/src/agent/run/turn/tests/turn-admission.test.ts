@@ -1,4 +1,7 @@
-import { ATTACHMENT_LIMIT, AgentTurnSchema, type AgentDomainPolicy, type AgentEvent, type TranscriptRow } from "@intentic/sandbox-contract";
+import { ATTACHMENT_LIMIT, AgentTurnSchema } from "@intentic/sandbox-contract/schemas/agent";
+import type { AgentDomainPolicy } from "@intentic/sandbox-contract/schemas/settings";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { unstubbed } from "@intentic/testing";
 import { waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../../../composition.js";
@@ -7,7 +10,8 @@ import { type LiveRun, turnRunOf } from "../../../../conversations/actor/convers
 import type { QueuedItem } from "../../../../conversations/actor/conversation-queue.js";
 import { createDomainEvents } from "../../../../seams/domain-events.js";
 import { transcriptPageOf } from "../../../../sessions/agent-transcript.js";
-import { beginTurn, notedFleet } from "../../../../testing.js";
+import { beginTurn } from "../../../../conversations/actor/conversation-actors.testing.js";
+import { notedFleet } from "../../../../conversations/registry/agents-registry.testing.js";
 import { AGENT_DOMAIN_NOT_READY } from "../../../../workload/domain/agent-domain-rollout.js";
 import { createAgentExecutionService } from "../../../../workload/agent-execution.js";
 import { streamAgent } from "../../stream-agent.js";

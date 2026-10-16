@@ -2,11 +2,11 @@
 import { Button, Icon, Notice, toneTint } from "@intentic/ui";
 import { computed, watch } from "vue";
 import { RouterLink } from "vue-router";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { usePaneView } from "./useChat-view";
+import { useAgents } from "../../../models/fleet/useAgents";
+import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { lowHoursNotice } from "../../settings/hosted-plan/hostedHours";
-import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
+import { lowHoursNotice } from "../../../models/hosted-plan/hostedHours";
+import { useHostedPlan } from "../../../models/hosted-plan/useHostedPlan";
 import ChatAccountPanel from "../accounts/ChatAccountPanel.vue";
 import ChatPrivacyStrip from "./privacy/ChatPrivacyStrip.vue";
 import ChatTrialStrip from "./ChatTrialStrip.vue";

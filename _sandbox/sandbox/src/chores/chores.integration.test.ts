@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { probeSpec } from "@intentic/sandbox-contract/chores";
-import type { ChoreLedgerEntry, ProbeResult } from "@intentic/sandbox-contract";
+import type { ChoreLedgerEntry, ProbeResult } from "@intentic/sandbox-contract/schemas/maintenance";
 import { createLogger } from "../logger.js";
 import { choreShape, packageSignals } from "./chore-signals.js";
 import { fileChoresStore, isStale } from "./chores-store.js";

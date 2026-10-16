@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
-import type { phoneContract } from "@intentic/sandbox-contract";
+import type { phoneContract } from "@intentic/sandbox-contract/contracts/phone.contract";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { type LinkSocket, PhoneCallError, PhoneJsonRpcLink } from "./json-rpc-link.js";

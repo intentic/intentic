@@ -1,6 +1,6 @@
 import { ref } from "vue";
-import { NO_ATTENTION } from "../../../fleet/agentStatus";
-import type { FleetAgent } from "../../../fleet/useAgents-fleet";
+import { NO_ATTENTION } from "../../../../../models/agent-status/agentStatus-lanes";
+import type { FleetAgent } from "../../../../../models/fleet/useAgents-fleet";
 import { useFamilyArchive } from "../familyArchive";
 
 // One tap archived an agent and its seven children with nothing said; a family now asks first, with the count.

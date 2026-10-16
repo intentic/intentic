@@ -1,4 +1,4 @@
-import type { Area } from "@intentic/sandbox-contract";
+import type { Area } from "@intentic/sandbox-contract/schemas/areas";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed, type MaybeRefOrGetter } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";

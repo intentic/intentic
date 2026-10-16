@@ -1,6 +1,7 @@
-import type { FleetConfig } from "@intentic/sandbox-contract";
+import type { FleetConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { answerError, type FleetWho } from "../../sandboxes/fleet-client.js";
 import type { CapabilityHandler } from "../capability.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 /* THE OWNER'S ACCOUNT, connected to one sandbox so that box can bring up others. The wallet's sibling one level up. */
 
@@ -9,12 +10,8 @@ import type { CapabilityHandler } from "../capability.js";
 // `status` that re-verifies, and nothing that hands the value onward.
 
 const whoOf = (body: string): FleetWho | undefined => {
-    try {
-        const parsed = JSON.parse(body) as { email?: unknown; label?: unknown };
-        return typeof parsed.email === "string" ? { email: parsed.email, label: typeof parsed.label === "string" ? parsed.label : "" } : undefined;
-    } catch {
-        return undefined;
-    }
+    const parsed = parseJsonOr(body, undefined) as { email?: unknown; label?: unknown } | null | undefined;
+    return typeof parsed?.email === "string" ? { email: parsed.email, label: typeof parsed.label === "string" ? parsed.label : "" } : undefined;
 };
 
 export const fleetHandler: CapabilityHandler = {

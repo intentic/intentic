@@ -1,4 +1,6 @@
-import { type AgentSummary, RETRY_LADDER_TRIES, type TurnEnding } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { RETRY_LADDER_TRIES } from "@intentic/sandbox-contract/schemas/turn-break";
+import type { TurnEnding } from "@intentic/sandbox-contract/events/transcript";
 import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
 import type { Services } from "../../composition.js";
 

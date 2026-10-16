@@ -1,4 +1,6 @@
-import { compareUnrankedModelIds, MINTED_PROVIDERS, type Model } from "@intentic/sandbox-contract";
+import { compareUnrankedModelIds } from "@intentic/sandbox-contract/models/model-order";
+import { MINTED_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
+import type { Model } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { seedModelsOf } from "../../../runtimes/minted/minted-provider.js";
 import { recordingLogger } from "../../../harness/route-fakes.testing.js";
 import { createCatalogChangeLog, servedModels } from "../provider-registry.js";

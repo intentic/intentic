@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { useAgents } from "../../../agents/fleet/useAgents";
-import { usePaneView } from "../../panel/useChat-view";
+import { useAgents } from "../../../../models/fleet/useAgents";
+import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import { useOperation } from "../../../../workbench/operations/operations";
-import type { ChatMessage } from "../transcript";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 
 /* Disarms the one watch this row names, leaving the conversation's others armed; a fired watch's row keeps no button. */
 

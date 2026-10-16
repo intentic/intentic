@@ -1,5 +1,8 @@
 import { STATE_DIR } from "@intentic/constants";
-import { type AgentSummary, ciFixConversationId, nextDayStartIn, type SubagentSession, UTC } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { ciFixConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { nextDayStartIn, UTC } from "@intentic/sandbox-contract/time/zone";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 
 // One afternoon across two repos, with a card in every lane `laneOf` distinguishes: attention (awaiting a parked

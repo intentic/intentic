@@ -2,7 +2,7 @@
 // decisions across the states a refused land can be in.
 import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
-import type { LandConflict } from "@intentic/sandbox-contract";
+import type { LandConflict } from "@intentic/sandbox-contract/schemas/agents";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 

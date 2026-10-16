@@ -3,6 +3,7 @@ import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
 import { CONTROL_SCOPES, type ControlScope } from "./control-tokens.js";
 import { ownerDenied, unavailableIfUnreadable } from "../owner-gates.js";
+import { defineRawRoutes } from "../../http/raw-route-server.js";
 
 // Control tokens, minted by the owner or a maintainer, durable and revocable; raw value returned exactly once. Plain
 // routes before the oRPC catch-all. A token file this build cannot read refuses a mint or a revoke (control-tokens.ts),
@@ -34,7 +35,7 @@ const parseMint = (body: unknown, now: number): MintRequest => {
     return { label: labelOf(fields.label, scope), scope, ...(futureInstant(fields.expiresAt, now) ? { expiresAt: fields.expiresAt } : {}) };
 };
 
-export const createControlTokenRoutes = (services: ControlTokenRoutesDeps) => ({
+const createControlTokenRoutes = (services: ControlTokenRoutesDeps) => ({
     /** POST /system/control/tokens */
     mint: async (c: Context<AppEnv>): Promise<Response> => {
         const denied = await ownerDenied(services, c);
@@ -80,4 +81,14 @@ export const createControlTokenRoutes = (services: ControlTokenRoutesDeps) => ({
             return c.json({ ok: true });
         });
     },
+});
+
+// Control tokens: owner-minted, durable, revocable machine credentials.
+export const controlTokenRawRoutes = defineRawRoutes((services: ControlTokenRoutesDeps) => {
+    const controlTokens = createControlTokenRoutes(services);
+    return {
+        "POST /system/control/tokens": controlTokens.mint,
+        "GET /system/control/tokens": controlTokens.list,
+        "DELETE /system/control/tokens/{id}": controlTokens.revoke,
+    };
 });

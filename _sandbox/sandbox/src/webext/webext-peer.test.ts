@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { unstubbed } from "@intentic/testing";
 import type { RpcMessage } from "../agent/tools/turn-mounts.js";
 import type { Services } from "../composition.js";

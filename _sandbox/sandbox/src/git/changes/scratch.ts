@@ -1,7 +1,7 @@
 import { lstat, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
-import type { ScratchPath, ScratchReason } from "@intentic/sandbox-contract";
+import type { ScratchPath, ScratchReason } from "@intentic/sandbox-contract/schemas/git/git";
 import { STATE_DIR } from "@intentic/constants";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { currentRepos } from "../../workspace/watch/repo-watch.js";

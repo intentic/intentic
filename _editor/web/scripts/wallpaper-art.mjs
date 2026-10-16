@@ -3,12 +3,7 @@
 // `<name>-<dark|light>.png` per scheme; 10-bit so the soft skies don't band under the scrims drawn over them.
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createRequire } from "node:module";
-import { repoRoot } from "@intentic/constants/node";
-
-// sharp is a dependency of @intentic/site, not @intentic/web.
-const require = createRequire(join(repoRoot(import.meta.url), `_site/site/package.json`));
-const sharp = require(`sharp`);
+import sharp from "sharp";
 
 const here = import.meta.dirname;
 const MASTERS = join(here, `../src/assets/wallpaper`);

@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pino } from "pino";
 import { waitFor } from "@intentic/testing/bun";
-import { type FakeTurns, fakeTurns, memoryFleet } from "../../testing.js";
-import { memoryWatchJournal } from "./watch-journal.js";
+import { type FakeTurns, fakeTurns } from "../../seams/turn-starter.testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
+import { memoryWatchJournal } from "../../store/journals/watch-journal.js";
 import { armWatcher, armedWatcherCount, type CheckResult, startWatcherRuntime, type WatcherSpec } from "./watchers.js";
 
 // Real timers and a real directory: the signal is a filesystem event, and the floor is set far enough out that only the

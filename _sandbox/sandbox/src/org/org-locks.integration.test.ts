@@ -1,12 +1,13 @@
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { MemberRole, OrgPolicy } from "@intentic/sandbox-contract";
+import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { OrgPolicy } from "@intentic/sandbox-contract/schemas/organisation";
 import { createApp } from "../app.js";
 import { createLogger } from "../logger.js";
 import { clientFor, errorCode, proven, rejectForbidden } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 import { createOrgPolicyHolder, ORG_POLICY_FILE, type OrgPolicyFetch } from "./org-policy.js";
 
 /* AN ORGANISATION'S LOCK, held to over the daemon's own HTTP surface the way the editor and the agent reach it: a

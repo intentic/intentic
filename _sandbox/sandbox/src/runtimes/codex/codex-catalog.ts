@@ -1,5 +1,7 @@
 import { join } from "node:path";
-import { compareUnrankedModelIds, humanizeModelId, type Model, ModelSchema } from "@intentic/sandbox-contract";
+import { compareUnrankedModelIds } from "@intentic/sandbox-contract/models/model-order";
+import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
+import { type Model, ModelSchema } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import type { Config } from "../../env.config.js";
 import { cacheFile } from "../../store/open-document.js";

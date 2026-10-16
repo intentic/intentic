@@ -1,4 +1,4 @@
-import type { WebchatPublicConfig } from "@intentic/sandbox-contract";
+import type { WebchatPublicConfig } from "@intentic/sandbox-contract/schemas/automations";
 import { styles } from "./styles.js";
 
 // Pins the widget's palette to intentic's numbers, sampled from the app and cross-checked against @intentic/ui's oklch

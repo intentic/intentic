@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RetentionSettingsSchema, type RetentionSettings } from "@intentic/sandbox-contract";
+import { RetentionSettingsSchema, type RetentionSettings } from "@intentic/sandbox-contract/schemas/data-protection";
 import { unstubbed } from "@intentic/testing";
 import { createLogger } from "../logger.js";
 import { removeAgedFiles } from "./aged-files.js";

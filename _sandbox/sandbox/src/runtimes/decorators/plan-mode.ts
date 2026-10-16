@@ -1,4 +1,5 @@
-import type { AgentCapabilities, AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { planRevision } from "../../agent/prompt/plan-revision.js";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 

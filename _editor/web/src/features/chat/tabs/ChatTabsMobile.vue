@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
-import { startAgent } from "../../agents/fleet/agentActions";
+import { startAgent } from "../../../models/fleet/agentActions";
 import { statusIcon } from "../models/catalog";
-import { useChat } from "../run/useChat";
+import { useChat } from "../../../models/conversations/run/useChat";
 import { viewersOfSession } from "../../../workbench/presence/usePresence";
 import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import ChatSwitcherSheet from "./ChatSwitcherSheet.vue";

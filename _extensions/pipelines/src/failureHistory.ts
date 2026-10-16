@@ -1,4 +1,4 @@
-import type { PipelineJob, PipelineRun } from "@intentic/sandbox-contract";
+import type { PipelineJob, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 
 // Whether the same job keeps failing across runs, not just whether a run failed; counted per repo+branch since the same
 // job name on different branches is a different story.

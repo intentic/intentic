@@ -2,7 +2,7 @@ import { chmod, readdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
-import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
+import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract/state/versions";
 import { binDir } from "./config.js";
 import {
     agentAssetName,
@@ -117,7 +117,7 @@ const reconcileAgent = async (exec: UpgradeExec, installed: string, log: Log): P
 const fetchAll = async (exec: UpgradeExec, pieces: readonly Piece[]): Promise<string | undefined> => {
     try {
         for (const piece of pieces) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one download at a time, the launcher is kilobytes
+            // one download at a time, the launcher is kilobytes
             await exec.fetchTo(piece.url, piece.staged);
         }
         return undefined;
@@ -128,16 +128,16 @@ const fetchAll = async (exec: UpgradeExec, pieces: readonly Piece[]): Promise<st
 
 const swapIn = async (exec: UpgradeExec, pieces: readonly Piece[]): Promise<void> => {
     for (const piece of pieces) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- renames in order, each undone in reverse by swapOut
+        // renames in order, each undone in reverse by swapOut
         await exec.swap(piece.target, piece.previous);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+        // ditto
         await exec.swap(piece.staged, piece.target);
     }
 };
 
 const swapOut = async (exec: UpgradeExec, pieces: readonly Piece[]): Promise<void> => {
     for (const piece of pieces.toReversed()) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- the rollback undoes swapIn in reverse
+        // the rollback undoes swapIn in reverse
         await exec.swap(piece.previous, piece.target);
     }
 };

@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { panelFromHost, portSlotFromHost, publicSlotFromHost } from "@intentic/sandbox-contract";
+import { panelFromHost, portSlotFromHost, publicSlotFromHost } from "@intentic/sandbox-contract/ids/hostnames";
 import type { NetdHeader, Page, PreviewRoute, Upstream } from "@intentic/sandbox-contract/netd-wire";
 import { escapeHtml } from "@intentic/base/format";
 import type { PortTarget } from "../ports/port-forwards.js";

@@ -5,7 +5,7 @@ import { extensionSecretsDocument, fileSecretVault, type SecretVault } from "../
 import type { Config } from "../env.config.js";
 import { createExtensionBackend, type ExtensionBackend } from "./backend/backend-supervisor.js";
 import { type SecretKeyResolver, vaultExtensionSettingSecrets } from "./extension-settings.js";
-import { type ExtensionHost, installedExtensions } from "./installed-extensions.js";
+import { type ExtensionHost, installedExtensions } from "../capabilities/extension-inventory/installed-extensions.js";
 
 // The extension backend host and the vault its secret settings live in.
 export interface ExtensionsSlice {

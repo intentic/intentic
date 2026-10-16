@@ -1,8 +1,8 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { LandedMessageDraft } from "@intentic/sandbox-contract";
+import type { LandedMessageDraft } from "@intentic/sandbox-contract/schemas/agents";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
-import { isolatedAgent } from "../../../testing.js";
+import { isolatedAgent } from "../../registry/agents-store.testing.js";
 import { AgentDomainRefusedError, assertAgentExecutionContext, createAgentExecutionService, type AgentExecutionContext, type AgentExecutionService } from "../../../workload/agent-execution.js";
 import { rootExecutionService } from "../../../workload/agent-execution.testing.js";
 
@@ -10,14 +10,6 @@ const ask = jest.fn<() => Promise<{ value: { subject: string; note: string; brea
 // Whether a model is set for commit messages; checked before the report opens, not caught by the walk.
 const modelSet = jest.fn<() => boolean>(() => true);
 const executions: AgentExecutionContext[] = [];
-jest.mock("../../../agent/models/role-model.js", () => ({
-    askRoleModel: (_services: Services, execution: AgentExecutionContext) => {
-        assertAgentExecutionContext(execution);
-        executions.push(execution);
-        return ask();
-    },
-    roleModelIsSet: async () => modelSet(),
-}));
 jest.mock("../../../git/changes/contract-shrink.js", () => ({ claimedContractShrink: async () => [] }));
 const { describeLanding, messageAnswer } = await import("../landed-subject.js");
 
@@ -45,6 +37,15 @@ const noteDraft = (draft: LandedMessageDraft | undefined): void => {
 const servicesWith = (said?: string, execution: AgentExecutionService = rootExecutionService(), origins: Record<string, string[]> = { "a.ts": ["c1"] }): Services =>
     unstubbed<Services>("services", {
         agentExecution: execution,
+        turnEngine: unstubbed<Services["turnEngine"]>("turnEngine", {
+            askRoleModel: async (_services, context) => {
+                assertAgentExecutionContext(context);
+                executions.push(context);
+                // SAFETY: the only ask here is the commit-message one, whose answer `ask` fakes.
+                return ask() as never;
+            },
+            roleModelIsSet: async () => modelSet(),
+        }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: WORKSPACE_ROOT }),
         agents: unstubbed<Services["agents"]>("agents", {
             entry: () => isolatedAgent([{ repo: "root", base: "a".repeat(40) }]),

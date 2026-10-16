@@ -3,7 +3,7 @@
 // refactorAsk.test.ts.
 import "@intentic/testing/dom";
 import { createApp, h, nextTick, ref } from "vue";
-import type { WorkspaceHealth } from "@intentic/sandbox-contract";
+import type { WorkspaceHealth } from "@intentic/sandbox-contract/schemas/codebase-health";
 import type { AgentRunChoice } from "@intentic/ui";
 import CodebaseHealth from "./CodebaseHealth.vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -25,13 +25,13 @@ const { started, runs, health } = mocked;
 const STANDING: AgentRunChoice = { provider: `claude`, model: `claude-opus-5-5`, label: `Claude Opus 5.5`, effort: `high`, effortLabel: `High` };
 const PICKED: AgentRunChoice = { provider: `codex`, model: `gpt-6.1-sol`, label: `GPT-6.1-Sol`, effort: `max`, effortLabel: `Max` };
 
-jest.mock(`../../agents/fleet/agentActions`, () => ({
+jest.mock(`../../../models/fleet/agentActions`, () => ({
     startAgent: (prompt?: string, _actsAs?: string, run?: AgentRunChoice) => {
         mocked.started.push(prompt ?? ``);
         mocked.runs.push(run);
     },
 }));
-jest.mock(`../../chat/models/shellModelPicking`, () => ({
+jest.mock(`../../../models/conversations/accounts/shellModelPicking`, () => ({
     shellModelPicking: () => ({
         agentRun: (role: string) => {
             mocked.roles.push(role);
@@ -46,7 +46,7 @@ jest.mock(`../../chat/models/shellModelPicking`, () => ({
 jest.mock(`./useCodebaseHealth`, () => ({
     useCodebaseHealth: () => ({ health: mocked.health, loading: ref(false), error: ref(null), refresh: () => {} }),
 }));
-jest.mock(`../explorer/useRepos`, () => ({ useRepos: () => ({ options: ref([`root`]) }) }));
+jest.mock(`../../../models/workspace/tree/useRepos`, () => ({ useRepos: () => ({ options: ref([`root`]) }) }));
 
 const mount = (): HTMLElement => {
     const el = document.createElement(`div`);

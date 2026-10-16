@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import { within } from "@intentic/base/async";
-import type { AccountUsage, LoginStatus, OauthAccount } from "@intentic/sandbox-contract";
+import type { AccountUsage } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { LoginStatus, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { Services } from "../../composition.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
 import { forgetAccountState, sameAccount, signInIdentity } from "../../agent/providers/accounts/account-identity.js";

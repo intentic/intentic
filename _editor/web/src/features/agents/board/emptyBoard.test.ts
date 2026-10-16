@@ -2,12 +2,12 @@
 // whatever this sandbox can send, offers the one task needing no code and none needing some, and that starters fill the
 // composer rather than dispatching an agent.
 import "@intentic/testing/dom";
-import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
+import { TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp, h, nextTick } from "vue";
-import { accountsLoaded, providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
-import { endpointProviders, endpointsLoaded, trialStatus } from "../../chat/accounts/providerCatalog";
-import { useChat } from "../../chat/run/useChat";
+import { accountsLoaded, providerAccounts, translatorAccounts } from "../../../models/providers/providerAccounts";
+import { endpointProviders, endpointsLoaded, trialStatus } from "../../../models/providers/providerCatalog";
+import { useChat } from "../../../models/conversations/run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKey } from "../../../lib/queryKeys";
 import { buildIdeas, buildPrompt } from "./buildIdeas";

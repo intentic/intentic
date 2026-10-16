@@ -1,11 +1,7 @@
-import {
-    type AgentSummary,
-    type CiMainFailure,
-    ciFixConversationId,
-    fixAttemptId,
-    fixStance,
-    type MainFailureDecision,
-} from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { CiMainFailure, MainFailureDecision } from "@intentic/sandbox-contract/schemas/ci";
+import { ciFixConversationId, fixAttemptId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { fixStance } from "@intentic/sandbox-contract/state/fix-stance";
 import {
     coveredRuns,
     handBackOf,

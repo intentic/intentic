@@ -1,5 +1,5 @@
 import { relative } from "node:path";
-import { isReportedManifest } from "@intentic/sandbox-contract";
+import { isReportedManifest } from "@intentic/sandbox-contract/state/workspace-state";
 
 // Registry of what can be repaired about a manifest, keyed by absolute path like manifest-problems.ts; populated when a
 // store constructs itself.

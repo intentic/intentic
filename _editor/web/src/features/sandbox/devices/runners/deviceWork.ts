@@ -1,8 +1,8 @@
-import { agentBuildSkew, agentStalled, type Device, type DeviceAgentOp, machinesOf } from "@intentic/sandbox-contract";
+import { agentBuildSkew, agentStalled, type Device, type DeviceAgentOp, machinesOf } from "@intentic/sandbox-contract/schemas/devices";
 import type { NoticeModel } from "@intentic/ui";
 import { shallowRef } from "vue";
 import { t } from "@intentic/ui/i18n";
-import { activeSandboxId } from "../../../../lib/activeSandbox";
+import { activeSandboxId } from "../../../../app/storage/activeSandbox";
 import { type AgentRun, agentRunTitle, type LinksAsked } from "./agentRun";
 
 // WORK IN FLIGHT ON A MACHINE, PAST THE PAGE THAT STARTED IT. A device page is mounted while it is on screen and not a

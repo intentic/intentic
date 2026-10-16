@@ -1,4 +1,4 @@
-import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
+import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { ORPCError } from "@orpc/server";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";

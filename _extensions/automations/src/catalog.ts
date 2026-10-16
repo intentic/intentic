@@ -1,4 +1,4 @@
-import type { AutomationTemplate, TriggerSource } from "@intentic/sandbox-contract";
+import type { AutomationTemplate, TriggerSource } from "@intentic/sandbox-contract/schemas/automations";
 import type { CapabilityFacts } from "@intentic/extension-api";
 import type { IconName } from "@intentic/extension-ui";
 import { computed } from "vue";

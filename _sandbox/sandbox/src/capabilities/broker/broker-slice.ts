@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import { BROKER_PORT } from "@intentic/constants";
-import { envSuffix } from "@intentic/sandbox-contract";
+import { envSuffix } from "@intentic/sandbox-contract/policy/capability-env";
 import { contributionFor, contributionRegistry } from "../contributions.js";
-import type { ExtensionHost } from "../../extensions/installed-extensions.js";
+import type { ExtensionHost } from "../extension-inventory/installed-extensions.js";
 import type { CardDeps } from "../../guard/card-offers.js";
 import type { HoldDeps } from "../../guard/held-asks.js";
 import type { ConversationGrants } from "../../personas/conversation-grants.js";

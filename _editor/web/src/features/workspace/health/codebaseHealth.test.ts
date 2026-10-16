@@ -1,4 +1,4 @@
-import type { WorkspaceHotspot } from "@intentic/sandbox-contract";
+import type { WorkspaceHotspot } from "@intentic/sandbox-contract/schemas/codebase-health";
 import { hotspotRows, median, moduleRows, perFile, splitPath } from "./codebaseHealth";
 
 const hotspot = (path: string, score: number): WorkspaceHotspot => ({

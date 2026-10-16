@@ -10,8 +10,8 @@
 // 6. A retired spelling: outlined/raised/rounded as props; PrimeVue's own `severity`/`text`/`link`, or a `ui-button-*`
 //    class, where the tier and tone props say it (button.ts is the one place that maps a tier onto PrimeVue).
 // 7. Two <Button> siblings in one element at different sizes.
-// Exceptions: an entry in ALLOWED, keyed by file and exact finding, with a reason; a stale entry is reported.
-import { at, blank, classesOf, finishFindings, tags, templateSource, templatesUnder, VOID, waiverList } from "./lib/templates.mjs";
+// Exceptions: `<!-- allow(buttons): <reason> -->` above the element.
+import { at, blank, classesOf, excusedAt, finishFindings, tags, templateSource, templatesUnder, VOID } from "./lib/templates.mjs";
 
 // A text size, not text-left or text-muted: the scale's own steps, what makes a control a button, not a row.
 const TEXT_SIZE = /(?:^|\s)(?:[\w@-]+:)*text-(?:4xs|3xs|2xs|xs|sm|base|lg|xl|2xl|3xl)(?:\s|$)/u;
@@ -43,35 +43,13 @@ const DENSE = new Set([`Row`, `RowGroup`, `DisclosureRow`]);
 // A row's trailing cluster (26px), not what it expands to: an expanded footer is a page's controls, nested.
 const ROW_CLUSTER = /(?:#|v-slot:)(?:control|actions|meta|lead)\b/u;
 
-// Waivers keyed by path then exact class/prop, with a reason; only a control's shape, not its tier, qualifies.
-const ALLOWED = new Map([
-    [
-        `_editor/ui/src/components/sandbox/AgentRunButton.vue`,
-        new Map([
-            [
-                `['rounded-l-none', quiet ? 'pl-1 pr-1.5' : 'px-1.5']`,
-                `A SPLIT BUTTON'S SEAM. Two buttons are welded into one control here, so the pair has to lose the corners and the padding where they meet, or it reads as two buttons that happen to be touching. This is the joint, not a tier being retuned: the tier is whatever the caller passed, and both halves take it.`,
-            ],
-        ]),
-    ],
-    [
-        `_editor/ui/src/components/layout/FloatingAction.vue`,
-        new Map([
-            [
-                "h-14 py-0 labelled ? `gap-2 px-5 text-sm font-semibold` : `w-14 px-0`",
-                `THE UPLOAD FAB, and the exception the vocabulary already names (see ui.ts). A floating action button is a 56px circle by definition — the size IS the affordance on a phone — so it is the one control in the app whose box is not a tier's.`,
-            ],
-            [`rounded`, `The same FAB: a circle is what a floating action button is. Nothing else in the app may take this prop.`],
-        ]),
-    ],
-]);
-
 const tracked = templatesUnder(`_editor`, `_extensions`);
 const findings = [];
-const { waived, stale } = waiverList(ALLOWED, `button-tiers.mjs`);
 
 for (const path of tracked) {
-    const scan = blank(templateSource(path));
+    const source = templateSource(path);
+    const scan = blank(source);
+    const excused = (index) => excusedAt(source, scan, index, `buttons`);
     const stack = [{ name: `#file`, attrs: ``, buttons: [] }];
     const inDense = () => stack.some((frame) => DENSE.has(frame.name)) && stack.some((frame) => frame.cluster);
 
@@ -123,7 +101,7 @@ for (const path of tracked) {
             !/(?:^|\s)text-left(?:\s|$)/u.test(classes) &&
             !RECIPES.test(classes)
         ) {
-            if (!waived(path, classes)) {
+            if (!excused(index)) {
                 findings.push({
                     at: where,
                     why: `a bare <button> with a text size, chrome and side padding IS the action button: use <Button> (tier by role, \`size="small"\` on a dense surface), or one of the four controls that are not it — ui.iconButton / ui.linkButton / ui.textAction / .ui-chip`,
@@ -132,7 +110,7 @@ for (const path of tracked) {
         }
 
         // Rule 7: a rounded-full box with padding is a pill regardless of how it was built; the chip owns that shape.
-        if (name === `button` && PILL.test(classes) && PAD_X.test(classes) && !RECIPES.test(classes) && !waived(path, classes)) {
+        if (name === `button` && PILL.test(classes) && PAD_X.test(classes) && !RECIPES.test(classes) && !excused(index)) {
             findings.push({
                 at: where,
                 why: `a hand-drawn pill: use \`class="ui-chip"\` (plus \`ui-chip-on\` for the lit state), which owns the radius, the tone, the hover, the thumb target and what ON looks like`,
@@ -148,7 +126,7 @@ for (const path of tracked) {
             !TEXT_SIZE.test(classes) &&
             !CHROME.test(classes.replaceAll(/(?:^|\s)[\w@-]+:\S+/gu, ` `)) &&
             !RECIPES.test(classes) &&
-            !waived(path, classes)
+            !excused(index)
         ) {
             findings.push({
                 at: where,
@@ -158,7 +136,7 @@ for (const path of tracked) {
 
         // Rule 2: a hand-written disabled fade, a second opinion on what tokens.css already answers.
         const fade = classes.match(/(?:^|\s)!?disabled:opacity-\d+/u);
-        if (fade !== null && !waived(path, fade[0].trim())) {
+        if (fade !== null && !excused(index)) {
             findings.push({
                 at: where,
                 why: `\`${fade[0].trim()}\` is a hand-written disabled state: the design system has exactly one, it is not an opacity (a 0.6 fade of a 10% tint is a 6% tint, i.e. nothing), and it is \`--ui-button-off-*\` in tokens.css`,
@@ -167,7 +145,7 @@ for (const path of tracked) {
 
         // Rule 3: a literal accent color the palette picker and the skin cannot repaint.
         const literal = classes.match(/(?:^|\s)!?(?:[\w@-]+:)*(?:bg-primary-\d{2,3}(?![\w/])|text-white\b)/u);
-        if (pressable && literal !== null && !waived(path, literal[0].trim())) {
+        if (pressable && literal !== null && !excused(index)) {
             findings.push({
                 at: where,
                 why: `\`${literal[0].trim()}\` pins a control to one step of the palette, so the accent picker and the skin cannot repaint it: use the tier (\`<Button>\` / \`<Button tier="loud">\`) or the fill tokens (\`--color-primary-fill\` / \`--color-fill-content\`)`,
@@ -182,7 +160,7 @@ for (const path of tracked) {
             });
 
             // Rule 4: a call site restating geometry the tier already owns.
-            if (classes !== `` && TIER_GEOMETRY.test(classes) && !waived(path, classes)) {
+            if (classes !== `` && TIER_GEOMETRY.test(classes) && !excused(index)) {
                 findings.push({
                     at: where,
                     why: `<Button class="${classes.trim()}"> restates geometry the tier owns: pick the tier and the size instead, and keep only layout here (shrink-0, w-full, self-start, margins)`,
@@ -190,7 +168,7 @@ for (const path of tracked) {
             }
 
             // Rule 5: a row's own control cluster needs the compact size.
-            if (inDense() && !/(?:^|\s):?size=/u.test(attrs) && !waived(path, `size`)) {
+            if (inDense() && !/(?:^|\s):?size=/u.test(attrs) && !excused(index)) {
                 findings.push({
                     at: where,
                     why: `<Button> in a row's own control cluster takes the compact control: add \`size="small"\`, which is what every other row action in the app is drawn at`,
@@ -200,14 +178,14 @@ for (const path of tracked) {
             // Rule 6: a spelling the design system retired.
             // Attribute NAMES only: a bound value may well mention `text` (a prop of the caller's own).
             const retired = attrs.replace(/"[^"]*"/gu, `""`).match(RETIRED);
-            if (retired !== null && !waived(path, retired[0].trim())) {
+            if (retired !== null && !excused(index)) {
                 findings.push({
                     at: where,
                     why: `\`${retired[0].trim()}\` is retired: say what the button IS with \`tier\` (loud, accent — the default —, boring, quiet) and lay a colour on it with \`tone\` (accent, danger, warning, success). \`severity="secondary"\` is \`tier="boring"\`, \`text\` is \`tier="quiet"\`, \`severity="danger"\` is \`tone="danger"\`; \`outlined\` was the neutral tier's second spelling`,
                 });
             }
             const tierClass = classes.match(TIER_CLASS);
-            if (tierClass !== null && !waived(path, tierClass[0].trim())) {
+            if (tierClass !== null && !excused(index)) {
                 findings.push({
                     at: where,
                     why: `\`${tierClass[0].trim()}\` is a tier written as a class: \`tier="loud"\`, \`gilded\` and \`thumb\` are props, and button.ts is the one place that knows which class each one comes to`,
@@ -220,8 +198,6 @@ for (const path of tracked) {
         }
     }
 }
-
-findings.push(...stale());
 
 finishFindings(
     findings,

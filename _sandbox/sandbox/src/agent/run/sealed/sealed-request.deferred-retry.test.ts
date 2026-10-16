@@ -9,7 +9,7 @@ import { rootExecution } from "../../../workload/agent-execution.testing.js";
 import { runAgent } from "../agent.js";
 import type { QueryFn } from "../sdk-stream.js";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../../../testing.js";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { runSealedRequest, type SealedAsk } from "./sealed-request.js";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 

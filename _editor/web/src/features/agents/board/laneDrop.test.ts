@@ -1,7 +1,7 @@
 // No mocks: laneDrop reads the lane machine from agentStatus, a pure leaf; the fleet store import is type-only and
 // erased.
 import { dropActionFor, dropActionLabel, dropHint, dropRejection, type DropAction, pendingOf } from "./laneDrop";
-import type { FleetAgent } from "../fleet/useAgents-fleet";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 
 // A drop can't assign a status; it runs the action that causes one. Most drops have no action behind them at all.
 describe("dropActionFor", () => {

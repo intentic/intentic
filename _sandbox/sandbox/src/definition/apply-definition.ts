@@ -2,15 +2,10 @@ import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
-import {
-    type ArrivalItem,
-    type ArrivalReport,
-    type DefinitionDiff,
-    type DefinitionExport,
-    type NeedsAction,
-    type SandboxDefinition,
-    SandboxSettingsSchema,
-} from "@intentic/sandbox-contract";
+import type { ArrivalItem, ArrivalReport } from "@intentic/sandbox-contract/state/arrival";
+import type { DefinitionDiff, DefinitionExport, SandboxDefinition } from "@intentic/sandbox-contract/state/definition";
+import type { NeedsAction } from "@intentic/sandbox-contract/policy/needs-action";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import type { Services } from "../composition.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { composeEnvironment, draftsDir } from "../environment/environment.js";

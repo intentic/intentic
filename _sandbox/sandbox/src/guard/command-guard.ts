@@ -1,20 +1,17 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { errorMessage } from "@intentic/base/errors";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import {
-    type AgentEvent,
     COMMAND_CLASS_LABELS,
-    type CommandClass,
     type CommandContext,
-    type CommandJudgeMode,
-    type CommandLocus,
     type CommandMatch,
     type CommandSpan,
     matchCommand,
     mergeSpans,
-    type ProgramAsk,
-    type SafetyLogEntry,
-    type SafetyVerdict,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/policy/command-classes";
+import type { CommandClass, CommandLocus } from "@intentic/sandbox-contract/schemas/agent";
+import type { CommandJudgeMode, SafetyLogEntry, SafetyVerdict } from "@intentic/sandbox-contract/policy/safety-policy";
+import type { ProgramAsk } from "@intentic/sandbox-contract/events/requests";
 import type { JudgeFacts } from "../agent/tools/command-judge.js";
 import { RoleModelUnsetError } from "../seams/role-model-unset.js";
 import { JS_TOOL_NAME } from "../seams/js-tool-names.js";

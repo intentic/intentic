@@ -1,4 +1,5 @@
 import { posix } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { unzipSync, type UnzipFileInfo } from "fflate";
 import { error, type Finding } from "./finding.js";
 import { childrenNamed, parseXml, type XmlElement } from "./xml-tree.js";
@@ -61,7 +62,7 @@ export const openPackage = (bytes: Uint8Array): OoxmlPackage => {
             },
         });
     } catch (cause) {
-        throw new NotAPackage(`not a readable zip package (${cause instanceof Error ? cause.message : String(cause)})`);
+        throw new NotAPackage(`not a readable zip package (${errorMessage(cause)})`);
     }
     const decoder = new TextDecoder();
     const texts = new Map<string, string>();

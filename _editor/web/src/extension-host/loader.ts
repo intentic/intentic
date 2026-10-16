@@ -5,7 +5,7 @@ import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import type { ExtensionManifest } from "@intentic/extension-manifest";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-manifest";
-import type { ExtensionSummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
 import { shallowRef } from "vue";
 import { type ExtensionHostStatus, extensionsLoaded, extensionStatuses } from "../workbench/views/extensionStatuses";
 import { extensionSettingsStore } from "../features/extensions/useExtensionSettings";

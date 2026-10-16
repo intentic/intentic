@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { CONSULT_FAILED } from "../decorators/vendor-ask.js";
 import { JS_TOOL_NAME } from "../../seams/js-tool-names.js";
 import type { CommandGuard, GuardOutcome, GuardSubject } from "../../guard/command-guard.js";

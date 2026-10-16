@@ -2,7 +2,7 @@
 // since jsdom lays nothing out.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { AgentsListSchema } from "@intentic/sandbox-contract";
+import { AgentsListSchema } from "@intentic/sandbox-contract/schemas/agents-list";
 import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 
 // Stubs the daemon at the seam the list reaches it through, so the archive probe is asserted as a call.
@@ -11,8 +11,8 @@ jest.mock("../../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSand
 
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
-import { modelLabelFor } from "../../accounts/providerCatalog";
-import { useChat } from "../../run/useChat";
+import { modelLabelFor } from "../../../../models/providers/providerCatalog";
+import { useChat } from "../../../../models/conversations/run/useChat";
 import { queryClient } from "../../../../lib/queryPersistence";
 import { router } from "../../../../router/index";
 import ChatTabList from "../ChatTabList.vue";

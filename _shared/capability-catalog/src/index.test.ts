@@ -6,7 +6,7 @@ import {
     LOCAL_MODELS,
     localModelChoice,
     SshConfigSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/capabilities";
 import { CAPABILITY_CATALOG, contributionEntry } from "./index.js";
 
 // Real shapes from _extensions/connectors/intentic-extension.json, abridged to the card-relevant fields.

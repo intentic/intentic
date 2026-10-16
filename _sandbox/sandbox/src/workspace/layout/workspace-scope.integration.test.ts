@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ORPCError } from "@orpc/server";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
-import { conversationEntry, isolatedAgent } from "../../testing.js";
+import { conversationEntry, isolatedAgent } from "../../conversations/registry/agents-store.testing.js";
 import { scopedTarget, type WorkspaceScopeDeps, workspaceRootFor } from "./workspace-scope.js";
 
 // Whose copy of the workspace a read means, and the three failures that resolution can produce.

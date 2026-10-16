@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
+import { parseJsonOr } from "@intentic/base/json";
 import { type GatewayHooks, runConnectorGateway } from "@intentic/connector-runtime";
 import { type Client, REST } from "discord.js";
 import { type DiscordConnectorConfig, discordGatewayState, ensureDiscordClient, releaseDiscordClient } from "./client.js";
@@ -11,16 +12,12 @@ import { activeVoiceSession, joinVoice, leaveVoice, sayInVoice, stopSpeaking, st
 
 // One string field of a control route's JSON body, empty when it is absent. Only discord-voice posts here (loopback), and
 // a body that is not JSON reads as one without the field, which each route refuses as the missing field it is.
+// A body that is not JSON carries no field, and the route answers 400 for it.
 const fieldOf = (raw: string, key: "channelId" | "text"): string => {
-    try {
-        // SAFETY: JSON.parse yields an object, a primitive or null; only `key` is read, and through String(), so a value
-        // of any type is read as text rather than trusted to be it.
-        const parsed = JSON.parse(raw || "{}") as Partial<Record<typeof key, string>> | null;
-        return String(parsed?.[key] ?? "").trim();
-    } catch {
-        // allow(silent-catch): a body that is not JSON carries no field, and the route answers 400 for it
-        return "";
-    }
+    // SAFETY: JSON.parse yields an object, a primitive or null; only `key` is read, and through String(), so a value
+    // of any type is read as text rather than trusted to be it.
+    const parsed = parseJsonOr(raw || "{}", undefined) as Partial<Record<typeof key, string>> | null | undefined;
+    return String(parsed?.[key] ?? "").trim();
 };
 
 void runConnectorGateway<DiscordConnectorConfig, Client>({

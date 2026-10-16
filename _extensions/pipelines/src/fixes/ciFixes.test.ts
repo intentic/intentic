@@ -1,4 +1,6 @@
-import { type AgentSummary, ciFixConversationId, fixAttemptId, type PipelineRun } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { ciFixConversationId, fixAttemptId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { branchFixes, branchKey, fixesByRun } from "./ciFixes";
 import { agentCard, pipelineRun as run } from "../testing";
 

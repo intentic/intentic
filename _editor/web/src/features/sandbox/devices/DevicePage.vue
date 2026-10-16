@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { deviceEnvironment, HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract";
+import { deviceEnvironment } from "@intentic/sandbox-contract/schemas/devices";
+import { HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract/schemas/hosts";
 import {
     BrandMark,
     Button,
@@ -30,11 +31,11 @@ import DeviceRunners from "./runners/DeviceRunners.vue";
 import DeviceUpdateProgress from "./runners/DeviceUpdateProgress.vue";
 import SandboxBatchBar from "./batch/SandboxBatchBar.vue";
 import SyncSwitchMenu from "./sync/SyncSwitchMenu.vue";
-import { boardRoute, cardRoute } from "./deviceLinks";
-import { canSetShape } from "./shapeFlow";
+import { boardRoute, cardRoute } from "../../../models/sandbox/devices/deviceLinks";
+import { canSetShape } from "../../../models/sandbox/devices/shapeFlow";
 import { rollbackChoices } from "./rollbackChoices";
 import { deviceAgentPanel, machineAgent } from "./deviceAgent";
-import { blockAttention, deviceAttention } from "./health/deviceAttention";
+import { blockAttention, deviceAttention } from "../../../models/sandbox/devices/deviceAttention";
 import {
     commandable,
     type DeviceRow,
@@ -56,18 +57,18 @@ import {
     selfGroup,
     slugOfDaemonUrl,
     switchMenus,
-} from "./deviceRows";
+} from "../../../models/sandbox/devices/deviceRows";
 import { useDeviceOps } from "./runners/deviceOps";
 import { useSandboxSelection } from "./batch/sandboxSelection";
 import { environmentTitle, wslDistroRows } from "./machineEnvironments";
 import { type ConflictAsk, conflictAsk } from "./sync/conflictAsk";
 import SandboxSyncToggles from "./sync/SandboxSyncToggles.vue";
-import { type DeviceScopes, distroMark, manageBlock, osMark } from "./deviceFacts";
-import { startAgent } from "../../agents/fleet/agentActions";
+import { type DeviceScopes, distroMark, manageBlock, osMark } from "../../../models/sandbox/devices/deviceFacts";
+import { startAgent } from "../../../models/fleet/agentActions";
 import HostConnectDialog from "../../capabilities/connect/hosts/HostConnectDialog.vue";
-import { useCapabilities } from "../../capabilities/connect/useCapabilities";
-import { isDefaultName } from "../../capabilities/model/tiles";
-import { machineGrants } from "../../capabilities/model/connections";
+import { useCapabilities } from "../../../models/capabilities/useCapabilities";
+import { isDefaultName } from "../../../models/capabilities/tiles";
+import { machineGrants } from "../../../models/capabilities/connections";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";

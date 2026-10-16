@@ -3,7 +3,8 @@
 // Gemini (Claude Opus/Sonnet, GPT-OSS too), so membership is decided by `owned_by`, not an id prefix. That list is the
 // translator's built-in catalog, not what each account may call: a row Google refuses is learned from the refusal
 // (gemini-catalog.ts `refused`), never predicted from Google's own metadata, whose ids differ from the translator's.
-import { EFFORT_TIERS, humanizeModelId } from "@intentic/sandbox-contract";
+import { EFFORT_TIERS } from "@intentic/sandbox-contract/models/agent-catalog";
+import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
 import { z } from "zod";
 import { getJson } from "../../agent/models/model-discovery.js";
 import { opt } from "../../opt.js";

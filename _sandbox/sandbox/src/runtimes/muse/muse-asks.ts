@@ -1,4 +1,7 @@
-import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, ProgramAsk } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AskQuestion, ProgramAsk } from "@intentic/sandbox-contract/events/requests";
+import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
 import { errorMessage } from "@intentic/base/errors";
 import type { TurnHooks } from "../../agent/providers/agent-request.js";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";

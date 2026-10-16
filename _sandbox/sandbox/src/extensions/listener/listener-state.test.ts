@@ -1,10 +1,10 @@
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { AutomationRecord } from "../../automations/automations-store.js";
 import type { Services } from "../../composition.js";
 import { automationRecord } from "../../harness/route-stores.testing.js";
-import { listenerContribution } from "../../testing.js";
-import type { InstalledExtension } from "../installed-extensions.js";
+import { listenerContribution } from "./listener.testing.js";
+import type { InstalledExtension } from "../../capabilities/extension-inventory/installed-extensions.js";
 import { listenerProcessesDesired, listenerState, resolveListenerOwners } from "./listener-state.js";
 
 const services = (automations: AutomationRecord[], capabilities: Capability[]): Pick<Services, "automations" | "capabilities"> =>

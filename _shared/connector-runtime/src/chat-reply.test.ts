@@ -1,4 +1,4 @@
-import type { ListenerDispatchFrame } from "@intentic/sandbox-contract";
+import type { ListenerDispatchFrame } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import { waitFor } from "@intentic/testing/bun";
 import { type ChatSurface, createChatReply, LOST_NOTICE, type ReplyTiming } from "./chat-reply.js";
 import { runRegistry } from "./chat-runs.js";

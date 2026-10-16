@@ -13,6 +13,7 @@ import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { CHECKS } from "../../checks/manifest.mjs";
 import { changedSince, git } from "../lib/git.mjs";
+import { touchesTables } from "../tools/layer-tables.mjs";
 
 // Directories a crate walk never enters: build output and dependency trees hold no crate of this repository's.
 const CRATE_SKIP = new Set(["node_modules", "target", "dist", "generated", ".cache", ".turbo", "out-tsc", ".git"]);
@@ -87,6 +88,18 @@ const DAEMON = "_sandbox/sandbox";
 const STATE_SHAPES = `${DAEMON}/src/store/generated/state-shapes.json`;
 const SHAPES_WRITER = "src/store/shapes/write-state-shapes.ts";
 
+const INDEXES_WRITER = "scripts/write-indexes.mjs";
+
+// Rewrites the daemon's generated indexes (its scripts/write-indexes.mjs: the state registry, the raw route index and the slice registry)
+// when a daemon source changed, ahead of the shapes, whose freeze reads the registry. Answers whether either moved.
+export const regenerateDaemonIndexes = (root, changed) => {
+    if (!(changed ?? []).some((path) => path.startsWith(`${DAEMON}/src/`)) || !existsSync(join(root, DAEMON, INDEXES_WRITER))) {
+        return false;
+    }
+    const result = spawnSync(process.execPath, [INDEXES_WRITER], { cwd: join(root, DAEMON), encoding: "utf8" });
+    return result.status === 0 && /^daemon indexes: wrote /m.test(result.stdout ?? "");
+};
+
 // Freezes any new shape of a stored document and rewrites the type-level checks that every frozen shape still converts
 // to today's schema (the daemon's store/shapes/write-state-shapes.ts), when a daemon or contract source changed. The
 // typecheck after it is what judges: this only records, the way the contract lock does. Answers whether the file moved.
@@ -119,10 +132,23 @@ const dirtyContents = (root) =>
             .map((path) => [path, existsSync(join(root, path)) ? git(root, "hash-object", path)?.trim() : "absent"]),
     );
 
+const LAYER_TABLES = "_tools/checks/layer-tables.mjs";
+
+// Rewrites the generated layers table in a layered package's README when its layers.json or that README changed (the
+// layer-tables check, _tools/scripts/tools/layer-tables.mjs). Answers whether a README moved.
+export const regenerateLayerTables = (root, changed) => {
+    if (!(changed ?? []).some((path) => touchesTables(root, path)) || !existsSync(join(root, LAYER_TABLES))) {
+        return false;
+    }
+    const result = spawnSync(process.execPath, [join(root, LAYER_TABLES), "--fix"], { cwd: root, encoding: "utf8" });
+    return /^rewrote /m.test(result.stdout ?? "");
+};
+
 /**
  * Every machine fixer scoped to `changed` (repo-relative paths), in `root`: rustfmt on the crates it touched, the
- * ratcheted baselines it beat, the contract lock when it changed the contract, and the stored shapes when it changed a
- * daemon or contract source. Answers which ran and which paths they wrote.
+ * ratcheted baselines it beat, the contract lock when it changed the contract, the daemon's generated indexes when it
+ * changed a daemon source, the stored shapes when it changed a daemon or contract source, and a layered package's README table when it changed its layers.json or README. Answers
+ * which ran and which paths they wrote.
  */
 export const fixChange = (root, changed) => {
     const before = dirtyContents(root);
@@ -139,9 +165,15 @@ export const fixChange = (root, changed) => {
         if (regenerateContractLock(root, changed)) {
             ran.push("contract lock");
         }
+        if (regenerateDaemonIndexes(root, changed)) {
+            ran.push("daemon indexes");
+        }
         if (regenerateStateShapes(root, changed)) {
             ran.push("state shapes");
         }
+    }
+    if (regenerateLayerTables(root, changed)) {
+        ran.push("layer tables");
     }
     const after = dirtyContents(root);
     const wrote = [...new Set([...before.keys(), ...after.keys()])].filter((path) => before.get(path) !== after.get(path)).toSorted();

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onUnmounted } from "vue";
-import { boxNameOf } from "../../agents/fleet/fleetScope";
-import type { Conversation } from "../session/conversation";
+import { boxNameOf } from "../../../models/fleet/fleetScope";
+import type { Conversation } from "../../../models/conversations/session/conversation";
 import { placeConversation } from "./pane/composerControls";
-import { type BoxFleet, otherBoxes, subscribe as watchOtherBoxes } from "../../sandbox/live/fleetAcross";
-import { useRunners } from "../../sandbox/devices/runners/useRunners";
+import { type BoxFleet, otherBoxes, subscribe as watchOtherBoxes } from "../../../models/sandbox/live/fleetAcross";
+import { useRunners } from "../../../models/sandbox/devices/useRunners";
 import { useT } from "@intentic/ui/i18n";
 import { useFleetAdvice } from "./fleet/fleetAdvice";
 import { draftFleet } from "./fleet/fleetPlacement";

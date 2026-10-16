@@ -1,20 +1,21 @@
-import { type AgentProvider, isTrialProvider, type PermissionMode } from "@intentic/sandbox-contract";
+import type { AgentProvider, PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
+import { isTrialProvider } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { computed, type Ref, ref, watch } from "vue";
-import { boxNameOf, scopeOffered } from "../../../agents/fleet/fleetScope";
-import { useAgents } from "../../../agents/fleet/useAgents";
-import { useRunners } from "../../../sandbox/devices/runners/useRunners";
-import { providerDisplayLabel } from "../../accounts/providerCatalog";
+import { boxNameOf, scopeOffered } from "../../../../models/fleet/fleetScope";
+import { useAgents } from "../../../../models/fleet/useAgents";
+import { useRunners } from "../../../../models/sandbox/devices/useRunners";
+import { providerDisplayLabel } from "../../../../models/providers/providerCatalog";
 import { useComposerLanding } from "../../composer/composerLanding";
 import { type ComposerControl, overflowRows, ridesRow } from "../../composer/composerMore";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { composerModelReading } from "../../composer/composerModelLabel";
 import { modeMeta } from "../../models/catalog";
 import type { RunThrough } from "../../models/run-settings/useRunThrough";
-import { startingMode } from "../../run/turnDefaults";
-import type { Conversation } from "../../session/conversation";
-import type { ChatMessage } from "../../transcript/transcript";
+import { startingMode } from "../../../../models/conversations/run/turnDefaults";
+import type { Conversation } from "../../../../models/conversations/session/conversation";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 
 // The composer's row of controls for one pane: which pills ride the row and which wait in the overflow (where the
 // conversation runs among them: a chip once it is placed elsewhere, an overflow row while it is here), what each pill

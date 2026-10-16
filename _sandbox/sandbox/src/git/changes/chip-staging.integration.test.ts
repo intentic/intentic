@@ -3,7 +3,8 @@ import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { DISCARDABLE_SIDES, discardOutcome, scopedPaths, UNATTRIBUTED_ORIGIN } from "@intentic/sandbox-contract";
+import { DISCARDABLE_SIDES, discardOutcome, scopedPaths } from "@intentic/sandbox-contract/schemas/git/git-scope";
+import { UNATTRIBUTED_ORIGIN } from "@intentic/sandbox-contract/schemas/git/git";
 
 import { createApp } from "../../app.js";
 import { clientFor } from "../../harness/route-client.testing.js";

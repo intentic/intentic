@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { open, mkdir, rm } from "node:fs/promises";
-import type { FortinetVpnConfig, VpnConfig } from "@intentic/sandbox-contract";
+import type { FortinetVpnConfig, VpnConfig } from "@intentic/sandbox-contract/schemas/vpn";
 import { activeResolvers, halt, interfaceAddress, interfaceRoutes, livePid as livePidOf, logTail, toolMissing } from "../tunnel/net-probe.js";
 import type { VpnDialOptions, VpnDriver, VpnProbe } from "./vpn-driver.js";
 import { interfaceName, logPath, pidPath, vpnDir } from "./vpn-paths.js";

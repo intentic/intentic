@@ -2,7 +2,7 @@
 import { githubRepoOf, isCurrentSecurityReview } from "@intentic/registry";
 import { BrandMark, Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { computed, ref } from "vue";
-import { checksOk, checksProblem, type DiscoverListing, type InstallOutcome, splitListingName } from "./discoverListing";
+import { checksOk, checksProblem, type DiscoverListing, type InstallOutcome, splitListingName } from "../../../models/sandbox/discoverListing";
 import { useT } from "@intentic/ui/i18n";
 
 // One listing, read before it's run: where this product's trust argument gets made explicit rather than implied. Source

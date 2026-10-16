@@ -1,6 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { openSpawnedChild, resetSubagents, settleSpawnedChild, type SubagentTurn } from "../../agent/subagents/subagents.js";
 import type { AgentRequest, TurnHooks, TurnPolicy, TurnTools } from "../../agent/providers/agent-request.js";
 import type { ChildSupervisor } from "../../agent/subagents/children.js";
@@ -11,7 +11,7 @@ import type { CommandGuard } from "../../guard/command-guard.js";
 import { createTurnTaint } from "../../guard/turn-taint.js";
 import type { CursorGuard } from "./cursor-tools.js";
 import { cursorCustomTools } from "./cursor-tools.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 
 // One fleet's actors, and the cards a turn here parks in them.
 const actors = memoryFleet().conversations;

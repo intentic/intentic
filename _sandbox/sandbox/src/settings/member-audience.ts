@@ -1,4 +1,4 @@
-import { type Audience, AudienceSchema } from "@intentic/sandbox-contract";
+import { type Audience, AudienceSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";

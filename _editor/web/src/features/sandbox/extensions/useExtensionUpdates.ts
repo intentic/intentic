@@ -1,5 +1,5 @@
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
-import { useExtensions } from "../../extensions/useExtensions";
+import { useExtensions } from "../../../models/extensions/useExtensions";
 
 // The update verbs an open extension row offers, each finished the way the row's switch is: once the daemon has swapped
 // the code, the host reloads so this browser runs what is now installed. One module for the offer and the policy

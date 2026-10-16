@@ -1,4 +1,7 @@
-import { type AgentSummary, type AgentTurn, type FixAttemptPlan, type FixResume, planFixAttempt, type TurnErrand } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import { type FixAttemptPlan, type FixResume, planFixAttempt } from "@intentic/sandbox-contract/state/fix-attempt-plan";
+import type { TurnErrand } from "@intentic/sandbox-contract/schemas/speaker";
 import type { Services } from "../../composition.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import { TITLE_MAX } from "../../seams/conversation-title.js";

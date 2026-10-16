@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { machine, type MachineTree } from "./host-machine.testing.js";
 import {
     applyProviderKeys,

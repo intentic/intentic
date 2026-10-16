@@ -1,13 +1,13 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AgentRequest } from "../../providers/agent-request.js";
 import { createTurnFrames } from "../frames/frame-reducers.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import type { HeldTurn } from "../turn/turn-resume.js";
 import { costOf, settleTurn, type TurnEnd } from "./turn-settlement.js";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../../../testing.js";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);

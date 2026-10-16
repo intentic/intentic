@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 import { AnchoredOverlay, Button, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, ref, watch } from "vue";
@@ -57,7 +58,7 @@ const signIn = async (): Promise<void> => {
         await host.signIn();
         handedOver.value = true;
     } catch (error) {
-        failure.value = error instanceof Error ? error.message : String(error);
+        failure.value = errorMessage(error);
     } finally {
         busy.value = false;
     }

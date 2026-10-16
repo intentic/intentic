@@ -1,4 +1,5 @@
-import { type Fence, fenceCovers, type Area } from "@intentic/sandbox-contract";
+import { type Fence, fenceCovers } from "@intentic/sandbox-contract/policy/fence-paths";
+import type { Area } from "@intentic/sandbox-contract/schemas/areas";
 import type { Caller } from "../auth/auth.js";
 import { foldersOf } from "./areas-store.js";
 

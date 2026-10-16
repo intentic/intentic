@@ -1,11 +1,14 @@
 <!-- Connection rows show name, state, address, and the next primary action. -->
 <script setup lang="ts">
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
-import type { HostSummary, PhoneSummary, WebExtSummary, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { HostSummary } from "@intentic/sandbox-contract/schemas/hosts";
+import type { PhoneSummary } from "@intentic/sandbox-contract/schemas/phone";
+import type { WebExtSummary } from "@intentic/sandbox-contract/schemas/webext";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { Button, ContextMenu, CopyButton, type IconName, Row, StatusBadge, ui } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
-import { type ConnectionState, rebuildStep, signsInByHand } from "../model/connections";
+import { type ConnectionState, rebuildStep, signsInByHand } from "../../../models/capabilities/connections";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

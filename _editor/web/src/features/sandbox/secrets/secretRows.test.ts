@@ -1,7 +1,9 @@
 // Pins credential naming inherited from its card, the split between owner-set values and box-only credentials,
 // and that this tab never surfaces another page's errand.
 import type { ExtensionManifest } from "@intentic/extension-manifest";
-import type { ExtensionSummary, SecretInventoryEntry, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
+import type { SecretInventoryEntry } from "@intentic/sandbox-contract/schemas/secrets";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { matchesSecret, type SecretSources, secretRow, secretRows } from "./secretRows";
 
 const entry = (over: Partial<SecretInventoryEntry> & Pick<SecretInventoryEntry, `key` | `kind`>): SecretInventoryEntry => ({

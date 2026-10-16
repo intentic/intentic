@@ -3,7 +3,7 @@ import { STATE_DIR } from "@intentic/constants";
 // The guarantee under test is the quality contract of "Synthesize N": every source rides whole (reasoning, tools,
 // diffs, notices, never a summary), the preparation refuses whole synthesis when any source can't be captured
 // completely, and the composed chat opens as a draft with nothing sent until the user decides.
-import type { TranscriptRow } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { ref } from "vue";
 import { mocked } from "@intentic/testing/bun";
 import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
@@ -19,8 +19,6 @@ jest.mock("../../../../client/sandbox/sandboxClient", () => ({
     sandboxJson: jest.fn(),
     sandboxUpload: jest.fn(),
 }));
-// The real router pulls the auth/environment chain, which needs window.env; nothing here navigates.
-jest.mock("../../../../router/index", () => ({ router: { push: jest.fn() } }));
 // Same window.env chain via analytics; the action only fires a milestone event through track.
 jest.mock("../../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined, noteTurnCompleted: jest.fn() }));
 // Same window.env chain via useSandbox; the tab persistence only reads activeSandboxId and reachable.
@@ -33,7 +31,7 @@ jest.mock("../../../../client/sandbox/useSandbox", () => {
 // takes from it, and this mock is also the assertion hook that the composed chat is shown.
 // Listed by hand rather than spread over the real module: importing it here would load its graph before the mocks
 // below, which is the one thing this file's seams cannot survive.
-jest.mock("../agentActions", () => ({ revealConversation: jest.fn(), openConversation: jest.fn() }));
+jest.mock("../../../../models/fleet/agentActions", () => ({ revealConversation: jest.fn(), openConversation: jest.fn() }));
 
 // The node test environment has neither storage; conversations persist their tab snapshot on every change.
 const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => {
@@ -55,9 +53,9 @@ const session = store(`sessionStorage`);
 const { sandboxRequest, sandboxUpload } = await import("../../../../client/sandbox/sandboxClient");
 const sandboxRequestMock = mocked(sandboxRequest);
 const sandboxUploadMock = mocked(sandboxUpload);
-const { revealConversation } = await import("../agentActions");
-const { useChat } = await import("../../../chat/run/useChat");
-const { draftConversation, reveal } = await import("../../../chat/panel/useChat-reveal");
+const { revealConversation } = await import("../../../../models/fleet/agentActions");
+const { useChat } = await import("../../../../models/conversations/run/useChat");
+const { draftConversation, reveal } = await import("../../../../models/conversations/panel/useChat-reveal");
 // The store half of "New agent", as the summons applies it: the fixture these suites open extra tabs with.
 const newChat = () => {
     const conversation = draftConversation();
@@ -66,9 +64,9 @@ const newChat = () => {
 };
 
 const { renderTranscript, synthesisPrompt, synthesizeSessions, synthesizing } = await import("../synthesizeSessions");
-const { chatStrip } = await import("../../../chat/panel/useChat-strip");
+const { chatStrip } = await import("../../../../models/conversations/panel/useChat-strip");
 const { receiveFloatingNote } = await import("../../../../workbench/window/floating");
-const { receiveChatNote } = await import("../../../chat/run/chatChannel");
+const { receiveChatNote } = await import("../../../../models/conversations/run/chatChannel");
 
 beforeEach(() => {
     local.clear();

@@ -5,8 +5,8 @@ import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useRole } from "../../client/sandbox/useRole";
-import { useWakeListener } from "../chat/wake/useWakeListener";
-import { wakeStatus } from "../chat/wake/wakeStatus";
+import { useWakeListener } from "../../models/voice/useWakeListener";
+import { wakeStatus } from "../../models/voice/wakeStatus";
 
 // Talking to the agent from across the room, on this device: whether this device listens for the wake word (its own
 // microphone, so its own switch, kept in this browser) and where listening stands. The word itself is the sandbox's

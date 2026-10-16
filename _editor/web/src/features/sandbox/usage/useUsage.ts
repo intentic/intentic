@@ -1,4 +1,4 @@
-import type { UsageRollupRow } from "@intentic/sandbox-contract";
+import type { UsageRollupRow } from "@intentic/sandbox-contract/schemas/providers/usage";
 import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";

@@ -1,4 +1,5 @@
-import type { ControlScope, SessionOwner } from "@intentic/sandbox-contract";
+import type { ControlScope } from "@intentic/sandbox-contract/policy/control-scopes";
+import type { SessionOwner } from "@intentic/sandbox-contract/schemas/agents";
 import type { Caller } from "./auth.js";
 
 // Who a non-bearer caller is, when the grant that admitted it can say: the per-boot secrets name a process, not a

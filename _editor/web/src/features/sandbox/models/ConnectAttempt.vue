@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { type AgentProvider, providerSpec } from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { Button, Icon, Notice, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, useId, useTemplateRef } from "vue";

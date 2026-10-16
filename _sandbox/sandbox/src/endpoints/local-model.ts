@@ -1,4 +1,10 @@
-import { type Capability, type EndpointConfig, LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelConfig, localModelChoice } from "@intentic/sandbox-contract";
+import {
+    type Capability,
+    type EndpointConfig,
+    LOCAL_MODEL_WINDOW_DEFAULT,
+    type LocalModelConfig,
+    localModelChoice,
+} from "@intentic/sandbox-contract/schemas/capabilities";
 import { opt } from "../opt.js";
 import { statePath } from "../state-paths.js";
 

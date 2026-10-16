@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { type CommandGuard, consultWith, type CommandWhere, type GuardOutcome, type GuardSubject } from "../../guard/command-guard.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
 import type { GateHooks } from "./policy-gate-server.js";

@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { PageDrafts, PartialJsonStrings } from "./page-draft.js";
 
 // Feeds text one piece at a time, the way input_json_delta arrives: at any split, however awkward.

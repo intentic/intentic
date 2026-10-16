@@ -3,7 +3,7 @@ import { DiffStat, type Tip } from "@intentic/ui";
 import { computed } from "vue";
 import { useLayout } from "../../../workbench/window/useLayout";
 import type { LineStat } from "@intentic/code-read";
-import { addedIn, shownStat, weightFill } from "./changeWeight";
+import { addedIn, shownStat, weightFill } from "../../../models/workspace/changes/changeWeight";
 import { useT } from "@intentic/ui/i18n";
 
 // The +/- badge for a changed file; every surface (rows, headings, diff bar) renders through this so their

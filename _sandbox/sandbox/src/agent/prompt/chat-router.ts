@@ -1,23 +1,14 @@
 import { errorMessage } from "@intentic/base/errors";
-import {
-    BULLET,
-    type ChatRoute,
-    type ChatRouteAsk,
-    FENCE,
-    humanizeModelId,
-    type ModelOffer,
-    type ModelPick,
-    modelPinKey,
-    offerLines,
-    type ParsedPick,
-    parseModelPick,
-    type Persona,
-    replyFields,
-} from "@intentic/sandbox-contract";
+import { BULLET, FENCE } from "@intentic/sandbox-contract/text/model-answer";
+import type { ChatRoute, ChatRouteAsk, ModelPick } from "@intentic/sandbox-contract/schemas/chat-route";
+import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
+import { type ModelOffer, offerLines, type ParsedPick, parseModelPick, replyFields } from "@intentic/sandbox-contract/models/model-offer";
+import { modelPinKey } from "@intentic/sandbox-contract/models/model-pins";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import type { Services } from "../../composition.js";
 import { reachablePersonas } from "../../personas/persona-reach.js";
 import { autoOffer } from "../models/auto-offer.js";
-import type { RoleAnswer } from "../models/role-answer.js";
+import type { RoleAnswer } from "../../engines/role-answer.js";
 import { askRoleModel, roleModelIsSet } from "../models/role-model.js";
 import { AgentDomainRefusedError, withAgentExecution } from "../../workload/agent-execution.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";

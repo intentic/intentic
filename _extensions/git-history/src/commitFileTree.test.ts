@@ -1,4 +1,4 @@
-import type { GitChange } from "@intentic/sandbox-contract";
+import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
 import { buildFileTree, flattenFileTree, type TreeNode } from "./commitFileTree";
 
 const file = (path: string): GitChange => ({ path, status: "modified", additions: 1, deletions: 0 });

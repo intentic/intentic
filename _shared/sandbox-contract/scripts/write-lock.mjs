@@ -4,6 +4,6 @@
 import { writeFileSync } from "node:fs";
 import { currentLock, serializeLock } from "../dist/state/contract-lock.js";
 
-const lock = currentLock();
+const lock = await currentLock();
 writeFileSync(new URL("../contract.lock.json", import.meta.url), serializeLock(lock));
 console.log(`contract.lock.json: ${Object.keys(lock).length} entries (schemas, wire manifests and route access)`);

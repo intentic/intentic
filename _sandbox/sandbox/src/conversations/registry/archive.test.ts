@@ -1,15 +1,18 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { openConversationsDb } from "../../store/conversations-db.js";
-import { beginTurn, fakeTurns, fleetStoreOver, noPresences } from "../../testing.js";
+import { beginTurn } from "../actor/conversation-actors.testing.js";
+import { fakeTurns } from "../../seams/turn-starter.testing.js";
+import { fleetStoreOver } from "./agents-registry.testing.js";
+import { noPresences } from "../land/landed-presence.testing.js";
 import type { BeginTurn } from "../actor/conversation-decide.js";
 import { createFleet, type FleetStore } from "./agents-registry.js";
 import { type PersistedAgent, worktreeOf } from "./agents-store.js";
 import { agedFamilies, archivable, archivableByAge, archiveAgents, goesWithParent, purgeArchived, sweepAgedAgents } from "./archive.js";
 import { createLogger } from "../../logger.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
-import { memoryWatchJournal } from "../../agent/verification/watch-journal.js";
-import { armWatcher, listWatchers, startWatcherRuntime } from "../../agent/verification/watchers.js";
+import { memoryWatchJournal } from "../../store/journals/watch-journal.js";
+import { armWatcher, cancelWatchersFor, listWatchers, startWatcherRuntime } from "../../agent/verification/watchers.js";
 
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 const DAY = 24 * 60 * 60 * 1000;
@@ -42,6 +45,9 @@ const card = (overrides: Partial<AgentSummary> = {}): AgentSummary => ({
 });
 
 // Archive paths only ever read the roster and write markers back through this stub.
+// The engine as archiving reads it: only the watches a conversation armed, which this suite arms.
+const watchEngine = { familyOf: () => ({ heads: [], members: [], records: new Map() }), cancelFamily: async () => [], cancelWatchersFor };
+
 const noStandings = { of: () => "idle" as const, causesOf: () => [], refresh: async () => false, forget: () => {} };
 
 // Only `retire` and `remove` are exercised; the rest of the interface is unreachable from these paths.
@@ -197,7 +203,7 @@ describe("archiveAgents", () => {
             await conversations.send("c1", { kind: "settle" }, 2_000).settled;
             await armWatcher({ conversationId: "c1", command: "false", note: "CI", cwd: "/", env: {}, profile: {} });
             expect(listWatchers("c1")).toHaveLength(1);
-            await archiveAgents({ agents, conversations, agentWorktrees: stubWorktrees().worktrees, logger }, ["c1"], 9_000);
+            await archiveAgents({ agents, conversations, agentWorktrees: stubWorktrees().worktrees, logger, turnEngine: watchEngine }, ["c1"], 9_000);
             expect(listWatchers("c1")).toEqual([]);
         } finally {
             stop();

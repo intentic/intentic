@@ -6,7 +6,7 @@ import {
     type LoopRecord,
     LoopRecordSchema,
     type LoopState,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/loops";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openEntries } from "../store/open-document.js";
 import { countResume, keyedEntries } from "../store/keyed-entries.js";

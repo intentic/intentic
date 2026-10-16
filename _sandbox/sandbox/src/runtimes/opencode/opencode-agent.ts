@@ -1,13 +1,13 @@
 import { basename } from "node:path";
 import type { OpenCodeClient, OpenCodeEvent, PermissionRule } from "@opencode/client";
-import type { AgentCommand, AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentCommand } from "@intentic/sandbox-contract/events/requests";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { displayNameOf } from "@intentic/agent-context/tool-calls";
 import { whenAborted } from "@intentic/base/async";
 import type { AgentRequest, OpenCodeCredential } from "../../agent/providers/agent-request.js";
 import { type SteeringChannel, steeringRelay } from "../../agent/checkpoints/agent-steering.js";
-import { withFileNote } from "../../agent/prompt/attachment-note.js";
+import { withFileNote } from "../../sessions/vocabulary/attachment-note.js";
 import { loadAttachments } from "../../agent/prompt/attachment-images.js";
-import { stripTurnPreamble } from "../../agent/prompt/turn-preamble.js";
 import { vendorShellEnv } from "../../agent/run/vendor-shell-env.js";
 import { workloadStamp } from "../../seams/workload-stamp.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
@@ -56,6 +56,7 @@ import {
     type TurnQueue,
     type TurnReading,
 } from "./opencode-turn.js";
+import { stripTurnPreamble } from "../../sessions/vocabulary/prompt-envelope.js";
 
 export type { RaisedFrame, TurnAsk } from "./opencode-turn.js";
 

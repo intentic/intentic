@@ -1,13 +1,16 @@
+import { parseJsonOr } from "@intentic/base/json";
 // Tolerant reader for `openclaw.json`, hand-written JSON5-ish edits (comments, trailing commas, single quotes) over
 // plain JSON, string-tracking so none of that logic touches text inside a real string. Not a full JSON5 parser:
 // hex/leading-dot numbers and continuations fail, degrading to a named refusal rather than losing the whole import.
 
+const NOT_JSON: unique symbol = Symbol("not strict JSON");
+
 export const parseJson5ish = (raw: string): unknown | undefined => {
-    try {
-        return JSON.parse(raw) as unknown;
-    } catch {
-        // Fall through to the tolerant pass.
+    const strict = parseJsonOr(raw, NOT_JSON);
+    if (strict !== NOT_JSON) {
+        return strict;
     }
+    // Not strict JSON: the tolerant pass.
     let out = "";
     let index = 0;
     while (index < raw.length) {
@@ -65,11 +68,7 @@ export const parseJson5ish = (raw: string): unknown | undefined => {
         out += char;
         index += 1;
     }
-    try {
-        return JSON.parse(dropTrailingCommas(out)) as unknown;
-    } catch {
-        return undefined;
-    }
+    return parseJsonOr(dropTrailingCommas(out), undefined);
 };
 
 // Trailing commas are dropped in a second pass, after comments are gone: in the first pass, a comma's lookahead could

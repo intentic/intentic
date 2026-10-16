@@ -3,13 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { createOpenCodeAgent, type OpenCodeRunner, type OpenCodeTurn, type OpenCodeTurnEvent, type TurnSession } from "./opencode-agent.js";
 import type { EventOf } from "./opencode-frames.js";
 import { EXECUTE_PROMPT, PLAN_PREAMBLE } from "../decorators/plan-mode.js";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 
 // The real filesystem read behind attached images, which the faked runner in opencode-agent.test.ts cannot exercise.
 

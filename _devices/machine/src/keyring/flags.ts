@@ -8,7 +8,12 @@ import {
     type EntryPatch,
     type EntryRules,
 } from "@intentic/keyring";
-import { KeyringSecretNameSchema, type KeyringRefusalCode, KeyringShareModeSchema, type KeyringShareMode } from "@intentic/sandbox-contract";
+import {
+    KeyringSecretNameSchema,
+    type KeyringRefusalCode,
+    KeyringShareModeSchema,
+    type KeyringShareMode,
+} from "@intentic/sandbox-contract/schemas/keyring";
 import type { z } from "zod";
 
 // WHAT `intentic-machine keyring add|edit|share|backend` TAKE, read into the keyring's own requests (protocol.ts) before

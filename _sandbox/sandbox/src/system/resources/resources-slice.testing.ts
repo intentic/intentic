@@ -1,6 +1,6 @@
 import { budgetOn } from "../../agent/run/turn/turn-plan.testing.js";
 import { createLogger } from "../../logger.js";
-import { testConfig } from "../../testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import { createPerfTracker } from "./perf.js";
 import type { ResourcesSlice } from "./resources-slice.js";
 

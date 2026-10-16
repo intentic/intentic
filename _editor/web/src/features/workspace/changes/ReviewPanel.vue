@@ -1,16 +1,7 @@
 <script setup lang="ts">
-import {
-    DISCARDABLE_SIDES,
-    discardOutcome,
-    isScratch,
-    scopedPaths,
-    type GitChange,
-    type GitDiffSide,
-    type LandedMessage,
-    type LandedMessageDraft,
-    type RepoChanges,
-    type RepoTarget,
-} from "@intentic/sandbox-contract";
+import { DISCARDABLE_SIDES, discardOutcome, scopedPaths } from "@intentic/sandbox-contract/schemas/git/git-scope";
+import { isScratch, type GitChange, type GitDiffSide, type RepoChanges, type RepoTarget } from "@intentic/sandbox-contract/schemas/git/git";
+import type { LandedMessage, LandedMessageDraft } from "@intentic/sandbox-contract/schemas/agents";
 import {
     Button,
     type ButtonTier,
@@ -29,16 +20,16 @@ import {
     vAction,
 } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
-import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
+import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import { computed, ref, watch } from "vue";
-import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
+import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import HoverCard from "../../chat/tabs/HoverCard.vue";
 import ReviewStat from "./ReviewStat.vue";
 import CommitField from "./commit/CommitField.vue";
 import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
-import { rendersAsBytes } from "../explorer/fileType";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { useChat } from "../../chat/run/useChat";
+import { rendersAsBytes } from "../../../models/workspace/tree/fileType";
+import { useAgents } from "../../../models/fleet/useAgents";
+import { useChat } from "../../../models/conversations/run/useChat";
 import { useLayout } from "../../../workbench/window/useLayout";
 import { boxIsYours, commitMessage, followFilledMessage, nameCommitAfter, namedAfter } from "./commit/commitMessage";
 import {
@@ -53,20 +44,21 @@ import {
     summarizeOrigins,
     YOURS,
 } from "./changeOrigins";
-import { currentAction, unfinishedMark } from "../../agents/fleet/agentStatus";
-import { useSelectionBlade } from "../../agents/board/cards/selectionBlade";
-import { diffRawUrls } from "./diffRaw";
-import { repoOfPath, turnWrites } from "../files/liveWrites";
-import { ahead, behind, syncable, unpublished } from "../push/outgoingWork";
-import { COMMIT_SCOPE, useChanges } from "./useChanges";
+import { unfinishedMark } from "../../../models/agent-status/agentStatus-chips";
+import { currentAction } from "../../../models/agent-status/agentStatus-meta";
+import { useSelectionBlade } from "../../../models/fleet/board/selectionBlade";
+import { diffRawUrls } from "../../../models/workspace/changes/diffRaw";
+import { repoOfPath, turnWrites } from "../../../models/workspace/files/liveWrites";
+import { ahead, behind, syncable, unpublished } from "../../../models/workspace/push/outgoingWork";
+import { COMMIT_SCOPE, useChanges } from "../../../models/changes/useChanges";
 import { usePushFlow } from "../push/usePushFlow";
-import { useRepos } from "../explorer/useRepos";
+import { useRepos } from "../../../models/workspace/tree/useRepos";
 import type { DiffPayload } from "@intentic/extension-api";
-import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "./changeModules";
-import { sideTotal, truncatedOn, truncatedTotal } from "./truncation";
-import type { OpenMode } from "../tabs/workspaceTabs";
-import { useChangeGrouping } from "./useChangeGrouping";
-import { addedIn, sumCode, sumShown, useChangeWeight, type ShownStat } from "./changeWeight";
+import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "../../../models/workspace/changes/changeModules";
+import { sideTotal, truncatedOn, truncatedTotal } from "../../../models/workspace/changes/truncation";
+import type { OpenMode } from "../../../models/workspace/tabs/workspaceTabs";
+import { useChangeGrouping } from "../../../models/workspace/changes/useChangeGrouping";
+import { addedIn, sumCode, sumShown, useChangeWeight, type ShownStat } from "../../../models/workspace/changes/changeWeight";
 import { useModules } from "../health/useModules";
 import ChangeRowName from "../../../components/ChangeRowName.vue";
 import OtherSandboxChanges from "./OtherSandboxChanges.vue";
@@ -75,7 +67,7 @@ import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { changeRowMenuItems } from "./changeRowMenu";
-import { useHome } from "../home/useHome";
+import { useHome } from "../../../models/workspace/home/useHome";
 import { useNotifications } from "../../../workbench/notifications/notifications";
 import { formatChord, isApplePlatform } from "../../../workbench/commands/keybindings";
 

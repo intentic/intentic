@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { promisify } from "node:util";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
-import type { RunnerCommand, RunnerCommandFrame } from "@intentic/sandbox-contract";
+import type { RunnerCommand, RunnerCommandFrame } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { endSession } from "../seams/session-processes.js";
 
 /* ONE OFFLOADED LINE, RUN ON THIS RUNNER FOR ITS PARENT (settings `offload`, the parent's offload/ service).

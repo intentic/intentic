@@ -1,5 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { AgentEvent, RoutedAgentTurn } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
 import { privacySliceFake } from "../../../privacy/privacy-slice.testing.js";

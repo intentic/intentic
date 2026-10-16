@@ -1,6 +1,8 @@
-import type { DeviceFlowLine, DeviceSandboxFlow, EnvironmentRebuildWait } from "@intentic/sandbox-contract";
+import type { DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract/schemas/devices";
+import type { EnvironmentRebuildWait } from "@intentic/sandbox-contract/schemas/environment";
 import { askedRestart, type RestartResume } from "../system/restart-resume.js";
 import type { Services } from "../composition.js";
+import { errorMessage } from "@intentic/base/errors";
 
 // "REBUILD WHEN THEY'RE IDLE". A rebuild restarts the container every turn here runs in, and the owner pressing Rebuild
 // now while four agents were mid-turn cut all four. This holds the rebuild until nothing a restart would cut is in
@@ -75,7 +77,7 @@ export const createRebuildWhenIdle = (deps: RebuildWhenIdleDeps): RebuildWhenIdl
             }
         } catch (error) {
             answered = true;
-            failure = error instanceof Error ? error.message : String(error);
+            failure = errorMessage(error);
         }
         if (!answered) {
             grace = setTimeout(() => {

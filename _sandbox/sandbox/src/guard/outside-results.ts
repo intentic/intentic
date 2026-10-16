@@ -1,5 +1,6 @@
 import type { HookCallbackMatcher, HookEvent, PostToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
-import { classifyCommand, CONTROL_MCP_SERVERS } from "@intentic/sandbox-contract";
+import { classifyCommand } from "@intentic/sandbox-contract/policy/command-classes";
+import { CONTROL_MCP_SERVERS } from "@intentic/sandbox-contract/policy/reserved-servers";
 import { JS_TOOL_NAME } from "../seams/js-tool-names.js";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { z } from "zod";

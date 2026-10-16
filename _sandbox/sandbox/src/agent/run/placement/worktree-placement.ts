@@ -1,4 +1,7 @@
-import type { AgentEvent, Fence, RepoBase, SnapshotTurn } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
+import type { RepoBase } from "@intentic/sandbox-contract/schemas/agent";
+import type { SnapshotTurn } from "@intentic/sandbox-contract/schemas/history";
 import { settleIndex } from "@intentic/base/git";
 import { type RepoSync, syncConversation } from "../../../conversations/land/sync.js";
 import { agentRepoReview, anchorOf } from "../../../conversations/land/agent-changes.js";
@@ -10,7 +13,7 @@ import { carryStrayWork, type RefSnapshot, snapshotRefs } from "../../../convers
 import type { Services } from "../../../composition.js";
 import { forkWorktreeBase } from "../../checkpoints/checkpoint-worktree.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
-import { type LandBooks, type LandingDeps, type LandingHooks, landTurn, settleLandBooks } from "./turn-landing.js";
+import { type LandBooks, type LandingDeps, type LandingHooks, landTurn, settleLandBooks } from "../../../conversations/land/turn-landing.js";
 import { anchorIsolatedTurn, type Placement, worktreeFrame } from "./turn-placement.js";
 import type { ReachWatch } from "./turn-reach.js";
 
@@ -72,7 +75,7 @@ const rebaser =
         // `base` is where the branch sits on its upstream; stale, it reads a fast-forward as real work.
         await deps.agents.recordWorktree(
             conversationId,
-            // oxlint-disable-next-line oxc/no-map-spread -- Each route returns a fresh immutable record.
+            // Each route returns a fresh immutable record.
             (worktreeOf(deps.agents.entry(conversationId))?.repos ?? worktree.repos).map((composed) => ({ ...composed, base: onto.get(composed.repo) ?? composed.base })),
         );
         books.span = books.span.map((repo) => ({ repo: repo.repo, from: onto.get(repo.repo) ?? repo.from, dir: repo.dir }));

@@ -1,4 +1,4 @@
-import type { SealedBox } from "@intentic/sandbox-contract";
+import type { SealedBox } from "@intentic/sandbox-contract/schemas/keyring";
 import { seal } from "@intentic/sandbox-contract/keyring-seal";
 
 // A value this computer's own programs hand the keyring (`intentic-machine keyring add`, the desktop app) is sealed to

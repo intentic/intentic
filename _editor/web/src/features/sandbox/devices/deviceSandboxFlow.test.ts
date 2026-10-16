@@ -4,7 +4,7 @@
 // rather than a result frame. Pinned here: with `severing` that IS the outcome, and a refusal the device managed
 // to send is still a failure either way.
 import "@intentic/testing/dom";
-import type { DeviceFlowLine } from "@intentic/sandbox-contract";
+import type { DeviceFlowLine } from "@intentic/sandbox-contract/schemas/devices";
 import { AsyncIteratorClass } from "@orpc/client";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
@@ -16,7 +16,7 @@ jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandbox
 // exactly what this returns.
 jest.mock(`../../../client/sandbox/sandboxClient`, () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn(), sandboxError: jest.fn() }));
 
-const { DeviceFlowLostError, manageDeviceSandbox, swapServingSandbox } = await import("./useDevices");
+const { DeviceFlowLostError, manageDeviceSandbox, swapServingSandbox } = await import("../../../models/sandbox/devices/useDevices");
 
 // The daemon's frames as the typed client hands them over, one per pull. `dies` plays a container deleted out from
 // under the connection carrying its own removal — Chromium's own words for a body that stops arriving — once the

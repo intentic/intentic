@@ -1,4 +1,4 @@
-import { DEVICE_FEATURE_KEYRING, deviceSupports } from "@intentic/sandbox-contract";
+import { DEVICE_FEATURE_KEYRING, deviceSupports } from "@intentic/sandbox-contract/schemas/hosts";
 import type { Services } from "../../composition.js";
 import type { SecretKeepOn } from "../need-kinds.js";
 import { NeedRefusal } from "../needs.js";

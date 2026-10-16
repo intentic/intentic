@@ -1,6 +1,6 @@
 import type { Caller } from "../auth/auth.js";
 import { conversationReader, registryProvenance, seesWholeFleet } from "../auth/scope/conversation-reader.js";
-import { sessionsContract } from "@intentic/sandbox-contract";
+import { sessionsContract } from "@intentic/sandbox-contract/contracts/sessions.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";

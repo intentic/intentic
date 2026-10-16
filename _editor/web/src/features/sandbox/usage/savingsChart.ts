@@ -1,6 +1,6 @@
 import type { FigureAccent } from "@intentic/ui/markdown";
 import { seriesColor } from "@intentic/ui/series";
-import type { InputSavings } from "@intentic/sandbox-contract";
+import type { InputSavings } from "@intentic/sandbox-contract/schemas/settings";
 import { t } from "@intentic/ui/i18n";
 
 // Every number and mark on the Savings surfaces, as pure functions over the daemon's savings report (same split

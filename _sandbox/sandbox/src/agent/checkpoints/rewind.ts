@@ -1,7 +1,7 @@
-import type { RewindResult } from "@intentic/sandbox-contract";
+import type { RewindResult } from "@intentic/sandbox-contract/schemas/history";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Services } from "../../composition.js";
-import type { TurnCheckpoint } from "./turn-checkpoints.js";
+import type { TurnCheckpoint } from "../../store/journals/turn-checkpoints.js";
 
 // Rewind moves three things together: files, messages after the turn, and the provider session; restoring only files
 // would leave the agent's context referencing edits no longer on disk. Which arm restores comes from the checkpoint

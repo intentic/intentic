@@ -1,4 +1,4 @@
-import type { SafetyVerdict } from "@intentic/sandbox-contract";
+import type { SafetyVerdict } from "@intentic/sandbox-contract/policy/safety-policy";
 import type { judgeCommand } from "../agent/tools/command-judge.js";
 import type { LiveRun } from "../conversations/actor/conversation-holdings.js";
 import type { CardDeps } from "../guard/card-offers.js";

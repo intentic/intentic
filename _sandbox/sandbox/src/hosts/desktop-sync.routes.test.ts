@@ -1,4 +1,4 @@
-import { PairingAnswerSchema } from "@intentic/sandbox-contract";
+import { PairingAnswerSchema } from "@intentic/sandbox-contract/schemas/short-codes";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import type { AppEnv } from "../app-env.js";

@@ -1,4 +1,4 @@
-import type { VpnConfig } from "@intentic/sandbox-contract";
+import type { VpnConfig } from "@intentic/sandbox-contract/schemas/vpn";
 import { tunnelHandler, tunnelStatus } from "../../tunnel/tunnel-handler.js";
 import { vpnDrivers } from "../../vpn/vpn-drivers.js";
 import { connectVpn, disconnectVpn, vpnLink } from "../../vpn/vpn-links.js";

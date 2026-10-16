@@ -1,17 +1,18 @@
 <script setup lang="ts">
-import { SPENT_UTILIZATION } from "@intentic/sandbox-contract";
-import type { KeepWarmEnd } from "@intentic/sandbox-contract";
+import { SPENT_UTILIZATION } from "@intentic/sandbox-contract/models/plan-pools";
+import type { KeepWarmEnd } from "@intentic/sandbox-contract/schemas/keep-warm";
 import { formatElapsed, formatTokens, Icon, ProgressRing, ResponsiveOverlay, type Tip, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock } from "@intentic/ui/format";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
-import KeepWarmPanel from "../../agents/fleet/prompt-cache/KeepWarmPanel.vue";
-import { contextPct, turnInFlight } from "../../agents/fleet/agentStatus";
-import { cacheAlive, cacheCooling, keptWarm } from "../../agents/fleet/prompt-cache/promptCache";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { formatRemaining, formatReset, planHeadroom, remainingFigure, usageStatusFor } from "../session/usageStatus";
-import { usePaneView } from "./useChat-view";
+import KeepWarmPanel from "../../../parts/fleet/KeepWarmPanel.vue";
+import { contextPct } from "../../../models/agent-status/agentStatus-meta";
+import { turnInFlight } from "../../../models/agent-status/agentStatus-standing";
+import { cacheAlive, cacheCooling, keptWarm } from "../../../models/fleet/promptCache";
+import { useAgents } from "../../../models/fleet/useAgents";
+import { formatRemaining, formatReset, planHeadroom, remainingFigure, usageStatusFor } from "../../../models/providers/usageStatus";
+import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useAudience } from "../../../app/useAudience";
 import ChatToolCallsToggle from "../tools/ChatToolCallsToggle.vue";

@@ -1,5 +1,5 @@
 import { type Conversion, type Converted, convertDocument as convertWith, type Granularity } from "@intentic/sandbox-contract/documents";
-import { DEV_VERSION } from "@intentic/sandbox-contract";
+import { DEV_VERSION } from "@intentic/sandbox-contract/state/versions";
 import { version } from "../../version.js";
 
 // The conversion vocabulary lives in the contract (@intentic/sandbox-contract/documents), shared with extensions'

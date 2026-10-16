@@ -162,7 +162,7 @@ export type InstallReach = "own-copy" | "main-tree" | "ask-owner";
 // session recall, outside the sandbox, recognises them too.
 export { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER };
 
-// Titles beside each header (turn-preamble.ts pairs them); picked from the built notice's own opening.
+// Titles beside each header (sessions/vocabulary/prompt-envelope.ts pairs them); picked from the built notice's own opening.
 export const SETUP_NOTICE_TITLE = "Dependencies aren't installed yet";
 export const STALE_NOTICE_TITLE = "Dependencies are behind";
 export const setupNoticeTitle = (notice: string): string => (notice.startsWith(SETUP_NOTICE_HEADER) ? SETUP_NOTICE_TITLE : STALE_NOTICE_TITLE);

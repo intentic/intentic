@@ -1,11 +1,11 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { unstubbed } from "@intentic/testing";
 import { z } from "zod";
 import type { AgentTool } from "../../agent/tools/agent-tools.js";
 import type { InProcessServer, MountSpec } from "../../agent/tools/turn-mounts.js";
 import { armSupervisor, type ChildSupervisor } from "../../agent/subagents/children.js";
 import type { DelegateAsk } from "../linked-children.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { linkMountsOf } from "../link-mounts.js";
 
 // A linked sandbox reaches a turn the way a connected computer does: a tool server named after its card, on the turn's

@@ -1,5 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { clearableOnDevice } from "@intentic/sandbox-contract";
+import { clearableOnDevice } from "@intentic/sandbox-contract/schemas/devices";
 import type { Pairing } from "../config.js";
 import {
     CONFLICT_PATHS_MAX,

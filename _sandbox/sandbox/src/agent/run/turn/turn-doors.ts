@@ -1,4 +1,4 @@
-import type { StopResult, StopTurn } from "@intentic/sandbox-contract";
+import type { StopResult, StopTurn } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { type LiveRun, liveRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";

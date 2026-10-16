@@ -6,13 +6,12 @@ import { join } from "node:path";
 
 import { waitFor, SETTLES } from "@intentic/testing/bun";
 
-import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
+import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 
 import { createApp } from "../app.js";
 
 import type { Services } from "../composition.js";
 
-import { extensionProcessKey } from "../extensions/extension-processes.js";
 
 import { toolCardOf, toolChildrenOf, transcriptPageOf } from "../sessions/agent-transcript.js";
 
@@ -24,6 +23,7 @@ import { fakeServiceProcesses } from "../processes/processes-slice.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "../harness/route-services.testing.js";
 import { runAgentTurn } from "../harness/route-turns.testing.js";
 import { unlinkedMessage } from "./worktrees/checkout-link.js";
+import { extensionProcessKey } from "../capabilities/extension-dirs.js";
 
 // Agents routes tests, driven over the daemon's HTTP surface as the browser drives it. Fakes and client are shared from
 // route-services.testing.ts and its siblings.

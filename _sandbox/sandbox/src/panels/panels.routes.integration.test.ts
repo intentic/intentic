@@ -2,11 +2,11 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { panelsContract } from "@intentic/sandbox-contract";
+import { panelsContract } from "@intentic/sandbox-contract/contracts/panels.contract";
 import { errorCode, routesClient } from "../harness/route-client.testing.js";
 import { tempWorkspace } from "../harness/route-fakes.testing.js";
 import { fakeProcesses } from "../processes/processes-slice.testing.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import { type PanelsRoutesDeps, createPanelsRoutes } from "./panels.routes.js";
 

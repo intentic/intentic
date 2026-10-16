@@ -1,7 +1,7 @@
 import { lstat, readdir, realpath, rm, rmdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { errnoCode } from "@intentic/base/errors";
-import type { StorageCategoryId, StorageCleanResult } from "@intentic/sandbox-contract";
+import type { StorageCategoryId, StorageCleanResult } from "@intentic/sandbox-contract/schemas/metrics";
 import { BROWSER_LOCK, type CleanCandidate, inFlight, planClean } from "./clean-plan.js";
 import { namedByProgram, pnpmRunning, type RunningProgram } from "./running-programs.js";
 import { categoryFolders, classifyStoragePath, locateStoragePath, removalOf, type StorageRoots } from "./storage-catalog.js";

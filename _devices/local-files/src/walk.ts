@@ -2,13 +2,13 @@ import type { Dirent } from "node:fs";
 import { readdir, readlink, realpath, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
 import { mapPool } from "@intentic/base/async";
-import {
-    isLockedWorkspacePath,
-    type WorkspaceChildren,
-    type WorkspaceLink,
-    type WorkspaceTree,
-    type WorkspaceTreeEntry,
-} from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
+import type {
+    WorkspaceChildren,
+    WorkspaceLink,
+    WorkspaceTree,
+    WorkspaceTreeEntry,
+} from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { createIgnoreScope, type IgnoreScope, toRelPath, walkMatchers } from "@intentic/workspace-ignore";
 import { segmentsOf, within } from "./paths.js";
 

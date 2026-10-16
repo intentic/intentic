@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 
-import { type AgentEvent, type Capability, EMAIL_SIGN_IN_OFF, isTurnFact, PLATFORM_KEY_UNKNOWN, PROVIDER_VENDOR, RAW_ROUTE_LIST, type TranscriptRow } from "@intentic/sandbox-contract";
+import { type AgentEvent, isTurnFact } from "@intentic/sandbox-contract/events/agent-events";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { EMAIL_SIGN_IN_OFF, PLATFORM_KEY_UNKNOWN } from "@intentic/sandbox-contract/schemas/system";
+import { PROVIDER_VENDOR } from "@intentic/sandbox-contract/models/agent-catalog";
+import { RAW_ROUTE_LIST } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
@@ -24,7 +29,7 @@ import { createBootTracker } from "./system/boot/boot.js";
 import type { AgentRequest } from "./agent/providers/agent-request.js";
 import { ANONYMOUS_BROWSER_SERVER } from "./browser/tools/browser-tools.js";
 
-import { testConfig } from "./testing.js";
+import { testConfig } from "./env.config.testing.js";
 
 import { clientFor, collect, errorCode, postJson, proven, rejectForbidden } from "./harness/route-client.testing.js";
 import { rejectAuth } from "./auth/auth-slice.testing.js";

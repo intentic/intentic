@@ -1,11 +1,16 @@
 import { createLogger } from "../logger.js";
 import { createPerfTracker } from "../system/resources/perf.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
+import { Hono } from "hono";
+import type { AppEnv } from "../app-env.js";
+import { serveRawRoutes } from "../http/raw-route-server.js";
 import { createSpeechRoute, createWakeClaims, type SpeechRoutesDeps, WAKE_CLAIM_MS } from "./speech.routes.js";
-import { MAX_UTTERANCE_WAV_BYTES, type Speech, SpeechModelNotReadyError, SpeechUnprovisionedError } from "./transcribe.js";
-import { WavFormatError } from "./wav.js";
+import { MAX_UTTERANCE_WAV_BYTES, type Speech, SpeechModelNotReadyError, SpeechUnprovisionedError } from "@intentic/speech/transcribe";
+import { WavFormatError } from "@intentic/speech/wav";
 
 /* The speech routes over their two seams (perf, speech). */
+
+const speechApp = (...args: Parameters<typeof createSpeechRoute>): Hono<AppEnv> => serveRawRoutes(new Hono<AppEnv>(), createSpeechRoute(...args));
 
 const speechDeps = (speech: Partial<Speech>): SpeechRoutesDeps => ({
     perf: createPerfTracker(createLogger(testConfig)),
@@ -23,7 +28,7 @@ const speechDeps = (speech: Partial<Speech>): SpeechRoutesDeps => ({
 
 test("GET /speech/status answers the engine's report for the asked locale verbatim", async () => {
     let asked: string | undefined;
-    const app = createSpeechRoute(
+    const app = speechApp(
         speechDeps({
             status: async (locale) => {
                 asked = locale;
@@ -39,7 +44,7 @@ test("GET /speech/status answers the engine's report for the asked locale verbat
 
 test("POST /speech/prepare arms the locale's model and answers where it stands", async () => {
     let asked: string | undefined;
-    const app = createSpeechRoute(
+    const app = speechApp(
         speechDeps({
             prepare: async (locale) => {
                 asked = locale;
@@ -54,7 +59,7 @@ test("POST /speech/prepare arms the locale's model and answers where it stands",
 
 test("POST /speech/transcribe hands the WAV and locale to the engine and answers its text", async () => {
     let seen: { bytes: number; locale: string | undefined } | undefined;
-    const app = createSpeechRoute(
+    const app = speechApp(
         speechDeps({
             transcribe: async (wav, locale) => {
                 seen = { bytes: wav.byteLength, locale };
@@ -69,7 +74,7 @@ test("POST /speech/transcribe hands the WAV and locale to the engine and answers
 });
 
 test("an oversized utterance is refused whether declared or discovered", async () => {
-    const app = createSpeechRoute(speechDeps({}));
+    const app = speechApp(speechDeps({}));
     // Declared: the header alone refuses before the body is read.
     const declared = await app.request("/speech/transcribe", {
         method: "POST",
@@ -84,7 +89,7 @@ test("an oversized utterance is refused whether declared or discovered", async (
 
 // The undeclared case read the whole body before measuring it; a stream that never ends shows the read is counted.
 test("an oversized chunked utterance is refused without reading it whole", async () => {
-    const app = createSpeechRoute(speechDeps({}));
+    const app = speechApp(speechDeps({}));
     let pulled = 0;
     const body = new ReadableStream<Uint8Array>({
         pull(controller) {
@@ -99,13 +104,13 @@ test("an oversized chunked utterance is refused without reading it whole", async
 });
 
 test("an empty body is a 400, not a model run over nothing", async () => {
-    const app = createSpeechRoute(speechDeps({}));
+    const app = speechApp(speechDeps({}));
     const response = await app.request("/speech/transcribe", { method: "POST" });
     expect(response.status).toBe(400);
 });
 
 test("the two refusals with a story get their own statuses: 501 rebuild, 409 wait", async () => {
-    const unprovisioned = createSpeechRoute(
+    const unprovisioned = speechApp(
         speechDeps({
             transcribe: async () => {
                 throw new SpeechUnprovisionedError();
@@ -113,7 +118,7 @@ test("the two refusals with a story get their own statuses: 501 rebuild, 409 wai
         }),
     );
     expect((await unprovisioned.request("/speech/transcribe", { method: "POST", body: Buffer.from("RIFF") })).status).toBe(501);
-    const downloading = createSpeechRoute(
+    const downloading = speechApp(
         speechDeps({
             transcribe: async () => {
                 throw new SpeechModelNotReadyError();
@@ -124,7 +129,7 @@ test("the two refusals with a story get their own statuses: 501 rebuild, 409 wai
 });
 
 test("audio that is not a 16-bit PCM WAV is the caller's mistake, a 400", async () => {
-    const app = createSpeechRoute(
+    const app = speechApp(
         speechDeps({
             transcribe: async () => {
                 throw new WavFormatError("not a WAV file");
@@ -138,12 +143,12 @@ test("audio that is not a 16-bit PCM WAV is the caller's mistake, a 400", async 
 
 /* The wake claim: two devices hearing one "Leon" open one session between them. */
 
-const claimOf = (app: ReturnType<typeof createSpeechRoute>, device: string) =>
+const claimOf = (app: Hono<AppEnv>, device: string) =>
     app.request("/speech/wake", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device }) });
 
 test("the first device to claim a wake acts on it, and another device of the same person stands down for a few seconds", async () => {
     let now = 1_000_000;
-    const app = createSpeechRoute(
+    const app = speechApp(
         speechDeps({}),
         createWakeClaims(() => now),
     );
@@ -174,7 +179,7 @@ test("two people never stand each other down", () => {
 });
 
 test("a claim that names no usable device is a 400", async () => {
-    const app = createSpeechRoute(speechDeps({}));
+    const app = speechApp(speechDeps({}));
     expect((await claimOf(app, "x")).status).toBe(400);
     expect((await app.request("/speech/wake", { method: "POST", body: "not json" })).status).toBe(400);
 });

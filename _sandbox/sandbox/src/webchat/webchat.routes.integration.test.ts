@@ -1,14 +1,11 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-    type ActivityEvent,
-    type AgentEvent,
-    type AgentTurn,
-    type Automation,
-    SandboxSettingsSchema,
-    WEBCHAT_DAILY_MAX_DEFAULT,
-} from "@intentic/sandbox-contract";
+import type { ActivityEvent } from "@intentic/sandbox-contract/schemas/activity";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import { type Automation, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract/schemas/automations";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { Hono } from "hono";
 import { stubGlobal, unstubAllGlobals, waitFor } from "@intentic/testing/bun";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
@@ -17,7 +14,7 @@ import { PAYLOAD_MAX, runHeldWake } from "../automations/scheduler.js";
 import { createAutomationsRoutes } from "../automations/automations.routes.js";
 import { HELD_WAKE_DECLINED } from "../automations/held-wake-answers.js";
 import { call } from "@orpc/server";
-import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { sqliteTurnJournal } from "../store/journals/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import type { Services } from "../composition.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
@@ -25,7 +22,8 @@ import { unstubbed } from "@intentic/testing";
 import { fileWebchatOutbox, outboxStreamFor } from "./webchat-outbox.js";
 import { createWebchatRoutes } from "./webchat.routes.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
-import { conversationEntry, drivenBy } from "../testing.js";
+import { conversationEntry } from "../conversations/registry/agents-store.testing.js";
+import { drivenBy } from "../seams/turn-starter.testing.js";
 
 const ORIGIN = "https://site.example";
 

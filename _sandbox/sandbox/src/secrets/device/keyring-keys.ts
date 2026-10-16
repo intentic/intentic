@@ -1,4 +1,4 @@
-import { KEYRING_KEY_RE, type KeyringSandboxKeys, KeyringSandboxKeysSchema } from "@intentic/sandbox-contract";
+import { KEYRING_KEY_RE, type KeyringSandboxKeys, KeyringSandboxKeysSchema } from "@intentic/sandbox-contract/schemas/keyring";
 import { type KeyringKeyPair, newSealKeyPair, newSignKeyPair } from "@intentic/sandbox-contract/keyring-seal";
 import type { Context } from "hono";
 import { z } from "zod";

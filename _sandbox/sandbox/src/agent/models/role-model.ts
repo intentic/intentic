@@ -1,24 +1,15 @@
 import { errorMessage } from "@intentic/base/errors";
-import {
-    endpointProvider,
-    type ModelChoice,
-    type ModelPin,
-    modelPinKey,
-    type ModelRole,
-    type ModelSource,
-    NATIVE_PROVIDERS,
-    type NativeProvider,
-    ladderIsEmpty,
-    ladderPins,
-    readyChain,
-    roleLadder,
-    type SetupLadder,
-} from "@intentic/sandbox-contract";
+import { endpointProvider } from "@intentic/sandbox-contract/models/agent-catalog";
+import { type ModelChoice, modelPinKey, type ModelSource, readyChain } from "@intentic/sandbox-contract/models/model-pins";
+import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import type { ModelRole } from "@intentic/sandbox-contract/models/model-roles";
+import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
+import { ladderIsEmpty, ladderPins, roleLadder, type SetupLadder } from "@intentic/sandbox-contract/models/model-setups";
 import type { Services } from "../../composition.js";
 import { endpointConfigOf } from "../../endpoints/local-model.js";
-import { mentionsSpentAllowance } from "../providers/failure-sentences.js";
+import { mentionsSpentAllowance } from "../../engines/failure-sentences.js";
 import { type DeclaredWindow, declaredWindow, helperOverflow, helperPromptRoom } from "../prompt/window/context-budget.js";
-import { type RoleAsk, readRoleAnswer, UnusableAnswerError } from "./role-answer.js";
+import { type RoleAsk, readRoleAnswer, UnusableAnswerError } from "../../engines/role-answer.js";
 import { rungLimit, spentRung } from "./role-model-quota.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 import { runSealedRequest } from "../run/sealed/sealed-request.js";

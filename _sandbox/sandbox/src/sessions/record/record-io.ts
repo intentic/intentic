@@ -9,7 +9,7 @@ interface Writer {
 export const writeAll = async (handle: Writer, bytes: Buffer): Promise<void> => {
     let offset = 0;
     while (offset < bytes.length) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- each write resumes where the previous one stopped.
+        // each write resumes where the previous one stopped.
         const { bytesWritten } = await handle.write(bytes, offset, bytes.length - offset);
         if (bytesWritten === 0) {
             throw new Error("record write made no progress");

@@ -1,6 +1,6 @@
 <!-- The home's quick look: a card beside the hovered tile with a file's first lines, the picture itself, a document's first page, or what a folder holds. -->
 <script setup lang="ts">
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import {
     Code,
     explorerColorClass,
@@ -18,13 +18,13 @@ import { useLayout } from "../../../workbench/window/useLayout";
 import { renderViewerForExtension, useViewerComponent } from "../../../workbench/views/viewerRegistry";
 import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
 import { explorerShows } from "../explorer/explorerFilter";
-import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
-import { readFileWindow } from "../files/fileWindow";
+import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
+import { readFileWindow } from "../../../models/workspace/files/fileWindow";
 import { scopeQuery } from "../../../app/workspaceScope";
 import { extensionOf } from "@intentic/ui/file-format";
 import { homeGroups, homeOrder } from "./homeOrder";
-import { kindLabel, QUICK_LOOK_BYTES, type QuickLookKind, quickLookLines, quickLookPlan } from "./quickLookContent";
-import { thumbnailUrl } from "./thumbnails";
+import { kindLabel, QUICK_LOOK_BYTES, type QuickLookKind, quickLookLines, quickLookPlan } from "../../../models/workspace/home/quickLookContent";
+import { thumbnailUrl } from "../../../models/workspace/home/thumbnails";
 import { useT } from "@intentic/ui/i18n";
 
 // `entry` undefined means closed. The card takes no pointer events: it overlaps the tiles beside its anchor, and the

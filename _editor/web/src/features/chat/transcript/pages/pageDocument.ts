@@ -1,6 +1,7 @@
-import { type McpAppData, type Page, pageHead, type PageTheme, readMcpAppData } from "@intentic/sandbox-contract";
+import { type McpAppData, pageHead, type PageTheme, readMcpAppData } from "@intentic/sandbox-contract/text/pages";
+import type { Page } from "@intentic/sandbox-contract/events/requests";
 import { sandboxBlob } from "../../../../client/sandbox/sandboxClient";
-import { buildPreviewDocument } from "../../../workspace/viewers/html/htmlDocument";
+import { buildPreviewDocument } from "../../../../models/workspace/viewers/htmlDocument";
 
 // A page the agent showed, as the frame draws it: the stored file (never rewritten, so read once per window), sealed the
 // way every workspace page is (htmlDocument.ts), with the chat's theme and the bridge first in its head.

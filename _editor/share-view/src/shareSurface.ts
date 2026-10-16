@@ -1,4 +1,4 @@
-import type { ChatSurface } from "@intentic/web/features/chat/tools/chatToolSurface";
+import type { ChatSurface } from "@intentic/web/models/conversations/tools/chatToolSurface";
 
 // Only pictures are reachable from a published page; everything else (file contents, shell attachments,
 // delegations) stays undefined so the card draws a generic record instead of a live link. Paths are already

@@ -1,6 +1,6 @@
 import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { computed, effectScope, type Ref, watch } from "vue";
-import { activeSandboxId } from "../../lib/activeSandbox";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
 import { rpcQuery } from "../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { supportsRoute } from "../../client/sandbox/useDaemonRoutes";

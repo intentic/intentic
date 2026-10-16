@@ -4,10 +4,10 @@ import { t } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
 import { hold, useNotifications } from "../../../../workbench/notifications/notifications";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
-import { expectRestart } from "../../live/sandboxRestart";
+import { expectRestart } from "../../../../models/sandbox/live/sandboxRestart";
 import { autoUpdateNotice } from "./autoUpdate";
 import { useAutoUpdate } from "./useAutoUpdate";
-import { useSandboxVersion } from "./useSandboxVersion";
+import { useSandboxVersion } from "../../../../models/sandbox/useSandboxVersion";
 
 // AN UPDATE THAT TAKES ITSELF, FOLLOWED FROM THE ROOT. The daemon only restarts when nobody it can see is at the editor,
 // but "nobody it can see" is a judgement, and a person reading without touching anything looks the same as an empty

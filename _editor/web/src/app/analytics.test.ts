@@ -253,7 +253,7 @@ describe(`sandbox switch`, () => {
         environment.analytics.posthogKey = `phc_test`;
         stubGlobal(`window`, { env: environment });
         const { analyticsChoice } = await import(`./analyticsConsent`);
-        const { activeSandboxId } = await import(`../lib/activeSandbox`);
+        const { activeSandboxId } = await import(`./storage/activeSandbox`);
         const { queryClient } = await import(`../lib/queryPersistence`);
         const { rpcKey } = await import(`../lib/queryKeys`);
         analyticsChoice.value = `allow`;
@@ -284,7 +284,7 @@ describe(`sandbox switch`, () => {
         environment.analytics.posthogKey = `phc_test`;
         stubGlobal(`window`, { env: environment });
         const { analyticsChoice } = await import(`./analyticsConsent`);
-        const { activeSandboxId } = await import(`../lib/activeSandbox`);
+        const { activeSandboxId } = await import(`./storage/activeSandbox`);
         const { queryClient } = await import(`../lib/queryPersistence`);
         const { rpcKey } = await import(`../lib/queryKeys`);
         analyticsChoice.value = `allow`;

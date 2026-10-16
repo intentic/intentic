@@ -15,7 +15,7 @@
 import { sleep } from "@intentic/base/async";
 import { describeError, flushClientDiagnostics, reportClient } from "./clientDiagnostics";
 import { storedValue, storeValue } from "@intentic/ui/storage";
-import { TURN_DEFAULT_KEYS } from "../lib/turnDefaultKeys";
+import { TURN_DEFAULT_KEYS } from "./turnDefaultKeys";
 
 // How long after boot an error still counts as a failed start rather than an ordinary bug; generous, since a false
 // positive only costs one wipe and reload.

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { IgnoredOutput } from "@intentic/sandbox-contract";
+import type { IgnoredOutput } from "@intentic/sandbox-contract/schemas/git/git";
 import { Button, explorerColorClass, formatBytes, iconForEntry, useExplorerStyle } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { basename, parentDir } from "@intentic/ui/path";

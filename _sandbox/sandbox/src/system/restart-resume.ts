@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import type { DeviceFlowLine, RestartIntent } from "@intentic/sandbox-contract";
+import type { DeviceFlowLine } from "@intentic/sandbox-contract/schemas/devices";
+import type { RestartIntent } from "@intentic/sandbox-contract/schemas/restart-intent";
 import { z } from "zod";
 import { logsRoot } from "../seams/logs-root.js";
 import { defineDocument } from "../store/evolution/documents.js";

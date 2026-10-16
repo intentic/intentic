@@ -2,7 +2,9 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentEvent, type AgentTurn, type Loop, LOOP_DIR } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import { type Loop, LOOP_DIR } from "@intentic/sandbox-contract/schemas/loops";
 import { unstubbed } from "@intentic/testing";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { turnRunOf } from "../conversations/actor/conversation-holdings.js";
@@ -10,7 +12,9 @@ import type { Services } from "../composition.js";
 import { fileLoopsStore } from "./loops-store.js";
 import { loopRunning, resumeLoops, runLoop } from "./loop-runner.js";
 import { restartResume } from "../agent/run/turn/restart-resume-policy.js";
-import { drivenBy, memoryFleet, unpinnedRouting } from "../testing.js";
+import { drivenBy } from "../seams/turn-starter.testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
+import { unpinnedRouting } from "../agent/run/turn/turn-routing.testing.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { createDomainEvents } from "../seams/domain-events.js";
 
@@ -38,7 +42,6 @@ const fakeServices = (root: string): Services => {
 
 // Turn that ends immediately, recording the prompt it was given; `events` lets a test add usage or an error.
 const fakeTurn = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): TurnStarter["stream"] =>
-    // eslint-disable-next-line require-yield
     async function* fake(input: AgentTurn) {
         prompts.push(input.prompt);
         yield* events;

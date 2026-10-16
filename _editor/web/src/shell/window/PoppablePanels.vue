@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
-import { useChatFloating } from "../../features/chat/panel/chatFloating";
-import { globalTerminalSource, useTerminalPanel } from "../../features/terminal/useTerminalPanel";
+import { useChatFloating } from "../../models/conversations/panel/chatFloating";
+import { globalTerminalSource, useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import { useTerminalFloating } from "../../features/terminal/terminalFloating";
-import { chatOnRail } from "../../features/chat/panel/chatPanelLayout";
+import { chatOnRail } from "../../models/conversations/panel/chatPanelLayout";
 import { BROWSERS_SIDE_VIEW, browsersFront, browsersOpened } from "../../workbench/browsers/browsersSurface";
 import { browsersPath } from "../../workbench/browsers/browsersPaths";
 import { useBrowsersFloating } from "../../workbench/browsers/browsersFloating";

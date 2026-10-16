@@ -1,4 +1,4 @@
-import { MODEL_ROLES } from "@intentic/sandbox-contract";
+import { MODEL_ROLES } from "@intentic/sandbox-contract/models/model-roles";
 import { setLocale } from "@intentic/ui/i18n";
 import { roleBlurb, roleLabel } from "./roleWords";
 

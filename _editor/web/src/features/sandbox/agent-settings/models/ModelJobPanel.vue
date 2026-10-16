@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { MODEL_ROLES, type ModelPin, type ModelRole, suggestedSetup } from "@intentic/sandbox-contract";
+import { MODEL_ROLES, type ModelRole } from "@intentic/sandbox-contract/models/model-roles";
+import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import { suggestedSetup } from "@intentic/sandbox-contract/models/model-setups";
 import { Button, ui } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { modelLabelFor } from "../../../chat/accounts/providerCatalog";
+import { modelLabelFor } from "../../../../models/providers/providerCatalog";
 import { pinKnobSummary } from "./modelPinList";
 import type { SetupsView } from "./modelSetups";
 import { roleBlurb, roleLabel, setupName } from "./roleWords";

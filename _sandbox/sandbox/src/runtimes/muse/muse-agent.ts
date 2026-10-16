@@ -1,9 +1,9 @@
 import { whenAborted } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { type SteeringChannel, steeringRelay } from "../../agent/checkpoints/agent-steering.js";
 import { loadAttachments } from "../../agent/prompt/attachment-images.js";
-import { withFileNote } from "../../agent/prompt/attachment-note.js";
+import { withFileNote } from "../../sessions/vocabulary/attachment-note.js";
 import type { AgentRequest, MuseCredential } from "../../agent/providers/agent-request.js";
 import { POST_PLAN_MODE } from "../../agent/run/agent.js";
 import { vendorShellEnv } from "../../agent/run/vendor-shell-env.js";

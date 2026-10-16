@@ -1,24 +1,16 @@
 <script setup lang="ts">
-import {
-    HANDOFF_MODES,
-    type KeepWarmSettings,
-    type LimitHandoff,
-    KeepWarmSettingsSchema,
-    type LimitPolicy,
-    type RetryPolicy,
-    type RoomPolicy,
-    type TurnBreak,
-    type TurnBreakPolicy,
-} from "@intentic/sandbox-contract";
+import { HANDOFF_MODES, type LimitHandoff } from "@intentic/sandbox-contract/schemas/providers/handoff";
+import { type KeepWarmSettings, KeepWarmSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import type { LimitPolicy, RetryPolicy, RoomPolicy, TurnBreak, TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
-import { breakAnswers, breakLabel } from "../../../chat/run/endings/turnBreak";
-import { handoffLabel } from "../../../chat/run/endings/handoffChoice";
-import { useSandboxSettings } from "../../overview/useSandboxSettings";
+import { breakAnswers, breakLabel } from "../../../../models/conversations/endings/turnBreak";
+import { handoffLabel } from "../../../../models/conversations/endings/handoffChoice";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
-// The standing answer to each ending's one question, in the same words the chat asks it in (chat/run/endings/turnBreak.ts).
+// The standing answer to each ending's one question, in the same words the chat asks it in (models/conversations/endings/turnBreak.ts).
 // One answer per row, never a set of switches over the same wall: two independent booleans over a spent allowance
 // spelled a fourth posture ("move, else hold") nobody would choose, and left every surface guessing which of them was
 // the one in force. Every ending that ran something starts at `wait`: a re-run spends the owner's allowance on a turn
@@ -56,7 +48,7 @@ const memoryPolicy = computed<TurnBreakPolicy>({
     set: (value) => patch({ memoryPolicy: value as RoomPolicy }),
 });
 
-// How a turn a spent allowance held continues once its cache is cold (chat/run/endings/handoffChoice.ts): the chat's card asks
+// How a turn a spent allowance held continues once its cache is cold (models/conversations/endings/handoffChoice.ts): the chat's card asks
 // each time and preselects this, and a booked send (a move, a resend at the reset) uses it unless someone picked there.
 const handoffRows = computed(() => [
     { label: t(`sandbox.agentRecovery.handoffSuggested`), value: `suggested` as LimitHandoff, title: { title: t(`sandbox.agentRecovery.handoffSuggested`), note: t(`sandbox.agentRecovery.handoffSuggestedBrief`) } },

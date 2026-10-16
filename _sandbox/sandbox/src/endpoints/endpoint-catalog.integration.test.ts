@@ -2,7 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { link, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LOCAL_MODEL_INSTANT } from "@intentic/sandbox-contract";
+import { LOCAL_MODEL_INSTANT } from "@intentic/sandbox-contract/schemas/capabilities";
 import { createEndpointCatalog } from "./endpoint-catalog.js";
 
 // The id is the routing key, never rewritten; a local model's id is often the weights file's absolute path, which the

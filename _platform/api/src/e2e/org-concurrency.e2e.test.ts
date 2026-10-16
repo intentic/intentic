@@ -130,53 +130,53 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
     it(`two admins removing each other at once leave one admin, never none`, async () => {
         for (let round = 0; round < ROUNDS; round++) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- each round is one race over its own fresh rows
+            // each round is one race over its own fresh rows
             const [a, b] = await Promise.all([person(`a`), person(`b`)]);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // as above
             const orgId = await orgWithAdmins(a, b);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // as above
             const settled = await Promise.allSettled([
                 call(orgRoutes.removeMember, { orgId, email: b.email }, { context: as(a) }),
                 call(orgRoutes.removeMember, { orgId, email: a.email }, { context: as(b) }),
             ]);
             const done = settled.map(outcome).filter((result) => result.ok);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // as above
             expect({ round, admins: await adminCount(orgId), done: done.length }).toEqual({ round, admins: 1, done: 1 });
         }
     }, 120_000);
 
     it(`two admins demoting each other at once leave one admin, never none`, async () => {
         for (let round = 0; round < ROUNDS; round++) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- each round is one race over its own fresh rows
+            // each round is one race over its own fresh rows
             const [a, b] = await Promise.all([person(`a`), person(`b`)]);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // as above
             const orgId = await orgWithAdmins(a, b);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // as above
             const settled = await Promise.allSettled([
                 call(orgRoutes.addMember, { orgId, email: b.email, role: `member` }, { context: as(a) }),
                 call(orgRoutes.addMember, { orgId, email: a.email, role: `member` }, { context: as(b) }),
             ]);
             const done = settled.map(outcome).filter((result) => result.ok);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // as above
             expect({ round, admins: await adminCount(orgId), done: done.length }).toEqual({ round, admins: 1, done: 1 });
         }
     }, 120_000);
 
     it(`a sandbox bound while its owner deletes it ends up either bound or deleted, never deleted while bound`, async () => {
         for (let round = 0; round < ROUNDS; round++) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- each round is one race over its own fresh rows
+            // each round is one race over its own fresh rows
             const owner = await person(`owner`);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // as above
             const [orgId, sandboxId] = await Promise.all([orgWithAdmins(owner), sandboxOf(owner)]);
             const [bind, remove] = (
-                // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+                // as above
                 await raced(
                     round,
                     () => call(orgRoutes.bindSandbox, { orgId, sandboxId }, { context: as(owner) }),
                     () => call(sandboxRoutes.delete, { sandboxId }, { context: as(owner) }),
                 )
             ).map(outcome);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // as above
             const row = await prisma.sandbox.findUnique({ where: { id: sandboxId }, select: { orgId: true } });
             // Exactly one of the two took effect, and the database says the same thing the answers did.
             expect({ round, bound: bind?.ok, deleted: remove?.ok, row }).toEqual(
@@ -201,19 +201,19 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
     it(`a sandbox bound while its owner's account is erased ends up either bound with the account kept, or gone`, async () => {
         for (let round = 0; round < ROUNDS; round++) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- each round is one race over its own fresh rows
+            // each round is one race over its own fresh rows
             const owner = await person(`leaver`);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // as above
             const [orgId, sandboxId] = await Promise.all([orgWithAdmins(owner), sandboxOf(owner)]);
             const [bind, erase] = (
-                // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+                // as above
                 await raced(
                     round,
                     () => call(orgRoutes.bindSandbox, { orgId, sandboxId }, { context: as(owner) }),
                     () => eraseAccount(prisma, config, logger, owner.id),
                 )
             ).map(outcome);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // as above
             const row = await prisma.sandbox.findUnique({ where: { id: sandboxId }, select: { orgId: true } });
             expect({ round, bound: bind?.ok, erased: erase?.ok, row }).toEqual(
                 bind?.ok === true ? { round, bound: true, erased: false, row: { orgId } } : { round, bound: false, erased: true, row: null },

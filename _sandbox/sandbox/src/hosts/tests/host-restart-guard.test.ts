@@ -1,14 +1,7 @@
-import {
-    AgentAttentionSchema,
-    type AgentSummary,
-    AgentSummarySchema,
-    type Capability,
-    DeviceConfigSchema,
-    ProgramArgumentsSchema,
-    type ProgramReading,
-    programInCall,
-    SandboxSettingsSchema,
-} from "@intentic/sandbox-contract";
+import { AgentAttentionSchema, type AgentSummary, AgentSummarySchema } from "@intentic/sandbox-contract/schemas/agents";
+import { type Capability, DeviceConfigSchema } from "@intentic/sandbox-contract/schemas/capabilities";
+import { ProgramArgumentsSchema, type ProgramReading, programInCall } from "@intentic/sandbox-contract/policy/device-programs";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import { startTurnRun } from "../../agent/run/turn/turn-runs.js";
 import { openSpawnedChild, resetSubagents } from "../../agent/subagents/subagents.js";
@@ -19,7 +12,7 @@ import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { clearTurnTaint, NO_TAINT, publishTurnTaint } from "../../guard/turn-taint.js";
 import { createDomainEvents } from "../../seams/domain-events.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { createHeldCards } from "../../guard/held-cards.js";
 import type { HostGuardDeps } from "../host-guard-deps.js";
 import { DeviceToolCallSchema, judgeHostRestart, restartInCall, restartInProgram } from "../host-restart-guard.js";

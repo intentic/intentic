@@ -1,6 +1,7 @@
 // jsdom: the import chain reaches app-wide singletons that read browser globals (window.env) as they load.
 import "@intentic/testing/dom";
-import { type PlanLimitsHeld, type PlanLimitsRefreshed, type TrialStatusResponse, TrialStatusSchema } from "@intentic/sandbox-contract";
+import type { PlanLimitsHeld, PlanLimitsRefreshed } from "@intentic/sandbox-contract/contracts/usage.contract";
+import { type TrialStatusResponse, TrialStatusSchema } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // What a connection read learns about accounts the provider is holding reads off. A press was the only thing that ever
@@ -42,8 +43,8 @@ const daemon = (held: PlanLimitsHeld[] | undefined, posted: Posted[] = []): Post
     return posted;
 };
 
-const { heldAccounts, refreshConnections } = await import("./useChat-accounts");
-const { accountsLoaded } = await import("./providerAccounts");
+const { heldAccounts, refreshConnections } = await import("../../../models/conversations/accounts/useChat-accounts");
+const { accountsLoaded } = await import("../../../models/providers/providerAccounts");
 
 const HELD = [{ provider: `claude`, account: `a`, resumesAt: 1_800_000_000 }];
 

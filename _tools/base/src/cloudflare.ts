@@ -131,7 +131,7 @@ export const cloudflarePages = async (token: string, path: string, perPage = 50)
     let totalPages = 1;
     do {
         const paged = `${path}${path.includes("?") ? "&" : "?"}per_page=${perPage}&page=${page}`;
-        // oxlint-disable-next-line eslint/no-await-in-loop -- each page says whether another exists
+        // each page says whether another exists
         const envelope = await request(token, paged);
         const { result, result_info: info } = envelope;
         if (!Array.isArray(result)) {

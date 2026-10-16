@@ -1,4 +1,4 @@
-import type { TranscriptRow } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 
 // What the scratch pad says the conversation is at, above the composer it opens (ChatQuickBar): the last thing said in
 // it, by the agent or by the reader, as one plain line the header clamps. Not a transcript: enough to know which chat

@@ -3,12 +3,12 @@
 // Nothing is spelled out on the card, a failure included: every reading is the seal's hover.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
-import { setAgents } from "../../../agents/fleet/useAgents-registry";
-import type { FleetAgent } from "../../../agents/fleet/useAgents-fleet";
-import { openAgentConversation } from "../../panel/useChat-reveal";
+import { setAgents } from "../../../../models/fleet/useAgents-registry";
+import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
+import { openAgentConversation } from "../../../../models/conversations/panel/useChat-reveal";
 import { queryClient } from "../../../../lib/queryPersistence";
 import { router } from "../../../../router/index";
 import ChatTabList from "../ChatTabList.vue";

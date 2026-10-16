@@ -8,7 +8,9 @@ import {
     type RequestPermissionRequest,
     type SessionNotification,
 } from "@agentclientprotocol/sdk";
-import type { AgentCapabilities, AgentEvent, PermissionMode } from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { whenAborted } from "@intentic/base/async";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
@@ -27,8 +29,8 @@ import {
     turnWatchdog,
     watchedPull,
 } from "../decorators/turn-watchdog.js";
-import { isContextOverflowText } from "../../agent/providers/failure-sentences.js";
-import { workspacePath } from "../../agent/tools/tool-calls.js";
+import { isContextOverflowText } from "../../engines/failure-sentences.js";
+import { workspacePath } from "../../sessions/vocabulary/tool-calls.js";
 import { opt } from "../../opt.js";
 import { answerVendorAsk } from "../decorators/vendor-ask.js";
 import { isRateLimited, vendorFailureFrame, type VendorRule, withStderrTail } from "../decorators/vendor-errors.js";

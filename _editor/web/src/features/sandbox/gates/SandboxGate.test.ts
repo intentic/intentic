@@ -3,7 +3,7 @@
 // above the floor. A refused account still comes first, since nothing past that door is this person's to update.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { OLDEST_SUPPORTED_DAEMON } from "@intentic/sandbox-contract";
+import { OLDEST_SUPPORTED_DAEMON } from "@intentic/sandbox-contract/state/daemon-floor";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 const stub = (name: string) => ({ default: defineComponent({ render: () => h(`div`, { "data-gate": name }) }) });

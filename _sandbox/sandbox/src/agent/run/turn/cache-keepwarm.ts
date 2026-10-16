@@ -1,18 +1,17 @@
 import { errorMessage } from "@intentic/base/errors";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import {
-    type AgentEvent,
-    type AgentProvider,
-    capabilitiesOf,
     changedParts,
     type KeepWarm,
     type KeepWarmEnd,
     keepWarmCap,
     keepWarmDueAt,
     type PromptFingerprint,
-    SPENT_UTILIZATION,
-    spokenByPerson,
-    type TurnSpeaker,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/keep-warm";
+import { SPENT_UTILIZATION } from "@intentic/sandbox-contract/models/plan-pools";
+import { spokenByPerson, type TurnSpeaker } from "@intentic/sandbox-contract/schemas/speaker";
 import type { Services } from "../../../composition.js";
 import { deadlineKind, deadlines, type Deadlines } from "../../../conversations/actor/conversation-deadline.js";
 import { startAnchor } from "../../../conversations/worktrees/isolation.js";
@@ -25,10 +24,11 @@ import { serviceability, type ServiceabilityDeps } from "../../../usage/servicea
 import type { AgentRequest } from "../../providers/agent-request.js";
 import type { WarmReplay } from "../../providers/provider-module.js";
 import { recordFrame } from "../frames/frame-effects.js";
-import { KEYED_PARTS, nextPromptDayAt } from "../prompt-fingerprint.js";
+import { KEYED_PARTS } from "../prompt-fingerprint.js";
 import { costOf } from "../settle/turn-settlement.js";
 import { withCacheTtl } from "./prompt-cache.js";
 import { sumUsage, type UsageFrame } from "./turn-usage.js";
+import { nextPromptDayAt } from "../../../conversations/actor/conversation-state.js";
 
 // Keep-warm: holding an idle conversation's prompt cache open by re-reading it shortly before it expires. This module
 // owns the hold (when it is due, how far it may reach, why it ends); the provider that served the last turn owns the

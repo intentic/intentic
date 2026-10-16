@@ -1,13 +1,15 @@
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type AgentEvent, type Rule, SandboxSettingsSchema, type WorkspaceEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { type Rule, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
 import { unstubbed } from "@intentic/testing";
 import * as versionLanded from "../../conversations/land/version-landed.js";
 import type { Services } from "../../composition.js";
 import { collect } from "../../harness/route-client.testing.js";
 import { gitOut, OPENING_CHECKS_PREAMBLE, realCheckout, recordingLogger } from "../../harness/route-fakes.testing.js";
 import { recordingTurnStores, services } from "../../harness/route-services.testing.js";
-import { beginTurn } from "../../testing.js";
+import { beginTurn } from "../../conversations/actor/conversation-actors.testing.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import { depsSliceFake } from "../../workspace/deps/deps-slice.testing.js";
 import { SteeringQueue } from "../checkpoints/agent-steering.js";

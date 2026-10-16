@@ -1,8 +1,8 @@
-import { CONTROL_MCP_SERVERS } from "@intentic/sandbox-contract";
+import { CONTROL_MCP_SERVERS } from "@intentic/sandbox-contract/policy/reserved-servers";
 import { outsideSourceOf } from "../guard/outside-results.js";
 import { clearTerminalHelp, raiseTerminalHelp, settleTerminalHelpFor, terminalHelpFor } from "./terminal-help.js";
 import { parkedCards } from "../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);

@@ -2,6 +2,7 @@ import { countParser } from "@intentic/agent-cli/flags";
 import { within } from "@intentic/base/async";
 import { estimateTokens } from "@intentic/base/format";
 import { oneLine } from "@intentic/base/one-line";
+import { parseJsonOr } from "@intentic/base/json";
 import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
 import { createRecall, parseLine, readLines, type Recall, type SessionMatch, typedPromptOf } from "../../recall/recall.js";
 import { loadConfig } from "../../env.config.js";
@@ -167,10 +168,9 @@ interface HookPayload {
 // A payload worth answering, or nothing: malformed input, an empty prompt, and a non-first prompt all return undefined
 // alike.
 const hookPayloadOf = async (input: string): Promise<HookPayload | undefined> => {
-    let payload: HookPayload;
-    try {
-        payload = JSON.parse(input) as HookPayload;
-    } catch {
+    // SAFETY: a Claude Code hook's own payload; every field read off it is optional in HookPayload.
+    const payload = parseJsonOr(input, undefined) as HookPayload | undefined;
+    if (payload === undefined) {
         return undefined;
     }
     const prompt = payload.prompt ?? "";

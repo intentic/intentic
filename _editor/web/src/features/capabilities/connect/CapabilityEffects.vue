@@ -4,7 +4,7 @@ import type { CapabilityEffect } from "@intentic/capability-catalog";
 import type { IconName, TooltipValue } from "@intentic/ui";
 import { computed } from "vue";
 import { useT } from "@intentic/ui/i18n";
-import { grantList } from "../model/grants";
+import { grantList } from "../../../models/capabilities/grants";
 
 const t = useT();
 

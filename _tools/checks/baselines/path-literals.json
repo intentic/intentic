@@ -1,6 +1,6 @@
 {
     "_deploy/cli/src/sandbox-run/sandbox-run.command.integration.test.ts": 1,
-    "_editor/web/src/features/chat/session/conversation.test.ts": 1,
+    "_editor/web/src/models/conversations/session/conversation.test.ts": 1,
     "_editor/web/src/features/chat/tabs/HoverCard.test.ts": 1,
     "_editor/web/src/features/sandbox/extensions/useManifestProblems.test.ts": 2,
     "_editor/web/src/features/sandbox/personas/SandboxPersonas.test.ts": 1,
@@ -8,7 +8,7 @@
     "_editor/web/src/features/workspace/explorer/tests/WorkspaceTree.test.ts": 6,
     "_editor/web/vite.shared.ts": 1,
     "_sandbox/output-cleaners/src/cleaners.mjs": 3,
-    "_sandbox/sandbox/src/agent/models/role-answer.test.ts": 1,
+    "_sandbox/sandbox/src/engines/role-answer.test.ts": 1,
     "_sandbox/sandbox/src/agent/models/role-model.test.ts": 1,
     "_sandbox/sandbox/src/agent/subagents/tests/children.integration.test.ts": 3,
     "_sandbox/sandbox/src/agent/tools/agent-redaction.test.ts": 2,

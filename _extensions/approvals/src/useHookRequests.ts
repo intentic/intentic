@@ -1,4 +1,5 @@
-import { type HookRequest, type HookRequests, roleAtLeast } from "@intentic/sandbox-contract";
+import type { HookRequest, HookRequests } from "@intentic/sandbox-contract/schemas/approvals";
+import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { HostQuery } from "@intentic/extension-api";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";

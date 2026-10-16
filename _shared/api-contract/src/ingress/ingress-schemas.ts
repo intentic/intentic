@@ -1,4 +1,6 @@
-import { OrgPolicySchema, SANDBOX_ID, TrialStatusSchema } from "@intentic/sandbox-contract";
+import { OrgPolicySchema } from "@intentic/sandbox-contract/schemas/organisation";
+import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
+import { TrialStatusSchema } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import { z } from "zod";
 
 /* THE SHAPES MACHINES SEND THE PLATFORM AND WHAT IT ANSWERS, declared once for both ends (routes.ts names the route

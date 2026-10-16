@@ -1,4 +1,4 @@
-import { DeviceScopesSchema } from "@intentic/sandbox-contract";
+import { DeviceScopesSchema } from "@intentic/sandbox-contract/schemas/capabilities";
 import { GrantInputSchema, readGrant } from "./grant.js";
 
 /* A newer sandbox may push a switch this agent has never heard of. Refusing it dropped the link, which the sandbox

@@ -20,7 +20,7 @@ const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => 
 const local = store(`localStorage`);
 const session = store(`sessionStorage`);
 
-const { readTabSnapshot, writeTabSnapshot } = await import("../tabSnapshot");
+const { readTabSnapshot, writeTabSnapshot } = await import("../../../../models/conversations/tabs/tabSnapshot");
 
 const KEY = `intentic.chatTabs.sb1`;
 const tab = (conversationId: string, title?: string): Record<string, unknown> => ({

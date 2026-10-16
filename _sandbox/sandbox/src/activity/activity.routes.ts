@@ -1,13 +1,14 @@
-import { activityContract, type ActivityEvent, type ActivityStatus } from "@intentic/sandbox-contract";
+import { activityContract } from "@intentic/sandbox-contract/contracts/activity.contract";
+import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract/schemas/activity";
 import type { Caller } from "../auth/auth.js";
 import { conversationReader, readsEverything, registryProvenance } from "../auth/scope/conversation-reader.js";
 import type { Provenance } from "../auth/fleet-scope.js";
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
-import { listenerProvidersOf } from "../extensions/installed-extensions.js";
+import { listenerProvidersOf } from "../capabilities/extension-inventory/installed-extensions.js";
 import { listenerState } from "../extensions/listener/listener-state.js";
-import { listenerStatus } from "../extensions/listener/listener-status.js";
+import { listenerStatus } from "../capabilities/status/listener-status.js";
 
 type ActivityConnection = ActivityStatus["connections"][number];
 

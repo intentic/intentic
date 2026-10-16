@@ -5,14 +5,14 @@ import { formatClock } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { formatUntil } from "@intentic/ui/time";
 import { computed, nextTick, ref } from "vue";
-import { agentDisplayTitle, agentStatusMeta } from "../../../agents/fleet/agentStatus";
-import { useAgents } from "../../../agents/fleet/useAgents";
-import { autoVersionRule, landsByDefault, NAMED_RULES } from "../../../sandbox/environment/rules";
-import { useRules } from "../../../sandbox/environment/useRules";
+import { agentDisplayTitle, agentStatusMeta } from "../../../../models/agent-status/agentStatus-meta";
+import { useAgents } from "../../../../models/fleet/useAgents";
+import { autoVersionRule, landsByDefault, NAMED_RULES } from "../../../../models/sandbox/environment/rules";
+import { useRules } from "../../../../models/sandbox/environment/useRules";
 import { useRole } from "../../../../client/sandbox/useRole";
-import type { Conversation } from "../../session/conversation";
+import type { Conversation } from "../../../../models/conversations/session/conversation";
 import { type LandsHow, waitTargets } from "./waitTargets";
-import { hourChoices, type SendLater, waitText } from "./sendLater";
+import { hourChoices, type SendLater, waitText } from "../../../../models/conversations/drafts/sendLater";
 import LaterTimePicker from "./LaterTimePicker.vue";
 
 /* When a message goes, when not now. HOUR FIRST: half a day of whole hours, one press each, since people book against

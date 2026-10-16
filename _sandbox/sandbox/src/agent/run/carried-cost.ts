@@ -1,6 +1,7 @@
 import { open, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { parseJsonWith } from "@intentic/base/json";
 
 // The spend a resumed Claude session carries in. The CLI restores the running total its transcript saved (the last
 // `cost-state` record for that session), so a resumed query's first result already counts every earlier turn. Read off
@@ -32,12 +33,8 @@ const totalOn = (line: string, sessionId: string): number | undefined => {
     if (start === -1 || !line.includes(COST_STATE_MARK)) {
         return undefined;
     }
-    try {
-        const parsed = CostStateSchema.safeParse(JSON.parse(line.slice(start)));
-        return parsed.success && parsed.data.sessionId === sessionId ? parsed.data.totalCostUSD : undefined;
-    } catch {
-        return undefined;
-    }
+    const parsed = parseJsonWith(line.slice(start), CostStateSchema);
+    return parsed !== undefined && parsed.sessionId === sessionId ? parsed.totalCostUSD : undefined;
 };
 
 // The latest total in one read's whole lines, newest first.

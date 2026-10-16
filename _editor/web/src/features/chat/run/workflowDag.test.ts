@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import type { Workflow, WorkflowRun, WorkflowStep, WorkflowStepRun } from "@intentic/sandbox-contract";
+import type { Workflow, WorkflowRun, WorkflowStep, WorkflowStepRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { stepSubtitle, toneFor, workflowDag } from "./workflowDag";
 
 // The chat's own picture of a run, kept now that the Workflows page is an installed extension rather than compiled in:

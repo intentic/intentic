@@ -125,7 +125,7 @@ export const releaseHosted = async (prisma: PrismaClient, config: Config, sandbo
  * since the owner who could have taken the release back is the one being erased. */
 export const queueHostedTeardown = async (tx: Prisma.TransactionClient, appNames: Iterable<string>, now: Date): Promise<void> => {
     for (const appName of new Set(appNames)) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one small write per app inside one transaction
+        // one small write per app inside one transaction
         await tx.hostedCleanup.upsert({ where: { appName }, create: { appName, deleteAfter: now }, update: { deleteAfter: now } });
     }
 };
@@ -138,7 +138,7 @@ export const destroyQueuedApps = async (prisma: PrismaClient, config: Config, lo
         return destroyed;
     }
     for (const appName of appNames) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- provider teardowns are sequential and skip active provisions
+        // provider teardowns are sequential and skip active provisions
         const done = await withHostedAppLock(config, appName, false, async () => {
             await cleanupApp(prisma, config, appName);
             return true;

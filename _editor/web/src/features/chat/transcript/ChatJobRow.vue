@@ -2,11 +2,11 @@
 import type { IconName } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock } from "@intentic/ui/format";
-import type { TranscriptBackgroundJob } from "@intentic/sandbox-contract";
+import type { TranscriptBackgroundJob } from "@intentic/sandbox-contract/events/transcript";
 import { computed, ref } from "vue";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { usePaneView } from "../panel/useChat-view";
-import { useChatSurface } from "../tools/chatToolSurface";
+import { useAgents } from "../../../models/fleet/useAgents";
+import { usePaneView } from "../../../models/conversations/panel/useChat-view";
+import { useChatSurface } from "../../../models/conversations/tools/chatToolSurface";
 import { jobPhase, type JobStopper, portsLine } from "./jobPhase";
 import { useT } from "@intentic/ui/i18n";
 import { formatElapsed } from "@intentic/ui";

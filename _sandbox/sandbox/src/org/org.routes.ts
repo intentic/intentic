@@ -1,4 +1,4 @@
-import { orgContract } from "@intentic/sandbox-contract";
+import { orgContract } from "@intentic/sandbox-contract/contracts/org.contract";
 import { implement } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";
 import type { OrgPolicyHolder } from "./org-policy.js";

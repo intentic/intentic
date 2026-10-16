@@ -1,4 +1,12 @@
-import { ORG_SECTIONS, type OrgPolicy, type OrgPolicyState, type OrgSection, type OrgSectionMode, OrgSectionSchema, orgSectionMode } from "@intentic/sandbox-contract";
+import {
+    ORG_SECTIONS,
+    type OrgPolicy,
+    type OrgPolicyState,
+    type OrgSection,
+    type OrgSectionMode,
+    OrgSectionSchema,
+    orgSectionMode,
+} from "@intentic/sandbox-contract/schemas/organisation";
 import { computed } from "vue";
 import { rpcQuery } from "../../client/sandbox/rpcQuery";
 import { supportsRoute } from "../../client/sandbox/useDaemonRoutes";

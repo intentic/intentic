@@ -1,7 +1,10 @@
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type ContractRoute, type Hello, HelloSchema, RAW_ROUTE_LIST, SANDBOX_ROUTES, sandboxRouteFor } from "@intentic/sandbox-contract";
+import type { ContractRoute } from "@intentic/sandbox-contract/protocol/routes";
+import { type Hello, HelloSchema } from "@intentic/sandbox-contract/events/system-events";
+import { RAW_ROUTE_LIST } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
+import { SANDBOX_ROUTES, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { sha256Text } from "../files.js";
 import { type Grant, Grants } from "../grants.js";
 import { unhurried } from "../server.js";

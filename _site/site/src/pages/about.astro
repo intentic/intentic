@@ -209,6 +209,11 @@ const claimIcons = [
                             {
                                 background.map((item) => (
                                     <li class="relative pb-8 pl-7 last:pb-0">
+                                        {/* allow(tailwind): centres an 8px dot (h-2 w-2) on the 1px rule of the
+                                          * enclosing "border-l border-line": half the dot (4) plus half the rule
+                                          * (0.5). Derived from two things on the element itself, so it tracks them
+                                          * rather than the spacing scale — which is in 4px steps and correctly has no
+                                          * half-pixel. */}
                                         <span class="absolute top-1.5 -left-[4.5px] h-2 w-2 rounded-full bg-primary-500 ring-4 ring-canvas" />
                                         <p class="font-mono text-2xs tracking-wide text-link uppercase">{item.marker}</p>
                                         <p class="mt-1.5 text-base font-medium tracking-tight text-content">{item.lead}</p>

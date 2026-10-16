@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { waitFor, stubGlobal, unstubAllGlobals, SETTLES } from "@intentic/testing/bun";
-import { LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelConfig } from "@intentic/sandbox-contract";
+import { LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { CapabilityCtx } from "../capability.js";
 import * as childProcessOriginal from "node:child_process";
 

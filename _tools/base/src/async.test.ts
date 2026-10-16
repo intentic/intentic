@@ -922,7 +922,7 @@ describe(`unlessAborted`, () => {
         const added = jest.spyOn(controller.signal, `addEventListener`);
         const removed = jest.spyOn(controller.signal, `removeEventListener`);
         for (let read = 0; read < 3; read += 1) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one read after another, as a stream loop does
+            // one read after another, as a stream loop does
             await unlessAborted(Promise.resolve(read), controller.signal, -1);
         }
         expect(added).toHaveBeenCalledTimes(3);

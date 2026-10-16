@@ -1,7 +1,8 @@
 import { createBackoff, sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
-import { HOST_HEARTBEAT_MS, hostConnectUrl, type DeviceScopes } from "@intentic/sandbox-contract";
+import { HOST_HEARTBEAT_MS, hostConnectUrl } from "@intentic/sandbox-contract/protocol/doors/host-protocol";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { dialPeer, PEER_LINK_BACKOFF, peerLinkSilenceMs, type PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import { RPCHandler } from "@orpc/server/websocket";
 import { type DaemonBase, resolveDaemonBase } from "../daemon-base.js";
@@ -130,13 +131,13 @@ export const connect = (
     // again) or the trash window has passed (forget the link, and end the loop). Answers whether to dial.
     const whileGone = async (signal: AbortSignal): Promise<boolean> => {
         while (goneSince !== undefined && !signal.aborted) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one look an hour, by design
+            // one look an hour, by design
             const step = goneLinkStep(goneSince, now(), (await dial.gone?.(config.sandboxUrl)) === true);
             if (step === "dial") {
                 goneSince = undefined;
                 attempts = 0;
                 linkLog("answers again, so it is not gone after all: dialling it again.");
-                // oxlint-disable-next-line eslint/no-await-in-loop -- once, as the loop ends
+                // once, as the loop ends
                 await goneStore.mark(config, undefined).catch((error: unknown) => linkLog(`could not clear its gone mark (${errorMessage(error)})`));
                 return true;
             }
@@ -144,11 +145,11 @@ export const connect = (
                 linkLog(
                     "the platform still says this sandbox no longer exists, a week on: this link is forgotten. Connect again from the sandbox to restore it.",
                 );
-                // oxlint-disable-next-line eslint/no-await-in-loop -- once, as the loop ends
+                // once, as the loop ends
                 await forget(config.sandboxUrl).catch((error: unknown) => linkLog(`could not drop the link (${String(error)})`));
                 return false;
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             await sleep(GONE_RECHECK_MS, { signal });
         }
         return !signal.aborted;

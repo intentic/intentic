@@ -1,6 +1,6 @@
-import type { TranscriptRow } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { computed } from "vue";
-import { Conversation } from "../../session/conversation";
+import { Conversation } from "../../../../models/conversations/session/conversation";
 
 // AN IN-PROCESS SUBAGENT'S TRANSCRIPT, HELD AS A CONVERSATION NOBODY CAN SEND TO, so the chat draws it with its own rows
 // (ChatPaneTurns, ChatMessageView): the same cards, thinking and prose as the parent's column, rather than a second

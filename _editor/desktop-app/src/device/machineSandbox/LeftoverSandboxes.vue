@@ -3,6 +3,7 @@
      account only on the reader's press (the platform's trash keeps each a week); the app never removes one by itself.
      Which rows count is machine_sandbox.rs `leftovers`: named the old way for this computer, run nowhere for a day. -->
 <script setup lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 import { Button, ConfirmDialog, Icon, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, ref, watch } from "vue";
@@ -47,7 +48,7 @@ const remove = async (): Promise<void> => {
     try {
         await machineSandboxRemoveLeftovers(leftovers.value.map((leftover) => leftover.id));
     } catch (error) {
-        failure.value = error instanceof Error ? error.message : String(error);
+        failure.value = errorMessage(error);
     } finally {
         removing.value = false;
         await read();

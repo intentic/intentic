@@ -1,4 +1,4 @@
-import type { FleetConfig } from "@intentic/sandbox-contract";
+import type { FleetConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { Context } from "hono";
 import { cardDeps } from "../conversations/actor/card-deps.js";
 import type { AppEnv } from "../app-env.js";
@@ -6,12 +6,13 @@ import type { Services } from "../composition.js";
 import { answerResponse, cliBody } from "../http/cli-answer.js";
 import { manageDeviceSandbox,heldHostDevices } from "../hosts/device-reports.js";
 import { hostRunningSelf } from "../hosts/self-host.js";
-import { hostRunningSandbox } from "@intentic/sandbox-contract";
+import { hostRunningSandbox } from "@intentic/sandbox-contract/schemas/devices";
 import { fleetList, fleetProvision, fleetRemove } from "./fleet-client.js";
 import { createSandboxThroughFleet, listFleet, removeSandboxThroughFleet } from "./fleet-gate.js";
 import { soleLiveConversation, turnRunOf } from "../conversations/actor/conversation-holdings.js";
 import { type TurnStanding, turnStandingOf } from "../conversations/actor/turn-standing.js";
 import { holdDepsOf } from "../guard/held-asks.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 /* The `sandboxes` CLI's three routes, scoped to the agent token like the wallet's and the capability ask's. */
 
@@ -52,7 +53,7 @@ const withheldFrom = async (services: Services, c: Context<AppEnv>): Promise<Res
     return refused === undefined ? undefined : c.json({ error: { type: "withheld", message: refused } }, 403);
 };
 
-export const createSandboxesRoutes = (services: Services) => {
+const createSandboxesRoutes = (services: Services) => {
     const deps = {
         token: async () => (await fleetEntry(services))?.token,
         list: (token: string) => fleetList(services.config, token),
@@ -117,3 +118,14 @@ export const createSandboxesRoutes = (services: Services) => {
         },
     };
 };
+
+// The `sandboxes` CLI: the owner's other sandboxes, and the one door a new one is created through. `/sandboxes`
+// rather than `/fleet`, which the conversation-fleet reads already own.
+export const sandboxesRawRoutes = defineRawRoutes((services: Services) => {
+    const sandboxRoutes = createSandboxesRoutes(services);
+    return {
+        "GET /sandboxes": sandboxRoutes.list,
+        "POST /sandboxes": sandboxRoutes.create,
+        "POST /sandboxes/remove": sandboxRoutes.remove,
+    };
+});

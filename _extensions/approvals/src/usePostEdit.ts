@@ -1,4 +1,4 @@
-import type { ApprovalSummary, PostApprovalSummary } from "@intentic/sandbox-contract";
+import type { ApprovalSummary, PostApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
 import { type ComputedRef, computed, type Ref, ref } from "vue";
 import { type PostEdit, postEdit } from "./postText";
 

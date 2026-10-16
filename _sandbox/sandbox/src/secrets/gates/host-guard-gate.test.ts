@@ -1,10 +1,12 @@
-import { type AgentEvent, DEFAULT_SAFETY_POLICY, type SecretHostGuard } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
+import type { SecretHostGuard } from "@intentic/sandbox-contract/schemas/secrets";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { consultWith, createCommandGuard, vendorSubject } from "../../guard/command-guard.js";
 import { NO_TAINT } from "../../guard/turn-taint.js";
 import { createHeldCards } from "../../guard/held-cards.js";
 import { opt } from "../../opt.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { createHostGuardGate, type HostGuardCheck, type HostGuardGateDeps, type WidenRequest } from "./host-guard-gate.js";
 import { effectiveHostGuards } from "../guards/host-guards.js";
 import { resolveCommandSecrets, type SecretAccess, type SecretTarget } from "../secret-access.js";

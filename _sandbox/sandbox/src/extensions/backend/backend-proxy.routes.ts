@@ -3,6 +3,7 @@ import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
 import { BACKEND_HOST_HEADER } from "./backend-host-config.js";
 import { forwardToBackend, stall } from "./backend-proxy.js";
+import { defineRawRoutes } from "../../http/raw-route-server.js";
 
 // The browser multiplexes every daemon call onto one HTTP/2 connection, so requests still waiting for their first byte
 // hold streams the rest of the daemon shares: enough of them and /events and /system/* queue behind one extension.
@@ -33,7 +34,7 @@ const stalledCount = (calls: ReadonlySet<WaitingCall>, now: number): number => {
 // Credentials are stripped before forwarding, the backend authenticates only with its own scoped token; 503 during a
 // restart is the client's retry cue. An extension's declared MCP endpoint is refused here: it is reached only through the
 // daemon's MCP door, which checks that the calling turn was granted the card, never by a panel's or a member's bearer.
-export const createBackendProxyRoute = (services: Pick<Services, "extensionBackend">) => {
+const createBackendProxyRoute = (services: Pick<Services, "extensionBackend">) => {
     // Per route, not per request: the cap is only a cap if every call in flight counts against the same set.
     const waiting = new Map<string, Set<WaitingCall>>();
     return async (c: Context<AppEnv>): Promise<Response> => {
@@ -66,3 +67,6 @@ export const createBackendProxyRoute = (services: Pick<Services, "extensionBacke
         }
     };
 };
+
+// The backend namespace /x/<id>/* proxied verbatim to the backend host.
+export const backendProxyRawRoutes = defineRawRoutes((services: Pick<Services, "extensionBackend">) => ({ "ALL /x/*": createBackendProxyRoute(services) }));

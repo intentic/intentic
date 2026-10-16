@@ -1,4 +1,4 @@
-import type { PhoneSummary } from "@intentic/sandbox-contract";
+import type { PhoneSummary } from "@intentic/sandbox-contract/schemas/phone";
 import { phoneRowOf } from "./phoneRows";
 
 const facts = (paused = false): NonNullable<PhoneSummary[`facts`]> => ({

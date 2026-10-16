@@ -1,4 +1,4 @@
-import { HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract";
+import { HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract/schemas/hosts";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { hostCallRoute, partlyConnectedRefusal } from "../host-call-route.js";

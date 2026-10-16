@@ -2,7 +2,7 @@
 import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { useChatFloating } from "../../features/chat/panel/chatFloating";
+import { useChatFloating } from "../../models/conversations/panel/chatFloating";
 import { commandShortcut } from "../../workbench/commands/useCommands";
 import RailIcon from "./RailIcon.vue";
 import { type ChatDragPhase, GRAB } from "./chatTileDrag";

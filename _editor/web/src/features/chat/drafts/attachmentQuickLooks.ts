@@ -1,6 +1,6 @@
 import { dropPartialFirst, dropPartialLast, type FileQuickLook, isAudioPath, isImagePath } from "./fileQuickLook";
 import { lazyByPath } from "../../../client/sandbox/lazyByPath";
-import { readFileWindow } from "../../workspace/files/fileWindow";
+import { readFileWindow } from "../../../models/workspace/files/fileWindow";
 
 // Head and tail windows per attachment path, shared by the composer chip, sent bubbles and session hover cards — the
 // text twin of attachmentPreviews.ts, on the same terms (fetched on first ask, retried through the daemon's boot,

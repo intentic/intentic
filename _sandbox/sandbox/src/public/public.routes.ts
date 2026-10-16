@@ -1,7 +1,7 @@
 import { cp, mkdir, readdir, rm, rmdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { publicContract } from "@intentic/sandbox-contract";
+import { publicContract } from "@intentic/sandbox-contract/contracts/public.contract";
 import { SHARE_DIR } from "@intentic/sandbox-contract/share-paths";
 import { isPublicPath, toRelPath } from "@intentic/workspace-ignore";
 import { implement, ORPCError } from "@orpc/server";

@@ -1,7 +1,7 @@
 import { computed, type ComputedRef } from "vue";
 import { placementOf, slugFromDaemonUrl, type SandboxPlacement } from "./placement";
 import { useEndpoint } from "../../../client/endpoint/useEndpoint";
-import { useHostRunning } from "../devices/useDevices";
+import { useHostRunning } from "../../../models/sandbox/devices/useDevices";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 
 // The active sandbox's placement, with both refinements applied: the fleet's own word on which connected device runs

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type { ExtensionRemovalPlan, ExtensionSummary } from "@intentic/sandbox-contract";
+import type { ExtensionRemovalPlan, ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
 import { Button, Modal, Notice, SkeletonRows, SkeletonSnapshot, StatusBadge, ui, vSkeletonSource } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { facetsOf } from "../../extensions/extensionFacets";
-import { removalPlan } from "../../extensions/useExtensions";
+import { removalPlan } from "../../../models/extensions/useExtensions";
 import { useT } from "@intentic/ui/i18n";
 
 // The read before an uninstall. Removing an extension is the one act that also removes things the owner configured

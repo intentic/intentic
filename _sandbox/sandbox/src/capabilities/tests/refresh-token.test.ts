@@ -1,6 +1,6 @@
 import { CapabilityContributionSchema } from "@intentic/extension-manifest";
-import type { Capability } from "@intentic/sandbox-contract";
-import type { InstalledExtension } from "../../extensions/installed-extensions.js";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { InstalledExtension } from "../extension-inventory/installed-extensions.js";
 import { contributionKey, type ResolvedContribution } from "../contributions.js";
 import { storeRefreshToken } from "../refresh-token.js";
 

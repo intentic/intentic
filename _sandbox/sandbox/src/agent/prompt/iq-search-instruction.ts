@@ -3,9 +3,9 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { cachedAsync } from "@intentic/base/held";
 import { SEARCH_GUIDANCE } from "./guidance.js";
+import { IQ_SEARCH_INSTRUCTION_HEADER } from "../../sessions/vocabulary/prompt-envelope.js";
 
-export const IQ_SEARCH_INSTRUCTION_HEADER = "## iq workspace search";
-// The chat-row title, beside the header it belongs to (turn-preamble.ts explains the pairing).
+// The chat-row title of the note whose header sessions/vocabulary/prompt-envelope.ts holds.
 export const IQ_SEARCH_INSTRUCTION_TITLE = "Using iq for workspace search";
 
 /* Claude Code reads the full skill through the plugin loader. */

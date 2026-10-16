@@ -1,7 +1,7 @@
 // EXTENSION WORK OUTLIVES ITS DRAWER. Installs from Browse, the row verbs and the drawer's update are kept in the
 // operations ledger under the extension they act on, so a collapsed row, the other pill or another page coming between
 // the press and the end leaves the work marked as running, and its end waiting to be said.
-import type { ExtensionSummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
 import { type EffectScope, effectScope } from "vue";
 import { forgetOperations, startOperation, useOperation, useOperations } from "../../../workbench/operations/operations";
 import { useNotifications } from "../../../workbench/notifications/notifications";

@@ -3,16 +3,13 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 // source knows (a machine's OS and its other doors, a browser's sites, a tunnel's address), and how the Connected
 // slice orders the inventory it builds from them.
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, type CapabilityCategory } from "@intentic/capability-catalog";
-import type {
-    Device,
-    HostSummary,
-    NetdiskLink,
-    PhoneSummary,
-    VpnLink,
-    WebExtSummary,
-    CapabilityStatus,
-    CapabilitySummary,
-} from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
+import type { HostSummary } from "@intentic/sandbox-contract/schemas/hosts";
+import type { NetdiskLink } from "@intentic/sandbox-contract/schemas/netdisk";
+import type { PhoneSummary } from "@intentic/sandbox-contract/schemas/phone";
+import type { VpnLink } from "@intentic/sandbox-contract/schemas/vpn";
+import type { WebExtSummary } from "@intentic/sandbox-contract/schemas/webext";
+import type { CapabilityStatus, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import {
     type ConnectionRow,
     type ConnectionSources,
@@ -27,7 +24,7 @@ import {
 } from "./connectionRows";
 import type { DeviceConnection } from "./deviceConnections";
 import { type CatalogTile, catalogTiles } from "./slices";
-import { entryIcon } from "./tiles";
+import { entryIcon } from "../../../models/capabilities/tiles";
 
 const NOW = 1_700_000_000_000;
 

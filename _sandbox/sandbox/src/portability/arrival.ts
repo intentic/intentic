@@ -1,15 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { createGunzip } from "node:zlib";
-import type {
-    ArrivalApply,
-    ArrivalHost,
-    ArrivalItem,
-    ArrivalPlan,
-    ArrivalReport,
-    BundleManifest,
-    SandboxDefinition,
-} from "@intentic/sandbox-contract";
+import type { ArrivalApply, ArrivalHost, ArrivalItem, ArrivalPlan, ArrivalReport } from "@intentic/sandbox-contract/state/arrival";
+import type { BundleManifest, SandboxDefinition } from "@intentic/sandbox-contract/state/definition";
 import { extract } from "tar-stream";
 import {
     type AssistantSetup,

@@ -2,7 +2,8 @@ import { randomBytes } from "node:crypto";
 import { FREE_TIER, PAID_TIERS } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
 import { pollFor, sleep as pause } from "@intentic/base/async";
-import { previewUrl, STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
+import { previewUrl } from "@intentic/sandbox-contract/ids/hostnames";
+import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { mintSandbox } from "../mint-sandbox.js";
@@ -78,7 +79,7 @@ const collectPreviousRuns = async (prisma: PrismaClient, config: Config, logger:
     const leftovers = await prisma.sandbox.findMany({ where: { ownerId }, select: { id: true } });
     for (const leftover of leftovers) {
         logger.warn({ sandboxId: leftover.id }, `hosted canary: collecting a sandbox a previous run left behind`);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one at a time, and there is normally none
+        // one at a time, and there is normally none
         await teardown(prisma, config, logger, leftover.id);
     }
 };

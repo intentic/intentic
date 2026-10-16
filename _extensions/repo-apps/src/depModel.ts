@@ -1,4 +1,9 @@
-import type { WorkspaceComponent, WorkspaceDepEdge, WorkspaceDepUsage, WorkspacePackage } from "@intentic/sandbox-contract";
+import type {
+    WorkspaceComponent,
+    WorkspaceDepEdge,
+    WorkspaceDepUsage,
+    WorkspacePackage,
+} from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
 
 // What the Dependencies view computes from the daemon's package graph, kept out of the components so it is testable:
 // which edges a longer path already implies, which packages so many others use that they are better shown as chips than

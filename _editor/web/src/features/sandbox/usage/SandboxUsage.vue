@@ -15,12 +15,12 @@ import {
     vAction,
     vSkeletonSource,
 } from "@intentic/ui";
-import { modelPinKey, parsePinned } from "@intentic/sandbox-contract";
+import { modelPinKey, parsePinned } from "@intentic/sandbox-contract/models/model-pins";
 import { localZone, sameClock, UTC } from "@intentic/sandbox-contract/time";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { modelLabelFor, providerDisplayLabel, providerGroup, providerGroupLabel } from "../../chat/accounts/providerCatalog";
+import { useAgents } from "../../../models/fleet/useAgents";
+import { modelLabelFor, providerDisplayLabel, providerGroup, providerGroupLabel } from "../../../models/providers/providerCatalog";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSavings } from "./useSavings";
 import { useUsage } from "./useUsage";

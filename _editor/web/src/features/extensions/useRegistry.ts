@@ -1,10 +1,10 @@
-import type { Marketplace } from "@intentic/sandbox-contract";
+import type { Marketplace } from "@intentic/sandbox-contract/schemas/marketplace";
 import { OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
 import { sandboxRef } from "@intentic/extension-api";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { REGISTRY } from "../../lib/queryKeys";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
-import { browseMarketplace } from "../capabilities/connect/useCapabilities";
+import { browseMarketplace } from "../../models/capabilities/useCapabilities";
 
 // Registry browsing as a cached query keyed on the URL, not an imperative action, so Discover opens with a list already
 // showing. A browse is a daemon-side clone, so it's cached hard (5-minute stale, no refetch on mount); the URL is

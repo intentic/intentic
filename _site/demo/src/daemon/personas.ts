@@ -1,4 +1,5 @@
-import type { Area, Persona } from "@intentic/sandbox-contract";
+import type { Area } from "@intentic/sandbox-contract/schemas/areas";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { deskEdition, freshEdition } from "../mode";
 
 // The persona picker's cards and the named areas a grant can be fenced to, each upserted by id as the daemon's store

@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { errorMessage } from "@intentic/base/errors";
-import { WEBEXT_TICKET_TOOL, WEBEXT_TICKET_TTL_MS, type WebExtSecretRequest } from "@intentic/sandbox-contract";
+import { WEBEXT_TICKET_TOOL, WEBEXT_TICKET_TTL_MS } from "@intentic/sandbox-contract/protocol/doors/webext-links";
+import type { WebExtSecretRequest } from "@intentic/sandbox-contract/schemas/webext";
 import { z } from "zod";
 import { callFailure } from "../peers/call-failure.js";
 import type { WebExtHub } from "./webext-peer.js";

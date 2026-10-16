@@ -1,5 +1,5 @@
-import { envSuffix } from "@intentic/sandbox-contract";
-import type { ExtensionHost } from "../extensions/installed-extensions.js";
+import { envSuffix } from "@intentic/sandbox-contract/policy/capability-env";
+import type { ExtensionHost } from "./extension-inventory/installed-extensions.js";
 import { brokeredEnvOf, type GitRewrite, gitRewriteEnv, rawRouteEnv, type TurnGateway } from "./broker/broker-env.js";
 import type { CredentialDelivery } from "./broker/broker-policy.js";
 import { contributionEnv, contributionFor, contributionRegistry } from "./contributions.js";

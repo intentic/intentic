@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 import { Button, EmptyState, formatDate, formatDateTime, formatDayMonth, Notice, RowGroup, StatusBadge, type Tip, timeAgo, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, ref } from "vue";
@@ -101,7 +102,7 @@ const openProject = async (project: OfferedProject): Promise<void> => {
         // The window moves onto the folder in place (folderSwitch.ts), and this page goes with the folder it offered.
         await host.point(project.path);
     } catch (error) {
-        rowFailure.value = { path: project.path, message: error instanceof Error ? error.message : String(error) };
+        rowFailure.value = { path: project.path, message: errorMessage(error) };
     } finally {
         opening.value = undefined;
     }
@@ -113,7 +114,7 @@ const pickFolder = async (): Promise<void> => {
     try {
         await host.pickFolder();
     } catch (error) {
-        failure.value = error instanceof Error ? error.message : String(error);
+        failure.value = errorMessage(error);
     }
 };
 </script>

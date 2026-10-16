@@ -1,18 +1,16 @@
 import { keyedLock } from "@intentic/base/async";
 import { isInfraStep } from "@intentic/constants/ci-infra-steps";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { CI_FIX_PREFIX, ciFixConversationId, fnvDigest } from "@intentic/sandbox-contract/ids/conversation-ids";
 import {
-    type AgentSummary,
-    CI_FIX_PREFIX,
-    ciFixConversationId,
     type CiMainFailure,
-    fixStance,
-    fnvDigest,
     isPipelineInFlight,
     type MainFailureDecision,
     type MainFailureHandBack,
     type PipelineRun,
-} from "@intentic/sandbox-contract";
-import { deliverWake } from "../agent/run/turn/wake-delivery.js";
+} from "@intentic/sandbox-contract/schemas/ci";
+import { fixStance } from "@intentic/sandbox-contract/state/fix-stance";
+import { deliverWake } from "../seams/wake-delivery.js";
 import type { Services } from "../composition.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { opt } from "../opt.js";

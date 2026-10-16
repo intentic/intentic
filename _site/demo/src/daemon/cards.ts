@@ -1,4 +1,6 @@
-import { type AgentSearchResult, type AgentSummary, isTurnBreakPolicy, type SandboxHandlerInput } from "@intentic/sandbox-contract";
+import type { AgentSearchResult, AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { isTurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
+import type { SandboxHandlerInput } from "@intentic/sandbox-contract/protocol/procedure-types";
 import { refuse } from "@intentic/contract-serve";
 import { landAgentDelta, landedPaths, sessions } from "../fixture/workspace";
 import { agentAnswer, broadcastRoster, listeners, OWNER, patchAgent, roster } from "./roster";

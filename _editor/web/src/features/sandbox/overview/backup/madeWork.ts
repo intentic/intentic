@@ -1,5 +1,7 @@
 import { REFERENCE_DIR } from "@intentic/constants";
-import { type GitChanges, type GitLog, STARTER_REPO } from "@intentic/sandbox-contract";
+import type { GitChanges } from "@intentic/sandbox-contract/schemas/git/git";
+import type { GitLog } from "@intentic/sandbox-contract/schemas/git/git-history";
+import { STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
 
 // WHAT COUNTS AS WORK, for the warning that this sandbox's work has nowhere to be pushed. A brand-new hosted sandbox is
 // not empty: the daemon keeps its own dotted state in /work, and the first boot seeds the starter site (`site`, one

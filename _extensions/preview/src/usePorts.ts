@@ -1,4 +1,4 @@
-import type { PortSummary } from "@intentic/sandbox-contract";
+import type { PortSummary } from "@intentic/sandbox-contract/schemas/ports";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";

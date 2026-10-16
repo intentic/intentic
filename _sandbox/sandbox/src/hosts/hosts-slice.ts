@@ -1,11 +1,16 @@
-import type { Capability } from "@intentic/sandbox-contract";
-import type { Pairings } from "../peers/enrollment.js";
-import type { SyncFleet, SyncMode } from "../peers/desktop-sync.js";
-import type { RedeemCodes } from "../peers/redeem-codes.js";
-import type { HostHub, HostStore } from "./host-peer.js";
-import type { HostDeviceReach } from "./self-host.js";
-import type { RunGrants } from "./device-door.js";
-import type { DeviceTunnels } from "./device-tunnels.js";
+import type { Capability, DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { DeviceFacts } from "@intentic/sandbox-contract/schemas/hosts";
+import type { CompositionCore } from "../composition.js";
+import { enrolledFleet, type SyncFleet, type SyncMode, syncPairBurns } from "../peers/desktop-sync.js";
+import { type Pairings, pairings } from "../peers/enrollment.js";
+import { createPeerHub } from "../peers/peer-hub.js";
+import { filePeerStore } from "../peers/peer-store.js";
+import { type RedeemCodes, redeemCodes } from "../peers/redeem-codes.js";
+import { defineSlice } from "../seams/slice.js";
+import { createRunGrants, type RunGrants } from "./device-door.js";
+import { createDeviceTunnels, type DeviceTunnels } from "./device-tunnels.js";
+import { HOST_PEER, type HostAnnounced, type HostClient, type HostHub, type HostStore } from "./host-peer.js";
+import { hostDeviceReach, type HostDeviceReach } from "./self-host.js";
 
 // The owner's computers: the device door, its hub and reach, and desktop sync's pairings and fleet.
 export interface HostsSlice {
@@ -30,3 +35,19 @@ export interface HostsSlice {
     // What lets a run the owner started from the editor act on its one computer (device-door.ts).
     readonly runGrants: RunGrants;
 }
+
+export const hostsSlice = defineSlice<HostsSlice>({
+    build: ({ config: { historyRoot }, logger, peerTools, whole }: Pick<CompositionCore, "config" | "logger" | "peerTools" | "whole">) => ({
+        hosts: filePeerStore(historyRoot, HOST_PEER.store),
+        // Reads only readings already held (hosts/self-host.ts), so composing a turn never waits on a laptop.
+        hostReach: (granted) => hostDeviceReach(whole(), granted),
+        syncFleet: () => enrolledFleet(historyRoot),
+        hostHub: createPeerHub<HostClient, HostAnnounced, DeviceFacts, DeviceScopes>(HOST_PEER.hub, logger, peerTools),
+        syncPairings: pairings<SyncMode>(syncPairBurns(historyRoot)),
+        redeemCodes: redeemCodes(),
+        // Never replayable, so no burn file: minted and spent in-process.
+        enrollTokens: pairings(),
+        deviceTunnels: createDeviceTunnels({ hub: () => whole().hostHub, logger }),
+        runGrants: createRunGrants(),
+    }),
+});

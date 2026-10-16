@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { TemplateManifest, TemplatePreview } from "@intentic/scaffold";
-import { previewUrl } from "@intentic/sandbox-contract";
+import { previewUrl } from "@intentic/sandbox-contract/ids/hostnames";
 
 // Per-app preview key: `<repo>--<app>`, matching the preview host `preview-<repo>--<app>-<sandboxId>.<zone>`.
 // `--` can't appear in a monorepo name, so this never collides with a plain repo's panel key.

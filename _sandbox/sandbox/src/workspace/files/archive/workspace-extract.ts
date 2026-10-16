@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, open, readdir, rename, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { type ArchiveFormat, archiveFormat, archiveStem, wrapsItsOwnName } from "@intentic/sandbox-contract";
+import { type ArchiveFormat, archiveFormat, archiveStem, wrapsItsOwnName } from "@intentic/sandbox-contract/text/archives";
 
 // Unpacking an archive the way someone means it: one new folder beside the archive, named after it, holding what was
 // inside. Nothing is overwritten, an archive that is one folder doesn't land as that folder twice, and a failure

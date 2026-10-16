@@ -5,7 +5,7 @@ import {
     PasskeyRecoverRequestSchema,
     PasskeyRegisterRequestSchema,
     type PasskeysList,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/system";
 import type { Context } from "hono";
 import type { z } from "zod";
 import type { AppEnv } from "../../app-env.js";
@@ -13,6 +13,7 @@ import type { Services } from "../../composition.js";
 import { bearerFrom, ForbiddenError, OWNER_UNREADABLE, OwnerUnreadableError, type Proof } from "../auth.js";
 import { ownershipDenied } from "../owner-gates.js";
 import { mintRecoveryCodes, PasskeyError, type StoredCredential, summaryOf } from "./passkey-store.js";
+import { defineRawRoutes } from "../../http/raw-route-server.js";
 
 // The sandbox as WebAuthn relying party: each member's own passkeys, the two anonymous doors a passkey signs in
 // through, the owner's require-a-passkey switch, and the recovery codes that keep that switch from locking the owner
@@ -45,7 +46,7 @@ const denied = (c: Context, error: unknown): Response => {
 
 const sessionOf = (minted: { readonly token: string; readonly expiresAt: number }, email: string) => ({ token: minted.token, expiresAt: minted.expiresAt, email });
 
-export const createPasskeyRoutes = (services: PasskeyRoutesDeps) => {
+const createPasskeyRoutes = (services: PasskeyRoutesDeps) => {
     // Whether removing `credential` would leave the owner with none while the policy still demands one.
     const ownersLast = async (credential: StoredCredential): Promise<boolean> => {
         const owner = await services.ownerEmail();
@@ -246,3 +247,19 @@ export const createPasskeyRoutes = (services: PasskeyRoutesDeps) => {
         },
     };
 };
+
+// Passkeys: each member's own, the anonymous sign-in doors, the owner's require switch and its recovery codes.
+export const passkeyRawRoutes = defineRawRoutes((services: PasskeyRoutesDeps) => {
+    const passkeys = createPasskeyRoutes(services);
+    return {
+        "GET /system/passkeys": passkeys.list,
+        "POST /system/passkeys/register/options": passkeys.registerOptions,
+        "POST /system/passkeys/register": passkeys.register,
+        "POST /system/passkeys/assert/options": passkeys.assertOptions,
+        "POST /system/passkeys/assert": passkeys.assert,
+        "POST /system/passkeys/policy": passkeys.setPolicy,
+        "POST /system/passkeys/recovery": passkeys.regenerateRecovery,
+        "DELETE /system/passkeys/{id}": passkeys.remove,
+        "POST /system/session/recover": passkeys.recover,
+    };
+});

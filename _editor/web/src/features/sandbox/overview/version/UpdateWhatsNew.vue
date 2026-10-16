@@ -23,6 +23,9 @@ const lines = computed(() => notes.map((note) => ({ note, ...noteLines(note) }))
         <ul class="flex flex-col gap-3">
             <li v-for="line in lines" :key="line.note" class="flex gap-3">
                 <!-- A small gold lozenge, the house's own mark, rather than a bullet that reads as a list of chores. -->
+                <!-- allow(tailwind): softens the corners of a 6px lozenge (h-1.5 w-1.5 rotate-45) without rounding it
+                     into a dot: the smallest radius token, --radius-2xs, is 2px, a third of the side, which reads as
+                     a circle at this size. A one-off for a mark this small, not a missing step on the scale. -->
                 <span class="mt-[0.45rem] h-1.5 w-1.5 shrink-0 rotate-45 rounded-[1px] bg-primary-500/80" aria-hidden="true" />
                 <span class="flex min-w-0 flex-col gap-0.5">
                     <span class="text-sm leading-snug text-content">{{ line.head }}</span>

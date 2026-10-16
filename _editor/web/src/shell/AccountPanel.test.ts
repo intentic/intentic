@@ -18,7 +18,7 @@ const account = {
     local: true,
 };
 jest.mock(`../client/auth/useAccount`, () => ({ useAccount: () => account }));
-jest.mock(`../features/settings/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ planBadge: ref(undefined) }) }));
+jest.mock(`../models/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ planBadge: ref(undefined) }) }));
 jest.mock(`../features/gettingStarted/useGettingStarted`, () => ({ useGettingStarted: () => ({ reopenable: ref(false), show: async () => undefined }) }));
 jest.mock(`../workbench/commands/useCommands`, () => ({ registerCommand: () => ({ dispose: () => undefined }) }));
 

@@ -43,8 +43,18 @@ const baseEntries = Object.entries(
     ).exports,
 ).map(([subpath, target]) => [`@intentic/base/${subpath.replace(/^\.\//, ``)}`, fromRoot(`_tools/base/${target.import[`@intentic/src`].replace(/^\.\//, ``)}`)] as const);
 
+// Every module of the wire contract at the subpath its `./*` export gives it, longest first and ahead of the hand-named
+// subpaths and the barrel below, since a string alias also matches `<key>/…`.
+const contractModuleEntries = readdirSync(fromRoot(`_shared/sandbox-contract/src`), { recursive: true, encoding: `utf8` })
+    .map((path) => path.replaceAll(`\\`, `/`))
+    .filter((path) => path.endsWith(`.ts`) && !path.endsWith(`.test.ts`) && !path.endsWith(`.d.ts`) && path !== `index.ts`)
+    .map((path) => path.slice(0, -`.ts`.length))
+    .toSorted()
+    .toReversed()
+    .map((id) => [`@intentic/sandbox-contract/${id}`, fromRoot(`_shared/sandbox-contract/src/${id}.ts`)] as const);
+
 export const sourceAliases = (): Record<string, string> => ({
-    ...Object.fromEntries(baseEntries),
+    ...Object.fromEntries([...baseEntries, ...contractModuleEntries]),
     // Alias order matters: a string alias also matches `<key>/…`, so a subpath must precede its own barrel, and a
     // prefix-sharing pair (`markdown-document` before `markdown`) must keep that order too, or the import resolves
     // into a directory and fails with ENOTDIR.

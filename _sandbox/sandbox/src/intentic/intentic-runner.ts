@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { IntenticLine } from "@intentic/sandbox-contract";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import { whenAborted } from "@intentic/base/async";
 import { jsonLines } from "@intentic/base/json-lines";
 import { DAEMON_OWNER, workloadStamp } from "../seams/workload-stamp.js";

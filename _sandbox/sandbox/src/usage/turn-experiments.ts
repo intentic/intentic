@@ -1,5 +1,6 @@
 import { MECHANISMS, measureExperiment, type Design } from "@intentic/agent-context/arm-stats";
-import type { DayWindowQuery, SavingsReport, UsageTurn } from "@intentic/sandbox-contract";
+import type { DayWindowQuery, UsageTurn } from "@intentic/sandbox-contract/schemas/providers/usage";
+import type { SavingsReport } from "@intentic/sandbox-contract/schemas/settings";
 import type { UsageStore } from "./usage-store.js";
 
 // The mechanism experiments (iq search teaching, project map, field notes) measured off the usage ledger.

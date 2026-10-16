@@ -1,6 +1,6 @@
 import { open } from "node:fs/promises";
 import { extname, join } from "node:path";
-import type { WorkspaceBucket, WorkspaceClassification, WorkspaceTree } from "@intentic/sandbox-contract";
+import type { WorkspaceBucket, WorkspaceClassification, WorkspaceTree } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { fileTypeFromFile } from "file-type";
 
 // Local mirror of a walked tree node: zod's recursive `get children()` degrades to `Record<string, unknown>[]` in a
@@ -165,10 +165,10 @@ export const classifyWorkspace = async (root: string, tree: WorkspaceTree): Prom
                     classifications.push({ path: entry.path, bucket: "repositories", reason: `repository:${marker}` });
                     continue; // one repo unit: do not descend
                 }
-                // oxlint-disable-next-line eslint/no-await-in-loop -- Sequential I/O preserves tree traversal order.
+                // Sequential I/O preserves tree traversal order.
                 await visit(children);
             } else {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- see above
+                // see above
                 classifications.push(await classifyFile(join(root, entry.path), entry.path));
             }
         }

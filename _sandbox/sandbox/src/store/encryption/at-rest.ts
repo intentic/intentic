@@ -1,7 +1,7 @@
 import { createHash, createDecipheriv, createCipheriv, hkdfSync, randomBytes } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { AT_REST_KEY_FILE_ENV } from "@intentic/sandbox-contract";
+import { AT_REST_KEY_FILE_ENV } from "@intentic/sandbox-contract/schemas/data-protection";
 import { isMissing } from "@intentic/base/errors";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { z } from "zod";

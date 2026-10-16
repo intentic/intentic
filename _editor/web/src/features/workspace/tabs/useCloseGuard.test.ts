@@ -2,9 +2,9 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { type App, createApp } from "vue";
 import { externalDirtyPaths, setExternalDirty } from "../files/externalDirty";
-import { useEditBuffers } from "../files/useEditBuffers";
+import { useEditBuffers } from "../../../models/workspace/files/useEditBuffers";
 import { useCloseGuard } from "./useCloseGuard";
-import { useWorkspaceTabs } from "./useWorkspaceTabs";
+import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 
 // Pins the workspace's one close guard, the hosted workspace's tab menu and a local window's tabs alike: a close that
 // would discard unsaved work asks first, whichever editor holds that work, and a close the reader agrees to takes the

@@ -1,6 +1,6 @@
 // The versions a row's Roll back offers: every image the machine kept, when the agent the op goes through can be sent
 // `to` at all. An older agent refuses the field outright, so it is never offered one.
-import type { DeviceFacts } from "@intentic/sandbox-contract";
+import type { DeviceFacts } from "@intentic/sandbox-contract/schemas/hosts";
 import { rollbackChoices } from "./rollbackChoices";
 
 const takesTo: Pick<DeviceFacts, "features"> = { features: [`set-shape`, `rollback-to`] };

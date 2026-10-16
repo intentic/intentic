@@ -1,6 +1,6 @@
 <!-- Renders the post text under review via the shared <Markdown> component, so approvals see the same formatting the platform will. -->
 <script setup lang="ts">
-import type { PostApprovalSummary } from "@intentic/sandbox-contract";
+import type { PostApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
 import { ui, Markdown } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { attachmentPreview } from "./attachmentPreviews";

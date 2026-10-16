@@ -1,4 +1,4 @@
-import { AgentDomainPolicySchema, type AgentDomainPolicy } from "@intentic/sandbox-contract";
+import { AgentDomainPolicySchema, type AgentDomainPolicy } from "@intentic/sandbox-contract/schemas/settings";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { openDocument } from "../../store/open-document.js";
 

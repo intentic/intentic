@@ -1,7 +1,7 @@
 // The switcher a scope chip opens. It replaced a flat menu of every conversation that ever had a branch, so what is
 // pinned here is what that menu could not do: say where the reader is, keep a long lane short, find a copy by typing.
 import "@intentic/testing/dom";
-import type { FleetAgent } from "../../../agents/fleet/useAgents-fleet";
+import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
@@ -23,7 +23,7 @@ const copy = (id: string, over: Partial<FleetAgent> = {}): FleetAgent => ({
 });
 
 const fleet = ref<FleetAgent[]>([]);
-jest.mock(`../../../agents/fleet/useAgents`, () => ({
+jest.mock(`../../../../models/fleet/useAgents`, () => ({
     useAgents: () => ({ fleet, agentById: (id: string) => fleet.value.find((agent) => agent.id === id) }),
 }));
 

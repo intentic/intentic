@@ -18,6 +18,7 @@ import {
     readWindowPlace,
     windowListed,
 } from "./agent-desktop.js";
+import { parseJsonWith } from "@intentic/base/json";
 
 /* /system/desktop-view: the sandbox's own desktop (agent-desktop.ts) as live video, and the owner's hands on it. The
    picture is x11grab of the whole display (videocast.ts), the hands XTEST on the same display (xinput.ts): one space,
@@ -73,13 +74,8 @@ type MouseMessage = z.infer<typeof MouseMessageSchema>;
 export type DesktopViewMessage = z.infer<typeof DesktopViewMessageSchema>;
 
 const messageIn = (data: string): DesktopViewMessage | undefined => {
-    try {
-        const parsed = DesktopViewMessageSchema.safeParse(JSON.parse(data));
-        return parsed.success ? parsed.data : undefined;
-    } catch {
-        // allow(silent-catch): a frame that is not JSON is not a message, and dropping it is the answer.
-        return undefined;
-    }
+    // A frame that is not JSON is not a message, and dropping it is the answer.
+    return parseJsonWith(data, DesktopViewMessageSchema);
 };
 
 // What the socket holds unsent: hono's node adapter hands over the ws library's own socket as `raw`.

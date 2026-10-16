@@ -1,4 +1,4 @@
-import { KINDS } from "./terminalMeta";
+import { KINDS } from "../../models/terminal/terminalMeta";
 import type { TerminalTab } from "./useTerminal";
 
 // Single definition of 'inactive', used by the bar-menu count and palette command so they agree. Quiet:

@@ -1,17 +1,18 @@
 <!-- A secret need's own answer: one masked field whose value goes straight to the sandbox's store, never the chat; or,
      where one of the owner's computers has a keyring that answers, to that keyring instead, the sandbox keeping a pointer. -->
 <script setup lang="ts">
-import type { KeyringShareMode, Need, SecretNeed } from "@intentic/sandbox-contract";
+import type { KeyringShareMode } from "@intentic/sandbox-contract/schemas/keyring";
+import type { Need, SecretNeed } from "@intentic/sandbox-contract/schemas/needs";
 import { Notice, SegmentedControl, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, watch } from "vue";
-import SecretField from "../capabilities/connect/secrets/SecretField.vue";
+import SecretField from "../../parts/capabilities/SecretField.vue";
 import { keyringModeExplained } from "../capabilities/connect/secrets/keyringWords";
 import { useKeyrings } from "../capabilities/connect/secrets/useKeyrings";
-import ChatDecisionButton from "../chat/transcript/cards/ChatDecisionButton.vue";
+import ChatDecisionButton from "../../components/ChatDecisionButton.vue";
 import { useNotifications } from "../../workbench/notifications/notifications";
 import { useNeedAnswer } from "./needAnswer";
-import { useNeeds } from "./useNeeds";
+import { useNeeds } from "../../models/needs/useNeeds";
 
 const t = useT();
 

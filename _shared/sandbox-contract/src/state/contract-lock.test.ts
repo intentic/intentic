@@ -18,9 +18,9 @@ const ACCESS_MOVED =
 // Needs 30s: serializing ~500 schemas can run past the unit hang detector under load.
 test(
     "contract.lock.json matches the schemas this package exports",
-    () => {
+    async () => {
         const committed = committedText();
-        const current = currentLock();
+        const current = await currentLock();
         // Named first, so a reach change says which route before the whole-lock diff does.
         expect(accessChanges(committed, serializeLock(current)), ACCESS_MOVED).toEqual([]);
         expect(
@@ -35,8 +35,8 @@ test(
 
 // The wire outside oRPC is pinned the same way: a changed tunnel path, a gone control message or a renamed verdict is a
 // shrink the push gate and the landing draft both flag, where before nothing could see it.
-test("the lock flags a change to the wire no oRPC route carries", () => {
-    const base = currentLock() as Record<string, Record<string, unknown>>;
+test("the lock flags a change to the wire no oRPC route carries", async () => {
+    const base = (await currentLock()) as Record<string, Record<string, unknown>>;
     const moved = structuredClone(base);
     (moved["wire:tunnel"] as { path: string }).path = "/tunnel/v3";
     delete (moved["wire:browser-wire"] as { webTransport?: unknown }).webTransport;
@@ -45,7 +45,7 @@ test("the lock flags a change to the wire no oRPC route carries", () => {
 });
 
 // The lock as it would be with one raw route declared otherwise: the declaration is swapped in place, and back.
-const lockWith = (name: string, change: (declared: RouteMeta) => RouteMeta): Record<string, unknown> => {
+const lockWith = async (name: string, change: (declared: RouteMeta) => RouteMeta): Promise<Record<string, unknown>> => {
     const route = RAW_ROUTE_LIST.find((candidate) => candidate.name === name);
     if (route === undefined) {
         throw new Error(`${name} is gone; pick another raw route with a maintainer floor and no grants`);
@@ -53,7 +53,7 @@ const lockWith = (name: string, change: (declared: RouteMeta) => RouteMeta): Rec
     const declared = route.meta;
     Reflect.set(route, "meta", change(declared));
     try {
-        return currentLock();
+        return await currentLock();
     } finally {
         Reflect.set(route, "meta", declared);
     }
@@ -63,18 +63,18 @@ const ROUTE = "POST /system/sync/report";
 
 // A lowered floor on any route, not only the ones route-reach.test.ts pins: the lock check names it, and the push gate and
 // the landing draft read it as a shrink that needs a declared break.
-test("lowering one route's floor fails the lock check, naming the route", () => {
-    const committed = currentLock();
-    const lowered = lockWith(ROUTE, (declared) => ({ ...declared, floor: "viewer" }));
+test("lowering one route's floor fails the lock check, naming the route", async () => {
+    const committed = await currentLock();
+    const lowered = await lockWith(ROUTE, (declared) => ({ ...declared, floor: "viewer" }));
     expect(accessChanges(serializeLock(committed), serializeLock(lowered))).toEqual([`${ROUTE}: floor "maintainer" → "viewer"`]);
     expect(shrunkSurfaces(committed, lowered)).toEqual([`access:${ROUTE}.floor`]);
 });
 
 // A grant a route never declared still has a value in the lock, so granting it is a changed value, not growth that
 // passes; taking one away reads the same way, since it locks out a caller that relied on it.
-test("granting guest or agent reach reads as a shrink, and so does taking it back", () => {
-    const committed = currentLock();
-    const granted = lockWith(ROUTE, (declared) => ({ ...declared, guest: true, agent: true }));
+test("granting guest or agent reach reads as a shrink, and so does taking it back", async () => {
+    const committed = await currentLock();
+    const granted = await lockWith(ROUTE, (declared) => ({ ...declared, guest: true, agent: true }));
     expect(accessChanges(serializeLock(committed), serializeLock(granted))).toEqual([`${ROUTE}: agent false → true, guest false → true`]);
     expect(shrunkSurfaces(committed, granted)).toEqual([`access:${ROUTE}.agent`, `access:${ROUTE}.guest`]);
     expect(shrunkSurfaces(granted, committed)).toEqual([`access:${ROUTE}.agent`, `access:${ROUTE}.guest`]);

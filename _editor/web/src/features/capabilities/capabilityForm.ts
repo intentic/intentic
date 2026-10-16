@@ -1,6 +1,7 @@
 import { type CapabilityCatalogEntry, instancesOf } from "@intentic/capability-catalog";
 import type { CapabilityField } from "@intentic/extension-manifest";
-import type { ForticlientConnection, CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { ForticlientConnection } from "@intentic/sandbox-contract/schemas/vpn";
+import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { NoticeModel } from "@intentic/ui";
 import { computed, nextTick, reactive, type Ref, ref, watch } from "vue";
 import { auditOffered, replacedPin } from "./model/audit";
@@ -22,12 +23,12 @@ import {
     type StoredSecrets,
     submitAnywayWord,
     submitWord,
-} from "./model/form";
-import { cleanedPaste, containerUrlFix, expandPaste, normalizeFieldValue, summarisesWireguard, wireguardSummary } from "./model/normalize";
+} from "../../models/capabilities/form";
+import { cleanedPaste, containerUrlFix, expandPaste, normalizeFieldValue, summarisesWireguard, wireguardSummary } from "../../models/capabilities/normalize";
 import { answersSummary, hostPresets } from "./model/previews";
 import { versionReadToken } from "./model/refs";
-import { openingName, suggestName } from "./model/tiles";
-import type { PairedLink } from "./connect/links/linkPairing";
+import { openingName, suggestName } from "../../models/capabilities/tiles";
+import type { PairedLink } from "../../components/linkPairing";
 
 // The configuration form over the open tile: its answers and name, which boxes were left and whether a submit was
 // refused, what a paste unpacked, the Advanced fold, and what the answers add up to. Re-seeded whenever the URL opens

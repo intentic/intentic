@@ -102,9 +102,11 @@ export const report = (oxlint, checkout, config, ...files) => {
         return { diagnostics: parsed.diagnostics ?? [], files: parsed.number_of_files ?? 0 };
     };
     try {
-        // Not --silent: it empties the JSON report too.
+        // Not --silent: it empties the JSON report too. Only the plugins config knows every rule a directive may name, so
+        // only it can call a disable comment dead; the root config would misread the anti-slop ones.
+        const deadDirectives = config === PLUGINS_CONFIG ? [`--report-unused-disable-directives`] : [];
         return read(
-            execFileSync(oxlint, [`-c`, join(checkout, config), `-f`, `json`, `--no-error-on-unmatched-pattern`, ...files], {
+            execFileSync(oxlint, [`-c`, join(checkout, config), `-f`, `json`, `--no-error-on-unmatched-pattern`, ...deadDirectives, ...files], {
                 cwd: checkout,
                 encoding: `utf8`,
                 stdio: [`ignore`, `pipe`, `ignore`],

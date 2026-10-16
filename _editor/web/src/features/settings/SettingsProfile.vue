@@ -5,7 +5,7 @@ import { computed, ref } from "vue";
 import { fileToSquareDataUrl } from "../../lib/imageDataUrl";
 import { useAccount } from "../../client/auth/useAccount";
 import { signsInByEmail, signsInWithGoogle } from "../../client/auth/signInMethods";
-import { useHostedPlan } from "./hosted-plan/useHostedPlan";
+import { useHostedPlan } from "../../models/hosted-plan/useHostedPlan";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

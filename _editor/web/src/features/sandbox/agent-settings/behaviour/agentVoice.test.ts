@@ -1,5 +1,5 @@
 import { setFormatLocale } from "@intentic/ui/format";
-import { VoiceSettingsSchema, type VoicesView } from "@intentic/sandbox-contract";
+import { VoiceSettingsSchema, type VoicesView } from "@intentic/sandbox-contract/schemas/voice";
 import {
     defaultVoiceFor,
     initialLanguage,

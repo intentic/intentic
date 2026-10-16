@@ -1,7 +1,7 @@
 import { type NoticeModel, noticeFrom } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, getCurrentInstance, hasInjectionContext, type MaybeRefOrGetter, onScopeDispose, shallowReactive, toValue, watch } from "vue";
-import { activeSandboxId } from "../../lib/activeSandbox";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
 import { beginHubWork, injectHubSection } from "../hub/hubWork";
 import { useNotifications } from "../notifications/notifications";
 

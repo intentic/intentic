@@ -2,20 +2,22 @@ import { basename, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import { extensionIdOf, type ProcessContribution } from "@intentic/extension-manifest";
-import { type ExtensionSummary, extensionsContract, previewUrl } from "@intentic/sandbox-contract";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
+import { extensionsContract } from "@intentic/sandbox-contract/contracts/extensions.contract";
+import { previewUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import { implement, ORPCError } from "@orpc/server";
 import { requireMaintainer } from "../auth/owner-gates.js";
-import { extensionDir, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
+import { extensionDir, workspaceExtensionsRoot, extensionProcessKey } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
-import { approveExtension } from "./extension-approvals.js";
-import { devSummaryOf } from "./extension-dev.js";
+import { approveExtension } from "../capabilities/extension-inventory/extension-approvals.js";
+import { devSummaryOf } from "../capabilities/extension-inventory/extension-dev.js";
 import { createExtensionDevRoutes } from "./extension-dev.routes.js";
-import { writeExtensionEnablement } from "./extension-enablement.js";
-import { extensionProcessKey, reconcileListenerProcesses, startAutoStartProcesses, startExtensionProcess } from "./extension-processes.js";
+import { writeExtensionEnablement } from "../capabilities/extension-inventory/extension-enablement.js";
+import { reconcileListenerProcesses, startAutoStartProcesses, startExtensionProcess } from "./extension-processes.js";
 import { planExtensionRemoval, removeExtension } from "./extension-removal.js";
 import { readAllExtensionSettings, writeExtensionSettings } from "./extension-settings.js";
-import { extensionReadiness, extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "./extension-readiness.js";
+import { extensionReadiness, extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../capabilities/extension-inventory/extension-readiness.js";
 import {
     applyExtensionUpdate,
     checkExtensionUpdates,
@@ -30,7 +32,7 @@ import {
     writeUpdatePolicy,
 } from "./extension-updates.js";
 import { readExtensionUsage, recordExtensionUsage } from "./extension-usage.js";
-import { ESSENTIAL_EXTENSIONS, extensionInventory, type InstalledExtension, installedExtensions, type PendingExtension } from "./installed-extensions.js";
+import { ESSENTIAL_EXTENSIONS, extensionInventory, type InstalledExtension, installedExtensions, type PendingExtension } from "../capabilities/extension-inventory/installed-extensions.js";
 import { listenerOwnership } from "./listener/listener-state.js";
 import { writeWorkspaceExtension } from "./workspace-extension-scaffold.js";
 import { publicAddressOf } from "../env.config.js";

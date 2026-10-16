@@ -1,16 +1,9 @@
 import { readFile, stat } from "node:fs/promises";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { dirname, isAbsolute, resolve } from "node:path";
-import {
-    type AgentEvent,
-    type Page,
-    PAGE_LAYOUT_GUIDE,
-    PAGE_MAX_HEIGHT,
-    PAGE_MIN_HEIGHT,
-    PAGE_THEME_GUIDE,
-    PAGE_TITLE_MAX,
-    PAGE_VALUE_MAX,
-} from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { type Page, PAGE_MAX_HEIGHT, PAGE_MIN_HEIGHT, PAGE_TITLE_MAX, PAGE_VALUE_MAX } from "@intentic/sandbox-contract/events/requests";
+import { PAGE_LAYOUT_GUIDE, PAGE_THEME_GUIDE } from "@intentic/sandbox-contract/text/pages";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { sdk } from "../../engines/claude-sdk.js";

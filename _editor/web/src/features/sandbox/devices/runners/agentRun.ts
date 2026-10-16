@@ -1,4 +1,4 @@
-import type { DeviceAgentOp } from "@intentic/sandbox-contract";
+import type { DeviceAgentOp } from "@intentic/sandbox-contract/schemas/devices";
 import type { NoticeModel } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 

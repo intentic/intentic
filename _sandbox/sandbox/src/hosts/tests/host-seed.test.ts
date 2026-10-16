@@ -1,4 +1,4 @@
-import { DeviceConfigSchema } from "@intentic/sandbox-contract";
+import { DeviceConfigSchema } from "@intentic/sandbox-contract/schemas/capabilities";
 import { hostIdFrom, SETUP_HOST_SCOPES } from "../host-seed.js";
 
 // Setup auto-connects the installer's machine with no explicit consent step, so what it grants is asserted here rather

@@ -12,7 +12,7 @@ import { useDesktopQuery } from "./desktopQuery";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useRole } from "../../client/sandbox/useRole";
 import { useAudience } from "../../app/useAudience";
-import { useTerminalPanel } from "../terminal/useTerminalPanel";
+import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 
 const { window: windowId, active, toolsTo } = defineProps<{
     // One window on the desktop, by its id; absent for the whole display. Fixed for the tab's life, as its key is.

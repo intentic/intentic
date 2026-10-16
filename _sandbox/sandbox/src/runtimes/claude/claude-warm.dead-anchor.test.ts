@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { capabilitiesOf } from "@intentic/sandbox-contract";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { unstubbed } from "@intentic/testing";
 import { ANCHOR_READY, type IsolationPlan, startMountAnchor } from "../../conversations/worktrees/isolation.js";
 import { AgentDomainRefusedError, createAgentExecutionService } from "../../workload/agent-execution.js";

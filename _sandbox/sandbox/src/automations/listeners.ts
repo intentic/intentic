@@ -1,11 +1,13 @@
-import type { AgentOrigin, ListenerMessage, ListenerStop, ListenerStopAnswer, Trigger } from "@intentic/sandbox-contract";
+import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
+import type { ListenerMessage, ListenerStop, ListenerStopAnswer } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
+import type { Trigger } from "@intentic/sandbox-contract/schemas/automations";
 import { Delayer } from "@intentic/base/async";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import type { Services } from "../composition.js";
 import { opt } from "../opt.js";
 import { CHANNEL_SESSION_TTL_MS, THREAD_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
 import { threadKey } from "../seams/thread-key.js";
-import { FIRE_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
+import { FIRE_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract/schemas/automations";
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import { doorAdmission } from "./door-admission.js";

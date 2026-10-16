@@ -1,4 +1,4 @@
-import { channelId, type PushChannel, RelayChannelSchema, WebPushChannelSchema } from "@intentic/sandbox-contract";
+import { channelId, type PushChannel, RelayChannelSchema, WebPushChannelSchema } from "@intentic/sandbox-contract/schemas/push";
 import webpush from "web-push";
 import { z } from "zod";
 import { opt } from "../opt.js";

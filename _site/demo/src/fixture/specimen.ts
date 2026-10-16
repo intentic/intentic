@@ -1,4 +1,5 @@
-import type { AgentSummary, TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { KEY_EXPIRE_PROGRAM, SOFT_DELETES_JOBS, SOFT_E2E_JOB, SOFT_TYPECHECK_JOB } from "./fleet";
 import { PAYOUTS_PAGE } from "./pages";

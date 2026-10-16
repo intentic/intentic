@@ -1,11 +1,11 @@
 import { computed } from "vue";
-import { effectiveAutoLand, turnInFlight } from "../../agents/fleet/agentStatus";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { landsByDefault } from "../../sandbox/environment/rules";
+import { effectiveAutoLand, turnInFlight } from "../../../models/agent-status/agentStatus-standing";
+import { useAgents } from "../../../models/fleet/useAgents";
+import { landsByDefault } from "../../../models/sandbox/environment/rules";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
-import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import { useRole } from "../../../client/sandbox/useRole";
-import type { Conversation } from "../session/conversation";
+import type { Conversation } from "../../../models/conversations/session/conversation";
 
 // The composer setting about how a conversation's work arrives rather than what it says: whether its finished work lands
 // by itself, a standing answer of the conversation's (the board menu's "Land automatically"). Which agents a message can

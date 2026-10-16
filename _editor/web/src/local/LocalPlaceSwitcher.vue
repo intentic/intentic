@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 import { AnchoredOverlay, Notice, SandboxLogo, useHoverMenu } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -75,7 +76,7 @@ const attempt = async (key: string, act: () => Promise<void>): Promise<void> => 
         await act();
         open.value = false;
     } catch (error) {
-        failure.value = { key, message: error instanceof Error ? error.message : String(error) };
+        failure.value = { key, message: errorMessage(error) };
     } finally {
         working.value = undefined;
     }

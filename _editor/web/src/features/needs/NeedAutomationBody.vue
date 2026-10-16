@@ -1,15 +1,16 @@
 <!-- An automation need's own answer: what would be saved and switched on, said in plain words, then approved whole. -->
 <script setup lang="ts">
-import type { Automation, AutomationNeed, Need, Trigger, WatchSource } from "@intentic/sandbox-contract";
+import type { Automation, Trigger, WatchSource } from "@intentic/sandbox-contract/schemas/automations";
+import type { AutomationNeed, Need } from "@intentic/sandbox-contract/schemas/needs";
 import { Code, Icon, Notice, ui } from "@intentic/ui";
 import { formatDateTime } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { useAgents } from "../agents/fleet/useAgents";
-import { modelLabelFor } from "../chat/accounts/providerCatalog";
-import ChatDecisionButton from "../chat/transcript/cards/ChatDecisionButton.vue";
+import { useAgents } from "../../models/fleet/useAgents";
+import { modelLabelFor } from "../../models/providers/providerCatalog";
+import ChatDecisionButton from "../../components/ChatDecisionButton.vue";
 import { useNeedAnswer } from "./needAnswer";
-import { useNeeds } from "./useNeeds";
+import { useNeeds } from "../../models/needs/useNeeds";
 
 const t = useT();
 

@@ -1,5 +1,7 @@
 import { inflateRawSync } from "node:zlib";
-import { DEFAULT_PRIVACY_SHIELD, type Measure, type PrivacyShieldPolicy, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { DEFAULT_PRIVACY_SHIELD, type PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
+import type { Measure } from "@intentic/sandbox-contract/schemas/compliance";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { documentFilename, renderDocument } from "./drafts.js";
 import { markdownToDocx } from "./docx.js";
 import type { ComplianceFacts } from "./facts.js";

@@ -1,5 +1,7 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentCapabilities, SystemPromptMode, TurnNote } from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../phones/phone-peer.js";
@@ -7,8 +9,8 @@ import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { FIELD_NOTES_NOTE_TITLE } from "@intentic/agent-context/field-notes";
 import { guidanceBlock, type SearchTool } from "./guidance.js";
 import { intenticSystemPrompt } from "./intentic-prompt.js";
-import { MEMORY_NOTE_TITLE } from "./workspace-memory.js";
 import type { TurnPolicy, TurnSpec, TurnTools } from "../providers/agent-request.js";
+import { MEMORY_NOTE_TITLE } from "../../sessions/vocabulary/prompt-envelope.js";
 
 // Three modes: `intentic` and `claude` share the same appends over a different base; `custom` replaces the prompt
 // outright, nothing added. AgentCapabilities.instructions ("replace"/"append"/"none") decides how each of the six

@@ -1,4 +1,4 @@
-import type { EndpointConfig } from "@intentic/sandbox-contract";
+import type { EndpointConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 
 // Reading an endpoint's config, the pure half shared by the model catalog, the translator reconciler, and turn
 // credential resolution; one module so a URL meaning one thing to one consumer and another to a second isn't a bug that

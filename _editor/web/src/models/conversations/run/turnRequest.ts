@@ -1,0 +1,234 @@
+import type { AgentHarness, AgentProvider, EditorContext, PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { TurnErrand } from "@intentic/sandbox-contract/schemas/speaker";
+import type { ProcedureInput } from "../../../client/sandbox/sandboxRpc";
+import type { TurnBooking } from "../drafts/sendLater";
+import { offeredHarness, offeredLoops } from "../../providers/offeredLoops";
+
+// The turn body the daemon receives: what a send carries and the shape that states it on the wire. Which session a turn
+// goes on in is the daemon's to decide (routing.ts); a session id rides only for a conversation it has no record of.
+
+// Where a fork was cut from, carried by its first turn: `keep` rows of `conversationId`, over `files` then or now.
+export type ForkLink = NonNullable<ProcedureInput<`agent.run`>["forkOf"]>;
+
+// Turn settings passed into a send: the active conversation's own provider/model/effort/thinking, captured at
+// send time.
+export interface TurnSettings {
+    readonly agent: AgentProvider;
+    // Which harness runs the turn (native runtime vs the Claude Code loop); orthogonal to `agent`.
+    readonly harness: AgentHarness;
+    // The account the person picked, or the daemon's own record of where the conversation runs; undefined is auto (the
+    // daemon picks by serviceability). Sent only as intent (accountIntent).
+    readonly account: string | undefined;
+    // `account` is a hand pick no turn has run on yet (Selection.accountPicked), so the turn names it even where the
+    // daemon's record already does (accountIntent).
+    readonly accountPicked?: boolean;
+    // Persona id the turn acts as; undefined means an ordinary chat with every connected account reachable.
+    readonly actsAs: string | undefined;
+    // The folder the conversation opens in (the project it belongs to); undefined means the workspace root. The daemon
+    // latches the first turn's answer.
+    readonly startIn: string | undefined;
+    readonly model: string;
+    readonly effort: string;
+    readonly thinking: boolean;
+    // Whether to ask for fast speed, already reconciled against the selected model (see turnSettings).
+    readonly fast: boolean;
+    // Keeps the picked model despite looking simple; sent even when false, to clear an earlier hold.
+    // This turn's model came from Auto's reading, not a hand. Absent on every other turn, which is the point: it
+    // marks the one turn the judge decided.
+    readonly autoPicked?: boolean;
+}
+
+// A provider-minted resumable session and the runtime/account it belongs to; a mismatched selection at send
+// time retires it.
+export interface SessionRef {
+    readonly id: string;
+    readonly provider: AgentProvider;
+    readonly account: string | undefined;
+    // Harness that minted the session; a harness switch retires it too, same as runtime/account.
+    readonly harness: AgentHarness;
+}
+
+// Builds a session ref from the turn that produced it and the daemon's own account for it. Account falls back
+// to what was asked for only when the daemon named none (env-token or translator turns).
+export const boundSession = (
+    sessionId: string,
+    turn: { readonly provider: AgentProvider; readonly account: string | undefined; readonly harness: AgentHarness },
+    resolvedAccount: string | undefined,
+): SessionRef => ({ id: sessionId, provider: turn.provider, account: resolvedAccount ?? turn.account, harness: turn.harness });
+
+// This window's reading of the daemon's continuation rule (routing.ts `continues`: same runtime, account and harness),
+// for two things only: the words of the "switched" divider, and whether a past session opened from the history menu
+// resumes (resumedSessionId). The daemon decides which session a turn goes on in; nothing here routes.
+// A selection on auto names no account, so it continues wherever the daemon runs the session.
+export const readsAsContinuing = (
+    session: SessionRef | undefined,
+    selection: { agent: AgentProvider; account: string | undefined; harness: AgentHarness },
+): boolean =>
+    session !== undefined &&
+    session.provider === selection.agent &&
+    (selection.account === undefined || session.account === selection.account) &&
+    // Two names for one loop are one loop, as the daemon's sameLoop reads it.
+    capabilitiesOf(session.provider, session.harness).runtime === capabilitiesOf(selection.agent, selection.harness).runtime;
+
+// The session a turn names: only on a conversation the daemon has no record of, which is a past session resumed from the
+// history menu, and only while the selection still reads as continuing it. On a conversation it holds the daemon picks
+// the session itself (turn-admission.ts sessionFor) and ignores any it is sent, so none is sent.
+export const resumedSessionId = (
+    session: SessionRef | undefined,
+    settings: Pick<TurnSettings, "agent" | "account" | "harness">,
+    registered: boolean,
+): string | undefined => (!registered && readsAsContinuing(session, settings) ? session?.id : undefined);
+
+// The account a request names: a pick the daemon has not taken yet, or a pick made by hand for this turn. Where a
+// conversation runs is the daemon's record (routingFor), moved by `switchAccount` and reported back on each session
+// frame (`session`), so a turn naming none runs there, and is moved off it by the daemon when that account can no
+// longer serve (blocked-account.ts), or held when no other can. Named, and so run whatever the account's state, only
+// where the selection holds something that record does not: a chat's first turn (undefined there too is auto), a turn
+// onto another provider than the conversation's, an account other than the one the daemon last reported (a pick the
+// daemon, busy with a turn, refused to move to), or an account the person picked by hand that no turn has run on
+// yet (`accountPicked`), even the recorded one: picking an account the daemon holds turns off for is an attempt on
+// it, not another hold, and its answer lifts the daemon's mark.
+export const accountIntent = (
+    settings: Pick<TurnSettings, "agent" | "account" | "accountPicked">,
+    facts: { readonly registered: boolean; readonly session: SessionRef | undefined },
+): string | undefined => {
+    const { session } = facts;
+    if (settings.accountPicked === true) {
+        return settings.account;
+    }
+    const recorded = facts.registered && session !== undefined && session.provider === settings.agent;
+    return recorded && (settings.account === undefined || settings.account === session.account) ? undefined : settings.account;
+};
+
+// Flags that ride only when true, since the daemon reads false and unset the same way. `autoPicked` is deliberately not
+// one of them: unset there would leave an earlier turn's veto standing on the conversation.
+const setFlags = (settings: TurnSettings): { fast?: true; autoPicked?: true } => ({
+    ...(settings.fast ? { fast: true as const } : {}),
+    ...(settings.autoPicked === true ? { autoPicked: true as const } : {}),
+});
+
+// Two fields, not one: a chip is a file the user chose, so an unresolvable one refuses the send, while a mention is
+// this tokenizer's reading of their words, so an unresolvable one is the daemon's to drop. Each omitted when empty.
+const filePaths = (attachments: string[], mentions: string[]): Pick<ProcedureInput<`agent.run`>, "attachments" | "mentions"> => ({
+    ...(attachments.length > 0 ? { attachments } : {}),
+    ...(mentions.length > 0 ? { mentions } : {}),
+});
+
+// The harness field a turn carries: absent wherever the turn runs on the provider's default loop.
+const sentHarness = (settings: Pick<TurnSettings, "agent" | "harness">): { readonly harness?: AgentHarness } => {
+    const harness = offeredHarness(offeredLoops(settings.agent), settings.harness);
+    return harness === `native` ? {} : { harness };
+};
+
+// Builds the turn request body. An omitted `model`/`harness`/`sessionId` each resolve to the daemon's own
+// default; `isolated` picks the conversation's worktree over /work.
+export const turnRequestBody = (input: {
+    // This window's name for the message, so the daemon recognises a resend of it and a Stop can name it.
+    readonly messageId: string;
+    readonly text: string;
+    readonly conversationId: string;
+    readonly title: string | null;
+    readonly isolated: boolean;
+    // Runner this conversation executes on, set on its first turn; the daemon latches it from there.
+    readonly runner?: string | undefined;
+    // Not a wire field: the address this body is posted to (Conversation.box). Fields scoped to one daemon's own
+    // store must not cross to another box:
+    //   account – a key in the box's credential store; omitted, that box picks by serviceability.
+    //   actsAs – a persona card in the box's record; unresolved names send an ordinary chat.
+    //   editorContext – a path in this workspace, meaningless on another box.
+    // Model and provider do cross: the target daemon resolves the model against its own catalog.
+    readonly box?: string | undefined;
+    readonly mode: PermissionMode;
+    readonly settings: TurnSettings;
+    // The daemon has this conversation on record, so a turn naming no account runs on the one it is on (accountIntent).
+    readonly registered: boolean;
+    // The session this window holds, as the daemon last reported it (bindSession). Not which one the turn resumes: the
+    // daemon decides that; this is only what the account intent and a history-menu resume are read against.
+    readonly session: SessionRef | undefined;
+    readonly forkOf: ForkLink | undefined;
+    // Files the user staged as chips. A path the daemon can't resolve refuses the send, since the user chose it.
+    readonly attachmentPaths: string[];
+    // Workspace paths read out of the text's own `@` tokens. Ride apart from the chips: nobody chose them, so the
+    // daemon drops one that doesn't resolve rather than refusing the turn over a word in a paste.
+    readonly mentionedPaths: string[];
+    readonly editorContext: EditorContext | undefined;
+    // What the words are for when this window composed them (an errand), which the row they open carries.
+    readonly errand?: TurnErrand | undefined;
+    // A scheduled send: the daemon holds the words in the queue until its instant, or until another conversation's work
+    // has landed (sendLater.ts), rather than starting a turn.
+    readonly booking?: TurnBooking | undefined;
+    // This conversation's own answer to whether its finished work lands by itself, for the message that opens it; the
+    // daemon reads it there only, and only from a maintainer.
+    readonly conversationAutoLand?: boolean | undefined;
+    // A Continue: the daemon carries the conversation on without the words, which only a daemon from before reads.
+    readonly continues?: boolean | undefined;
+}): ProcedureInput<`agent.run`> => {
+    // Whether this body targets this sandbox; fields scoped to another box's store are dropped otherwise.
+    const here = input.box === undefined;
+    const body: ProcedureInput<`agent.run`> = {
+        messageId: input.messageId,
+        prompt: input.text,
+        // Seeds a fresh registry entry's title; an existing entry keeps its own.
+        ...(input.title !== null ? { title: input.title } : {}),
+        ...filePaths(input.attachmentPaths, input.mentionedPaths),
+        agent: input.settings.agent,
+        // Isolated runs in this conversation's own worktree (branch agent/<conversationId>), not /work.
+        conversationId: input.conversationId,
+        ...(input.isolated ? { isolated: true } : {}),
+        // Omitted for this sandbox; a runner is paired to one box, so it never rides another box's body.
+        ...(here && input.runner !== undefined ? { placement: { kind: `runner` as const, id: input.runner } } : {}),
+        // `native` is the daemon's default and stays unsent, as does the default named outright and any loop the daemon
+        // does not offer the provider on: it would run its own loop anyway, and the request should not claim otherwise.
+        ...sentHarness(input.settings),
+        // Omitted when this body targets another box, since that daemon holds no such selection, and wherever the turn
+        // continues the conversation on the account it already runs on (accountIntent).
+        account: here ? accountIntent(input.settings, input) : undefined,
+        // Omitted rather than empty: an unresolved persona card gets an ordinary chat, not an error.
+        ...(here && input.settings.actsAs !== undefined ? { actsAs: input.settings.actsAs } : {}),
+        // Omitted for another box, whose projects are its own.
+        ...(here && input.settings.startIn !== undefined ? { startIn: input.settings.startIn } : {}),
+        // Only for a conversation the daemon has no record of (resumedSessionId); otherwise it picks the session itself.
+        sessionId: resumedSessionId(input.session, input.settings, input.registered),
+        errand: input.errand,
+        ...(input.forkOf !== undefined ? { forkOf: input.forkOf } : {}),
+        // Empty selection (catalog not yet loaded) is dropped; the daemon resolves its own live default.
+        model: input.settings.model || undefined,
+        effort: input.settings.effort,
+        thinking: input.settings.thinking,
+        ...setFlags(input.settings),
+        // Always sent: unlike the flags above, unset would leave an earlier turn's veto standing on the conversation.
+        // Starting permission posture, passed straight to the SDK:
+        //   plan – proposes then executes
+        //   default – prompts per tool
+        //   bypassPermissions – asks nothing
+        permissionMode: input.mode,
+        // Opt-in file/selection chip; a path in this workspace, so it stays here.
+        ...(here && input.editorContext !== undefined ? { editorContext: input.editorContext } : {}),
+    };
+    stateOccasions(body, input, here);
+    if (input.continues === true) {
+        body.continues = true;
+    }
+    return body;
+};
+
+// What only some sends say beside the words: when they go, if not now (a booking), and, on the message that opens a
+// conversation here, its own answer to whether its finished work lands by itself. Written onto the body in place.
+const stateOccasions = (
+    body: ProcedureInput<`agent.run`>,
+    input: { readonly booking?: TurnBooking | undefined; readonly conversationAutoLand?: boolean | undefined; readonly registered: boolean },
+    here: boolean,
+): void => {
+    const { sendAt, sendAfter } = input.booking ?? {};
+    if (sendAt !== undefined) {
+        body.sendAt = sendAt;
+    }
+    if (sendAfter !== undefined) {
+        body.sendAfter = sendAfter;
+    }
+    // Only for a conversation the daemon has no record of yet, and only for this sandbox, whose land it is.
+    if (!input.registered && here && input.conversationAutoLand !== undefined) {
+        body.conversationAutoLand = input.conversationAutoLand;
+    }
+};

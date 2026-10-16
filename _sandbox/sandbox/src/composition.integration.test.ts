@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pino from "pino";
 import { createServices, type Services, servicesTeardown } from "./composition.js";
+import { leafTeardown } from "./bootstrap/slices/slice-registry.js";
 import { statePath } from "./state-paths.js";
-import { testConfig } from "./testing.js";
+import { testConfig } from "./env.config.testing.js";
 
 // The real composition over temp roots: every slice builder runs in its order, and the services that read the finished
 // daemon per call (composition.ts, `whole`) answer once it has returned instead of reaching a binding never made.
@@ -37,4 +38,11 @@ test("the late seams answer once composing has returned", async () => {
     expect(await services.phoneReach([])).toBeUndefined();
     expect(services.outboxStreamFor(undefined)).toBeUndefined();
     expect(services.reach.status()).toEqual({ state: "off" });
+});
+
+test("the leaf slices are composed beside the core, with the stops of those that start something", () => {
+    expect(Object.keys(services)).toEqual(
+        expect.arrayContaining(["git", "hostHub", "linkedChildren", "loops", "workflows", "needs", "orgPolicy", "history", "shares", "walletLedger"]),
+    );
+    expect(leafTeardown(services)).toHaveLength(1);
 });

@@ -1,6 +1,6 @@
 import { posix } from "node:path";
 import { cachedAsync } from "@intentic/base/held";
-import type { WorkspaceDepEdge, WorkspaceDepUsage, WorkspaceGraph } from "@intentic/sandbox-contract";
+import type { WorkspaceDepEdge, WorkspaceDepUsage, WorkspaceGraph } from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
 import { importsOf } from "./import-scan.js";
 import { packageFiles, readSources } from "./package-files.js";
 import { readPackageGraph, readWorkspaceManifests, type WorkspaceManifest } from "./package-graph.js";

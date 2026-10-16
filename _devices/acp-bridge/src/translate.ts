@@ -1,7 +1,9 @@
 import { basename, isAbsolute, join } from "node:path";
 import type { SessionUpdate, ToolCallContent as AcpToolCallContent, ToolCallLocation as AcpToolCallLocation } from "@agentclientprotocol/sdk";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { AttachFrame, ToolCallContent, ToolCallLocation, TranscriptTool } from "@intentic/sandbox-contract";
+import type { AttachFrame } from "@intentic/sandbox-contract/events/agent-events";
+import type { ToolCallContent, ToolCallLocation } from "@intentic/sandbox-contract/events/requests";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 
 // Attach stream to ACP session/update, the mechanical reverse of acp-events.ts; a tool's first sighting is `tool_call`,
 // every later one `tool_call_update`.

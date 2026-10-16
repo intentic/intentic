@@ -3,11 +3,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { TranscriptRow } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { pino } from "pino";
 import { type LiveRun, RUNS } from "../../../conversations/actor/conversation-holdings.js";
 import type { ListeningPort } from "../../../ports/port-scan.js";
-import { memoryFleet } from "../../../testing.js";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { bashTmuxHooks } from "../agent-terminals.js";
 import {
     type BackgroundJob,

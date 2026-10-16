@@ -1,14 +1,16 @@
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type OrgPolicy, PrivacyShieldPolicySchema, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import type { OrgPolicy } from "@intentic/sandbox-contract/schemas/organisation";
+import { PrivacyShieldPolicySchema } from "@intentic/sandbox-contract/schemas/privacy";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { createApp } from "../app.js";
 import { clientFor, errorCode } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { createLogger } from "../logger.js";
 import { filePrivacyPolicy } from "../privacy/privacy-policy.js";
 import { fileSandboxSettingsStore } from "../settings/settings-store.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 import { createPinDriftReporter, pinPrivacy, pinSettings, privacyPin, privacyPinRefusal, settingsPin, settingsPinRefusal } from "./org-pins.js";
 import { createOrgPolicyHolder } from "../org/org-policy.js";
 
@@ -46,7 +48,7 @@ const settled = async <T>(read: () => T, done: (value: T) => boolean): Promise<T
         if (done(value)) {
             return value;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- polling a file another promise writes, with a hang bound
+        // polling a file another promise writes, with a hang bound
         await new Promise((resolve) => setTimeout(resolve, 10));
     }
     return read();

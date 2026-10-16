@@ -1,5 +1,5 @@
 import { defaultGit, GIT_STALL_GUARD, gitAuthHeader, gitHeaderEnv, type GitRunner } from "@intentic/base/git";
-import type { RemoteRef, RemoteRefs } from "@intentic/sandbox-contract";
+import type { RemoteRef, RemoteRefs } from "@intentic/sandbox-contract/schemas/git/remote-refs";
 
 // What a repository offers, read over the wire without cloning it: `ls-remote` is one round trip and touches no disk,
 // which is what lets an install form resolve a version while someone is still typing the URL into it.

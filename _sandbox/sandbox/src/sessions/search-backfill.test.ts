@@ -1,7 +1,7 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import { recordingLogger } from "../harness/route-fakes.testing.js";
 import { createLogger } from "../logger.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 import { backfillSearchIndex, type BackfillSource } from "./search-backfill.js";
 import { openSearchIndex } from "./search-index.js";
 import type { SpokenLine } from "./transcript-search.js";

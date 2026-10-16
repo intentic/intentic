@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { type RequestDocument, planParts } from "@intentic/sandbox-contract";
+import type { RequestDocument } from "@intentic/sandbox-contract/events/requests";
+import { planParts } from "@intentic/sandbox-contract/text/title";
 import { browserOwnsClick, MarkdownParts } from "@intentic/ui";
 import { basename } from "@intentic/ui/path";
 import { copyCodeFromEvent, parseMarkdownParts, renderParsedMarkdown } from "@intentic/ui/markdown";
 import { computed, ref } from "vue";
-import { useChatSurface } from "../../tools/chatToolSurface";
+import { useChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
 import { useT } from "@intentic/ui/i18n";
 
 // Renders a document a turn wrote: the Write card that produced it, and any question/plan card asking about it. No diff

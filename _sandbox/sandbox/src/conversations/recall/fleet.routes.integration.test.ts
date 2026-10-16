@@ -1,11 +1,11 @@
-import { deriveTitle } from "@intentic/sandbox-contract";
+import { deriveTitle } from "@intentic/sandbox-contract/text/title";
 import type { Hono } from "hono";
 import { createApp } from "../../app.js";
 import type { AppEnv } from "../../app-env.js";
 import { clientFor, collect, proven } from "../../harness/route-client.testing.js";
 import { services } from "../../harness/route-services.testing.js";
 import { runAgentTurn } from "../../harness/route-turns.testing.js";
-import { testConfig } from "../../testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import { transcriptFile } from "../../sessions/transcript-record.js";
 import { conversationUnit } from "../../store/conversation-units.js";
 import type { FleetRecall, FleetRow } from "./fleet-recall.js";

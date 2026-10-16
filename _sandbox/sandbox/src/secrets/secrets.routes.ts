@@ -9,11 +9,12 @@ import { collectSecretInventory, ENV_FILE, SECRETS_FILE } from "@intentic/scaffo
 import { secretField } from "../capabilities/summary.js";
 import { lastUseByName, type SecretUse } from "./secret-uses.js";
 import { contributionRegistry } from "../capabilities/contributions.js";
-import type { CredentialGate, CredentialPolicy, SecretInventoryEntry, SecretProgramGuard } from "@intentic/sandbox-contract";
+import type { CredentialGate, CredentialPolicy, SecretInventoryEntry, SecretProgramGuard } from "@intentic/sandbox-contract/schemas/secrets";
 import { implement, ORPCError } from "@orpc/server";
 import type { Caller } from "../auth/auth.js";
 import { ensureMaintainer, ensureOwner } from "../auth/owner-gates.js";
-import { roleAtLeast, secretsContract } from "@intentic/sandbox-contract";
+import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
+import { secretsContract } from "@intentic/sandbox-contract/contracts/secrets.contract";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { stateRelPath } from "../state-paths.js";

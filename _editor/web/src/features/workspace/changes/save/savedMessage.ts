@@ -1,6 +1,7 @@
-import type { LandedMessage, RepoChanges } from "@intentic/sandbox-contract";
+import type { LandedMessage } from "@intentic/sandbox-contract/schemas/agents";
+import type { RepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
 import { ALL_SIDES, commitMessageOf, originsOf } from "../changeOrigins";
-import { truncatedTotal } from "../truncation";
+import { truncatedTotal } from "../../../../models/workspace/changes/truncation";
 
 // What a maker's one Save press records the tree under. A maker never writes a commit message, so the subject is
 // chosen for them: the sentence the commit-message model already wrote for an assistant's landing when the whole

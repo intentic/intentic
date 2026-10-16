@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { noteChildWork } from "./child-verification.js";
 import { closeSubagents, fileReportedSubagent, type SubagentTurn } from "./subagents.js";
 

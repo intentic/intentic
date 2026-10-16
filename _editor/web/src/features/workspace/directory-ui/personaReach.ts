@@ -1,5 +1,5 @@
 import { sandboxRef } from "@intentic/extension-api";
-import type { Persona } from "@intentic/sandbox-contract";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 

@@ -1,4 +1,5 @@
-import type { AccountUsage, OauthAccount, ProviderRefusal } from "@intentic/sandbox-contract";
+import type { AccountUsage, ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
 import { FIRST_RECHECK_MS, type SeatProbe } from "../../../runtimes/claude/claude-seat-check.js";

@@ -1,7 +1,7 @@
 import { STATE_DIR } from "@intentic/constants";
 import { lazyByPath } from "../../../../client/sandbox/lazyByPath";
 import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
-import { renditionBlob } from "../../../workspace/home/thumbnails";
+import { renditionBlob } from "../../../../models/workspace/home/thumbnails";
 import { lookOf, type ShotLook, UNJUDGED } from "./shotLook";
 
 // Each shot's look (shotLook.ts), read off the daemon's `tile` rendition: the whole picture inside 256 px, a few KB,

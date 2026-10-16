@@ -5,16 +5,17 @@ import {
     type AutomationRun,
     AutomationRunSchema,
     AutomationSchema,
-    type ModelPin,
     type WatchState,
     WatchStateSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/automations";
+import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { z } from "zod";
 import { drop, fold, isJsonObject, type JsonObject, nested } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument, openEntries } from "../store/open-document.js";
 import { defineStep } from "../store/evolution/state-steps.js";
 import { stateRelPath } from "../state-paths.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // The sandbox-owned automations manifest and the run ledger beside it; the scheduler polls the manifest, the
 // /automations routes edit it.
@@ -69,12 +70,8 @@ export const automationWatchDocument = defineDocument({
 type WatchLedger = Readonly<Record<string, WatchState>>;
 
 const parsedJson = (text: string | undefined): unknown => {
-    try {
-        return text === undefined ? undefined : JSON.parse(text);
-    } catch {
-        // allow(silent-catch): an unreadable file has nothing to move; its own store reports it
-        return undefined;
-    }
+    // An unreadable file has nothing to move; its own store reports it.
+    return text === undefined ? undefined : parseJsonOr(text, undefined);
 };
 
 const canonical = (value: unknown): string => `${JSON.stringify(value, undefined, 2)}\n`;

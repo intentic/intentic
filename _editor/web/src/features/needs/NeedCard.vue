@@ -1,12 +1,12 @@
 <!-- One need, answered where it is drawn: in the chat that raised it, pinned under the conversation, or in Needs you. -->
 <script setup lang="ts">
-import { isOpenNeed, type Need } from "@intentic/sandbox-contract";
+import { isOpenNeed, type Need } from "@intentic/sandbox-contract/schemas/needs";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import ChatCard from "../chat/transcript/cards/ChatCard.vue";
+import ChatCard from "../../components/ChatCard.vue";
 import NeedAnswer from "./NeedAnswer.vue";
-import { NEED_ICONS, needStatus, toldLine, workingLine } from "./needStatus";
-import { useNeeds } from "./useNeeds";
+import { NEED_ICONS, needStatus, toldLine, workingLine } from "../../models/needs/needStatus";
+import { useNeeds } from "../../models/needs/useNeeds";
 
 const t = useT();
 

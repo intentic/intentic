@@ -1,7 +1,7 @@
 // The keyrings on the owner's computers, and pairing two of them: offered only while two answer, sent only for the two
 // picked, and said while both prompts are up with the fingerprints each should show, then with the ones both showed.
 import "@intentic/testing/dom";
-import type { SandboxKeyring } from "@intentic/sandbox-contract";
+import type { SandboxKeyring } from "@intentic/sandbox-contract/schemas/secrets";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
 import { computed, createApp, h, nextTick, ref } from "vue";

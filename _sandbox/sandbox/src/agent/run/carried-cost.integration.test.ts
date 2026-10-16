@@ -4,12 +4,12 @@ import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { type HarnessRequest, runAgent } from "./agent.js";
 import { CHUNK_BYTES, carriedCostOf, TAIL_LIMIT_BYTES } from "./carried-cost.js";
 import type { QueryFn } from "./sdk-stream.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 
 // Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
 jest.mock("../prompt/preset-prompt.js", () => ({

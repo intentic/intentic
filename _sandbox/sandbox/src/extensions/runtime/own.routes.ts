@@ -10,7 +10,8 @@ import { subscribeRefChanges } from "../../git/remote/ref-watch.js";
 import { subscribeRepoChanges } from "../../workspace/watch/repo-watch.js";
 import { subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../../workspace/watch/workspace-watch.js";
 import { extensionSettingsDocument, type ExtensionSettings, onExtensionSettingsWritten, readAllExtensionSettings } from "../extension-settings.js";
-import { type InstalledExtension, installedExtensions } from "../installed-extensions.js";
+import { type InstalledExtension, installedExtensions } from "../../capabilities/extension-inventory/installed-extensions.js";
+import { defineRawRoutes } from "../../http/raw-route-server.js";
 
 // What an extension's own code asks the daemon about itself (the contract's extension-protocol): its settings with
 // their secret values, and one stream of what moved, its settings and the workspace. Every extension token reaches both
@@ -112,4 +113,14 @@ export const createExtensionOwnRoutes = (services: Services) => ({
             }
         });
     },
+});
+
+// What an extension's own code asks about itself: its settings with their secrets, and its event stream. Every
+// extension token reaches both undeclared; each answers only about the extension the token was minted for.
+export const extensionOwnRawRoutes = defineRawRoutes((services: Services) => {
+    const extensionOwnRoutes = createExtensionOwnRoutes(services);
+    return {
+        "GET /extension/settings": extensionOwnRoutes.settings,
+        "GET /extension/events": extensionOwnRoutes.events,
+    };
 });

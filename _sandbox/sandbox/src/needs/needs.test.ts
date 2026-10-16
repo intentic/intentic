@@ -1,5 +1,5 @@
-import type { AgentNeed, Need, NeedRaise, NeedSubject, NeedTold } from "@intentic/sandbox-contract";
-import { memoryNeedsStore } from "../testing.js";
+import type { AgentNeed, Need, NeedRaise, NeedSubject, NeedTold } from "@intentic/sandbox-contract/schemas/needs";
+import { memoryNeedsStore } from "./needs-store.testing.js";
 import type { TurnStanding } from "../conversations/actor/turn-standing.js";
 import type { Answered, Met, NeedKindHandler, NeedKinds, Resolved } from "./need-kinds.js";
 import { createNeeds, type NeedsDeps, onePassAtATime } from "./needs.js";

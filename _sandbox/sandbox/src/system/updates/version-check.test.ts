@@ -1,6 +1,6 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { isDevBuild } from "../../version.js";
-import { expireTimeouts, stalledFetch } from "../../testing.js";
+import { expireTimeouts, stalledFetch } from "../../http/fetch.testing.js";
 import { isNewer, latestVersion, RELEASE_FETCH_TIMEOUT_MS, refreshLatestVersion, startVersionCheck } from "./version-check.js";
 
 afterEach(() => {

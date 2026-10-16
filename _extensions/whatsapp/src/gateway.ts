@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { ListenerPairing } from "@intentic/sandbox-contract";
+import type { ListenerPairing } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 // The subpath, not the package root: the root loads every schema in the contract, tens of megabytes this process never
 // uses.
 import { deliverChunked, type GatewayHooks, GatewayRefusal, runConnectorGateway } from "@intentic/connector-runtime";

@@ -1,4 +1,4 @@
-import type { PipelineStatus } from "@intentic/sandbox-contract";
+import type { PipelineStatus } from "@intentic/sandbox-contract/schemas/ci";
 import { type ReportedJob, remoteWorkflow, resolveRun, type RunJob, workflowCalls } from "./workflowGraph.js";
 
 // Pins resolveRun's job-id-to-display-name matching: needs uses job IDs, the jobs API reports display names, and

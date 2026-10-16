@@ -1,4 +1,4 @@
-import type { GitBranch, GitRemoteBranch } from "@intentic/sandbox-contract";
+import type { GitBranch, GitRemoteBranch } from "@intentic/sandbox-contract/schemas/git/git";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 
 // Branch list/create/delete over a real repo. Listing is one `for-each-ref` call that never fails for a branch with no

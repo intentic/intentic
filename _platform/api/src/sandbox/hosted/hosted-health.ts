@@ -306,7 +306,7 @@ export const repairHostedRows = async (prisma: PrismaClient, config: Config, log
         if (row.migratingId !== null || row.buildingId !== null) {
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one machine at a time, gentle on the provider
+        // one machine at a time, gentle on the provider
         const verdict = await withHostedAppLock(config, row.appName, false, async (): Promise<GoneVerdict> => {
             const held = await prisma.hostedMachine.findUnique({
                 where: { id: row.id },

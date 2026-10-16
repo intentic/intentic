@@ -3,8 +3,10 @@
     // 13,700 findings on main when this became a tier).
     //
     // A TIDY TIER THAT JUDGES ONLY WHAT AN EDIT ADDS: _tools/oxlint/lint-edit.mjs reports what an edit adds over HEAD
-    // under this file (_tools/oxlint/added.mjs). `pnpm lint:plugins` lists the whole backlog. `@oxlint/plugins` must
-    // equal the `oxlint` version exactly: the JS plugin ABI is not semver-stable.
+    // under this file (_tools/oxlint/added.mjs), anti-slop only. Complexity is held by the `code-shape` check
+    // (_tools/checks/code-shape.mjs), which runs this rule with these options and ratchets every score over them, in CI
+    // too. `pnpm lint:plugins` lists the whole backlog. `@oxlint/plugins` must equal the `oxlint` version exactly: the
+    // JS plugin ABI is not semver-stable.
     "$schema": "./node_modules/oxlint/configuration_schema.json",
     "extends": ["./.oxlintrc.json"],
     "jsPlugins": [

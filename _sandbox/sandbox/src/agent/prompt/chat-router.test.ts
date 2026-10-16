@@ -1,12 +1,15 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { type Area, type ModelOffer, modelPinKey, type Persona } from "@intentic/sandbox-contract";
+import type { Area } from "@intentic/sandbox-contract/schemas/areas";
+import type { ModelOffer } from "@intentic/sandbox-contract/models/model-offer";
+import { modelPinKey } from "@intentic/sandbox-contract/models/model-pins";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 import { AgentDomainRefusedError, assertAgentExecutionContext, createAgentExecutionService, type AgentExecutionContext, type AgentExecutionService } from "../../workload/agent-execution.js";
 import { rootExecutionService } from "../../workload/agent-execution.testing.js";
-import type { RoleAsk } from "../models/role-answer.js";
-import { readRoleAnswer } from "../models/role-answer.js";
+import type { RoleAsk } from "../../engines/role-answer.js";
+import { readRoleAnswer } from "../../engines/role-answer.js";
 import type { RouteVerdict } from "./chat-router.js";
 
 /* THE ROUTER, at the seam it spends: askRoleModel is mocked so a test can hand back a reply and see what the router

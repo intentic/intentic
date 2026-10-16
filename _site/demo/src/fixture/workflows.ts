@@ -1,4 +1,4 @@
-import type { Workflow, WorkflowRun, WorkflowSummary } from "@intentic/sandbox-contract";
+import type { Workflow, WorkflowRun, WorkflowSummary } from "@intentic/sandbox-contract/schemas/workflows";
 
 // Same run as the fleet fixture's two review cards (`wf-a3f19c22-review-perf`/`-security`), so a card's workflow mark
 // opens this graph. Chain carries one session through plan → build (`continue`), then fans out to two `fresh` reviewer

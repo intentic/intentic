@@ -1,4 +1,4 @@
-import type { SandboxMetrics } from "@intentic/sandbox-contract";
+import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
 import { t } from "@intentic/ui/i18n";
 import { memoryRowsOf, memoryShort, usedOf } from "./sandboxFigures";
 

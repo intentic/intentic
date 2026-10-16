@@ -1,5 +1,5 @@
 import { t } from "@intentic/ui/i18n";
-import type { PushChannel } from "@intentic/sandbox-contract";
+import type { PushChannel } from "@intentic/sandbox-contract/schemas/push";
 import type { Minted, PushDriver } from "./driver.js";
 
 // Web push, from the browser's side: the transport for every real browser, including the Android TWA (Chrome). The

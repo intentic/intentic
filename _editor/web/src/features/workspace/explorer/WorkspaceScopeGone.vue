@@ -2,7 +2,7 @@
 import { Button, EmptyState, Icon } from "@intentic/ui";
 import { RouterLink } from "vue-router";
 import { useScopeTitle } from "../health/scopeTitle";
-import { useWorkspaceTree } from "./useWorkspaceTree";
+import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 import { workspaceAgent } from "../../../app/workspaceScope";
 import { useT } from "@intentic/ui/i18n";
 

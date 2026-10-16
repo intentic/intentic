@@ -6,7 +6,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { runBounded } from "@intentic/base/process";
 import { renameOver } from "@intentic/base/fs";
 import { homeDir, type Log } from "@intentic/local-agent";
-import { DEV_VERSION } from "@intentic/sandbox-contract";
+import { DEV_VERSION } from "@intentic/sandbox-contract/state/versions";
 import { binDir } from "./config.js";
 import { adoptRunningDistros } from "./environments/commands.js";
 import { launchUpgrade, UPGRADE_ENV, upgradeHereToMachine } from "./environments/machine-upgrade.js";

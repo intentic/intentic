@@ -3,16 +3,16 @@ import { BottomSheet, SearchBar, timeAgo } from "@intentic/ui";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useSettled } from "@intentic/ui/async";
 import { ref, watch } from "vue";
-import { useAgents } from "../../agents/fleet/useAgents";
+import { useAgents } from "../../../models/fleet/useAgents";
 import { statusIcon } from "../models/catalog";
-import { useChat } from "../run/useChat";
-import { SEARCH_SETTLE_MS } from "../run/useChat-sessions";
+import { useChat } from "../../../models/conversations/run/useChat";
+import { SEARCH_SETTLE_MS } from "../../../models/conversations/run/useChat-sessions";
 import { viewersOfSession } from "../../../workbench/presence/usePresence";
 import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import PastChatList from "../panel/PastChatList.vue";
 import { modelOrProvider } from "./cardView";
 import { twinTitles } from "./tabs";
-import type { Conversation } from "../session/conversation";
+import type { Conversation } from "../../../models/conversations/session/conversation";
 import { useT } from "@intentic/ui/i18n";
 
 // The phone's chat switcher: the open chats, a new one, and the stored sessions behind a search box. One sheet with

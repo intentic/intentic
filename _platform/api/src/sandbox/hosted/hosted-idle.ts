@@ -150,7 +150,7 @@ export const reapIdleHosted = async (
         if (idleDaysSoFar < idleWarnDays) {
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep, gentle on the API
+        // sequential sweep, gentle on the API
         const verdict = await decideIdleMachine(prisma, config, logger, machine, idleDaysSoFar, now).catch((error: unknown) => {
             logger.error({ err: error, app: machine.appName }, `hosted idle sweep: failed for this machine; retried tomorrow`);
             return `kept` as const;

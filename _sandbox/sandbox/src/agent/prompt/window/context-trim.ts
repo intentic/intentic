@@ -1,4 +1,7 @@
-import { type AgentCapabilities, type ContextTrim, LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODEL_WINDOWS, type TurnNote } from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { ContextTrim } from "@intentic/sandbox-contract/schemas/context-trim";
+import { LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODEL_WINDOWS } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { FIELD_NOTES_NOTE_TITLE } from "@intentic/agent-context/field-notes";
 import { GUIDANCE_TITLE } from "../guidance.js";
 import type { PromptTrim } from "../system-prompt.js";

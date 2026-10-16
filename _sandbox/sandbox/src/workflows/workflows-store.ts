@@ -6,7 +6,7 @@ import {
     type WorkflowStepState,
     WorkflowSchema,
     type WorkflowRunState,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/workflows";
 import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { drop, isJsonObject, type JsonObject, nested } from "../store/evolution/conversions.js";
@@ -15,6 +15,7 @@ import { defineStep } from "../store/evolution/state-steps.js";
 import { openEntries } from "../store/open-document.js";
 import { countResume, keyedEntries } from "../store/keyed-entries.js";
 import { stateRelPath } from "../state-paths.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Two files: `workflows.json` is a manifest the user edits by hand; `workflow-runs.json` is an append-mostly ledger the
 // scheduler writes many times per step, bounded and never user-edited. Kept apart so a step write can't clobber a
@@ -31,12 +32,8 @@ export const workflowsDocument = defineDocument({
     movedByStep: ["gate.token"],
 });
 const parsedJson = (text: string | undefined): unknown => {
-    try {
-        return text === undefined ? undefined : JSON.parse(text);
-    } catch {
-        // allow(silent-catch): an unreadable file has nothing to move; its own store reports it
-        return undefined;
-    }
+    // An unreadable file has nothing to move; its own store reports it.
+    return text === undefined ? undefined : parseJsonOr(text, undefined);
 };
 
 const carriesGateToken = (entry: unknown): entry is JsonObject & { id: string; gate: JsonObject & { token: string } } =>

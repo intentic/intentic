@@ -1,6 +1,6 @@
 import { statfs } from "node:fs/promises";
 import { cpus, loadavg, totalmem } from "node:os";
-import type { RunnerFacts } from "@intentic/sandbox-contract";
+import type { RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { type Pressure, readPressure } from "../system/resources/cgroup.js";
 import { opt } from "../opt.js";
 import type { BudgetSnapshot, ResourceBudget } from "../workload/resource-budget.js";

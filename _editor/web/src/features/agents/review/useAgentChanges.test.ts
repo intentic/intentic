@@ -53,7 +53,7 @@ jest.mock("../../../client/sandbox/useSandboxQuery", () => ({
         error: { value: undefined },
     }),
 }));
-jest.mock("../fleet/agentActions", () => ({
+jest.mock("../../../models/fleet/agentActions", () => ({
     agentWork: (id: string) => `agents/${id}`,
     askAgentToResolve: jest.fn(),
     discardAgent: jest.fn(),
@@ -63,14 +63,14 @@ jest.mock("../fleet/agentActions", () => ({
 }));
 // `agentById` answers from the card each case puts on the board: whether that card is in a turn is what an ask lives as
 // long as. Read at call time, so the map below is in place by then.
-jest.mock("../fleet/useAgents", () => ({
+jest.mock("../../../models/fleet/useAgents", () => ({
     useAgents: () => ({ archive: jest.fn(), setAutoLand: jest.fn(), agentById: (id: string) => cards.value.get(id) }),
 }));
 
 import { effectScope, nextTick, ref, shallowRef } from "vue";
 import { forgetOperations } from "../../../workbench/operations/operations";
-import { askAgentToResolve, landAgent, type ResolveAsk } from "../fleet/agentActions";
-import type { FleetAgent } from "../fleet/useAgents-fleet";
+import { askAgentToResolve, landAgent, type ResolveAsk } from "../../../models/fleet/agentActions";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 import { useAgentChanges } from "./useAgentChanges";
 
 const cards = shallowRef<ReadonlyMap<string, Pick<FleetAgent, "status" | "attention">>>(new Map());

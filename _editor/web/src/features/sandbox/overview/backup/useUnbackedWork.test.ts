@@ -1,7 +1,7 @@
 // jsdom mounts a component so vue-query's injection is in place; the import graph reads browser globals at load.
 import "@intentic/testing/dom";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import type { GitRemoteRepo } from "@intentic/sandbox-contract";
+import type { GitRemoteRepo } from "@intentic/sandbox-contract/schemas/git/git-history";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";

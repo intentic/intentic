@@ -1,6 +1,6 @@
 import { unstubbed } from "@intentic/testing";
 import { createLogger } from "../../logger.js";
-import { testConfig } from "../../testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import type { ClaudeSlice } from "./claude-provider.js";
 
 // Claude's slice as route suites stand it up (harness/route-services.testing.ts). Not part of the build.

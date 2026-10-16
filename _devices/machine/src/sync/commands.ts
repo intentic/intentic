@@ -5,13 +5,10 @@ import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { clearWindowsRunValue, explain, type Footnote, homeDir, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
-import {
-    environmentKeyOf,
-    projectDirNameOf,
-    sandboxIdFromUrl,
-    type SyncEnrollmentRequest,
-    SyncEnrollmentAnswerSchema,
-} from "@intentic/sandbox-contract";
+import { environmentKeyOf } from "@intentic/sandbox-contract/schemas/hosts";
+import { projectDirNameOf } from "@intentic/sandbox-contract/ids/project-dir";
+import { sandboxIdFromUrl } from "@intentic/sandbox-contract/ids/hostnames";
+import { type SyncEnrollmentRequest, SyncEnrollmentAnswerSchema } from "@intentic/sandbox-contract/schemas/devices";
 import { buildRouteMap, type CommandContext, type FlagParametersForType } from "@stricli/core";
 import { buildCommand, machineUi, type Narration, sandboxUrlOf } from "../cli-ui.js";
 import { z } from "zod";
@@ -805,13 +802,13 @@ const mirrorSwitch = (brief: string, off: boolean) =>
         // Every pairing of the sandbox carries the switch (a folder attached to it reports it), and the forwards are the
         // sandbox's, torn down once.
         for (const pairing of selected) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+            // state is a single file; serial keeps the writes ordered
             await setMirrorOff(pairingKey(pairing), off);
         }
         // OFF takes effect now, ON is the watcher's: creating a forward dials over the transport that agent holds.
         if (off) {
             for (const sandboxId of new Set(selected.map((pairing) => pairing.sandboxId))) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox's teardown at a time, as everywhere else here
+                // one sandbox's teardown at a time, as everywhere else here
                 await retirePairingMirror(mutagen, sandboxId);
             }
             ui.note("Those ports are off this device's localhost. File syncing is untouched.");
@@ -849,10 +846,10 @@ const mirrorPortSwitch = (brief: string, ignored: boolean) =>
             let taken = 0;
             // Only the pairing that mirrors its sandbox's ports (never a folder attached to it) holds the number.
             for (const pairing of selected.filter((held) => !isAttachedPairing(held))) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+                // state is a single file; serial keeps the writes ordered
                 await setPortIgnored(pairingKey(pairing), flags.port, ignored);
                 if (ignored) {
-                    // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing's teardown at a time, as everywhere else here
+                    // one pairing's teardown at a time, as everywhere else here
                     taken += (await retireMirroredPort(mutagen, pairing.sandboxId, flags.port)) ? 1 : 0;
                 }
             }
@@ -897,7 +894,7 @@ const clean = buildCommand<SandboxFlags>({
         let removed = 0;
         let standing = 0;
         for (const pairing of syncing) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing at a time, so a log line names one sandbox
+            // one pairing at a time, so a log line names one sandbox
             const outcome = await healDerivedConflicts(mutagen, pairing, ui.note, true);
             removed += outcome.removed.length;
             standing += outcome.standing;
@@ -930,7 +927,7 @@ const autoHealSwitch = (brief: string, off: boolean) =>
         async (selected, _flags, ui) => {
             ui.act(off ? "Turning off clearing build output" : "Turning on clearing build output");
             for (const pairing of selected) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+                // state is a single file; serial keeps the writes ordered
                 await setAutoHealOff(pairingKey(pairing), off);
             }
             if (!off) {
@@ -970,7 +967,7 @@ export const syncUninstall = async (say: Narration, sandbox?: string, { forGood 
         const firstOfSandbox = !revoked.has(pairing.sandboxId);
         revoked.add(pairing.sandboxId);
         if (pairing.syncToken !== undefined && firstOfSandbox) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- Drops are sequenced so failures identify one sandbox.
+            // Drops are sequenced so failures identify one sandbox.
             await revokeEnrollment(pairing.sandboxUrl, pairing.syncToken).catch((error: unknown) =>
                 say.warn(
                     `${pairing.sandboxUrl} could not be told to forget this device (${errorMessage(error)}), so its sync key is still authorized there. Remove this device from that sandbox's Devices view.`,
@@ -980,14 +977,14 @@ export const syncUninstall = async (say: Narration, sandbox?: string, { forGood 
         if (pairing.mode === "sync" && syncSessionNames(pairing).length > 0) {
             // The pair goes together: a surviving backup session would keep mirroring a sandbox this device has just
             // unpaired, writing into a folder the owner considers released.
-            // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+            // state is a single file; serial keeps the writes ordered
             await runProcess(mutagen, ["sync", "terminate", ...syncSessionNames(pairing)], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
         }
         if (firstOfSandbox) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+            // state is a single file; serial keeps the writes ordered
             await retirePairingMirror(mutagen, pairing.sandboxId);
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+        // ditto
         await removePairing(pairingKey(pairing));
         say.note(`Unpaired ${pairingKey(pairing)}${pairing.localDir === undefined ? "" : `; ${pairing.localDir} is no longer synced`}.`);
     }

@@ -1,4 +1,5 @@
-import { type Capability, type Persona, type PersonaPowers, VISITOR_CHAT_PERSONA, PersonaPowersSchema } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type Persona, type PersonaPowers, VISITOR_CHAT_PERSONA, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
 import {
     personaCapabilities,
     personaCliEnv,

@@ -3,7 +3,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Services } from "../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import type { Social } from "../../conversations/registry/agents-store.js";
-import { conversationAfter } from "../../testing.js";
+import { conversationAfter } from "../../conversations/registry/agents-store.testing.js";
 import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
 import { assertAgentExecutionContext, type AgentExecutionContext, withAgentExecution } from "../../workload/agent-execution.js";
 import { rootExecutionService } from "../../workload/agent-execution.testing.js";

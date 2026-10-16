@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Icon, Popover, StatusBadge, toneWash } from "@intentic/extension-ui";
-import type { PipelineStatus } from "@intentic/sandbox-contract";
+import type { PipelineStatus } from "@intentic/sandbox-contract/schemas/ci";
 import { ref } from "vue";
 import { type PipelineStage, stageLabel } from "./pipelineDag";
 import { runDuration, STATUS_TONE } from "../statusVisual";

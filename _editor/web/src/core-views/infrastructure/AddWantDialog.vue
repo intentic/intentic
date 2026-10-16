@@ -2,7 +2,7 @@
 import { BrandMark, Button, ui, Modal, Notice, type NoticeModel, Picker, type PickerOption, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic/capability-catalog";
-import { INVENTORY_NAME_MAX, INVENTORY_NAME_RE, inventoryIdentifier } from "@intentic/sandbox-contract";
+import { INVENTORY_NAME_MAX, INVENTORY_NAME_RE, inventoryIdentifier } from "@intentic/sandbox-contract/schemas/inventory";
 import { computed, ref, useId, watch } from "vue";
 import { useInventory } from "../../features/extensions/useInventory";
 import { useWorkspaceApps } from "../../features/extensions/useWorkspaceApps";

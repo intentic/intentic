@@ -1,6 +1,6 @@
 // What an update that takes itself says on the card and in the lane, and which of the owner's answers apply. Instants
 // are built on the runner's own calendar, since "04:00 tomorrow" is read off the reader's clock.
-import type { AutoUpdate } from "@intentic/sandbox-contract";
+import type { AutoUpdate } from "@intentic/sandbox-contract/schemas/updates";
 import { autoUpdateNotice, autoUpdateStatus, countdownClock, holdLine, notTodayUntil } from "./autoUpdate";
 
 const NOW = new Date(2026, 9, 4, 16, 30).getTime();

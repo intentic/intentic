@@ -1,7 +1,7 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { unstubbed } from "@intentic/testing";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
-import { memoryFleet } from "../../../testing.js";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import type { ChildSupervisor } from "../children.js";
 import { subagentWaitServer } from "../subagent-wait.js";
 

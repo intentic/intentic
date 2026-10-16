@@ -1,5 +1,5 @@
 import type { Services } from "../../composition.js";
-import { decideLanding, performLandingWrites } from "../../agent/run/placement/turn-landing.js";
+import { decideLanding, performLandingWrites } from "./turn-landing.js";
 import { awaitingWake, type ConversationState } from "../actor/conversation-state.js";
 import { isIsolated } from "../registry/agents-store.js";
 import { landByHandLeased, type LandByHandDeps } from "./land-by-hand.js";

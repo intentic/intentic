@@ -1,6 +1,8 @@
 import http from "node:http";
 import { jsonLines } from "@intentic/base/json-lines";
 import { errnoCode, errorMessage } from "@intentic/base/errors";
+import { parseJsonOr } from "@intentic/base/json";
+import { isRecord } from "@intentic/base/escape";
 
 // The Docker Engine API over its unix socket, the handful of calls running one container needs. No `docker` CLI: the
 // sandbox's engine is a feature pack that may be absent, and its absence is an answer this reports, not a crash.
@@ -84,15 +86,10 @@ const request = (socketPath: string, method: string, path: string, body?: unknow
     });
 
 const failure = (what: string, response: EngineResponse): Error => {
-    let message = response.body.trim();
-    try {
-        const parsed: unknown = JSON.parse(response.body);
-        if (typeof parsed === "object" && parsed !== null && typeof (parsed as { message?: unknown }).message === "string") {
-            message = (parsed as { message: string }).message;
-        }
-    } catch {
-        // Not JSON: the raw body is the message.
-    }
+    // Not JSON: the raw body is the message.
+    const parsed = parseJsonOr(response.body, undefined);
+    const said = isRecord(parsed) ? parsed["message"] : undefined;
+    const message = typeof said === "string" ? said : response.body.trim();
     return new Error(`${what}: the Docker engine answered ${response.status}${message === "" ? "" : `, ${message}`}`);
 };
 

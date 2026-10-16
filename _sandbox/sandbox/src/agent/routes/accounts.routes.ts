@@ -1,5 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
-import { accountsContract, type NativeProvider } from "@intentic/sandbox-contract";
+import { accountsContract } from "@intentic/sandbox-contract/contracts/accounts.contract";
+import type { NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../../composition.js";
 import type { OrpcContext } from "../../app-env.js";

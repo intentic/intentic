@@ -1,6 +1,6 @@
 import type { IconName, TooltipValue } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
-import { KINDS, TERMINAL_COLORS, terminalMeta } from "../terminalMeta";
+import { KINDS, TERMINAL_COLORS, terminalMeta } from "../../../models/terminal/terminalMeta";
 import type { TerminalTab } from "../useTerminal";
 
 // What a pill says about its session: glyph, colour, label and tooltip, the reader's own overrides (terminalMeta) over

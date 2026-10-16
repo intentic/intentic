@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { endpointProvider, type PrivacyProvider, type PrivacyShieldPolicy, TRIAL_ENDPOINT_ID } from "@intentic/sandbox-contract";
+import { endpointProvider, TRIAL_ENDPOINT_ID } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { PrivacyProvider, PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
 import { Button, Notice, type NoticeModel, Row, RowGroup, RowNote, StatusBadge, type StatusVariant } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";

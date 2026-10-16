@@ -1,10 +1,10 @@
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { computed, type ComputedRef, ref, type Ref, watch } from "vue";
 import { z } from "zod";
-import { activeSandboxId } from "../../lib/activeSandbox";
-import { storedJson, storedValue, storeJson, storeValue } from "../../lib/browserStorage";
-import { addPendingTerminal, dropPendingTerminal, refreshTerminals } from "./terminalsQuery";
-import { isWork, KINDS, pruneTerminalMeta } from "./terminalMeta";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
+import { storedJson, storedValue, storeJson, storeValue } from "../../app/storage/browserStorage";
+import { addPendingTerminal, dropPendingTerminal, refreshTerminals } from "../../models/terminal/terminalsQuery";
+import { isWork, KINDS, pruneTerminalMeta } from "../../models/terminal/terminalMeta";
 import {
     createTerminalSession,
     disposeTerminalSession,

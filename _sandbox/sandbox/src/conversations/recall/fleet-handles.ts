@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { Services } from "../../composition.js";
 import { statePath } from "../../state-paths.js";
 import { type FleetRecallDeps, type HandleResolution, present, resolveHandle } from "./fleet-recall.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // The handles `resolveHandle` cannot answer from the registry alone, because they name something a conversation HAD
 // rather than something it is: a runtime session it has since retired, a run or turn of it, an in-process subagent one
@@ -87,11 +88,9 @@ interface SubagentMeta {
 const SubagentMetaSchema = z.object({ agentType: z.string().optional(), description: z.string().optional() });
 
 const metaOf = (raw: string): SubagentMeta => {
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(raw);
-    } catch {
-        // allow(silent-catch): the runtime's meta file is its own to write; one that is not JSON names nothing, and the lookup goes on without its words.
+    const parsed = parseJsonOr(raw, undefined);
+    if (parsed === undefined) {
+        // The runtime's meta file is its own to write; one that is not JSON names nothing, and the lookup goes on without its words.
         return {};
     }
     const meta = SubagentMetaSchema.safeParse(parsed);

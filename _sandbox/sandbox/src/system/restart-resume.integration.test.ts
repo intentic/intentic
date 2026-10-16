@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DeviceFlowLine } from "@intentic/sandbox-contract";
+import type { DeviceFlowLine } from "@intentic/sandbox-contract/schemas/devices";
 import { readRestartIntent } from "./boot/restarts/restart-record.js";
 import { askedRestart, fileRestartResume } from "./restart-resume.js";
 

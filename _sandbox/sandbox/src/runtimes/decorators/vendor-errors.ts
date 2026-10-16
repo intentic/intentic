@@ -1,5 +1,5 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
-import { isUnsentParameterRefusalText, mentionsSpentAllowance } from "../../agent/providers/failure-sentences.js";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { isUnsentParameterRefusalText, mentionsSpentAllowance } from "../../engines/failure-sentences.js";
 import { unsentParameterFrame } from "../../agent/run/error-frames.js";
 
 // How a vendor's failure sentence is read: one rate-limit and spent-allowance classifier for every runtime, the frame a

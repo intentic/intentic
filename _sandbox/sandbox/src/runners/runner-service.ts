@@ -1,17 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, normalize } from "node:path";
 import { narrate } from "@intentic/base/async";
-import {
-    type AgentEvent,
-    AgentHarnessSchema,
-    AgentProviderSchema,
-    type AgentTurn,
-    type RunnerSync,
-    type RunnerSyncLine,
-    type RunnerTurn,
-    runnerContract,
-    runnerGitUrl,
-} from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { AgentHarnessSchema, AgentProviderSchema, type AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import { type RunnerSync, type RunnerSyncLine, type RunnerTurn, runnerGitUrl } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import { runnerContract } from "@intentic/sandbox-contract/contracts/runner.contract";
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import { adoptDefinitionSettings } from "../definition/apply-definition.js";

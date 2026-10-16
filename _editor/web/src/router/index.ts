@@ -38,12 +38,13 @@ import { receiveHandoff } from "../features/chat/drafts/localHandoff";
 import { receiveTaskHandoff } from "../features/chat/drafts/localTaskHandoff";
 import { noteFound } from "../lib/foundOnComputer";
 import { MODELS_PATH } from "../lib/routes/modelsPath";
-import { DELETED_PATH } from "../features/sandbox/devices/deviceLinks";
+import { DELETED_PATH } from "../models/sandbox/devices/deviceLinks";
 import { setPageTitle } from "../shell/browser-tab/tabTitle";
 import { useNotifications } from "../workbench/notifications/notifications";
 import { coldStartAtRoot, installedApp, lastRoute, rememberRoute } from "./recentRoute";
 import { afterPaint } from "../lib/afterPaint";
 import { browsersPath, previewRedirect } from "../workbench/browsers/browsersPaths";
+import { installNavigation } from "../workbench/navigation/navigation";
 
 declare module "vue-router" {
     interface RouteMeta {
@@ -185,7 +186,7 @@ const chatEntry = async (): Promise<boolean | RouteLocationRaw> => {
     if (!useDevice().mobile.value) {
         return true;
     }
-    const { useChat } = await import(`../features/chat/run/useChat`);
+    const { useChat } = await import(`../models/conversations/run/useChat`);
     return mobileChatPath(useChat().active.value.conversationId);
 };
 
@@ -550,7 +551,7 @@ router.beforeEach(async (to) => {
     if (linkedConversation(to.query) === undefined) {
         return true;
     }
-    const surface = useDevice().mobile.value ? `phone` : (await import(`../features/chat/panel/chatPanelLayout`)).chatOnRailTile.value ? `chat` : `board`;
+    const surface = useDevice().mobile.value ? `phone` : (await import(`../models/conversations/panel/chatPanelLayout`)).chatOnRailTile.value ? `chat` : `board`;
     return conversationRedirect(to.query, surface) ?? true;
 });
 
@@ -569,3 +570,7 @@ router.onError((error, to) => {
 // declared. Asked for per navigation, so it is in the reader's language even when they changed it after boot.
 // The tab's mark (what needs you, what finished) is put in front of it by shell/browser-tab/browserTab.ts.
 router.afterEach((to) => setPageTitle(to.meta.title?.()));
+
+// Last, after the table's own hooks: everything below composition navigates through this registry, and the afterEach
+// hooks it queued run after the ones above, as they did when those modules imported this one.
+installNavigation(router);

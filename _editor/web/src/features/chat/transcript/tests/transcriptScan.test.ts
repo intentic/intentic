@@ -1,4 +1,4 @@
-import { firstChange, firstWhere, newestOf, runningTotal } from "../transcriptScan";
+import { firstChange, firstWhere, newestOf, runningTotal } from "../../../../models/conversations/transcript/transcriptScan";
 
 // Each reader must say exactly what a scan of every row says, through every way a transcript changes: a row appended, the
 // streamed row replaced, a row in the middle reworded, a row dropped, a page put above, the whole of it rebuilt.

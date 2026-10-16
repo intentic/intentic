@@ -1,6 +1,6 @@
 import { ref } from "vue";
 import * as desktopOriginal from "../../../app/environments/desktop";
-import type { WakePhase } from "./useWakeListener";
+import type { WakePhase } from "../../../models/voice/useWakeListener";
 import type { DesktopWakeListener } from "./wakeDesktop";
 
 // Pins what the page tells the desktop app about listening and what it does with the tray's asks: the state the tray

@@ -1,4 +1,4 @@
-import { vpnContract } from "@intentic/sandbox-contract";
+import { vpnContract } from "@intentic/sandbox-contract/contracts/vpn.contract";
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";

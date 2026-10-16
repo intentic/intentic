@@ -1,4 +1,6 @@
-import { type AgentTurn, DEFAULT_SAFETY_POLICY, type RoutedAgentTurn, SandboxSettingsSchema, withRuntimeDefaults } from "@intentic/sandbox-contract";
+import { type AgentTurn, type RoutedAgentTurn, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
+import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { type ConversationReach, REACH_ALL } from "../../../secrets/credential-reach.js";
@@ -7,7 +9,9 @@ import type { Services } from "../../../composition.js";
 import type { MemoryReading } from "@intentic/constants/memory-room";
 import { createResourceBudget, type ResourceBudget } from "../../../workload/resource-budget.js";
 import { RUNTIME_ADAPTERS } from "../../../runtimes/runtime-table.js";
-import { testConfig, memoryFleet, testTurnMounts } from "../../../testing.js";
+import { testConfig } from "../../../env.config.testing.js";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
+import { testTurnMounts } from "../../tools/turn-mounts.testing.js";
 import type { AgentRequest, TurnBase } from "../../providers/agent-request.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import type { TurnContext } from "../../providers/adapter.js";

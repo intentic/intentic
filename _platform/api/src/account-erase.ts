@@ -115,7 +115,7 @@ export const eraseAccount = async (
         // In id order, the one order every erase takes them in; each is the lock a provision's handoff and a release take.
         const sandboxes = await tx.sandbox.findMany({ where: { ownerId: userId }, select: { id: true }, orderBy: { id: `asc` } });
         for (const sandbox of sandboxes) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- row locks, taken one after another in a fixed order
+            // row locks, taken one after another in a fixed order
             await lockHostedSandbox(tx, sandbox.id);
         }
         // Before anything is queued, carried or deleted: the transaction rolls back whole if an organisation holds one.

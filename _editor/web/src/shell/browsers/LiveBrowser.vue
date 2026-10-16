@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { BrowserPage, BrowserSession, DesktopWindow } from "@intentic/sandbox-contract";
+import type { BrowserPage, BrowserSession, DesktopWindow } from "@intentic/sandbox-contract/schemas/terminal";
 import { errorMessage } from "@intentic/base/errors";
 import { noticeOf } from "@intentic/ui/async";
 import { AnchoredOverlay, Button, EmptyState, Icon, Picker, ui } from "@intentic/ui";
@@ -14,21 +14,21 @@ import LiveTabStrip from "../../features/browsers/LiveTabStrip.vue";
 import LiveLauncher, { type LaunchGroup } from "./LiveLauncher.vue";
 import { initialOf, type GroupMark, type StripGroup, type StripTab } from "../../features/browsers/stripTab";
 import { closeBrowser, closeBrowserPage, openBrowser, useBrowsersQuery } from "../../features/browsers/browsersQuery";
-import type { BrowserCommand } from "../../features/browsers/keyIntent";
+import type { BrowserCommand } from "../../models/browsers/keyIntent";
 import Omnibox from "../../features/browsers/Omnibox.vue";
 import { useBrowserView } from "../../features/browsers/useBrowserView";
 import { agentTitle, agentTurnRunning } from "../../features/browsers/agentTurns";
 import BrowserSelectMenu from "../../features/capabilities/connect/BrowserSelectMenu.vue";
-import { postTurnControl } from "../../features/chat/run/turnStream";
+import { postTurnControl } from "../../client/sandbox/streams/turnStream";
 import { useOperation, useOperations } from "../../workbench/operations/operations";
-import { loopbackPreviewTarget, pickTarget, type PreviewTarget } from "../../features/preview/previewModel";
+import { loopbackPreviewTarget, pickTarget, type PreviewTarget } from "../../models/preview/previewModel";
 import { usePreviewTargets } from "../../features/preview/usePreviewTargets";
 import PreviewTab from "../../features/preview/PreviewTab.vue";
 import PreviewStage from "../../features/preview/PreviewStage.vue";
 import { phoneById, phonePickerGroups, phoneUserAgent, storePhoneId, storedPhoneId } from "../../features/preview/phoneModels";
 import DesktopTab from "../../features/desktop/DesktopTab.vue";
 import { useDesktopQuery } from "../../features/desktop/desktopQuery";
-import { usePorts } from "../../features/sandbox/environment/usePorts";
+import { usePorts } from "../../models/sandbox/environment/usePorts";
 import { useRole } from "../../client/sandbox/useRole";
 import { useT } from "@intentic/ui/i18n";
 

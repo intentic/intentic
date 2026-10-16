@@ -2,8 +2,8 @@ import "@intentic/testing/dom";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, defineComponent as define, h, h as hyper, nextTick, ref as vueRef, shallowRef, watchEffect } from "vue";
 import type { MenuItem } from "primevue/menuitem";
-import type { ChatMessage } from "../transcript";
-import { errands } from "../../run/errands";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
+import { errands } from "../../../../models/conversations/run/errands";
 import { IconStub } from "@intentic/ui/testing";
 
 // Pins the cut's menu: which rows a cut offers, which an uncheckpointed cut may still show, and that the destructive rewind
@@ -47,9 +47,9 @@ jest.mock("@intentic/ui", () => {
         }),
     };
 });
-jest.mock("../../../workspace/changes/history/useHistory", () => ({ invalidateWorkspace: jest.fn() }));
+jest.mock("../../../../models/changes/useHistory", () => ({ invalidateWorkspace: jest.fn() }));
 // Built fresh per mount: a computed over the plain `state` object would otherwise cache its first reading.
-jest.mock("../../panel/useChat-view", () => {
+jest.mock("../../../../models/conversations/panel/useChat-view", () => {
     return {
         usePaneView: () => ({
             // Whether the chat works in a copy of its own decides how many forks the menu offers.
@@ -61,12 +61,12 @@ jest.mock("../../panel/useChat-view", () => {
         }),
     };
 });
-jest.mock("../../run/useChat", () => {
+jest.mock("../../../../models/conversations/run/useChat", () => {
     return { useChat: () => ({ conversations: computed(() => []), setActive: (id: string) => opened.ids.push(id) }) };
 });
-jest.mock("../../panel/useChat-reveal", () => ({ openAgentConversation: (agent: { id: string }) => opened.ids.push(agent.id) }));
+jest.mock("../../../../models/conversations/panel/useChat-reveal", () => ({ openAgentConversation: (agent: { id: string }) => opened.ids.push(agent.id) }));
 // Forks are read off the fleet, not open tabs, so a closed tab or a colleague's fork still counts.
-jest.mock("../../../agents/fleet/useAgents", () => {
+jest.mock("../../../../models/fleet/useAgents", () => {
     return { useAgents: () => ({ fleet: computed(() => state.fleet), agentById: (id: string) => state.fleet.find((agent) => agent.id === id) }) };
 });
 

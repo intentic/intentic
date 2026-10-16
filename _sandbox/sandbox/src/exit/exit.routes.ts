@@ -1,4 +1,5 @@
-import { exitContract, type IntenticLine } from "@intentic/sandbox-contract";
+import { exitContract } from "@intentic/sandbox-contract/contracts/exit.contract";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";

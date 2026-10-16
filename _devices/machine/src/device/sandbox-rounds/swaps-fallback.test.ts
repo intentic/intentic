@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import type { DeviceSwap } from "@intentic/sandbox-contract";
+import type { DeviceSwap } from "@intentic/sandbox-contract/schemas/device-swaps";
 import { CUTOVER_HEARTBEAT_SECS, CUTOVER_STALE_MS, cutoverInProgress, swapOfRecord } from "./swaps-fallback.js";
 
 /* COMPAT(ic-swaps): remove with swaps-fallback.ts. The fallback for an ic without `ic sandbox swaps` applies ic's rule,

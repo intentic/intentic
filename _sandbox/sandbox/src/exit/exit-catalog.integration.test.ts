@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ExitConfigSchema } from "@intentic/sandbox-contract";
+import { ExitConfigSchema } from "@intentic/sandbox-contract/schemas/exit";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { TOR_FALLBACK, VPNGATE_FALLBACK } from "./exit-countries.js";
 import { catalogPath } from "./exit-paths.js";
@@ -47,7 +47,7 @@ test("a fresh catalog is written atomically, 0600, under its provider's key, and
     expect(fresh.countries.map((point) => point.country)).toEqual(["DE", "NL"]);
     const stored = JSON.parse(await readFile(catalogPath("tor"), "utf8")) as { countries: unknown };
     expect(stored.countries).toEqual(fresh.countries);
-    // oxlint-disable-next-line no-bitwise -- the permission bits are the assertion
+    // the permission bits are the assertion
     expect((await stat(catalogPath("tor"))).mode & 0o777).toBe(0o600);
     offline();
     expect(await torDriver.catalog("berlin", TOR)).toEqual(fresh);

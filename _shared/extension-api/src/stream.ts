@@ -1,4 +1,4 @@
-import { sseEvents, sseJson } from "@intentic/sandbox-contract";
+import { sseEvents, sseJson } from "@intentic/sandbox-contract/protocol/sse";
 
 // Reads a daemon SSE/ndjson stream: reframes blank-line-separated `data: <JSON>` frames and parses each, through the
 // contract's one SSE reader, which ends a stream silent past its heartbeat window rather than hanging on it.

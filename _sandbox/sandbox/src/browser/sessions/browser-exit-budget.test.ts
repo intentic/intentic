@@ -1,4 +1,6 @@
-import type { Capability, ExitConfig, IntenticLine } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { ExitConfig } from "@intentic/sandbox-contract/schemas/exit";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import { startExitOnce } from "../../exit/exit-links.js";
 import { resolveProfileExit } from "./browser-exit.js";
 

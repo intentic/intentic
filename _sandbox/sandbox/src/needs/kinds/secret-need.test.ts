@@ -1,4 +1,5 @@
-import { type Need, PersonaPowersSchema } from "@intentic/sandbox-contract";
+import type { Need } from "@intentic/sandbox-contract/schemas/needs";
+import { PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
 import type { TurnStanding } from "../../conversations/actor/turn-standing.js";
 import type { NamedSecret } from "../../secrets/secret-registry.js";
 import { secretNeed } from "./secret-need.js";

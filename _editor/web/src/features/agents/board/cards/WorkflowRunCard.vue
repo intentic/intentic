@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { formatMoney, Icon, timeAgo, toneWash, ui, useDevice } from "@intentic/ui";
-import type { WorkflowRun } from "@intentic/sandbox-contract";
+import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { computed } from "vue";
-import { laneOfRun, runningTitles, spentOn } from "../../fleet/useWorkflowRuns";
-import { liveSessions } from "../../../chat/run/chatRun";
+import { laneOfRun, runningTitles, spentOn } from "../../../../models/fleet/useWorkflowRuns";
+import { liveSessions } from "../../../../models/conversations/run/chatRun";
 import { useT } from "@intentic/ui/i18n";
-import { useSelectionBlade } from "./selectionBlade";
+import { useSelectionBlade } from "../../../../models/fleet/board/selectionBlade";
 
 // A workflow run's row on the board, an agent card's sibling, not one: same shell (radius, border, lane bar, hover)
 // since it shares the column, but no provider/branch/worktree/transcript, so Land/Archive/diff don't apply.

@@ -1,7 +1,7 @@
 // The recovery panel's other options for a sandbox of the owner's own machine: a restart and a rollback pressed on that
 // machine through another of the owner's sandboxes that reaches it, and the two commands only when none does.
 import "@intentic/testing/dom";
-import type { Device } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 import { installI18n } from "@intentic/ui/i18n";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
@@ -15,7 +15,7 @@ const SLUG = `sandbox-3c469e9d6c58`;
 const active = ref(sandboxSummary({ id: `quiet`, name: `Quiet`, role: `owner` }));
 const lab = sandboxSummary({ id: `lab`, name: `Lab`, role: `owner` });
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active, sandboxes: computed(() => [active.value, lab]), select: jest.fn() }) }));
-jest.mock(`../environment/servingSlug`, () => ({ useServingSlug: () => computed(() => SLUG) }));
+jest.mock(`../../../models/sandbox/environment/servingSlug`, () => ({ useServingSlug: () => computed(() => SLUG) }));
 // A diagnosis with nothing pressed first: only the other options are under test here.
 const stuck: DiagnosisNotice = { title: `Quiet isn't answering`, body: ``, waiting: false, tone: `warning`, chain: [], action: undefined, otherActions: [], findings: [], sayAtOnce: false };
 const notice = ref<DiagnosisNotice>(stuck);
@@ -27,8 +27,8 @@ const relays = ref<{ sandboxId: string; devices: Device[] }[]>([]);
 const looking = ref(false);
 jest.mock(`../live/useDeviceRelays`, () => ({ useDeviceRelays: () => ({ relays: computed(() => relays.value), looking, look: async () => {} }) }));
 const manageDeviceSandbox = jest.fn(async () => `Restarted.`);
-jest.mock(`../devices/useDevices`, () => ({ manageDeviceSandbox }));
-jest.mock(`../live/sandboxRestart`, () => ({ expectRestart: () => () => {} }));
+jest.mock(`../../../models/sandbox/devices/useDevices`, () => ({ manageDeviceSandbox }));
+jest.mock(`../../../models/sandbox/live/sandboxRestart`, () => ({ expectRestart: () => () => {} }));
 jest.mock(`../overview/version/HostedRollbackDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { scriptSource } = await import("../../../app/environments/scriptCommand");

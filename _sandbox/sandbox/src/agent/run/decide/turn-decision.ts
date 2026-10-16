@@ -1,17 +1,10 @@
 import { type AccountRoute, heldForAccountMessage } from "../../providers/accounts/blocked-account.js";
-import { routingFor } from "../../providers/accounts/routing.js";
-import type {
-    AgentCapabilities,
-    AgentHarness,
-    AgentProvider,
-    AgentTurn,
-    Capability,
-    Rule,
-    SandboxSettings,
-    SystemPromptMode,
-    TurnNote,
-    RoutedAgentTurn,
-} from "@intentic/sandbox-contract";
+import { routingFor } from "../../../conversations/registry/routing.js";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { AgentHarness, AgentProvider, AgentTurn, RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { Rule, SandboxSettings, SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { mayDelegate, personaCapabilities, personaPrompt, type TurnPersona } from "../../../personas/personas.js";
 import { withRepoChecks } from "../../../rules/repo-checks.js";
 import { gatedCapabilities } from "../../../secrets/credential-gating.js";
@@ -81,7 +74,7 @@ export interface TurnDecision extends DecidedEffects {
 const underRepoChecks = (settings: SandboxSettings, declared: readonly Rule[]): SandboxSettings =>
     declared.length === 0 ? settings : { ...settings, rules: withRepoChecks(settings.rules, declared) };
 
-// The account the arm is called with, by the one routing rule (agent/providers/accounts/routing.ts): the one the turn names, else
+// The account the arm is called with, by the one routing rule (conversations/registry/routing.ts): the one the turn names, else
 // the one its conversation runs on for this provider, else none, which the credential resolver answers by serviceability.
 // A session resumes only under the account that minted it, so a turn naming none must not wander, except off an account
 // that can no longer serve it (blocked-account.ts), onto the ready one the conversation is moved to.

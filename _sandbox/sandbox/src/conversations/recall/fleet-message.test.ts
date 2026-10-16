@@ -1,7 +1,9 @@
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
-import { beginTurn, conversationEntry, memoryFleet } from "../../testing.js";
+import { beginTurn } from "../actor/conversation-actors.testing.js";
+import { conversationEntry } from "../registry/agents-store.testing.js";
+import { memoryFleet } from "../registry/agents-registry.testing.js";
 import { messageConversation, messageTaint } from "./fleet-message.js";
 
 // What a message makes of the turn it lands in. A stranger's words taint it; the target's own family's words taint it

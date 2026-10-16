@@ -1,15 +1,19 @@
 import { upgradeWebSocket } from "@hono/node-server";
 import { errorMessage } from "@intentic/base/errors";
 import { binaryFrame } from "@intentic/base/ws-tcp-pump";
-import { MAX_SPEECH_SAMPLES, SpeechClientMessageSchema, type SpeechServerMessage, SpeechWakeClaimSchema } from "@intentic/sandbox-contract";
-import { Hono } from "hono";
+import {
+    MAX_SPEECH_SAMPLES,
+    SpeechClientMessageSchema,
+    type SpeechServerMessage,
+    SpeechWakeClaimSchema,
+} from "@intentic/sandbox-contract/schemas/speech";
 import type { Services } from "../composition.js";
-import type { AppEnv } from "../app-env.js";
 import { redeemTicket } from "../auth/tokens/ws-tickets.js";
 import { readBoundedBytes } from "../http/bounded-body.js";
-import { rawRouteServer } from "../http/raw-route-server.js";
-import { MAX_UTTERANCE_WAV_BYTES, type Speech, SpeechModelNotReadyError, SpeechUnprovisionedError } from "./transcribe.js";
-import { pcm16Samples, WavFormatError, wavSamples } from "./wav.js";
+import { defineRawRoutes, type RawRouteTable } from "../http/raw-route-server.js";
+import { MAX_UTTERANCE_WAV_BYTES, type Speech, SpeechModelNotReadyError, SpeechUnprovisionedError } from "@intentic/speech/transcribe";
+import { pcm16Samples, WavFormatError, wavSamples } from "@intentic/speech/wav";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Audio in, words out, off oRPC since audio doesn't fit its JSON contract.
 // - `GET /speech/status?lang=` says where the locale's model stands; asking while it is absent starts fetching it.
@@ -49,14 +53,14 @@ export const createWakeClaims = (now: () => number = Date.now) => {
     };
 };
 
-export const createSpeechRoute = (services: SpeechRoutesDeps, wakeClaims = createWakeClaims()): Hono<AppEnv> => {
-    const app = new Hono<AppEnv>();
-    const serve = rawRouteServer(app);
+export const createSpeechRoute = (
+    services: SpeechRoutesDeps,
+    wakeClaims = createWakeClaims(),
+): RawRouteTable<"GET /speech/status" | "POST /speech/prepare" | "POST /speech/transcribe" | "POST /speech/wake"> => ({
+    "GET /speech/status": async (c) => c.json(await services.speech.status(c.req.query("lang"))),
+    "POST /speech/prepare": async (c) => c.json(await services.speech.prepare(c.req.query("lang"))),
 
-    serve("GET /speech/status", async (c) => c.json(await services.speech.status(c.req.query("lang"))));
-    serve("POST /speech/prepare", async (c) => c.json(await services.speech.prepare(c.req.query("lang"))));
-
-    serve("POST /speech/transcribe", async (c) => {
+    "POST /speech/transcribe": async (c) => {
         // Counted as it arrives: a chunked body declares no length, and would otherwise be read whole first.
         const body = await readBoundedBytes(c.req.raw, MAX_UTTERANCE_WAV_BYTES);
         if (body.kind !== "ok") {
@@ -86,9 +90,9 @@ export const createSpeechRoute = (services: SpeechRoutesDeps, wakeClaims = creat
             }
             throw error;
         }
-    });
+    },
 
-    serve("POST /speech/wake", async (c) => {
+    "POST /speech/wake": async (c) => {
         // allow(silent-catch): a body that is not JSON is a claim that names no device, refused below like one the schema refuses.
         const claim = SpeechWakeClaimSchema.safeParse(await c.req.json().catch(() => undefined));
         if (!claim.success) {
@@ -96,10 +100,8 @@ export const createSpeechRoute = (services: SpeechRoutesDeps, wakeClaims = creat
         }
         const person = c.get("identity")?.email.toLowerCase() ?? "";
         return c.json({ granted: wakeClaims.claim(person, claim.data.device, claim.data.holdMs) });
-    });
-
-    return app;
-};
+    },
+});
 
 // A running guess is made at most this often, and never sooner than twice the last one took: a phrase heard in 100 ms
 // updates five times a second, and a box under load backs off on its own.
@@ -251,11 +253,9 @@ export const createSpeechStreamRoute = (services: SpeechStreamDeps) =>
                     }
                     return;
                 }
-                let parsed: unknown;
-                try {
-                    parsed = JSON.parse(String(event.data));
-                } catch {
-                    // allow(silent-catch): a text frame that is not JSON is no message of the protocol, dropped like one the schema refuses below
+                const parsed = parseJsonOr(String(event.data), undefined);
+                if (parsed === undefined) {
+                    // A text frame that is not JSON is no message of the protocol, dropped like one the schema refuses below.
                     return;
                 }
                 const message = SpeechClientMessageSchema.safeParse(parsed);
@@ -279,3 +279,10 @@ export const createSpeechStreamRoute = (services: SpeechStreamDeps) =>
             onError: cleanup,
         };
     });
+
+// Composer voice input, a WAV in, text out; and the composer's live dictation: phrases in as they are spoken, running
+// guesses and finals back.
+export const speechRawRoutes = defineRawRoutes((services: SpeechRoutesDeps & SpeechStreamDeps) => ({
+    ...createSpeechRoute(services),
+    "GET /speech/stream": createSpeechStreamRoute(services),
+}));

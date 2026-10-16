@@ -1,12 +1,12 @@
 <!-- Model pill (provider mark, name, chevron) that opens <ChatModelPicker>, shared by both composers. -->
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { isTrialProvider } from "@intentic/sandbox-contract";
-import type { Conversation } from "../session/conversation";
-import { trialBadge } from "../session/access";
-import { modelLabelFor, newerVersionOf, trialStatus } from "../accounts/providerCatalog";
+import { isTrialProvider } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { Conversation } from "../../../models/conversations/session/conversation";
+import { trialBadge } from "../../../models/providers/access";
+import { modelLabelFor, newerVersionOf, trialStatus } from "../../../models/providers/providerCatalog";
 import { composerModelReading, stillRunningOn } from "./composerModelLabel";
-import ProviderLogo from "../accounts/ProviderLogo.vue";
+import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

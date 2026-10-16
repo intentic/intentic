@@ -1,4 +1,5 @@
-import type { MintedProvider, MintedVariant, Model } from "@intentic/sandbox-contract";
+import type { MintedProvider, MintedVariant } from "@intentic/sandbox-contract/models/provider-specs";
+import type { Model } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { z } from "zod";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import { unrankedCatalog } from "../../agent/models/model-discovery.js";

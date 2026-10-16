@@ -1,12 +1,9 @@
-import {
-    AgentTurnSchema,
-    HandoffOfferSchema,
-    RESUME_NOTES,
-    type ResumeReason,
-    TodoItemSchema,
-    TurnSpeakerSchema,
-    turnedAwayCode,
-} from "@intentic/sandbox-contract";
+import { AgentTurnSchema } from "@intentic/sandbox-contract/schemas/agent";
+import { HandoffOfferSchema } from "@intentic/sandbox-contract/schemas/providers/handoff";
+import { RESUME_NOTES, type ResumeReason } from "@intentic/sandbox-contract/events/resume";
+import { TodoItemSchema } from "@intentic/sandbox-contract/events/requests";
+import { TurnSpeakerSchema } from "@intentic/sandbox-contract/schemas/speaker";
+import { turnedAwayCode } from "@intentic/sandbox-contract/policy/turned-away";
 import { z } from "zod";
 import { opt } from "../../opt.js";
 import type { Services } from "../../composition.js";

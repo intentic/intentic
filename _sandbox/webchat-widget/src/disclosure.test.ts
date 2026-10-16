@@ -1,4 +1,4 @@
-import type { WebchatPublicConfig } from "@intentic/sandbox-contract";
+import type { WebchatPublicConfig } from "@intentic/sandbox-contract/schemas/automations";
 import { VisitorChatElement, disclosureText } from "./element.js";
 
 const config = (extra: Partial<WebchatPublicConfig> = {}): WebchatPublicConfig => ({

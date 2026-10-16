@@ -75,13 +75,28 @@ export const configFor = (script) => /-p\s+(\S+)/.exec(script)?.[1] ?? "tsconfig
 // Resolves a workspace import to its .ts source in this checkout, never through node_modules, via each package's
 // `exports`'s `@intentic/src` condition.
 const SOURCE_CONDITION = "@intentic/src";
+// A copy of a conditions tree (JSON, as package.json holds it) with every target's `*` replaced by what it matched.
+const substituted = (node, matched) => JSON.parse(JSON.stringify(node).replaceAll("*", JSON.stringify(matched).slice(1, -1)));
+// The `exports` entry for one subpath as Node picks it: the exact key, else the `*` pattern with the longest head.
+export const exportEntry = (exports, subpath) => {
+    if (exports?.[subpath] !== undefined) {
+        return exports[subpath];
+    }
+    const [pattern, head, tail] =
+        Object.keys(exports ?? {})
+            .filter((key) => key.includes("*"))
+            .map((key) => [key, key.slice(0, key.indexOf("*")), key.slice(key.indexOf("*") + 1)])
+            .filter(([, start, end]) => subpath.startsWith(start) && subpath.endsWith(end) && subpath.length >= start.length + end.length)
+            .toSorted(([, a], [, b]) => b.length - a.length)[0] ?? [];
+    return pattern === undefined ? undefined : substituted(exports[pattern], subpath.slice(head.length, subpath.length - tail.length));
+};
 export const workspaceSource = (specifier) => {
     const segments = specifier.split("/");
     // A scoped name is two segments, a bare one is one; what follows is the export subpath.
     const depth = specifier.startsWith("@") ? 2 : 1;
     const owner = byName.get(segments.slice(0, depth).join("/"));
     const subpath = segments.length > depth ? `./${segments.slice(depth).join("/")}` : ".";
-    const entry = owner?.pkg.exports?.[subpath];
+    const entry = exportEntry(owner?.pkg.exports, subpath);
     const source = entry?.import?.[SOURCE_CONDITION] ?? entry?.[SOURCE_CONDITION];
     return source === undefined ? undefined : join(owner.dir, source);
 };

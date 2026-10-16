@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { MainFailureDecisionSchema } from "@intentic/sandbox-contract";
+import { MainFailureDecisionSchema } from "@intentic/sandbox-contract/schemas/ci";
 import { z } from "zod";
 import { at, drop, mapValue, rename } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";

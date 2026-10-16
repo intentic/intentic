@@ -3,7 +3,7 @@
 import "@intentic/testing/dom";
 import { type App, createApp, h, nextTick } from "vue";
 import FileTabs from "./FileTabs.vue";
-import type { WorkspaceTab } from "./workspaceTabs";
+import type { WorkspaceTab } from "../../../models/workspace/tabs/workspaceTabs";
 import { IconStub } from "@intentic/ui/testing";
 
 // scrollIntoView: FileTabs reads it at import; jsdom doesn't implement it.

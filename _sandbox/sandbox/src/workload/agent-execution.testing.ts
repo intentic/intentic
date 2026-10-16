@@ -1,4 +1,4 @@
-import type { AgentDomainPolicy } from "@intentic/sandbox-contract";
+import type { AgentDomainPolicy } from "@intentic/sandbox-contract/schemas/settings";
 import { createAgentExecutionService, type AgentExecutionLease, type AgentExecutionPlacement, type AgentExecutionService } from "./agent-execution.js";
 
 // Test-only protected-reader seam: root is an explicit policy answer, never a production admission default.

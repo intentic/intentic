@@ -2,14 +2,14 @@
 import { Button, ResponsiveOverlay, type Tip } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { agentDisplayTitle } from "../../../agents/fleet/agentStatus";
-import { useAgents } from "../../../agents/fleet/useAgents";
-import { openById } from "../../../agents/fleet/useAgents-actions";
+import { agentDisplayTitle } from "../../../../models/agent-status/agentStatus-meta";
+import { useAgents } from "../../../../models/fleet/useAgents";
+import { openById } from "../../../../models/fleet/useAgents-actions";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import ComposerSendLater from "../../composer/later/ComposerSendLater.vue";
-import type { BookedGroup } from "../../composer/later/bookings";
-import { bookingOf, type SendLater } from "../../composer/later/sendLater";
-import { usePaneView } from "../../panel/useChat-view";
+import type { BookedGroup } from "../../../../models/conversations/drafts/bookings";
+import { bookingOf, type SendLater } from "../../../../models/conversations/drafts/sendLater";
+import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import ChatHeldBubble from "./ChatHeldBubble.vue";
 import ChatHeldStatus from "./ChatHeldStatus.vue";
 

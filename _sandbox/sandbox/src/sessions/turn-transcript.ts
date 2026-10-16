@@ -1,22 +1,17 @@
 import { randomUUID } from "node:crypto";
-import {
-    type AgentTurn,
-    cancelledRequests,
-    capabilitiesOf,
-    isAwaitingDecision,
-    noticeCode,
-    resumeNoticeRow,
-    type TranscriptRow,
-    type TurnErrand,
-    type TurnSpeaker,
-    unspokenPromptRow,
-    withRuntimeDefaults,
-} from "@intentic/sandbox-contract";
+import { type AgentTurn, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
+import { cancelledRequests } from "@intentic/sandbox-contract/policy/request-status";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { isAwaitingDecision, type TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
+import { noticeCode } from "@intentic/sandbox-contract/events/sandbox-notice";
+import { resumeNoticeRow } from "@intentic/sandbox-contract/events/resume";
+import type { TurnErrand, TurnSpeaker } from "@intentic/sandbox-contract/schemas/speaker";
+import { unspokenPromptRow } from "@intentic/sandbox-contract/events/agent-words";
 import { opt } from "../opt.js";
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
-import { parseQueuedPrompt } from "../agent/prompt/turn-preamble.js";
 import type { Services } from "../composition.js";
 import type { TranscriptAgent } from "./agent-transcript.js";
+import { parseQueuedPrompt } from "./vocabulary/prompt-envelope.js";
 
 // Attachment paths as a row carries them: relative to the workspace root, absolute anywhere else left alone.
 export const rootRelative = (paths: readonly string[], root: string): string[] =>

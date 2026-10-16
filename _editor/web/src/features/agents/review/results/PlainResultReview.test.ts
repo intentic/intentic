@@ -5,7 +5,7 @@ import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import type { LandResult } from "@intentic/sandbox-contract";
+import type { LandResult } from "@intentic/sandbox-contract/schemas/agents";
 import type { AgentReviewFile, useAgentChanges } from "../useAgentChanges";
 
 // The conversation's recorded documents as the daemon lists them (agents.documents), and its results' bytes
@@ -14,7 +14,7 @@ const documents = jest.fn(async (_input: { id: string }, _options?: unknown): Pr
 jest.mock(`../../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: { agents: { documents } } }));
 const read = jest.fn(async (_id: string, _path: string, _at?: string): Promise<Blob> => new Blob([`%PDF`], { type: `application/pdf` }));
 const saved = jest.fn(async (_id: string, _path: string, _at?: string): Promise<void> => undefined);
-jest.mock(`../../../workspace/viewers/results/resultFiles`, () => ({ readResult: read, saveResult: saved }));
+jest.mock(`../../../../models/workspace/viewers/resultFiles`, () => ({ readResult: read, saveResult: saved }));
 const { default: PlainResultReview } = await import(`./PlainResultReview.vue`);
 
 type Changes = Pick<ReturnType<typeof useAgentChanges>, `count` | `files` | `error` | `conflicts`>;

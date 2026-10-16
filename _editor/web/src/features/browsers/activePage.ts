@@ -1,4 +1,4 @@
-import type { BrowserPage } from "@intentic/sandbox-contract";
+import type { BrowserPage } from "@intentic/sandbox-contract/schemas/terminal";
 
 // Follows the daemon's `active` page until picked, then stays on the pick. If the picked tab closes, falls back to
 // `active` again, matching the daemon's own pin drop on that event.

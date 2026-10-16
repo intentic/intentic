@@ -1,4 +1,4 @@
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../registry/agents-registry.testing.js";
 import type { Holding } from "./conversation-holdings.js";
 
 // What a conversation holds beside its state, through the registry every door files into: each item is found by its

@@ -1,11 +1,13 @@
-import type { RepoBase, TurnNote } from "@intentic/sandbox-contract";
+import type { RepoBase } from "@intentic/sandbox-contract/schemas/agent";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Logger } from "pino";
 import { withConversationTrailer } from "../../git-identity.js";
 import { headSha } from "../../git/changes/changes.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import type { AgentWorktrees } from "../../conversations/worktrees/worktrees.js";
-import type { TurnCheckpoint } from "./turn-checkpoints.js";
+import type { TurnCheckpoint } from "../../store/journals/turn-checkpoints.js";
+import { CHECKPOINT_NOTE_HEADER, CHECKPOINT_NOTE_TITLE } from "../../sessions/vocabulary/prompt-envelope.js";
 
 // Pins an isolated conversation's checkout (an isolated turn has no workspace-history capture to checkpoint on): commits
 // what the checkout holds, then reads back the commit per repo, since HEAD alone would miss prior turns' uncommitted
@@ -27,9 +29,6 @@ export interface CheckpointCapture {
 const untold = new Map<string, CheckpointCapture[]>();
 // The newest this many are told; a run of steered messages each committing a little says nothing more past it.
 const UNTOLD_KEPT = 5;
-
-export const CHECKPOINT_NOTE_HEADER = "## Your uncommitted work was committed";
-export const CHECKPOINT_NOTE_TITLE = "Uncommitted work committed";
 
 const plural = (count: number, one: string): string => `${count} ${one}${count === 1 ? "" : "s"}`;
 

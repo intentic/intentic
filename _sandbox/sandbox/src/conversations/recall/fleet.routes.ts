@@ -8,6 +8,7 @@ import { soleLiveConversation } from "../actor/conversation-holdings.js";
 import { messageConversation } from "./fleet-message.js";
 import { resolveFleetHandle } from "./fleet-handles.js";
 import { fleetMessageDetail, fleetMessages, fleetRows } from "./fleet-transcript.js";
+import { defineRawRoutes } from "../../http/raw-route-server.js";
 
 // The shell door onto the daemon's fleet knowledge (registry, record, worktree composition, phrase index), joined into
 // one answer. Its own namespace, not `/agents`: the board's router can land, discard and rename, so what lives here
@@ -87,7 +88,7 @@ const readableHandle = (resolved: HandleResolution, reads: ConversationReader): 
 };
 
 // Full Services, not a Pick: `message` starts turns, and a turn is the whole daemon.
-export const createFleetRoutes = (services: Services) => ({
+const createFleetRoutes = (services: Services) => ({
     /** GET /fleet: paginated roster, newest first; `?q=` switches it to a phrase search, `?owner=` narrows to one member's. */
     list: async (c: Context<AppEnv>): Promise<Response> => {
         const query = c.req.query("q")?.trim();
@@ -169,4 +170,17 @@ export const createFleetRoutes = (services: Services) => ({
                   outcome.status,
               );
     },
+});
+
+// The fleet surface: which conversations exist, what one is, which said a phrase — joined from the registry, the
+// record, the worktree composition and the phrase index — and saying something to one of them.
+// Scoped to the agent token like `services`/`capabilities`, unlike `/agents`: the reads cannot change anything,
+// and the one write only puts words in front of another conversation, which a person can do by typing.
+export const fleetRawRoutes = defineRawRoutes((services: Services) => {
+    const fleetRoutes = createFleetRoutes(services);
+    return {
+        "GET /fleet": fleetRoutes.list,
+        "POST /fleet/message": fleetRoutes.message,
+        "GET /fleet/{handle}": fleetRoutes.show,
+    };
 });

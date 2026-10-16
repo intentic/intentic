@@ -1,4 +1,5 @@
-import type { AgentWatch, ProgramAsk } from "@intentic/sandbox-contract";
+import type { AgentWatch } from "@intentic/sandbox-contract/schemas/agents";
+import type { ProgramAsk } from "@intentic/sandbox-contract/events/requests";
 import { awaitingWake, type ConversationState, idleConversation, type ParkedCard } from "./conversation-state.js";
 import { type QueuedItem, scheduled } from "./conversation-queue.js";
 import { conversationStatus, permissionAskOf } from "./conversation-status.js";

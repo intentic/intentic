@@ -1,7 +1,7 @@
 import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Workflow, WorkflowRun } from "@intentic/sandbox-contract";
+import type { Workflow, WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js";
 
 const roots: string[] = [];

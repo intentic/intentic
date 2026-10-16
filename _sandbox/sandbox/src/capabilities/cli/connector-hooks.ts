@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { CliConfig } from "@intentic/sandbox-contract";
+import type { CliConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { Logger } from "pino";
 import { directExec, type ExecInTerminal } from "../../terminal/terminal-run.js";
 import type { CapabilitiesStore } from "../capabilities-store.js";

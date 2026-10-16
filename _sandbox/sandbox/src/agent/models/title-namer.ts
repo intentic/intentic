@@ -1,10 +1,10 @@
 import type { Services } from "../../composition.js";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
 import type { AgentExecutionContext } from "../../workload/agent-execution.js";
-import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../providers/failure-sentences.js";
-import { sentenceAnswer } from "./role-answer.js";
+import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../../engines/failure-sentences.js";
+import { sentenceAnswer } from "../../engines/role-answer.js";
 import { askRoleModel, roleModelIsSet } from "./role-model.js";
-import { BULLET, FENCE } from "@intentic/sandbox-contract";
+import { BULLET, FENCE } from "@intentic/sandbox-contract/text/model-answer";
 
 // Writes a name for a conversation at turn start, where the contract's title.ts can only derive one by cutting a
 // sentence. Runs only while the title is still `derived`, so a name never overwrites a better one already set; a name

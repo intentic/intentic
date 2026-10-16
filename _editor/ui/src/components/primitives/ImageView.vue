@@ -364,6 +364,9 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
                     +
                 </button>
                 <span class="mx-0.5 h-3.5 w-px bg-line"></span>
+                <!-- allow(recipes): "FIT" AND "1:1" ARE WORDS in the zoom bar's row of xs glyphs: they keep the row's
+                     20px height and its hover plate, and the box widens to the word. A chip or a text button would
+                     put a second control shape in a five-button bar. -->
                 <button
                     type="button"
                     :class="ui.iconButton({ size: `xs` }, `w-auto px-1.5`)"
@@ -374,6 +377,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
                 >
                     {{ t(`ui.imageView.fit`) }}
                 </button>
+                <!-- allow(recipes): "1:1" is a word in the zoom bar too, the same as "fit" above. -->
                 <button
                     type="button"
                     :class="ui.iconButton({ size: `xs` }, `w-auto px-1.5 tabular-nums`)"

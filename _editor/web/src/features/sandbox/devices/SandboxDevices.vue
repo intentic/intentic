@@ -7,12 +7,12 @@ import CardlessKeys from "./health/CardlessKeys.vue";
 import ContainerHealthCard from "./health/ContainerHealthCard.vue";
 import DeviceBoard from "./board/DeviceBoard.vue";
 import DevicePage from "./DevicePage.vue";
-import { boardRoute, DELETED_ANCHOR, deviceRoute, selectedKey } from "./deviceLinks";
-import { machineRows, slugOfDaemonUrl, withSandboxNames } from "./deviceRows";
-import { useDevices } from "./useDevices";
+import { boardRoute, DELETED_ANCHOR, deviceRoute, selectedKey } from "../../../models/sandbox/devices/deviceLinks";
+import { machineRows, slugOfDaemonUrl, withSandboxNames } from "../../../models/sandbox/devices/deviceRows";
+import { useDevices } from "../../../models/sandbox/devices/useDevices";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
-import { useSandboxVersion } from "../overview/version/useSandboxVersion";
+import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

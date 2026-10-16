@@ -6,6 +6,7 @@ import { z } from "zod";
 import { stateRelPath } from "../../state-paths.js";
 import type { DocumentRoot } from "./documents.js";
 import { asideOf, writeJsonFile } from "../json-file.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // The write-ahead journal of one conversion episode: before the boot step changes a file it copies the file aside
 // (its pre-image), and the episode stays open until the new version has booted all the way. A build that finds an
@@ -116,13 +117,9 @@ const isJournalObject = async (path: string): Promise<boolean> => {
     if (text === undefined) {
         return true;
     }
-    try {
-        const raw: unknown = JSON.parse(text);
-        return typeof raw === "object" && raw !== null && !Array.isArray(raw);
-    } catch {
-        // allow(silent-catch): not JSON is exactly the damaged file this asks about; the answer is the report
-        return false;
-    }
+    // Not JSON is exactly the damaged file this asks about; the answer is the report.
+    const raw: unknown = parseJsonOr(text, undefined);
+    return typeof raw === "object" && raw !== null && !Array.isArray(raw);
 };
 
 export const writeJournal = async (historyRoot: string, journal: Journal): Promise<void> => {

@@ -27,7 +27,7 @@ const readBytes = async (request: Request, max: number): Promise<Uint8Array | un
     const chunks: Uint8Array[] = [];
     let size = 0;
     for (;;) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one stream, read in order
+        // one stream, read in order
         const { done, value } = await reader.read();
         if (done) {
             break;

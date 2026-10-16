@@ -1,6 +1,6 @@
 import { clearBrowserHelp, closeBrowserSession, listBrowserSessions, openBrowserSession, raiseBrowserHelp } from "./browser-sessions.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);

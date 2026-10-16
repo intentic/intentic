@@ -1,13 +1,7 @@
-import {
-    DEFAULT_PRIVACY_SHIELD,
-    type OrgPolicy,
-    orgPinnedGroups,
-    orgPinRefusal,
-    type OrgPinRefusal,
-    type PrivacyShieldPolicy,
-    type SandboxSettings,
-    SandboxSettingsSchema,
-} from "@intentic/sandbox-contract";
+import { DEFAULT_PRIVACY_SHIELD, type PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
+import { type OrgPolicy, orgPinnedGroups } from "@intentic/sandbox-contract/schemas/organisation";
+import { orgPinRefusal, type OrgPinRefusal } from "@intentic/sandbox-contract/policy/org-locks";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import type { Logger } from "pino";
 import type { AuditService } from "../audit/audit-service.js";
 import type { OrgPolicyHolder } from "../org/org-policy.js";

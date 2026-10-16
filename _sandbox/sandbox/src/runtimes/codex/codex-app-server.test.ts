@@ -1,8 +1,9 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
 import { createCodexAgent } from "./codex-agent.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { fakeCodexProcess, memoryFleet } from "../../testing.js";
+import { fakeCodexProcess } from "./codex-app-server.testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { forgetNamespaceEntry, registerMountEntry } from "../../workload/namespace-entry.js";

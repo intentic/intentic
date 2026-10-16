@@ -1,7 +1,7 @@
 import type { ViewBadge } from "@intentic/extension-api";
 import { computed, type ComputedRef } from "vue";
-import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
-import { usePanels } from "../features/extensions/usePanels";
+import { useCapabilities } from "../models/capabilities/useCapabilities";
+import { usePanels } from "../models/extensions/usePanels";
 import { activationBadge, APPROVALS_VIEW_ID, detectActivations, extensionPath } from "../workbench/views/registry";
 import { parseRoot, type TabRoot } from "../lib/routes/tabRoots";
 

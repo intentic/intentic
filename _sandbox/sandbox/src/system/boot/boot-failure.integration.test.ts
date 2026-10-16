@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DisposableStore } from "@intentic/base/lifecycle";
-import type { BootProgress } from "@intentic/sandbox-contract";
+import type { BootProgress } from "@intentic/sandbox-contract/events/system-events";
 import { pino } from "pino";
 import { z } from "zod";
 import { version } from "../../version.js";

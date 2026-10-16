@@ -7,7 +7,7 @@ import {
     ListenerStatusSchema,
     type ListenerStopAnswer,
     ListenerStopSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import type { Context } from "hono";
 import { stream } from "hono/streaming";
 import { DEBOUNCE_MS, dispatchListenerMessage, reportListenerFailure, stopChannelTurn } from "../../automations/listeners.js";
@@ -17,7 +17,8 @@ import type { AppEnv } from "../../app-env.js";
 import { callingExtension, type ExtensionGrant } from "../../auth/grants.js";
 import { readBoundedJson } from "../../http/bounded-body.js";
 import { listenerOwnership, listenerStateOf } from "./listener-state.js";
-import { setListenerStatus } from "./listener-status.js";
+import { setListenerStatus } from "../../capabilities/status/listener-status.js";
+import { defineRawRoutes } from "../../http/raw-route-server.js";
 
 // Control surface for an extension's listener gateway; the gateway holds the provider connection, not the daemon.
 // Five routes: /state (reconcile), /dispatch (inbound events, optional ndjson stream), failure/status reports, and /stop
@@ -162,4 +163,18 @@ export const createListenerRoutes = (services: Services) => ({
         setListenerStatus(provider, body, Date.now());
         return c.json({ ok: true });
     },
+});
+
+// Realtime-listener control for an extension's gateway process: reconciles via /state, POSTs inbound events to
+// /dispatch, reports failures/status.
+// Reached with the per-boot panel token, like every other panel-process call.
+export const listenerRawRoutes = defineRawRoutes((services: Services) => {
+    const listenerRoutes = createListenerRoutes(services);
+    return {
+        "GET /listeners/{provider}/state": listenerRoutes.state,
+        "POST /listeners/{provider}/dispatch": listenerRoutes.dispatch,
+        "POST /listeners/{provider}/failure": listenerRoutes.failure,
+        "POST /listeners/{provider}/status": listenerRoutes.status,
+        "POST /listeners/{provider}/stop": listenerRoutes.stop,
+    };
 });

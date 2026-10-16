@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { zstdDecompressSync } from "node:zlib";
 import pino from "pino";
-import type { TranscriptRow } from "@intentic/sandbox-contract";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { fileTranscriptRecord, legacyTranscriptFile, transcriptFile } from "../transcript-record.js";
 import { blobsRoot, putBlob } from "./record-blobs.js";
 import { backupFile, convertLegacy } from "./record-convert.js";

@@ -4,7 +4,9 @@
 // machine last did about this sandbox's version, a withdrawn release and a skipped one, each with the action that
 // applies to it.
 import "@intentic/testing/dom";
-import type { Environment, Info, PreparingUpdate, StagedUpdate, UpdateOutcome } from "@intentic/sandbox-contract";
+import type { Environment } from "@intentic/sandbox-contract/schemas/environment";
+import type { Info, PreparingUpdate, StagedUpdate } from "@intentic/sandbox-contract/schemas/system";
+import type { UpdateOutcome } from "@intentic/sandbox-contract/schemas/updates";
 import { useOsPreference } from "@intentic/ui";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -21,7 +23,7 @@ const moreUpdateNotes = ref(0);
 const preparing = ref<PreparingUpdate | undefined>(undefined);
 const skipServed = ref(true);
 const skipVersion = jest.fn(async (_version: string | null): Promise<void> => undefined);
-jest.mock(`./useSandboxVersion`, () => ({
+jest.mock(`../../../../models/sandbox/useSandboxVersion`, () => ({
     useSandboxVersion: () => ({
         info,
         installed: computed(() => info.value.version),
@@ -52,7 +54,7 @@ jest.mock(`./useBackgroundDownload`, () => ({
         return { starting };
     },
 }));
-jest.mock(`../../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet: ref([]) }) }));
+jest.mock(`../../../../models/fleet/useAgents`, () => ({ useAgents: () => ({ fleet: ref([]) }) }));
 type ActiveRow = { id: string; role: string; hosted?: { region: string; warm: boolean; canRollBack?: boolean } };
 const active = ref<ActiveRow>({ id: `sb1`, role: `owner` });
 jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
@@ -104,7 +106,7 @@ jest.mock(`./HostedRollbackDialog.vue`, () => ({
 
 const { default: SandboxUpdateCard } = await import("./SandboxUpdateCard.vue");
 const { forgetOperations } = await import("../../../../workbench/operations/operations");
-const { forgetRestarts } = await import("../../live/sandboxRestart");
+const { forgetRestarts } = await import("../../../../models/sandbox/live/sandboxRestart");
 
 const HOUR = 60 * 60_000;
 const outcome = (over: Partial<UpdateOutcome> & Pick<UpdateOutcome, `result`>): UpdateOutcome => ({

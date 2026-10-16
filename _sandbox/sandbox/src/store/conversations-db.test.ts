@@ -1,6 +1,6 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import { sqliteAgentsStore } from "../conversations/registry/agents-store.js";
-import { conversationEntry, isolatedAgent } from "../testing.js";
+import { conversationEntry, isolatedAgent } from "../conversations/registry/agents-store.testing.js";
 import { openConversationsDb } from "./conversations-db.js";
 
 const count = (db: ReturnType<typeof openConversationsDb>, table: string): number =>

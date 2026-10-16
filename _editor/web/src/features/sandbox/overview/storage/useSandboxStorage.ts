@@ -1,4 +1,4 @@
-import type { StorageCategoryId, StorageCleanResult, StorageReport } from "@intentic/sandbox-contract";
+import type { StorageCategoryId, StorageCleanResult, StorageReport } from "@intentic/sandbox-contract/schemas/metrics";
 import { t } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
 import { queryClient } from "../../../../lib/queryPersistence";

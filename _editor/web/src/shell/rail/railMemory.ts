@@ -1,7 +1,8 @@
+import { parseJsonWith } from "@intentic/base/json";
 import type { IconName } from "@intentic/ui";
 import { computed, type ComputedRef, type Ref, watch } from "vue";
 import { z } from "zod";
-import { storedValue, storeValue } from "../../lib/browserStorage";
+import { storedValue, storeValue } from "../../app/storage/browserStorage";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 
 // Rail tiles arrive in waves, each pushing everything below it down as it lands. Once a load completes, the layout
@@ -43,12 +44,7 @@ const readTiles = (sandboxId: string | undefined): readonly RailTile[] => {
         return [];
     }
     // An unreadable or stale-shaped payload counts as no memory; the rail just grows as if none was remembered.
-    try {
-        const parsed = StoredTilesSchema.safeParse(JSON.parse(raw) as unknown);
-        return parsed.success ? (parsed.data as readonly RailTile[]) : [];
-    } catch {
-        return [];
-    }
+    return (parseJsonWith(raw, StoredTilesSchema) as readonly RailTile[] | undefined) ?? [];
 };
 
 // Ghost tiles to draw beside the live ones, plus the writer that keeps them current. `settled` (the rail is

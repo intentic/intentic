@@ -1,11 +1,10 @@
 import { join } from "node:path";
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
-import type { ExtensionConfig } from "@intentic/sandbox-contract";
-import { invalidExtensionFragment } from "@intentic/sandbox-contract";
-import { extensionProcessKey } from "../../extensions/extension-processes.js";
+import type { ExtensionConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import { invalidExtensionFragment } from "@intentic/sandbox-contract/policy/overlay-lint";
 import { capabilityJobSession } from "../../terminal/terminal-session.js";
 import type { CapabilityHandler } from "../capability.js";
-import { extensionDir, extensionRootOf, extensionsRoot, readExtensionManifest } from "../extension-dirs.js";
+import { extensionDir, extensionRootOf, extensionsRoot, readExtensionManifest, extensionProcessKey } from "../extension-dirs.js";
 import { checkoutInto, previousDir } from "../git-checkout.js";
 
 // A git checkout at .intentic/local/extensions/<id>, sha-pinned by the schema (a full commit sha). Install validates

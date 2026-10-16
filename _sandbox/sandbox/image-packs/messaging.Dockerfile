@@ -1,6 +1,6 @@
 # The messaging gateway runtimes — deployed trees from the `trees` build context, so this pack is BAKE-ONLY
 # (profiles can include it; an overlay rebuild cannot, and the daemon surfaces "not in this image" for a
-# messaging connector on a core image instead — extensions/extension-readiness.ts). Their MANIFESTS are baked
+# messaging connector on a core image instead — capabilities/extension-inventory/extension-readiness.ts). Their MANIFESTS are baked
 # in every image by the core Dockerfile so the capability cards exist either way; these COPYs put the runnable
 # gateways behind them.
 # The discord gateway's voice stack needs no rebuild after this COPY: its Opus decoder is mediaplex, a napi-rs

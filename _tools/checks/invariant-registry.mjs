@@ -1,77 +1,34 @@
 #!/usr/bin/env node
 /* A registry anyone may contribute to and nobody must is a folder that fills up for two months and is never opened again. */
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { ADOPTING, ratchet } from "./lib/ratchet.mjs";
 
 const root = resolve(import.meta.filename, "../../..");
 const src = join(root, "_sandbox/sandbox/src");
-
-// Subsystems not yet audited; removing an entry needs a real or explained invariant.ts. Shrink only.
-const UNAUDITED = new Set([
-    "activity",
-    "approvals",
-    "auth",
-    "automations",
-    "browser",
-    "chores",
-    "ci",
-    "endpoints",
-    "environment",
-    "execution",
-    "extensions",
-    "git",
-    "guard",
-    "hashline",
-    "history",
-    "intentic",
-    "inventory",
-    "logs",
-    "loops",
-    "migrations",
-    "panels",
-    "personas",
-    "portability",
-    "ports",
-    "processes",
-    "public",
-    "push",
-    "rules",
-    "scaffold",
-    "secrets",
-    "sessions",
-    "settings",
-    "share",
-    "speech",
-    "store",
-    "terminal",
-    "trial",
-    "usage",
-    "vpn",
-    "wallet",
-    "webchat",
-    "workflows",
-    "workspace",
-]);
 
 // Not subsystems: the registry itself, plus test-scaffolding dirs with no daemon code.
 const NOT_A_SUBSYSTEM = new Set(["invariants", "e2e", "harness"]);
 
 const failures = [];
-// UNAUDITED entries already resolved: directory gone, or invariant.ts now exists. Logged, not failed.
-const retired = [];
 
 const directories = readdirSync(src)
     .filter((entry) => statSync(join(src, entry)).isDirectory())
     .filter((entry) => !NOT_A_SUBSYSTEM.has(entry))
     .sort();
 
-const present = new Set(directories);
-for (const entry of UNAUDITED) {
-    if (!present.has(entry)) {
-        retired.push(`UNAUDITED names '${entry}', which is not a directory under _sandbox/sandbox/src (renamed or removed)`);
-    }
+// Subsystems not yet audited are the standing backlog in baselines/invariant-registry.json, one entry each: it only
+// shrinks, and the fixers' `--tighten` drops a subsystem once it has a real or explained invariant.ts.
+const keyOf = (directory) => `_sandbox/sandbox/src/${directory}`;
+const unaudited = new Map(
+    directories.filter((directory) => !existsSync(join(src, directory, "invariant.ts"))).map((directory) => [keyOf(directory), 1]),
+);
+const { grown } = ratchet("invariant-registry", "invariant-registry", unaudited);
+if (ADOPTING) {
+    process.exit(0);
 }
+const unexcused = new Set(grown.map(({ key }) => key));
 
 // Every file other than the invariant module, read once, so rule 4 can check whether anything imports each companion.
 const sources = [];
@@ -93,15 +50,12 @@ for (const directory of directories) {
     try {
         body = readFileSync(companion, "utf8");
     } catch {
-        if (!UNAUDITED.has(directory)) {
+        if (unexcused.has(keyOf(directory))) {
             failures.push(
                 `'${directory}' has no invariant.ts, register a check, or add an empty companion with a leading "No runtime invariant: <why>" comment`,
             );
         }
         continue;
-    }
-    if (UNAUDITED.has(directory)) {
-        retired.push(`'${directory}' now has an invariant.ts but is still listed as UNAUDITED`);
     }
     // Checks for `checks` structurally; executing the module would mean constructing daemon services.
     const empty = /export const checks[^=]*=\s*(\[\s*\]|\(\s*\)\s*(:[^=]*)?=>\s*\[\s*\])/.test(body);
@@ -128,11 +82,6 @@ for (const directory of directories) {
     }
 }
 
-// Logged so the list gets trimmed on the next edit; never treated as a failure.
-for (const line of retired) {
-    console.log(`verify-invariants: ${line}: drop it from UNAUDITED when you next edit this file`);
-}
-
 if (failures.length > 0) {
     console.error(`verify-invariants: ${failures.length} problem(s)\n`);
     for (const failure of failures) {
@@ -141,7 +90,7 @@ if (failures.length > 0) {
     process.exit(1);
 }
 
-// Backlog excludes retired entries, so the summary doesn't undercount how much of the tree is audited.
-const backlog = UNAUDITED.size - retired.length;
+// Backlog counts only the subsystems the baseline still excuses, so the summary doesn't undercount how much is audited.
+const backlog = unaudited.size - unexcused.size;
 const audited = directories.length - backlog;
 console.log(`verify-invariants: ok, ${audited} of ${directories.length} subsystems audited, ${backlog} in the backlog`);

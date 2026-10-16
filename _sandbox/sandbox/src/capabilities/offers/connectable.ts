@@ -1,6 +1,6 @@
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, contributionEntry } from "@intentic/capability-catalog";
 import { contributionRegistry } from "../contributions.js";
-import type { ExtensionHost } from "../../extensions/installed-extensions.js";
+import type { ExtensionHost } from "../extension-inventory/installed-extensions.js";
 
 /* EVERY CARD THIS SANDBOX CAN CONNECT, the static catalog merged with the enabled extensions' contributed entries. */
 export const connectableEntries = async (host: ExtensionHost): Promise<CapabilityCatalogEntry[]> => {

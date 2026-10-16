@@ -1,4 +1,4 @@
-import type { AgentDomainPolicy } from "@intentic/sandbox-contract";
+import type { AgentDomainPolicy } from "@intentic/sandbox-contract/schemas/settings";
 
 export const AGENT_DOMAIN_NOT_READY =
     "The unprivileged agent domain is not available in this build yet. Turns, Bash panes and the agent's home are placed in it, but it has not been verified in a live sandbox, and the daemon still runs some agent-reachable work as root: condition watches, panels, the desktop, and git in repositories an agent creates. Agent execution is refused rather than run as root.";

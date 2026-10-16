@@ -1,5 +1,5 @@
 import type { SessionConfigOption } from "@agentclientprotocol/sdk";
-import { EFFORT_TIERS } from "@intentic/sandbox-contract";
+import { EFFORT_TIERS } from "@intentic/sandbox-contract/models/agent-catalog";
 
 // An ACP session's model and reasoning-depth choices, read off the config options its agent answers session/new,
 // session/load and session/set_config_option with and pushes as config_option_update. The protocol names no model or

@@ -1,4 +1,5 @@
-import { KEYRING_PACKAGE_RE, KEYRING_PROGRAM_MAX, KEYRING_PROGRAMS_MAX, type SecretProgramGuard } from "@intentic/sandbox-contract";
+import { KEYRING_PACKAGE_RE, KEYRING_PROGRAM_MAX, KEYRING_PROGRAMS_MAX } from "@intentic/sandbox-contract/schemas/keyring";
+import type { SecretProgramGuard } from "@intentic/sandbox-contract/schemas/secrets";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { openDocument } from "../../store/open-document.js";

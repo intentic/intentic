@@ -1,13 +1,7 @@
-import {
-    type AdmissionPolicy,
-    type AdmissionRule,
-    COMMAND_CLASS_LABELS,
-    type CommandClass,
-    type CommandLocus,
-    hardRuleClasses,
-    type Trigger,
-    type WakeSource,
-} from "@intentic/sandbox-contract";
+import type { AdmissionPolicy, AdmissionRule, CommandClass, CommandLocus, WakeSource } from "@intentic/sandbox-contract/schemas/agent";
+import { COMMAND_CLASS_LABELS } from "@intentic/sandbox-contract/policy/command-classes";
+import { hardRuleClasses } from "@intentic/sandbox-contract/policy/safety-policy";
+import type { Trigger } from "@intentic/sandbox-contract/schemas/automations";
 import { ALLOW, DENY, defineGuardedAction, HOLD } from "./guard.js";
 import { taintWords } from "./turn-taint.js";
 

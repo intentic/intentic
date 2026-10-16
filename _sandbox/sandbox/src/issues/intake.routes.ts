@@ -6,7 +6,7 @@ import {
     IssueIngestSchema,
     type IssuePublicConfig,
     type IssuesConfig,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/issues";
 import { DEFAULT_ACCENT } from "@intentic/sandbox-contract/embed";
 import type { Context } from "hono";
 import type { z } from "zod";
@@ -21,6 +21,8 @@ import { wakeBrief } from "./issue-payload.js";
 import { fileIssuesStore, issuesDocument, type IssuesStore } from "./issues-store.js";
 import { issueInstallsDocument } from "../store/installs.js";
 import { readBoundedJson } from "../http/bounded-body.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
+import { createSdkRoute } from "./issue-sdk.js";
 
 // The daemon's second public door (report), differing from the Visitor chat after admission: every report is a file
 // write, only sometimes a turn, since nobody waits on a crashing page. Grouping happens before anything can wake
@@ -212,3 +214,16 @@ export const startWake = async (
         (conversationId) => issues.noteRun(issue.id, conversationId, Date.now()),
     );
 };
+
+// The bug intake: reporter bundle, per-automation config, puzzle challenge, and the report ingest itself.
+// The ingest answers immediately, since a crashing page is often seconds from unloading; the owner's inbox is the
+// non-public oRPC /issues surface.
+export const intakeRawRoutes = defineRawRoutes((services: Services) => {
+    const intake = createIntakeRoutes(services);
+    return {
+        "GET /intake/sdk.js": createSdkRoute(),
+        "GET /intake/{id}/config": intake.config,
+        "GET /intake/{id}/challenge": intake.challenge,
+        "POST /intake/{id}/report": intake.report,
+    };
+});

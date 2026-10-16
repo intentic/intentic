@@ -1,9 +1,10 @@
-import { agentWordsOf } from "@intentic/sandbox-contract";
+import { agentWordsOf } from "@intentic/sandbox-contract/events/agent-words";
 import { pino } from "pino";
 import { childActor } from "../../../auth/principal.js";
 import { opt } from "../../../opt.js";
 import type { DomainEventMap } from "../../../seams/domain-events.js";
-import { type FakeTurns, fakeTurns, memoryFleet } from "../../../testing.js";
+import { type FakeTurns, fakeTurns } from "../../../seams/turn-starter.testing.js";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { type ChildReportDeps, reportChildTurn } from "../child-report.js";
 import { openSpawnedChild, resetSubagents, settleSpawnedChild, waitForSubagent } from "../subagents.js";
 

@@ -1,7 +1,7 @@
-import type { SandboxSettings } from "@intentic/sandbox-contract";
+import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import { type Ref, watch } from "vue";
 import type { AnalyticsGate } from "../../../app/analytics";
-import { activeSandboxId } from "../../../lib/activeSandbox";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
 import { rpcKey } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";

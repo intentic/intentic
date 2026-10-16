@@ -1,4 +1,4 @@
-import type { NetdiskConfig } from "@intentic/sandbox-contract";
+import type { NetdiskConfig } from "@intentic/sandbox-contract/schemas/netdisk";
 import { netdiskDrivers } from "../../netdisk/netdisk-drivers.js";
 import { mountNetdisk, netdiskLink, unmountNetdisk } from "../../netdisk/netdisk-links.js";
 import { MOUNT_ROOT } from "../../netdisk/netdisk-paths.js";

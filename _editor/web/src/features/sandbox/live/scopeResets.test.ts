@@ -1,10 +1,10 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp, effectScope, nextTick, ref } from "vue";
 import { projectScope, setProjectScope } from "../../../app/projectScope";
-import { activeSandboxId } from "../../../lib/activeSandbox";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // What each door into a new sandbox scope starts over, read off the stores themselves rather than the primitive: a
@@ -24,17 +24,17 @@ jest.mock("../../../client/sandbox/sandboxRpc", () => ({
 const { queryClient } = await import("../../../lib/queryPersistence");
 const { applySystemEvent } = await import("./systemEvents");
 await import("../switching/sandboxScope");
-const { useChat } = await import("../../chat/run/useChat");
-const { useEditBuffers } = await import("../../workspace/files/useEditBuffers");
-const { useWorkspaceTree } = await import("../../workspace/explorer/useWorkspaceTree");
-const { useWorkspaceTabs } = await import("../../workspace/tabs/useWorkspaceTabs");
-const { useHome } = await import("../../workspace/home/useHome");
+const { useChat } = await import("../../../models/conversations/run/useChat");
+const { useEditBuffers } = await import("../../../models/workspace/files/useEditBuffers");
+const { useWorkspaceTree } = await import("../../../models/workspace/tree/useWorkspaceTree");
+const { useWorkspaceTabs } = await import("../../../models/workspace/tabs/useWorkspaceTabs");
+const { useHome } = await import("../../../models/workspace/home/useHome");
 const { useLayout } = await import("../../../workbench/window/useLayout");
-const { changeEpochOf, markWorkspaceChanged } = await import("../../workspace/changes/live/useWorkspaceLive");
+const { changeEpochOf, markWorkspaceChanged } = await import("../../../models/workspace/changes/useWorkspaceLive");
 const { markBrowsersOpened, browsersOpened } = await import("../../../workbench/browsers/browsersSurface");
 const { presenceOthers, setPresenceUsers } = await import("../../../workbench/presence/usePresence");
-const { useAgents } = await import("../../agents/fleet/useAgents");
-const { archived, setAgents } = await import("../../agents/fleet/useAgents-registry");
+const { useAgents } = await import("../../../models/fleet/useAgents");
+const { archived, setAgents } = await import("../../../models/fleet/useAgents-registry");
 
 const SANDBOX = `sbx-1`;
 const hello = (workspaceId: string): void => applySystemEvent({ kind: `hello`, workspaceId, build: `build-1` }, SANDBOX);

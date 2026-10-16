@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ChatSession } from "../run/useChat-sessions";
+import type { ChatSession } from "../../../models/conversations/run/useChat-sessions";
 import MatchLine from "../../../components/MatchLine.vue";
 import { viewersOfSession } from "../../../workbench/presence/usePresence";
 import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";

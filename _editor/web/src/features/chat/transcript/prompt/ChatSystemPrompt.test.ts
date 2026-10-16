@@ -2,7 +2,8 @@
 // composition in the order the model reads it, and nothing is fetched until a reader asks — the payload is the whole
 // prompt, and a transcript that opened one per pane would pay for it every time.
 import "@intentic/testing/dom";
-import type { ConversationPrompt, TurnNote } from "@intentic/sandbox-contract";
+import type { ConversationPrompt } from "@intentic/sandbox-contract/schemas/system-prompt";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, ref, toValue } from "vue";

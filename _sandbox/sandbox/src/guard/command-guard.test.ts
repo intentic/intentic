@@ -1,12 +1,8 @@
 import type { SyncHookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
-import {
-    type AgentEvent,
-    COMMAND_CLASS_LABELS,
-    DEFAULT_SAFETY_POLICY,
-    type SafetyLogEntry,
-    type SafetyVerdict,
-    WORKSPACE_ROOT,
-} from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { COMMAND_CLASS_LABELS } from "@intentic/sandbox-contract/policy/command-classes";
+import { DEFAULT_SAFETY_POLICY, type SafetyLogEntry, type SafetyVerdict } from "@intentic/sandbox-contract/policy/safety-policy";
+import { WORKSPACE_ROOT } from "@intentic/sandbox-contract";
 import type { JudgeFacts } from "../agent/tools/command-judge.js";
 import { JS_TOOL_NAME } from "../seams/js-tool-names.js";
 import { commandGateHooks, type CommandGuardOptions } from "./command-guard.js";
@@ -14,7 +10,7 @@ import { createTurnTaint, NO_TAINT } from "./turn-taint.js";
 import type { ClassifiedInstall } from "../environment/runtime-installs.js";
 import { PROJECT_INSTALL_RULE, type ProjectInstallGate } from "../agent/providers/project-installs.js";
 import { parkedCards } from "../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);

@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import { type AuditEvent, type AuditSettings, AuditSettingsSchema, type AuditStatus } from "@intentic/sandbox-contract";
+import type { AuditEvent, AuditStatus } from "@intentic/sandbox-contract/schemas/audit";
+import { type AuditSettings, AuditSettingsSchema } from "@intentic/sandbox-contract/schemas/data-protection";
 import type { Logger } from "pino";
 import type { SecretsSlice } from "../secrets/secrets-slice.js";
 import type { SandboxSettingsStore } from "../settings/settings-store.js";

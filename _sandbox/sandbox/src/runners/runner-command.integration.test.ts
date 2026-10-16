@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { offloadRef, type RunnerCommand, type RunnerCommandFrame } from "@intentic/sandbox-contract";
+import { offloadRef, type RunnerCommand, type RunnerCommandFrame } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { createRunnerCommands, offloadTreeOf } from "./runner-command.js";
 
 // One offloaded line on a runner, against real git: the parent's snapshot fetched into the runner's own tree, the line's

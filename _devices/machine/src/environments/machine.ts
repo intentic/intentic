@@ -5,7 +5,7 @@ import { posix } from "node:path";
 import { execBounded, runBounded } from "@intentic/base/process";
 import { STATE_DIR } from "@intentic/constants";
 import { writeSecretFile } from "@intentic/local-agent";
-import { wslPathOf } from "@intentic/sandbox-contract";
+import { wslPathOf } from "@intentic/sandbox-contract/schemas/hosts";
 import { baseDir, machineConfigPath } from "../config.js";
 import { registeredDistro, WINDOWS_SIDE } from "./wsl.js";
 import { crossEnv } from "./crossing.js";
@@ -75,7 +75,7 @@ const CMD_EXE = ["cmd.exe", "/mnt/c/Windows/System32/cmd.exe"];
 
 const windowsProfile = async (): Promise<string | undefined> => {
     for (const cmd of CMD_EXE) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- candidates in order, the first that answers wins
+        // candidates in order, the first that answers wins
         const answer = await execBounded(cmd, ["/c", "echo %USERPROFILE%"], { timeoutMs: 10_000, cwd: interopCwd() }).catch(() => undefined);
         const profile = answer?.stdout.trim();
         if (profile !== undefined && /^[A-Za-z]:\\/.test(profile)) {

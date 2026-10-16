@@ -3,9 +3,11 @@
 // registry counts and recommendation it shows.
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { RegistryEntry } from "@intentic/registry";
-import type { ExtensionSummary, HostSummary, CapabilityRecommendation, CapabilityStatus, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
+import type { HostSummary } from "@intentic/sandbox-contract/schemas/hosts";
+import type { CapabilityRecommendation, CapabilityStatus, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { effectScope, type EffectScope, ref } from "vue";
-import type { BackgroundProcessRow } from "../terminal/useBackgroundProcesses";
+import type { BackgroundProcessRow } from "../../models/terminal/useBackgroundProcesses";
 import type { ConnectionSources } from "./model/connectionRows";
 import type { DeviceConnection } from "./model/deviceConnections";
 import { servingExtension, tileProcesses, useTilePane } from "./tilePane";

@@ -1,6 +1,6 @@
 import { access } from "node:fs/promises";
 import { constants } from "node:fs";
-import type { EngineId } from "@intentic/sandbox-contract";
+import type { EngineId } from "@intentic/sandbox-contract/schemas/engines";
 import { resolveOnPath } from "../image/on-path.js";
 import { engineDescriptor, type EnginePaths } from "./engine-descriptors.js";
 import { engineVersionDir, isQuarantined, readEngineState } from "./engine-store.js";

@@ -1,4 +1,5 @@
-import { projectDirCandidates, projectDirNameFor } from "@intentic/sandbox-contract";
+import { errorMessage } from "@intentic/base/errors";
+import { projectDirCandidates, projectDirNameFor } from "@intentic/sandbox-contract/ids/project-dir";
 import { computed, ref, watch } from "vue";
 import { askLocalApp } from "../app/environments/local";
 import { localHost, type LocalFolderSandbox, type LocalMachineSandbox, type LocalProjectPreview } from "../app/environments/localHost";
@@ -100,8 +101,6 @@ const watchCard = (): void => {
     );
 };
 
-const words = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
 /** The dialog, for this window's folder; a folder that has its sandbox already is opened instead. */
 const ask = async (): Promise<void> => {
     const project = host();
@@ -126,7 +125,7 @@ const ask = async (): Promise<void> => {
         }
         preview.value = answer;
     } catch (error) {
-        failure.value = words(error);
+        failure.value = errorMessage(error);
     }
 };
 
@@ -160,7 +159,7 @@ const attach = async (): Promise<`pcSetup` | undefined> => {
             await project.act(`signIn`);
         }
     } catch (error) {
-        failure.value = words(error);
+        failure.value = errorMessage(error);
     } finally {
         attaching.value = false;
     }
@@ -201,7 +200,7 @@ const pressed = async (action: () => Promise<unknown>): Promise<void> => {
     try {
         await action();
     } catch (error) {
-        actionFailure.value = words(error);
+        actionFailure.value = errorMessage(error);
     }
 };
 

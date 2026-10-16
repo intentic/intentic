@@ -1,8 +1,9 @@
 import { mkdir, stat, writeFile } from "node:fs/promises";
+import { undefinedIfMissing } from "@intentic/base/errors";
 
 /* The up marker: touched when a tunnel comes up, removed when it goes down, its mtime the "up since" a card shows. */
 
-export const upSince = async (marker: string): Promise<number | undefined> => (await stat(marker).catch(() => undefined))?.mtimeMs;
+export const upSince = async (marker: string): Promise<number | undefined> => (await stat(marker).catch(undefinedIfMissing))?.mtimeMs;
 
 // The directory is created here with its MODE, 0700, so what a tunnel remembers is readable by the daemon's own
 // user alone; a later mkdir on an existing directory is a no-op that leaves that mode standing.

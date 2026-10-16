@@ -1,6 +1,7 @@
 import { type FileHandle, open } from "node:fs/promises";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { isJsonObject, type JsonObject } from "../store/evolution/conversions.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Reads a JSONL log newest line first, backwards from its end in chunks, and stops at the first line older than the
 // window asked for. A question about the last hour of a 40 MB file reads the last hour, and nothing older ever enters
@@ -127,11 +128,7 @@ export const scanNewestFirst = async (paths: readonly string[], query: ScanQuery
 
 /** One log line as a record, or undefined for a torn line or anything not a JSON object. */
 export const parseRecord = (raw: string): JsonObject | undefined => {
-    try {
-        const parsed: unknown = JSON.parse(raw);
-        return isJsonObject(parsed) ? parsed : undefined;
-    } catch {
-        // allow(silent-catch): a torn line (a truncating prune racing an append) loses one line, never the read.
-        return undefined;
-    }
+    // A torn line (a truncating prune racing an append) loses one line, never the read.
+    const parsed: unknown = parseJsonOr(raw, undefined);
+    return isJsonObject(parsed) ? parsed : undefined;
 };

@@ -220,7 +220,7 @@ describe(`reconcileHostedPool`, () => {
             const del = jest.fn().mockResolvedValue({});
             const calls = stubFetch([{ match: (method, url) => method === `GET` && url.includes(`/machines/`), respond }, ...builderRoutes]);
             const prisma = fakePrisma({ hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([poolRow()]), delete: del } });
-            // oxlint-disable-next-line eslint/no-await-in-loop -- two readings of the same row, one at a time
+            // two readings of the same row, one at a time
             await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
             expect(del).not.toHaveBeenCalled();
             expect(calls.some((entry) => entry.method === `DELETE`)).toBe(false);

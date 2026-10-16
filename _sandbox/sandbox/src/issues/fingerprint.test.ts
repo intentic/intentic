@@ -1,4 +1,4 @@
-import type { IssueReport } from "@intentic/sandbox-contract";
+import type { IssueReport } from "@intentic/sandbox-contract/schemas/issues";
 import { culpritOf, deHash, fingerprintOf, frameOf, framesOf, messageClass, titleOf } from "./fingerprint.js";
 
 // Each case pins one way a bug could over-count (billed once per false split) or under-count (buried in another issue's

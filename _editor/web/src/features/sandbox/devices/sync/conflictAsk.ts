@@ -1,4 +1,5 @@
-import { clearableOnDevice, type DeviceConflict, HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract";
+import { clearableOnDevice, type DeviceConflict } from "@intentic/sandbox-contract/schemas/devices";
+import { HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract/schemas/hosts";
 import { composeAsk } from "@intentic/sandbox-contract/chores";
 import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";

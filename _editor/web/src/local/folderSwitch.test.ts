@@ -18,7 +18,7 @@ const landOnAfterSwitch = jest.fn();
 const setPageTitle = jest.fn();
 
 jest.mock("../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId, refresh }) }));
-jest.mock("../features/sandbox/switching/sandboxScreen", () => ({ landOnAfterSwitch }));
+jest.mock("../models/sandbox/sandboxScreen", () => ({ landOnAfterSwitch }));
 jest.mock("../shell/browser-tab/tabTitle", () => ({ setPageTitle }));
 
 const { ARRIVAL_WAIT_MS, folderDrawn, moveTo, switchTo, takeFolderSwitches } = await import("./folderSwitch");

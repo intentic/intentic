@@ -1,4 +1,4 @@
-import type { TranscriptTool } from "@intentic/sandbox-contract";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { t } from "@intentic/ui/i18n";
 
 // What a tool call is called for someone who doesn't write code: the act in plain words ("Reading a file", "Running

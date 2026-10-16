@@ -1,6 +1,6 @@
 // A session whose socket couldn't be authorized must stay on its retry ladder: nothing else ever reconnects it.
 const socketAddress = jest.fn<() => Promise<{ base: string; query: string } | undefined>>();
-jest.mock("../sandbox/session/wsTicket", () => ({ socketAddress }));
+jest.mock("../../client/sandbox/streams/wsTicket", () => ({ socketAddress }));
 
 const { createTerminalSession, disposeTerminalSession } = await import("./terminalSession");
 const { signalConnection } = await import("../../client/sandbox/useSandbox");

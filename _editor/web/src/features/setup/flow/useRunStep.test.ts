@@ -1,7 +1,7 @@
 import "@intentic/testing/dom";
 import type { SandboxSummary, SetupCode } from "@intentic/api-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { syncFolder } from "@intentic/sandbox-contract";
+import { syncFolder } from "@intentic/sandbox-contract/ids/hostnames";
 import { type EffectScope, effectScope, ref } from "vue";
 import { desktopSetupLink } from "../../../app/environments/desktop";
 import type { desktopInstaller } from "../../../app/environments/desktopDownloads";

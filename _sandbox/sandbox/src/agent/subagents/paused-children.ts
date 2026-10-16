@@ -6,7 +6,7 @@ import { parentOfActor } from "../../auth/principal.js";
 import type { Services } from "../../composition.js";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { openDocument } from "../../store/open-document.js";
-import { type ChildNewsDeps, sayToParent } from "./child-lands.js";
+import { type ChildNewsDeps, sayToParent } from "../../conversations/land/child-lands.js";
 
 // A paused child's end check, across a restart. A spawned child whose turn ended on a wall the sandbox re-runs it past by
 // itself (a spent allowance, a turn that stopped short) is paused, not finished, and its parent was told not to send the

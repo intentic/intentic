@@ -1,6 +1,8 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { GitChange, SessionOwner, TranscriptRow, TurnReach } from "@intentic/sandbox-contract";
-import { readableProviderText } from "../../agent/providers/provider-error-text.js";
+import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
+import type { SessionOwner, TurnReach } from "@intentic/sandbox-contract/schemas/agents";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
+import { readableProviderText } from "../../engines/provider-error-text.js";
 import type { Services } from "../../composition.js";
 import { agentRepoChanges } from "../land/agent-changes.js";
 import type { FoundLine } from "../../sessions/search-index.js";

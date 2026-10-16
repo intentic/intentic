@@ -2,7 +2,7 @@
 import { Button, DisclosureRow, Notice, RowGroup, StatusBadge } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useManifestProblems } from "../../extensions/useManifestProblems";
-import { openWorkspaceRef } from "../../../workspace/files/refs/openFileRef";
+import { openWorkspaceRef } from "../../../../models/workspace/files/openFileRef";
 import { type ManifestRepairAction, manifestNotices } from "./manifestNotice";
 import { useOperation } from "../../../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";

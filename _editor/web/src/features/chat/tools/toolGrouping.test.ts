@@ -1,4 +1,4 @@
-import type { TranscriptTool } from "@intentic/sandbox-contract";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { type ToolGroup, groupConsecutiveTools, groupDiffSummary } from "./toolGrouping";
 
 const tool = (name: string, target?: string, id?: string): TranscriptTool => ({

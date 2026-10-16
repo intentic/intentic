@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
-import type { EnvironmentOffer } from "@intentic/sandbox-contract";
+import type { EnvironmentOffer } from "@intentic/sandbox-contract/schemas/environment";
 import { draftFileName } from "./auto-drafts.js";
 import { renderBlocks, splitBlocks, uniqueBlocks } from "./overlay-blocks.js";
 import type { RuntimeInstallsStore } from "./runtime-installs.js";

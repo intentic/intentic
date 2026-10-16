@@ -1,0 +1,168 @@
+import type { CommandRun } from "@intentic/sandbox-contract/schemas/ci";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import { createRunWatcher, type RunSource } from "./runWatcher";
+
+/* THE WATCHER'S OWN PROMISES, the ones a push rides on: the reveal happens once, at the first state that names a terminal. */
+
+const openFocused = jest.fn();
+jest.mock(`../../terminal/useTerminalPanel`, () => ({ useTerminalPanel: () => ({ openFocused }) }));
+
+const IDLE: CommandRun = { status: `idle`, command: ``, output: `` };
+const running = (session?: string): CommandRun => ({
+    status: `running`,
+    command: `git push origin main`,
+    output: ``,
+    ...(session === undefined ? {} : { session }),
+});
+const passed: CommandRun = { status: `passed`, command: `git push origin main`, output: ``, exitCode: 0, session: `job-push` };
+
+// A source that answers `state` from a script of states (or throws where the script says `throw`), and counts
+// what was asked of it.
+const scripted = (states: readonly (CommandRun | `throw`)[]) => {
+    let next = 0;
+    const calls = { start: 0, cancel: 0, state: 0 };
+    const source: RunSource<CommandRun> = {
+        idle: IDLE,
+        start: async () => {
+            calls.start += 1;
+        },
+        state: async () => {
+            calls.state += 1;
+            const state = states[Math.min(next, states.length - 1)]!;
+            next += 1;
+            if (state === `throw`) {
+                throw new Error(`tunnel dropped`);
+            }
+            return state;
+        },
+        cancel: async () => {
+            calls.cancel += 1;
+        },
+        reveal: (run) => ({ title: `Pushing intentic`, detail: run.command }),
+        says: {
+            startFailed: () => `Could not start the push.`,
+            lostContact: () => `Lost contact with the push.`,
+            stopFailed: () => `Could not stop the push.`,
+        },
+    };
+    return { source, calls };
+};
+
+beforeEach(() => {
+    jest.useFakeTimers();
+    openFocused.mockClear();
+});
+afterEach(() => {
+    jest.useRealTimers();
+});
+
+// Every poll after the first sits behind the interval; this walks the clock past as many as a script needs.
+const settle = async <T>(pending: Promise<T>, polls: number): Promise<T> => {
+    for (let i = 0; i < polls; i += 1) {
+        await advanceTimersByTimeAsync(700);
+    }
+    return pending;
+};
+
+test(`start follows the run to its verdict and opens the terminal once, at the first state that names it`, async () => {
+    const { source, calls } = scripted([running(), running(`job-push`), running(`job-push`), passed]);
+    const watcher = createRunWatcher(source);
+    expect(watcher.run.value).toEqual(IDLE);
+
+    const pending = watcher.start();
+    await advanceTimersByTimeAsync(0);
+    expect(watcher.running.value).toBe(true);
+    expect(watcher.terminal.value).toBeUndefined();
+
+    const settled = await settle(pending, 3);
+    expect(settled).toEqual(passed);
+    expect(watcher.run.value).toEqual(passed);
+    expect(watcher.running.value).toBe(false);
+    expect(calls).toEqual({ start: 1, cancel: 0, state: 4 });
+    expect(openFocused).toHaveBeenCalledTimes(1);
+    expect(openFocused).toHaveBeenCalledWith(`job-push`, { title: `Pushing intentic`, detail: `git push origin main` });
+});
+
+test(`a dropped poll is reported and the follow goes on; the next answer clears it`, async () => {
+    const { source } = scripted([running(`job-push`), `throw`, passed]);
+    const watcher = createRunWatcher(source);
+    const pending = watcher.start();
+    await settle(Promise.resolve(), 1);
+    expect(watcher.error.value).toBe(`tunnel dropped`);
+    expect(watcher.running.value).toBe(true);
+
+    const settled = await settle(pending, 1);
+    expect(settled).toEqual(passed);
+    expect(watcher.error.value).toBeUndefined();
+});
+
+test(`forgetting a run stops the follow and rests, without touching the daemon`, async () => {
+    const { source, calls } = scripted([running(`job-push`)]);
+    const watcher = createRunWatcher(source);
+    const pending = watcher.start();
+    await settle(Promise.resolve(), 2);
+    const asked = calls.state;
+    watcher.forget();
+    expect(await pending).toEqual(IDLE);
+    await settle(Promise.resolve(), 3);
+    expect(calls.state).toBe(asked);
+    expect(calls.cancel).toBe(0);
+    expect(watcher.run.value).toEqual(IDLE);
+});
+
+test(`a start the daemon refused rests with the reason, and asks nothing more`, async () => {
+    const { source, calls } = scripted([passed]);
+    const refusing: RunSource<CommandRun> = {
+        ...source,
+        start: async () => {
+            throw new Error(`503`);
+        },
+    };
+    const watcher = createRunWatcher(refusing);
+    expect(await watcher.start()).toEqual(IDLE);
+    expect(watcher.error.value).toBe(`503`);
+    expect(calls.state).toBe(0);
+});
+
+test(`showTerminal opens the run's terminal again on request, and nothing where there is none`, async () => {
+    const { source } = scripted([passed]);
+    const watcher = createRunWatcher(source);
+    watcher.showTerminal();
+    await advanceTimersByTimeAsync(0);
+    expect(openFocused).not.toHaveBeenCalled();
+    await watcher.start();
+    await advanceTimersByTimeAsync(0);
+    openFocused.mockClear();
+    watcher.showTerminal();
+    // The panel is reached lazily (a dynamic import, see runWatcher.ts), so the open lands a tick later.
+    await advanceTimersByTimeAsync(0);
+    expect(openFocused).toHaveBeenCalledWith(`job-push`, { title: `Pushing intentic`, detail: `git push origin main` });
+});
+
+test(`cancel asks the daemon to stop and keeps a refusal as the error line`, async () => {
+    const { source, calls } = scripted([passed]);
+    const watcher = createRunWatcher(source);
+    await watcher.cancel();
+    expect(calls.cancel).toBe(1);
+    const stubborn = createRunWatcher({
+        ...source,
+        cancel: async () => {
+            throw new Error(`no such run`);
+        },
+    });
+    await stubborn.cancel();
+    expect(stubborn.error.value).toBe(`no such run`);
+});
+
+// A run on another box has no panel here to open (usePushRun.ts aims the ledger's pushes at that box): the
+// source says so by answering no words, and the watcher follows the run without touching the panel.
+test(`a source with no panel to open follows the run and reveals nothing`, async () => {
+    const { source } = scripted([running(`job-push`), passed]);
+    const watcher = createRunWatcher({ ...source, reveal: () => undefined });
+    const settled = await settle(watcher.start(), 1);
+    expect(settled).toEqual(passed);
+    watcher.showTerminal();
+    await advanceTimersByTimeAsync(0);
+    expect(openFocused).not.toHaveBeenCalled();
+    expect(watcher.terminal.value).toBe(`job-push`);
+});

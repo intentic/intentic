@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import { INVENTORY_SERVICES } from "@intentic/capability-catalog";
-import type { InventoryEntry } from "@intentic/sandbox-contract";
+import type { InventoryEntry } from "@intentic/sandbox-contract/schemas/inventory";
 import { Button, Card, ui, ConfirmDialog, InfoHint, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, onMounted, ref, watch } from "vue";
-import SecretField from "../../features/capabilities/connect/secrets/SecretField.vue";
+import SecretField from "../../parts/capabilities/SecretField.vue";
 import { bashCommand } from "../../app/environments/scriptCommand";
 import RunCommand from "../../components/RunCommand.vue";
-import { useCapabilities } from "../../features/capabilities/connect/useCapabilities";
+import { useCapabilities } from "../../models/capabilities/useCapabilities";
 import { useDeployments } from "../../features/extensions/useDeployments";
 import { useInventory } from "../../features/extensions/useInventory";
-import { usePanels } from "../../features/extensions/usePanels";
+import { usePanels } from "../../models/extensions/usePanels";
 import { convergedBadge } from "../../features/extensions/reconcileStatus";
-import { useSecrets } from "../../features/capabilities/connect/secrets/useSecrets";
+import { useSecrets } from "../../models/capabilities/useSecrets";
 import { useWorkspaceState } from "../../features/extensions/useWorkspaceState";
 import { detectActivations, extensionPath } from "../../workbench/views/registry";
 import AddWantDialog from "./AddWantDialog.vue";

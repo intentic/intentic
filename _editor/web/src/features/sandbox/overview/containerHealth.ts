@@ -1,5 +1,5 @@
 import type { SandboxSummary } from "@intentic/api-contract";
-import { type Device, hostRunningSandbox } from "@intentic/sandbox-contract";
+import { type Device, hostRunningSandbox } from "@intentic/sandbox-contract/schemas/devices";
 import { t } from "@intentic/ui/i18n";
 
 // Order is significant: drift outranks duplicate, which outranks unreachable, which outranks refused.

@@ -43,7 +43,7 @@ An extension builds its catalog and translator in one call, `extensionI18n` from
 
 ## Words are built when they are read
 
-`t` reads the active language at the moment it is called. A label table evaluated at module import keeps the language the page booted in, so labels are built inside a function or a `computed`. [`turnBreak.ts`](../../_editor/web/src/features/chat/run/endings/turnBreak.ts) and [`AgentRecovery.vue`](../../_editor/web/src/features/sandbox/agent-settings/behaviour/AgentRecovery.vue) follow this rule.
+`t` reads the active language at the moment it is called. A label table evaluated at module import keeps the language the page booted in, so labels are built inside a function or a `computed`. [`turnBreak.ts`](../../_editor/web/src/models/conversations/endings/turnBreak.ts) and [`AgentRecovery.vue`](../../_editor/web/src/features/sandbox/agent-settings/behaviour/AgentRecovery.vue) follow this rule.
 
 ## Switching language
 

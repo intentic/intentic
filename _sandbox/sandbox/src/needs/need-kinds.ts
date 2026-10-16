@@ -1,4 +1,4 @@
-import type { Need, NeedAnswer, NeedAsk, NeedKind, NeedSecretInputSchema, NeedSubject } from "@intentic/sandbox-contract";
+import type { Need, NeedAnswer, NeedAsk, NeedKind, NeedSecretInputSchema, NeedSubject } from "@intentic/sandbox-contract/schemas/needs";
 import type { z } from "zod";
 import type { TurnStanding } from "../conversations/actor/turn-standing.js";
 

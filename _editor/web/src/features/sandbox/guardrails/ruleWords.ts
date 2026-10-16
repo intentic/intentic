@@ -1,4 +1,4 @@
-import type { CommandClass } from "@intentic/sandbox-contract";
+import type { CommandClass } from "@intentic/sandbox-contract/schemas/agent";
 import { t } from "@intentic/ui/i18n";
 
 // COMMAND_RULE_CATALOG says what each command class does, and what narrows each of its patterns, in English: the safety

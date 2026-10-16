@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, posix, win32 } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { execBounded } from "@intentic/base/process";
+import { parseJsonWith } from "@intentic/base/json";
 import { z } from "zod";
 import { heldDistros, windowsRoot } from "../environments/machine.js";
 import { registeredDistro, WINDOWS_SIDE } from "../environments/wsl.js";
@@ -40,18 +41,12 @@ const SiblingStateSchema = z.object({ pairings: z.array(z.unknown()) });
 const SiblingPairingSchema = z.object({ localDir: z.string(), sandboxId: z.string() });
 
 export const siblingFoldersIn = (raw: string, environment: string): SiblingFolder[] | undefined => {
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(raw);
-    } catch {
-        // allow(silent-catch): a torn file is unread (above), which the caller names
+    // A torn file is unread (above), which the caller names.
+    const state = parseJsonWith(raw, SiblingStateSchema);
+    if (state === undefined) {
         return undefined;
     }
-    const state = SiblingStateSchema.safeParse(parsed);
-    if (!state.success) {
-        return undefined;
-    }
-    return state.data.pairings.flatMap((pairing) => {
+    return state.pairings.flatMap((pairing) => {
         const held = SiblingPairingSchema.safeParse(pairing);
         return held.success ? [{ environment, localDir: held.data.localDir, sandboxId: held.data.sandboxId }] : [];
     });

@@ -1,5 +1,7 @@
-import type { ExtensionSummary, CapabilitySummary, SkillOrigin, SkillSummary } from "@intentic/sandbox-contract";
-import { capabilityMark } from "../../../capabilities/model/tiles";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { SkillOrigin, SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
+import { capabilityMark } from "../../../../models/capabilities/tiles";
 
 // Marks for the skills list, in tiers: a manifest-declared mark from the owning extension or capability card,
 // then a word table for rows with no owner (baked tools, the reader's own skills), then the origin's glyph as a

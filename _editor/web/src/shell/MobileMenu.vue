@@ -5,7 +5,7 @@ import { Avatar, type IconName, Row, RowGroup, SandboxLogo, vAction } from "@int
 import { computed, onMounted } from "vue";
 import { useAudience } from "../app/useAudience";
 import { useAuth } from "../client/auth/useAuth";
-import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
+import { useCapabilities } from "../models/capabilities/useCapabilities";
 import {
     type ActiveExtension,
     activationBadge,
@@ -17,24 +17,24 @@ import {
     WORKSPACE_VIEW_ID,
     DEVICES_VIEW_ID,
 } from "../workbench/views/registry";
-import { sandboxHubPath } from "../features/sandbox/sandboxNav";
-import { DEVICES_PATH } from "../features/sandbox/devices/deviceLinks";
+import { sandboxHubPath } from "../models/sandbox/sandboxNav";
+import { DEVICES_PATH } from "../models/sandbox/devices/deviceLinks";
 import { devicesWorking } from "../features/sandbox/devices/runners/deviceWork";
 import { useVocabulary } from "../workbench/views/vocabulary";
 import { badgeChip, badgeClass, badgeToneClass, RUNNING_MARK_CLASS } from "../workbench/views/viewBadge";
-import { usePanels } from "../features/extensions/usePanels";
+import { usePanels } from "../models/extensions/usePanels";
 import { useRole } from "../client/sandbox/useRole";
 import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttention";
 import { useRebuildOffer } from "../features/sandbox/environment/rebuild/useRebuildOffer";
 import { identityHue } from "../lib/identityHue";
 import { presenceActivity, presenceOthers } from "../workbench/presence/usePresence";
 import { useSandbox } from "../client/sandbox/useSandbox";
-import { connectedSandboxes, unfinishedSandboxes } from "../features/sandbox/live/roster";
+import { connectedSandboxes, unfinishedSandboxes } from "../models/sandbox/live/roster";
 import { sandboxAvailabilityVisual } from "../features/sandbox/overview/availability";
 import { placementOf, type SandboxPlacement } from "../features/sandbox/overview/placement";
 import { useSandboxPlacement } from "../features/sandbox/overview/useSandboxPlacement";
 import { useSandboxAvailability } from "../features/sandbox/overview/useSandboxAvailability";
-import { useWorkspaceTree } from "../features/workspace/explorer/useWorkspaceTree";
+import { useWorkspaceTree } from "../models/workspace/tree/useWorkspaceTree";
 import { environment } from "../app/environments/environment";
 import { usePushNotifications } from "../workbench/push/usePushNotifications";
 import { pushMenuRow } from "./pushMenuRow";

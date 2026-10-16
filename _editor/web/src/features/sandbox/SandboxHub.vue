@@ -11,10 +11,10 @@ import {
     sandboxEmbedOf,
     sandboxKeyAllowed,
     sandboxSectionGroups,
-} from "./sandboxNav";
-import { useCapabilities } from "../capabilities/connect/useCapabilities";
-import { useExtensions } from "../extensions/useExtensions";
-import { usePanels } from "../extensions/usePanels";
+} from "../../models/sandbox/sandboxNav";
+import { useCapabilities } from "../../models/capabilities/useCapabilities";
+import { useExtensions } from "../../models/extensions/useExtensions";
+import { usePanels } from "../../models/extensions/usePanels";
 import { useRegistry } from "../extensions/useRegistry";
 import { useHostedBuild } from "./secrets/useHostedBuild";
 import { useRole } from "../../client/sandbox/useRole";
@@ -29,11 +29,11 @@ import SandboxAgent from "./overview/SandboxAgent.vue";
 import SandboxModels from "./models/SandboxModels.vue";
 import { sourcesNeedingSomeone } from "./models/modelSources";
 import { useModelSources } from "./models/useModelSources";
-import { providerDisplayLabel } from "../chat/accounts/providerCatalog";
-import { useChat } from "../chat/run/useChat";
+import { providerDisplayLabel } from "../../models/providers/providerCatalog";
+import { useChat } from "../../models/conversations/run/useChat";
 import SandboxEnvironment from "./environment/SandboxEnvironment.vue";
 import SandboxExtensions from "./extensions/SandboxExtensions.vue";
-import { toListing, updateCount } from "./extensions/discoverListing";
+import { toListing, updateCount } from "../../models/sandbox/discoverListing";
 import SandboxPersonas from "./personas/SandboxPersonas.vue";
 import SandboxAreas from "./areas/SandboxAreas.vue";
 import SandboxAudit from "./audit/SandboxAudit.vue";

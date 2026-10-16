@@ -1,13 +1,13 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
-import { usePanels } from "../extensions/usePanels";
+import { usePanels } from "../../models/extensions/usePanels";
 import { APPS, rpcPrefix } from "../../lib/queryKeys";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
-import { stopJob } from "../agents/fleet/useAgents-actions";
-import { usePorts } from "../sandbox/environment/usePorts";
+import { stopJob } from "../../models/fleet/useAgents-actions";
+import { usePorts } from "../../models/sandbox/environment/usePorts";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
-import { usePublicOutbox } from "../workspace/push/usePublicOutbox";
-import { appTargets, mergeTargets, portTargets, type PreviewTarget, portTargetId, publicTarget, repoTargets } from "./previewModel";
+import { usePublicOutbox } from "../../models/workspace/push/usePublicOutbox";
+import { appTargets, mergeTargets, portTargets, type PreviewTarget, portTargetId, publicTarget, repoTargets } from "../../models/preview/previewModel";
 
 // The live list. `active` gates the per-monorepo apps fan-out while the panel is mounted (same economy as
 // useWorkspaceApps); panels/outbox ride reads the shell holds. No clock: the daemon's runtime push invalidates panels

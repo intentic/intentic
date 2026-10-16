@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { type Capability, DEFAULT_PRIVACY_SHIELD, type PrivacyLedgerEntry, type PrivacyShieldPolicy } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { DEFAULT_PRIVACY_SHIELD, type PrivacyLedgerEntry, type PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
 import type { JsonFile } from "../store/json-file.js";
 import { memoryPrivacyImages } from "./privacy-images.js";
 import type { PrivacyLedger } from "./privacy-ledger.js";

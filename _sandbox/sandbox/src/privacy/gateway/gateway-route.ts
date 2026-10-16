@@ -1,4 +1,4 @@
-import type { PersonalDataClass, PrivacyLedgerAction, PrivacyShieldPolicy } from "@intentic/sandbox-contract";
+import type { PersonalDataClass, PrivacyLedgerAction, PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
 import type { Context } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import { REQUEST_REFRAMED, RESPONSE_REFRAMED, forwardHeaders } from "../../http/forward-headers.js";

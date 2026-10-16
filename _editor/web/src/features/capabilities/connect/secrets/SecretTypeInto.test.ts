@@ -4,7 +4,7 @@
 import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { computed, createApp, h, nextTick, ref } from "vue";
-import type { SandboxKeyring, SecretInventoryEntry } from "@intentic/sandbox-contract";
+import type { SandboxKeyring, SecretInventoryEntry } from "@intentic/sandbox-contract/schemas/secrets";
 import { type SecretRow, secretRow } from "../../../sandbox/secrets/secretRows";
 import { IconStub } from "@intentic/ui/testing";
 

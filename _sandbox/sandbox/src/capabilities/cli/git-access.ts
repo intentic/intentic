@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { CliConfig } from "@intentic/sandbox-contract";
+import type { CliConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { createHash } from "node:crypto";
 import { access, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";

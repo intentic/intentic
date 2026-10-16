@@ -1,12 +1,13 @@
 import { getEventListeners } from "node:events";
-import type { AgentEvent, UsageWindow } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import { collect } from "../../harness/route-client.testing.js";
 import { OPENING_CHECKS_PREAMBLE, recordingLogger } from "../../harness/route-fakes.testing.js";
 import { codexConnectedProxy, recordingTurnStores, services, withTranslator } from "../../harness/route-services.testing.js";
 import type { ConversationEvent } from "../../conversations/actor/conversation-decide.js";
-import { notedFleet } from "../../testing.js";
+import { notedFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { recordProviderSuccess } from "../providers/provider-health.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import type { AgentRequest } from "../providers/agent-request.js";

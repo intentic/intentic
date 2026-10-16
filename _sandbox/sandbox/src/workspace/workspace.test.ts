@@ -1,6 +1,6 @@
 import { join, relative } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { INVENTORY_PATH } from "@intentic/sandbox-contract";
+import { INVENTORY_PATH } from "@intentic/sandbox-contract/schemas/inventory";
 import { CONFIG_FILE, REPO_ROLES } from "@intentic/scaffold";
 import { workspacePaths } from "./workspace.js";
 

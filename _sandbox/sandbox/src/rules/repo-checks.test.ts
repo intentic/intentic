@@ -1,4 +1,4 @@
-import type { Rule } from "@intentic/sandbox-contract";
+import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import {
     adoptedRules,
     agreedChecks,

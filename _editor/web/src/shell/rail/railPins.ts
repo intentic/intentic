@@ -1,6 +1,7 @@
+import { parseJsonWith } from "@intentic/base/json";
 import { computed, type ComputedRef, shallowRef } from "vue";
 import { z } from "zod";
-import { storedValue, storeValue } from "../../lib/browserStorage";
+import { storedValue, storeValue } from "../../app/storage/browserStorage";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 
 // A reader's per-tile override of the default rail table (registry.ts's `RAIL_GROUPS`), for the one tile the
@@ -17,12 +18,7 @@ const readPins = (sandboxId: string | undefined): ReadonlySet<string> => {
         return new Set();
     }
     // An unreadable payload isn't a preference: falls back to the default table rather than a half-parsed list.
-    try {
-        const parsed = StoredPinsSchema.safeParse(JSON.parse(raw) as unknown);
-        return new Set(parsed.success ? parsed.data : []);
-    } catch {
-        return new Set();
-    }
+    return new Set(parseJsonWith(raw, StoredPinsSchema) ?? []);
 };
 
 // Bumped on every write and read by `pinned` purely to invalidate it, since localStorage isn't reactive.

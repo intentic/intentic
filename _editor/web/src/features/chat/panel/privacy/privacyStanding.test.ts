@@ -1,4 +1,5 @@
-import { ACP, CLAUDE_CODE, CURSOR, DEFAULT_PRIVACY_SHIELD, type PrivacyShieldPolicy, type PrivacyShieldStatus } from "@intentic/sandbox-contract";
+import { ACP, CLAUDE_CODE, CURSOR } from "@intentic/sandbox-contract/models/agent-runtimes";
+import { DEFAULT_PRIVACY_SHIELD, type PrivacyShieldPolicy, type PrivacyShieldStatus } from "@intentic/sandbox-contract/schemas/privacy";
 import { privacyStanding } from "./privacyStanding";
 
 const statusOf = (policy: Partial<PrivacyShieldPolicy>): PrivacyShieldStatus => ({

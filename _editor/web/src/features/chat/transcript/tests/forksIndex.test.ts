@@ -1,5 +1,5 @@
-import { NO_ATTENTION } from "../../../agents/fleet/agentStatus";
-import type { FleetAgent } from "../../../agents/fleet/useAgents-fleet";
+import { NO_ATTENTION } from "../../../../models/agent-status/agentStatus-lanes";
+import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import { forksAt } from "../forksIndex";
 
 const fork = (id: string, conversationId: string, index: number): FleetAgent => ({

@@ -25,7 +25,7 @@ export interface Teardown {
 export const tearDown = async (teardown: Teardown): Promise<string | undefined> => {
     const { failed, unfinished } = await teardown.disposeWithin(STOP_DEADLINE_MS);
     const problems = [
-        ...failed.map((error) => (error instanceof Error ? error.message : String(error))),
+        ...failed.map((error) => errorMessage(error)),
         ...(unfinished > 0 ? [`${unfinished} still stopping after ${STOP_DEADLINE_MS} ms`] : []),
     ];
     return problems.length === 0 ? undefined : problems.join("; ");

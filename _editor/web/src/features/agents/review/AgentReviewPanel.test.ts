@@ -2,10 +2,10 @@
 // rows that all looked alike, forcing the reader to match strings by eye. The fix (conflicted rows pinned above every
 // repo, a glyph per row, a narrowing filter) is entirely in what renders, so only rendering can pin it.
 import "@intentic/testing/dom";
-import type { WorkspaceModule, AgentChanges, AgentHistory } from "@intentic/sandbox-contract";
+import type { WorkspaceModule, AgentChanges, AgentHistory } from "@intentic/sandbox-contract/schemas/git/git";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick, ref, type Ref } from "vue";
-import { CONFLICT_ICON } from "./conflictResolution";
+import { CONFLICT_ICON } from "../../../models/conversations/review/conflictResolution";
 import { useAgentChanges } from "./useAgentChanges";
 import { useKeybindings } from "../../../workbench/commands/useKeybindings";
 import { queryClient } from "../../../lib/queryPersistence";
@@ -32,7 +32,7 @@ const { default: AgentReviewPanel } = await import("./AgentReviewPanel.vue");
 // The comment toggle that decides which reading every badge prints, imported once globals are in place.
 const { showComments, toggleShowComments } = (await import("../../../workbench/window/useLayout")).useLayout();
 // The other list preference: size order vs. path order.
-const { largestFirst } = (await import("../../workspace/changes/changeWeight")).useChangeWeight();
+const { largestFirst } = (await import("../../../models/workspace/changes/changeWeight")).useChangeWeight();
 
 const AGENT = `a1`;
 // A refused land as the daemon reports it: nothing landed (atomic), two of five files blocked for two different

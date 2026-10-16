@@ -79,7 +79,7 @@ export const stampHostedOwners = async (
     let failed = 0;
     for (const entry of entries) {
         try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one small write per machine, gentle on a rate-limited API
+            // one small write per machine, gentle on a rate-limited API
             await setMachineMetadata(config.hosted.flyApiToken, entry.appName, entry.machineId ?? ``, FLY_META_OWNER, entry.owner ?? ``);
             stamped += 1;
             report(`stamped ${entry.appName} -> ${entry.owner ?? ``}`);

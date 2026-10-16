@@ -1,13 +1,7 @@
-import {
-    type AgentSummary,
-    type CiMainFailure,
-    type FixStance,
-    fixStance,
-    isPipelineInFlight,
-    latestFixAttempt,
-    type MainFailureHandBack,
-    type PipelineRun,
-} from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { type CiMainFailure, isPipelineInFlight, type MainFailureHandBack, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import { type FixStance, fixStance } from "@intentic/sandbox-contract/state/fix-stance";
+import { latestFixAttempt } from "@intentic/sandbox-contract/ids/conversation-ids";
 
 // A MAIN-LINE BRANCH WHOSE CI FAILS, AND ITS ONE FIX AGENT, as the board draws it: one incident block at the head of its
 // repository's runs, holding the runs it is about (coveredRuns). The daemon keeps the failure (`ci.runs` `failures`,

@@ -1,8 +1,10 @@
 import { mapPool } from "@intentic/base/async";
-import { lstat, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Logger } from "pino";
 import type { HistoryGitRunner } from "./history.js";
+import { undefinedIfMissing } from "@intentic/base/errors";
+import { readTextIfExists } from "@intentic/base/fs";
 
 // Files past this size stay out of history snapshots. A snapshot stores a full copy of every file it records, so a
 // folder of films dropped into /work (30 GB of them, once) was hashed and written a second time onto the history
@@ -33,8 +35,8 @@ export const literalPattern = (path: string): string | undefined => {
 const unescapePattern = (line: string): string => line.slice(1).replaceAll(/\\(.)/gu, "$1");
 
 const sizeOf = async (worktree: string, path: string): Promise<number> => {
-    // allow(silent-catch): a path gone since it was listed is one there is nothing to leave out of.
-    const entry = await lstat(join(worktree, path)).catch(() => undefined);
+    // A path gone since it was listed is one there is nothing to leave out of.
+    const entry = await lstat(join(worktree, path)).catch(undefinedIfMissing);
     return entry?.isFile() === true ? entry.size : 0;
 };
 
@@ -55,8 +57,8 @@ export const leaveOutLargeFiles = async (
 ): Promise<void> => {
     const listPath = largeFilesList(scope.gitDir);
     try {
-        // allow(silent-catch): a scope that never had a large file has no list yet.
-        const listed = new Set((await readFile(listPath, "utf8").catch(() => "")).split("\n").filter((line) => line.startsWith("/")).map(unescapePattern));
+        // A scope that never had a large file has no list yet.
+        const listed = new Set(((await readTextIfExists(listPath)) ?? "").split("\n").filter((line) => line.startsWith("/")).map(unescapePattern));
         // What `add -A` would stage: files nothing ignores (this list included), and recorded files changed since.
         const untracked = nulList((await git([...largeFilesConfig(scope.gitDir), "ls-files", "-z", "-o", "--exclude-standard"], run)).stdout);
         const changed = new Set(nulList((await git(["ls-files", "-z", "-m"], run)).stdout));

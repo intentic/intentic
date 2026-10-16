@@ -1,4 +1,4 @@
-import { ManifestProblemsSchema } from "@intentic/sandbox-contract";
+import { ManifestProblemsSchema } from "@intentic/sandbox-contract/schemas/system";
 
 /* The wire shape the notice is built from. */
 

@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import { type DeviceReport, isProjectDirName, projectDirNameOf } from "@intentic/sandbox-contract";
+import type { DeviceReport } from "@intentic/sandbox-contract/schemas/devices";
+import { isProjectDirName, projectDirNameOf } from "@intentic/sandbox-contract/ids/project-dir";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import type { JsonFile } from "../store/json-file.js";

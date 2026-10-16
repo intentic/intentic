@@ -2,13 +2,9 @@ import { writeFile } from "node:fs/promises";
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import { pathExists } from "@intentic/base/fs";
+import { DISCARDABLE_SIDES, isWholeRepo, scopedPaths, STAGEABLE_SIDES, UNSTAGEABLE_SIDES } from "@intentic/sandbox-contract/schemas/git/git-scope";
+import { gitContract } from "@intentic/sandbox-contract/contracts/git.contract";
 import {
-    DISCARDABLE_SIDES,
-    gitContract,
-    isWholeRepo,
-    scopedPaths,
-    STAGEABLE_SIDES,
-    UNSTAGEABLE_SIDES,
     type GitChange,
     type GitChanges,
     type GitDiffSide,
@@ -18,7 +14,7 @@ import {
     type ScratchPath,
     type OriginAgent,
     type RepoChanges,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/git/git";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";

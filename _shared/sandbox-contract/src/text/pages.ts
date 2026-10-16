@@ -2,6 +2,7 @@
 // daemon's headless check (agent/pages/page-check.ts), which lays the page out the way the chat will, and the chat's
 // own frame (the editor's chat/transcript/pages). A page runs its scripts in a frame with an opaque origin and no
 // network: the policy below is the whole of what it may load, and the bootstrap is the whole of what it may say.
+import { parseJsonOr } from "@intentic/base/json";
 
 // Everything a sealed page may load is already inside it: its own inline scripts and styles, and pictures, fonts and
 // media carried in as data. Nothing reaches the network, another frame, or a form target.
@@ -331,13 +332,10 @@ export const readMcpAppData = (html: string): McpAppData | undefined => {
     if (match === null) {
         return undefined;
     }
-    try {
-        const data = JSON.parse(match[1] ?? ``) as Partial<McpAppData>;
-        return typeof data.server === `string` && typeof data.tool === `string` ? { server: data.server, tool: data.tool, input: data.input, result: data.result } : undefined;
-    } catch {
-        // allow(silent-catch): a block that does not parse is not an app's, as the comment on this function says.
-        return undefined;
-    }
+    // A block that does not parse is not an app's, as the comment on this function says.
+    // SAFETY: server and tool are checked by type below; input and result are opaque to this reader.
+    const data = parseJsonOr(match[1] ?? ``, undefined) as Partial<McpAppData> | null | undefined;
+    return typeof data?.server === `string` && typeof data.tool === `string` ? { server: data.server, tool: data.tool, input: data.input, result: data.result } : undefined;
 };
 
 // A page's answer as the agent is handed it: JSON text, whatever the page sent, refused past the cap rather than cut.

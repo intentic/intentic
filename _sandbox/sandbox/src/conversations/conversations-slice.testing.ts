@@ -2,13 +2,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { IN_MEMORY } from "@intentic/base/sqlite";
+import { askRoleModel, roleModelIsSet } from "../agent/models/role-model.js";
 import { streamAgent } from "../agent/run/stream-agent.js";
+import { cancelFamily, familyOf } from "../agent/subagents/children.js";
+import { cancelWatchersFor } from "../agent/verification/watchers.js";
 import { turnDoors } from "../agent/run/turn/turn-doors.js";
 import type { SliceFakeContext } from "../harness/slice-fake.testing.js";
 import { claudeStoreOf } from "../sessions/session-store.js";
 import { openConversationsDb } from "../store/conversations-db.js";
 import { conversationUnits } from "../store/conversation-units.js";
-import { fleetStoreOver, memoryFleet, noIsolation } from "../testing.js";
+import { fleetStoreOver, memoryFleet } from "./registry/agents-registry.testing.js";
+import { noIsolation } from "./worktrees/isolation.testing.js";
 import { parkedCards } from "./actor/parked-cards.js";
 import { sqliteAgentsStore } from "./registry/agents-store.js";
 import type { ConversationsSlice } from "./conversations-slice.js";
@@ -92,5 +96,6 @@ export const conversationsSliceFake = (context: SliceFakeContext) => {
         agentOrigins: { forRepo: async () => ({}), identify: () => ({}), metrics: () => ({}) },
         // The engine's own doors over these services, as composition binds them.
         turns: turnDoors(context.self, (input, signal) => streamAgent(context.self(), input, signal)),
+        turnEngine: { askRoleModel, roleModelIsSet, familyOf, cancelFamily, cancelWatchersFor },
     } satisfies Partial<ConversationsSlice>;
 };

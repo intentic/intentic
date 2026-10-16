@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
 import type { Services } from "../../composition.js";
-import { isolatedAgent } from "../../testing.js";
+import { isolatedAgent } from "../../conversations/registry/agents-store.testing.js";
 import { taskStoreDir } from "../run/task-store.js";
 import { HANDOFF_STATE_NOTE_TITLE, type HandoffStateDeps, handoffStateNote } from "./handoff-state.js";
 

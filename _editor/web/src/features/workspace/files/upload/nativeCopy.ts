@@ -2,7 +2,7 @@ import { MANIFESTS } from "@intentic/workspace-setup";
 import { desktopApp } from "../../../../app/environments/desktop";
 import { useEndpoint } from "../../../../client/endpoint/useEndpoint";
 import { currentSandboxTarget } from "../../../../client/sandbox/sandboxTarget";
-import { DROP_SKIP } from "../../explorer/transfer/dropEntries";
+import { DROP_SKIP } from "../../../../models/workspace/tree/dropEntries";
 
 // A big drop handed to the desktop app, which copies it into a sandbox on this same computer itself: it walks the
 // dropped folders on disk and streams them into the sandbox's container (the app's drop_copy.rs), where the page would

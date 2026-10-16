@@ -1,5 +1,5 @@
-import type { ChoreLedgerEntry, ProbeId, ProbeResult } from "@intentic/sandbox-contract";
-import { ChoreLedgerEntrySchema, ProbeResultSchema } from "@intentic/sandbox-contract";
+import type { ChoreLedgerEntry, ProbeId, ProbeResult } from "@intentic/sandbox-contract/schemas/maintenance";
+import { ChoreLedgerEntrySchema, ProbeResultSchema } from "@intentic/sandbox-contract/schemas/maintenance";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument, openEntries } from "../store/open-document.js";

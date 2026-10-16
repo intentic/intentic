@@ -1,7 +1,7 @@
 import { conversationReader, registryProvenance } from "../auth/scope/conversation-reader.js";
 import { noteAudit } from "../audit/audit-http.js";
 import { errorMessage } from "@intentic/base/errors";
-import { privacyContract } from "@intentic/sandbox-contract";
+import { privacyContract } from "@intentic/sandbox-contract/contracts/privacy.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";

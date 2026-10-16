@@ -4,12 +4,13 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { writeFileAtomic } from "@intentic/base/fs";
+import { readTextIfExists, writeFileAtomic } from "@intentic/base/fs";
 import { runBounded } from "@intentic/base/process";
 import { withManagedInclude, withoutManagedIncludes } from "@intentic/base/ssh-config";
 import { REFERENCE_DIR, STATE_DIR } from "@intentic/constants";
 import { homeDir, type Log, writeSecretFile } from "@intentic/local-agent";
-import { SshHostKeySchema, STATE_GROUPS, stateGroupPaths, UNBACKED_STATE_PATHS } from "@intentic/sandbox-contract";
+import { SshHostKeySchema } from "@intentic/sandbox-contract/schemas/devices";
+import { STATE_GROUPS, stateGroupPaths, UNBACKED_STATE_PATHS } from "@intentic/sandbox-contract/state/workspace-state";
 import { baseDir } from "../config.js";
 import {
     isProjectPairing,
@@ -281,7 +282,7 @@ export const writeManagedSshConfig = async (fragment: string): Promise<void> => 
 // Undo exactly what writeManagedSshConfig did, our fragment and our include line, nothing else of the user's.
 export const removeManagedSshConfig = async (): Promise<void> => {
     await rm(sshConfigPath, { force: true });
-    const current = await readFile(userSshConfigPath, "utf8").catch(() => "");
+    const current = (await readTextIfExists(userSshConfigPath)) ?? "";
     const stripped = stripManagedIncludes(current);
     if (stripped !== current) {
         // Atomic for the same reason as the write above: this is the user's whole ssh config.

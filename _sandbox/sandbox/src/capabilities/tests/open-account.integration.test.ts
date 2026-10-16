@@ -1,4 +1,4 @@
-import type { BrowserConfig, Capability } from "@intentic/sandbox-contract";
+import type { BrowserConfig, Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { tempWorkspace } from "../../harness/route-fakes.testing.js";
 import { fakeFiles } from "../../workspace/workspace-slice.testing.js";
 import { services } from "../../harness/route-services.testing.js";

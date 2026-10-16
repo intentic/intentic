@@ -1,4 +1,5 @@
-import type { ExitConfig, ExitObservation, ExitPoint, ExitState, IntenticLine } from "@intentic/sandbox-contract";
+import type { ExitConfig, ExitObservation, ExitPoint, ExitState } from "@intentic/sandbox-contract/schemas/exit";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 
 // Per-provider SPI behind the `exit` capability: how a driver's own pool of exits is listed, brought up, moved, and
 // read back.

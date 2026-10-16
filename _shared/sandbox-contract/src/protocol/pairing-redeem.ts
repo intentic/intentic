@@ -68,7 +68,7 @@ export const redeemWhileWarming = async (
         return { kind: "answered", response };
     } catch (error) {
         if (signal?.aborted === true) {
-            // oxlint-disable-next-line typescript/only-throw-error -- the stop's own reason, as an aborted fetch rejects with it
+            // the stop's own reason, as an aborted fetch rejects with it
             throw signal.reason;
         }
         if (error instanceof Warming) {

@@ -1,13 +1,7 @@
-import {
-    type Fence,
-    fenceAllows,
-    fenceReaches,
-    type PresenceUser,
-    type SandboxMetrics,
-    type SubagentSession,
-    type SystemEvent,
-    type TreeChanged,
-} from "@intentic/sandbox-contract";
+import { type Fence, fenceAllows, fenceReaches } from "@intentic/sandbox-contract/policy/fence-paths";
+import type { PresenceUser, SystemEvent, TreeChanged } from "@intentic/sandbox-contract/events/system-events";
+import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
 import { ORPCError } from "@orpc/server";
 import type { PersistedAgent } from "../conversations/registry/agents-store.js";
 import type { Caller } from "./auth.js";

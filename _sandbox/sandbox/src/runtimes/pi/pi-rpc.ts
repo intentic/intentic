@@ -5,7 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { whenAborted } from "@intentic/base/async";
-import type { AcpAgentConfig } from "@intentic/sandbox-contract";
+import type { AcpAgentConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { AgentTool } from "../../agent/tools/agent-tools.js";
 import type { NamespaceEntryReference } from "../../workload/namespace-entry.js";
 import { namespaceTargetOf, nsenterArgv } from "../../workload/namespace-entry.js";
@@ -17,6 +17,7 @@ import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { jsonLines, outputTail } from "../stdio/child-output.js";
 import { createHookSocket, type HookEndpoint } from "../daemon-tools/hook-socket.js";
 import { PI_EXTENSION_SOURCE, PI_TURN_ENV, type PiTurnFile } from "./pi-extension.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Pi RPC transport: spawns `<command> --mode rpc` and speaks its strict-LF JSONL protocol over stdio. Commands carry a
 // minted `id`; the matching `{type:"response", id}` line resolves it, everything else on stdout is an event handed
@@ -271,10 +272,8 @@ export const piSpawner = (sessionDir: string): PiSpawn => {
         };
 
         const onLine = (line: string): void => {
-            let parsed: unknown;
-            try {
-                parsed = JSON.parse(line);
-            } catch {
+            const parsed = parseJsonOr(line, undefined);
+            if (parsed === undefined) {
                 return; // Not protocol output: Pi promises JSONL, so a stray line is noise, not a frame.
             }
             const record = parsed as { type?: unknown; id?: unknown } & Record<string, unknown>;

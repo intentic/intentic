@@ -2,11 +2,11 @@
 // member below the write tier sees in the explorer, not just the daemon's 403.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import { ACTIVE_KEY, activeSandboxId } from "../../../../lib/activeSandbox";
+import { ACTIVE_KEY, activeSandboxId } from "../../../../app/storage/activeSandbox";
 import * as actualSandboxRpc from "../../../../client/sandbox/sandboxRpc";
 import type { ProcedureName } from "../../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
@@ -54,7 +54,7 @@ jest.mock("../../../../client/sandbox/useRole", () => {
 });
 
 const { default: WorkspaceTree } = await import("../WorkspaceTree.vue");
-const { useWorkspaceTree } = await import("../useWorkspaceTree");
+const { useWorkspaceTree } = await import("../../../../models/workspace/tree/useWorkspaceTree");
 const { queryClient } = await import("../../../../lib/queryPersistence");
 
 const file = (path: string): WorkspaceTreeEntry => ({ name: path.slice(path.lastIndexOf(`/`) + 1), path, type: `file` });

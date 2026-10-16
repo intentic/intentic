@@ -1,4 +1,9 @@
-import type { ListenerDispatchFrame, ListenerPlanItem, ListenerStep, ListenerTurnOpened } from "@intentic/sandbox-contract";
+import type {
+    ListenerDispatchFrame,
+    ListenerPlanItem,
+    ListenerStep,
+    ListenerTurnOpened,
+} from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 
 // What a chat shows of a turn while it works, folded from the daemon's dispatch frames: the turn it opened, the agent's
 // steps in the order they began, its checklist, and whether it is writing its reply right now. Pure state and wording,

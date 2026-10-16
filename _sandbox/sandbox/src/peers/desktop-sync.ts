@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { within } from "@intentic/base/async";
 import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
-import { type DeviceReport, environmentOf } from "@intentic/sandbox-contract";
+import { type DeviceReport, environmentOf } from "@intentic/sandbox-contract/schemas/devices";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { tokenEquals } from "../auth/auth.js";
@@ -101,7 +101,7 @@ export const distinctLabels = (enrollments: readonly SyncEnrollment[]): SyncEnro
             [base, ...[2, 3, 4, 5, 6, 7, 8, 9].map((count) => `${base}-${count}`)].find((candidate) => !taken.has(candidate)) ??
             `${base}-${Date.now()}`;
         taken.add(machine);
-        // oxlint-disable-next-line oxc/no-map-spread -- Each enrollment update creates a fresh record.
+        // Each enrollment update creates a fresh record.
         return { ...entry, machine };
     });
 };
@@ -236,7 +236,7 @@ export const verifySyncToken = async (historyRoot: string, presented: string, ch
     const now = Date.now();
     if (checkedIn && (matched.seenAt === undefined || now - matched.seenAt >= SEEN_THROTTLE_MS)) {
         await persist(historyRoot, (current) =>
-            // oxlint-disable-next-line oxc/no-map-spread -- Each enrollment update creates a fresh record.
+            // Each enrollment update creates a fresh record.
             current.map((entry) => (entry.key === matched.key ? { ...entry, seenAt: now } : entry)),
         );
     }
@@ -311,7 +311,7 @@ export const recordDeviceReport = async (historyRoot: string, presented: string,
         await persist(historyRoot, (current) =>
             distinctLabels(
                 current.map((entry) =>
-                    // oxlint-disable-next-line oxc/no-map-spread -- Each enrollment update creates a fresh record.
+                    // Each enrollment update creates a fresh record.
                     entry.key === matched.key
                         ? { ...entry, machineId: report.machineId, ...(environment === undefined ? {} : { environment }) }
                         : entry,

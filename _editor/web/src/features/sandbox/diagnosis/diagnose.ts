@@ -1,5 +1,6 @@
 import type { HostReport, HostedStatus } from "@intentic/api-contract";
-import { CRASH_LOOP_RESTARTS, type EdgeVerdict, type SandboxVitals } from "@intentic/sandbox-contract";
+import { CRASH_LOOP_RESTARTS } from "@intentic/sandbox-contract/state/update-probation";
+import type { EdgeVerdict, SandboxVitals } from "@intentic/sandbox-contract/netd/generated/browser-wire";
 import type { ConnectionFailure } from "../../../client/sandbox/connection";
 
 // WHY A SANDBOX ISN'T ANSWERING, as a pure function of what could be observed while it wasn't. The connection machine

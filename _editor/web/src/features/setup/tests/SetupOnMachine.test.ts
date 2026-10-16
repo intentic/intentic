@@ -1,7 +1,7 @@
 // Setting a new sandbox up on a computer of the owner's that is already connected: one press per such machine, which
 // runs the same `ic sandbox connect` the command would, with this row's code, through the sandbox that reaches it.
 import "@intentic/testing/dom";
-import type { Device } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 import { installI18n } from "@intentic/ui/i18n";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
@@ -13,7 +13,7 @@ const relays = ref<{ sandboxId: string; devices: Device[] }[]>([]);
 const look = jest.fn(async () => {});
 jest.mock(`../../sandbox/live/useDeviceRelays`, () => ({ useDeviceRelays: () => ({ relays: computed(() => relays.value), looking: ref(false), look }) }));
 const manageDeviceSandbox = jest.fn(async () => `Set up.`);
-jest.mock(`../../sandbox/devices/useDevices`, () => ({ manageDeviceSandbox }));
+jest.mock(`../../../models/sandbox/devices/useDevices`, () => ({ manageDeviceSandbox }));
 
 const { default: SetupOnMachine } = await import("../SetupOnMachine.vue");
 

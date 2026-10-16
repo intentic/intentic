@@ -4,14 +4,15 @@ import type {
     AutomationTarget,
     AutomationTemplate,
     FireOn,
-    ModelPin,
     SenderRule,
     Senders,
     WatchSource,
     WebchatConfig,
     WorkspaceEventKind,
-} from "@intentic/sandbox-contract";
-import { AutomationSchema, VISITOR_CHAT_PERSONA, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/automations";
+import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import { AutomationSchema, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract/schemas/automations";
+import { VISITOR_CHAT_PERSONA } from "@intentic/sandbox-contract/schemas/personas";
 import { asZone, cronOptions, type Zone } from "@intentic/sandbox-contract/time";
 import { Cron } from "croner";
 import { computed, type ComputedRef, reactive, watch } from "vue";

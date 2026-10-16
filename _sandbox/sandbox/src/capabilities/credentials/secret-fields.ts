@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { ResolvedContribution } from "../contributions.js";
 import { registry } from "../registry.js";
 

@@ -1,4 +1,4 @@
-import { issuesContract } from "@intentic/sandbox-contract";
+import { issuesContract } from "@intentic/sandbox-contract/contracts/issues.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";

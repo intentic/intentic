@@ -1,7 +1,8 @@
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
+import { parseJsonWith } from "@intentic/base/json";
 import type { Log } from "@intentic/local-agent";
-import type { DeviceSandbox } from "@intentic/sandbox-contract";
+import type { DeviceSandbox } from "@intentic/sandbox-contract/schemas/devices";
 import { z } from "zod";
 import { readMachineConfig } from "../../environments/machine.js";
 import { type IcRun, lastLine, newRoundState, type RoundState, type Rounds, runRound, startRounds } from "./ic-rounds.js";
@@ -40,15 +41,7 @@ const BackupAnswerSchema = z.object({
     reason: z.string().optional(),
 });
 
-const backupAnswer = (line: string): z.infer<typeof BackupAnswerSchema> | undefined => {
-    try {
-        const parsed = BackupAnswerSchema.safeParse(JSON.parse(line));
-        return parsed.success ? parsed.data : undefined;
-    } catch {
-        // allow(silent-catch): a line that is not JSON is ic's prose, which the fallback below reports as it is
-        return undefined;
-    }
-};
+const backupAnswer = (line: string): z.infer<typeof BackupAnswerSchema> | undefined => parseJsonWith(line, BackupAnswerSchema);
 
 // The sentence a finished backup is logged as: ic's own answer when it gave one, else its last line.
 export const backupNews = (slug: string, output: string): string => {
@@ -96,15 +89,7 @@ const TidyAnswerSchema = z.object({
     backups: z.array(z.object({ slug: z.string(), reason: z.string().optional() })).default([]),
 });
 
-const tidyAnswer = (line: string): z.infer<typeof TidyAnswerSchema> | undefined => {
-    try {
-        const parsed = TidyAnswerSchema.safeParse(JSON.parse(line));
-        return parsed.success ? parsed.data : undefined;
-    } catch {
-        // allow(silent-catch): a line that is not JSON is ic's prose, which the fallback below reports as it is
-        return undefined;
-    }
-};
+const tidyAnswer = (line: string): z.infer<typeof TidyAnswerSchema> | undefined => parseJsonWith(line, TidyAnswerSchema);
 
 // One line for the whole tidy: what went, in counts, and the volumes nobody claims by name, since those stay.
 export const tidyNews = (run: IcRun): string => {

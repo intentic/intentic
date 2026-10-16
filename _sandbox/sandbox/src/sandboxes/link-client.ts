@@ -1,15 +1,15 @@
 import {
     LINK_HEADER,
     type LinkAnswer,
-    type LinkConfig,
     type LinkHello,
     type LinkMessage,
     type LinkMessageReceipt,
     type LinkTask,
     type LinkTaskStatus,
-    RAW_JSON_ROUTES,
-    rawRouteUrl,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/links";
+import type { LinkConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import { RAW_JSON_ROUTES } from "@intentic/sandbox-contract/protocol/raw/raw-json-routes";
+import { rawRouteUrl } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { z } from "zod";
 import { opt } from "../opt.js";
 

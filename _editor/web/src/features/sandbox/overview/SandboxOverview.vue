@@ -17,16 +17,16 @@ import type { ResourcesForm } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { fileToSquareDataUrl } from "../../../lib/imageDataUrl";
-import { useSandboxVersion } from "./version/useSandboxVersion";
+import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { sandboxHoursLine } from "../../settings/hosted-plan/hostedHours";
-import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
+import { sandboxHoursLine } from "../../../models/hosted-plan/hostedHours";
+import { useHostedPlan } from "../../../models/hosted-plan/useHostedPlan";
 import { useSandboxOutline } from "./useSandboxOutline";
 import { sandboxAvailabilityVisual } from "./availability";
 import { useSandboxAvailability } from "./useSandboxAvailability";
 import { useSandboxPlacement } from "./useSandboxPlacement";
-import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
-import { useSelfResources } from "../devices/useSelfResources";
+import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
+import { useSelfResources } from "../../../models/sandbox/devices/useSelfResources";
 import { useRole } from "../../../client/sandbox/useRole";
 import SandboxBackupCard from "./backup/SandboxBackupCard.vue";
 import SandboxBehindCard from "./version/SandboxBehindCard.vue";
@@ -199,6 +199,9 @@ const removeLogo = async (): Promise<void> => {
             <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
                 <div class="flex min-w-0 flex-1 items-center gap-3">
                     <!-- The logo tile is the control itself: live for owners in every state, disabled for members. -->
+                    <!-- allow(recipes): THE OVERVIEW HEADING'S 48px SANDBOX LOGO is the button: its box is the logo's
+                         (SandboxLogo :size="48"), drawn nowhere else, not a glyph at any of the recipe's sizes, and
+                         its width is the logo's too. -->
                     <button
                         ref="logoTrigger"
                         type="button"

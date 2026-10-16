@@ -1,7 +1,9 @@
 import type { Options, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../engines/claude-sdk.js";
 import { errorMessage } from "@intentic/base/errors";
-import { CLAUDE_SEED_MODELS, humanizeModelId, type Model, type ModelBadge, ModelSchema } from "@intentic/sandbox-contract";
+import { CLAUDE_SEED_MODELS } from "@intentic/sandbox-contract/models/agent-catalog";
+import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
+import { type Model, type ModelBadge, ModelSchema } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { z } from "zod";
 import type { Logger } from "pino";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";

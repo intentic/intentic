@@ -1,6 +1,7 @@
-import { type CliConfig, envSuffix } from "@intentic/sandbox-contract";
-import { extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../../extensions/extension-readiness.js";
-import { listenerStatus } from "../../extensions/listener/listener-status.js";
+import type { CliConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import { envSuffix } from "@intentic/sandbox-contract/policy/capability-env";
+import { extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../extension-inventory/extension-readiness.js";
+import { listenerStatus } from "../status/listener-status.js";
 import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "../../store/loaded-skills.js";
 import { terminalExec } from "../../terminal/terminal-run.js";
 import { capabilityJobSession } from "../../terminal/terminal-session.js";

@@ -1,7 +1,8 @@
-import { portsContract, portUrl } from "@intentic/sandbox-contract";
+import { portsContract } from "@intentic/sandbox-contract/contracts/ports.contract";
+import { portUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import { identifyPort, isDevToolsPort } from "./port-identity.js";
 import { extensionProcessIndex } from "../extensions/extension-processes.js";
-import type { ExtensionHost } from "../extensions/installed-extensions.js";
+import type { ExtensionHost } from "../capabilities/extension-inventory/installed-extensions.js";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";

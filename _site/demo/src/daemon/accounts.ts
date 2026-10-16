@@ -1,4 +1,5 @@
-import type { Model, OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
+import type { Model, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import type { TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { STARTED_AT } from "./roster";
 
 // The connected accounts and model catalogs the Agent tab reads: two Claude subscriptions, the translator's rows in

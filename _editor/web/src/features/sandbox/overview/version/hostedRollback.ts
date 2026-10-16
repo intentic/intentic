@@ -1,6 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import { apiClient } from "../../../../lib/useApi";
-import { expectRestart } from "../../live/sandboxRestart";
+import { expectRestart } from "../../../../models/sandbox/live/sandboxRestart";
 
 // A HOSTED sandbox back onto the image its machine ran before its last image change. The platform serves this, not
 // the daemon, so it works while the sandbox is down: which is when it is most wanted. The restart it causes is declared

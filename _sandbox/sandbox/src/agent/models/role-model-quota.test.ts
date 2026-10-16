@@ -1,5 +1,5 @@
 import { unstubbed } from "@intentic/testing";
-import type { ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract";
+import type { ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { Services } from "../../composition.js";
 import { PROVIDER_MODULES } from "../../runtimes/runtime-table.js";
 import { opt } from "../../opt.js";

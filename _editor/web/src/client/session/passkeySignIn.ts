@@ -1,17 +1,19 @@
+import type {
+    AuthenticationOptionsJSON,
+    AuthenticationResponse,
+    DaemonSession,
+    PasskeyRegistered,
+    RegistrationOptionsJSON,
+    RegistrationResponse,
+    SessionRecovered,
+} from "@intentic/sandbox-contract/schemas/system";
 import {
-    type AuthenticationOptionsJSON,
-    type AuthenticationResponse,
-    type DaemonSession,
-    type PasskeyRegistered,
     RAW_JSON_ROUTES,
     type RawJsonInput,
     type RawJsonOutput,
     type RawJsonRouteKey,
-    rawRoutePath,
-    type RegistrationOptionsJSON,
-    type RegistrationResponse,
-    type SessionRecovered,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/protocol/raw/raw-json-routes";
+import { rawRoutePath } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import type { z } from "zod";
 import type { SandboxTarget } from "../sandbox/sandboxTarget";
 import type { StepUpBearer } from "./signInPrompt";

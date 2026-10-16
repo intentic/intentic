@@ -5,15 +5,8 @@
 // content now, so for Cursor the strip speaks only once a turn was refused for what it found; before the send it speaks
 // only for an agent the shield can't read at all.
 import "@intentic/testing/dom";
-import {
-    ACP,
-    CLAUDE_CODE,
-    CURSOR,
-    DEFAULT_PRIVACY_SHIELD,
-    type AgentCapabilities,
-    type PrivacyShieldPolicy,
-    type PrivacyShieldStatus,
-} from "@intentic/sandbox-contract";
+import { ACP, CLAUDE_CODE, CURSOR, type AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import { DEFAULT_PRIVACY_SHIELD, type PrivacyShieldPolicy, type PrivacyShieldStatus } from "@intentic/sandbox-contract/schemas/privacy";
 import { type App, createApp, h, nextTick, ref, shallowRef } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
@@ -26,7 +19,7 @@ const lastFailure = ref<{ code: string; text?: string } | undefined>(undefined);
 const resumeQueue = jest.fn(async () => {});
 const streaming = ref(false);
 const runner = ref<string | undefined>(undefined);
-jest.mock(`../useChat-view`, () => ({
+jest.mock(`../../../../models/conversations/panel/useChat-view`, () => ({
     usePaneView: () => ({
         conversation: shallowRef({ conversationId: `vivid-rowan-moks`, runner }),
         provider,
@@ -54,7 +47,7 @@ const updatePolicy = jest.fn(async (change: (current: PrivacyShieldPolicy) => Pr
     written.push(policy.value);
     status.value = statusOf(policy.value);
 });
-jest.mock(`../../../sandbox/privacy-shield/usePrivacyShield`, () => ({
+jest.mock(`../../../../models/sandbox/usePrivacyShield`, () => ({
     usePrivacyShield: () => ({ status, updatePolicy, isSaving: ref(false) }),
 }));
 // SAFETY: the stub renders the one prop the strip passes (`to`), which is all a RouterLink is asked for here.

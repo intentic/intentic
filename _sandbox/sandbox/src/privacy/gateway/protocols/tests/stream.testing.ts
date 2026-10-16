@@ -27,7 +27,7 @@ export const runEverySplit = async (makeTransform: () => TransformStream<Uint8Ar
     const whole = await run(makeTransform(), [bytes]);
     const mismatches: number[] = [];
     for (let at = 0; at <= bytes.length; at += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- each split is its own stream; running them one by one keeps a failure's offset readable.
+        // each split is its own stream; running them one by one keeps a failure's offset readable.
         const output = await run(makeTransform(), [bytes.slice(0, at), bytes.slice(at)]);
         if (output !== whole) {
             mismatches.push(at);

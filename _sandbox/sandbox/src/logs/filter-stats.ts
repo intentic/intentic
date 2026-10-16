@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseStatsFile, summarizeStats } from "@intentic/output-cleaners/stats";
-import type { DayWindowQuery, InputSavings } from "@intentic/sandbox-contract";
+import type { DayWindowQuery } from "@intentic/sandbox-contract/schemas/providers/usage";
+import type { InputSavings } from "@intentic/sandbox-contract/schemas/settings";
 import { utcDay } from "../usage/usage-store.js";
 import { logsRoot } from "./log-files.js";
 

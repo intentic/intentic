@@ -1,4 +1,5 @@
-import type { AgentSummary, Automation, AutomationSummary, SenderSeen, WatchSource } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { Automation, AutomationSummary, SenderSeen, WatchSource } from "@intentic/sandbox-contract/schemas/automations";
 import { asZone, UTC, type Zone } from "@intentic/sandbox-contract/time";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed, type ComputedRef, type Ref } from "vue";

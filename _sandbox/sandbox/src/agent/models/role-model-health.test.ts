@@ -1,4 +1,4 @@
-import type { UsageTurn } from "@intentic/sandbox-contract";
+import type { UsageTurn } from "@intentic/sandbox-contract/schemas/providers/usage";
 import { failingStreak } from "./role-model-health.js";
 
 const NOW = Date.parse("2026-09-08T12:00:00Z");

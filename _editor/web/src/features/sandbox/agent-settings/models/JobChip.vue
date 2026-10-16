@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MODEL_ROLES, type ModelRole } from "@intentic/sandbox-contract";
+import { MODEL_ROLES, type ModelRole } from "@intentic/sandbox-contract/models/model-roles";
 import { type IconName, ui } from "@intentic/ui";
 import { isIconName } from "@intentic/ui/icons";
 import { computed, inject } from "vue";

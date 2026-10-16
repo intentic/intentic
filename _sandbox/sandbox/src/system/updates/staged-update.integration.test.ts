@@ -1,7 +1,7 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { UpdateOutcome } from "@intentic/sandbox-contract";
+import type { UpdateOutcome } from "@intentic/sandbox-contract/schemas/updates";
 import { PREPARING_FRESH_MS, preparingUpdate, stagedUpdate, updateOutcome } from "./staged-update.js";
 
 // The staged-update marker: every failure to read it (missing, malformed, unversioned) falls back to "nothing is known

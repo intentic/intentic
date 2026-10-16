@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { deliverableKindOf } from "@intentic/sandbox-contract";
+import { deliverableKindOf } from "@intentic/sandbox-contract/text/documents";
 import { Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, provide, ref, watch } from "vue";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
-import { CHAT_SURFACE } from "../../../chat/tools/chatToolSurface";
+import { CHAT_SURFACE } from "../../../../models/conversations/tools/chatToolSurface";
 import ChatTurnDeliverables from "../../../chat/transcript/deliverables/ChatTurnDeliverables.vue";
 import type { ChatDeliverable } from "../../../chat/transcript/deliverables/deliverables";
 import type { useAgentChanges } from "../useAgentChanges";

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type { Device } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 import { Button, ui, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
-import { runDeviceCommand, useDevices } from "../useDevices";
+import { runDeviceCommand, useDevices } from "../../../../models/sandbox/devices/useDevices";
 import { useOperations } from "../../../../workbench/operations/operations";
-import { useDesktopSync } from "./useDesktopSync";
+import { useDesktopSync } from "../../../../models/sandbox/devices/useDesktopSync";
 import { beginDeviceWork, machineKeyOf } from "../runners/deviceWork";
 import { desktopVersion, openDesktopLink } from "../../../../app/environments/desktop";
 import RunCommand from "../../../../components/RunCommand.vue";

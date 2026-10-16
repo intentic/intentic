@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { constants, type Stats } from "node:fs";
 import { copyFile, type FileHandle, lstat, mkdir, open, readdir, rename, rm, stat, utimes } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
-import { errnoCode } from "@intentic/base/errors";
+import { errnoCode, undefinedIfMissing } from "@intentic/base/errors";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
-import { IGNORED_OUTPUTS_LISTED, type IgnoredOutput } from "@intentic/sandbox-contract";
+import { IGNORED_OUTPUTS_LISTED, type IgnoredOutput } from "@intentic/sandbox-contract/schemas/git/git";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { currentRepos } from "../../workspace/watch/repo-watch.js";
 import { resolveRealWithin, resolveWithin } from "../../workspace/files/workspace-files-paths.js";
@@ -138,7 +138,7 @@ const walkIgnored = async (dir: string, folder: string, skip: readonly string[],
     const found: string[] = [];
     const pending = [folder];
     while (pending.length > 0 && room.left > 0) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one folder at a time keeps the walk inside its ceiling
+        // one folder at a time keeps the walk inside its ceiling
         const { folders, files } = await entriesOf(dir, pending.shift() ?? "", skip);
         const looked = files.slice(0, room.left);
         room.left -= looked.length;
@@ -161,7 +161,7 @@ const candidatesOf = async (dir: string, skip: readonly string[], git: GitRunner
             continue;
         }
         if (row.endsWith("/")) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- the ceiling is shared, so folders are walked in turn
+            // the ceiling is shared, so folders are walked in turn
             paths.push(...(await walkIgnored(dir, path, skip, room)));
         } else {
             room.left -= 1;
@@ -178,7 +178,7 @@ const sameContent = async (left: FileHandle, right: FileHandle, size: number): P
     const one = Buffer.alloc(Math.min(COMPARE_CHUNK, size));
     const other = Buffer.alloc(one.length);
     for (let offset = 0; offset < size; offset += one.length) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a chunk at a time, so a difference stops the read
+        // a chunk at a time, so a difference stops the read
         const [read, readOther] = await Promise.all([left.read(one, 0, one.length, offset), right.read(other, 0, other.length, offset)]);
         if (read.bytesRead !== readOther.bytesRead || !one.subarray(0, read.bytesRead).equals(other.subarray(0, readOther.bytesRead))) {
             return false;
@@ -224,8 +224,8 @@ const mainEntry = async (path: string): Promise<Stats | "absent" | undefined> =>
 // which a file cannot be copied over without taking it away. Same size and modification time reads as the same file
 // without opening either, which is how a copy made here reads afterwards.
 const judge = async (dir: string, main: string, path: string, budget: { left: number }): Promise<IgnoredOutput | "same" | undefined> => {
-    // allow(silent-catch): a file gone since it was listed is no file of the copy's, which is the answer.
-    const own = await lstat(join(dir, path)).catch(() => undefined);
+    // A file gone since it was listed is no file of the copy's, which is the answer.
+    const own = await lstat(join(dir, path)).catch(undefinedIfMissing);
     if (own?.isFile() !== true) {
         return undefined;
     }
@@ -251,7 +251,7 @@ const isOutput = (verdict: IgnoredOutput | "same" | undefined): verdict is Ignor
 const judgeAll = async (dir: string, main: string, paths: readonly string[], budget: { left: number }): Promise<IgnoredOutput[]> => {
     const judged: IgnoredOutput[] = [];
     for (let at = 0; at < paths.length; at += JUDGE_BATCH) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- batched, so a listing of thousands never opens them all at once
+        // batched, so a listing of thousands never opens them all at once
         const batch = await Promise.all(paths.slice(at, at + JUDGE_BATCH).map((path) => judge(dir, main, path, budget)));
         judged.push(...batch.filter(isOutput));
     }
@@ -310,7 +310,7 @@ export const namedIgnoredOutputs = async (
     const result: NamedOutputs = { outside: [], not: [], named: [], same: [] };
     const inside: string[] = [];
     for (const path of new Set(paths)) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of paths, each resolved through its links
+        // a handful of paths, each resolved through its links
         if (!(await contained(dir, main, path))) {
             result.outside.push(path);
         } else if (!isOutputFile(path) || skipped(path, skip)) {
@@ -329,7 +329,7 @@ export const namedIgnoredOutputs = async (
     const budget = { left: Number.POSITIVE_INFINITY };
     for (let at = 0; at < inside.length; at += JUDGE_BATCH) {
         const batch = inside.slice(at, at + JUDGE_BATCH);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- batched, so a press of a thousand never opens them all at once
+        // batched, so a press of a thousand never opens them all at once
         const verdicts = await Promise.all(batch.map(async (path) => (ignored.has(path) ? await judge(dir, main, path, budget) : undefined)));
         for (const [index, path] of batch.entries()) {
             const verdict = verdicts[index];
@@ -365,7 +365,7 @@ const copyOne = async (from: string, to: string): Promise<void> => {
 // through git: an ignored file stays out of the index.
 export const copyIntoMain = async (dir: string, main: string, outputs: readonly IgnoredOutput[]): Promise<void> => {
     for (const output of outputs) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one file at a time; a render can be hundreds of megabytes
+        // one file at a time; a render can be hundreds of megabytes
         await copyOne(join(dir, output.path), join(main, output.path));
     }
 };

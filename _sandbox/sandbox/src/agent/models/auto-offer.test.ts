@@ -1,4 +1,6 @@
-import type { AccountUsage, Model, NativeProvider, OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
+import type { AccountUsage, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { Model, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import type { NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 

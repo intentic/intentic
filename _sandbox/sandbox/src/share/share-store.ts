@@ -1,4 +1,4 @@
-import { SharedConversationSchema } from "@intentic/sandbox-contract";
+import { SharedConversationSchema } from "@intentic/sandbox-contract/schemas/share";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";

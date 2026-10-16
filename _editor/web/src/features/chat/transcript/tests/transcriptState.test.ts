@@ -1,6 +1,7 @@
-import type { AttachFrame, TranscriptTool } from "@intentic/sandbox-contract";
-import type { ChatMessage } from "../transcript";
-import { applyPatch, attachRun, emptyTranscriptState, rebuildKeeping } from "../transcriptState";
+import type { AttachFrame } from "@intentic/sandbox-contract/events/agent-events";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
+import { applyPatch, attachRun, emptyTranscriptState, rebuildKeeping } from "../../../../models/conversations/transcript/transcriptState";
 
 const child: TranscriptTool = { id: `t2`, name: `Read`, category: `read`, status: `in_progress` };
 const delegation: TranscriptTool = { id: `task-1`, name: `Agent`, category: `other`, status: `in_progress`, thinking: `in`, children: [child] };

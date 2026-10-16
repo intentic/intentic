@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
-import type { ExtensionSummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
 import { Button, Notice, StatusBadge, timeAgo, toneTint, ui } from "@intentic/ui";
 import { computed, watch } from "vue";
 import ActionLink from "../../../components/ActionLink.vue";
-import { startAgent } from "../../agents/fleet/agentActions";
-import { useAgents } from "../../agents/fleet/useAgents";
+import { startAgent } from "../../../models/fleet/agentActions";
+import { useAgents } from "../../../models/fleet/useAgents";
 import { useOperation } from "../../../workbench/operations/operations";
-import { router } from "../../../router";
-import { updateBrief } from "./extensionBrief";
+import { navigation } from "../../../workbench/navigation/navigation";
+import { updateBrief } from "../../../models/sandbox/extensionBrief";
 import { drawerScope, extensionBusy, latestFailure } from "./extensionWork";
 import { useExtensionUpdates } from "./useExtensionUpdates";
 import { useT } from "@intentic/ui/i18n";
@@ -141,7 +141,7 @@ const openReview = (conversationId: string): void => {
     if (agent !== undefined) {
         open(agent);
     } else {
-        void router.push(reviewAt(conversationId));
+        void navigation().push(reviewAt(conversationId));
     }
 };
 const readDiff = (): void => {

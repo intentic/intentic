@@ -1,10 +1,13 @@
 import { serialLock } from "@intentic/base/async";
-import type { AutoUpdate, AutoUpdateHold, AutoUpdateInput, DeviceFlowLine, DeviceSandboxFlow, StagedUpdate } from "@intentic/sandbox-contract";
-import { isNewer } from "@intentic/sandbox-contract";
+import type { AutoUpdate, AutoUpdateHold, AutoUpdateInput } from "@intentic/sandbox-contract/schemas/updates";
+import type { DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract/schemas/devices";
+import type { StagedUpdate } from "@intentic/sandbox-contract/schemas/system";
+import { isNewer } from "@intentic/sandbox-contract/state/versions";
 import type { RestartResume } from "../restart-resume.js";
 import { askedRestart } from "../restart-resume.js";
 import { opt } from "../../opt.js";
 import type { UpdatePolicyFile } from "./update-policy.js";
+import { errorMessage } from "@intentic/base/errors";
 
 // TAKING AN UPDATE BY ITSELF, AT A MOMENT NOBODY FEELS. Everything an update costs nobody already happens unasked: the
 // machine that runs this sandbox downloads and builds the next release in the background (`ic sandbox prepare --auto`,
@@ -275,7 +278,7 @@ export const createAutoUpdater = (deps: AutoUpdateDeps): AutoUpdater => {
             }
         } catch (error) {
             answered = true;
-            words = error instanceof Error ? error.message : String(error);
+            words = errorMessage(error);
         }
         if (answered) {
             await fail(words ?? UNSAID);

@@ -13,7 +13,7 @@ const html = readFileSync(resolve(import.meta.dirname, `../index.html`), `utf8`)
 const literal = <T>(name: string): T => {
     const source = new RegExp(`var ${name} = ([\\s\\S]*?);\\n`, `u`).exec(html)?.[1];
     expect(source, `index.html declares no ${name}`).toEqual(expect.any(String));
-    // oxlint-disable-next-line no-new-func -- reading our own checked-in literal, not input
+    // reading our own checked-in literal, not input
     return new Function(`return (${source})`)() as T;
 };
 
@@ -113,7 +113,7 @@ const boot = (href: string, browser: Browser = {}, os: Os = `light`): BootResult
         // `no-preference` matches neither query, which is what `light` models here: the dark one simply misses.
         ...(os === `silent` ? {} : { matchMedia: (query: string): { matches: boolean } => ({ matches: os === `dark` && query.includes(`dark`) }) }),
     };
-    // oxlint-disable-next-line no-new-func -- running our own checked-in script, with its globals shadowed by arguments
+    // running our own checked-in script, with its globals shadowed by arguments
     new Function(`localStorage`, `document`, `window`, SCRIPT)(localStorage, document, window);
     return { stored: store, attributes, url };
 };

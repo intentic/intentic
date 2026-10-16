@@ -5,15 +5,15 @@ import {
     ArtifactFileNameSchema,
     ArtifactKindSchema,
     ArtifactNameSchema,
-    DEVICE_FEATURE_PROGRAMS,
-    deviceSupports,
     type PushedArtifact,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/device-artifacts";
+import { DEVICE_FEATURE_PROGRAMS, deviceSupports } from "@intentic/sandbox-contract/schemas/hosts";
 import { errorMessage } from "@intentic/base/errors";
 import type { Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../app-env.js";
 import { type DoorServices, refusalFor } from "./device-door.routes.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // THE `devices push` DOOR: a program the agent built, carried from its shell to one of the owner's computers
 // (schemas/device-artifacts.ts). The CLI reads the bytes in the agent's own view of /work, so a build in a conversation's
@@ -112,3 +112,8 @@ export const createDeviceArtifactRoutes = (services: DoorServices) => ({
         }
     },
 });
+
+// The `devices push` CLI: a program built here, carried to one of the owner's computers to run there.
+export const deviceArtifactRawRoutes = defineRawRoutes((services: DoorServices) => ({
+    "POST /devices/{name}/artifacts": createDeviceArtifactRoutes(services).push,
+}));

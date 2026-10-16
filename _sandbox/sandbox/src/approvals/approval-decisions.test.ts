@@ -1,4 +1,5 @@
-import type { ActionApprovalSummary, AutomationApproval, PostApprovalSummary } from "@intentic/sandbox-contract";
+import type { ActionApprovalSummary, PostApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
+import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
 import { approvalDigest, fieldsDigest } from "./approval-decisions.js";
 
 // A yes is pinned to a digest of what it covers, and a ledger written by an earlier release is read by this one: the

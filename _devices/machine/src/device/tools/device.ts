@@ -13,7 +13,8 @@ import {
     SETTLE_MS,
 } from "@intentic/desktop-automation";
 import { sleep } from "@intentic/base/async";
-import { COMMAND_CLASS_LABELS, type DeviceScopes } from "@intentic/sandbox-contract";
+import { COMMAND_CLASS_LABELS } from "@intentic/sandbox-contract/policy/command-classes";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { calling, type Indicator, machineIndicator } from "../indicator.js";
 import { assertScope, ScopeError } from "../policy.js";
 import { assertNoSandboxPower, destructiveClasses } from "./shell.js";

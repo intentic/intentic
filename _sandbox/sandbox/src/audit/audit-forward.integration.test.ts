@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AuditSettings } from "@intentic/sandbox-contract";
+import type { AuditSettings } from "@intentic/sandbox-contract/schemas/data-protection";
 import { backoffMs, createAuditForwarder } from "./audit-forward.js";
 import { fileAuditLog } from "./audit-store.js";
 

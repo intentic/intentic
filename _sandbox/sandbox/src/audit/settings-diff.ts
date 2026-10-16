@@ -1,4 +1,4 @@
-import type { SandboxSettings } from "@intentic/sandbox-contract";
+import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import { z } from "zod";
 
 // Which settings a change touched, as an audit record says it: dotted keys, one level into a nested block (`audit.

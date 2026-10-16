@@ -4,14 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startFakeModel, type ScriptedStep } from "@intentic/fake-model";
 import { hasTool, type ResponsesRequest, systemInstructions, toolOutputs, userMessages } from "@intentic/fake-model/responses";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { e2eTier } from "@intentic/testing/e2e";
 import type { AgentRequest, CodexCredential, TurnPolicy, TurnSpec, TurnTools } from "../agent/providers/agent-request.js";
 import { createCodexAgent } from "../runtimes/codex/codex-agent.js";
 import { writeCodexConfig } from "../runtimes/codex/codex-config.js";
 import { codexBinary } from "../runtimes/codex/codex-path.js";
 import { parkedCards } from "../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 import { rootExecution } from "../workload/agent-execution.testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.

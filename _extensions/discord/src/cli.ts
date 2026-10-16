@@ -1,4 +1,5 @@
 import { text as readAll } from "node:stream/consumers";
+import { errorMessage } from "@intentic/base/errors";
 import { readGatewayUrl } from "@intentic/connector-runtime";
 
 // The agent's voice control tool (`bin/discord-voice`): join <channelId>, say <text>, stop, leave, status. It forwards to
@@ -83,7 +84,7 @@ export const runVoiceCli = async (argv: readonly string[], io: CliIo): Promise<n
     try {
         res = await io.fetch(`${base}${request.path}`, request.init);
     } catch (error) {
-        io.write(`discord-voice: couldn't reach the Discord gateway: ${error instanceof Error ? error.message : String(error)}\n`);
+        io.write(`discord-voice: couldn't reach the Discord gateway: ${errorMessage(error)}\n`);
         return 2;
     }
     const text = await res.text();

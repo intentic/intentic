@@ -1,4 +1,4 @@
-import type { InputSavings } from "@intentic/sandbox-contract";
+import type { InputSavings } from "@intentic/sandbox-contract/schemas/settings";
 import { compositionOf, savedByCleaner, stageLabel } from "./savingsChart";
 
 // Composition segments must sum exactly to the raw output; everything else on the card is read against that

@@ -559,10 +559,6 @@
             "pasteIdIntoQuick": "Collez l'identifiant dans l'Ouverture rapide pour revenir à cet agent depuis n'importe où.",
             "sessionId": "Identifiant de session"
         },
-        "suggestedSessionBox": {
-            "ctrlEnter": "Ctrl+Entrée",
-            "whatShouldAgentDo": "Que doit faire l'agent ?"
-        },
         "workflowRunCard": {
             "archive": "Archiver l'exécution",
             "archiveRun": "Archiver cette exécution",

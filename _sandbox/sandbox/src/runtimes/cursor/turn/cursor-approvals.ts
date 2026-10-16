@@ -1,4 +1,5 @@
-import type { AgentEvent, ProgramAsk } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { ProgramAsk } from "@intentic/sandbox-contract/events/requests";
 import type { AgentRequest } from "../../../agent/providers/agent-request.js";
 import { z } from "zod";
 import { opt } from "../../../opt.js";

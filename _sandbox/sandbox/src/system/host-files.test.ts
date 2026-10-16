@@ -6,7 +6,7 @@ import { logsRoot } from "../logs/log-files.js";
 import { WORK_SIGNAL_PATH, workSignalBody } from "../workload/work-signal.js";
 import { bootFailureDocument } from "./boot/boot-failure.js";
 import { type ExitMarker, MARKER_FILE } from "./boot/restarts/boot-marker.js";
-import { RESTART_ACTIONS, RESTART_INITIATORS, RESTART_SIDES, RestartIntentSchema } from "@intentic/sandbox-contract";
+import { RESTART_ACTIONS, RESTART_INITIATORS, RESTART_SIDES, RestartIntentSchema } from "@intentic/sandbox-contract/schemas/restart-intent";
 import { RESTART_INTENT_FILE } from "./boot/restarts/restart-record.js";
 import { restartResumeDocument } from "./restart-resume.js";
 import { updateOutcomeDocument, updatePreparingDocument } from "./updates/staged-update.js";

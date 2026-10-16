@@ -1,4 +1,4 @@
-import type { KeyringTypeInput, SignedKeyringGrant } from "@intentic/sandbox-contract";
+import type { KeyringTypeInput, SignedKeyringGrant } from "@intentic/sandbox-contract/schemas/keyring";
 import { keyFingerprint, seal, unseal, verifyGrant } from "@intentic/sandbox-contract/keyring-seal";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";

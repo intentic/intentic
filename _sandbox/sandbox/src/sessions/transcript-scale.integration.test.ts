@@ -1,8 +1,8 @@
 import { mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
-import type { TurnCheckpoint, TurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
+import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import type { TurnCheckpoint, TurnCheckpoints } from "../store/journals/turn-checkpoints.js";
 import { agentToolChildren, type AgentTranscriptDeps, agentTranscriptPage } from "./agent-transcript.js";
 import { PAGE_TEXT_CAP } from "./record/record-rows.js";
 import { fileTranscriptRecord, MAX_WINDOW_BYTES, transcriptFile } from "./transcript-record.js";

@@ -4,7 +4,7 @@ import "@intentic/testing/dom";
 import { type App, createApp, h } from "vue";
 import { STATE_DIR } from "@intentic/constants";
 import { IconStub } from "@intentic/ui/testing";
-import { CHAT_SURFACE } from "../tools/chatToolSurface";
+import { CHAT_SURFACE } from "../../../models/conversations/tools/chatToolSurface";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
 

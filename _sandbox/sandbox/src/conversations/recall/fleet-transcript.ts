@@ -1,4 +1,4 @@
-import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
+import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { type FleetRecallDeps, present } from "./fleet-recall.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
 import { oneLine } from "@intentic/base/one-line";

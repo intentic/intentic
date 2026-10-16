@@ -3,9 +3,10 @@
 // the run settings under it ARE the shared control (PickerRunSettings), drawn without the meter this surface
 // already keeps beside its model pill.
 import "@intentic/testing/dom";
-import { type AgentHarness, type AgentProvider, capabilitiesOf, limitationsOf } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { capabilitiesOf, limitationsOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
-import type { Conversation } from "../session/conversation";
+import type { Conversation } from "../../../models/conversations/session/conversation";
 import { IconStub } from "@intentic/ui/testing";
 
 // ModelPicker is tested on its own; stubbed to its footer slot so only the footer mounts here. Its props are kept
@@ -24,9 +25,9 @@ jest.mock(`./ModelPicker.vue`, () => ({
 jest.mock(`../accounts/PickerAccounts.vue`, () => ({ default: defineComponent({ setup: () => () => h(`div`) }) }));
 jest.mock(`../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasContent: computed(() => false) }) }));
 const { default: ChatModelPicker } = await import("./ChatModelPicker.vue");
-const { providerModels } = await import("../accounts/providerCatalog");
-const { effortsFor } = await import("./run-settings/effortScale");
-const { advertisedLoops } = await import("./offeredLoops");
+const { providerModels } = await import("../../../models/providers/providerCatalog");
+const { effortsFor } = await import("../../../models/providers/effortScale");
+const { advertisedLoops } = await import("../../../models/providers/offeredLoops");
 
 // Grok native, the weakest runtime (something to disclose); Claude Code, the ceiling; both from the contract.
 const ROUTED = { provider: `grok`, harness: `native` } as const satisfies { provider: AgentProvider; harness: AgentHarness };

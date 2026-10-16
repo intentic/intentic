@@ -1,5 +1,7 @@
-import type { AgentEvent, AgentReply, AttachFrame, TranscriptRow } from "@intentic/sandbox-contract";
-import { isTurnFact } from "@intentic/sandbox-contract";
+import type { AgentEvent, AttachFrame } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
+import { isTurnFact } from "@intentic/sandbox-contract/events/agent-events";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { DESK_FEATURED_ID, OCTOBER_AFTER, OCTOBER_BEFORE } from "./fixture/desk";
 import { CHECKOUT_LIB_AFTER, CHECKOUT_LIB_BEFORE, CHECKOUT_ROUTE } from "./fixture/workspace";
@@ -422,7 +424,7 @@ const createRun = (conversationId: string, prompt: string, beats: Beat[], now: n
     // Runs once, from creation, not per attach, or each consumer would replay its own copy.
     void (async () => {
         for (const beat of beats) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a recorded stream is sequential by definition
+            // a recorded stream is sequential by definition
             await wait(beat.after, signal);
             if (signal.stopped) {
                 return;
@@ -432,7 +434,7 @@ const createRun = (conversationId: string, prompt: string, beats: Beat[], now: n
                 continue;
             }
             const requestId = beat.park;
-            // oxlint-disable-next-line eslint/no-await-in-loop -- the park IS the turn waiting on the user
+            // the park IS the turn waiting on the user
             const reply = await new Promise<AgentReply | undefined>((resolve) => parks.set(requestId, resolve));
             if (signal.stopped) {
                 return;

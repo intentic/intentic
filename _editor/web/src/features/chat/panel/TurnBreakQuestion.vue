@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import type { TurnBreak, TurnBreakPolicy } from "@intentic/sandbox-contract";
+import type { TurnBreak, TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { SegmentedControl } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, watch } from "vue";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
-import { breakAnswers, effectivePolicy, sandboxPolicy } from "../run/endings/turnBreak";
+import { useAgents } from "../../../models/fleet/useAgents";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
+import { breakAnswers, effectivePolicy, sandboxPolicy } from "../../../models/conversations/endings/turnBreak";
 
 // One wall's one question, asked where the wall stands in the chat: "Next", the answers as one segmented control, and on
 // the same line what the chosen answer will do. Every wall a chat can stop at asks it through here (the pick-up card for

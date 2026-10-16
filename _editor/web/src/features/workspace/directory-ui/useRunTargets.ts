@@ -1,11 +1,11 @@
-import type { RunTargetsList } from "@intentic/sandbox-contract";
+import type { RunTargetsList } from "@intentic/sandbox-contract/schemas/run-targets";
 import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { useOperations } from "../../../workbench/operations/operations";
-import { useTerminalPanel } from "../../terminal/useTerminalPanel";
+import { useTerminalPanel } from "../../../models/terminal/useTerminalPanel";
 
 // What each repository can run on the owner's own computers (its `.intentic/run.json`), and the button that runs one.
 // A run is `devices run` in a terminal the daemon opens, so starting one opens that terminal: the build, the push and

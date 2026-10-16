@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { errorMessage } from "@intentic/base/errors";
-import type { Capability, WebExtCookie } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { WebExtCookie } from "@intentic/sandbox-contract/schemas/webext";
 import { acquireProfileLock, isProfileOpen, launchSessionDir, profileOwner, releaseProfileLock } from "../browser/sessions/session-store.js";
 
 // Where a session crosses from the sandbox's browser to the person's (mirrors session-import.ts): some sites (passkeys,

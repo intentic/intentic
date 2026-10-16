@@ -1,4 +1,4 @@
-import { hostRunningSandbox } from "@intentic/sandbox-contract";
+import { hostRunningSandbox } from "@intentic/sandbox-contract/schemas/devices";
 import { ORIGIN_HOST } from "@intentic/sandbox-run";
 import { fileRestartResume } from "../system/restart-resume.js";
 import type { BootPhase } from "./boot-phase.js";

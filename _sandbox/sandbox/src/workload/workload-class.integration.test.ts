@@ -65,7 +65,7 @@ describe.skipIf(!kernel.runs)(kernel.title("spawnAs puts a child in its class as
             await new Promise((resolve) => setTimeout(resolve, POLL_MS));
             const pids = (await readFile(`/proc/${String(pid)}/task/${String(pid)}/children`, "utf8")).trim().split(/\s+/u).filter(Boolean);
             for (const candidate of pids) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- one or two children.
+                // one or two children.
                 const argv = await readFile(`/proc/${candidate}/cmdline`, "utf8").catch(() => "");
                 if (argv === "sleep\u000032\u0000") {
                     grandchild = Number(candidate);

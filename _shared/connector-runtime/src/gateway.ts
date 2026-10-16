@@ -3,8 +3,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
+import { parseJsonWith } from "@intentic/base/json";
 import { connectExtensionProcess, type ExtensionRuntime } from "@intentic/extension-api/runtime";
-import type { ListenerGatewayPhase, ListenerStatus } from "@intentic/sandbox-contract";
+import type { ListenerGatewayPhase, ListenerStatus } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 // The subpath, not the package root: the root loads every schema in the contract, tens of megabytes a gateway never uses.
 import { type ListenerDeliver, ListenerDeliverSchema } from "@intentic/sandbox-contract/listener-protocol";
 import { extensionGatewayUrlFile } from "@intentic/sandbox-contract/workspace-state";
@@ -115,15 +116,7 @@ const requireEnv = (name: string, onMissing: () => void): string => {
 };
 
 // A /deliver body as the contract shapes it, or undefined for one that is not: not JSON at all, or missing what it needs.
-const deliverBodyOf = (raw: string): ListenerDeliver | undefined => {
-    try {
-        const parsed = ListenerDeliverSchema.safeParse(JSON.parse(raw || "{}"));
-        return parsed.success ? parsed.data : undefined;
-    } catch {
-        // allow(silent-catch): a body that is not JSON is answered 400 like any other body missing its fields
-        return undefined;
-    }
-};
+const deliverBodyOf = (raw: string): ListenerDeliver | undefined => parseJsonWith(raw || "{}", ListenerDeliverSchema);
 
 const readBody = async (req: IncomingMessage): Promise<string> => {
     const chunks: Buffer[] = [];

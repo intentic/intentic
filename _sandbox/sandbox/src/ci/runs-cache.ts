@@ -1,4 +1,4 @@
-import type { PipelineRun } from "@intentic/sandbox-contract";
+import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 
 // The Pipelines view's read model: a REST backfill sweep fills it (GET /ci/runs finding it stale), webhook
 // deliveries freshen single runs in place between sweeps. An upsert deliberately does NOT extend the sweep

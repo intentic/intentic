@@ -1,5 +1,5 @@
 import type { WalletPolicy } from "@intentic/api-contract";
-import { WalletConfigSchema } from "@intentic/sandbox-contract";
+import { WalletConfigSchema } from "@intentic/sandbox-contract/schemas/capabilities";
 import { apiClient } from "../../../lib/useApi";
 
 /* THE WALLET CARD'S CAPS GO TO THE PLATFORM FROM HERE, the browser the owner is signed into, and from nowhere else. */

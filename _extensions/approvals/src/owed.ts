@@ -1,5 +1,5 @@
 import type { ViewBadge } from "@intentic/extension-api";
-import type { ApprovalsList, HookRequests } from "@intentic/sandbox-contract";
+import type { ApprovalsList, HookRequests } from "@intentic/sandbox-contract/schemas/approvals";
 import { waitingHooksOf } from "./useHookRequests";
 import { t } from "./i18n.js";
 

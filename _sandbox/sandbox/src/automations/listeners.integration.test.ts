@@ -1,11 +1,14 @@
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentTurn, type Automation, SandboxSettingsSchema, type ListenerMessage } from "@intentic/sandbox-contract";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import type { ListenerMessage } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { z } from "zod";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
-import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { sqliteTurnJournal } from "../store/journals/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import type { Services } from "../composition.js";
 import { CHANNEL_SESSION_TTL_MS, fileThreadSessionsStore, THREAD_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
@@ -17,7 +20,7 @@ import { admittedUnheld, createMessageBatcher, dispatchListenerMessage, LISTENER
 import { PAYLOAD_MAX, type TurnStream } from "./scheduler.js";
 import { fileSendersStore } from "./senders-store.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
-import { drivenBy } from "../testing.js";
+import { drivenBy } from "../seams/turn-starter.testing.js";
 import { opt } from "../opt.js";
 
 // The listener paths touch automations/capabilities/activity/workspace/logger, the senders roster, and on a hold the

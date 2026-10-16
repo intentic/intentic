@@ -1,4 +1,4 @@
-import type { PrivacyShieldPolicy } from "@intentic/sandbox-contract";
+import type { PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
 import { Hono } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import { createGatewayRoute } from "../gateway/gateway-route.js";

@@ -66,7 +66,7 @@ export const stopOwnerMachines = async (
 ): Promise<number> => {
     let stopped = 0;
     for (const machine of machines) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep, gentle on the API
+        // sequential sweep, gentle on the API
         const did = await stop(config, logger, machine, why).catch((error: unknown) => {
             logger.error({ err: error, app: machine.appName }, `hosted meter: stopping failed; retried next tick`);
             return false;
@@ -126,10 +126,10 @@ export const stopOverBudgetHosted = async (
     };
     let stopped = 0;
     for (const machine of open) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep, gentle on the API
+        // sequential sweep, gentle on the API
         const why = await stopReason(prisma, config, { sandboxId: machine.sandboxId, ownerId: machine.sandbox.ownerId }, hoursOf);
         if (why !== undefined) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep, gentle on the API
+            // sequential sweep, gentle on the API
             stopped += await stopOwnerMachines(config, logger, [machine], why, stopUnlessChanging);
         }
     }

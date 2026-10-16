@@ -1,5 +1,5 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { composeReach, createReachFrameLedger, livePathOf, pushesIn, type ReachParts } from "./agent-reach.js";
 
 // The frames' half of a turn's reach (AgentSummary.reach): which paths an edit tool wrote are live rather than on the

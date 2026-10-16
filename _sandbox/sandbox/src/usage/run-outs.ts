@@ -1,4 +1,5 @@
-import { type AccountUsage, bindingWindow, type UsageWindow, windowPeriod } from "@intentic/sandbox-contract";
+import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { bindingWindow, windowPeriod } from "@intentic/sandbox-contract/models/plan-pools";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";

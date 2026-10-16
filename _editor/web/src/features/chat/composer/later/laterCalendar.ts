@@ -1,4 +1,4 @@
-import { bookable, LATEST_SEND_MS, SOONEST_SEND_MS } from "./sendLater";
+import { bookable, LATEST_SEND_MS, SOONEST_SEND_MS } from "../../../../models/conversations/drafts/sendLater";
 
 // The send-later panel's own picker, as values: the days a booking can land on, laid out as the weeks they fall in,
 // and a time of day the reader types or presses. Pure, with the clock and the first weekday handed in; every step goes

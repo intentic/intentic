@@ -1,4 +1,4 @@
-import type { HookRequest } from "@intentic/sandbox-contract";
+import type { HookRequest } from "@intentic/sandbox-contract/schemas/approvals";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { hookSetSize, modulePowers, moduleSentence, pluginOrigin } from "./hookSet.js";

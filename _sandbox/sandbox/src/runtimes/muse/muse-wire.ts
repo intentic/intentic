@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseJsonWith } from "@intentic/base/json";
 
 // The slice of the Muse Session Protocol this daemon reads, parsed at the boundary: the notifications a turn renders and
 // the answers its commands get. Everything else the host sends is dropped here, unread; a malformed field on a method
@@ -221,26 +222,14 @@ export const toolArgsOf = (raw: string | undefined): MuseToolArgs => {
     if (raw === undefined || raw.trim() === "") {
         return {};
     }
-    try {
-        return ToolArgsSchema.parse(JSON.parse(raw));
-    } catch {
-        // allow(silent-catch): almost-JSON from the model names nothing, the same as an absent argument.
-        return {};
-    }
+    // Almost-JSON from the model names nothing, the same as an absent argument.
+    return parseJsonWith(raw, ToolArgsSchema) ?? {};
 };
 
 // What a finished shell call carries in its visible output: Muse's own envelope around the command's text and exit.
 const ShellResultSchema = z.object({ output: z.string(), exit_code: z.number().optional() });
 
 export const shellResultOf = (visible: string | undefined): z.infer<typeof ShellResultSchema> | undefined => {
-    if (visible === undefined) {
-        return undefined;
-    }
-    try {
-        const parsed = ShellResultSchema.safeParse(JSON.parse(visible));
-        return parsed.success ? parsed.data : undefined;
-    } catch {
-        // allow(silent-catch): a shell result that is not Muse's envelope is shown as the text it is.
-        return undefined;
-    }
+    // A shell result that is not Muse's envelope is shown as the text it is.
+    return visible === undefined ? undefined : parseJsonWith(visible, ShellResultSchema);
 };

@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { Socket } from "node:net";
 import { watchQueue } from "@intentic/base/async";
 import { escapeHtml } from "@intentic/base/escape";
-import { LOOPBACK_CATCH_LONGEST_MS, type LoopbackCatch, type LoopbackCatchEvent } from "@intentic/sandbox-contract";
+import { LOOPBACK_CATCH_LONGEST_MS, type LoopbackCatch, type LoopbackCatchEvent } from "@intentic/sandbox-contract/schemas/loopback-catch";
 
 // A sign-in's loopback redirect, caught on this machine (schemas/loopback-catch.ts in the contract). The provider sends
 // the browser to http://localhost:<port>/<path>?code=…&state=…, the address a CLI running here would have listened on;

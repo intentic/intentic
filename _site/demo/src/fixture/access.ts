@@ -1,5 +1,7 @@
 import type { InviteRecord } from "@intentic/api-contract";
-import type { AgentAccess, CredentialReach, EditScope, GrantedRole, SecretInventoryEntry } from "@intentic/sandbox-contract";
+import type { AgentAccess, CredentialReach, EditScope } from "@intentic/sandbox-contract/schemas/members";
+import type { GrantedRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { SecretInventoryEntry } from "@intentic/sandbox-contract/schemas/secrets";
 import { demoQuiet } from "../mode";
 
 // THE SHARED ACCESS ROSTER: the Access tab reads two copies of who may reach this sandbox — the platform's record

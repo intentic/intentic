@@ -2,14 +2,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
-import { type Persona, type SandboxSettings, PersonaPowersSchema, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import type { Services } from "../../../../composition.js";
 import { unstubbed } from "@intentic/testing";
-import { conversationAfter, testConfig } from "../../../../testing.js";
+import { conversationAfter } from "../../../../conversations/registry/agents-store.testing.js";
+import { testConfig } from "../../../../env.config.testing.js";
 import { FIRST_RECHECK_MS } from "../../../../runtimes/claude/claude-seat-check.js";
 import { BACK_ON, memorySeats, scriptedSeatCheck, STILL_OFF } from "../../../../runtimes/claude/claude-seat-check.testing.js";
 import { UNATTENDED_ACCOUNTS_TITLE } from "../../../../personas/personas.js";
-import { LANDING_CHECKS_NOTE_HEADER, LANDING_CHECKS_NOTE } from "../../../prompt/checks-note.js";
+import { LANDING_CHECKS_NOTE } from "../../../prompt/checks-note.js";
 import type { AgentRequest, TurnPolicy, TurnSpec } from "../../../providers/agent-request.js";
 import { composeWirePrompt } from "../../../prompt/turn-preamble.js";
 import type { TurnContext } from "../../../providers/adapter.js";
@@ -19,6 +21,7 @@ import { RECORD_READ_ROOTS } from "../../../../execution/js-runtime.js";
 import { planTurn } from "../turn-plan.js";
 import { base, budgetOn, codexServices, context, harnessServices, memoryReading, ROOT, servicesWith, turn, wire } from "../turn-plan.testing.js";
 import * as harnessCredentialsOriginal from "../../../providers/harness-credentials.js";
+import { LANDING_CHECKS_NOTE_HEADER } from "../../../../sessions/vocabulary/prompt-envelope.js";
 
 // What a turn is allowed to run on, and what it's handed once it may; session-resume rules live with the route instead
 // (app.integration.test.ts). A refusal is a value (`ok: false` + code), assertable without a stream.

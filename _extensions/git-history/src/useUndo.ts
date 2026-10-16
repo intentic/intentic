@@ -1,4 +1,4 @@
-import type { UndoableAction } from "@intentic/sandbox-contract";
+import type { UndoableAction } from "@intentic/sandbox-contract/schemas/git/git-history";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";

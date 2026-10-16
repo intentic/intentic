@@ -9,7 +9,7 @@
     "exports": {
         "./main": "./src/main.ts",
         "./builtins": "./src/extension-host/builtins.ts",
-        "./chat-tabs": "./src/features/chat/tabs/tabSnapshot.ts"
+        "./chat-tabs": "./src/models/conversations/tabs/tabSnapshot.ts"
     },
     "scripts": {
         "dev": "esbuild src/app/environments/environment.local.ts --bundle --target=es2024 --define:__API_URL__=\\\"${API_URL:-https://localhost:6480}\\\" --outfile=public/assets/js/env.js && vite",
@@ -81,6 +81,7 @@
         "esbuild": "catalog:",
         "fast-check": "catalog:",
         "mermaid": "catalog:",
+        "sharp": "catalog:",
         "tailwindcss": "catalog:",
         "typescript": "catalog:",
         "vite": "catalog:",

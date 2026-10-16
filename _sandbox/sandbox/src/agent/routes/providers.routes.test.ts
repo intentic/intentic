@@ -1,11 +1,7 @@
-import {
-    type Capability,
-    NATIVE_PROVIDERS,
-    type NativeProvider,
-    providersContract,
-    TRIAL_ENDPOINT_ID,
-    TRIAL_LABEL,
-} from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
+import { providersContract } from "@intentic/sandbox-contract/contracts/providers.contract";
+import { TRIAL_ENDPOINT_ID, TRIAL_LABEL } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { ProvidersRoutesDeps } from "./providers.routes.js";
 import { routesClient } from "../../harness/route-client.testing.js";
 import { memoryCapabilitiesStore } from "../../capabilities/capabilities-slice.testing.js";

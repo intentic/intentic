@@ -1,4 +1,4 @@
-import type { LocalModelFitResponse, LocalModelPrefetch } from "@intentic/sandbox-contract";
+import type { LocalModelFitResponse, LocalModelPrefetch } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import { computed, type ComputedRef } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKey } from "../../../lib/queryKeys";

@@ -5,9 +5,8 @@ import {
     type VoiceSettings,
     VoiceSettingsSchema,
     voiceEngineOf,
-    WAKE_WORD_DEFAULT,
-    WakeWordSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/voice";
+import { WAKE_WORD_DEFAULT, WakeWordSchema } from "@intentic/sandbox-contract/schemas/speech";
 import { Icon, Notice, type NoticeModel, Row, RowGroup, RowNote, ui } from "@intentic/ui";
 import { activeLocale, useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -17,8 +16,8 @@ import { sandboxRaw } from "../../../../client/sandbox/sandboxRaw";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { SPEECH_VOICES } from "../../../../lib/queryKeys";
 import { queryClient } from "../../../../lib/queryPersistence";
-import { useSpeechPlayer } from "../../../chat/voice/speechPlayer";
-import { useSandboxSettings } from "../../overview/useSandboxSettings";
+import { useSpeechPlayer } from "../../../../models/voice/speechPlayer";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import {
     defaultVoiceFor,
     initialLanguage,

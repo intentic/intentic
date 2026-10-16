@@ -1,3 +1,4 @@
+import { parseJsonOr } from "@intentic/base/json";
 import { definePreference } from "@intentic/ui/preference";
 import type { Ref } from "vue";
 
@@ -14,12 +15,8 @@ const read = (raw: string | null): readonly string[] => {
     if (raw === null) {
         return [];
     }
-    try {
-        const parsed: unknown = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === `string`).slice(0, KEEP) : [];
-    } catch {
-        return [];
-    }
+    const parsed = parseJsonOr(raw, undefined);
+    return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === `string`).slice(0, KEEP) : [];
 };
 
 export const recentCommandIds: Ref<readonly string[]> = definePreference<readonly string[]>({

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdir, open, rm, writeFile } from "node:fs/promises";
-import type { IntenticLine } from "@intentic/sandbox-contract";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import { z } from "zod";
 import { halt as haltClient, livePid as livePidOf, logTail, toolMissing } from "../tunnel/net-probe.js";
 import { providerCatalog } from "./exit-catalog.js";

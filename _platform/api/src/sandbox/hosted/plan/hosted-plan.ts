@@ -181,7 +181,7 @@ export const checkHostedPlanPrices = async (config: Config, logger: Logger, gate
         if (priceId === undefined) {
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one small read per rung, once at boot
+        // one small read per rung, once at boot
         const price = await stripe.price(priceId).catch((error: unknown) => {
             logger.error({ err: error, tier: tier.id, priceId }, `hosted plan: Stripe would not answer for ${tier.id}'s price, so nobody can buy it`);
             return undefined;
@@ -273,7 +273,7 @@ const mirrorItems = async (prisma: PrismaClient, config: Config, planId: string,
             continue;
         }
         seen.push(tier);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one small write per rung, and there are three
+        // one small write per rung, and there are three
         await prisma.hostedPlanItem.upsert({
             where: { planId_tier: { planId, tier } },
             create: { planId, tier, stripeItemId: item.id, quantity: item.quantity },
@@ -354,7 +354,7 @@ export const sweepStripeErasures = async (
     const rows = await prisma.stripeErasure.findMany({ orderBy: { createdAt: `asc` } });
     let erased = 0;
     for (const row of rows) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a few calls per row, once a day, gentle on Stripe
+        // a few calls per row, once a day, gentle on Stripe
         if (await eraseStripeCustomer(prisma, config, logger, row, gateway)) {
             erased += 1;
         }

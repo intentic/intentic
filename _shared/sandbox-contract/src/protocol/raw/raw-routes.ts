@@ -280,6 +280,9 @@ export const RAW_ROUTES = {
 
 export type RawRouteKey = keyof typeof RAW_ROUTES;
 
+// The raw routes the daemon registers itself: every one but those netd answers before a request reaches the daemon.
+export type DaemonRawRouteKey = { [K in RawRouteKey]: (typeof RAW_ROUTES)[K] extends { readonly netd: true } ? never : K }[RawRouteKey];
+
 // A raw route's path, for a caller that builds a URL to it rather than registering it.
 export const rawRoutePath = (key: RawRouteKey): string => key.slice(key.indexOf(" ") + 1);
 

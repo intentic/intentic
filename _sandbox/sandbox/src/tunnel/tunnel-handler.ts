@@ -1,4 +1,5 @@
-import type { CapabilityStatus, IntenticLine } from "@intentic/sandbox-contract";
+import type { CapabilityStatus } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import type { CapabilityHandler } from "../capabilities/capability.js";
 import { removeLoadedSkill, writeLoadedSkill } from "../store/loaded-skills.js";
 import type { TunnelEntry, TunnelKindName } from "./tunnel-links.js";

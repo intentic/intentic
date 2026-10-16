@@ -1,6 +1,6 @@
-import { readdirSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createRequire } from "node:module";
+import { Resvg } from "@resvg/resvg-js";
 
 import { icon, petals } from "../../../_site/site/scripts/lotus.mjs";
 
@@ -10,7 +10,6 @@ import { icon, petals } from "../../../_site/site/scripts/lotus.mjs";
 // node _devices/webext/scripts/render-icons.mjs
 
 const here = import.meta.dirname;
-const root = join(here, "..", "..", "..");
 const icons = join(here, "..", "static", "icons");
 
 // Chrome's four icon sizes:
@@ -19,26 +18,6 @@ const icons = join(here, "..", "static", "icons");
 // 48 - extensions page
 // 128 - store listing and install prompt
 const SIZES = [16, 32, 48, 128];
-
-// Two-attempt resolve: nothing in this workspace declares `@resvg/resvg-js` directly, so the ordinary resolve
-// misses and the pnpm store is reached into directly, fine for a maintainer's regeneration script but wrong in shipped
-// code.
-const require = createRequire(join(root, "package.json"));
-const fromStore = () => {
-    const store = join(root, "node_modules", ".pnpm");
-    const hit = readdirSync(store).find((entry) => entry.startsWith("@resvg+resvg-js@"));
-    return hit === undefined ? undefined : require(join(store, hit, "node_modules", "@resvg", "resvg-js"));
-};
-let Resvg;
-try {
-    ({ Resvg } = require("@resvg/resvg-js"));
-} catch {
-    ({ Resvg } = fromStore() ?? {});
-}
-if (Resvg === undefined) {
-    console.error("@resvg/resvg-js is not installed in this workspace; the committed PNGs are unchanged.");
-    process.exit(1);
-}
 
 const paths = petals();
 

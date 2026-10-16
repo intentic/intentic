@@ -1,4 +1,9 @@
-import type { WorkspaceSearchFreshness, WorkspaceSearchResult, WorkspaceSearchSpan, WorkspaceSearchTag } from "@intentic/sandbox-contract";
+import type {
+    WorkspaceSearchFreshness,
+    WorkspaceSearchResult,
+    WorkspaceSearchSpan,
+    WorkspaceSearchTag,
+} from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import type { Feature } from "./features.js";
 
 // A bare `q` whose words are not a symbol, path or regex is the semantic pipeline; an exact query that finds nothing

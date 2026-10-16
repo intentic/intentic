@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
-import { writeFileAtomic } from "@intentic/base/fs";
+import { readJsonIfExists, readTextIfExists, writeFileAtomic } from "@intentic/base/fs";
 import { plural } from "@intentic/base/format";
 import type { Log } from "@intentic/local-agent";
 import { z } from "zod";
@@ -35,8 +35,8 @@ export const stillLeftOver = (group: Group, leaderStarted: string | undefined, g
 
 const LINUX = process.platform === "linux";
 
-// allow(silent-catch): a kernel without the file has no boot to tell apart, and nothing is recorded
-const bootId = async (): Promise<string> => (await readFile("/proc/sys/kernel/random/boot_id", "utf8").catch(() => "")).trim();
+// A kernel without the file has no boot to tell apart, and nothing is recorded.
+const bootId = async (): Promise<string> => ((await readTextIfExists("/proc/sys/kernel/random/boot_id")) ?? "").trim();
 
 // allow(silent-catch): no such process is the answer this asks for
 const leaderStart = async (pid: number): Promise<string | undefined> => startTimeOf(await readFile(`/proc/${pid}/stat`, "utf8").catch(() => ""));
@@ -91,21 +91,13 @@ export const takeOverCommandLedger = async (log: Log): Promise<void> => {
         return;
     }
     kept = true;
-    // allow(silent-catch): no file is nothing left over
-    const raw = await readFile(ledgerPath, "utf8").catch(() => undefined);
-    let ledger: z.infer<typeof LedgerSchema> | undefined;
-    try {
-        const parsed = raw === undefined ? undefined : LedgerSchema.safeParse(JSON.parse(raw));
-        ledger = parsed?.success === true ? parsed.data : undefined;
-    } catch {
-        // allow(silent-catch): a torn file names nothing reliably, and killing on a guess is worse than leaving it
-        ledger = undefined;
-    }
+    // No file is nothing left over; a torn one names nothing reliably, and killing on a guess is worse than leaving it.
+    const ledger = await readJsonIfExists(ledgerPath, LedgerSchema);
     const current = await (boot ??= bootId());
     const left = ledger === undefined || ledger.boot !== current ? [] : ledger.groups;
     let ended = 0;
     for (const group of left) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of groups, each one /proc read
+        // a handful of groups, each one /proc read
         if (stillLeftOver(group, await leaderStart(group.pgid), groupAnswers(group.pgid))) {
             try {
                 process.kill(-group.pgid, "SIGKILL");

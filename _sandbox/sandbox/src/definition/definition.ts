@@ -2,17 +2,17 @@ import { join } from "node:path";
 import { FIELD_NOTES_FILE, STATE_DIR } from "@intentic/constants";
 import { errorMessage } from "@intentic/base/errors";
 import { isRecord } from "@intentic/base/escape";
+import { type Capability, CapabilitySchema } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { NeedsAction } from "@intentic/sandbox-contract/policy/needs-action";
 import {
-    type Capability,
-    CapabilitySchema,
-    type NeedsAction,
     type DefinitionRepository,
     type DefinitionWorkspace,
     type SandboxDefinition,
     SandboxDefinitionSchema,
-    SandboxSettingsSchema,DEV_VERSION,isNewer,
-    SETTINGS_HISTORY,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/state/definition";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract/state/versions";
+import { SETTINGS_HISTORY } from "@intentic/sandbox-contract/schemas/settings-history";
 import { defaultGit } from "@intentic/base/git";
 import { parse } from "smol-toml";
 import { ArrivalFormatError } from "../arrival-error.js";
@@ -352,7 +352,6 @@ const tomlBlock = (value: string): string => {
     if (!value.endsWith("\n")) {
         return JSON.stringify(value);
     }
-    // eslint-disable-next-line no-control-regex
     if (value.includes("'''") || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value) || value.includes("\r")) {
         return JSON.stringify(value);
     }

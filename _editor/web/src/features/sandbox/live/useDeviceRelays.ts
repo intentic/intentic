@@ -1,7 +1,7 @@
 import { within } from "@intentic/base/async";
 import { computed, type ComputedRef, onScopeDispose, type Ref, ref } from "vue";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useDevices } from "../devices/useDevices";
+import { useDevices } from "../../../models/sandbox/devices/useDevices";
 import { devicesAcross, readDevicesAcross, subscribeDevicesAcross } from "./devicesAcross";
 import type { DeviceRelay } from "./sandboxDoors";
 

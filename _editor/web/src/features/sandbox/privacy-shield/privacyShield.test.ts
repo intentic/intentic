@@ -6,7 +6,7 @@ import {
     type PrivacyNameWord,
     type PrivacyProvider,
     type PrivacyShieldPolicy,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/privacy";
 import {
     ALLOW_VALUE_MAX,
     activityFindings,

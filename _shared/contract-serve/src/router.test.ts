@@ -1,4 +1,4 @@
-import type { SystemEvent } from "@intentic/sandbox-contract";
+import type { SystemEvent } from "@intentic/sandbox-contract/events/system-events";
 import { Frames, refuse, serve, servedProcedures } from "./router.js";
 
 // A stand-in daemon of two procedures and one raw route, answered the way the demo and the local files sidecar are.

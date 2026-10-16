@@ -1,4 +1,6 @@
-import { headroomState, type SwitchAccount, withRuntimeDefaults } from "@intentic/sandbox-contract";
+import { headroomState } from "@intentic/sandbox-contract/models/plan-pools";
+import type { SwitchAccount } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../../composition.js";
 
 // The one command that moves a conversation to another account (routing.ts reads where it points from then on). Asked to

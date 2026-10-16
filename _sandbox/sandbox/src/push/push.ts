@@ -1,4 +1,4 @@
-import { channelId, type PushNotification } from "@intentic/sandbox-contract";
+import { channelId, type PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import type { Logger } from "pino";
 import { idleEverywhere, presentMembers } from "../system/presence.js";
 import type { PushStore, StoredChannel } from "./push-store.js";

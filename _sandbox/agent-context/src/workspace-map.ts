@@ -1,5 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
+import { parseJsonOr } from "@intentic/base/json";
+import { isRecord } from "@intentic/base/escape";
 import { IGNORED_DIRS, isPublicPath, isReferencePath } from "@intentic/workspace-ignore";
 
 // Which areas a project has, what each is for, and where the run stands; recomputed from the filesystem every
@@ -109,12 +111,9 @@ const describeManifest = (dir: string, name: string): string | undefined => {
         return undefined;
     }
     if (name.endsWith(".json")) {
-        try {
-            const description = (JSON.parse(source) as { description?: unknown }).description;
-            return typeof description === "string" && description.trim() !== "" ? description.trim() : undefined;
-        } catch {
-            return undefined;
-        }
+        const parsed = parseJsonOr(source, undefined);
+        const description = isRecord(parsed) ? parsed["description"] : undefined;
+        return typeof description === "string" && description.trim() !== "" ? description.trim() : undefined;
     }
     if (name === "go.mod") {
         // The module path's tail is the only non-boilerplate part of a go.mod's self-description.

@@ -1,6 +1,6 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { escapeRegExp } from "@intentic/base/escape";
-import { heredocBodies } from "@intentic/sandbox-contract";
+import { heredocBodies } from "@intentic/sandbox-contract/text/shell-regions";
 import { type IsolationPlan, inWorktree } from "./isolation.js";
 
 // When the worktree bind-mount cannot be built (no CAP_SYS_ADMIN), this rewrites absolute workspace-root paths into the

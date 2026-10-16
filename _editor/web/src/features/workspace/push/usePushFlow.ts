@@ -1,10 +1,11 @@
-import { commandRunOutcome, type PushRun } from "@intentic/sandbox-contract";
+import { commandRunOutcome } from "@intentic/sandbox-contract/policy/command-run";
+import type { PushRun } from "@intentic/sandbox-contract/schemas/git/git";
 import { sandboxRef, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
 import { computed, watch } from "vue";
-import { type SyncTarget, useChanges } from "../changes/useChanges";
-import { workspaceChangedSince, workspaceChangeMark } from "../changes/live/useWorkspaceLive";
-import { usePushRun } from "./usePushRun";
-import { credentialHostOf } from "./refusalSummary";
+import { type SyncTarget, useChanges } from "../../../models/changes/useChanges";
+import { workspaceChangedSince, workspaceChangeMark } from "../../../models/workspace/changes/useWorkspaceLive";
+import { usePushRun } from "../../../models/workspace/push/usePushRun";
+import { credentialHostOf } from "../../../models/workspace/push/refusalSummary";
 import { t } from "@intentic/ui/i18n";
 
 // The push flow, from click to answer, kept at module level (not in the panel) so it outlives the surface

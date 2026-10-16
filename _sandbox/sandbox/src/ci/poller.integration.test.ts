@@ -5,9 +5,9 @@ import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/base/git";
 import { unstubbed } from "@intentic/testing";
-import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
-import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { sqliteTurnJournal } from "../store/journals/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
@@ -19,7 +19,7 @@ import { createCiPoller } from "./poller.js";
 import type { FetchFn } from "./providers.js";
 import { createRunsCache } from "./runs-cache.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
-import { drivenBy } from "../testing.js";
+import { drivenBy } from "../seams/turn-starter.testing.js";
 
 /* The fallback path: a repo whose webhook could NOT be registered still wakes its `ci` automations. */
 

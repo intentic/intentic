@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { serialLock } from "@intentic/base/async";
-import type { PersonalDataSpan } from "./detect/detect.js";
-import { fullNameAlone } from "./detect/standalone.js";
+import type { PersonalDataSpan } from "@intentic/privacy-detect";
+import { fullNameAlone } from "@intentic/privacy-detect/standalone";
 import type { EntityRecognizer } from "./masker.js";
 
 // The local name model behind `names: "model"`: a Polish named-entity model (HerBERT fine-tuned for personal data, from
@@ -142,7 +142,7 @@ export const loadRecognizer = async (
                 }
                 const score = open.scores.reduce((sum, value) => sum + value, 0) / open.scores.length;
                 const value = text.slice(open.start, open.end);
-                // A person only as a full name (detect/standalone.ts); a location only as somebody's address, one with a
+                // A person only as a full name (@intentic/privacy-detect standalone.ts); a location only as somebody's address, one with a
                 // house number in it.
                 const kind =
                     open.tag === "PER" && fullNameAlone(value) ? "person-name" : open.tag === "LOC" && /\d/u.test(value) ? "address" : undefined;

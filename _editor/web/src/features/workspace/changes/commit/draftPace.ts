@@ -1,8 +1,8 @@
 import { shallowRef, watch } from "vue";
 import { z } from "zod";
-import type { LandedMessageDraft } from "@intentic/sandbox-contract";
-import { commitDraftPaceKey, storedJson, storeJson } from "../../../../lib/browserStorage";
-import { useAgents } from "../../../agents/fleet/useAgents";
+import type { LandedMessageDraft } from "@intentic/sandbox-contract/schemas/agents";
+import { commitDraftPaceKey, storedJson, storeJson } from "../../../../app/storage/browserStorage";
+import { useAgents } from "../../../../models/fleet/useAgents";
 import { draftRunning } from "../changeOrigins";
 
 // How long a commit message usually takes to draft, so the field's mark can fill a ring against it instead of spinning

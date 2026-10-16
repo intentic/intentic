@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, readdir, stat, symlink, writeFile } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import type { SharePayload } from "@intentic/sandbox-contract";
+import type { SharePayload } from "@intentic/sandbox-contract/events/transcript";
 import { publishShare, shareRoot, unpublishShare } from "./share-publish.js";
 
 // Pins the tree a share becomes, against a real directory, since the claims are about files reaching the open internet;

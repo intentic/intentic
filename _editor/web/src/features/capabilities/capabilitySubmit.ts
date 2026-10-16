@@ -1,15 +1,15 @@
-import type { CapabilitySummary } from "@intentic/sandbox-contract";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { AddCapabilityInput, CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { getCurrentScope, onScopeDispose, type Ref } from "vue";
 import { dismissOperation, operationsUnder, useOperation } from "../../workbench/operations/operations";
-import { sshKeyScope } from "./model/sshKey";
-import { useTerminalPanel } from "../terminal/useTerminalPanel";
+import { sshKeyScope } from "../../models/capabilities/sshKey";
+import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import type { CapabilityForm } from "./capabilityForm";
 import { rememberSecrets } from "./model/devSecrets";
-import { buildConfig } from "./model/form";
+import { buildConfig } from "../../models/capabilities/form";
 import { pushWalletPolicy } from "./model/walletPolicy";
 import type { useSetupWalk } from "./setupWalk";
 

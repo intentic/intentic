@@ -1,13 +1,13 @@
 // The page's half of "rebuild when they're idle": the wait is the sandbox's, so this only asks, withdraws, and keeps
 // re-reading /environment while one is under way, since nothing else tells the page when the sandbox moves it along.
 import "@intentic/testing/dom";
-import type { Environment } from "@intentic/sandbox-contract";
+import type { Environment } from "@intentic/sandbox-contract/schemas/environment";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, defineComponent, nextTick, ref } from "vue";
 
 const state = ref<Environment | undefined>(undefined);
 const refetch = jest.fn(async (): Promise<void> => undefined);
-jest.mock(`../../../sandbox/environment/useEnvironment`, () => ({
+jest.mock(`../../../../models/sandbox/environment/useEnvironment`, () => ({
     ENVIRONMENT_KEY: [`environment`],
     useEnvironment: () => ({ state, query: { refetch } }),
 }));

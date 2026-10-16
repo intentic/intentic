@@ -1,4 +1,4 @@
-import { type HostConnection, parseHostConnection } from "@intentic/sandbox-contract";
+import { type HostConnection, parseHostConnection } from "@intentic/sandbox-contract/schemas/hosts";
 import type { Services } from "../composition.js";
 
 // Which card and environment a connection is, off its enrollment's own record. A key with no record is a card that has

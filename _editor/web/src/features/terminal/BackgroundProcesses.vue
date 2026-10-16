@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { AnchoredOverlay, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
-import { type BackgroundProcessRow, useBackgroundProcesses, viewProcessLogs } from "./useBackgroundProcesses";
+import { type BackgroundProcessRow, useBackgroundProcesses, viewProcessLogs } from "../../models/terminal/useBackgroundProcesses";
 import { useT } from "@intentic/ui/i18n";
 
 // Background-processes control for managed processes, extension gateways, dockerd: status, read-only logs,

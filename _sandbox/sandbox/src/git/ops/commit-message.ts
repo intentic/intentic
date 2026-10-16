@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { readWorkspaceFile, statWorkspaceFileSize } from "../../workspace/files/workspace-files.js";
-import { BULLET, FENCE } from "@intentic/sandbox-contract";
+import { BULLET, FENCE } from "@intentic/sandbox-contract/text/model-answer";
 
 // Drafts a commit message from what a commit WOULD record, not what the repo contains; the diff is the only source
 // used, no session title or other context. Scope decides the base:

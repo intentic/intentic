@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { AiLiteracyLocaleSchema } from "@intentic/sandbox-contract";
+import { errorMessage } from "@intentic/base/errors";
+import { AiLiteracyLocaleSchema } from "@intentic/sandbox-contract/schemas/ai-literacy";
 import { Button, Modal, Notice } from "@intentic/ui";
 import { activeLocale, useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
@@ -29,7 +30,7 @@ const confirm = async (): Promise<void> => {
         await queryClient.invalidateQueries({ queryKey: statusQuery.queryKey.value });
         await queryClient.invalidateQueries({ queryKey: rpcQuery("settings.aiLiteracyConfirmations").queryKey.value });
     } catch (cause) {
-        error.value = cause instanceof Error ? cause.message : String(cause);
+        error.value = errorMessage(cause);
     } finally {
         busy.value = false;
     }

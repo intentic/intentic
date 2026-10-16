@@ -5,7 +5,7 @@ import { webPushDriver } from "./webPush";
 import { inNativeShell } from "../window/capacitor";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { useSandbox } from "../../client/sandbox/useSandbox";
-import { storedValue, storeValue } from "../../lib/browserStorage";
+import { storedValue, storeValue } from "../../app/storage/browserStorage";
 
 // Push, from the device's side: HOW it is received is the driver's business; this composable owns the enabling chain
 // (transport, permission, registration, daemon-stored) and reports which link failed, since `denied` is terminal.

@@ -1,4 +1,4 @@
-import type { WorkspaceHealth, WorkspaceHotspot, WorkspaceKeyModule } from "@intentic/sandbox-contract";
+import type { WorkspaceHealth, WorkspaceHotspot, WorkspaceKeyModule } from "@intentic/sandbox-contract/schemas/codebase-health";
 
 // What the Health tab reads for the shop's repositories: the resident index's hotspots (churn × branch points) and its
 // key modules (PageRank over imports). The figures are shaped to show every posture a row can take: a file both churning

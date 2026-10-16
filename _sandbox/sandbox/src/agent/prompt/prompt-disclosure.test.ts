@@ -1,4 +1,4 @@
-import { capabilitiesOf } from "@intentic/sandbox-contract";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { guidanceBlock } from "./guidance.js";
 import { promptDisclosure, withBaseText } from "./prompt-disclosure.js";
 import { turnPromptPlacement } from "./system-prompt.js";

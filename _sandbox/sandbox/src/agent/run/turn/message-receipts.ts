@@ -1,4 +1,5 @@
-import type { MessageReceipt, TranscriptRow } from "@intentic/sandbox-contract";
+import type { MessageReceipt } from "@intentic/sandbox-contract/schemas/agent";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import { type Holding, turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import type { Services } from "../../../composition.js";

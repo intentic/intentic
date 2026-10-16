@@ -7,7 +7,7 @@ import { hubWorkKey, hubWorkRunning } from "../../workbench/hub/hubWork";
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useAudience } from "../../app/useAudience";
-import { useHostedPlan } from "./hosted-plan/useHostedPlan";
+import { useHostedPlan } from "../../models/hosted-plan/useHostedPlan";
 import SettingsAppearance from "./SettingsAppearance.vue";
 import SettingsBilling from "./SettingsBilling.vue";
 import SettingsData from "./SettingsData.vue";

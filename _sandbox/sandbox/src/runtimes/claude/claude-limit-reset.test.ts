@@ -1,4 +1,4 @@
-import type { UsageWindow } from "@intentic/sandbox-contract";
+import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { unstubbed } from "@intentic/testing";
 import type { ClaudeStore, StoredAccount } from "./claude-credentials.js";
 import { claimLimitReset, type LimitResetDeps, readLimitReset } from "./claude-limit-reset.js";

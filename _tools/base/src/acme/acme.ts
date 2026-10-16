@@ -1,6 +1,7 @@
 import { createHash, type KeyObject, sign } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pollUntil } from "../async.js";
+import { parseJsonOr } from "../json.js";
 import { resolveTxtAuthoritatively, type TxtLookup } from "./authoritative-dns.js";
 import { base64Url, buildCsr } from "./csr.js";
 
@@ -63,12 +64,9 @@ const jsonOf = async (response: Response): Promise<Record<string, unknown>> => {
     if (text === "") {
         return {};
     }
-    try {
-        return JSON.parse(text) as Record<string, unknown>;
-    } catch {
-        // allow(silent-catch): a body that is not JSON has no fields to read; the response's status decides.
-        return {};
-    }
+    // A body that is not JSON has no fields to read; the response's status decides.
+    // SAFETY: an ACME body is a JSON object (RFC 8555); what each field holds is the caller's to read.
+    return parseJsonOr(text, {}) as Record<string, unknown>;
 };
 
 // The CA's own error text: ACME problem documents are RFC 7807, `detail` the human sentence and `type` the machine tag.
@@ -89,13 +87,13 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
     const doFetch = async (input: string, init?: RequestInit): Promise<Response> => {
         for (let attempt = 1; ; attempt += 1) {
             try {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- retries are sequential by definition
+                // retries are sequential by definition
                 return await transport(input, init);
             } catch (error) {
                 if (attempt >= TRANSPORT_ATTEMPTS) {
                     throw error;
                 }
-                // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+                // ditto
                 await wait(TRANSPORT_RETRY_MS);
             }
         }
@@ -168,7 +166,7 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
     const published: string[] = [];
     try {
         for (const authzUrl of authorizations) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- Authorizations are published and validated in order.
+            // Authorizations are published and validated in order.
             const authz = await jsonOf(await signedPost(authzUrl, undefined));
             const identifier = (authz["identifier"] as { value?: string } | undefined)?.value ?? "";
             const challenges = Array.isArray(authz["challenges"]) ? (authz["challenges"] as Record<string, unknown>[]) : [];
@@ -180,18 +178,18 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
             const keyAuthorization = `${dns01["token"]}.${thumbprint}`;
             const recordName = `_acme-challenge.${identifier}`;
             const digest = base64Url(new Uint8Array(createHash("sha256").update(keyAuthorization).digest()));
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             await options.publishChallenge(recordName, digest);
             published.push(recordName);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             await awaitPublication(recordName, digest, { ...options, resolveTxt, wait, now });
             // `{}`, not POST-as-GET, means "ready to be checked" on a challenge.
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             const accepted = await signedPost(dns01["url"], {});
             if (!accepted.ok) {
                 throw new Error(`the CA refused the dns-01 challenge for ${identifier}: ${await problemOf(accepted)}`);
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             await awaitOrThrow(
                 async () => {
                     const state = await jsonOf(await signedPost(authzUrl, undefined));
@@ -234,7 +232,7 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
     } finally {
         // Best-effort: a leftover TXT record must never turn a successful issuance into a failure.
         for (const recordName of published) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- cleanup is sequential and off the critical path
+            // cleanup is sequential and off the critical path
             await options.removeChallenge(recordName).catch(() => {
                 // allow(silent-catch): a leftover TXT record must never turn a successful issuance into a failure.
             });

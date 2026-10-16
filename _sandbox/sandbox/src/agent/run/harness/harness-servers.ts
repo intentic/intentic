@@ -1,5 +1,7 @@
 import type { McpSdkServerConfigWithInstance, McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
-import { type AgentTurn, type Capability, type CredentialGateKind, profileOf } from "@intentic/sandbox-contract";
+import { type AgentTurn, profileOf } from "@intentic/sandbox-contract/schemas/agent";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { CredentialGateKind } from "@intentic/sandbox-contract/schemas/secrets";
 import { ownWorktree, type TurnPlacement } from "../../../conversations/worktrees/isolation.js";
 import { type AccountsServerFactory, accountsServer } from "../../../browser/tools/accounts-tools.js";
 import { ANONYMOUS_BROWSER_SERVER, type BrowserTurnTools } from "../../../browser/tools/browser-tools.js";

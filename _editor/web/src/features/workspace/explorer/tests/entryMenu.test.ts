@@ -1,5 +1,6 @@
 import type { MenuItem } from "primevue/menuitem";
-import { SANDBOX_ROUTE_NAMES, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { type EntryMenuInput, type EntryVerbs, entryMenuItems, VERB_ROUTES, ZIP_ROUTE } from "../entryMenu";
 
 const file: WorkspaceTreeEntry = { name: `a.ts`, path: `src/a.ts`, type: `file` };

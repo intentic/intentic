@@ -1,8 +1,8 @@
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
-import { useRunners } from "../../../sandbox/devices/runners/useRunners";
-import type { Conversation } from "../../session/conversation";
+import { useRunners } from "../../../../models/sandbox/devices/useRunners";
+import type { Conversation } from "../../../../models/conversations/session/conversation";
 
 // The fleet advice for one draft (GET /offload/placement, settings `offload.sessions`): which machine a new chat should
 // start on while this one is busy. Read only while the conversation is still a draft on this sandbox with runners to go

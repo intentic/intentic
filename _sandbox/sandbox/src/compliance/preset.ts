@@ -1,18 +1,13 @@
 import {
     AUDIT_RETENTION_DAYS_PUBLIC_OFFICE,
-    type AdmissionPolicy,
-    type AdmissionRule,
-    AdmissionRuleSchema,
     effectiveActionRule,
     OUTWARD_ACTION_KEYS,
-    type PresetApplyResult,
-    type PresetGroup,
-    type PresetItem,
-    type PresetValue,
-    type PrivacyShieldPolicy,
     type RetentionSettings,
-    type SandboxSettings,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/data-protection";
+import { type AdmissionPolicy, type AdmissionRule, AdmissionRuleSchema } from "@intentic/sandbox-contract/schemas/agent";
+import type { PresetApplyResult, PresetGroup, PresetItem, PresetValue } from "@intentic/sandbox-contract/schemas/compliance";
+import type { PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
+import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 
 // The public-office preset: the stricter settings an office under GDPR, KRI and the AI Act switches on, one item each,
 // so the owner picks which. Never a default, and never applied without being named: most sandboxes are a developer's,

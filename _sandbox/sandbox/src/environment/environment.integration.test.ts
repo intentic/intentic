@@ -2,17 +2,18 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
 import { environmentSourcesOf } from "../environment-composers.js";
-import { environmentSourcesFake } from "../testing.js";
+import { environmentSourcesFake } from "../seams/environment-sources.testing.js";
 import { unstubbed } from "@intentic/testing";
 import { waitFor } from "@intentic/testing/bun";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { AUTO_MARKER } from "./auto-drafts.js";
 import { fileRuntimeInstallsStore } from "./runtime-installs.js";
-import { DEFAULT_PRIVACY_SHIELD, hasOfficialBase } from "@intentic/sandbox-contract";
+import { DEFAULT_PRIVACY_SHIELD } from "@intentic/sandbox-contract/schemas/privacy";
+import { hasOfficialBase } from "@intentic/sandbox-contract/policy/overlay-lint";
 import {
     approveDraft,
     approvedPath,

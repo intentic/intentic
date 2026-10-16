@@ -179,7 +179,7 @@ export const runGitBridge = async (
         return undefined;
     }
     for (const repo of repos) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one repo at a time, on purpose: they share one ssh
+        // one repo at a time, on purpose: they share one ssh
         // transport and log; concurrent fetches would contend for both.
         await bridgeRepo(exec, alias, pairing.localDir, repo, log);
     }
@@ -221,7 +221,7 @@ export const bridgedRepoCandidates = async (fs: UnbridgeFs, exec: BridgeExec, lo
     for (let depth = 0; depth < 4 && frontier.length > 0 && visited < UNBRIDGE_MAX_DIRS; depth += 1) {
         const next: string[] = [];
         for (const dir of frontier) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- breadth-first and bounded; a directory at a time keeps it gentle
+            // breadth-first and bounded; a directory at a time keeps it gentle
             for (const name of await fs.subdirs(dir)) {
                 visited += 1;
                 if (NEVER_A_BRIDGED_REPO.has(name) || visited > UNBRIDGE_MAX_DIRS) {
@@ -244,21 +244,21 @@ export const bridgedRepoCandidates = async (fs: UnbridgeFs, exec: BridgeExec, lo
 export const unbridgeRepos = async (exec: BridgeExec, fs: UnbridgeFs, alias: string, localDir: string): Promise<number> => {
     let touched = 0;
     for (const dir of await bridgedRepoCandidates(fs, exec, localDir)) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one repo at a time, as the bridge itself runs
+        // one repo at a time, as the bridge itself runs
         const url = (await exec.run("git", ["remote", "get-url", "sandbox"], dir))?.trim();
         if (url === undefined || !url.startsWith(`${alias}:`)) {
             continue;
         }
         // `remote remove` takes the remote-tracking refs (refs/remotes/sandbox/*) with it.
-        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+        // ditto
         await exec.run("git", ["remote", "remove", "sandbox"], dir);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+        // ditto
         const markers = (await exec.run("git", ["for-each-ref", "--format=%(refname)", "refs/intentic/bridged/"], dir)) ?? "";
         for (const ref of markers
             .split("\n")
             .map((line) => line.trim())
             .filter((line) => line.startsWith("refs/intentic/bridged/"))) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             await exec.run("git", ["update-ref", "-d", ref], dir);
         }
         touched += 1;

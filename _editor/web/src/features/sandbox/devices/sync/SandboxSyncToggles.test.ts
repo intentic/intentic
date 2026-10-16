@@ -2,13 +2,13 @@
 // of the reader: one folder per environment of the computer, each spelled in that environment's own filesystem, and a
 // command that carries the folder — because the folder is what decides which side ends up running mutagen.
 import "@intentic/testing/dom";
-import type { Device } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 import { sandboxGroups } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick } from "vue";
 import type { DeviceOps } from "../runners/deviceOps";
-import type { DeviceRow, MachineRow } from "../deviceRows";
+import type { DeviceRow, MachineRow } from "../../../../models/sandbox/devices/deviceRows";
 import { forgetSyncSetups } from "./syncSetup";
 
 jest.mock(`../../../../client/sandbox/useSandbox`, () => ({

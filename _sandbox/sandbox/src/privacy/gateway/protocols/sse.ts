@@ -1,4 +1,4 @@
-import { createSseParser, type SseParser } from "@intentic/sandbox-contract";
+import { createSseParser, type SseParser } from "@intentic/sandbox-contract/protocol/sse";
 import type { Json } from "./walk.js";
 
 // Server-Sent Events as both providers stream them, read off a byte stream that may be cut anywhere: inside a UTF-8

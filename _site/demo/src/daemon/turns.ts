@@ -1,4 +1,5 @@
-import type { AttachFrame, SandboxHandlerInput } from "@intentic/sandbox-contract";
+import type { AttachFrame } from "@intentic/sandbox-contract/events/agent-events";
+import type { SandboxHandlerInput } from "@intentic/sandbox-contract/protocol/procedure-types";
 import { Frames, refuse } from "@intentic/contract-serve";
 import { featuredRun, type Run, visitorRun } from "../turn";
 import { AWAITING_ID, FEATURED_ID, patchAgent } from "./roster";

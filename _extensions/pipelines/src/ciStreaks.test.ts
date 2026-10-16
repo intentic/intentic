@@ -1,4 +1,4 @@
-import type { PipelineRun } from "@intentic/sandbox-contract";
+import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { arrivesOpen, failureStreaks, openFailures, inFlightOnHead, streakTooltip, supersededBy } from "./ciStreaks";

@@ -1,7 +1,7 @@
 import type { FigureAccent } from "@intentic/ui/markdown";
 import type { BarItem } from "@intentic/ui";
 import { seriesColor } from "@intentic/ui/series";
-import type { UsageRollupRow } from "@intentic/sandbox-contract";
+import type { UsageRollupRow } from "@intentic/sandbox-contract/schemas/providers/usage";
 import { utcDayOf } from "@intentic/sandbox-contract/time";
 import { activeLocale, t } from "@intentic/ui/i18n";
 import { formatMoney, formatPercent } from "@intentic/ui/format";

@@ -1,4 +1,4 @@
-import type { AgentOrigin } from "@intentic/sandbox-contract";
+import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
 import { z } from "zod";
 import type { TurnStream } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";

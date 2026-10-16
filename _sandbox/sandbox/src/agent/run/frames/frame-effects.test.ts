@@ -1,8 +1,9 @@
-import type { AgentEvent, UsageWindow } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { recordingLogger } from "../../../harness/route-fakes.testing.js";
 import { recordingTurnStores, services } from "../../../harness/route-services.testing.js";
-import { beginTurn } from "../../../testing.js";
+import { beginTurn } from "../../../conversations/actor/conversation-actors.testing.js";
 import { providerOutage, recordProviderFailure, recordProviderSuccess } from "../../providers/provider-health.js";
 import type { FailureWrite } from "./classify-failure.js";
 import { beginPulse, endPulse } from "../turn/turn-pulse.js";

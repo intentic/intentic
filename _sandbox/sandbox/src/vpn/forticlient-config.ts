@@ -1,4 +1,4 @@
-import type { ForticlientConnection } from "@intentic/sandbox-contract";
+import type { ForticlientConnection } from "@intentic/sandbox-contract/schemas/vpn";
 
 // Reads an exported FortiClient configuration (File → Settings → Backup) into addable connections.
 // EncX-wrapped credentials are not reversible from the file; each is dropped and reported through `needs` rather than

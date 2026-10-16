@@ -1,29 +1,23 @@
 import "@intentic/testing/dom";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, h, nextTick, reactive, ref, shallowRef } from "vue";
-import {
-    type AgentActivity,
-    type AgentJob,
-    type AgentWatch,
-    type ChildAgentAsk,
-    type QueuePause,
-    type TranscriptPermission,
-    agentWordsRow,
-    childReportPrompt,
-    LAND_FIX_OPENING,
-    peerMessagePrompt,
-    verifyNudgePrompt,
-    watchWakePrompt,
-    watchWakeRow,
-} from "@intentic/sandbox-contract";
+import type { AgentActivity, AgentJob, AgentWatch } from "@intentic/sandbox-contract/schemas/agents";
+import type { ChildAgentAsk } from "@intentic/sandbox-contract/events/requests";
+import type { QueuePause } from "@intentic/sandbox-contract/schemas/agent";
+import type { TranscriptPermission } from "@intentic/sandbox-contract/events/transcript";
+import { agentWordsRow, childReportPrompt, peerMessagePrompt } from "@intentic/sandbox-contract/events/agent-words";
+import { LAND_FIX_OPENING } from "@intentic/sandbox-contract/events/land-breakage";
+import { verifyNudgePrompt } from "@intentic/sandbox-contract/events/verify-nudge";
+import { watchWakePrompt, watchWakeRow } from "@intentic/sandbox-contract/events/watch-wake";
 import { foldTurn } from "@intentic/sandbox-contract/transcript-fold";
-import { errandOf, errands, errandPrompt } from "../../run/errands";
-import { changedNothing, type ChatMessage } from "../transcript";
-import { clockOffset, resetSandboxClock } from "../../../agents/fleet/sandboxClock";
+import { errandOf, errands, errandPrompt } from "../../../../models/conversations/run/errands";
+import { changedNothing, type ChatMessage } from "../../../../models/conversations/transcript/transcript";
+import { clockOffset, resetSandboxClock } from "../../../../models/agent-status/sandboxClock";
 import { IconStub } from "@intentic/ui/testing";
 import { scrollersUnderShut } from "../../../../testing/scrollersUnderShut";
 import { shownText } from "../../../../testing/shownText";
-import { agentStatusMeta, CLOCK_FROM_MS, type EndingByHand } from "../../../agents/fleet/agentStatus";
+import { agentStatusMeta, CLOCK_FROM_MS } from "../../../../models/agent-status/agentStatus-meta";
+import type { EndingByHand } from "../../../../models/agent-status/agentStatus-standing";
 import { setLocale } from "@intentic/ui/i18n";
 import { useAudience } from "../../../../app/useAudience";
 
@@ -182,20 +176,16 @@ jest.mock("../../drafts/attachmentPreviews", () => ({
     rememberMedia: () => undefined,
     forgetMedia: () => undefined,
 }));
-jest.mock("../../../agents/fleet/agentStatus", () => ({
-    agentStatusMeta,
-    CLOCK_FROM_MS,
-    effectiveAutoLand: () => false,
-    effectiveOutageResume: () => false,
-}));
+jest.mock("../../../../models/agent-status/agentStatus-meta", () => ({ agentStatusMeta, CLOCK_FROM_MS }));
+jest.mock("../../../../models/agent-status/agentStatus-standing", () => ({ effectiveAutoLand: () => false }));
 // changedNothing stays real: it decides whether a checklist is drawn at all, which is a card's own reading.
-jest.mock("../transcript", () => ({ foldsIntoTurn: (message: ChatMessage) => errandOf(message) !== undefined, changedNothing }));
+jest.mock("../../../../models/conversations/transcript/transcript", () => ({ foldsIntoTurn: (message: ChatMessage) => errandOf(message) !== undefined, changedNothing }));
 jest.mock("../../../../lib/markdown/useMarkdown", () => {
     return { useMarkdown: () => computed(() => markdown.parts) };
 });
-jest.mock("../../../workspace/files/refs/openFileRef", () => ({ openFileRefFromEvent: jest.fn(), openWorkspaceRef: jest.fn() }));
-jest.mock("../../../terminal/portPreview", () => ({ openLoopbackPreview }));
-jest.mock("../../../workspace/changes/history/useHistory", () => ({ restoreSnapshot: jest.fn(), invalidateWorkspace: jest.fn() }));
+jest.mock("../../../../models/workspace/files/openFileRef", () => ({ openFileRefFromEvent: jest.fn(), openWorkspaceRef: jest.fn() }));
+jest.mock("../../../../models/terminal/portPreview", () => ({ openLoopbackPreview }));
+jest.mock("../../../../models/changes/useHistory", () => ({ restoreSnapshot: jest.fn(), invalidateWorkspace: jest.fn() }));
 jest.mock("../../tools/toolGrouping", () => ({ groupConsecutiveTools: () => [] }));
 jest.mock("../../composer/ChatAttachmentStrip.vue", () => ({ default: { render: () => undefined } }));
 jest.mock("../ChatTodoList.vue", () => ({ default: { render: () => undefined } }));
@@ -205,7 +195,7 @@ jest.mock("../../tools/ChatToolGroup.vue", () => ({ default: { render: () => und
 jest.mock("../../../needs/NeedCard.vue", () => ({ default: { render: () => undefined } }));
 
 // Stubs the pane's own view, not the focused one (useChat's PANE_VIEW), since this row reads its pane's conversation.
-jest.mock("../../panel/useChat-view", () => {
+jest.mock("../../../../models/conversations/panel/useChat-view", () => {
     const conversation = shallowRef({
         conversationId: `agent-1`,
         turn: {
@@ -249,7 +239,7 @@ jest.mock("../../panel/useChat-view", () => {
 
 // Roster count of this conversation's live subagents, which the loader reports waiting on, and the outside conditions
 // it is parked on, which a watch's own notice row reads to say whether it is still waiting.
-jest.mock("../../../agents/fleet/useAgents", () => ({
+jest.mock("../../../../models/fleet/useAgents", () => ({
     useAgents: () => ({
         agentById: () => ({
             subagents: { running: roster.running, total: roster.running },
@@ -263,7 +253,7 @@ jest.mock("../../../agents/fleet/useAgents", () => ({
     }),
 }));
 
-jest.mock("../../../sandbox/overview/useSandboxSettings", () => {
+jest.mock("../../../../models/sandbox/useSandboxSettings", () => {
     return {
         useSandboxSettings: () => ({ settings: ref(undefined), save: { mutateAsync: jest.fn() } }),
     };
@@ -272,7 +262,7 @@ jest.mock("../../../sandbox/overview/useSandboxSettings", () => {
 // A 16 GiB box a connected device can reshape, on an engine a test may resize; 64 GiB leaves a raise room to offer.
 const ROOMY_ENGINE = { memoryBytes: 64 * 1024 ** 3, cpus: 8 };
 const selfEngine = ref(ROOMY_ENGINE);
-jest.mock("../../../sandbox/devices/useSelfResources", () => ({
+jest.mock("../../../../models/sandbox/devices/useSelfResources", () => ({
     useSelfResources: () => ({
         slug: computed(() => `box`),
         current: computed(() => ({ memoryBytes: 16 * 1024 ** 3 })),
@@ -286,7 +276,7 @@ jest.mock("../../../sandbox/devices/useSelfResources", () => ({
 
 const { default: ChatMessageView } = await import("../ChatMessageView.vue");
 // The shell's own picker seam, real: a child-agent card opens it, and the test answers it as the panel's bar would.
-const { modelRequest, settleModelPick } = await import("../../models/host/hostModelPicker");
+const { modelRequest, settleModelPick } = await import("../../../../models/conversations/accounts/hostModelPicker");
 // Imported so the loader suite's last test can mount it standalone, asserting the same status line with no message at
 // all.
 const { default: ChatTurnStatus } = await import("../ChatTurnStatus.vue");

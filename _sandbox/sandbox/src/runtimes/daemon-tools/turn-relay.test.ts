@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { CommandGuard, GuardOutcome } from "../../guard/command-guard.js";
 import { createTurnTaint } from "../../guard/turn-taint.js";
 import { turnWatchdog } from "../decorators/turn-watchdog.js";

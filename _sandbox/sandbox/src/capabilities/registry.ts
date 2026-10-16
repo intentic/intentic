@@ -1,4 +1,4 @@
-import type { CapabilityKind } from "@intentic/sandbox-contract";
+import type { CapabilityKind } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { CapabilityHandler } from "./capability.js";
 import { agentHandler } from "./handlers/agent.handler.js";
 import { browserHandler } from "./handlers/browser.handler.js";

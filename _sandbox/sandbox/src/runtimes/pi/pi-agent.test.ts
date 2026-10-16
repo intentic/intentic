@@ -1,6 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { AgentRequest, ContainerCredential, TurnPolicy, TurnSpec } from "../../agent/providers/agent-request.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
@@ -8,7 +8,7 @@ import { createPiAgent } from "./pi-agent.js";
 import type { TurnTimeouts } from "../decorators/turn-watchdog.js";
 import type { PiEvent, PiLaunch, PiProcessHandlers, PiResponse, PiSpawn, PiStarted } from "./pi-rpc.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { declarationOf, rulesOf } from "../../rules/repo-checks.js";
 import { createTurnRelay } from "../daemon-tools/turn-relay.js";
 

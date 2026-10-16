@@ -1,4 +1,7 @@
-import { type AgentSummary, type ConversationQueue, deriveTitle, type SandboxHandlerInput, type SandboxHandlerOutput } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { ConversationQueue } from "@intentic/sandbox-contract/schemas/agent";
+import { deriveTitle } from "@intentic/sandbox-contract/text/title";
+import type { SandboxHandlerInput, SandboxHandlerOutput } from "@intentic/sandbox-contract/protocol/procedure-types";
 import { refuse } from "@intentic/contract-serve";
 import { amendAgent, broadcastRoster, FEATURED_ID, roster } from "./roster";
 import { startTurn } from "./turns";

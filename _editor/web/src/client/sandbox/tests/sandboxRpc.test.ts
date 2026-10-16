@@ -1,11 +1,8 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import {
-    REQUEST_ID_HEADER,
-    SANDBOX_ROUTE_NAMES,
-    sandboxRouteFingerprints,
-    SandboxSettingsSchema,
-    type SystemEvent,
-} from "@intentic/sandbox-contract";
+import { REQUEST_ID_HEADER } from "@intentic/sandbox-contract/protocol/headers";
+import { SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import type { SystemEvent } from "@intentic/sandbox-contract/events/system-events";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { readFailure, setDaemonRoutes } from "../useDaemonRoutes";
 import { SandboxHttpError } from "../sandboxHttpError";

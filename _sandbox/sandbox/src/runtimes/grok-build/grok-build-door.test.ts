@@ -1,4 +1,4 @@
-import type { OauthAccount } from "@intentic/sandbox-contract";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
 import { grokDoors } from "./grok-build-door.js";
 

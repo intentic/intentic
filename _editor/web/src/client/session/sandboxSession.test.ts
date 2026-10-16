@@ -91,7 +91,7 @@ jest.mock("../sandbox/useSandbox", () => {
 await import("./sandboxSession");
 // Shared with every fresh copy of the session module: only that module is loaded afresh, never what it imports.
 const { accountWaysIn } = await import("../auth/signInMethods");
-const { EMAIL_SIGN_IN_OFF, PLATFORM_KEY_UNKNOWN } = await import("@intentic/sandbox-contract");
+const { EMAIL_SIGN_IN_OFF, PLATFORM_KEY_UNKNOWN } = await import("@intentic/sandbox-contract/schemas/system");
 const prompts = await import("./signInPrompt");
 const { sandboxSummary } = await import("../../testing/sandboxSummary");
 

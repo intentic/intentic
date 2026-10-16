@@ -1,4 +1,6 @@
-import type { Capability, CredentialGate, TurnNote } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { CredentialGrants } from "./credential-grants.js";
 
 // Gates mounted capabilities (browser/identity/mcp) by absence: nothing here can stop a profile already signed in, a

@@ -1,14 +1,9 @@
-import {
-    type AgentProvider,
-    DEFAULT_PROVIDER,
-    endpointProvider,
-    type ModelPin,
-    type ModelRole,
-    type ModelSource,
-    NATIVE_PROVIDERS,
-    readyChain,
-    roleLadder,
-} from "@intentic/sandbox-contract";
+import { type AgentProvider, DEFAULT_PROVIDER, type ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import { endpointProvider } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { ModelRole } from "@intentic/sandbox-contract/models/model-roles";
+import { type ModelSource, readyChain } from "@intentic/sandbox-contract/models/model-pins";
+import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
+import { roleLadder } from "@intentic/sandbox-contract/models/model-setups";
 import type { Services } from "../../composition.js";
 import { failingStreak } from "./role-model-health.js";
 import { ladderPinsNow } from "./role-model.js";

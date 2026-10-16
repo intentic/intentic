@@ -1,5 +1,5 @@
 import { noteAudit } from "../audit/audit-http.js";
-import { personasContract } from "@intentic/sandbox-contract";
+import { personasContract } from "@intentic/sandbox-contract/contracts/personas.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";

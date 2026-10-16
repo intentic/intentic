@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { withConversationTrust } from "@intentic/sandbox-contract";
+import { withConversationTrust } from "@intentic/sandbox-contract/schemas/privacy";
 import { Button, Icon, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { usePrivacyShield } from "../../../sandbox/privacy-shield/usePrivacyShield";
+import { usePrivacyShield } from "../../../../models/sandbox/usePrivacyShield";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { privacyStanding } from "./privacyStanding";
-import { usePaneView } from "../useChat-view";
+import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 
 // The privacy shield's word on this conversation, above the composer, only when a turn is known to be turned away: a
 // runtime it cannot read at all or a runner it cannot reach (said before the send rather than after it), or what it found when the last turn was

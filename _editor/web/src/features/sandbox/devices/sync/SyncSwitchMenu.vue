@@ -2,7 +2,7 @@
 import { Button, ContextMenu, Icon } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
-import type { SwitchMenu } from "../deviceRows";
+import type { SwitchMenu } from "../../../../models/sandbox/devices/deviceRows";
 import { environmentTitle } from "../machineEnvironments";
 import type { DeviceOps } from "../runners/deviceOps";
 

@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { call } from "@orpc/server";
 import { unstubbed } from "@intentic/testing";
 import type { ProvenCaller } from "../auth/auth.js";

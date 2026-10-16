@@ -1,7 +1,7 @@
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import type { LineStat } from "@intentic/code-read";
-import type { GitChange } from "@intentic/sandbox-contract";
+import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
 import { readWorkspaceFile, statWorkspaceSizeMtime } from "../../workspace/files/workspace-files.js";
 import { mapPool, SingleFlight } from "@intentic/base/async";
 import { siblingModule, type WorkerCalls, workerPool } from "@intentic/base/worker-calls";

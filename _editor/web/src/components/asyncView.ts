@@ -11,7 +11,7 @@ import { t } from "@intentic/ui/i18n";
 
 type Loader = () => Promise<{ readonly default: Component }>;
 
-// Where a view stands in the phone's idle prefetch (router/prefetch.ts): `first` for where a phone's next tap goes (an
+// Where a view stands in the phone's idle prefetch (shell/prefetch/prefetch.ts): `first` for where a phone's next tap goes (an
 // agent's page from the board, the menu), `skip` for a view a phone never draws, whose chunk would be downloaded and
 // evaluated for nothing. Absent is route order, which is all a desktop ever uses.
 export type MobilePrefetch = `first` | `skip`;

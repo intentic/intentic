@@ -1,23 +1,24 @@
 <script setup lang="ts">
 import type { ChangeStatus, IconName, Tip } from "@intentic/ui";
 import { Button, Modal, Notice, ui, useDevice } from "@intentic/ui";
-import { useWorkspaceTabs } from "../../tabs/useWorkspaceTabs";
+import { useWorkspaceTabs } from "../../../../models/workspace/tabs/useWorkspaceTabs";
 import type { DiffPayload } from "@intentic/extension-api";
-import type { LandedMessage, RepoChanges } from "@intentic/sandbox-contract";
+import type { LandedMessage } from "@intentic/sandbox-contract/schemas/agents";
+import type { RepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
 import { computed, ref } from "vue";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
-import { useAgents } from "../../../agents/fleet/useAgents";
+import { useAgents } from "../../../../models/fleet/useAgents";
 import { type ChangedFile, fileRows } from "./changedFiles";
 import { askingModel, draftRunning, landedMessage, originHue, originsOf, YOURS } from "../changeOrigins";
-import { diffRawUrls } from "../diffRaw";
+import { diffRawUrls } from "../../../../models/workspace/changes/diffRaw";
 import { savedMessage, soleOrigin } from "./savedMessage";
-import { COMMIT_SCOPE, useChanges } from "../useChanges";
+import { COMMIT_SCOPE, useChanges } from "../../../../models/changes/useChanges";
 import { useSaveActions } from "./useSaveActions";
-import type { OpenMode } from "../../tabs/workspaceTabs";
+import type { OpenMode } from "../../../../models/workspace/tabs/workspaceTabs";
 import { useT } from "@intentic/ui/i18n";
 import CommitField from "../commit/CommitField.vue";
 import ChangeRowName from "../../../../components/ChangeRowName.vue";
-import ProviderLogo from "../../../chat/accounts/ProviderLogo.vue";
+import ProviderLogo from "../../../../parts/providers/ProviderLogo.vue";
 
 // The maker's half of the Changes sidebar, over the same read the developer's ReviewPanel uses. Everything git asks a
 // developer to decide is decided here instead: there is no index (a save records the whole tree), no message to write

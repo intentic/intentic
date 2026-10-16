@@ -257,7 +257,7 @@
             "verb": "q",
             "query": "That agent has no conversation left to send to.",
             "slices": ["ui-copy"],
-            "expected": [{ "file": "_editor/web/src/features/agents/fleet/agentActions.ts", "line": 178 }],
+            "expected": [{ "file": "_editor/web/src/models/fleet/agentActions.ts", "line": 178 }],
             "notes": "Live 2026-10-06: a bare query answered stream-agent.ts. The text is en.json agents.agentActions.noConversationLeft, rendered by agentActions.ts."
         },
         {
@@ -297,7 +297,7 @@
             "verb": "q",
             "query": "Your workspace moved on since the agent branched",
             "slices": ["ui-copy"],
-            "expected": [{ "file": "_editor/web/src/features/agents/review/conflictResolution.ts", "line": 81 }],
+            "expected": [{ "file": "_editor/web/src/models/conversations/review/conflictResolution.ts", "line": 81 }],
             "notes": "en.json agents.conflictResolution.workspaceMovedOnSince, capitalised differently from the catalog."
         },
         {

@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { Button, EmptyState } from "@intentic/ui";
 import { useTemplateRef } from "vue";
-import { useChatFloating } from "./chatFloating";
+import { useChatFloating } from "../../../models/conversations/panel/chatFloating";
 import { useLayout } from "../../../workbench/window/useLayout";
 import { chatFullSlot, publishSlot } from "../../../workbench/window/panelSlots";
 import { useT } from "@intentic/ui/i18n";

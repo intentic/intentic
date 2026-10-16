@@ -1,5 +1,5 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import { capabilitiesOf } from "@intentic/sandbox-contract";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { GUIDANCE_HEADER, guidanceBlock } from "./guidance.js";
 import { intenticPromptOf } from "./intentic-prompt.js";
 import { sdkSystemPrompt, turnPromptPlacement } from "./system-prompt.js";

@@ -2,13 +2,8 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { queueOnFile } from "@intentic/base/fs";
-import {
-    DEV_SANDBOX_IMAGE,
-    type Environment,
-    type EnvironmentRecurring,
-    type EnvironmentRuntimeDecision,
-    isOfficialSandboxImage,
-} from "@intentic/sandbox-contract";
+import { DEV_SANDBOX_IMAGE, isOfficialSandboxImage } from "@intentic/sandbox-contract/policy/overlay-lint";
+import type { Environment, EnvironmentRecurring, EnvironmentRuntimeDecision } from "@intentic/sandbox-contract/schemas/environment";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
 import type { Config } from "../env.config.js";

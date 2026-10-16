@@ -1,4 +1,4 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { isGridKey, moveInGrid } from "./homeGrid";
 import { homeLayout, EMPTY_LAYOUT } from "./homeLayout";
 import type { HomeGroup, HomeGroupKey } from "./homeOrder";

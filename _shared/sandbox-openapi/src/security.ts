@@ -2,7 +2,7 @@
 // (bearer, reaches everything the owner does) and a program's control token (`x-intentic-control`), scope fixed at mint
 // time since the daemon can't tell callers apart.
 
-import { CONTROL_SCOPE_REACH } from "@intentic/sandbox-contract";
+import { CONTROL_SCOPE_REACH } from "@intentic/sandbox-contract/policy/control-scopes";
 
 // Re-exported from the contract so the site's auth page and this scheme read the same rows as the daemon.
 export { CONTROL_SCOPE_REACH };

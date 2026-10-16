@@ -1,7 +1,8 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PageNotFoundError, publishPage, purgePages } from "./page-store.js";
+import { PageNotFoundError, publishPage } from "./page-store.js";
+import { purgePages } from "../../sessions/conversation-purge.js";
 
 describe("publishPage", () => {
     let root: string;

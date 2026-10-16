@@ -1,5 +1,6 @@
 import { experimentArm } from "@intentic/agent-context/experiments";
-import type { SandboxSettings, TurnNote } from "@intentic/sandbox-contract";
+import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { FieldNotes } from "@intentic/agent-context/field-notes";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 import { opt } from "../../../opt.js";

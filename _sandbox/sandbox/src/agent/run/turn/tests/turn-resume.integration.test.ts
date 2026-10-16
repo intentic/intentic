@@ -1,22 +1,16 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-    type AgentEvent,
-    type AgentTurn,
-    type ParkedRequest,
-    type Persona,
-    RESUME_NOTES,
-    RETRY_LADDER_MS,
-    RETRY_LADDER_TRIES,
-    type SandboxSettings,
-    SandboxSettingsSchema,
-    type TranscriptRow,
-    NATIVE_PROVIDERS,
-    withResumeNote,
-    withoutResumeNote,
-    setupsFromRoleLists,
-} from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { ParkedRequest } from "@intentic/sandbox-contract/events/requests";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import { RESUME_NOTES, withResumeNote, withoutResumeNote } from "@intentic/sandbox-contract/events/resume";
+import { RETRY_LADDER_MS, RETRY_LADDER_TRIES } from "@intentic/sandbox-contract/schemas/turn-break";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
+import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
+import { setupsFromRoleLists } from "@intentic/sandbox-contract/models/model-setups";
 import { waitFor, SETTLES } from "@intentic/testing/bun";
 import { sqliteAgentsStore } from "../../../../conversations/registry/agents-store.js";
 import { conversationsDbPath, openConversationsDb } from "../../../../store/conversations-db.js";
@@ -28,14 +22,17 @@ import { unstubbed } from "@intentic/testing";
 import type { TranscriptAgent } from "../../../../sessions/agent-transcript.js";
 import { testMintedSlices } from "../../../../runtimes/minted/minted-provider.testing.js";
 import { cliPartsFake } from "../../../../runtimes/vendor-cli/vendor-cli.testing.js";
-import { beginTurn, conversationEntry, drivenBy, fleetStoreOver, memoryFleet, notedFleet } from "../../../../testing.js";
+import { beginTurn } from "../../../../conversations/actor/conversation-actors.testing.js";
+import { conversationEntry } from "../../../../conversations/registry/agents-store.testing.js";
+import { drivenBy } from "../../../../seams/turn-starter.testing.js";
+import { fleetStoreOver, memoryFleet, notedFleet } from "../../../../conversations/registry/agents-registry.testing.js";
 import { automationConfig } from "../../../../harness/route-stores.testing.js";
 import { fileTranscriptRecord } from "../../../../sessions/transcript-record.js";
 import { fileSandboxSettingsStore } from "../../../../settings/settings-store.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "../../../providers/provider-health.js";
 import { providerReadiness } from "../../../providers/provider-registry.js";
 import { PROVIDER_MODULES } from "../../../../runtimes/runtime-table.js";
-import { type JournalledTurn, MAX_PARKED_RESTORES, sqliteTurnJournal, type TurnJournal } from "../turn-journal.js";
+import { type JournalledTurn, MAX_PARKED_RESTORES, sqliteTurnJournal, type TurnJournal } from "../../../../store/journals/turn-journal.js";
 import { turnRunOf } from "../../../../conversations/actor/conversation-holdings.js";
 import { createDomainEvents } from "../../../../seams/domain-events.js";
 import type { Said, StartedRun, TurnInput, TurnStarter } from "../../../../seams/turn-starter.js";

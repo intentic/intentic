@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { SHARED_STATE_PATHS } from "@intentic/sandbox-contract";
+import { SHARED_STATE_PATHS } from "@intentic/sandbox-contract/state/workspace-state";
 
 // How a workspace path maps into an isolated turn's worktree and back (conversations/worktrees/isolation.ts builds the
 // worktree and its namespace). Here, beside entering that namespace (namespace-entry.ts), so the code a turn runs (a

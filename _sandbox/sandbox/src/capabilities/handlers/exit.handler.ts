@@ -1,4 +1,4 @@
-import type { ExitConfig } from "@intentic/sandbox-contract";
+import type { ExitConfig } from "@intentic/sandbox-contract/schemas/exit";
 import { exitDrivers } from "../../exit/exit-drivers.js";
 import { exitLink, startExit, stopExit } from "../../exit/exit-links.js";
 import { tunnelHandler, tunnelStatus } from "../../tunnel/tunnel-handler.js";

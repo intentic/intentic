@@ -76,9 +76,9 @@ jest.mock(`@intentic/ui`, () => ({
 }));
 jest.mock(`../../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasContent: computed(() => true) }) }));
 
-const { dismissModelPick, modelRequest, requestModelPick, settleModelPick } = await import("./hostModelPicker");
-const { modelLabelFor, providerModels } = await import("../../accounts/providerCatalog");
-const { DEFAULT_EFFORT, DEFAULT_THINKING, defaultPinRunSettings } = await import("../run-settings/pickerRunSettings");
+const { dismissModelPick, modelRequest, requestModelPick, settleModelPick } = await import("../../../../models/conversations/accounts/hostModelPicker");
+const { modelLabelFor, providerModels } = await import("../../../../models/providers/providerCatalog");
+const { DEFAULT_EFFORT, DEFAULT_THINKING, defaultPinRunSettings } = await import("../../../../models/providers/pickerRunSettings");
 const { default: HostPickerBody } = await import("./HostPickerBody.vue");
 
 /* WHAT A `chooseRun` ANSWER CARRIES BESIDES THE TIER THE TEST IS ABOUT. */

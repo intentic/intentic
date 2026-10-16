@@ -9,7 +9,7 @@ import { Hono } from "hono";
 import type { ExtensionGrant } from "../../auth/grants.js";
 import { memorySecretVault } from "../../capabilities/capabilities-slice.testing.js";
 import type { Services } from "../../composition.js";
-import { testConfig } from "../../testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import { readWorkspaceFile } from "../../workspace/files/workspace-files.js";
 import { announceUnwatchedWrite } from "../../workspace/watch/workspace-watch.js";
 import { writeExtensionSettings } from "../extension-settings.js";

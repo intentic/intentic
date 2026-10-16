@@ -3,7 +3,9 @@ import { conversationReader, registryProvenance } from "../auth/scope/conversati
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
-import { agentsContract, type AgentChanges, type AgentScratch, type ScratchPath, capabilitiesOf } from "@intentic/sandbox-contract";
+import { agentsContract } from "@intentic/sandbox-contract/contracts/agents.contract";
+import type { AgentChanges, AgentScratch, ScratchPath } from "@intentic/sandbox-contract/schemas/git/git";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { implement, ORPCError } from "@orpc/server";
 import { withBaseText } from "../agent/prompt/prompt-disclosure.js";
 import { opt } from "../opt.js";

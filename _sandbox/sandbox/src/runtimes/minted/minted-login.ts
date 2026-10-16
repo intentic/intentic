@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { type LoginStatus, type MintedProvider, type MintedVariant, mintedVariant, type SignInCatcher } from "@intentic/sandbox-contract";
+import type { LoginStatus } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import { type MintedProvider, type MintedVariant, mintedVariant } from "@intentic/sandbox-contract/models/provider-specs";
+import type { SignInCatcher } from "@intentic/sandbox-contract/schemas/loopback-catch";
 import type { Logger } from "pino";
 import { armLoopbackCatch, type LoopbackBridgeDeps, type LoopbackTarget } from "../../agent/providers/accounts/loopback-bridge.js";
 import type { MintedStore } from "./minted-credentials.js";

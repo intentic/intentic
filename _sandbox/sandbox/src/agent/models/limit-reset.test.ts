@@ -1,4 +1,4 @@
-import type { UsageWindow } from "@intentic/sandbox-contract";
+import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import type { TurnLimit } from "../../usage/serviceability/fleet-limit.js";

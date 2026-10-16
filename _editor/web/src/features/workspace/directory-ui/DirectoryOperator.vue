@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { SegmentedControl } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
-import { useDirectoryTabs } from "./useDirectoryTabs";
+import { useDirectoryTabs } from "../../../models/workspace/tabs/useDirectoryTabs";
 import ExtensionView from "../../../core-views/ExtensionView.vue";
 
 // In-tree management surface for a repo directory: renders whichever directory-surface extension views the

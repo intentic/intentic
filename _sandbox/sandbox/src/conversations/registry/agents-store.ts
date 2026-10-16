@@ -2,21 +2,21 @@ import {
     AgentHarnessSchema,
     AgentOriginSchema,
     AgentProviderSchema,
-    type AgentStatus,
     ForkedFromSchema,
+    profileOf,
+    type TurnProfile,
+} from "@intentic/sandbox-contract/schemas/agent";
+import {
+    type AgentStatus,
     LandConflictSchema,
     LandedMessageSchema,
-    LandingDeliverySchema,
-    LimitPolicySchema,
-    profileOf,
-    RetryPolicySchema,
-    RoomPolicySchema,
     SessionOwnerSchema,
-    type TurnProfile,
     TurnProofSchema,
     TurnReachSchema,
     UnfinishedWorkSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/agents";
+import { LandingDeliverySchema } from "@intentic/sandbox-contract/schemas/project-delivery";
+import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema } from "@intentic/sandbox-contract/schemas/turn-break";
 import { z } from "zod";
 import type { ConversationsDb } from "../../store/conversations-db.js";
 import { readDocument } from "@intentic/sandbox-contract/documents";

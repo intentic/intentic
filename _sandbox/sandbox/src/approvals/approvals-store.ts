@@ -1,5 +1,5 @@
 import { STATE_DIR } from "@intentic/constants";
-import { ApprovalSchema, type ApprovalSummary } from "@intentic/sandbox-contract";
+import { ApprovalSchema, type ApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
 import type { Services } from "../composition.js";
 import { writeLoadedSkill } from "../store/loaded-skills.js";
 import { defineDocument } from "../store/evolution/documents.js";

@@ -1,4 +1,4 @@
-import type { ClientDiagnostic, ClientPage } from "@intentic/sandbox-contract";
+import type { ClientDiagnostic, ClientPage } from "@intentic/sandbox-contract/schemas/logs";
 import { replaySessionId } from "./analytics";
 import { buildId } from "./buildEpoch";
 import { desktopApp } from "./environments/desktop";

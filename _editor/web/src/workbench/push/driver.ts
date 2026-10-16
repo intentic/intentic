@@ -1,4 +1,4 @@
-import type { PushChannel } from "@intentic/sandbox-contract";
+import type { PushChannel } from "@intentic/sandbox-contract/schemas/push";
 
 // The seam between how a device receives push and everything else: usePushNotifications drives this interface,
 // webPush.ts and nativePush.ts implement the transports, and neither imports the other's mechanics. Both sides speak

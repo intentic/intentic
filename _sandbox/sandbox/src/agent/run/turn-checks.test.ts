@@ -1,9 +1,9 @@
 import type { StopHookInput } from "@anthropic-ai/claude-agent-sdk";
-import type { Rule } from "@intentic/sandbox-contract";
+import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import type { EditCommandRun } from "../../rules/file-edited.js";
 import { declarationOf, declaredChecks, rulesOf, withRepoChecks } from "../../rules/repo-checks.js";
 import { standing } from "../../rules/rules.js";
-import { syncHookOutput } from "../../testing.js";
+import { syncHookOutput } from "./harness/harness-hooks.testing.js";
 import {
     TURN_CHECK_CEILING_MS,
     TURN_CHECK_OUTPUT_BYTES,

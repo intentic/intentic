@@ -1,4 +1,4 @@
-import type { WalletConfig } from "@intentic/sandbox-contract";
+import type { WalletConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { atomicToUsd, usdcNetworkOf } from "@intentic/sandbox-contract/x402";
 import { usdcBalance } from "../../wallet/x402.js";
 import type { CapabilityHandler } from "../capability.js";

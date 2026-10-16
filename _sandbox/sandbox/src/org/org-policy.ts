@@ -2,10 +2,11 @@ import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { sleep } from "@intentic/base/async";
 import { errorMessage, isMissing } from "@intentic/base/errors";
-import { ORG_SECTIONS, type OrgPolicy, OrgPolicySchema, type OrgPolicyState, orgUnknownPins } from "@intentic/sandbox-contract";
+import { ORG_SECTIONS, type OrgPolicy, OrgPolicySchema, type OrgPolicyState, orgUnknownPins } from "@intentic/sandbox-contract/schemas/organisation";
 import type { Logger } from "pino";
 import { z } from "zod";
 import { writeJsonFile } from "../store/json-file.js";
+import { parseJsonWith } from "@intentic/base/json";
 
 /* THE ORGANISATION POLICY THIS SANDBOX ENFORCES (docs/architecture/organisations.md). A personal sandbox holds none,
  * and then nothing here changes anything: orgLockRefusal (sandbox-contract policy/org-locks.ts) lets every request
@@ -42,13 +43,8 @@ type Held = z.infer<typeof HeldSchema> & { readonly provisional?: true };
 
 // The held file as its schema reads it, or undefined for one that is not that.
 const heldOf = (text: string): z.infer<typeof HeldSchema> | undefined => {
-    try {
-        const parsed = HeldSchema.safeParse(JSON.parse(text));
-        return parsed.success ? parsed.data : undefined;
-    } catch {
-        // allow(silent-catch): text that is not JSON is a held file that does not read, which the caller handles.
-        return undefined;
-    }
+    // Text that is not JSON is a held file that does not read, which the caller handles.
+    return parseJsonWith(text, HeldSchema);
 };
 
 // The organisation's name out of a file that does not otherwise read, for the refusal's wording only.
@@ -122,7 +118,7 @@ export const createOrgPolicyHolder = (deps: {
             .catch((error: Error) => deps.logger.warn({ err: error }, "org policy: a listener failed on the policy now in force"));
     const changed = async (): Promise<void> => {
         for (const listener of listeners) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- in order, each after the last: a roster reconcile and a drift check must not race
+            // in order, each after the last: a roster reconcile and a drift check must not race
             await tell(listener);
         }
     };

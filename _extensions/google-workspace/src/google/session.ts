@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { parseJsonOr } from "@intentic/base/json";
 import { type Connection, type Credential, credentialOf } from "./accounts.js";
 import { runtimeDir, workspaceRoot } from "./paths.js";
 import { type AccessToken, mintToken } from "./token.js";
@@ -36,16 +37,13 @@ const readCache = async (path: string, fingerprint: string, now: number): Promis
     } catch {
         return undefined;
     }
-    try {
-        const parsed = JSON.parse(raw) as Partial<CachedToken>;
-        if (parsed.fingerprint !== fingerprint || typeof parsed.token !== "string" || typeof parsed.expiresAt !== "number") {
-            return undefined;
-        }
-        return parsed.expiresAt - SKEW_SECONDS > now ? parsed.token : undefined;
-    } catch {
-        // A truncated or hand-edited file reads as "no token"; it must never break a command.
+    // A truncated or hand-edited file reads as "no token"; it must never break a command.
+    // SAFETY: every field is checked by type before it is used.
+    const parsed = parseJsonOr(raw, undefined) as Partial<CachedToken> | null | undefined;
+    if (parsed?.fingerprint !== fingerprint || typeof parsed.token !== "string" || typeof parsed.expiresAt !== "number") {
         return undefined;
     }
+    return parsed.expiresAt - SKEW_SECONDS > now ? parsed.token : undefined;
 };
 
 export interface Session {

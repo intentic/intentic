@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Notice, Row, RowGroup, RowNote } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
-import { useSandboxSettings } from "../../overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
 // What happens when main's CI fails. Nothing checks work inside a turn or after it lands any more, and nothing asks

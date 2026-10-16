@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { cachedAsync } from "@intentic/base/held";
-import type { EnvironmentDrift, RuntimeInstall } from "@intentic/sandbox-contract";
+import type { EnvironmentDrift, RuntimeInstall } from "@intentic/sandbox-contract/schemas/environment";
 
 const execFileAsync = promisify(execFile);
 

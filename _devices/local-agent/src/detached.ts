@@ -1,9 +1,12 @@
 import { spawn } from "node:child_process";
 import { openSync } from "node:fs";
-import { readFile, rename, rm, stat } from "node:fs/promises";
+import { rename, rm, stat } from "node:fs/promises";
 import { uptime } from "node:os";
 import { basename } from "node:path";
 import { setTimeout } from "node:timers/promises";
+import { parseJsonOr } from "@intentic/base/json";
+import { readTextIfExists } from "@intentic/base/fs";
+import { isRecord } from "@intentic/base/escape";
 import { writeSecretFile } from "./home.js";
 import { type CliLauncher, stubCommand, windowsLaunchStub } from "./launcher.js";
 
@@ -25,7 +28,7 @@ export const isProcessAlive = (pid: number): boolean => {
 // reused its number after reboot. A record from another boot is stale by construction and its pid is never probed.
 const bootToken = async (): Promise<string> => {
     // Linux/WSL: a fresh UUID per boot, exact and immune to clock changes (e.g. a resynced WSL clock).
-    const bootId = (await readFile("/proc/sys/kernel/random/boot_id", "utf8").catch(() => "")).trim();
+    const bootId = ((await readTextIfExists("/proc/sys/kernel/random/boot_id")) ?? "").trim();
     // Elsewhere: boot start time via uptime(), which counts through sleep so a resumed laptop is the same boot.
     return bootId === "" ? `at:${Math.round(Date.now() - uptime() * 1000)}` : `id:${bootId}`;
 };
@@ -58,23 +61,22 @@ export const pidFileBody = async (record: PidRecord): Promise<string> => JSON.st
 const text = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
 
 const parsePidFile = (raw: string): PidFile | undefined => {
-    try {
-        const parsed = JSON.parse(raw) as Record<string, unknown>;
-        const { pid, boot } = parsed;
-        if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0 || typeof boot !== "string") {
-            return undefined;
-        }
-        const build = text(parsed["build"]);
-        const supervisor = text(parsed["supervisor"]);
-        return { pid, boot, ...(build === undefined ? {} : { build }), ...(supervisor === undefined ? {} : { supervisor }) };
-    } catch {
+    const parsed = parseJsonOr(raw, undefined);
+    if (!isRecord(parsed)) {
         return undefined;
     }
+    const { pid, boot } = parsed;
+    if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0 || typeof boot !== "string") {
+        return undefined;
+    }
+    const build = text(parsed["build"]);
+    const supervisor = text(parsed["supervisor"]);
+    return { pid, boot, ...(build === undefined ? {} : { build }), ...(supervisor === undefined ? {} : { supervisor }) };
 };
 
 // Undefined covers every record with nothing to reach (no file, torn, another boot, an exited pid): callers treat them alike.
 export const livePidRecord = async (pidPath: string): Promise<PidRecord | undefined> => {
-    const file = parsePidFile(await readFile(pidPath, "utf8").catch(() => ""));
+    const file = parsePidFile((await readTextIfExists(pidPath)) ?? "");
     if (file === undefined || !sameBoot(file.boot, await bootToken()) || !isProcessAlive(file.pid)) {
         return undefined;
     }
@@ -113,7 +115,7 @@ export const holdPidFile = async (pidPath: string, dir: string, record: PidRecor
 
 // Removes the pidfile only while it still names `pid`, so a stopper never deletes the claim of whoever replaced it.
 export const releasePidFile = async (pidPath: string, pid: number): Promise<boolean> => {
-    const file = parsePidFile(await readFile(pidPath, "utf8").catch(() => ""));
+    const file = parsePidFile((await readTextIfExists(pidPath)) ?? "");
     if (file !== undefined && file.pid !== pid) {
         return false;
     }
@@ -131,7 +133,7 @@ export const stopProcess = async (pid: number, timeoutMs: number): Promise<void>
         return;
     }
     for (let waited = 0; waited < timeoutMs && isProcessAlive(pid); waited += STOP_POLL_MS) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a bounded wait for one pid, by definition serial
+        // a bounded wait for one pid, by definition serial
         await setTimeout(STOP_POLL_MS);
     }
 };

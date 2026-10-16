@@ -1,12 +1,12 @@
 // A collapsed run renders wherever a surface is provided, not only in a ChatPane, and opens its file through it.
 import "@intentic/testing/dom";
 import { type App, createApp, h } from "vue";
-import type { TranscriptTool } from "@intentic/sandbox-contract";
-import type { ChatSurface } from "./chatToolSurface";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import type { ChatSurface } from "../../../models/conversations/tools/chatToolSurface";
 import { IconStub } from "@intentic/ui/testing";
 
 const { default: ChatToolRows } = await import("./ChatToolRows.vue");
-const { CHAT_SURFACE } = await import("./chatToolSurface");
+const { CHAT_SURFACE } = await import("../../../models/conversations/tools/chatToolSurface");
 
 let app: App | undefined;
 const mount = (tools: readonly TranscriptTool[], surface?: ChatSurface): HTMLElement => {

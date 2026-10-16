@@ -9,8 +9,8 @@ import {
     type NeedRaised,
     type NeedSubject,
     type NeedTold,
-    needWakePrompt,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/needs";
+import { needWakePrompt } from "@intentic/sandbox-contract/events/need-wake";
 import type { Logger } from "pino";
 import type { TurnStanding } from "../conversations/actor/turn-standing.js";
 import { type Answerer, isGone, type Met, type NeedKinds, type SecretKeepOn } from "./need-kinds.js";

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { type FakeModel, type ScriptedStep, startFakeModel } from "@intentic/fake-model";
 import { z } from "zod";
 import { type JsonValue, type ResponsesRequest, userMessages } from "@intentic/fake-model/responses";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { e2eTier } from "@intentic/testing/e2e";
 import type { AgentRequest, TurnSpec } from "../agent/providers/agent-request.js";
 import type { AgentTool } from "../agent/tools/agent-tools.js";
@@ -17,7 +17,7 @@ import { DEFAULT_TURN_TIMEOUTS } from "../runtimes/decorators/turn-watchdog.js";
 import { OPENCODE_GEMINI_PROVIDER } from "../runtimes/gemini/gemini-models.js";
 import { createOpenCodeService, type OpenCodeService } from "../runtimes/opencode/opencode.js";
 import { parkedCards } from "../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 import { rootExecution } from "../workload/agent-execution.testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.

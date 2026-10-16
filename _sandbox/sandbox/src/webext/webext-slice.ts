@@ -1,5 +1,8 @@
-import type { Capability, WebExtFacts, WebExtScopes } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { WebExtFacts, WebExtScopes } from "@intentic/sandbox-contract/schemas/webext";
+import type { CompositionCore } from "../composition.js";
 import { createPeerHub, type PeerDoorDeps } from "../peers/peer-hub.js";
+import { defineSlice } from "../seams/slice.js";
 import { filePeerStore } from "../peers/peer-store.js";
 import { createSecretTickets, type SecretTicketDesk } from "./secret-tickets.js";
 import {
@@ -25,7 +28,7 @@ export interface WebextSlice {
 }
 
 // Builds the webext slice; its reach reads only the hub it builds, so nothing here waits on the rest of the daemon.
-export const createWebextSlice = ({ historyRoot, logger, peerTools }: PeerDoorDeps): WebextSlice => {
+const createWebextSlice = ({ historyRoot, logger, peerTools }: PeerDoorDeps): WebextSlice => {
     const webextHub = createPeerHub<WebExtClient, WebExtAnnounced, WebExtFacts, WebExtScopes>(WEBEXT_PEER.hub, logger, peerTools);
     return {
         webexts: filePeerStore(historyRoot, WEBEXT_PEER.store),
@@ -36,3 +39,8 @@ export const createWebextSlice = ({ historyRoot, logger, peerTools }: PeerDoorDe
         secretTickets: createSecretTickets({ hub: webextHub, callTimeoutMs: WEBEXT_PEER.hub.callTimeoutMs }),
     };
 };
+
+export const webextSlice = defineSlice<WebextSlice>({
+    build: ({ config, logger, peerTools }: Pick<CompositionCore, "config" | "logger" | "peerTools">) =>
+        createWebextSlice({ historyRoot: config.historyRoot, logger, peerTools }),
+});

@@ -2,8 +2,8 @@
 import { Button, ui, Icon, Modal, RowGroup } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import RepoCheckRow from "../../sandbox/agent-settings/behaviour/RepoCheckRow.vue";
-import { useRepoChecks } from "../../sandbox/environment/useRepoChecks";
+import RepoCheckRow from "../../../components/RepoCheckRow.vue";
+import { useRepoChecks } from "../../../models/sandbox/environment/useRepoChecks";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

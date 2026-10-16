@@ -1,6 +1,6 @@
 import { computed } from "vue";
 import { desktopApp } from "../../../../app/environments/desktop";
-import { useSyncHealth } from "../../devices/useDevices";
+import { useSyncHealth } from "../../../../models/sandbox/devices/useDevices";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 
 // Whether this sandbox's files exist in exactly one place, and whether the reader is sitting at a computer that

@@ -6,7 +6,8 @@ import { basename, dirname, join } from "node:path";
 import { downloadFile } from "@huggingface/hub";
 import { SingleFlight } from "@intentic/base/async";
 import { undefinedIfMissing, errorMessage } from "@intentic/base/errors";
-import { type Capability, LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelPrefetch } from "@intentic/sandbox-contract";
+import { type Capability, LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { LocalModelPrefetch } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import { opt } from "../opt.js";
 import { type LocalModelSource, localModelSource, localModelWeightsPath } from "./local-model.js";
 

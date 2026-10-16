@@ -1,5 +1,7 @@
 import { type FixtureRouter, Frames, refuse, servedProcedures } from "@intentic/contract-serve";
-import { type Hello, type SystemEvent, TRANSLATOR_PROVIDERS, TranslatorAccountsSchema } from "@intentic/sandbox-contract";
+import type { Hello, SystemEvent } from "@intentic/sandbox-contract/events/system-events";
+import { TRANSLATOR_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
+import { TranslatorAccountsSchema } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { toRelPath } from "@intentic/workspace-ignore";
 import type { DerivedTexts } from "./derived.js";
 import type { Grant } from "./grants.js";

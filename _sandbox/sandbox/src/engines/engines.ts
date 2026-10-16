@@ -1,5 +1,6 @@
-import type { EngineChannel, EngineId, EngineRow, EnginesView } from "@intentic/sandbox-contract";
-import { ENGINE_IDS, isNewer } from "@intentic/sandbox-contract";
+import type { EngineChannel, EngineId, EngineRow, EnginesView } from "@intentic/sandbox-contract/schemas/engines";
+import { ENGINE_IDS } from "@intentic/sandbox-contract/schemas/engines";
+import { isNewer } from "@intentic/sandbox-contract/state/versions";
 import type { Logger } from "pino";
 import { opt } from "../opt.js";
 import type { BootRole } from "../agent/providers/provider-module.js";

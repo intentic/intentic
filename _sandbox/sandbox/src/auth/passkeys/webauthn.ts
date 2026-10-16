@@ -1,5 +1,5 @@
 import { createHash, createPublicKey, type KeyObject, verify as verifyWithKey } from "node:crypto";
-import type { AuthenticationResponse, RegistrationResponse } from "@intentic/sandbox-contract";
+import type { AuthenticationResponse, RegistrationResponse } from "@intentic/sandbox-contract/schemas/system";
 import { tokenEquals } from "../auth.js";
 
 // The relying-party half of WebAuthn, as narrow as passkeys let it be: attestation is not judged (a passkey's

@@ -1,24 +1,26 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
-import type { Capability } from "@intentic/sandbox-contract";
-import { envSuffix, grantSite } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { envSuffix } from "@intentic/sandbox-contract/policy/capability-env";
+import { grantSite } from "@intentic/sandbox-contract/schemas/needs";
 import { ENV_FILE } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { contributionEnv, contributionFor, contributionRegistry, contributionSecretFields } from "../capabilities/contributions.js";
 import { connectableEntries } from "../capabilities/offers/connectable.js";
 import { registry } from "../capabilities/registry.js";
-import type { Services } from "../composition.js";
+import type { CompositionCore, Services } from "../composition.js";
 import { liveRequestRun } from "../conversations/actor/card-deps.js";
 import { liveRunOf } from "../conversations/actor/conversation-holdings.js";
 import { turnStandingOf } from "../conversations/actor/turn-standing.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { approveDraft, composeEnvironment, proposeDraft, rejectDraft, toolStanding } from "../environment/environment.js";
-import { deliverWake } from "../agent/run/turn/wake-delivery.js";
+import { deliverWake } from "../seams/wake-delivery.js";
 import { deliverToListenerChannel } from "../extensions/listener/listener-deliver.js";
 import { needRaised, needResolved } from "../push/notifications.js";
 import { upsertEnv } from "../secrets/env-text.js";
+import { defineSlice } from "../seams/slice.js";
 import { textFile } from "../store/plain-files/text-file.js";
 import { capabilityNeed } from "./kinds/capability-need.js";
 import { automationNeed } from "./kinds/automation-need.js";
@@ -46,7 +48,7 @@ export interface NeedsSlice {
     readonly needs: Needs;
 }
 
-export interface NeedsSliceDeps {
+interface NeedsSliceDeps {
     readonly workspaceRoot: string;
     readonly logger: Logger;
     readonly whole: () => Services;
@@ -102,7 +104,7 @@ const withdrawNeedPush =
     (need) =>
         void whole().pushSender.withdraw(needResolved(need));
 
-export const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): NeedsSlice => {
+const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): NeedsSlice => {
     const capabilities = (): Promise<readonly Capability[]> => whole().capabilities.list();
     const secret = secretNeedOf(whole);
     const needs = createNeeds({
@@ -211,3 +213,8 @@ export const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDep
     });
     return { needs };
 };
+
+export const needsSlice = defineSlice<NeedsSlice>({
+    build: ({ workspace, logger, whole }: Pick<CompositionCore, "workspace" | "logger" | "whole">) =>
+        createNeedsSlice({ workspaceRoot: workspace.root, logger, whole }),
+});

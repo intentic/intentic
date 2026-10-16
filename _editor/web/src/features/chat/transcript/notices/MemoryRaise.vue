@@ -3,7 +3,7 @@ import { SandboxResourcesDialog } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { engineMemoryGib, type ResourcesForm } from "@intentic/ui/sandbox-resources";
 import { computed, ref } from "vue";
-import { useSelfResources } from "../../../sandbox/devices/useSelfResources";
+import { useSelfResources } from "../../../../models/sandbox/devices/useSelfResources";
 
 /* The other way past a low-memory hold, where this machine can reshape the sandbox: raise its memory first, while the held message waits through the restart. */
 

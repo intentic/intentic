@@ -1,3 +1,4 @@
+import { errorMessage } from "@intentic/base/errors";
 import { computed, ref } from "vue";
 import {
     machineSandboxCheck,
@@ -67,7 +68,7 @@ const attempt = async (action: () => Promise<void>): Promise<void> => {
         await action();
     } catch (error) {
         // The app's refusal is already a sentence for the reader (machine_sandbox.rs); a thrown Error carries it whole.
-        const said = error instanceof Error ? error.message : String(error);
+        const said = errorMessage(error);
         machineActionError.value = said;
         throw new Error(said, { cause: error });
     }

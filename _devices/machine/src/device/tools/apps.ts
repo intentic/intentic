@@ -1,5 +1,5 @@
 import { type Desktop, DesktopError, type Frame, type FrameLog, frameName, toImage, viewFrame, type WindowInfo } from "@intentic/desktop-automation";
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { calling, type Indicator, machineIndicator } from "../indicator.js";
 import { assertScope, ScopeError } from "../policy.js";
 import { assertTypable } from "./device.js";

@@ -1,4 +1,5 @@
-import { type CapabilityKind, isDerivedMachineId } from "@intentic/sandbox-contract";
+import type { CapabilityKind } from "@intentic/sandbox-contract/schemas/capabilities";
+import { isDerivedMachineId } from "@intentic/sandbox-contract/schemas/hosts";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { InvariantCheck } from "../invariants/invariants.js";
 import type { PeerHub } from "./peer-hub.js";

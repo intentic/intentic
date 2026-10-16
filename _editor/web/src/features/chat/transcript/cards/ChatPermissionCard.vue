@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import type { AgentReply, ChildMove, ChildRun } from "@intentic/sandbox-contract";
+import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { ChildMove, ChildRun } from "@intentic/sandbox-contract/events/requests";
 import { ContextMenu, ui } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { type CardAnswer, SKIP_CALL } from "../../session/cardReplies";
-import ChatCommandBlock from "../../tools/ChatCommandBlock.vue";
-import type { ChatMessage } from "../transcript";
-import ChatCard from "./ChatCard.vue";
+import { type CardAnswer, SKIP_CALL } from "../../../../models/conversations/session/cardReplies";
+import ChatCommandBlock from "../../../../components/ChatCommandBlock.vue";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
+import ChatCard from "../../../../components/ChatCard.vue";
 import ChatChildAgentAsk from "./ChatChildAgentAsk.vue";
-import ChatDecisionButton from "./ChatDecisionButton.vue";
+import ChatDecisionButton from "../../../../components/ChatDecisionButton.vue";
 import { permissionStatus } from "./cardStatus";
 
 const t = useT();

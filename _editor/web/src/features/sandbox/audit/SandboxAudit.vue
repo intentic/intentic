@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AUDIT_RETENTION_DAYS_DEFAULT, type AuditSettings } from "@intentic/sandbox-contract";
+import { AUDIT_RETENTION_DAYS_DEFAULT, type AuditSettings } from "@intentic/sandbox-contract/schemas/data-protection";
 import {
     AnchoredOverlay,
     Button,
@@ -30,8 +30,8 @@ import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { useSecretInventory } from "../../capabilities/connect/secrets/useSecrets";
-import { useSandboxSettings } from "../overview/useSandboxSettings";
+import { useSecretInventory } from "../../../models/capabilities/useSecrets";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import {
     actionFilters,
     actionIcon,

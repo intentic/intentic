@@ -8,7 +8,8 @@ import { bashCommand, oneLiner, oneLinerHost, psCommand } from "../../app/enviro
 import RunCommand from "../../components/RunCommand.vue";
 import { sandboxRaw } from "../../client/sandbox/sandboxRaw";
 import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
-import { INVENTORY_PATH, zoneFromUrl } from "@intentic/sandbox-contract";
+import { INVENTORY_PATH } from "@intentic/sandbox-contract/schemas/inventory";
+import { zoneFromUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import { normalizeHostName } from "./hostName";
 import { useT } from "@intentic/ui/i18n";
 

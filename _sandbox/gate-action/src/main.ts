@@ -8,6 +8,7 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
+import { parseJsonOr } from "@intentic/base/json";
 import {
     conversationIdFor,
     detailOf,
@@ -117,13 +118,7 @@ if (inputs.door === "fire") {
     process.exit(0);
 }
 
-const event = ((): unknown => {
-    try {
-        return eventText === "" ? undefined : JSON.parse(eventText);
-    } catch {
-        return undefined;
-    }
-})();
+const event = eventText === "" ? undefined : parseJsonOr(eventText, undefined);
 const request = inputs.request !== "" ? inputs.request : defaultRequest(process.env, event);
 if (request === "") {
     wiring("nothing to tell the agent: set `with: request` (no workflow context to compose one from)");

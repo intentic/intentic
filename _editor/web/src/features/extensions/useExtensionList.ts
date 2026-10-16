@@ -1,5 +1,6 @@
 import { contributedEntryOf } from "@intentic/extension-manifest";
-import type { ExtensionSummary, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { ENVIRONMENT, rpcKey } from "../../lib/queryKeys";
@@ -8,8 +9,8 @@ import { extensionsLoaded, extensionsReconciling, loadedCommits, loadedListAt } 
 import { extensionStatuses } from "../../workbench/views/extensionStatuses";
 import { type ExtensionFacet, facetsOf, searchTextOf } from "./extensionFacets";
 import { backendState, type ExtensionState, extensionState } from "./extensionState";
-import { useCapabilities } from "../capabilities/connect/useCapabilities";
-import { useExtensions } from "./useExtensions";
+import { useCapabilities } from "../../models/capabilities/useCapabilities";
+import { useExtensions } from "../../models/extensions/useExtensions";
 import { t } from "@intentic/ui/i18n";
 
 // Extensions tab's row model: joins the daemon's list, the extension host's per-browser statuses, and configured

@@ -14,7 +14,7 @@ import type { StructuralStep } from "../store/evolution/state-steps.js";
 
 // The registry the boot step converges with and the pre-flight plans with is every definition the source holds: a
 // document or step left out of it is one an update would neither convert at boot nor show on its card. Regenerate it
-// with `node --import tsx src/store/shapes/write-state-shapes.ts`.
+// with `node scripts/write-indexes.mjs`.
 
 const SOURCE = join(packageRoot(import.meta.url), "src");
 

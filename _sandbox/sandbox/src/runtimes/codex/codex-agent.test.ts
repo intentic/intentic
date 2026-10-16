@@ -1,13 +1,15 @@
 import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
-import type { AgentEvent, ToolCallContent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { ToolCallContent } from "@intentic/sandbox-contract/events/requests";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { sleep } from "@intentic/base/async";
 import type { AgentRequest, CodexCredential, TurnHooks } from "../../agent/providers/agent-request.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
 import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { forgetNamespaceEntry, registerMountEntry } from "../../workload/namespace-entry.js";
-import { fakeCodexRunner, memoryFleet } from "../../testing.js";
+import { fakeCodexRunner } from "./codex-app-server.testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import type { CodexEvent, CodexFailureInfo, CodexItem, CodexRunner, CodexTurn } from "./codex-app-server.js";
 import { createCodexAgent, LIMIT_WAIT_HANDED_OVER, UNGATED_CALL, UNGATED_LIST } from "./codex-agent.js";
 import { RATE_LIMIT_PATIENCE_MS } from "../decorators/vendor-errors.js";

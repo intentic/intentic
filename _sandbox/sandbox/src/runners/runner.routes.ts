@@ -3,9 +3,10 @@ import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { emitDefinitionToml, settingsDefinition } from "../definition/definition.js";
+import { defineRawRoutes } from "../http/raw-route-server.js";
 
 /* The one owner route a runner has beyond its peer door (runner-peer.ts): the settings push. */
-export const createRunnerDefinitionSyncRoute =
+const createRunnerDefinitionSyncRoute =
     (services: Services) =>
     async (c: Context<AppEnv>): Promise<Response> => {
         const denied = await ownerDenied(services, c);
@@ -27,3 +28,8 @@ export const createRunnerDefinitionSyncRoute =
         }
         return c.json(report);
     };
+
+// A runner's settings push.
+export const runnerDefinitionRawRoutes = defineRawRoutes((services: Services) => ({
+    "POST /system/runners/{id}/definition/sync": createRunnerDefinitionSyncRoute(services),
+}));

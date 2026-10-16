@@ -1,13 +1,13 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { sleep } from "@intentic/base/async";
-import { isBrowsableArchive } from "@intentic/sandbox-contract";
+import { isBrowsableArchive } from "@intentic/sandbox-contract/text/archives";
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { basename, joinPath } from "@intentic/ui/path";
 import { sandboxRef, sandboxScopeGuard, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
 import { computed, ref } from "vue";
 import { detectProjects, managerFromPackageJson, type ProjectSetup } from "@intentic/workspace-setup";
-import { captureDrop, type DroppedFile, isRootGitPath, walkDrop } from "../../explorer/transfer/dropEntries";
+import { captureDrop, type DroppedFile, isRootGitPath, walkDrop } from "../../../../models/workspace/tree/dropEntries";
 import { packTar } from "../../explorer/transfer/tarArchive";
 import { useEndpoint } from "../../../../client/endpoint/useEndpoint";
 import { sandboxRaw } from "../../../../client/sandbox/sandboxRaw";
@@ -18,7 +18,7 @@ import { rpcPrefix } from "../../../../lib/queryKeys";
 import { measuredProtocol, streamCapacity } from "../../../../lib/streamBudget";
 import { workspaceAgent } from "../../../../app/workspaceScope";
 import { chunkItems, dedupeByPath } from "../../../../lib/files/uploadChunking";
-import { clearUnsettledUploads, markFailed, markSettled, noteArriving } from "../provisionalEntries";
+import { clearUnsettledUploads, markFailed, markSettled, noteArriving } from "../../../../models/workspace/files/provisionalEntries";
 import { captureNativeDrop, copyNatively, type NativeDrop, type NativeEvent, type NativeProgress } from "./nativeCopy";
 
 // Workspace upload queue: drops and picks append to a shared queue rather than clobbering an in-flight upload.

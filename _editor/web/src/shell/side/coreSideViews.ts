@@ -1,18 +1,19 @@
 import type { Disposable } from "@intentic/extension-api";
-import { isLockedWorkspacePath, type PortSummary } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
+import type { PortSummary } from "@intentic/sandbox-contract/schemas/ports";
 import { explorerColorClass, iconForEntry, useExplorerStyle } from "@intentic/ui";
 import { basename } from "@intentic/ui/path";
 import { z } from "zod";
 import { t } from "@intentic/ui/i18n";
 import { useVocabulary } from "../../workbench/views/vocabulary";
-import { useAgents } from "../../features/agents/fleet/useAgents";
-import { loopbackPreviewTarget } from "../../features/preview/previewModel";
+import { useAgents } from "../../models/fleet/useAgents";
+import { loopbackPreviewTarget } from "../../models/preview/previewModel";
 import { BROWSERS_SIDE_VIEW, browsersFront, markBrowsersOpened, openBrowsers, showTab } from "../../workbench/browsers/browsersSurface";
 import { browsersPath, parseTabKey, tabKey, type LiveTab } from "../../workbench/browsers/browsersPaths";
-import { openInWorkspace } from "../../features/workspace/files/refs/openFileRef";
+import { openInWorkspace } from "../../models/workspace/files/openFileRef";
 import { rpcKey } from "../../lib/queryKeys";
 import { queryClient } from "../../lib/queryPersistence";
-import { router } from "../../router";
+import { navigation } from "../../workbench/navigation/navigation";
 import { handOffToMainWindow } from "../../workbench/window/mainWindow";
 import { browsersSlot } from "../../workbench/window/panelSlots";
 import { FILE_SIDE_VIEW, FileSideInputSchema } from "../../workbench/side/sideFileInput";
@@ -107,7 +108,7 @@ export const registerCoreSideViews = (): readonly Disposable[] => {
             label: t(`shared.browsers`),
             open: () => {
                 if (!handOffToMainWindow({ kind: `route`, path: browsersPath(browsersFront.value) })) {
-                    openBrowsers(router);
+                    openBrowsers(navigation());
                 }
             },
         }),

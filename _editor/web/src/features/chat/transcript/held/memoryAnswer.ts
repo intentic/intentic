@@ -1,9 +1,9 @@
-import { breakArmed } from "@intentic/sandbox-contract";
+import { breakArmed } from "@intentic/sandbox-contract/schemas/turn-break";
 import { computed } from "vue";
-import { useAgents } from "../../../agents/fleet/useAgents";
-import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
-import { usePaneView } from "../../panel/useChat-view";
-import { effectivePolicy } from "../../run/endings/turnBreak";
+import { useAgents } from "../../../../models/fleet/useAgents";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
+import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
+import { effectivePolicy } from "../../../../models/conversations/endings/turnBreak";
 
 /**
  * Whether this pane's low-memory hold goes by itself once memory frees up: its conversation's answer to the memory

@@ -1,4 +1,5 @@
-import { type DeviceConfig, HOST_NATIVE_ENVIRONMENT, parseHostConnection } from "@intentic/sandbox-contract";
+import type { DeviceConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import { HOST_NATIVE_ENVIRONMENT, parseHostConnection } from "@intentic/sandbox-contract/schemas/hosts";
 import { revokeSyncEnrollmentsOf } from "../../peers/desktop-sync.js";
 import type { CapabilityCtx } from "../capability.js";
 import { HOST_TOOLS_NOTE, hostToolsNote } from "./host-skills.js";

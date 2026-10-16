@@ -1,4 +1,4 @@
-import type { ChatMessage } from "../transcript/transcript";
+import type { ChatMessage } from "../../../models/conversations/transcript/transcript";
 import { type CardWords, finalReplyOf, optionHeard, spokenCardOf } from "./voiceCards";
 
 // Pins a card put to a person out loud and answered out loud: what is said for each kind, and how what they say back

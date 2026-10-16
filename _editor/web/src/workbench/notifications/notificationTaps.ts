@@ -1,5 +1,5 @@
 import type { Router } from "vue-router";
-import { inAppPath, sameOriginPath } from "../../lib/routes/inAppPath";
+import { inAppPath, sameOriginPath } from "../../app/environments/inAppPath";
 import { inNativeShell, pushPlugin } from "../window/capacitor.js";
 
 /* "A notification is a pointer back into the workspace", followed inside the page that is already open. Only a route

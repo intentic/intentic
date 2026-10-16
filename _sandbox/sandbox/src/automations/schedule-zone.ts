@@ -1,4 +1,4 @@
-import { asZone, UTC, type Zone } from "@intentic/sandbox-contract";
+import { asZone, UTC, type Zone } from "@intentic/sandbox-contract/time/zone";
 import type { Services } from "../composition.js";
 
 // WHICH CLOCK A CRON IS READ ON. The daemon's container runs UTC and the person who typed "20:43" almost never does,

@@ -1,5 +1,5 @@
 import { ElementRefs, FrameLog } from "@intentic/desktop-automation";
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { createIndicator, type Indicator } from "../indicator.js";
 import { ScopeError } from "../policy.js";
 import { fakeDesktop, fakeElement, fakeIndicatorDeps } from "../device-testing.js";

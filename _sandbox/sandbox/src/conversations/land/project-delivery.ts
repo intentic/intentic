@@ -3,24 +3,19 @@ import { dirname, join } from "node:path";
 import { keyedLock } from "@intentic/base/async";
 import { isInside } from "@intentic/base/contained";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { DEVICE_FEATURE_PROJECT_DELIVERY, type DeviceFacts, deviceSupports } from "@intentic/sandbox-contract/schemas/hosts";
 import {
-    DEVICE_FEATURE_PROJECT_DELIVERY,
     type DeliveredFile,
     type DeliveryConflictReason,
-    type DeviceFacts,
-    type DevicePairing,
-    type DeviceReport,
-    deviceSupports,
-    environmentOf,
-    isProjectDirName,
     type LandingDelivery,
     PROJECT_DELIVERY_MAX_BYTES,
     type ProjectDelivery,
     type ProjectDeliveryResult,
-    projectRemoteDir,
-    sandboxIdFromUrl,
-    type WorkspaceEvent,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/project-delivery";
+import { type DevicePairing, type DeviceReport, environmentOf } from "@intentic/sandbox-contract/schemas/devices";
+import { isProjectDirName, projectRemoteDir } from "@intentic/sandbox-contract/ids/project-dir";
+import { sandboxIdFromUrl } from "@intentic/sandbox-contract/ids/hostnames";
+import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
 import { defaultGit, type GitRunner, gitBytes } from "@intentic/base/git";
 import { z } from "zod";
 import type { Services } from "../../composition.js";
@@ -246,9 +241,9 @@ export const deliveryOf = async (
             kept.push({ path: change.path, reason });
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- each read spends the budget the next one is held to
+        // each read spends the budget the next one is held to
         const base = await sideOf(dir, change.srcMode, change.srcSha, budget);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- see above
+        // see above
         const next = base === TOO_LARGE ? TOO_LARGE : await sideOf(dir, change.dstMode, change.dstSha, budget - base.bytes);
         if (base === TOO_LARGE || next === TOO_LARGE) {
             return { files: [], kept: [], tooLarge: true };
@@ -316,10 +311,10 @@ const writeMerged = async (
         let written = 0;
         // One file at a time under the lock, like the land's own writes.
         for (const { path, content } of merged) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- see above
+            // see above
             const target = await safeTarget(realRoot, root, path);
             const landed = sent.get(path);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- see above
+            // see above
             const holds = target === undefined || landed === undefined || landed === null ? undefined : await readFile(target).catch(undefinedIfMissing);
             if (target === undefined || holds === undefined || !holds.equals(Buffer.from(landed ?? "", "base64"))) {
                 deps.logger.warn(
@@ -328,7 +323,7 @@ const writeMerged = async (
                 );
                 continue;
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- see above
+            // see above
             await writeFile(target, Buffer.from(content, "base64"));
             written += 1;
         }

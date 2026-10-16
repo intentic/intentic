@@ -5,12 +5,12 @@ import {
     PAGE_BRIDGE,
     PAGE_COLUMN_WIDTH,
     PAGE_FALLBACK_THEMES,
-    PAGE_MAX_HEIGHT,
     type PageAppearance,
     type PageTheme,
     sealedPage,
     sizedFirst,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/text/pages";
+import { PAGE_MAX_HEIGHT } from "@intentic/sandbox-contract/events/requests";
 
 // The agent's look at its own page before anyone else's: the page laid out in the sandbox's own headless Chromium the
 // way the chat draws it, sealed and themed, inside a sandboxed frame across a column of the chat's width, written in

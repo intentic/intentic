@@ -6,7 +6,7 @@ import { createApp } from "../app.js";
 import { proven, rejectForbidden } from "../harness/route-client.testing.js";
 import { rejectAuth } from "../auth/auth-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
-import { testConfig } from "../testing.js";
+import { testConfig } from "../env.config.testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { exportsDir } from "./exports.js";
 

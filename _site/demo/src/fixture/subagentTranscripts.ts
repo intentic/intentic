@@ -1,4 +1,5 @@
-import type { SandboxHandlerOutput, TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
+import type { SandboxHandlerOutput } from "@intentic/sandbox-contract/protocol/procedure-types";
+import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 
 // What the checkout agent's in-process subagents (fleet.ts `inProcessSubagents`) said and did, as
 // /agents/{id}/subagents/{subagentId}/transcript answers for them: the Explore run still searching, its prose so far, and

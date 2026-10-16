@@ -2,7 +2,7 @@ import type { Disposable } from "@intentic/extension-api";
 import { computed, onMounted, onUnmounted, watch, type WatchStopHandle } from "vue";
 import { projectScope, setProjectScope } from "../../app/projectScope";
 import { projectIdsOf } from "../../features/workspace/explorer/projectFocus";
-import { useRepos } from "../../features/workspace/explorer/useRepos";
+import { useRepos } from "../../models/workspace/tree/useRepos";
 import { PROJECT } from "../../workbench/commands/categories";
 import { registerCommand } from "../../workbench/commands/useCommands";
 import { t } from "@intentic/ui/i18n";

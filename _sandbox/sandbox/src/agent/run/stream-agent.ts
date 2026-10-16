@@ -1,25 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { anySignal } from "@intentic/base/async";
-import { readableProviderText } from "../providers/provider-error-text.js";
-import {
-    type AgentEvent,
-    type AgentReply,
-    type AgentTurn,
-    capabilitiesOf,
-    type ContextTrim,
-    type PromptFingerprint,
-    type SnapshotTurn,
-    type TranscriptRow,
-    type TurnNote,
-    type HandedOff,
-    mentionPaths,
-    noticeCode,
-    withRuntimeDefaults,
-} from "@intentic/sandbox-contract";
+import { readableProviderText } from "../../engines/provider-error-text.js";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { type AgentTurn, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { ContextTrim } from "@intentic/sandbox-contract/schemas/context-trim";
+import type { PromptFingerprint } from "@intentic/sandbox-contract/schemas/keep-warm";
+import type { SnapshotTurn } from "@intentic/sandbox-contract/schemas/history";
+import type { TranscriptRow, TurnNote } from "@intentic/sandbox-contract/events/transcript";
+import type { HandedOff } from "@intentic/sandbox-contract/schemas/providers/handoff";
+import { mentionPaths } from "@intentic/sandbox-contract/text/mentions";
+import { noticeCode } from "@intentic/sandbox-contract/events/sandbox-notice";
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import type { Logger } from "pino";
 import { createOutboundSniffer } from "../../activity/outbound.js";
-import { turnCliEnv } from "../../capabilities/turn-env.js";
+import { turnCliEnv } from "./harness/turn-env.js";
 import type { Services } from "../../composition.js";
 import { REPO_SYNC_NOTE_TITLE, type RepoSync, syncAdvisory, syncWorkspaceRepos } from "../../workspace/layout/sync-repos.js";
 import { resolveExistingWithin, resolveWithin } from "../../workspace/files/workspace-files-paths.js";
@@ -53,7 +49,7 @@ import { keepableOf, noteKeepable } from "./turn/cache-keepwarm.js";
 import { beginPulse, endPulse, pulseFrame } from "./turn/turn-pulse.js";
 import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";
 import { editorContextNote } from "./turn/turn-interactions.js";
-import { withRuntimeHistory } from "../providers/runtime-history.js";
+import { withRuntimeHistory } from "../../sessions/vocabulary/runtime-history.js";
 import { summaryNote, trimmedTurn } from "../providers/limit-handoff.js";
 import { handoffStateNote } from "../prompt/handoff-state.js";
 import { nameAgentTitle } from "../models/title-namer.js";
@@ -81,6 +77,7 @@ import { turnCloser } from "./placement/turn-close.js";
 import { runWorktreeFixers } from "../../conversations/land/worktree-fixers.js";
 import { standingOn } from "../../conversations/actor/parked-cards.js";
 import { AgentDomainRefusedError, agentExecutionScope, assertAgentExecution, withAdmittedAgentExecution, type AgentExecutionAdmission, type AgentExecutionContext } from "../../workload/agent-execution.js";
+import { errorMessage } from "@intentic/base/errors";
 
 // One turn from placement to settlement (streamAgent): placed, prepared, run on its provider, folded, settled.
 
@@ -137,7 +134,7 @@ export async function* streamAgent(services: Services, sent: TurnInput, signal: 
     try {
         admission = await services.agentExecution.admit();
     } catch (error) {
-        yield { kind: "error", code: "agent-domain-refused", message: error instanceof Error ? error.message : String(error) };
+        yield { kind: "error", code: "agent-domain-refused", message: errorMessage(error) };
         yield { kind: "done" };
         return;
     }
@@ -385,7 +382,7 @@ const handoffNoteFor = async (
 // The session to resume, or none if the runtime no longer holds it, which opens a fresh session seeded from the record
 // instead. A store that can't be probed is trusted, not doubted.
 // Only a backstop: which session a turn continues is decided before it gets here, on the runtime and account that minted it
-// (agent/providers/accounts/routing.ts sessionFor). What this probe catches is a session that decision rightly named and the
+// (conversations/registry/routing.ts sessionFor). What this probe catches is a session that decision rightly named and the
 // runtime has since lost (a pruned store, a recreated container), never one named for the wrong provider.
 const sessionToResume = async (services: Services, input: RoutedTurn, execution: AgentExecutionContext): Promise<string | undefined> => {
     const { sessionId } = input;

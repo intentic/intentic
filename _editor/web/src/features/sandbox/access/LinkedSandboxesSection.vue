@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { InboundLinkSummary, InboundLinkTermsUpdate, LinkRequest, LinkTerms } from "@intentic/sandbox-contract";
+import type { InboundLinkSummary, InboundLinkTermsUpdate, LinkRequest, LinkTerms } from "@intentic/sandbox-contract/schemas/links";
 import { Button, CopyButton, Notice, Picker, type PickerOption, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
@@ -11,8 +11,8 @@ import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useMintedTokens } from "../../../workbench/operations/useMintedTokens";
-import { usePersonas } from "../personas/usePersonas";
-import { LINKED_SANDBOXES_ANCHOR } from "../sandboxNav";
+import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
+import { LINKED_SANDBOXES_ANCHOR } from "../../../models/sandbox/sandboxNav";
 
 // INBOUND LINKS: the owner's other sandboxes allowed to hand this one tasks. Each link's terms are written here and
 // enforced here: the persona its tasks wear, whether each waits for the owner, how many turns an hour it may start. A task

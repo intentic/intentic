@@ -1,4 +1,5 @@
-import { AgentStatusSchema, AgentSummarySchema, AgentTurnSchema } from "@intentic/sandbox-contract";
+import { AgentStatusSchema, AgentSummarySchema } from "@intentic/sandbox-contract/schemas/agents";
+import { AgentTurnSchema } from "@intentic/sandbox-contract/schemas/agent";
 import {
     conversationIdFor,
     exitOfRun,

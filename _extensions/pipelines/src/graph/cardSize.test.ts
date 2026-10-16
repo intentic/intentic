@@ -1,4 +1,4 @@
-import type { PipelineJob } from "@intentic/sandbox-contract";
+import type { PipelineJob } from "@intentic/sandbox-contract/schemas/ci";
 import {
     CALLER_LINE,
     CARD_MAX_WIDTH,

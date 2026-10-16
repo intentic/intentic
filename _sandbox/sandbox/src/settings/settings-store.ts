@@ -1,4 +1,5 @@
-import { SETTINGS_HISTORY, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { SETTINGS_HISTORY } from "@intentic/sandbox-contract/schemas/settings-history";
+import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import type { Pin } from "../compliance/org-pins.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";

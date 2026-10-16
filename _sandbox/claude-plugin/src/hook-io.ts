@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
+import { parseJsonOr } from "@intentic/base/json";
 
 // What every hook entry shares: reading Claude Code's JSON payload, answering it, and failing open. A hook here is
 // unsolicited help, so whatever goes wrong costs the help and never the session: an unreadable payload, a throw, or a
@@ -31,14 +32,10 @@ export const readStdin = async (): Promise<string> => {
     return Buffer.concat(chunks).toString("utf8");
 };
 
+// A payload that is not JSON gets no answer, which Claude Code reads as "carry on unchanged".
 export const parseHookInput = (text: string): HookInput | undefined => {
-    try {
-        const value: unknown = JSON.parse(text);
-        return typeof value === "object" && value !== null ? (value as HookInput) : undefined;
-    } catch {
-        // allow(silent-catch): a payload that is not JSON gets no answer, which Claude Code reads as "carry on unchanged".
-        return undefined;
-    }
+    const value = parseJsonOr(text, undefined);
+    return typeof value === "object" && value !== null ? (value as HookInput) : undefined;
 };
 
 // What a handler answers: a JSON reply, text passed through as another program printed it, or nothing.

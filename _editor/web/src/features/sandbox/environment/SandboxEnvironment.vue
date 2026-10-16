@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { SkeletonSnapshot, ui, vSkeletonSource } from "@intentic/ui";
 import { computed } from "vue";
-import { useEnvironment } from "./useEnvironment";
+import { useEnvironment } from "../../../models/sandbox/environment/useEnvironment";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import EnginesCard from "./EnginesCard.vue";
 import EnvironmentCard from "./EnvironmentCard.vue";

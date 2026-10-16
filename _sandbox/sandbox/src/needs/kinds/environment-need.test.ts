@@ -1,4 +1,4 @@
-import type { Need } from "@intentic/sandbox-contract";
+import type { Need } from "@intentic/sandbox-contract/schemas/needs";
 import type { ToolStanding } from "../../environment/environment.js";
 import type { Answered } from "../need-kinds.js";
 import { environmentNeed } from "./environment-need.js";

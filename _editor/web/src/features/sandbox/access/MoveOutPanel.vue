@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { BundleExport, DefinitionDiff, DefinitionExport, WorkspaceRemote } from "@intentic/sandbox-contract";
+import type { BundleExport } from "@intentic/sandbox-contract/schemas/environment";
+import type { DefinitionDiff, DefinitionExport, WorkspaceRemote } from "@intentic/sandbox-contract/state/definition";
 import {
     Button,
     CopyButton,

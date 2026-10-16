@@ -1,13 +1,6 @@
-import {
-    RAW_ROUTES,
-    type RawRouteKey,
-    sandboxContract,
-    sandboxRouteFor,
-    type SandboxGroup,
-    type SandboxHandlerInput,
-    type SandboxHandlerOutput,
-    type SandboxProcedure,
-} from "@intentic/sandbox-contract";
+import { RAW_ROUTES, type RawRouteKey } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
+import { sandboxContract, sandboxRouteFor } from "@intentic/sandbox-contract";
+import type { SandboxGroup, SandboxHandlerInput, SandboxHandlerOutput, SandboxProcedure } from "@intentic/sandbox-contract/protocol/procedure-types";
 import { json } from "./json.js";
 import { eventStream, type StreamSink } from "./sse.js";
 

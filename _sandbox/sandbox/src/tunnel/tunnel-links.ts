@@ -1,5 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { Capability, IntenticLine } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { markUp } from "./tunnel-state.js";
 

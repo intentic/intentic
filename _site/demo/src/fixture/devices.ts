@@ -1,4 +1,4 @@
-import type { Device } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 
 // One of the owner's own computers, as the daemon's device registry reports it. The Devices tab used to answer
 // "the demo fixture doesn't serve GET /system/devices", so every control under a paired folder — pause, unpair,

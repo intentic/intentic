@@ -1,4 +1,4 @@
-import { type Device, hostRunningSandbox, type Machine, machinesOf } from "@intentic/sandbox-contract";
+import { type Device, hostRunningSandbox, type Machine, machinesOf } from "@intentic/sandbox-contract/schemas/devices";
 
 // A MACHINE OF THE OWNER'S THAT A PRESS CAN REACH, through any of the owner's sandboxes rather than only the one open:
 // a machine connected to a sibling, or to the sandbox the press is about (setup connects every sandbox to the machine

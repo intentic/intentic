@@ -1,13 +1,6 @@
 import { mkdir } from "node:fs/promises";
-import {
-    type AgentTurn,
-    type Loop,
-    type LoopDocument,
-    type LoopIteration,
-    type LoopRecord,
-    type LoopState,
-    profileOf,
-} from "@intentic/sandbox-contract";
+import { type AgentTurn, profileOf } from "@intentic/sandbox-contract/schemas/agent";
+import type { Loop, LoopDocument, LoopIteration, LoopRecord, LoopState } from "@intentic/sandbox-contract/schemas/loops";
 import { notResumedDetail, type RestartResume } from "../agent/run/turn/restart-resume-policy.js";
 import { sumUsage, type UsageFrame } from "../agent/run/turn/turn-usage.js";
 import type { ConversationActors } from "../conversations/actor/conversation-actors.js";

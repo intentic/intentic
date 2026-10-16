@@ -2,16 +2,16 @@
 import { loadChunk, useDevice } from "@intentic/ui";
 import { defineAsyncComponent, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { watchAgentsScope } from "../features/agents/board/agentsTile";
+import { watchAgentsScope } from "../models/fleet/board/agentsTile";
 import { watchDeviceReturns } from "../features/sandbox/devices/useDeviceReturns";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
 import { useMainWindow } from "../workbench/window/mainWindow";
-import { openInWorkspace, openWorkspaceRef } from "../features/workspace/files/refs/openFileRef";
+import { openInWorkspace, openWorkspaceRef } from "../models/workspace/files/openFileRef";
 import { openBrowsersBeside } from "../workbench/browsers/browsersSurface";
 import { parseTabKey } from "../workbench/browsers/browsersPaths";
 import { revealSideView } from "../workbench/side/sideViews";
-import { prefetchViewsAtIdle } from "../router/prefetch";
-import { useChat } from "../features/chat/run/useChat";
+import { prefetchViewsAtIdle } from "./prefetch/prefetch";
+import { useChat } from "../models/conversations/run/useChat";
 import { mobileChatPath } from "../lib/routes/tabRoots";
 import { useGuestFence } from "./guestFence";
 import SkipToContent from "./SkipToContent.vue";
@@ -32,7 +32,7 @@ useGuestFence();
 watchAgentsScope();
 // Answers an agent update's wait once the machine is read back on its new agent, whichever screen is open by then.
 watchDeviceReturns();
-// Pulls every view's chunk in the background once the shell is up (idempotent); see router/prefetch.ts.
+// Pulls every view's chunk in the background once the shell is up (idempotent); see shell/prefetch/prefetch.ts.
 onMounted(prefetchViewsAtIdle);
 const router = useRouter();
 const route = useRoute();

@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
-import { PRIVACY_EXCERPT_REACH, type PersonalDataClass, type PrivacyReplacement, type PrivacyShieldPolicy } from "@intentic/sandbox-contract";
-import { detectPersonalData, normalizeAllowed, type PersonalDataSpan } from "./detect/detect.js";
+import {
+    PRIVACY_EXCERPT_REACH,
+    type PersonalDataClass,
+    type PrivacyReplacement,
+    type PrivacyShieldPolicy,
+} from "@intentic/sandbox-contract/schemas/privacy";
+import { detectPersonalData, normalizeAllowed, type PersonalDataSpan } from "@intentic/privacy-detect";
 import type { PrivacyVault, VaultHit } from "./privacy-vault.js";
 import { LITERAL_PREFIX, TOKEN_LABEL, TOKEN_SOURCE, tokenPattern } from "./tokens.js";
 

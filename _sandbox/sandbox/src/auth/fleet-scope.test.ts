@@ -1,5 +1,6 @@
 import type { ProvenCaller } from "./auth.js";
-import type { SandboxMetrics, SubagentSession } from "@intentic/sandbox-contract";
+import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
 import { framedEvent, framedMetrics, framedSubagents, type Provenance, refuseUnlessVisible, visibleTo } from "./fleet-scope.js";
 
 // The two fences over the fleet, as pure rules: whose conversation counts as a guest's, what a fenced member may see

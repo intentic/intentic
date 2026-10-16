@@ -1,4 +1,4 @@
-import { type PrivacyLedgerEntry, PrivacyLedgerEntrySchema } from "@intentic/sandbox-contract";
+import { type PrivacyLedgerEntry, PrivacyLedgerEntrySchema } from "@intentic/sandbox-contract/schemas/privacy";
 import { defineDocument } from "../store/evolution/documents.js";
 import { boundedLog } from "../store/json-file.js";
 import { openEntries } from "../store/open-document.js";

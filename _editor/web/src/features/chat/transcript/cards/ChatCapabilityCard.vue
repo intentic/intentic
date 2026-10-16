@@ -4,11 +4,11 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { navigateInApp } from "../../../../workbench/window/mainWindow";
-import { entryDescription } from "../../../capabilities/model/catalogCopy";
-import type { CardAnswer } from "../../session/cardReplies";
-import type { ChatMessage } from "../transcript";
-import ChatCard from "./ChatCard.vue";
-import ChatDecisionButton from "./ChatDecisionButton.vue";
+import { entryDescription } from "../../../../models/capabilities/catalogCopy";
+import type { CardAnswer } from "../../../../models/conversations/session/cardReplies";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
+import ChatCard from "../../../../components/ChatCard.vue";
+import ChatDecisionButton from "../../../../components/ChatDecisionButton.vue";
 import { capabilityStatus } from "./cardStatus";
 
 const t = useT();

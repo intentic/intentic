@@ -4,6 +4,7 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import type { z } from "zod";
 import { writeJsonFile } from "../../../store/json-file.js";
 import { decryptAtRest } from "../../../store/encryption/at-rest.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // A provider's own accounts as one `<id>.json` per account in its auth directory, each read through the provider's schema.
 export interface AccountFiles<T> {
@@ -16,14 +17,8 @@ export interface AccountFiles<T> {
     readonly remove: (id: string) => Promise<void>;
 }
 
-const jsonOf = (text: string): unknown => {
-    try {
-        return JSON.parse(text) as unknown;
-    } catch {
-        // allow(silent-catch): text that is not JSON is content of another shape, which reads as no account
-        return undefined;
-    }
-};
+// Text that is not JSON is content of another shape, which reads as no account.
+const jsonOf = (text: string): unknown => parseJsonOr(text, undefined);
 
 export const accountFiles = <T extends { readonly id: string; readonly connectedAt: number }>(dir: string, schema: z.ZodType<T>): AccountFiles<T> => {
     const path = (id: string): string => join(dir, `${id}.json`);

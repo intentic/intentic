@@ -1,7 +1,7 @@
 import type { McpServer, NewSessionRequest } from "@agentclientprotocol/sdk";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AgentRequest, ContainerCredential, TurnPolicy, TurnSpec } from "../../agent/providers/agent-request.js";
 import { fakeAcpAgentApp, fakeAcpConnection } from "./__fixtures__/fake-acp-agent.js";
 import { type AcpTurnOptions, createAcpAgent } from "./acp-agent.js";
@@ -9,7 +9,7 @@ import type { TurnTimeouts } from "../decorators/turn-watchdog.js";
 import type { AcpConnection, AcpConnections } from "./acp-connection.js";
 import type { AcpLaunch, AcpSessionMeta } from "./acp-spawn.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { createTurnRelay } from "../daemon-tools/turn-relay.js";
 import { PROXY_BEARER_ENV, PROXY_URL_ENV } from "./acp-mcp-proxy.js";
 

@@ -1,4 +1,4 @@
-import type { BrowserSession, BrowsersList, OpenBrowserResult } from "@intentic/sandbox-contract";
+import type { BrowserSession, BrowsersList, OpenBrowserResult } from "@intentic/sandbox-contract/schemas/terminal";
 import { computed, type ComputedRef } from "vue";
 import { optimisticUpdate } from "../../lib/optimistic";
 import { queryClient } from "../../lib/queryPersistence";

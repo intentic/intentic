@@ -1,16 +1,14 @@
 // Tolerant readers over transcript JSONL lines: undocumented and drifting across claude-code versions (prompts were
 // plain strings before v2.x, arrays now). Every accessor returns undefined on an unexpected shape, so unknown line
 // types and future fields pass through.
+import { isRecord } from "@intentic/base/escape";
+import { parseJsonOr } from "@intentic/base/json";
 
 export type Line = Record<string, unknown>;
 
 export const parseLine = (json: string): Line | undefined => {
-    try {
-        const value: unknown = JSON.parse(json);
-        return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Line) : undefined;
-    } catch {
-        return undefined;
-    }
+    const value = parseJsonOr(json, undefined);
+    return isRecord(value) ? value : undefined;
 };
 
 const asRecord = (value: unknown): Line | undefined =>

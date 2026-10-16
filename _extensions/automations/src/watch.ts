@@ -1,4 +1,4 @@
-import type { AutomationSummary, WatchSource } from "@intentic/sandbox-contract";
+import type { AutomationSummary, WatchSource } from "@intentic/sandbox-contract/schemas/automations";
 import { formatDateTime } from "@intentic/extension-ui/format";
 import { since } from "./cronSchedule";
 import { t } from "./i18n.js";

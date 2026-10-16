@@ -1,7 +1,8 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { ApprovedActionOutcome } from "@intentic/extension-api/runtime";
-import type { ActionApprovalSummary, AgentTurn, ApprovalSummary, PostApprovalSummary } from "@intentic/sandbox-contract";
-import { actionTurnPrompt, DIRECT_PUBLISH_PLATFORMS, publishTurnPrompt } from "@intentic/sandbox-contract";
+import type { ActionApprovalSummary, ApprovalSummary, PostApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import { actionTurnPrompt, DIRECT_PUBLISH_PLATFORMS, publishTurnPrompt } from "@intentic/sandbox-contract/policy/approvals-execution";
 import type { Services } from "../composition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { type ApprovalStanding, approvalStandings, type SpentApproval, spendApprovals } from "./approval-decisions.js";

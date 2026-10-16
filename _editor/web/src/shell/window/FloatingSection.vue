@@ -11,7 +11,7 @@ import { useShellCommands } from "../commands/useShellCommands";
 import { claimFloating, type FloatingPanel } from "../../workbench/window/floating";
 import { sendLinkToMainWindow } from "../../workbench/window/mainWindow";
 import { markBrowsersOpened } from "../../workbench/browsers/browsersSurface";
-import { ACTIVE_KEY } from "../../lib/activeSandbox";
+import { ACTIVE_KEY } from "../../app/storage/activeSandbox";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useLayout } from "../../workbench/window/useLayout";
 import { browsersSlot, chatFullSlot, terminalSlot } from "../../workbench/window/panelSlots";

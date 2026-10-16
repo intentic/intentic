@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { AgentTool } from "../agent/tools/agent-tools.js";
 import type { TurnLease } from "../agent/tools/turn-mounts.js";
 import type { PeerKind } from "./peer.js";

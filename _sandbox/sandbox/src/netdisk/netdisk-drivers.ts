@@ -1,4 +1,4 @@
-import type { NetdiskProvider } from "@intentic/sandbox-contract";
+import type { NetdiskProvider } from "@intentic/sandbox-contract/schemas/netdisk";
 import type { NetdiskDriver } from "./netdisk-driver.js";
 import { smbDriver } from "./smb.js";
 

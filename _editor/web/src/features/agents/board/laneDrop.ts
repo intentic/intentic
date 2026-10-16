@@ -1,6 +1,7 @@
 import { t } from "@intentic/ui/i18n";
-import { awaitingUser, conflictIsYours, endingByHand, laneOf, type FleetLane, turnInFlight, unregistered, watching } from "../fleet/agentStatus";
-import type { FleetAgent } from "../fleet/useAgents-fleet";
+import { laneOf, type FleetLane } from "../../../models/agent-status/agentStatus-lanes";
+import { awaitingUser, conflictIsYours, endingByHand, turnInFlight, unregistered, watching } from "../../../models/agent-status/agentStatus-standing";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 
 // What dragging a card actually does: the lanes are pure projections of the daemon's status machine, so a drop can only
 // invoke the action that causes a status change, never assign one. Most drops are refused outright, and both functions

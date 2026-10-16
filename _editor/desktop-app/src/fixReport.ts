@@ -3,6 +3,7 @@
 // sandbox at the end; its words for people go to stderr. The report is the api contract's HostReportInput. Everything
 // in it is read leniently, since the progress line is younger than this app: a line that is neither shape is passed
 // over, and a state, a fix, an outcome or a check id this app has never heard of is kept as the string it is.
+import { parseJsonOr } from "@intentic/base/json";
 
 /** One link of the chain `ic` checks, as the view holds it: the latest `ic` said about that id. */
 export interface FixCheck {
@@ -59,15 +60,8 @@ interface JsonFields {
     readonly [key: string]: JsonValue;
 }
 
-const parseJson = (text: string): JsonValue | undefined => {
-    try {
-        // SAFETY: JSON.parse returns nothing but JSON values, which is all JsonValue says.
-        return JSON.parse(text) as JsonValue;
-    } catch {
-        // allow(silent-catch): a line cut short (the pipe closed mid-write) is not worth a broken screen; the next one says more.
-        return undefined;
-    }
-};
+// A line cut short (the pipe closed mid-write) is not worth a broken screen; the next one says more.
+const parseJson = (text: string): JsonValue | undefined => parseJsonOr(text, undefined);
 
 const isFields = (value: JsonValue | undefined): value is JsonFields => typeof value === `object` && value !== null && !Array.isArray(value);
 const isList = (value: JsonValue | undefined): value is readonly JsonValue[] => Array.isArray(value);

@@ -139,7 +139,7 @@ export const selectEndpoint = async (sandbox: Addressing, fetchImpl: FetchLike =
         if (candidate.kind === `public` && index === candidates.length - 1) {
             return candidate;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- Candidate order is the fallback order.
+        // Candidate order is the fallback order.
         if (await probeEndpoint(candidate, expected, fetchImpl)) {
             return candidate;
         }

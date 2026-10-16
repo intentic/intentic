@@ -1,5 +1,11 @@
 import { type Periodic, startPeriodic } from "@intentic/base/async";
-import { HOST_NATIVE_ENVIRONMENT, type DeviceFacts, type HostConnection, hostConnectionKey, userDistrosOf } from "@intentic/sandbox-contract";
+import {
+    HOST_NATIVE_ENVIRONMENT,
+    type DeviceFacts,
+    type HostConnection,
+    hostConnectionKey,
+    userDistrosOf,
+} from "@intentic/sandbox-contract/schemas/hosts";
 import type { Services } from "../composition.js";
 import { createRepeatGate } from "../logs/repeat-gate.js";
 import { opt } from "../opt.js";
@@ -7,6 +13,7 @@ import type { PeerState } from "../peers/peer-hub.js";
 import { agentInstallLine, codedInstallLine, exitingLine } from "./device-commands.js";
 import { callTool } from "./device-reports.js";
 import { hostConnectionOf } from "./host-connection.js";
+import { errorMessage } from "@intentic/base/errors";
 
 // ONE INSTALL CONNECTS THE WHOLE COMPUTER. The owner connected a PC, not one of its shells, so the moment any
 // environment of a machine holds a socket the daemon puts an agent in the rest: from the Windows side into every WSL
@@ -134,7 +141,7 @@ const linkThrough = async (services: Services, from: string, connection: string,
         "run_command",
         { command: line.command, in: line.in, timeoutMs: INSTALL_TIMEOUT_MS },
         AbortSignal.timeout(INSTALL_TIMEOUT_MS + 5_000),
-    ).catch((error: unknown) => ({ text: error instanceof Error ? error.message : String(error), refused: false }));
+    ).catch((error: unknown) => ({ text: errorMessage(error), refused: false }));
     return answer.refused
         ? { outcome: `refused by that device: ${answer.text.trim()}`, refused: true }
         : { outcome: answer.text.trim().split("\n")[0] ?? "ran", refused: false };

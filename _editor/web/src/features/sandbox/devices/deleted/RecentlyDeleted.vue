@@ -4,7 +4,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, useTemplateRef, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
-import { DELETED_ANCHOR } from "../deviceLinks";
+import { DELETED_ANCHOR } from "../../../../models/sandbox/devices/deviceLinks";
 import { daysLeft, trashSection } from "./trashWindow";
 import { useSandboxTrash } from "./useSandboxTrash";
 

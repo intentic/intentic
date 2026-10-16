@@ -1004,7 +1004,7 @@ describe(`GET /api/reachability/:sandboxId`, () => {
         const findUnique = jest.fn();
         const prisma = fakePrisma({ sandbox: { findUnique } });
         for (const bad of [`nope`, `ABCDEF012345`, `abcdef01234`, `abcdef0123456`, `../../etc/passwd`]) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one cheap request per shape; sequential reads clearer
+            // one cheap request per shape; sequential reads clearer
             expect((await ask(prisma, bad)).status, bad).toBe(404);
         }
         expect(findUnique).not.toHaveBeenCalled();

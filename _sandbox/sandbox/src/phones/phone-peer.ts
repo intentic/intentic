@@ -1,21 +1,17 @@
 import { wrapOutsideContent } from "@intentic/base/outside-text";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { COMMAND_CLASS_LABELS, matchCommand } from "@intentic/sandbox-contract/policy/command-classes";
+import type { CommandClass } from "@intentic/sandbox-contract/schemas/agent";
+import { hardRuleClasses } from "@intentic/sandbox-contract/policy/safety-policy";
+import { PHONE_HEARTBEAT_MS, PHONE_WAKE_WAIT_MS, type PhoneHello, PhoneHelloSchema } from "@intentic/sandbox-contract/protocol/doors/phone-protocol";
 import {
-    type Capability,
-    COMMAND_CLASS_LABELS,
-    type CommandClass,
-    hardRuleClasses,
-    matchCommand,
-    PHONE_HEARTBEAT_MS,
-    PHONE_WAKE_WAIT_MS,
     type PhoneFacts,
-    type PhoneHello,
-    PhoneHelloSchema,
-    type phoneContract,
     type PhoneScopes,
     PhoneScopesSchema,
     type PhoneSummary,
     PhoneWakeRegistrationSchema,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/phone";
+import type { phoneContract } from "@intentic/sandbox-contract/contracts/phone.contract";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import type { Context } from "hono";

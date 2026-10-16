@@ -4,17 +4,13 @@
 import "@intentic/testing/dom";
 import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, contributionEntry } from "@intentic/capability-catalog";
 import type { CapabilityField } from "@intentic/extension-manifest";
-import {
-    type ForticlientConnection,
-    VAULTED,
-    type CapabilityProbe,
-    type CapabilityRecommendation,
-    type CapabilitySummary,
-} from "@intentic/sandbox-contract";
+import type { ForticlientConnection } from "@intentic/sandbox-contract/schemas/vpn";
+import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
+import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { NoticeModel } from "@intentic/ui";
 import { effectScope, type EffectScope, nextTick, ref } from "vue";
 import { swallowFileDrag, useCapabilityForm } from "./capabilityForm";
-import { seedValues } from "./model/form";
+import { seedValues } from "../../models/capabilities/form";
 
 const catalogEntry = (id: string): CapabilityCatalogEntry => CAPABILITY_CATALOG.find((entry) => entry.id === id)!;
 const VPN = catalogEntry(`vpn`);

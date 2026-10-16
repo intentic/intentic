@@ -1,9 +1,11 @@
-import { type ContractRoute, RAW_ROUTE_LIST, SANDBOX_ROUTES, sandboxContract, sandboxRouteFor } from "@intentic/sandbox-contract";
+import type { ContractRoute } from "@intentic/sandbox-contract/protocol/routes";
+import { RAW_ROUTE_LIST } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
+import { SANDBOX_ROUTES, sandboxContract, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { StandardOpenAPIMatcher } from "@orpc/openapi/standard";
 import { type AnyProcedure, implement } from "@orpc/server";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import type { AppEnv } from "../app-env.js";
-import { rawRouteServer } from "./raw-route-server.js";
+import { mergeRawRoutes, rawRouteServer, serveRawRoutes } from "./raw-route-server.js";
 
 // The route matcher decides every gate's policy, so it must name the route the daemon actually dispatches a request
 // to, at every spelling that reaches one: a request served by a route the matcher did not name would be held to the
@@ -71,4 +73,19 @@ test("a bare prefix is no part of a `/*` declaration, though Hono serves it", as
         const served = (await app.request(prefix)).headers.get("x-served");
         expect({ prefix, served, matched: sandboxRouteFor("GET", prefix) }).toEqual({ prefix, served: `ALL ${prefix}/*`, matched: undefined });
     }
+});
+
+// Two tables serving one key would leave one of them dead, decided by nothing but the merge's argument order.
+test("merging two tables that serve one key throws, naming the key", () => {
+    const one = { "GET /health": (c: Context<AppEnv>) => c.body(null, 204) };
+    const other = { "GET /": (c: Context<AppEnv>) => c.body(null, 204), "GET /health": (c: Context<AppEnv>) => c.body(null, 200) };
+    expect(() => mergeRawRoutes(one, other)).toThrow("raw route GET /health is served by two tables");
+    expect(Object.keys(mergeRawRoutes(one, { "GET /": other["GET /"] })).toSorted()).toEqual(["GET /", "GET /health"]);
+});
+
+// A table's routes go on in declaration order whatever order the table lists them in, and a netd route never does.
+test("a table is served in declaration order, skipping what netd answers", () => {
+    const answer = (c: Context<AppEnv>) => c.body(null, 204);
+    const app = serveRawRoutes(new Hono<AppEnv>(), { "GET /workspace/raw": answer, "GET /system/vitals": answer, "GET /health": answer });
+    expect(app.routes.map((route) => `${route.method} ${route.path}`)).toEqual(["GET /health", "GET /workspace/raw"]);
 });

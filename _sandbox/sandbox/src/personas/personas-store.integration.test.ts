@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import type { Persona } from "@intentic/sandbox-contract";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { filePersonasStore, type PersonasStore } from "./personas-store.js";
 
 // A store over a fresh temp path (the .intentic dir doesn't exist yet: the store must create it on write).

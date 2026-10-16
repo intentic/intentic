@@ -3,7 +3,8 @@ import type { Services } from "../../../../composition.js";
 import type { QueuedItem } from "../../../../conversations/actor/conversation-queue.js";
 import { createDomainEvents } from "../../../../seams/domain-events.js";
 import type { TurnInput } from "../../../../seams/turn-starter.js";
-import { beginTurn, memoryFleet } from "../../../../testing.js";
+import { beginTurn } from "../../../../conversations/actor/conversation-actors.testing.js";
+import { memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
 import { turnDoors } from "../turn-doors.js";
 
 // Which session a wake continues, decided by the conversation's admission and nobody else: a watch armed on one routing

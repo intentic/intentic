@@ -3,7 +3,7 @@ import { Button, Icon } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted } from "vue";
-import { CALLED_MS, type WakeListener } from "./useWakeListener";
+import { CALLED_MS, type WakeListener } from "../../../models/voice/useWakeListener";
 import { GLANCE_MS, type WakeDelivery } from "./wakeDelivery";
 import { destinationLabel } from "./wakeWords";
 

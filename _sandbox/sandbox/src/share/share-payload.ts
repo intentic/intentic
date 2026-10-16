@@ -1,6 +1,8 @@
 import { extname } from "node:path";
-import type { TranscriptRow, TranscriptTool, ShareDetail, ToolCallContent } from "@intentic/sandbox-contract";
-import { maskCredentialMaterial } from "@intentic/sandbox-contract";
+import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import type { ShareDetail } from "@intentic/sandbox-contract/schemas/share";
+import type { ToolCallContent } from "@intentic/sandbox-contract/events/requests";
+import { maskCredentialMaterial } from "@intentic/sandbox-contract/policy/credential-material";
 import { SHARE_FILES_DIR } from "@intentic/sandbox-contract/share-paths";
 
 // Pure, synchronous reduction of a conversation to what a stranger may read: testable without a renderer doing file

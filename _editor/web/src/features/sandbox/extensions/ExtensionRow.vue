@@ -4,10 +4,10 @@ import { BrandMark, Button, DisclosureRow, formatCount, InfoHint, Notice, type N
 import { messageOr } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, nextTick, ref, watch } from "vue";
-import { startAgent } from "../../agents/fleet/agentActions";
+import { startAgent } from "../../../models/fleet/agentActions";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import type { ExtensionEntry } from "../../extensions/useExtensionList";
-import { publishBrief, tightenBrief } from "./extensionBrief";
+import { publishBrief, tightenBrief } from "../../../models/sandbox/extensionBrief";
 import ExtensionSection from "./ExtensionSection.vue";
 import ExtensionSettingsForm from "./ExtensionSettingsForm.vue";
 import ExtensionUpdateOffer from "./ExtensionUpdateOffer.vue";

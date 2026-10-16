@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { DAEMON_PORT, HISTORY_ROOT, LOCAL_PORT, PLATFORM_WEB_ORIGIN, PREVIEW_PORT, WORKSPACE_ROOT } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
-import { publicUrl, zoneFromUrl } from "@intentic/sandbox-contract";
+import { publicUrl, zoneFromUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import { REPLAY_SECRET_ENV } from "@intentic/sandbox-run";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { type ConfigDefinition, cliArgs, env, envFile, inspectSchema, loadConfig as loadPuristicConfig } from "@puristic/env/index.js";

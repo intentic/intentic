@@ -1,3 +1,4 @@
+import { parseJsonOr } from "@intentic/base/json";
 // Shared parsing vocabulary for undocumented provider payloads (Anthropic, ChatGPT, Google, Kimi all use private,
 // unpublished endpoints). A malformed field must cost a ring, never an exception, by the same rule on every provider,
 // so two meters never disagree about what counts as unreadable.
@@ -34,15 +35,8 @@ const FAILURE_MAX_CHARS = 120;
 // Anthropic all nest it at `error.message`; some answer `detail` or `message` at the top), else the bare status. The
 // words are the point: "Verify your account to continue." tells a reader what to do, and "HTTP 403" does not.
 export const readFailure = (status: number, body: string | undefined): string => {
-    const parsed = ((): unknown => {
-        try {
-            return JSON.parse(body ?? "") as unknown;
-        } catch {
-            // allow(silent-catch): a body that is not JSON has no sentence to lift, and the status below still says what failed.
-            return undefined;
-        }
-    })();
-    const record = asRecord(parsed);
+    // A body that is not JSON has no sentence to lift, and the status below still says what failed.
+    const record = asRecord(parseJsonOr(body ?? "", undefined));
     const words = asString(asRecord(record?.[`error`])?.[`message`]) ?? asString(record?.[`error`]) ?? asString(record?.[`detail`]) ?? asString(record?.[`message`]);
     const line = words?.split("\n")[0]?.trim();
     return line === undefined || line === "" || line.length > FAILURE_MAX_CHARS ? `HTTP ${String(status)}` : line;

@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import type { OrgDetail, OrgRole } from "@intentic/api-contract";
-import { ORG_SECTIONS, type OrgPolicyRules, type OrgSectionMode, orgPinnedGroups, orgSectionMode, PRESET_GROUPS, type PresetGroup } from "@intentic/sandbox-contract";
+import {
+    ORG_SECTIONS,
+    type OrgPolicyRules,
+    type OrgSectionMode,
+    orgPinnedGroups,
+    orgSectionMode,
+} from "@intentic/sandbox-contract/schemas/organisation";
+import { PRESET_GROUPS, type PresetGroup } from "@intentic/sandbox-contract/schemas/compliance";
 import { Button, Notice, Row, RowGroup, RowNote, SegmentedControl, ui } from "@intentic/ui";
 import { formatDateTime } from "@intentic/ui/format";
 import ToggleSwitch from "primevue/toggleswitch";

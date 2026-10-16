@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { humanizeModelId } from "@intentic/sandbox-contract";
+import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
 import { opt } from "../../opt.js";
 import { engineDir } from "../../engines/engine-store.js";
+import { writeFileAtomic } from "@intentic/base/fs";
 
 // What aims Muse Code at a model API other than Meta's: its Meta provider speaks the OpenAI Responses wire, and a
 // settings file can move that provider's base URL (`endpoint_transport`) and list the models it serves (`model_catalog`,
@@ -51,8 +52,6 @@ export const museEndpointConfigHome = async (endpoint: MuseEndpoint, root: strin
     const dir = join(home, "muse");
     await mkdir(dir, { recursive: true });
     // Renamed into place, so a host starting beside the writer never reads half a file.
-    const staged = join(dir, `.settings-${String(process.pid)}.json`);
-    await writeFile(staged, text, { mode: 0o644 });
-    await rename(staged, join(dir, "settings.json"));
+    await writeFileAtomic(join(dir, "settings.json"), text, 0o644);
     return home;
 };

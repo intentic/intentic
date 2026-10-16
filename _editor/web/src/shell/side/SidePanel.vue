@@ -5,7 +5,7 @@ import { loadChunk } from "@intentic/ui/chunk";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { type Component, computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, useId } from "vue";
-import { chatInSidePanel } from "../../features/chat/panel/chatPanelLayout";
+import { chatInSidePanel } from "../../models/conversations/panel/chatPanelLayout";
 import { SIDE_PANEL } from "../../workbench/commands/categories";
 import { type CommandRegistration, registerCommand } from "../../workbench/commands/useCommands";
 import { chatSlot } from "../../workbench/window/panelSlots";

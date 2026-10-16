@@ -1,7 +1,7 @@
-import { type Device, machinesOf } from "@intentic/sandbox-contract";
+import { type Device, machinesOf } from "@intentic/sandbox-contract/schemas/devices";
 import type { StatusVariant } from "@intentic/ui";
-import { hostEntry, osLabel } from "../../sandbox/devices/deviceFacts";
-import { deviceState, deviceTone } from "../../sandbox/devices/deviceRows";
+import { hostEntry, osLabel } from "../../../models/sandbox/devices/deviceFacts";
+import { deviceState, deviceTone } from "../../../models/sandbox/devices/deviceRows";
 import { t } from "@intentic/ui/i18n";
 
 // Machines this sandbox can see that no capability tile accounts for. A device arrives through either of two doors:

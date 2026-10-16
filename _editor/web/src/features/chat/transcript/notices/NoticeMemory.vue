@@ -3,12 +3,12 @@ import { Button, Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import TurnBreakQuestion from "../../panel/TurnBreakQuestion.vue";
-import { usePaneView } from "../../panel/useChat-view";
-import { memoryNext } from "../../run/endings/turnBreak";
-import type { ChatMessage } from "../transcript";
+import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
+import { memoryNext } from "../../../../models/conversations/endings/turnBreak";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import ChatHeldStatus from "../held/ChatHeldStatus.vue";
 import { memoryReading, useHeldQueue, useKeptTurn } from "../held/heldQueue";
-import { memoryTip, sendAnywayTip } from "../held/memoryTip";
+import { memoryTip, sendAnywayTip } from "../../../../models/conversations/transcript/memoryTip";
 import MemoryRaise from "./MemoryRaise.vue";
 
 /* The row a low-memory hold leaves, drawn as one line whatever it says: the sandbox's figures are a hover card away. */

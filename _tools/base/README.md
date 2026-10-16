@@ -17,7 +17,7 @@ flowchart LR
 - One implementation per rule that more than one tier applies: two copies of a condition, a size label or a
   quick-open ranking disagree on screen. Anything only one surface renders belongs next to that surface.
 - Subpath exports only, with no index, so a browser bundle pulls nothing it does not use. `outside-text` uses Web
-  Crypto, so it does not tie a caller to Node, and `one-line`, `capped-read`, `escape` and `fetch-json` need nothing but
+  Crypto, so it does not tie a caller to Node, and `one-line`, `capped-read`, `escape`, `json` and `fetch-json` need nothing but
   the language and fetch; `fs`, `contained`, `json-lines`, `process`, `sqlite`, `worker-calls`, `web-stream`,
   `ws-tcp-pump`, `acme` and `git` are Node's.
 - `when.ts` is a closed grammar with no arithmetic, calls or property access, because its strings arrive from
@@ -80,13 +80,18 @@ flowchart LR
   `escapeRegExp` and `isRecord`, which a dozen packages each kept a copy of.
 - `errors.ts` lets a catch name the failure it expects: `isMissing` is ENOENT or ENOTDIR only, and
   `undefinedIfMissing` answers undefined for "not there" while EACCES, EIO and a bug's TypeError still arrive.
+- `json.ts` (`./json`) reads text that may not be JSON: `parseJsonOr` hands back its fallback for a SyntaxError and
+  rethrows anything else, and `parseJsonWith` runs a schema over the value, undefined when the text is not JSON or the
+  schema refuses it. The schema is anything with zod's `safeParse`, so base still depends on no schema library.
 - `node/fs.ts` is the one atomic write: staged beside the target under a random name (worker threads share a process
   id, and two containers on one volume may both be pid 1), renamed over it, the staging file removed on any failure, a
   given mode exact rather than cut by the umask. `renameOver` is the rename retried while Windows holds the target open,
   for any rename that replaces a file someone may have open. A durable write flushes the file and then its directories
   through `syncDirectories`, which is best effort by contract: a directory it cannot open or a filesystem that cannot
   flush one never fails a write that already happened. `queueOnFile` serializes one path's read-modify-write across
-  every handle in the process.
+  every handle in the process. `readTextIfExists` (and its `Sync` twin) and `readJsonIfExists` read a file
+  that may be absent: undefined when it is missing, or for JSON, not JSON or refused by its schema, while EACCES, EISDIR
+  and EIO still throw.
 - `node/contained.ts` asks whether a path is inside a root one way: by whole segments, so `..notes` is a name and
   `/work/a-other` is not under `/work/a`, with the root itself inside and another Windows drive outside. `realInside`
   follows links first, for a disk where a folder can be a link elsewhere. `windowsHolds` is the one rule for a name NTFS

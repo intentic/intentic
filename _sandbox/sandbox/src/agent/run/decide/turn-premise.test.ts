@@ -1,5 +1,7 @@
 import { experimentArm } from "@intentic/agent-context/experiments";
-import { type AgentTurn, SandboxSettingsSchema, capabilitiesOf } from "@intentic/sandbox-contract";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { premiseOf, type TurnRuntime } from "./turn-premise.js";
 
 // Whether the premise sends the map: the arm decides where one was drawn, the switch where none was.

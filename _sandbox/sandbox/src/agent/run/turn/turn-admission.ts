@@ -1,7 +1,8 @@
-import { sessionFor } from "../../providers/accounts/routing.js";
+import { sessionFor } from "../../../conversations/registry/routing.js";
 import { randomUUID } from "node:crypto";
 import { keyedLock } from "@intentic/base/async";
-import { ATTACHMENT_LIMIT, MENTION_LIMIT, type MessageReceipt, profileOf, withRuntimeDefaults } from "@intentic/sandbox-contract";
+import { ATTACHMENT_LIMIT, type MessageReceipt, profileOf, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
+import { MENTION_LIMIT } from "@intentic/sandbox-contract/text/mentions";
 import type { BeginRefusal, BeginTurn } from "../../../conversations/actor/conversation-decide.js";
 import { type LiveRun, liveRunOf, turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import { type Booking, holdOf, type QueuedItem, waitingOf } from "../../../conversations/actor/conversation-queue.js";

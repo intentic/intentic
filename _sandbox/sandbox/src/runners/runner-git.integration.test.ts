@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { serve, type ServerType } from "@hono/node-server";
-import { runnerIncomingRef } from "@intentic/sandbox-contract";
+import { runnerIncomingRef } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { Hono } from "hono";
 import type { AgentWorktrees } from "../conversations/worktrees/worktrees.js";
 import type { Services } from "../composition.js";

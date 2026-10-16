@@ -341,6 +341,7 @@ export const ChoreProbeRequestSchema = z.object({
 });
 // POST /chores/ledger: record a run, or snooze. Daemon-written so a turn started from anywhere (panel, automation,
 // agent) lands in one ledger.
+/** @alias */
 export const ChoreLedgerWriteSchema = ChoreLedgerEntrySchema;
 // `warn` is a real third state, not a soft failure: reporting "pass" when nothing has been exercised yet would be the
 // check lying.

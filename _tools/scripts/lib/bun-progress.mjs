@@ -31,7 +31,7 @@ const ERROR_LINE = /^error: (.+)$/u;
 const AT_LINE = /^\s+at (?:.*\()?(.+?:\d+:\d+)\)?$/u;
 const UNNAMED_FAIL = /^\(fail\) \(unnamed\)/u;
 const HOOK_TIMED_OUT = /hook timed out/u;
-// eslint-disable-next-line no-control-regex -- bun colours its output on a terminal; the escapes are not part of a line
+// bun colours its output on a terminal; the escapes are not part of a line
 const ANSI = /\u001b\[[0-9;]*m/gu;
 
 // Silence past the per-test timeout, with room for a slow teardown to print its last line.

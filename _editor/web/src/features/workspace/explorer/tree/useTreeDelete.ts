@@ -1,15 +1,15 @@
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { t } from "@intentic/ui/i18n";
 import { computed, type Ref, ref, watch } from "vue";
 import type { useNotifications } from "../../../../workbench/notifications/notifications";
 import type { BarrenChain } from "../emptyDirs";
-import type { DeleteBatch } from "../undo/deleteUndo";
+import type { DeleteBatch } from "../../../../models/workspace/tree/deleteUndo";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { VERB_ROUTES } from "../entryMenu";
 import { joinPath } from "@intentic/ui/path";
 import { deletedReceipt } from "../entryNames";
 import type { useEmptyDirs } from "../useEmptyDirs";
-import type { useWorkspaceTree } from "../useWorkspaceTree";
+import type { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
 import type { useTreeRules } from "./useTreeRules";
 import type { MultiSelect } from "../../../../lib/multiSelect";
 

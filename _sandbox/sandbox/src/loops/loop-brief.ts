@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { fieldsExample, type Loop, LOOP_DIR } from "@intentic/sandbox-contract";
+import { fieldsExample } from "@intentic/sandbox-contract/policy/output-fields";
+import { type Loop, LOOP_DIR } from "@intentic/sandbox-contract/schemas/loops";
 
 // Prompt content only: describes the goal and what will be checked, never the loop's own machinery (iteration count,
 // budget, mode). The goal is restated only when the prompt doesn't already contain it; the progress-file memory note

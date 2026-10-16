@@ -1,4 +1,5 @@
-import type { IntenticLine, NetdiskConfig, NetdiskState } from "@intentic/sandbox-contract";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
+import type { NetdiskConfig, NetdiskState } from "@intentic/sandbox-contract/schemas/netdisk";
 
 // The per-protocol SPI behind the `netdisk` capability: a driver owns writing a credential, mounting, unmounting and
 // observing one kind of share, nothing about the manifest, routes or UI.

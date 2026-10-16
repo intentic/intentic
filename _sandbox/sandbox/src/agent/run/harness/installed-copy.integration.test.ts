@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { installedCopyDirtyPaths, installedCopyNote, installedCopyOf, installedCopyReviewer } from "./installed-copy.js";
 
 // A real workspace on disk: an install is a git clone under .intentic/local/extensions/<capability id>, its source is a

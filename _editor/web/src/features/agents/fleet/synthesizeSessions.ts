@@ -1,13 +1,14 @@
 import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
-import type { TranscriptRow, TranscriptQuestion, TranscriptTool, ToolCallContent } from "@intentic/sandbox-contract";
+import type { TranscriptRow, TranscriptQuestion, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import type { ToolCallContent } from "@intentic/sandbox-contract/events/requests";
 import { t } from "@intentic/ui/i18n";
 import { track } from "../../../app/analytics";
-import type { TabFacts } from "../../chat/tabs/tabFacts";
-import { summonChat } from "../../chat/run/summon";
-import { chatStrip } from "../../chat/panel/useChat-strip";
+import type { TabFacts } from "../../../models/conversations/tabs/tabFacts";
+import { summonChat } from "../../../models/conversations/run/summon";
+import { chatStrip } from "../../../models/conversations/panel/useChat-strip";
 import { sandboxRawUpload } from "../../../client/sandbox/sandboxRawUpload";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
-import { revealConversation } from "./agentActions";
+import { revealConversation } from "../../../models/fleet/agentActions";
 import { composeSession } from "./sessionSuggestion";
 import { uuid } from "../../../lib/uuid";
 

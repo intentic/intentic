@@ -24,7 +24,7 @@ jest.mock("../../../client/sandbox/sandboxClient", () => ({
 import { queryClient } from "../../../lib/queryPersistence";
 import { viewsOnScreen } from "../../../testing/viewsOnScreen";
 import { onRefsChanged, onReposChanged } from "../../../workbench/workspace-events/repoEvents";
-import { derivedEpochOf, workspaceChangeMark } from "../../workspace/changes/live/useWorkspaceLive";
+import { derivedEpochOf, workspaceChangeMark } from "../../../models/workspace/changes/useWorkspaceLive";
 import { applySystemEvent } from "./systemEvents";
 
 // These views hold no timer of their own, so this frame is their entire live feed; right views refresh, wrong ones are

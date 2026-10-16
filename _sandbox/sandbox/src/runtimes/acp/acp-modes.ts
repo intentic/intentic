@@ -1,5 +1,5 @@
 import type { SessionModeState } from "@agentclientprotocol/sdk";
-import type { PermissionMode } from "@intentic/sandbox-contract";
+import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
 
 // An ACP session's modes (NewSessionResponse.modes, session/set_mode, current_mode_update), and which of them a turn's
 // posture maps onto. The protocol fixes no mode ids, so the match is by id or name: Claude Code's adapter names

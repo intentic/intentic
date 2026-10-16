@@ -1,4 +1,4 @@
-import type { SandboxVitals } from "@intentic/sandbox-contract";
+import type { SandboxVitals } from "@intentic/sandbox-contract/netd/generated/browser-wire";
 import { netdProbeOf, probeNetd, type Settled } from "./probes";
 
 // What the two probes of a sandbox's address establish. The readable one decides whenever it can; the opaque one only

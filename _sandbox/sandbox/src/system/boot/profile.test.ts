@@ -1,5 +1,5 @@
 import type { Config } from "../../env.config.js";
-import { testConfig } from "../../testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import { listenHost, localContractComplaints, profileTraits } from "./profile.js";
 
 const withSandbox = (overrides: Partial<Config["sandbox"]>, rest: Partial<Config> = {}): Config => ({

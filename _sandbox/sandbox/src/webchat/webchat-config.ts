@@ -1,4 +1,4 @@
-import type { WebchatConfig, WebchatPublicConfig } from "@intentic/sandbox-contract";
+import type { WebchatConfig, WebchatPublicConfig } from "@intentic/sandbox-contract/schemas/automations";
 import { DEFAULT_ACCENT } from "@intentic/sandbox-contract/embed";
 import type { AutomationRecord } from "../automations/automations-store.js";
 

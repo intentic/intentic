@@ -3,11 +3,11 @@ import { Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useOperation } from "../../../workbench/operations/operations";
-import { keyIntent, type BrowserCommand, type KeyFrame } from "../../browsers/keyIntent";
-import { pointerFrame, type PointerAction } from "../../browsers/pointerFrame";
-import { selectionCopy } from "../../browsers/selectionCopy";
-import { type ScreencastMessage, useScreencast } from "../../browsers/useScreencast";
-import { socketUrl as wsSocketUrl } from "../../sandbox/session/wsTicket";
+import { keyIntent, type BrowserCommand, type KeyFrame } from "../../../models/browsers/keyIntent";
+import { pointerFrame, type PointerAction } from "../../../models/browsers/pointerFrame";
+import { selectionCopy } from "../../../models/browsers/selectionCopy";
+import { type ScreencastMessage, useScreencast } from "../../../models/browsers/useScreencast";
+import { socketUrl as wsSocketUrl } from "../../../client/sandbox/streams/wsTicket";
 import { useT } from "@intentic/ui/i18n";
 
 // One connected account's Chromium, driven live over /system/browser-profile (video of the page's viewport in, input

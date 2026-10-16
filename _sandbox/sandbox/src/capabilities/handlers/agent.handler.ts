@@ -1,4 +1,4 @@
-import type { AcpAgentConfig } from "@intentic/sandbox-contract";
+import type { AcpAgentConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { CapabilityHandler } from "../capability.js";
 
 // An ACP agent: a chat provider. apply/status = a spawn + initialize probe, proving the command actually

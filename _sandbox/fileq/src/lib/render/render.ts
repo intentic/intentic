@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { parseJsonOr } from "@intentic/base/json";
+import { readTextIfExists } from "@intentic/base/fs";
 import { toolOutDir } from "@intentic/agent-cli/env";
 import { STATE_DIR } from "@intentic/constants";
 import { getDocumentProxy } from "unpdf";
@@ -75,13 +77,11 @@ export const defaultOutDir = (absPath: string, workspaceRoot: string | undefined
 };
 
 const readStamp = async (dir: string): Promise<Stamp | undefined> => {
-    try {
-        const parsed: Partial<Stamp> = JSON.parse(await readFile(join(dir, STAMP_FILE), "utf8"));
-        return parsed.sha256 === undefined || parsed.size === undefined || parsed.total === undefined ? undefined : { sha256: parsed.sha256, size: parsed.size, total: parsed.total };
-    } catch {
-        // allow(silent-catch): no earlier render, or a stamp someone edited; either way the answer is to render afresh.
-        return undefined;
-    }
+    // No earlier render, or a stamp someone edited; either way the answer is to render afresh.
+    const text = await readTextIfExists(join(dir, STAMP_FILE));
+    // SAFETY: only this module writes the stamp, and each field is checked for presence before the stamp is believed.
+    const parsed = text === undefined ? undefined : (parseJsonOr(text, undefined) as Partial<Stamp> | null | undefined);
+    return parsed?.sha256 === undefined || parsed.size === undefined || parsed.total === undefined ? undefined : { sha256: parsed.sha256, size: parsed.size, total: parsed.total };
 };
 
 // Removes the images an earlier render of different bytes left, and nothing else in the folder.

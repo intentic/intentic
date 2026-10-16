@@ -1,4 +1,7 @@
-import { type AgentSummary, ciFixConversationId, fixStance, latestFixAttempt, type PipelineRun } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { ciFixConversationId, latestFixAttempt } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { fixStance } from "@intentic/sandbox-contract/state/fix-stance";
+import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 
 // Joins a fix agent to its run by re-deriving the conversation id (conversation-ids.ts); nothing else records the
 // pairing. Keyed by the run object, like other cross-run readings (ciStreaks). Also derives a branch's ongoing fix, so

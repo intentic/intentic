@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 
 // Narrow mailbox key: the newest code or link a site sent; read over the curl imaps:// the IMAP skill teaches.
 // Bound code lookup to a half-hour day-granular search window.

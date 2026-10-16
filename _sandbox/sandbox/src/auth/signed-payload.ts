@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { z } from "zod";
+import { parseJsonWith } from "@intentic/base/json";
 
 // A small JSON payload carried in an address and signed under a daemon key: `<payload>.<signature>`, the payload base64url
 // JSON, the signature the first 32 characters of HMAC-SHA256 over it, base64url. The privacy gateway's session tokens
@@ -67,13 +68,8 @@ export const signedPayloads = <Schema extends z.ZodType>(
             if (expected.length !== given.length || !timingSafeEqual(expected, given)) {
                 return undefined;
             }
-            try {
-                const parsed = schema.safeParse(JSON.parse(Buffer.from(payload, "base64url").toString("utf8")));
-                return parsed.success ? parsed.data : undefined;
-            } catch {
-                // allow(silent-catch): signed by this key yet unreadable can only be a payload a different build spelled differently.
-                return undefined;
-            }
+            // Signed by this key yet unreadable can only be a payload a different build spelled differently.
+            return parseJsonWith(Buffer.from(payload, "base64url").toString("utf8"), schema);
         },
     };
 };

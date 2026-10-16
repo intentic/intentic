@@ -1,4 +1,4 @@
-import type { UsageTurn } from "@intentic/sandbox-contract";
+import type { UsageTurn } from "@intentic/sandbox-contract/schemas/providers/usage";
 import { MIN_ARM_TURNS } from "@intentic/agent-context/arm-stats";
 import { readTurnExperiments } from "./turn-experiments.js";
 import type { UsageStore } from "./usage-store.js";

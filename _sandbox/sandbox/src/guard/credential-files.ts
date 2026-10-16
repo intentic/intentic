@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { isMissing } from "@intentic/base/errors";
-import { holdsCredentialMaterial } from "@intentic/sandbox-contract";
+import { holdsCredentialMaterial } from "@intentic/sandbox-contract/policy/credential-material";
 import { homeDir } from "../system/home-dir.js";
 
 // Checks whether a path actually holds a credential, the sandbox's half of `secrets.access`. May only subtract, and

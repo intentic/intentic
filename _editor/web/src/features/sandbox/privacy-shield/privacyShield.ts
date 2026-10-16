@@ -1,7 +1,6 @@
 import { PROVIDER_BRAND_PATHS, type ProviderBrand } from "@intentic/constants";
+import { isEndpointProvider, isTrialProvider } from "@intentic/sandbox-contract/models/agent-catalog";
 import {
-    isEndpointProvider,
-    isTrialProvider,
     PERSONAL_DATA_CLASSES,
     PRIVACY_ALLOW_MAX,
     type PersonalDataClass,
@@ -13,7 +12,7 @@ import {
     type PrivacyProvider,
     type PrivacyReplacement,
     type PrivacyShieldPolicy,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/privacy";
 
 // The privacy shield panel's arithmetic, kept free of Vue so it can be tested on its own. The policy route replaces
 // the policy whole, so every change here returns a new policy built from the one on screen rather than a patch.

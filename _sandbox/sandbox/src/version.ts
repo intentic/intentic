@@ -2,6 +2,7 @@ import { readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
+import { undefinedIfMissing } from "@intentic/base/errors";
 
 // The published version behind `ghcr.io/intentic/sandbox:stable`, set by the release flow before the image builds.
 export const { version } = createRequire(import.meta.url)(join(packageRoot(import.meta.url), "package.json")) as { version: string };
@@ -27,8 +28,9 @@ const newestMtimeMs = (dir: string): number => {
         }
         try {
             newest = Math.max(newest, statSync(path).mtimeMs);
-        } catch {
+        } catch (error) {
             // A file that vanished mid-walk is not part of the build.
+            undefinedIfMissing(error);
         }
     }
     return newest;

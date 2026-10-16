@@ -1,5 +1,8 @@
-import { lstat, readdir, readFile, rm } from "node:fs/promises";
+import { lstat, readdir, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { parseJsonWith } from "@intentic/base/json";
+import { readTextIfExists } from "@intentic/base/fs";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { livePidRecord } from "@intentic/local-agent";
 import { z } from "zod";
 import { AUDIT_ROLL_BYTES, rollAudit } from "../device/audit.js";
@@ -55,8 +58,8 @@ const auditRotate: UpkeepEntry = {
     reason: `the record of every call agents made here, set aside as audit.jsonl.1 once it reaches ${AUDIT_ROLL_BYTES / 1024 / 1024} MB`,
     find: async ({ base }) => {
         const path = join(base, "audit.jsonl");
-        // allow(silent-catch): no record yet is nothing to roll
-        const size = (await lstat(path).catch(() => undefined))?.size ?? 0;
+        // No record yet is nothing to roll.
+        const size = (await lstat(path).catch(undefinedIfMissing))?.size ?? 0;
         return size < AUDIT_ROLL_BYTES ? [] : [{ what: path, act: async () => void (await rollAudit(path)) }];
     },
 };
@@ -78,12 +81,12 @@ const shimParts: UpkeepEntry = {
         if ((await livePidRecord(join(bin, "upgrade.lock"))) !== undefined) {
             return [];
         }
-        // allow(silent-catch): no bin folder holds no half downloads
-        const names = (await readdir(bin).catch((): string[] => [])).filter(isShimPart);
+        // No bin folder holds no half downloads.
+        const names = ((await readdir(bin).catch(undefinedIfMissing)) ?? []).filter(isShimPart);
         const stale = await Promise.all(
             names.map(async (name) => {
-                // allow(silent-catch): a file gone since the listing is nothing to prune
-                const info = await lstat(join(bin, name)).catch(() => undefined);
+                // A file gone since the listing is nothing to prune.
+                const info = await lstat(join(bin, name)).catch(undefinedIfMissing);
                 return info !== undefined && now - info.mtimeMs >= PART_KEEP_MS ? name : undefined;
             }),
         );
@@ -116,21 +119,15 @@ const RunRecordsSchema = z.array(z.object({ log: z.string(), endedAt: z.string()
 // The `.logs` entries of the runs one sandbox's apps.json holds as running: a run's own log file, or the folder an
 // isolated run's log sits in. A record that does not read protects nothing, so the caller prunes nothing of that sandbox.
 const liveRunLogs = async (sandboxDir: string): Promise<ReadonlySet<string> | undefined> => {
-    // allow(silent-catch): no record at all is a sandbox that never started a program here
-    const text = await readFile(join(sandboxDir, "apps.json"), "utf8").catch(() => "[]");
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(text);
-    } catch {
-        // allow(silent-catch): a record torn mid-write cannot say what runs, so nothing of this sandbox is pruned this pass
-        return undefined;
-    }
-    const runs = RunRecordsSchema.safeParse(parsed);
-    if (!runs.success) {
+    // No record at all is a sandbox that never started a program here.
+    const text = (await readTextIfExists(join(sandboxDir, "apps.json"))) ?? "[]";
+    // A record torn mid-write cannot say what runs, so nothing of this sandbox is pruned this pass.
+    const runs = parseJsonWith(text, RunRecordsSchema);
+    if (runs === undefined) {
         return undefined;
     }
     const logs = join(sandboxDir, ".logs");
-    return new Set(runs.data.filter((run) => run.endedAt === undefined).map((run) => (dirname(run.log) === logs ? basename(run.log) : basename(dirname(run.log)))));
+    return new Set(runs.filter((run) => run.endedAt === undefined).map((run) => (dirname(run.log) === logs ? basename(run.log) : basename(dirname(run.log)))));
 };
 
 const runLogs: UpkeepEntry = {
@@ -146,12 +143,12 @@ const runLogs: UpkeepEntry = {
             sandboxes.map(async (sandbox): Promise<Finding[]> => {
                 const logs = join(runs, sandbox, ".logs");
                 const live = await liveRunLogs(join(runs, sandbox));
-                // allow(silent-catch): a sandbox folder with no outputs has nothing to prune
-                const names = live === undefined ? [] : await readdir(logs).catch((): string[] => []);
+                // A sandbox folder with no outputs has nothing to prune.
+                const names = live === undefined ? [] : ((await readdir(logs).catch(undefinedIfMissing)) ?? []);
                 const entries = await Promise.all(
                     names.map(async (name) => {
-                        // allow(silent-catch): an output gone since the listing is nothing to prune
-                        const info = await lstat(join(logs, name)).catch(() => undefined);
+                        // An output gone since the listing is nothing to prune.
+                        const info = await lstat(join(logs, name)).catch(undefinedIfMissing);
                         return info === undefined ? undefined : { name, mtimeMs: info.mtimeMs };
                     }),
                 );

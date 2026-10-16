@@ -1,5 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
-import { ciContract, type CiRepo } from "@intentic/sandbox-contract";
+import { ciContract } from "@intentic/sandbox-contract/contracts/ci.contract";
+import type { CiRepo } from "@intentic/sandbox-contract/schemas/ci";
 import { implement, ORPCError } from "@orpc/server";
 import { areasOf } from "../auth/principal.js";
 import { speakerOf, spokenBy } from "../seams/turn-speaker.js";

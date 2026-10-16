@@ -1,7 +1,7 @@
 import { useDevice } from "@intentic/ui";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
+import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import { setProjectScope, withinScope } from "../../../app/projectScope";
 import { workspaceAgent } from "../../../app/workspaceScope";
 

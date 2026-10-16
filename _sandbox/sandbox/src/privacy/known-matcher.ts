@@ -1,4 +1,4 @@
-import { afterEscape, isDigit } from "./detect/text.js";
+import { afterEscape, isDigit } from "@intentic/privacy-detect/text";
 
 // Finds every value the vault already holds, wherever it stands as a whole word, in each spelling its kind allows
 // (`Spelling`). Indexed by the first few characters of each value as compared rather than as one automaton: the vault
@@ -92,7 +92,7 @@ const endAt = <C>(text: string, at: number, candidate: Candidate<C>): number | u
 // longer number, while a value that ends in punctuation needs nothing after it. The letter of a JSON escape before it
 // (`\n` in raw JSON text) is the escape's, not a word's.
 // Nor where a digit at its edge continues a decimal: a float's places once found as a card number (`0.55899…99`) are a
-// float's wherever they come back. A decimal point only, as the card detector reads it (detect/text.ts partOfDecimal).
+// float's wherever they come back. A decimal point only, as the card detector reads it (@intentic/privacy-detect text.ts partOfDecimal).
 const boundedAt = <C>(text: string, start: number, end: number, candidate: Candidate<C>): boolean => {
     const before = candidate.lead === "" && isWordChar(text[start - 1]) && !afterEscape(text, start);
     const after = isWordChar(candidate.units.at(-1)) && isWordChar(text[end]);

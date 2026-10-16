@@ -1,5 +1,5 @@
 import { t } from "@intentic/ui/i18n";
-import type { PushChannel } from "@intentic/sandbox-contract";
+import type { PushChannel } from "@intentic/sandbox-contract/schemas/push";
 import { ORPCError } from "@orpc/client";
 import { pushPlugin, type PushNotificationsPlugin } from "../window/capacitor.js";
 import type { Minted, PushDriver } from "./driver.js";

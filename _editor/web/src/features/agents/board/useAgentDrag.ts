@@ -2,15 +2,15 @@ import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { computed, ref } from "vue";
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
-import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, nothingLanded, stopAgent } from "../fleet/agentActions";
-import { refreshAcross } from "../../sandbox/live/fleetAcross";
-import { otherFleet } from "../fleet/fleetScope";
-import { unregistered } from "../fleet/agentStatus";
-import { hold, pendingOn } from "../fleet/useAgents-provisional";
+import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, nothingLanded, stopAgent } from "../../../models/fleet/agentActions";
+import { refreshAcross } from "../../../models/sandbox/live/fleetAcross";
+import { otherFleet } from "../../../models/fleet/fleetScope";
+import { unregistered } from "../../../models/agent-status/agentStatus-standing";
+import { hold, pendingOn } from "../../../models/fleet/useAgents-provisional";
 import { dropActionFor, type DropAction, type DropTarget, type PendingAction } from "./laneDrop";
-import { useAgents } from "../fleet/useAgents";
+import { useAgents } from "../../../models/fleet/useAgents";
 import { useNotifications } from "../../../workbench/notifications/notifications";
-import type { FleetAgent } from "../fleet/useAgents-fleet";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
 
 // Pointer-driven card drag: Pointer Events (not HTML5 drag-and-drop) give a real AgentCard ghost, Escape-to-cancel, and
 // DOM hit-testing for the drop target. A drop never assigns a lane: it runs the action, and the action claims the card

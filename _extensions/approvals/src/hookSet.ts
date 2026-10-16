@@ -1,4 +1,4 @@
-import type { HookModule, HookPlugin, HookRequest } from "@intentic/sandbox-contract";
+import type { HookModule, HookPlugin, HookRequest } from "@intentic/sandbox-contract/schemas/approvals";
 import { t } from "./i18n.js";
 
 /* A hook set's plugins in plain words: what a plugin's hooks module does, read off the events it hooks and the methods

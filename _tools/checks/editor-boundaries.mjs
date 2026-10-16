@@ -4,10 +4,13 @@
 // evaluates first its partner's bindings uninitialised; a value import reaching a higher layer than its own
 // (lib/editor-layers.mjs, baselined, may only shrink: baselines/editor-layers.json); and a value import between units of
 // one layer (each features/<x>, each unit the table names) closing a cycle of any length, baselined, may only shrink:
-// baselines/editor-cycles.json.
+// baselines/editor-cycles.json; and a value import between subunits of one unit layers.json's `subunits` lists (each
+// immediate subdirectory, and the unit's root files as one more) closing a cycle, baselined, may only shrink:
+// baselines/editor-subunits.json.
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { editorGraphs, editorLayering } from "./lib/editor-graph.mjs";
+import { EDITOR_SUBUNITS } from "./lib/editor-layers.mjs";
 import { ratchet } from "./lib/ratchet.mjs";
 import { finish } from "./lib/report.mjs";
 import { root, SKIP_DIRS, TEST_FILE } from "./lib/repo.mjs";
@@ -15,6 +18,7 @@ import { root, SKIP_DIRS, TEST_FILE } from "./lib/repo.mjs";
 const SRC = "_editor/web/src";
 const BASELINE_PATH = "_tools/checks/baselines/editor-cycles.json";
 const LAYERS_BASELINE_PATH = "_tools/checks/baselines/editor-layers.json";
+const PARTS_BASELINE_PATH = "_tools/checks/baselines/editor-subunits.json";
 
 // Every module the app ships: suites import their subject and nothing imports them, so they close no cycle, and a
 // declaration file holds only types.
@@ -34,7 +38,7 @@ const walk = (dir) => {
 walk(join(root, SRC));
 
 const { files, fileEdges, subsystemEdges } = editorGraphs(sources);
-const { cycles: units, upward, upwardSites, unplaced } = editorLayering(sources);
+const { cycles: units, partCycles, upward, upwardSites, unplaced } = editorLayering(sources);
 
 // One loop per cycle of modules, through the first edge of it that closes one.
 const moduleCycles = files.components.map((component) => {
@@ -66,6 +70,16 @@ const addedCycles = grown
     .sort()
     .map((edge) => units.closes(units.cycleEdges.get(edge)));
 
+// Each key is one standing edge between two subunits of a unit, which only a change inside that unit can move.
+const unitOfPart = (edge) => EDITOR_SUBUNITS.find((unit) => edge.startsWith(`${unit}/`) || edge.startsWith(`${unit} `));
+const { grown: grownParts } = ratchet("editor-boundaries", "editor-subunits", new Map([...partCycles.cycleEdges.keys()].map((edge) => [edge, 1])), {
+    touchedBy: (edge, path) => path.startsWith(`${SRC}/${unitOfPart(edge)}/`),
+});
+const addedPartCycles = grownParts
+    .map(({ key }) => key)
+    .sort()
+    .map((edge) => partCycles.closes(partCycles.cycleEdges.get(edge)));
+
 const cycleUnits = new Set([...units.cycleEdges.values()].flat());
 const upwardSiteCount = [...upward.values()].reduce((sum, count) => sum + count, 0);
 finish(
@@ -86,8 +100,12 @@ finish(
             `A value import between editor units of one layer closes a cycle ${BASELINE_PATH} does not hold (paths under ${SRC}/). Reach one way through a type-only import, a registry the lower side exposes, or a module above both`,
             addedCycles,
         ],
+        [
+            `A value import between subunits of one editor unit (${EDITOR_SUBUNITS.join(", ")}) closes a cycle ${PARTS_BASELINE_PATH} does not hold (paths under ${SRC}/). Reach one way through a type-only import, a registry the lower part exposes, or a module both import`,
+            addedPartCycles,
+        ],
     ],
     [
-        `editor-boundaries: ${sources.size} modules, ${fileEdges} static value imports between them and no cycle; ${upwardSiteCount} upward imports across ${upward.size} edges and ${units.cycleEdges.size} same-layer edges closing cycles among ${cycleUnits.size} units, none new (${units.nodes.length} units in cycles' reach, ${subsystemEdges} value edges between subsystems)`,
+        `editor-boundaries: ${sources.size} modules, ${fileEdges} static value imports between them and no cycle; ${upwardSiteCount} upward imports across ${upward.size} edges and ${units.cycleEdges.size} same-layer edges closing cycles among ${cycleUnits.size} units, and ${partCycles.cycleEdges.size} edges closing cycles between the subunits of ${EDITOR_SUBUNITS.join(", ")}, none new (${units.nodes.length} units in cycles' reach, ${subsystemEdges} value edges between subsystems)`,
     ],
 );

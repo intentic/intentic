@@ -1,4 +1,4 @@
-import type { PartialFileDiff } from "@intentic/sandbox-contract";
+import type { PartialFileDiff } from "@intentic/sandbox-contract/schemas/history";
 
 // The answer for a file too big to ship as two whole sides: git computes a unified patch of the changed regions
 // (bounded to MAX_PATCH_BYTES) instead of sending both sides whole; nothing here reads the file itself.

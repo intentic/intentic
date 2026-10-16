@@ -1,4 +1,4 @@
-import type { IntenticOsStatus } from "@intentic/sandbox-contract";
+import type { IntenticOsStatus } from "@intentic/sandbox-contract/schemas/intentic-os";
 import type { OsRunEnd, OsRunEvent } from "../../desktop";
 import {
     KEPT_LINES,

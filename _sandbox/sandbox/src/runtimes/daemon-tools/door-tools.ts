@@ -1,4 +1,5 @@
-import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { TurnContext } from "../../agent/providers/adapter.js";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import { turnToolsOf, type TurnRemoteTools, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";

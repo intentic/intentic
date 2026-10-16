@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import type { DeliverableKind } from "@intentic/sandbox-contract";
+import type { DeliverableKind } from "@intentic/sandbox-contract/text/documents";
 import type { IconName } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import ResultPreview from "../../../workspace/viewers/results/ResultPreview.vue";
-import { saveResult } from "../../../workspace/viewers/results/resultFiles";
-import { setHtmlPreviewed } from "../../../workspace/viewers/html/htmlPreviewed";
-import { useChatSurface } from "../../tools/chatToolSurface";
+import ResultPreview from "../../../../parts/workspace/ResultPreview.vue";
+import { saveResult } from "../../../../models/workspace/viewers/resultFiles";
+import { setHtmlPreviewed } from "../../../../models/workspace/viewers/htmlPreviewed";
+import { useChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
 import { type ChatDeliverable, deliverableName } from "./deliverables";
 
 // The documents a finished turn made or changed, under its answer where it is read: one chip each, the file's name over

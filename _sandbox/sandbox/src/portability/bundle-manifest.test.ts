@@ -1,4 +1,4 @@
-import { BundleManifestSchema } from "@intentic/sandbox-contract";
+import { BundleManifestSchema } from "@intentic/sandbox-contract/state/definition";
 import { convertDocument } from "../store/evolution/conversions.js";
 import { bundleManifestDocument, unreadableManifest } from "./bundle-arrival.js";
 

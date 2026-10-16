@@ -1,5 +1,5 @@
 import { parseEnv } from "node:util";
-import { CapabilitySchema } from "@intentic/sandbox-contract";
+import { CapabilitySchema } from "@intentic/sandbox-contract/schemas/capabilities";
 import { parse as parseYaml } from "yaml";
 import {
     asArray,
@@ -19,6 +19,7 @@ import {
     type SourcePlan,
     text,
 } from "./adapter-shared.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Reads ~/.hermes into a plan, pure over the archive's file map, so preview and apply share one function.
 // - config.yaml: model/fallbacks, providers, mcp_servers, platforms, cron
@@ -43,13 +44,12 @@ export const detectHermes = (files: Files): boolean =>
 export const hermesAuthKeys = (
     raw: string,
 ): { readonly keys: readonly { readonly provider: string; readonly key: string }[]; readonly oauth: readonly string[] } | undefined => {
-    let parsed: Record<string, unknown>;
-    try {
-        parsed = asRecord(JSON.parse(raw)) ?? {};
-    } catch {
-        // allow(silent-catch): not JSON is the answer itself, which the plan words as a refused line.
+    const json = parseJsonOr(raw, undefined);
+    if (json === undefined) {
+        // Not JSON is the answer itself, which the plan words as a refused line.
         return undefined;
     }
+    const parsed = asRecord(json) ?? {};
     const keys: { provider: string; key: string }[] = [];
     const oauth: string[] = [];
     for (const [provider, entry] of Object.entries(asRecord(parsed["providers"]) ?? parsed).toSorted(([left], [right]) => left.localeCompare(right))) {

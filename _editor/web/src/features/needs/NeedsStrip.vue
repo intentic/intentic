@@ -4,8 +4,8 @@ import { Button, toneRim } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import NeedCard from "./NeedCard.vue";
-import { NEED_ICONS } from "./needStatus";
-import { useNeeds } from "./useNeeds";
+import { NEED_ICONS } from "../../models/needs/needStatus";
+import { useNeeds } from "../../models/needs/useNeeds";
 
 const t = useT();
 

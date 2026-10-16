@@ -1,7 +1,9 @@
-import { type AgentEvent, peerMessagePrompt, watchWakePrompt } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { peerMessagePrompt } from "@intentic/sandbox-contract/events/agent-words";
+import { watchWakePrompt } from "@intentic/sandbox-contract/events/watch-wake";
 import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTaint } from "../../guard/turn-taint.js";
 import { startTurnRun, type TurnRun } from "../run/turn/turn-runs.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { SteeringQueue, steeringRelay, steerTurn } from "./agent-steering.js";
 import { createDomainEvents } from "../../seams/domain-events.js";
 import type { Steer } from "../../seams/turn-starter.js";

@@ -1,4 +1,4 @@
-import type { Automation, AutomationTemplate } from "@intentic/sandbox-contract";
+import type { Automation, AutomationTemplate } from "@intentic/sandbox-contract/schemas/automations";
 import { ZoneSchema } from "@intentic/sandbox-contract/time";
 import { computed, nextTick } from "vue";
 import type { AvailableSource } from "./catalog";

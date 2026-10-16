@@ -1,8 +1,9 @@
-import type { AgentTurn, Persona } from "@intentic/sandbox-contract";
+import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
-import { conversationEntry, isolatedAgent } from "../../testing.js";
+import { conversationEntry, isolatedAgent } from "../../conversations/registry/agents-store.testing.js";
 import { contextNoteFor, decideComposition } from "./conversation-context.js";
 
 /* THE COMPOSITION IS READ OFF THE CARD, AND OFF NOTHING ELSE. */

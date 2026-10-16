@@ -1,4 +1,4 @@
-import { type ProviderRefusal, ProviderRefusalSchema } from "@intentic/sandbox-contract";
+import { type ProviderRefusal, ProviderRefusalSchema } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";

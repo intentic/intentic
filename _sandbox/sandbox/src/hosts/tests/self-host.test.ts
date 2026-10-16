@@ -1,12 +1,5 @@
-import {
-    type Device,
-    DeviceSandboxSchema,
-    HOST_NATIVE_ENVIRONMENT,
-    hostHoldingPath,
-    hostRunningSandbox,
-    type HostSummary,
-    pathReach,
-} from "@intentic/sandbox-contract";
+import { type Device, DeviceSandboxSchema, hostHoldingPath, hostRunningSandbox, pathReach } from "@intentic/sandbox-contract/schemas/devices";
+import { HOST_NATIVE_ENVIRONMENT, type HostSummary } from "@intentic/sandbox-contract/schemas/hosts";
 import { machineReach } from "../self-host.js";
 
 // The predicate behind every "run it out there instead of asking" path, tested beside the daemon's reader of it

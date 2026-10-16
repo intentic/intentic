@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { SecretHostGuard } from "@intentic/sandbox-contract";
+import type { SecretHostGuard } from "@intentic/sandbox-contract/schemas/secrets";
 import type { Logger } from "pino";
 import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
 import type { CardDeps } from "../guard/card-offers.js";

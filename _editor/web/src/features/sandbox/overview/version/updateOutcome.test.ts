@@ -1,7 +1,8 @@
 // What the update card says about this sandbox's version beyond "an update is out", and which of its actions apply.
 // Instants are built on the runner's own calendar (`new Date(y, m, d, h, min)`), since "until 14:05 tomorrow" is read
 // off the reader's clock and a UTC-built instant would move the day with the machine the suite runs on.
-import type { Info, UpdateOutcome } from "@intentic/sandbox-contract";
+import type { Info } from "@intentic/sandbox-contract/schemas/system";
+import type { UpdateOutcome } from "@intentic/sandbox-contract/schemas/updates";
 import { outcomeNews, updateCardPlan, versionName, withdrawnSentence } from "./updateOutcome";
 
 const NOW = new Date(2026, 8, 28, 16, 30).getTime();

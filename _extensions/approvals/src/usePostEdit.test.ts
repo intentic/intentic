@@ -1,4 +1,4 @@
-import type { PostApprovalSummary } from "@intentic/sandbox-contract";
+import type { PostApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
 import { runAllTimersAsync } from "@intentic/testing/bun";
 import { usePostEdit } from "./usePostEdit";
 

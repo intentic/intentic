@@ -1,6 +1,6 @@
 <!-- One glyph-width mark per automation run, oldest left to newest right — reversed from the ledger's newest-first order. -->
 <script setup lang="ts">
-import type { AutomationRun } from "@intentic/sandbox-contract";
+import type { AutomationRun } from "@intentic/sandbox-contract/schemas/automations";
 import { toneDot } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { t } from "./i18n.js";

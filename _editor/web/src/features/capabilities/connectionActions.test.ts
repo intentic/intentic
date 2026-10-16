@@ -4,14 +4,14 @@
 // it still running.
 import "@intentic/testing/dom";
 import { effectScope, type EffectScope } from "vue";
-import * as actualUseDevices from "../sandbox/devices/useDevices";
+import * as actualUseDevices from "../../models/sandbox/devices/useDevices";
 import type { DeviceConnection } from "./model/deviceConnections";
 
 // The one call a disconnect makes, answered per case.
 const revokeSyncDevice = jest.fn<(machine: string) => Promise<void>>(async () => {});
 // Snapshotted before the mock replaces the module: a namespace is a live binding.
 const realUseDevices = { ...actualUseDevices };
-jest.mock(`../sandbox/devices/useDevices`, () => ({ ...realUseDevices, revokeSyncDevice }));
+jest.mock(`../../models/sandbox/devices/useDevices`, () => ({ ...realUseDevices, revokeSyncDevice }));
 
 const { useConnectionActions } = await import("./connectionActions");
 const { forgetOperations } = await import("../../workbench/operations/operations");

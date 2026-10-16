@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import type { MemberRole } from "@intentic/sandbox-contract";
+import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 
 // The four affordance flags per tier, as one table: a guest drives its own chats but never reviews, ships or owns.
 const role = ref<MemberRole | undefined>(`owner`);

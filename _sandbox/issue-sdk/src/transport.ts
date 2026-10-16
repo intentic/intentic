@@ -1,4 +1,4 @@
-import type { IssueAccepted, IssueIngest, IssuePublicConfig } from "@intentic/sandbox-contract";
+import type { IssueAccepted, IssueIngest, IssuePublicConfig } from "@intentic/sandbox-contract/schemas/issues";
 import { embedFailure, type EmbedEndpoint, embedUrl, fetchEmbedChallenge, fetchEmbedJson, type PowChallenge } from "@intentic/sandbox-contract/embed";
 
 // The three embed calls (config, challenge) are the contract's (embed.ts) against the daemon's public /intake door;

@@ -1,5 +1,5 @@
 import type { MemoryReading } from "@intentic/constants/memory-room";
-import { breakArmed } from "@intentic/sandbox-contract";
+import { breakArmed } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { Services } from "../../../composition.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import type { NamespaceSetupError } from "../../../workload/namespace-holder.js";

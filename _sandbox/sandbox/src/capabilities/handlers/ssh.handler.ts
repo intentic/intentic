@@ -1,4 +1,4 @@
-import type { SshConfig } from "@intentic/sandbox-contract";
+import type { SshConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { readFile, writeFile } from "node:fs/promises";
 import { removeLoadedSkill, writeLoadedSkill } from "../../store/loaded-skills.js";
 import type { CapabilityHandler } from "../capability.js";

@@ -2,15 +2,11 @@ import { join } from "node:path";
 import type { ProcessContribution } from "@intentic/extension-manifest";
 import { EXTENSION_PROCESS_ENV } from "@intentic/sandbox-contract/extension-protocol";
 import type { Services } from "../composition.js";
-import { extensionRuntimeAbsent } from "./extension-readiness.js";
-import { enabledExtensions, type ExtensionHost, extensionInventory, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
+import { extensionRuntimeAbsent } from "../capabilities/extension-inventory/extension-readiness.js";
+import { enabledExtensions, type ExtensionHost, extensionInventory, type InstalledExtension, installedExtensions } from "../capabilities/extension-inventory/installed-extensions.js";
 import { listenerOwnership, listenerProcessesDesired, listenerState } from "./listener/listener-state.js";
 import { prepareExtensionDirs } from "./runtime/extension-state.js";
-
-// Service key for a declared extension process (`svc-ext-<id>-<name>`); dots in the id are sanitized.
-// Extension processes run under the service supervisor, never tmux; the prefix marks it apart from a dev panel.
-export const EXTENSION_PROCESS_PREFIX = "ext-";
-export const extensionProcessKey = (id: string, name: string): string => `${EXTENSION_PROCESS_PREFIX}${id.replaceAll(".", "-")}-${name}`;
+import { extensionProcessKey } from "../capabilities/extension-dirs.js";
 
 // Where a declared process runs: its extension's directory, which for an install in dev mode is the source checkout.
 const processCwd = (extension: InstalledExtension, process: ProcessContribution): string =>

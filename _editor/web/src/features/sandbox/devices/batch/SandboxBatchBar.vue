@@ -2,7 +2,7 @@
 import { Button, Icon, type IconName, type Tip, VERB_LABEL } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { computed } from "vue";
-import type { BatchAction, BatchVerb } from "../deviceRows";
+import type { BatchAction, BatchVerb } from "../../../../models/sandbox/devices/deviceRows";
 import type { DeviceOps } from "../runners/deviceOps";
 import type { SandboxSelection } from "./sandboxSelection";
 import { useT } from "@intentic/ui/i18n";

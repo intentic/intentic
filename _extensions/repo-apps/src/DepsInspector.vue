@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { WorkspaceDepEdge, WorkspacePackage } from "@intentic/sandbox-contract";
+import type { WorkspaceDepEdge, WorkspacePackage } from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
 import { Button, Icon, ui } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { usageOf, type Area, type Closure } from "./depModel";

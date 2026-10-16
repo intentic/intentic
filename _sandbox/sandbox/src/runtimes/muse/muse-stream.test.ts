@@ -1,5 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { museFailureFrame, museFrames, museStreamState, type MuseStreamState, museUsageFrame } from "./muse-stream.js";
 import { type MuseNotification, readMuseEvent } from "./muse-wire.js";
 

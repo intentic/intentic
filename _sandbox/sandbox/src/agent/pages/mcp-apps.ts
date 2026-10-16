@@ -1,5 +1,7 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import { type AgentEvent, intoHead, mcpAppDataScript, type Page } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { intoHead, mcpAppDataScript } from "@intentic/sandbox-contract/text/pages";
+import type { Page } from "@intentic/sandbox-contract/events/requests";
 import type { AgentTool } from "../tools/agent-tools.js";
 import { McpClient, type McpTool } from "./mcp-client.js";
 import { carryPage } from "./page-assets.js";

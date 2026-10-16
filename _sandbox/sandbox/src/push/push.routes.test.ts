@@ -1,4 +1,4 @@
-import type { PushChannel } from "@intentic/sandbox-contract";
+import type { PushChannel } from "@intentic/sandbox-contract/schemas/push";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";

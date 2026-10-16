@@ -1,5 +1,6 @@
 import { extname } from "node:path";
-import type { AgentEvent, ToolCallContent, ToolCallStatus } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { ToolCallContent, ToolCallStatus } from "@intentic/sandbox-contract/events/requests";
 import { agentCommand, commandWords, shellScriptOf } from "../providers/agent-installs.js";
 
 // Ledger over the turn: which code files changed and whether a passing check followed the last edit. Edits and evidence

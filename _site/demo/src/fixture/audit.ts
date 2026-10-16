@@ -1,4 +1,4 @@
-import type { AuditExport, AuditList, AuditQuery, AuditRecord, AuditStatus, AuditVerify } from "@intentic/sandbox-contract";
+import type { AuditExport, AuditList, AuditQuery, AuditRecord, AuditStatus, AuditVerify } from "@intentic/sandbox-contract/schemas/audit";
 
 // A short audit trail for the Audit log page, over three days: a member granted, a setting changed, sign-ins, a refused
 // attempt, a read, and presses the daemon wrote twice in a moment. The hashes are placeholders, not a real chain: the

@@ -1,7 +1,7 @@
 import { readdir, rm } from "node:fs/promises";
 import { join, posix } from "node:path";
 import type { Log } from "@intentic/local-agent";
-import { clearableOnDevice, type DeviceConflict } from "@intentic/sandbox-contract";
+import { clearableOnDevice, type DeviceConflict } from "@intentic/sandbox-contract/schemas/devices";
 import type { SandboxEndpoint } from "./endpoint.js";
 
 // BUILD OUTPUT IS NOT A CONFLICT. Two-way-safe exists to stop one person's edit overwriting another's, and for that it
@@ -77,7 +77,7 @@ export const isDerivedHusk = async (root: string, path: string, ignored: (path: 
         if (entry.name !== REPOSITORY && ignored(child)) {
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- depth-first by design; the walk prunes at every ignore match
+        // depth-first by design; the walk prunes at every ignore match
         if (entry.name !== REPOSITORY && entry.isDirectory() && (await isDerivedHusk(root, child, ignored, found))) {
             nested.push(child);
         } else {
@@ -182,13 +182,13 @@ export const clearConflictResidue = async (args: {
             standing += 1;
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one path at a time, and a stale report must not remove the next one
+        // one path at a time, and a stale report must not remove the next one
         if (!(await isDerivedHusk(args.root, conflict.path, ignored))) {
             // The report said residue and the disk says otherwise: something real arrived since. Left for a person.
             standing += 1;
             continue;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- sequenced so a failure names one path
+        // sequenced so a failure names one path
         if (await removeResidue(args.root, conflict.path)) {
             removed.push(conflict.path);
         } else {
@@ -228,7 +228,7 @@ export const sweepDerivedResidue = async (args: {
     const sweepable = sweepableHusks(husks, absent);
     const removed: string[] = [];
     for (const path of sweepable) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- sequenced so a failure names one path
+        // sequenced so a failure names one path
         if (await removeResidue(args.root, path)) {
             removed.push(path);
         }

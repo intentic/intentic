@@ -1,5 +1,5 @@
 import { createLogger } from "../../logger.js";
-import { testConfig } from "../../testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import type { CursorSlice } from "./cursor-provider.js";
 
 // Cursor's slice as route suites stand it up (harness/route-services.testing.ts). Not part of the build.

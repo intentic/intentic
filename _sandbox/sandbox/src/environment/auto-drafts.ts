@@ -1,8 +1,8 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import type { EnvironmentDrift, RuntimeInstall, RuntimeInstallsFile } from "@intentic/sandbox-contract";
-import { utcDayOf } from "@intentic/sandbox-contract";
+import type { EnvironmentDrift, RuntimeInstall, RuntimeInstallsFile } from "@intentic/sandbox-contract/schemas/environment";
+import { utcDayOf } from "@intentic/sandbox-contract/time/zone";
 import { installLive } from "./drift.js";
 import { statePath } from "../state-paths.js";
 

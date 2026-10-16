@@ -1,7 +1,7 @@
 // A tunnel's dial outlives the card that pressed it: a reader who leaves while it dials comes back to it still dialling,
 // and to the gateway's refusal with the one-time-code field one press away, instead of a Connect button offered again.
 import "@intentic/testing/dom";
-import type { VpnLink } from "@intentic/sandbox-contract";
+import type { VpnLink } from "@intentic/sandbox-contract/schemas/vpn";
 import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -9,7 +9,7 @@ import { IconStub } from "@intentic/ui/testing";
 const OFFICE = { id: `office`, provider: `fortinet`, state: `idle`, routes: [], autoConnect: false } as unknown as VpnLink;
 const links = ref<VpnLink[]>([OFFICE]);
 const open = jest.fn<(id: string, onLine?: (message: string) => void, otp?: string) => Promise<void>>(async () => undefined);
-jest.mock(`../sandbox/devices/useLiveLinks`, () => ({
+jest.mock(`../../models/sandbox/devices/useLiveLinks`, () => ({
     useLiveLinks: () => ({ links, error: ref(undefined), open, close: jest.fn(async () => undefined) }),
 }));
 

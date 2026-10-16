@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace-tree.js";
 
 const paths = (entries: readonly WorkspaceTreeEntry[]): string[] =>

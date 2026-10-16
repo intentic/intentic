@@ -1,7 +1,7 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { createHeldCards } from "../../guard/held-cards.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { createProgramGuardGate, type ProgramGuardGateDeps, type ProgramWidenRequest } from "./program-guard-gate.js";
 
 // Widening a secret's program guard over a real parked-card registry: a card in the live conversation that only the

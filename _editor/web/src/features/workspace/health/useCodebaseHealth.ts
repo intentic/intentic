@@ -1,4 +1,4 @@
-import type { WorkspaceHealth } from "@intentic/sandbox-contract";
+import type { WorkspaceHealth } from "@intentic/sandbox-contract/schemas/codebase-health";
 import { computed, type Ref } from "vue";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { rpcKey } from "../../../lib/queryKeys";

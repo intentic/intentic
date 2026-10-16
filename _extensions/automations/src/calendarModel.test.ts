@@ -1,4 +1,4 @@
-import type { AutomationRun, AutomationSummary, Trigger } from "@intentic/sandbox-contract";
+import type { AutomationRun, AutomationSummary, Trigger } from "@intentic/sandbox-contract/schemas/automations";
 import { localZone, ZoneSchema } from "@intentic/sandbox-contract/time";
 import { addDays, calendarWeek, instantAt, layoutDay, minuteOfDay, weekStartOf } from "./calendarModel";
 

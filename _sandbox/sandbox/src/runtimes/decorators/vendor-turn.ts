@@ -1,6 +1,7 @@
-import type { AgentCapabilities, AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
-import { withFileNote } from "../../agent/prompt/attachment-note.js";
+import { withFileNote } from "../../sessions/vocabulary/attachment-note.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
 import { type AttachedImage, loadAttachments } from "../../agent/prompt/attachment-images.js";

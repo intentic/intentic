@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type { Persona } from "@intentic/sandbox-contract";
-import { personaBoundsWords } from "../../sandbox/personas/personaBounds";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import { personaBoundsWords } from "../../../models/sandbox/personas/personaBounds";
 import { Button, ui, FACE_SIZES, Modal, Notice, type NoticeModel, PersonaFace, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
-import { useCapabilities } from "../../capabilities/connect/useCapabilities";
-import { useExtensions } from "../../extensions/useExtensions";
+import { useCapabilities } from "../../../models/capabilities/useCapabilities";
+import { useExtensions } from "../../../models/extensions/useExtensions";
 import {
     extensionGrantablesFrom,
     FULL_POWERS,
@@ -15,9 +15,9 @@ import {
     personasStartingIn,
     powersDraftOf,
     storedPowers,
-} from "../../sandbox/personas/personaRules";
-import { usePersonas } from "../../sandbox/personas/usePersonas";
-import PersonaPowersFields from "../../sandbox/personas/PersonaPowersFields.vue";
+} from "../../../models/sandbox/personas/personaRules";
+import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
+import PersonaPowersFields from "../../../components/PersonaPowersFields.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Who works in this folder, opened from a directory row: one question with three answers — write a new persona

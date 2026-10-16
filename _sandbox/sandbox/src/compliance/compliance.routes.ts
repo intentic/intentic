@@ -1,4 +1,5 @@
-import { complianceContract, type ComplianceDocumentKind, type ComplianceLanguage } from "@intentic/sandbox-contract";
+import { complianceContract } from "@intentic/sandbox-contract/contracts/compliance.contract";
+import type { ComplianceDocumentKind, ComplianceLanguage } from "@intentic/sandbox-contract/schemas/compliance";
 import { implement } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";
 import { noteAudit } from "../audit/audit-http.js";

@@ -1,14 +1,12 @@
 import { join } from "node:path";
 import { politeGit } from "@intentic/base/git";
 import type { Logger } from "pino";
-import { sqliteTurnCheckpoints, type TurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
-import { filePromptRecord, type PromptRecord } from "../agent/prompt/prompt-record.js";
-import { streamAgent } from "../agent/run/stream-agent.js";
-import { turnDoors } from "../agent/run/turn/turn-doors.js";
-import { sqliteTurnJournal, type TurnJournal, turnJournalRows } from "../agent/run/turn/turn-journal.js";
-import { sqliteWatchJournal, type WatchJournal } from "../agent/verification/watch-journal.js";
+import { sqliteTurnCheckpoints, type TurnCheckpoints } from "../store/journals/turn-checkpoints.js";
+import { filePromptRecord, type PromptRecord } from "../store/journals/prompt-record.js";
+import { sqliteTurnJournal, type TurnJournal, turnJournalRows } from "../store/journals/turn-journal.js";
+import { sqliteWatchJournal, type WatchJournal } from "../store/journals/watch-journal.js";
 import type { Services } from "../composition.js";
-import { inLogContext } from "../logger.js";
+import type { TurnEngine } from "../seams/turn-engine.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { conversationUnits, type ConversationUnits } from "../store/conversation-units.js";
 import type { ConversationsDb } from "../store/conversations-db.js";
@@ -39,6 +37,8 @@ export interface ConversationsSlice {
     // Every door a subsystem starts or drives a turn through: the turn engine's own (agent/run/turn/turn-doors.ts),
     // handed over here so no subsystem imports it.
     readonly turns: TurnStarter;
+    // The rest of what the fleet asks of the engine (seams/turn-engine.ts), handed over the same way.
+    readonly turnEngine: TurnEngine;
     // One actor per conversation: its turn lifecycle, leases and in-memory records, and the one way it is disposed.
     readonly conversations: ConversationActors;
     // Every card a turn is parked on, held by those actors' conversations; what /agent/reply resolves.
@@ -67,9 +67,12 @@ export interface ConversationsDeps {
     readonly logger: Logger;
     // Worktree ops file into the same tracker the summary line reads.
     readonly perf: PerfTracker;
-    // A turn is the one thing here that reaches most of the daemon (agent/run/stream-agent.ts), and it runs long after
-    // composing, so its doors read the finished services per turn.
+    // Read when a card parks, long after composing.
     readonly whole: () => Services;
+    // The turn engine's doors (agent/run/turn/turn-doors.ts), bound to streamAgent by composition so the fleet does not
+    // import the engine.
+    readonly turns: TurnStarter;
+    readonly turnEngine: TurnEngine;
     // Whether the previous run died without its exit hook (system/boot/boot-marker.ts), passed in by composition so the
     // fleet does not import the system subsystem.
     readonly previousRunDied: () => boolean;
@@ -86,7 +89,7 @@ export interface ConversationsParts {
 
 // Builds the conversations slice: one database for the registry and everything keyed by a conversation, so a fact
 // spanning its tables is one write.
-export const createConversationsSlice = ({ historyRoot, workspace, logger, perf, whole, previousRunDied, cardSettled }: ConversationsDeps): ConversationsParts => {
+export const createConversationsSlice = ({ historyRoot, workspace, logger, perf, whole, turns, turnEngine, previousRunDied, cardSettled }: ConversationsDeps): ConversationsParts => {
     // Opened so a missing or damaged file never keeps the daemon from coming up: set aside, salvaged or made again,
     // logged and reported (store/conversations-db-recovery.ts). Checked up front only after a run that died unannounced.
     const { db: conversationsDb, recovery } = openConversationsDbAtBoot({ historyRoot, check: previousRunDied(), logger });
@@ -121,12 +124,8 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
             agents,
             conversationUnits: units,
             conversationsDb,
-            // Bound to streamAgent here, the one module that may name the turn body.
-            turns: turnDoors(whole, (input, signal) =>
-                input.conversationId === undefined
-                    ? streamAgent(whole(), input, signal)
-                    : inLogContext({ conversationId: input.conversationId }, streamAgent(whole(), input, signal)),
-            ),
+            turns,
+            turnEngine,
             conversations,
             // The conversation-wide yes answered on any permission card, read from the grant store as each card parks; and
             // a settled card's "waiting on you" push replaced wherever it showed (push.ts `withdraw`).

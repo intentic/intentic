@@ -1,6 +1,6 @@
 import { childActor } from "../../../auth/principal.js";
-import { childLandingWords } from "../../../agent/subagents/child-lands.js";
-import { conversationEntry, isolatedAgent } from "../../../testing.js";
+import { childLandingWords } from "../child-lands.js";
+import { conversationEntry, isolatedAgent } from "../../registry/agents-store.testing.js";
 import type { IsolatedAgent, PersistedAgent } from "../../registry/agents-store.js";
 import { type LandTarget, landTargetOf, recordedTargetOf, upstreamOf } from "../land-target.js";
 

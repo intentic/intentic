@@ -10,12 +10,13 @@ import {
     type AuditRecord,
     AuditRecordSchema,
     type AuditVerify,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/audit";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import type { JsonFile } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
 import { checkChain, GENESIS_HASH, sealRecord, type SegmentText } from "./audit-chain.js";
+import { parseJsonWith } from "@intentic/base/json";
 
 // The audit trail on disk (historyRoot/audit/): one JSON Lines file per calendar month (UTC) under `segments/`, each
 // line a record carrying the hash of the one before it, and a checkpoint naming the last record retention deleted, so
@@ -76,12 +77,8 @@ const monthSpan = (segment: string): Span => {
 };
 
 const parseRecord = (line: string): AuditRecord | undefined => {
-    try {
-        return AuditRecordSchema.safeParse(JSON.parse(line)).data;
-    } catch {
-        // allow(silent-catch): a line that is not a record is listed as nothing; /audit/verify is where it is reported
-        return undefined;
-    }
+    // A line that is not a record is listed as nothing; /audit/verify is where it is reported.
+    return parseJsonWith(line, AuditRecordSchema);
 };
 
 interface StoredRecord {

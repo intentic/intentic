@@ -1,7 +1,8 @@
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AddedDependencies, AgentSpan, GitChange, ScratchPath, WorkspaceModule } from "@intentic/sandbox-contract";
+import type { AddedDependencies, GitChange, ScratchPath, WorkspaceModule } from "@intentic/sandbox-contract/schemas/git/git";
+import type { AgentSpan } from "@intentic/sandbox-contract/schemas/agents";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { changesAgainstBase, changesBetweenRefs, headSha } from "../../git/changes/changes.js";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";

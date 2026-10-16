@@ -1,7 +1,7 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import { openConversationsDb } from "../../store/conversations-db.js";
 import { recordedProblems } from "../../store/manifest/manifest-problems.js";
-import { conversationEntry, isolatedAgent } from "../../testing.js";
+import { conversationEntry, isolatedAgent } from "./agents-store.testing.js";
 import { type PersistedAgent, sqliteAgentsStore } from "./agents-store.js";
 
 // The registry's table group on an in-memory database: the same schema and SQL as the file on the history volume.

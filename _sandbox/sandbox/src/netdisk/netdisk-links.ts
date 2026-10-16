@@ -1,5 +1,6 @@
 import { rm } from "node:fs/promises";
-import type { IntenticLine, NetdiskConfig, NetdiskLink } from "@intentic/sandbox-contract";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
+import type { NetdiskConfig, NetdiskLink } from "@intentic/sandbox-contract/schemas/netdisk";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { restoreTunnels, type TunnelEntry, tunnelEntries, tunnelUp } from "../tunnel/tunnel-links.js";
 import { upSince } from "../tunnel/tunnel-state.js";

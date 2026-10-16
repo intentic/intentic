@@ -1,4 +1,4 @@
-import type { PermissionMode } from "@intentic/sandbox-contract";
+import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
 import type { IconName } from "@intentic/ui";
 import { modeMeta } from "../models/catalog";
 import type { RunThroughState } from "../models/run-settings/useRunThrough";

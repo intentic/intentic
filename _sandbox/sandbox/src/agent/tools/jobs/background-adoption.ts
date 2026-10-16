@@ -1,4 +1,4 @@
-import { classifyCommand } from "@intentic/sandbox-contract";
+import { classifyCommand } from "@intentic/sandbox-contract/policy/command-classes";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { Logger } from "pino";
 import { armWatcher, cancelWatcher, type WatcherSpec } from "../../verification/watchers.js";

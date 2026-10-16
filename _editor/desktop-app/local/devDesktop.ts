@@ -2,7 +2,7 @@ import type { InvokeArgs } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import type { ApiToken, HostedPlanState, User } from "@intentic/api-contract";
-import type { KeyringState } from "@intentic/sandbox-contract";
+import type { KeyringState } from "@intentic/sandbox-contract/schemas/keyring";
 import type { LocalFound } from "@intentic/web/local-host";
 import type {
     AccountAnswer,

@@ -2,27 +2,28 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { IconStub } from "@intentic/ui/testing";
 import { computed, createApp, h, nextTick, ref } from "vue";
-import { type AgentStanding, NO_ATTENTION } from "../../../../agents/fleet/agentStatus";
-import * as agentsOriginal from "../../../../agents/fleet/useAgents";
-import * as sessionsOriginal from "../../../run/useChat-sessions";
+import { NO_ATTENTION } from "../../../../../models/agent-status/agentStatus-lanes";
+import type { AgentStanding } from "../../../../../models/agent-status/agentStatus-standing";
+import * as agentsOriginal from "../../../../../models/fleet/useAgents";
+import * as sessionsOriginal from "../../../../../models/conversations/run/useChat-sessions";
 
 // What waits on the reader, pinned over the composer: the card the agent is parked on, before and after this window drew
 // it, the plan's answers there, and a message held for memory, worded as held.
 
 const retryHydrate = jest.fn();
-jest.mock("../../../run/useChat-sessions", () => ({ ...sessionsOriginal, retryHydrate }));
+jest.mock("../../../../../models/conversations/run/useChat-sessions", () => ({ ...sessionsOriginal, retryHydrate }));
 
 // This conversation's own answer to the memory wall, as the roster carries it; absent, the wall's default (send once
 // memory frees up) answers, since the sandbox's settings are not loaded here.
 const memoryOverride = ref<`wait` | `resend` | undefined>();
 const realUseAgents = agentsOriginal.useAgents;
-jest.mock("../../../../agents/fleet/useAgents", () => ({
+jest.mock("../../../../../models/fleet/useAgents", () => ({
     ...agentsOriginal,
     useAgents: () => ({ ...realUseAgents(), agentById: () => (memoryOverride.value === undefined ? undefined : { memoryPolicy: memoryOverride.value }) }),
 }));
 
-const { Conversation } = await import("../../../session/conversation");
-const { conversationView, PANE_VIEW } = await import("../../useChat-view");
+const { Conversation } = await import("../../../../../models/conversations/session/conversation");
+const { conversationView, PANE_VIEW } = await import("../../../../../models/conversations/panel/useChat-view");
 const { default: ChatWaitingBar } = await import("../ChatWaitingBar.vue");
 type Chat = InstanceType<typeof Conversation>;
 

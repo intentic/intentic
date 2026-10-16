@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { endpointIdOf, isTrialProvider, type LocalModelFitResponse } from "@intentic/sandbox-contract";
+import { endpointIdOf, isTrialProvider } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { LocalModelFitResponse } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import { Button, Icon, RowGroup, RowNote, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { z } from "zod";
 import { RouterLink } from "vue-router";
-import { endpointProviders } from "../../chat/accounts/providerCatalog";
-import { useCapabilities } from "../../capabilities/connect/useCapabilities";
+import { endpointProviders } from "../../../models/providers/providerCatalog";
+import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import ConnectionRow from "../secrets/ConnectionRow.vue";
 import HostServerRows from "./HostServerRows.vue";
 import LocalModelLane from "./LocalModelLane.vue";

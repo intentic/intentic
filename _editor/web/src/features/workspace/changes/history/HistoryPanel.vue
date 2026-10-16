@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import type { SnapshotChange, SnapshotTrigger, Snapshot } from "@intentic/sandbox-contract";
+import type { SnapshotChange, SnapshotTrigger, Snapshot } from "@intentic/sandbox-contract/schemas/history";
 import { computed, ref } from "vue";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
-import { diffRawUrls } from "../diffRaw";
-import { useHistory } from "./useHistory";
+import { diffRawUrls } from "../../../../models/workspace/changes/diffRaw";
+import { useHistory } from "../../../../models/changes/useHistory";
 import { Button, ChangeStatusMark, ui, type IconName, Notice, timeAgo } from "@intentic/ui";
-import { useWorkspaceTabs } from "../../tabs/useWorkspaceTabs";
+import { useWorkspaceTabs } from "../../../../models/workspace/tabs/useWorkspaceTabs";
 import type { DiffPayload } from "@intentic/extension-api";
-import type { OpenMode } from "../../tabs/workspaceTabs";
+import type { OpenMode } from "../../../../models/workspace/tabs/workspaceTabs";
 import { useT } from "@intentic/ui/i18n";
 
 // Restore-point timeline: daemon checkpoints of /work (not git), from agent turns, user changes, and restore markers.

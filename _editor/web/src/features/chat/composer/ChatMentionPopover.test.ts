@@ -1,24 +1,25 @@
 // The `@` picker as one list: settings above files, one highlight the parent drives, a header that names the mode,
 // and the files put away while a kind is drilled.
 import "@intentic/testing/dom";
-import { type AgentProvider, providerLabel } from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import type { PickerEntry } from "../models/modelPickerState";
+import type { PickerEntry } from "../../../models/conversations/accounts/modelPickerState";
 import type { QuickPick, QuickPickSources } from "./composerQuickPick";
 
 // Needs jsdom: the kit's barrel reads matchMedia at import time (its device tracker), which jsdom lacks.
 
 // modelPickerState imports conversation.ts for the live catalogs; stub its side-effects so the import is inert.
 jest.mock("../../../client/sandbox/sandboxClient", () => ({ sandboxRequest: jest.fn() }));
-jest.mock("../models/useChat-catalog", () => ({ loadProviderModels: jest.fn(async () => {}) }));
+jest.mock("../../../models/conversations/accounts/useChat-catalog", () => ({ loadProviderModels: jest.fn(async () => {}) }));
 // The other-boxes poll is the placement menu's concern; here it only has to be started and stopped.
-jest.mock("../../sandbox/live/fleetAcross", () => ({ subscribe: () => () => {} }));
+jest.mock("../../../models/sandbox/live/fleetAcross", () => ({ subscribe: () => () => {} }));
 
 // The file list under the settings, driven by hand; `seen` records what the picker asked it for.
 const files = ref<readonly string[]>([]);
 const seen = { query: ref(``), active: ref(false) };
-jest.mock("../../workspace/search/useFuzzyFiles", () => ({
+jest.mock("../../../models/workspace/search/useFuzzyFiles", () => ({
     useFuzzyFiles: (query: { value: string }, active: { value: boolean }) => {
         seen.query = query as never;
         seen.active = active as never;

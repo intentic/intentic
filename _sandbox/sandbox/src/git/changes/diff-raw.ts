@@ -1,18 +1,16 @@
-import { Hono } from "hono";
+import type { Context } from "hono";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
-import { rawRouteServer } from "../../http/raw-route-server.js";
 import { contentTypeForPath } from "../../workspace/files/workspace-files-download.js";
 import { createDiffLocator, DiffLocateError, parseDiffSourceQuery } from "./diff-locate.js";
 
 // Bytes behind a binary diff (JSON diff can't carry them); sibling of /workspace/raw. Covers all four diff sources
 // (working/agent/commit/checkpoint) through diff-locate.ts, each resolving the same rev-specs as its JSON counterpart.
 
-export const createDiffRawRoute = (services: Services): Hono<AppEnv> => {
+export const createDiffRawRoute = (services: Services) => {
     const locator = createDiffLocator(services);
-    const app = new Hono<AppEnv>();
 
-    rawRouteServer(app)("GET /diff/raw", async (c) => {
+    return async (c: Context<AppEnv>): Promise<Response> => {
         const query = new URL(c.req.url).searchParams;
         try {
             const which = query.get("which");
@@ -37,7 +35,5 @@ export const createDiffRawRoute = (services: Services): Hono<AppEnv> => {
             }
             throw error;
         }
-    });
-
-    return app;
+    };
 };

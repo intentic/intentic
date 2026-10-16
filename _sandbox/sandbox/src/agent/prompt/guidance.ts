@@ -1,6 +1,6 @@
 import { BATCHING_GUIDANCE, CONTEXT_REUSE_GUIDANCE } from "@intentic/agent-context/guidance";
 import { HISTORY_ROOT } from "@intentic/constants";
-import { windowsPathOf, wslPathOf } from "@intentic/sandbox-contract";
+import { windowsPathOf, wslPathOf } from "@intentic/sandbox-contract/schemas/hosts";
 import type { EnvironmentReach, HostDeviceReach, MachineReach } from "../../hosts/self-host.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../phones/phone-peer.js";

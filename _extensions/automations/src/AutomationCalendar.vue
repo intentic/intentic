@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AutomationSummary } from "@intentic/sandbox-contract";
+import type { AutomationSummary } from "@intentic/sandbox-contract/schemas/automations";
 import { localZone, zoneLabel } from "@intentic/sandbox-contract/time";
 import {
     activeLocale,

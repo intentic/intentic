@@ -1,7 +1,8 @@
 import { spawnCatalogText } from "./spawn-catalog.js";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../engines/claude-sdk.js";
-import { AgentHarnessSchema, AgentProviderSchema, harnessChoosable, loopsOf, PROVIDERS } from "@intentic/sandbox-contract";
+import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
+import { harnessChoosable, loopsOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { type ChildSupervisor, spawnedNote } from "./children.js";

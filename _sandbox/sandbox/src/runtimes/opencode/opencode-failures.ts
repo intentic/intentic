@@ -1,5 +1,5 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
-import { isContextOverflowText } from "../../agent/providers/failure-sentences.js";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { isContextOverflowText } from "../../engines/failure-sentences.js";
 import { modelUnavailableFrame } from "../../agent/run/error-frames.js";
 import { opt } from "../../opt.js";
 import { isRateLimited, RATE_LIMIT_PATIENCE_MS, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";

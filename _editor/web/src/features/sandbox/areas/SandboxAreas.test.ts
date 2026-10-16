@@ -3,7 +3,8 @@
 // schema would refuse. jsdom: renders and reads the mounted DOM.
 import "@intentic/testing/dom";
 import { STATE_DIR, WORKSPACE_ROOT as root } from "@intentic/constants";
-import type { Area, WorkspaceTreeEntry } from "@intentic/sandbox-contract";
+import type { Area } from "@intentic/sandbox-contract/schemas/areas";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { IconStub } from "@intentic/ui/testing";
 import { waitFor } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref, ref as shallow } from "vue";
@@ -34,7 +35,7 @@ const personas = ref([
     { id: `support-bot`, label: `Support bot`, capabilities: [], workspace: { startIn: `web/support` } },
     { id: `scribe`, label: `Scribe`, capabilities: [], workspace: { startIn: `docs` } },
 ]);
-jest.mock(`../personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
+jest.mock(`../../../models/sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
 
 const role = ref<string>(`owner`);
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ role: role.value }) }) }));

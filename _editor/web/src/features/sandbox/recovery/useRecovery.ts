@@ -1,6 +1,7 @@
 import type { AdoptionTicket, SandboxLookup, SandboxSummary } from "@intentic/api-contract";
 import { errorMessage } from "@intentic/base/errors";
-import { type RelinkAnswer, type RelinkRequest, sandboxIdOfDaemonUrl } from "@intentic/sandbox-contract";
+import type { RelinkAnswer, RelinkRequest } from "@intentic/sandbox-contract/schemas/platform-link";
+import { sandboxIdOfDaemonUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import { ORPCError } from "@orpc/client";
 import { computed, ref } from "vue";
 import type { RememberedSandbox } from "../../../client/directory/deviceDirectory";
@@ -171,7 +172,7 @@ export const useRecovery = (deps: RecoveryDeps) => {
     const reconnectAll = async (): Promise<void> => {
         for (const candidate of candidates.value) {
             if (candidate.state.kind === `recoverable`) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- one sign-in prompt at a time, by design
+                // one sign-in prompt at a time, by design
                 await reconnect(candidate.entry, candidate.state.sandboxId);
             }
         }

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { type Periodic, startPeriodic } from "@intentic/base/async";
 import { PROBES, type ProbeSpec, WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
-import type { ProbeId, ProbeResult, RunningProbe } from "@intentic/sandbox-contract";
+import type { ProbeId, ProbeResult, RunningProbe } from "@intentic/sandbox-contract/schemas/maintenance";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import { runCheck, shellArgv } from "../workload/run-check.js";

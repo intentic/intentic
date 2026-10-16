@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { isRecord } from "@intentic/base/escape";
 import type { JsonValue } from "@intentic/base/fetch-json";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Logger } from "pino";
 import { z } from "zod";
 import type { CommandGuard } from "../../guard/command-guard.js";
@@ -16,6 +16,7 @@ import { GATE_SCRIPT_NAME, gateScript, hooksJson, LIVE_TURNS_NAME, shieldedComma
 import { type CursorSecrets, secretReadRefusal, secretWriteRefusal } from "./turn/cursor-secrets.js";
 import { type CursorTerminal, paneCommand } from "./turn/cursor-terminal.js";
 import { CUSTOM_TOOLS_SERVER, hookToolRefusal, mcpToolRefusal } from "./turn/cursor-tool-list.js";
+import { writeFileAtomic } from "@intentic/base/fs";
 
 // Owner's command rulebook enforced inside Cursor's own loop via beforeShellExecution, the owner's standing
 // instructions folded onto Cursor's base prompt via beforeSubmitPrompt, the turn's tool list and per-tool cards on every
@@ -705,8 +706,7 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
         const ids = JSON.stringify([...turns.keys()]);
         writing = writing.then(async () => {
             try {
-                await writeFile(`${livePath}.part`, ids, { mode: 0o644 });
-                await rename(`${livePath}.part`, livePath);
+                await writeFileAtomic(livePath, ids, 0o644);
             } catch (error) {
                 logger.warn({ err: error }, "cursor: could not record the live turns for the hook script");
             }

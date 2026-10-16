@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import { createIgnoreScope, type IgnoreScope, toRelPath } from "@intentic/workspace-ignore";
 import { type DirReads, freshDirReads } from "./dir-reads.js";
 

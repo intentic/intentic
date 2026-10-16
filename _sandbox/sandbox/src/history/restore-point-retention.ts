@@ -1,6 +1,6 @@
-import { readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { pathExists } from "@intentic/base/fs";
+import { pathExists, writeFileAtomic } from "@intentic/base/fs";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import type { HistoryGitRunner } from "./history.js";
@@ -73,8 +73,7 @@ const pruneScope = async (deps: PruneDeps, before: number): Promise<number> => {
         return 0;
     }
     const shallow = join(scope.gitDir, "shallow");
-    await writeFile(`${shallow}.tmp`, `${base.sha}\n`);
-    await rename(`${shallow}.tmp`, shallow);
+    await writeFileAtomic(shallow, `${base.sha}\n`);
     if (behind > 0) {
         await git(["reflog", "expire", "--expire=now", "--all"], bare);
         // A cruft pack would keep what the cut left unreachable; --prune=now with -a drops it instead.

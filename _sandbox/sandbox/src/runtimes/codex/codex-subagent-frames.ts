@@ -1,4 +1,5 @@
-import type { AgentEvent, SubagentStatus } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { SubagentStatus } from "@intentic/sandbox-contract/schemas/terminal";
 import { oneLine } from "@intentic/base/one-line";
 import { opt } from "../../opt.js";
 import type { CodexEvent, CodexItem } from "./codex-app-server.js";

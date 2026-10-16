@@ -1,6 +1,6 @@
 import { keyedLock } from "@intentic/base/async";
 import type { ActiveTurn } from "../../agent/checkpoints/agent-steering.js";
-import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
+import type { JournalledTurn } from "../../store/journals/turn-journal.js";
 import { recordConversationPrompt, recordPrompt } from "../../sessions/transcript-search.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
 import { type BeginTurn, type ConversationEffect, type ConversationEvent, decide, refusesArchived, type ReplyOf, type SettleFlush } from "./conversation-decide.js";

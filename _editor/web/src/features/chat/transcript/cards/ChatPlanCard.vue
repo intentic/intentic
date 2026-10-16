@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { MarkdownParts } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { planParts } from "@intentic/sandbox-contract";
+import { planParts } from "@intentic/sandbox-contract/text/title";
 import { computed } from "vue";
 import { useMarkdown } from "../../../../lib/markdown/useMarkdown";
-import { NEED_ICONS } from "../../../needs/needStatus";
-import { useNeeds } from "../../../needs/useNeeds";
-import { usePaneView } from "../../panel/useChat-view";
-import type { ChatMessage } from "../transcript";
-import ChatCard from "./ChatCard.vue";
+import { NEED_ICONS } from "../../../../models/needs/needStatus";
+import { useNeeds } from "../../../../models/needs/useNeeds";
+import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
+import ChatCard from "../../../../components/ChatCard.vue";
 import ChatDocumentBody from "./ChatDocumentBody.vue";
 import { documentDrawn, documentTitled, planStatus } from "./cardStatus";
 

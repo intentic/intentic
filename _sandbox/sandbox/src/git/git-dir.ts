@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathExists } from "@intentic/base/fs";
+import { undefinedIfMissing } from "@intentic/base/errors";
 
 // Where a checkout's git admin files live, read straight off the filesystem so a hot path pays no spawn. A linked
 // worktree or submodule has a `.git` pointer file; its per-worktree dir holds HEAD and operation markers, and the common
@@ -10,7 +11,7 @@ import { pathExists } from "@intentic/base/fs";
 // neither resolves to something on disk (not a repo, or a torn pointer whose repository is gone).
 export const gitDirOf = async (checkout: string): Promise<string | undefined> => {
     const entry = join(checkout, ".git");
-    const stats = await stat(entry).catch(() => undefined);
+    const stats = await stat(entry).catch(undefinedIfMissing);
     if (stats === undefined) {
         return undefined;
     }

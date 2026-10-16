@@ -1,8 +1,10 @@
-import { type AgentCapabilities, type AgentEvent, CLAUDE_CODE, type PermissionMode } from "@intentic/sandbox-contract";
+import { type AgentCapabilities, CLAUDE_CODE } from "@intentic/sandbox-contract/models/agent-runtimes";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, type PlanPhaseResult, planMode } from "./plan-mode.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 
 // A runtime whose row holds no approval modes, made up rather than borrowed: the real ones gain modes as their seams
 // are wired, and a test pinned to one of them stops testing the emulation the day it does.

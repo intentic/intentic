@@ -1,27 +1,27 @@
 <script setup lang="ts">
 import { Button, ui, ContextMenu } from "@intentic/ui";
 import { computed, nextTick, provide, ref, watch } from "vue";
-import type { FleetLane } from "../../agents/fleet/agentStatus";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { FINISHED_WINDOW, windowFinished } from "../../agents/fleet/useAgents-fleet";
+import type { FleetLane } from "../../../models/agent-status/agentStatus-lanes";
+import { useAgents } from "../../../models/fleet/useAgents";
+import { FINISHED_WINDOW, windowFinished } from "../../../models/fleet/useAgents-fleet";
 import HoverCard from "./HoverCard.vue";
 import RailCard from "./RailCard.vue";
 import RailLane from "../../../components/RailLane.vue";
 import type { OpenChat } from "./cardView";
 import { useChatTrays } from "./chatTrays";
-import { CHILD_ROWS } from "../../agents/board/cards/childRows";
-import { closeSubagent, subagentOnScreen } from "../panel/subagent/subagentView";
+import { CHILD_ROWS } from "../../../models/fleet/board/childRows";
+import { closeSubagent, subagentOnScreen } from "../../../models/conversations/panel/subagentView";
 import { dismissRows, rowsUnder, settleDismissed, useFoldFlip, useRowReveal } from "@intentic/ui/motion";
 import ChatRowList from "./ChatRowList.vue";
 import { laneOrdered, steadyLanes } from "./laneOrder";
 import { tabsInLane } from "./tabs";
 import { createChatRowActions, provideChatRowActions } from "./useChatRowActions";
 import ChatShareDialog from "../panel/ChatShareDialog.vue";
-import { useChat } from "../run/useChat";
-import { chatRun, showingRunGraph } from "../run/chatRun";
-import { openRunInChat } from "../run/openRun";
-import { insideRun, runIdsInLedger, runsInLane, runningTitles, runsNeedingYou, useWorkflowRuns } from "../../agents/fleet/useWorkflowRuns";
-import type { WorkflowRun } from "@intentic/sandbox-contract";
+import { useChat } from "../../../models/conversations/run/useChat";
+import { chatRun, showingRunGraph } from "../../../models/conversations/run/chatRun";
+import { openRunInChat } from "../../../models/fleet/openRun";
+import { insideRun, runIdsInLedger, runsInLane, runningTitles, runsNeedingYou, useWorkflowRuns } from "../../../models/fleet/useWorkflowRuns";
+import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { useT } from "@intentic/ui/i18n";
 
 // Switcher for every open conversation, hosted by both the docked ChatTabs sheet and the floating rail. Card and

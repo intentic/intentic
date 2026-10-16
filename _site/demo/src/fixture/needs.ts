@@ -1,4 +1,4 @@
-import type { ConversationGrantRevoke, GrantRevoke, Need, NeedAnswer, StandingGrants } from "@intentic/sandbox-contract";
+import type { ConversationGrantRevoke, GrantRevoke, Need, NeedAnswer, StandingGrants } from "@intentic/sandbox-contract/schemas/needs";
 import { demoQuiet, freshEdition } from "../mode";
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID } from "./fleet";
 

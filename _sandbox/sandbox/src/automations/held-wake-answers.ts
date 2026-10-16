@@ -1,4 +1,6 @@
-import type { AgentOrigin, AutomationApproval, PushNotification } from "@intentic/sandbox-contract";
+import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
+import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
+import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import type { Services } from "../composition.js";
 import { deliverToListenerChannel } from "../extensions/listener/listener-deliver.js";
 import { opt } from "../opt.js";

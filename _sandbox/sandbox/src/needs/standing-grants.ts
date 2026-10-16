@@ -6,11 +6,11 @@ import {
     type OwnerGrant,
     type OwnerGrantKind,
     type OwnerGrantRevoke,
-    type SettingsHook,
     type StandingGrants,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/needs";
+import type { SettingsHook } from "@intentic/sandbox-contract/schemas/approvals";
 import { opt } from "../opt.js";
-import { approvedExtensions } from "../extensions/extension-approvals.js";
+import { approvedExtensions } from "../capabilities/extension-inventory/extension-approvals.js";
 import { approvedHookSets, revokeHookSet } from "../guard/hook-approvals.js";
 import type { ConversationGrants } from "../personas/conversation-grants.js";
 import type { OwnerGrants } from "../personas/owner-grants.js";
@@ -26,7 +26,7 @@ import { publishRuntimeChange } from "../seams/runtime-feed.js";
 // Beside them, the yeses that name no conversation (`ownerWide`), each kept off the workspace where no agent writes: a
 // command policy line allowed with Always (personas/owner-grants.ts), a Claude Code hook set the owner approved by its
 // digest (guard/hook-approvals.ts) and a workspace extension they approved for the powers it declared
-// (extensions/extension-approvals.ts). One list reads all three and one door takes any of them back. A policy line goes
+// (capabilities/extension-inventory/extension-approvals.ts). One list reads all three and one door takes any of them back. A policy line goes
 // from the next turn's judge; a hook set is unapproved from the next turn, which asks again; an extension goes back to
 // waiting for a yes, with its processes stopped, its files and settings left where they are.
 

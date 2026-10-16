@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { ConversationPrompt, PromptSection, TurnNote } from "@intentic/sandbox-contract";
+import type { ConversationPrompt, PromptSection } from "@intentic/sandbox-contract/schemas/system-prompt";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { CopyButton, MarkdownDocument, Modal, Notice, ui } from "@intentic/ui";
 import { formatTokens, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";

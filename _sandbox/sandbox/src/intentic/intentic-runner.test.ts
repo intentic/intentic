@@ -1,4 +1,4 @@
-import type { IntenticLine } from "@intentic/sandbox-contract";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import { jsonLinesOf } from "@intentic/base/json-lines";
 import { parseIntenticLine } from "./intentic-runner.js";
 

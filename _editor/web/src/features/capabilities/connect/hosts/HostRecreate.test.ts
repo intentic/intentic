@@ -4,20 +4,20 @@
 // sandbox never went quiet is lost contact, and a device that answered in words is quoted. The wait is armed at the
 // press and ends on the sandbox answering on what it was swapped onto, since a relayed stream can stay open forever.
 import "@intentic/testing/dom";
-import type { EnvironmentRebuildWait } from "@intentic/sandbox-contract";
+import type { EnvironmentRebuildWait } from "@intentic/sandbox-contract/schemas/environment";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { useOsPreference } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
-import * as useDevicesOriginal from "../../../sandbox/devices/useDevices";
+import * as useDevicesOriginal from "../../../../models/sandbox/devices/useDevices";
 import { oneLiner } from "../../../../app/environments/scriptCommand";
 
 const reachable = ref(true);
 const fleet = ref<{ id: string; title: string; status: string }[]>([]);
-jest.mock(`../../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet, refresh: async () => undefined }) }));
+jest.mock(`../../../../models/fleet/useAgents`, () => ({ useAgents: () => ({ fleet, refresh: async () => undefined }) }));
 const autoResume = ref(false);
-jest.mock(`../../../sandbox/overview/useSandboxSettings`, () => ({
+jest.mock(`../../../../models/sandbox/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings: computed(() => ({ autoResumeOnRestart: autoResume.value })) }),
 }));
 // What the sandbox answering right now runs: the version an update moves, the overlay a rebuild aims at.
@@ -31,9 +31,9 @@ const swapServingSandbox = jest.fn(async (_hostId: string, _slug: string, _op: s
 // Imported statically and spread: a module loaded inside a mock factory deadlocks bun's link of the graph naming it.
 // The machine this page can ask directly; undefined is one it cannot reach, where the command is the way.
 const hostRunning = ref<string | undefined>(`host-1`);
-jest.mock(`../../../sandbox/devices/useDevices`, () => ({ ...useDevicesOriginal, swapServingSandbox, useHostRunning: () => hostRunning }));
+jest.mock(`../../../../models/sandbox/devices/useDevices`, () => ({ ...useDevicesOriginal, swapServingSandbox, useHostRunning: () => hostRunning }));
 jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sb1`), reachable }) }));
-jest.mock(`../../../sandbox/devices/ConnectDeviceHint.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`../../../../parts/sandbox/ConnectDeviceHint.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 // The rebuild the sandbox holds for idle agents, and whether it can: off, as an older sandbox answers.
 const idleWait = ref<EnvironmentRebuildWait | undefined>(undefined);
 const waitsForAgents = ref(false);
@@ -41,7 +41,7 @@ const askIdle = jest.fn(async (_host: string, _hash: string): Promise<void> => u
 const cancelIdle = jest.fn(async (): Promise<void> => undefined);
 jest.mock(`./useRebuildWhenIdle`, () => ({ useRebuildWhenIdle: () => ({ wait: idleWait, supported: waitsForAgents, ask: askIdle, cancel: cancelIdle }) }));
 
-const { forgetRestarts, restartExpected } = await import("../../../sandbox/live/sandboxRestart");
+const { forgetRestarts, restartExpected } = await import("../../../../models/sandbox/live/sandboxRestart");
 const { forgetOperations } = await import("../../../../workbench/operations/operations");
 const { forgetSwapFollows } = await import("./swapFollow");
 const { default: HostRecreate } = await import("./HostRecreate.vue");

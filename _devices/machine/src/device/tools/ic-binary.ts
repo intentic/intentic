@@ -1,18 +1,17 @@
 import { chmod, rename, rm, stat } from "node:fs/promises";
 import { homeDir } from "@intentic/local-agent";
+import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract/state/versions";
 import {
-    DEV_VERSION,
     DEVICE_FEATURE_RESHAPE_LATER,
     DEVICE_FEATURE_ROLLBACK_TO,
     DEVICE_FEATURE_SET_SHAPE,
     DEVICE_FEATURE_BACKGROUND_PREPARE,
     type DeviceFeature,
-    isNewer,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/hosts";
 import { archToken, download, exe, osToken, releaseAssetUrl } from "../../release.js";
 import { verifyReleaseFiles } from "../../release/release-verify.js";
 import { MACHINE_VERSION } from "../../version.js";
-import { errorMessage } from "@intentic/base/errors";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { execBounded } from "@intentic/base/process";
 
 // WHICH `ic` THIS AGENT RUNS, and keeping it at least as new as the agent. Every sandbox verb here is an `ic` verb, so an
@@ -58,12 +57,12 @@ export interface InstalledIc {
 export const installedIc = async (): Promise<InstalledIc | undefined> => {
     for (const candidate of icCandidates(process.platform, homeDir())) {
         // allow(silent-catch): a candidate that is missing or will not say its version is not the installed ic, and the next is tried
-        // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; the first that answers wins
+        // candidates are tried in order; the first that answers wins
         const answer = await execBounded(candidate, ["--version"], { timeoutMs: 30_000 }).catch(() => undefined);
         if (answer !== undefined) {
-            // allow(silent-catch): a bare name found on PATH is not a file this agent can stat; its time is simply not said
-            // oxlint-disable-next-line eslint/no-await-in-loop -- the one candidate that answered
-            const info = await stat(candidate).catch(() => undefined);
+            // A bare name found on PATH is not a file this agent can stat; its time is simply not said.
+            // the one candidate that answered
+            const info = await stat(candidate).catch(undefinedIfMissing);
             const found: { path: string; version: string; modified?: string } = { path: candidate, version: icVersionFrom(answer.stdout) ?? DEV_VERSION };
             if (info !== undefined) {
                 found.modified = info.mtime.toISOString();
@@ -124,9 +123,9 @@ export const fetchIc = async (target: string, installed: string | undefined, age
 // (PATH lookups) are not files this agent writes or can stat, so they read as none.
 const icSignature = async (): Promise<string> => {
     for (const candidate of icCandidates(process.platform, homeDir())) {
-        // allow(silent-catch): a candidate that is not there is the next one's turn
-        // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; the first that exists wins
-        const info = await stat(candidate).catch(() => undefined);
+        // A candidate that is not there is the next one's turn.
+        // candidates are tried in order; the first that exists wins
+        const info = await stat(candidate).catch(undefinedIfMissing);
         if (info !== undefined) {
             return `${candidate}:${info.size}:${info.mtimeMs}`;
         }
@@ -200,7 +199,7 @@ export const ensureCurrentIc = (): Promise<void> => ensureForFile();
 // refuses an unknown subcommand with a usage error).
 const helpOf = async (verb: readonly string[]): Promise<string | undefined> => {
     for (const candidate of icCandidates(process.platform, homeDir())) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; the first that answers wins
+        // candidates are tried in order; the first that answers wins
         const answer = await execBounded(candidate, [...verb, "--help"], { timeoutMs: 30_000 }).then(
             ({ stdout }) => stdout,
             (error: NodeJS.ErrnoException) => (error.code === "ENOENT" ? undefined : ""),

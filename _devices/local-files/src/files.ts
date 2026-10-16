@@ -4,7 +4,7 @@ import { chmod, lstat, open, readFile, rm, stat } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { errnoCode } from "@intentic/base/errors";
+import { errnoCode, undefinedIfMissing } from "@intentic/base/errors";
 import { renameOver } from "@intentic/base/fs";
 import { decodeUtf16Window, UTF16_PROBE, utf16ByBom } from "@intentic/base/utf16-text";
 import { isUtf8, trimUtf8Window } from "@intentic/base/utf8-text";
@@ -226,8 +226,8 @@ const streamInto = async (abs: string, flags: number, source: WriteSource, limit
 // Why a text save names text the file does not hold: gone, not UTF-8 (the editor read it with replacement characters,
 // and writing those back would change every byte they stand for), or changed since it was read.
 const textRefusal = async (abs: string, baseHash: string): Promise<WriteRefusal | undefined> => {
-    // allow(silent-catch): a file that is gone no longer holds the text the save was based on, which is the refusal.
-    const current = await readFile(abs).catch(() => undefined);
+    // A file that is gone no longer holds the text the save was based on, which is the refusal.
+    const current = await readFile(abs).catch(undefinedIfMissing);
     if (current === undefined) {
         return `changed`;
     }
@@ -252,8 +252,8 @@ export const writeFileWhole = async (
     if (refused !== undefined) {
         return refused;
     }
-    // allow(silent-catch): a new file has no mode to keep.
-    const previous = await lstat(abs).catch(() => undefined);
+    // A new file has no mode to keep.
+    const previous = await lstat(abs).catch(undefinedIfMissing);
     const temporary = join(dirname(abs), `.${basename(abs)}${TEMPORARY_MARK}${randomBytes(4).toString(`hex`)}.tmp`);
     try {
         await streamInto(temporary, CREATE_NEW, source, cap);
@@ -278,8 +278,8 @@ export const writeFileWhole = async (
 // there since the path was resolved is refused, not followed. A part past the cap keeps what came before it, as the
 // daemon's does; a retry resends the drop from its first part.
 export const writePartAt = async (abs: string, body: ReadableStream<Uint8Array>, offset: number, cap = MAX_WRITE_BYTES): Promise<WriteRefusal | undefined> => {
-    // allow(silent-catch): nothing there is a file the first part made and something since removed, the refusal below.
-    const entry = await lstat(abs).catch(() => undefined);
+    // Nothing there is a file the first part made and something since removed, the refusal below.
+    const entry = await lstat(abs).catch(undefinedIfMissing);
     if (entry?.isFile() !== true) {
         return `changed`;
     }

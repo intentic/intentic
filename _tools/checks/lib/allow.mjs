@@ -4,7 +4,7 @@
 import { spawnSync } from "node:child_process";
 import { allowTrailers } from "../../constants/src/allow.mjs";
 
-export { allowedAt, allowTrailers, pragmaReason } from "../../constants/src/allow.mjs";
+export { allowedAt, allowingLine, allowTrailers, pragmaReason } from "../../constants/src/allow.mjs";
 
 /**
  * The checks an `Allow: <check> — <reason>` trailer in `base..head` excuses, each with its reasons; empty when git

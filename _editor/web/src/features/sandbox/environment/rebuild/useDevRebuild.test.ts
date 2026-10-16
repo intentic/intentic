@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK } from "@intentic/sandbox-contract";
+import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK } from "@intentic/sandbox-contract/schemas/devices";
 import { advanceTimersByTimeAsync, freshImport } from "@intentic/testing/bun";
 import { effectScope } from "vue";
 import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
@@ -10,7 +10,7 @@ import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 // answer FROM the daemon, carrying the status the composable branches on.
 
 const runDeviceCommand = jest.fn();
-jest.mock(`../../devices/useDevices`, () => ({ runDeviceCommand }));
+jest.mock(`../../../../models/sandbox/devices/useDevices`, () => ({ runDeviceCommand }));
 
 const { OUT_OF_CONTACT_MS, outOfContact, rebuildRunning, useDevRebuild: followRebuild } = await import("./useDevRebuild");
 // The same module evaluated a second time: the page after a reload, its memory gone and this browser's storage intact.

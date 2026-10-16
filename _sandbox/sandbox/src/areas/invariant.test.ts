@@ -1,4 +1,5 @@
-import type { Area, Persona } from "@intentic/sandbox-contract";
+import type { Area } from "@intentic/sandbox-contract/schemas/areas";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import type { Member } from "../auth/auth.js";
 import { memoryMembersStore, memoryAreasStore, memoryPersonasStore } from "../harness/route-stores.testing.js";
 import { checks } from "./invariant.js";

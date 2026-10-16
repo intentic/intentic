@@ -1,18 +1,15 @@
 import {
     isPresetSetup,
-    MODEL_ROLE_IDS,
-    type ModelPin,
-    type ModelRole,
     type ModelSetup,
-    type ModelSource,
-    PRESET_SETUPS,
-    type PresetSetup,
     presetPins,
     roleSetupId,
     type SetupSettings,
     storedSetup,
     suggestedSetup,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/models/model-setups";
+import { MODEL_ROLE_IDS, type ModelRole, PRESET_SETUPS, type PresetSetup } from "@intentic/sandbox-contract/models/model-roles";
+import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import type { ModelSource } from "@intentic/sandbox-contract/models/model-pins";
 
 // The Models page as data: every setup in the order the page draws it, the jobs on each, and the writes each press makes.
 // Nothing here is held between visits; it is all read off the two settings (modelSetups, roleSetups) through the

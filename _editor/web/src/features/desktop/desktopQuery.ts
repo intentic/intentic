@@ -1,4 +1,4 @@
-import type { DesktopState } from "@intentic/sandbox-contract";
+import type { DesktopState } from "@intentic/sandbox-contract/schemas/terminal";
 import { computed, type ComputedRef } from "vue";
 import { rpcQuery } from "../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";

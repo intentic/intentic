@@ -1,4 +1,4 @@
-import { PAGE_FALLBACK_THEMES, type PageTheme, type PageThemeVariable } from "@intentic/sandbox-contract";
+import { PAGE_FALLBACK_THEMES, type PageTheme, type PageThemeVariable } from "@intentic/sandbox-contract/text/pages";
 import { computed, type ComputedRef, shallowRef } from "vue";
 
 // The theme a page the agent shows wears: the editor's own look, read off its live roles, so a chart sits in the chat

@@ -1,7 +1,7 @@
 // The Access tab's conversation permissions: which conversation each yes belongs to and whether it can still use it, each
 // yes in words with its own Revoke, and a conversation's whole set taken back at once.
 import "@intentic/testing/dom";
-import type { GrantRevoke, StandingGrants } from "@intentic/sandbox-contract";
+import type { GrantRevoke, StandingGrants } from "@intentic/sandbox-contract/schemas/needs";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
@@ -38,7 +38,7 @@ const fleet = ref<Agent[]>([]);
 const archived = ref<Agent[]>([]);
 const archiveLoading = ref(false);
 const loadArchived = jest.fn(async () => undefined);
-jest.mock(`../../agents/fleet/useAgents`, () => ({
+jest.mock(`../../../models/fleet/useAgents`, () => ({
     useAgents: () => ({
         fleet,
         archiveLoading,

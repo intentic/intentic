@@ -4,7 +4,7 @@ import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import { desktopSyncLink } from "../../app/environments/desktop";
-import type { SyncPairing } from "../sandbox/devices/sync/useDesktopSync";
+import type { SyncPairing } from "../../models/sandbox/devices/useDesktopSync";
 import type { SetupProject } from "./setupArrival";
 
 /* A HOSTED PROJECT'S FOLDER GOES TO THE APP BEFORE ITS WORKSPACE OPENS. The desktop app parked the folder when it opened

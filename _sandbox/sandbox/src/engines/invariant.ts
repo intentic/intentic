@@ -1,4 +1,4 @@
-import { ENGINE_IDS, type EngineId } from "@intentic/sandbox-contract";
+import { ENGINE_IDS, type EngineId } from "@intentic/sandbox-contract/schemas/engines";
 import type { InvariantCheck } from "../invariants/invariants.js";
 import { type EngineState, installedVersions, isQuarantined, readEngineState } from "./engine-store.js";
 

@@ -3,13 +3,15 @@
 import "@intentic/testing/dom";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { CapabilityContribution } from "@intentic/extension-manifest";
-import type { CapabilityKind, HostSummary, WebExtSummary, CapabilityStatus, CapabilitySummary } from "@intentic/sandbox-contract";
+import type { CapabilityKind, CapabilityStatus, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { HostSummary } from "@intentic/sandbox-contract/schemas/hosts";
+import type { WebExtSummary } from "@intentic/sandbox-contract/schemas/webext";
 import type { NoticeModel } from "@intentic/ui";
 import { effectScope, type EffectScope, ref } from "vue";
 import * as actualSandboxRpc from "../../client/sandbox/sandboxRpc";
 import type { ProcedureInput } from "../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
-import { useTerminalPanel } from "../terminal/useTerminalPanel";
+import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 
 // The one daemon call here: an ACP agent's sign-in, which answers with the job session to watch.
 const login = jest.fn<(input: ProcedureInput<`capabilities.login`>) => Promise<{ session: string }>>();

@@ -1,4 +1,6 @@
-import type { Persona, Area, Automation } from "@intentic/sandbox-contract";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import type { Area } from "@intentic/sandbox-contract/schemas/areas";
+import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
 import { type Member, type MembersStore, memberRow } from "../auth/auth.js";
 import type { AutomationRecord } from "../automations/automations-store.js";
 import type { PersonasStore } from "../personas/personas-store.js";

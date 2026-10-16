@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { DeviceSandboxOp } from "@intentic/sandbox-contract";
+import { errorMessage } from "@intentic/base/errors";
+import type { DeviceSandboxOp } from "@intentic/sandbox-contract/schemas/devices";
 import {
     Button,
     ui,
@@ -13,17 +14,17 @@ import {
 import { noticeFrom } from "@intentic/ui/async";
 import Checkbox from "primevue/checkbox";
 import { computed, onBeforeUnmount, ref, shallowRef, type VNode, watch } from "vue";
-import { type DeviceSandboxPayload, swapServingSandbox, useHostRunning } from "../../../sandbox/devices/useDevices";
+import { type DeviceSandboxPayload, swapServingSandbox, useHostRunning } from "../../../../models/sandbox/devices/useDevices";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
-import { expectRestart, type RestartQuiet } from "../../../sandbox/live/sandboxRestart";
+import { expectRestart, type RestartQuiet } from "../../../../models/sandbox/live/sandboxRestart";
 import { useOperation } from "../../../../workbench/operations/operations";
-import { turnInFlight } from "../../../agents/fleet/agentStatus";
-import { useAgents } from "../../../agents/fleet/useAgents";
-import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
+import { turnInFlight } from "../../../../models/agent-status/agentStatus-standing";
+import { useAgents } from "../../../../models/fleet/useAgents";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { appliedHash, runningVersion } from "./swapLanding";
 import { followSwap, type SwapEnd, SwapGaveUp, type SwapProgress } from "./swapFollow";
 import { useRebuildWhenIdle } from "./useRebuildWhenIdle";
-import ConnectDeviceHint from "../../../sandbox/devices/ConnectDeviceHint.vue";
+import ConnectDeviceHint from "../../../../parts/sandbox/ConnectDeviceHint.vue";
 import { desktopRecreateLink, desktopVersion, openDesktopLink } from "../../../../app/environments/desktop";
 import { DESKTOP_DOWNLOADS } from "../../../../app/environments/desktopDownloads";
 import { bashCommand, oneLiner, psCommand } from "../../../../app/environments/scriptCommand";
@@ -423,7 +424,7 @@ watch(
             },
             (error: unknown) => {
                 letIdleGo();
-                idleFailure.value = { tone: `warning`, title: error instanceof Error ? error.message : String(error) };
+                idleFailure.value = { tone: `warning`, title: errorMessage(error) };
             },
         );
         idleClaim = expectRestart({ sandbox, id: `recreate`, what: workingWords().Rebuild, quiet: QUIET.value.Rebuild, untilAnswered: true });

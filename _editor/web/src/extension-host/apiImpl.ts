@@ -1,19 +1,24 @@
+import { isRecord } from "@intentic/base/escape";
+import { parseJsonOr } from "@intentic/base/json";
 import type { CapabilityFacts, Disposable, ExtensionContext, IntenticApi, PickedModel, ProcessStatus, RepoFacts } from "@intentic/extension-api";
 import { extensionApiVersion, flattenQuery, mergeQuery } from "@intentic/extension-api";
 import { extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { useDevice, useTheme } from "@intentic/ui";
-import { type AgentHarness, type AgentProvider, type ExtensionSummary, rawRouteUrl, sandboxRequestFor } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
+import { rawRouteUrl } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
+import { sandboxRequestFor } from "@intentic/sandbox-contract";
 import { watch } from "vue";
 import { projectScope, setProjectScope, withinScope } from "../app/projectScope";
 import { useAudience } from "../app/useAudience";
-import { effortLabelOf } from "../features/chat/models/run-settings/effortScale";
-import { modelLabelFor } from "../features/chat/accounts/providerCatalog";
-import { agentRunChoice, shellModelPicking } from "../features/chat/models/shellModelPicking";
-import { summonChat } from "../features/chat/run/summon";
-import { useChat } from "../features/chat/run/useChat";
-import { accountsOf } from "../features/chat/accounts/useChat-accounts";
-import { useAgents } from "../features/agents/fleet/useAgents";
-import { startAgent } from "../features/agents/fleet/agentActions";
+import { effortLabelOf } from "../models/providers/effortScale";
+import { modelLabelFor } from "../models/providers/providerCatalog";
+import { agentRunChoice, shellModelPicking } from "../models/conversations/accounts/shellModelPicking";
+import { summonChat } from "../models/conversations/run/summon";
+import { useChat } from "../models/conversations/run/useChat";
+import { accountsOf } from "../models/conversations/accounts/useChat-accounts";
+import { useAgents } from "../models/fleet/useAgents";
+import { startAgent } from "../models/fleet/agentActions";
 import { registerCommand, executeCommand } from "../workbench/commands/useCommands";
 import { extensionSettingsStore } from "../features/extensions/useExtensionSettings";
 import { queryClient } from "../lib/queryPersistence";
@@ -21,12 +26,12 @@ import { sandboxJson, sandboxRequest } from "../client/sandbox/sandboxClient";
 import { sandboxRaw } from "../client/sandbox/sandboxRaw";
 import { gatedSandboxRpc, sandboxRpc } from "../client/sandbox/sandboxRpc";
 import { useSandboxQuery } from "../client/sandbox/useSandboxQuery";
-import { useTerminalPanel } from "../features/terminal/useTerminalPanel";
-import { sandboxKey } from "../lib/activeSandbox";
+import { useTerminalPanel } from "../models/terminal/useTerminalPanel";
+import { sandboxKey } from "../app/storage/activeSandbox";
 import { rpcKey } from "../lib/queryKeys";
 import { useSandbox } from "../client/sandbox/useSandbox";
-import { useWorkspaceTabs } from "../features/workspace/tabs/useWorkspaceTabs";
-import { diffTabId } from "../features/workspace/tabs/workspaceTabs";
+import { useWorkspaceTabs } from "../models/workspace/tabs/useWorkspaceTabs";
+import { diffTabId } from "../models/workspace/tabs/workspaceTabs";
 import { documentProvider, registerDocumentProvider } from "../workbench/views/documentRegistry";
 import { extensionSideViewId, registerExtensionSideView } from "../core-views/extensionSideViews";
 import { SideInputSchema } from "../workbench/side/sideTabs";
@@ -36,7 +41,7 @@ import { onRefsChanged, onReposChanged } from "../workbench/workspace-events/rep
 import { registerView } from "../workbench/views/registry";
 import { registerViewer } from "../workbench/views/viewerRegistry";
 import { previewAddress } from "../features/preview/previewAddress";
-import { router } from "../router";
+import { navigation } from "../workbench/navigation/navigation";
 import { registerFileBindings } from "../workbench/workspace-events/fileBindings";
 import { recordSandboxCall } from "./sandboxUsage";
 import { uuid } from "../lib/uuid";
@@ -128,7 +133,7 @@ const sideViewsApi = (
             if (entry === undefined) {
                 throw new Error(`side view "${view.id}" is not declared in the manifest's contributes.sideViews`);
             }
-            return track(registerExtensionSideView(extensionId, entry, view, (path) => void router.push(path)));
+            return track(registerExtensionSideView(extensionId, entry, view, (path) => void navigation().push(path)));
         },
         open: (id, input, options) => {
             const view = extensionSideViewId(extensionId, id);
@@ -408,7 +413,7 @@ export const createExtensionApi = (
                     return;
                 }
                 const id = diffTabId(payload.key, payload.scope, payload.path);
-                void router.push({ name: `workspace`, params: { path: [] }, query: { ...router.currentRoute.value.query, diff: id } });
+                void navigation().push({ name: `workspace`, params: { path: [] }, query: { ...navigation().currentRoute.value.query, diff: id } });
             },
             // No navigation or focus change on either device: filling a tab is not a gesture the user made.
             fillDiff: (payload) => useWorkspaceTabs().fillDiff(payload),
@@ -430,15 +435,11 @@ export const createExtensionApi = (
                 if (text === undefined) {
                     return undefined;
                 }
-                try {
-                    const parsed: unknown = JSON.parse(text);
-                    // Asserted, not validated, same contract as `sandbox.json<T>`: the caller names the shape it
-                    // expects. Checked only that it is a record, since a bare array or scalar would make every property
-                    // read undefined silently.
-                    return typeof parsed === `object` && parsed !== null && !Array.isArray(parsed) ? (parsed as T) : undefined;
-                } catch {
-                    return undefined;
-                }
+                const parsed = parseJsonOr(text, undefined);
+                // Asserted, not validated, same contract as `sandbox.json<T>`: the caller names the shape it
+                // expects. Checked only that it is a record, since a bare array or scalar would make every property
+                // read undefined silently.
+                return isRecord(parsed) ? (parsed as T) : undefined;
             },
             write: async (path, body) => {
                 guardSandbox(`${rawRouteUrl(`POST /workspace/upload`)}?path=${encodeURIComponent(path)}`, { method: `POST` });
@@ -557,17 +558,17 @@ export const createExtensionApi = (
             },
         },
         navigate: (path) => {
-            void router.push(path);
+            void navigation().push(path);
         },
         // The address behind the same path, for views whose rows are links rather than buttons.
-        href: (path) => router.resolve(path).href,
-        // `router.currentRoute` rather than `useRoute()`: an extension may read this outside any component's setup,
+        href: (path) => navigation().resolve(path).href,
+        // `navigation().currentRoute` rather than `useRoute()`: an extension may read this outside any component's setup,
         // where `useRoute()` needs injection context; the ref stays reactive inside a computed either way.
         route: {
-            query: () => flattenQuery(router.currentRoute.value.query),
+            query: () => flattenQuery(navigation().currentRoute.value.query),
             setQuery: (patch, options) => {
-                const query = mergeQuery(router.currentRoute.value.query, patch);
-                void (options?.push === true ? router.push({ query }) : router.replace({ query }));
+                const query = mergeQuery(navigation().currentRoute.value.query, patch);
+                void (options?.push === true ? navigation().push({ query }) : navigation().replace({ query }));
             },
         },
         theme: {

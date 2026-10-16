@@ -2,10 +2,10 @@
 <script setup lang="ts">
 import { basename } from "@intentic/ui/path";
 import { computed } from "vue";
-import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
+import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 import { workspaceDir } from "../../../app/workspaceScope";
 import { useCover } from "./useCover";
-import { useHome } from "./useHome";
+import { useHome } from "../../../models/workspace/home/useHome";
 import HomeCoverDocument from "./HomeCoverDocument.vue";
 
 // Drawn by HomeView in place of its tiles while a cover is chosen. There is no navigation here: the explorer tree is the

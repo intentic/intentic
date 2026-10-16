@@ -1,5 +1,6 @@
 import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
-import type { EngineRow, EnginesView, EngineWriteResult, RawJsonInput } from "@intentic/sandbox-contract";
+import type { EngineRow, EnginesView, EngineWriteResult } from "@intentic/sandbox-contract/schemas/engines";
+import type { RawJsonInput } from "@intentic/sandbox-contract/protocol/raw/raw-json-routes";
 import type { NoticeModel } from "@intentic/ui";
 import { computed } from "vue";
 import { ENGINES } from "../../../lib/queryKeys";

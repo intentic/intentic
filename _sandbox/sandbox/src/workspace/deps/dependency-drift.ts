@@ -4,6 +4,7 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
 import { parse, YAMLError } from "yaml";
 import { readWorkspaceManifests } from "./package-graph.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Dependency drift: an installed tree that no longer satisfies what is declared above it, missed by workspace-setup's
 // node_modules check. Two readings of the tree itself, never of pnpm's own install record: a name that fails to resolve
@@ -46,12 +47,8 @@ const manifestAt = async (dir: string): Promise<Record<string, unknown> | undefi
     if (text === undefined) {
         return undefined;
     }
-    try {
-        const parsed: unknown = JSON.parse(text);
-        return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : undefined;
-    } catch {
-        return undefined;
-    }
+    const parsed: unknown = parseJsonOr(text, undefined);
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : undefined;
 };
 
 // Root manifest is checked separately from workspace members: their globs never name the root, and a single-package

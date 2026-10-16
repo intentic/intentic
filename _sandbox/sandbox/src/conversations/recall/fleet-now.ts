@@ -1,4 +1,5 @@
-import { type AgentSummary, type TurnSpeaker, TurnSpeakerSchema } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { type TurnSpeaker, TurnSpeakerSchema } from "@intentic/sandbox-contract/schemas/speaker";
 import type { ConversationState } from "../actor/conversation-state.js";
 
 // Where a conversation stands RIGHT NOW, for `agents show`: the turn in flight (since when, who started it, when it last

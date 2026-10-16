@@ -1,9 +1,10 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { readdir, readFile, rm } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { pollUntil } from "@intentic/base/async";
+import { readTextIfExists } from "@intentic/base/fs";
 import { browserTargetPath } from "./cdp.js";
 import { BrowserError } from "./types.js";
 
@@ -208,8 +209,8 @@ export const ownsEndpoint = (file: ActivePort | undefined, answered: string | un
 
 const profilesRoot = (): string => join(homedir(), ".intentic", "browser");
 
-// allow(silent-catch): a profile with no port file has no browser of ours running on it
-const activePortIn = async (profile: string): Promise<ActivePort | undefined> => parseActivePort(await readFile(join(profile, ACTIVE_PORT_FILE), "utf8").catch(() => ""));
+// A profile with no port file has no browser of ours running on it.
+const activePortIn = async (profile: string): Promise<ActivePort | undefined> => parseActivePort((await readTextIfExists(join(profile, ACTIVE_PORT_FILE))) ?? "");
 
 const ownEndpointIn = async (profile: string): Promise<number | undefined> => {
     const file = await activePortIn(profile);
@@ -222,7 +223,7 @@ export const ownEndpoint = async (): Promise<number | undefined> => {
     // allow(silent-catch): no profiles yet is no browser of ours
     const families = await readdir(profilesRoot()).catch((): string[] => []);
     for (const family of families) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a profile or two, each one file and one loopback call
+        // a profile or two, each one file and one loopback call
         const port = await ownEndpointIn(join(profilesRoot(), family));
         if (port !== undefined) {
             return port;

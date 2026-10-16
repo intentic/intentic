@@ -1,4 +1,4 @@
-import { type AgentDomainPolicy, AgentDomainPolicySchema } from "@intentic/sandbox-contract";
+import { type AgentDomainPolicy, AgentDomainPolicySchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { collect } from "../../harness/route-client.testing.js";

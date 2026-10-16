@@ -1,4 +1,4 @@
-import type { TurnExperiment, TurnMetricReading } from "@intentic/sandbox-contract";
+import type { TurnExperiment, TurnMetricReading } from "@intentic/sandbox-contract/schemas/settings";
 import { outcomeOf, tableOf } from "./experimentReadings";
 
 // Every row of the results table must land in one of four answers, and the arithmetic behind the hover note (the likely

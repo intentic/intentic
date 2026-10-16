@@ -1,18 +1,29 @@
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { capabilitiesOf, isConversationId } from "@intentic/sandbox-contract";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { isConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { PersistedAgent } from "../conversations/registry/agents-store.js";
 import { claudeStoreOf } from "./session-store.js";
 import type { FileTranscriptRecord } from "./transcript-record.js";
 import { statePath } from "../state-paths.js";
 import { conversationsRoot } from "../store/conversation-units.js";
-import { purgePages } from "../agent/pages/page-store.js";
 import { backupFile } from "./record/record-convert.js";
 
 // What a conversation leaves OUTSIDE its unit and its rows, in layouts other owners dictate: its session files in the
 // Claude Code store every unfenced conversation shares, and uploads only its transcript names. Runs before the unit goes,
 // since the transcripts are what say which uploads are whose.
+
+// The folder a conversation's pages are filed in; a turn with no conversation files its pages together.
+export const folderOf = (conversationId: string | undefined): string => (conversationId === undefined ? "loose" : conversationId.replace(/[^A-Za-z0-9_-]/g, "_"));
+
+// Every conversation's pages, for the purge that removes one.
+const pagesFolder = (workspaceRoot: string, conversationId: string): string =>
+    statePath(workspaceRoot, ".intentic/records/artifacts/", "pages", folderOf(conversationId));
+
+// Removes a conversation's pages with it.
+export const purgePages = (workspaceRoot: string, conversationId: string): Promise<void> =>
+    rm(pagesFolder(workspaceRoot, conversationId), { recursive: true, force: true });
 
 // `areas` decides where the session state lives, so a purge that cannot read it leaves the fenced copy behind.
 export type PurgeConversation = Pick<PersistedAgent, "id" | "profile" | "sessionId" | "identity">;
@@ -59,7 +70,7 @@ const orphanedAttachments = async (historyRoot: string, stored: Stored, removed:
     const units = (await readdir(conversationsRoot(historyRoot), { withFileTypes: true }).catch(undefinedIfMissing)) ?? [];
     const retained = new Set<string>();
     for (const unit of units.filter((entry) => entry.isDirectory() && isConversationId(entry.name) && !removedIds.has(entry.name))) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one record at a time, so only one is ever held in memory.
+        // one record at a time, so only one is ever held in memory.
         for (const id of attachmentDirs(await stored(unit.name))) {
             retained.add(id);
         }

@@ -1,25 +1,20 @@
 // A cold start of the installed app at its bare start URL returns to the page it was last on, when that was recent: a
 // phone kills a backgrounded app within minutes, and "/" would otherwise land on the board every time. A link, a
 // notification tap or a shortcut names its own destination and keeps it; a browser tab at "/" is a typed address.
+import { parseJsonWith } from "@intentic/base/json";
 import { z } from "zod";
-import { storedValue, storeValue } from "../lib/browserStorage";
-import { inAppPath } from "../lib/routes/inAppPath";
+import { storedValue, storeValue } from "../app/storage/browserStorage";
+import { inAppPath } from "../app/environments/inAppPath";
 
 const LAST_ROUTE_KEY = `intentic.lastRoute`;
 const RECENT_VISIT_MS = 30 * 60_000;
 const SavedRoute = z.object({ path: z.string(), at: z.number() });
 
 export const recentRoute = (stored: string | null, now: number): string | undefined => {
-    try {
-        const saved = SavedRoute.safeParse(JSON.parse(stored ?? `null`));
-        const path = saved.success ? inAppPath(saved.data.path) : undefined;
-        return saved.success && path !== undefined && path !== `/` && now >= saved.data.at && now - saved.data.at < RECENT_VISIT_MS
-            ? path
-            : undefined;
-    // allow(silent-catch): Corrupt browser storage should leave the app at its normal root route.
-    } catch {
-        return undefined;
-    }
+    // Corrupt browser storage should leave the app at its normal root route.
+    const saved = parseJsonWith(stored ?? `null`, SavedRoute);
+    const path = saved === undefined ? undefined : inAppPath(saved.path);
+    return saved !== undefined && path !== undefined && path !== `/` && now >= saved.at && now - saved.at < RECENT_VISIT_MS ? path : undefined;
 };
 
 // Launched from the home screen (the installed web app, the Android app; `navigator.standalone` is iOS's own flag for it)

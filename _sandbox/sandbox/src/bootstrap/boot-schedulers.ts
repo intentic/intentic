@@ -1,6 +1,6 @@
 import { startRuntimeHealth } from "../agent/providers/adapter-health.js";
 import { noteLinkTurnSettled, noteLinkTurnStarted } from "../links/link-tasks.js";
-import { childLandingWords, reportChildLanded } from "../agent/subagents/child-lands.js";
+import { childLandingWords, reportChildLanded } from "../conversations/land/child-lands.js";
 import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
 import { adoptChildTurn, childKillNote } from "../agent/subagents/children.js";
 import { createProjectDelivery, type ProjectDeliveryDeps } from "../conversations/land/project-delivery.js";

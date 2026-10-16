@@ -1,7 +1,8 @@
 import { sameAccount } from "../../agent/providers/accounts/account-identity.js";
 import { randomUUID } from "node:crypto";
 import { serialLock } from "@intentic/base/async";
-import type { MintedProvider, OauthAccount } from "@intentic/sandbox-contract";
+import type { MintedProvider } from "@intentic/sandbox-contract/models/provider-specs";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { Logger } from "pino";
 import { z } from "zod";
 import { accountFiles } from "../../agent/providers/accounts/account-files.js";

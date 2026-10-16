@@ -1,5 +1,5 @@
-import { PLAN_DOCUMENTS_DIR } from "@intentic/sandbox-contract";
-import type { TranscriptTool } from "@intentic/sandbox-contract";
+import { PLAN_DOCUMENTS_DIR } from "@intentic/sandbox-contract/state/workspace-state";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { delegates, numberedFileBody, present, TEXT_CAP } from "./toolPresentation";
 
 // A completed call with no output, spread over per-case.

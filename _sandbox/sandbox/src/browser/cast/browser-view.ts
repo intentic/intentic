@@ -12,6 +12,7 @@ import { startLiveView, type LiveView } from "./live-view.js";
 import type { ScreencastClientMessage } from "./screencast.js";
 import type { Services } from "../../composition.js";
 import { redeemTicket } from "../../auth/tokens/ws-tickets.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // The socket the handlers below answer on, named once so each of them does not repeat hono's generic.
 type Socket = WSContext;
@@ -202,10 +203,8 @@ export const createBrowserViewRoute = (services: Services) =>
                 if (closed) {
                     return;
                 }
-                let message: ScreencastClientMessage;
-                try {
-                    message = JSON.parse(String(event.data)) as ScreencastClientMessage;
-                } catch {
+                const message = parseJsonOr(String(event.data), undefined) as ScreencastClientMessage | undefined;
+                if (message === undefined) {
                     return;
                 }
                 // A ping is answered before attach, so a slow start isn't read as a dead socket; the rest is for the view.

@@ -1,13 +1,14 @@
 // Needs jsdom: the line under a resolved ask is one sentence joined from three messages, and only a render shows whether a
 // space survives the joins, in every language the editor ships.
 import "@intentic/testing/dom";
-import type { AgentEvent, CapabilityOutcome } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { CapabilityOutcome } from "@intentic/sandbox-contract/events/requests";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { type Locale, setLocale } from "@intentic/ui/i18n";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, defineComponent, h } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
-import type { ChatMessage } from "../transcript";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import ChatCapabilityCard from "./ChatCapabilityCard.vue";
 
 // The card's row once the owner said yes and setup ended as `outcome` says, as the daemon's own fold leaves it.

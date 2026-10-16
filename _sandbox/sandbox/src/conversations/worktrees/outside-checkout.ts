@@ -2,7 +2,7 @@ import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
-import type { OutsideCheckout } from "@intentic/sandbox-contract";
+import type { OutsideCheckout } from "@intentic/sandbox-contract/schemas/git/git";
 import { headSha } from "../../git/changes/changes.js";
 import { currentRepos } from "../../workspace/watch/repo-watch.js";
 import { isMirrorResidue } from "./checkout-aside.js";
@@ -23,14 +23,14 @@ const filesUnder = async (dir: string, room: number): Promise<number> => {
     const pending = [dir];
     while (pending.length > 0 && found < room) {
         const current = pending.pop() ?? dir;
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one directory at a time keeps the walk inside its ceiling
+        // one directory at a time keeps the walk inside its ceiling
         const entries = (await readdir(current, { withFileTypes: true }).catch(undefinedIfMissing)) ?? [];
         if (current !== dir && entries.some((entry) => entry.name === ".git")) {
             continue;
         }
         for (const entry of entries) {
             const path = join(current, entry.name);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- see above
+            // see above
             if (entry.name === ".git" || (await isMirrorResidue(path))) {
                 continue;
             }
@@ -69,10 +69,10 @@ export const outsideCheckout = async (
     const carried = new Set(composed.map(({ repo }) => repo));
     const outside: OutsideCheckout[] = [];
     for (const repo of (await currentRepos(workspaceRoot)).filter((live) => !carried.has(live))) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- nearly always zero repos; one walk at a time when not
+        // nearly always zero repos; one walk at a time when not
         const files = await filesUnder(worktrees.worktreeDir(id, repo), COUNT_MAX);
         if (files > 0) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- see above
+            // see above
             outside.push({ repo, reason: await reasonOf(worktrees.mainDir(repo), git), files });
         }
     }

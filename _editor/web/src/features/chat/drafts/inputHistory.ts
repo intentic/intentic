@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { inputHistoryKey, storedJson, storeJson } from "../../../lib/browserStorage";
+import { inputHistoryKey, storedJson, storeJson } from "../../../app/storage/browserStorage";
 
 // Composer message recall (up/down cycle sent messages, like shell history), distinct from the transcript:
 // workspace-wide, reaching prompts from chats no longer open. Scoped per sandbox in localStorage, since it must

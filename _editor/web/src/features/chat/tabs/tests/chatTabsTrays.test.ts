@@ -3,17 +3,18 @@
 // a card of its own; and a row's press shows the child in this chat, an in-process one in its parent's column.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { AgentSummary, SubagentSession } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
 import { t } from "@intentic/ui/i18n";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
-import { setAgents } from "../../../agents/fleet/useAgents-registry";
+import { setAgents } from "../../../../models/fleet/useAgents-registry";
 import { rpcKey } from "../../../../lib/queryKeys";
 import { queryClient } from "../../../../lib/queryPersistence";
 import { router } from "../../../../router/index";
-import { closeSubagent, subagentOnScreen } from "../../panel/subagent/subagentView";
-import { openAgentConversation } from "../../panel/useChat-reveal";
-import { useChat } from "../../run/useChat";
+import { closeSubagent, subagentOnScreen } from "../../../../models/conversations/panel/subagentView";
+import { openAgentConversation } from "../../../../models/conversations/panel/useChat-reveal";
+import { useChat } from "../../../../models/conversations/run/useChat";
 import ChatTabList from "../ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
 

@@ -3,7 +3,7 @@
 import { ref } from "vue";
 import { STATE_DIR } from "@intentic/constants";
 import { type ChatShot, shotKey } from "./shots";
-import type { ChatTurn } from "../transcript";
+import type { ChatTurn } from "../../../../models/conversations/transcript/transcript";
 
 const plain = new Set<string>();
 jest.mock("./shotLooks", () => ({

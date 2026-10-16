@@ -2,9 +2,9 @@
 import { AnchoredOverlay, Button, useHoverIntent } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, watch } from "vue";
-import ChatCommandBlock from "../../../chat/tools/ChatCommandBlock.vue";
+import ChatCommandBlock from "../../../../components/ChatCommandBlock.vue";
 import { answerableAsk, answerFromBoard, type BoardAnswer } from "../../fleet/boardAnswer";
-import type { FleetAgent } from "../../fleet/useAgents-fleet";
+import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 
 // The permission a card's turn waits on, answered where the card is drawn: one row, what it asks on the left and Allow
 // once and Skip on the right, as the card's other fact-and-press rows sit. "Approve →" used to open a page with nothing

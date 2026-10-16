@@ -1,0 +1,99 @@
+{
+    "name": "@intentic/privacy-detect",
+    "version": "0.0.0",
+    "description": "privacy-detect, the privacy shield's detectors: personal data found in text by checksums, patterns and Polish and English name lists, with no model and no network",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_sandbox/privacy-detect"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/detect.d.ts",
+            "import": {
+                "@intentic/src": "./src/detect.ts",
+                "default": "./dist/detect.js"
+            },
+            "require": {
+                "@intentic/src": "./src/detect.ts",
+                "default": "./dist/detect.js"
+            }
+        },
+        "./standalone": {
+            "types": "./dist/standalone.d.ts",
+            "import": {
+                "@intentic/src": "./src/standalone.ts",
+                "default": "./dist/standalone.js"
+            },
+            "require": {
+                "@intentic/src": "./src/standalone.ts",
+                "default": "./dist/standalone.js"
+            }
+        },
+        "./text": {
+            "types": "./dist/text.d.ts",
+            "import": {
+                "@intentic/src": "./src/text.ts",
+                "default": "./dist/text.js"
+            },
+            "require": {
+                "@intentic/src": "./src/text.ts",
+                "default": "./dist/text.js"
+            }
+        },
+        "./lexicon": {
+            "types": "./dist/lexicon.d.ts",
+            "import": {
+                "@intentic/src": "./src/lexicon.ts",
+                "default": "./dist/lexicon.js"
+            },
+            "require": {
+                "@intentic/src": "./src/lexicon.ts",
+                "default": "./dist/lexicon.js"
+            }
+        },
+        "./data/*": {
+            "types": "./dist/data/*.d.ts",
+            "import": {
+                "@intentic/src": "./src/data/*.ts",
+                "default": "./dist/data/*.js"
+            },
+            "require": {
+                "@intentic/src": "./src/data/*.ts",
+                "default": "./dist/data/*.js"
+            }
+        },
+        "./testing": {
+            "types": "./dist/tests/ids.testing.d.ts",
+            "import": {
+                "@intentic/src": "./src/tests/ids.testing.ts",
+                "default": "./dist/tests/ids.testing.js"
+            },
+            "require": {
+                "@intentic/src": "./src/tests/ids.testing.ts",
+                "default": "./dist/tests/ids.testing.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "bun check -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "suites",
+        "test:watch": "suites --watch"
+    },
+    "dependencies": {
+        "@intentic/sandbox-contract": "workspace:*",
+        "tslib": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:"
+    }
+}

@@ -739,7 +739,7 @@ describe(`the first script of a window booting at a panel's address`, () => {
                 said.push({ channel: this.name, note });
             }
         }
-        // oxlint-disable-next-line no-new-func -- running our own checked-in script, not input
+        // running our own checked-in script, not input
         new Function(`location`, `BroadcastChannel`, script)({ pathname }, Channel);
         return said;
     };

@@ -1,4 +1,5 @@
-import { type AccountState, type ProviderRefusal, type ServiceFacts, serviceStates } from "@intentic/sandbox-contract";
+import type { AccountState, ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { type ServiceFacts, serviceStates } from "@intentic/sandbox-contract/models/plan-pools";
 import { recordingLogger } from "../../harness/route-fakes.testing.js";
 import { createAccountStateLog } from "./state-log.js";
 

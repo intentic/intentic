@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import type { SandboxMetrics } from "@intentic/sandbox-contract";
+import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, h, nextTick } from "vue";
 
@@ -14,12 +14,12 @@ jest.mock("@intentic/ui", async () => {
     };
 });
 // The metrics panel's session rows name conversations the way the board does; none are open in this suite.
-jest.mock("../fleet/useAgents", () => ({ useAgents: () => ({ agentById: (_id: string) => undefined }) }));
-jest.mock("../fleet/useAgents-actions", () => ({ openById: () => undefined }));
+jest.mock("../../../models/fleet/useAgents", () => ({ useAgents: () => ({ agentById: (_id: string) => undefined }) }));
+jest.mock("../../../models/fleet/useAgents-actions", () => ({ openById: () => undefined }));
 
 const { default: StatusBar } = await import("./StatusBar.vue");
 const { openPanel, panelHeight } = await import("./statusBarState");
-const { showLiveMetrics } = await import("../metrics/liveMetrics");
+const { showLiveMetrics } = await import("../../../models/sandbox/liveMetrics");
 
 const GIB = 2 ** 30;
 

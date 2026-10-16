@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type { StorageCategoryId, StorageCategoryUsage } from "@intentic/sandbox-contract";
+import type { StorageCategoryId, StorageCategoryUsage } from "@intentic/sandbox-contract/schemas/metrics";
 import { Button, Card, ConfirmDialog, Meter, Notice, type NoticeModel } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatBytes, formatDateTime, timeAgo } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, watch } from "vue";
-import { NEAR_LIMIT } from "../../../agents/metrics/liveMetrics";
+import { NEAR_LIMIT } from "../../../../models/sandbox/liveMetrics";
 import { storageCategoryLabel, storageCategoryText } from "./storageCategories";
 import { cleanOffer, freeableBytes, shareOfCounted, splitCategories, uncountedBytes } from "./storageView";
 import { useSandboxStorage } from "./useSandboxStorage";
@@ -178,6 +178,10 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                             <!-- A stop square inside the turning ring: what it is doing and what pressing it does, in one glyph. -->
                             <span class="relative inline-flex size-[1em] items-center justify-center">
                                 <Icon v-if="scanning" name="spinner" spin class="absolute inset-0" />
+                                <!-- allow(tailwind): softens the corners of the scan button's stop square
+                                     (size-[0.3em], about 4px at text-sm) inside its spinner, as UpdateWhatsNew's
+                                     lozenge does: --radius-2xs is 2px, half the side, which turns the square into a
+                                     dot and the stop glyph into a record one. -->
                                 <span class="size-[0.3em] rounded-[1px] bg-current" />
                             </span>
                             {{ t(`sandbox.sandboxStorageCard.stop`) }}

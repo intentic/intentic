@@ -2,13 +2,14 @@
 // person picks a computer, asking each time unless they pick another share, and a computer whose keyring is locked is said
 // to hold it only once it is next unlocked, before the press and after it. With no keyring answering there is no choice.
 import "@intentic/testing/dom";
-import type { Need, SandboxKeyring, SecretNeed } from "@intentic/sandbox-contract";
+import type { Need, SecretNeed } from "@intentic/sandbox-contract/schemas/needs";
+import type { SandboxKeyring } from "@intentic/sandbox-contract/schemas/secrets";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
 import { computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 const provideSecret = { mutateAsync: jest.fn(async (_input: { id: string; value: string; keepOn?: { device: string; mode: string } }): Promise<void> => undefined) };
-jest.mock(`./useNeeds`, () => ({ useNeeds: () => ({ provideSecret, answer: { mutateAsync: jest.fn() } }) }));
+jest.mock(`../../models/needs/useNeeds`, () => ({ useNeeds: () => ({ provideSecret, answer: { mutateAsync: jest.fn() } }) }));
 // The need's answer runs its task and says how it ended, as the operations ledger would.
 jest.mock(`./needAnswer`, () => ({
     useNeedAnswer: () => ({
@@ -27,7 +28,7 @@ jest.mock(`../capabilities/connect/secrets/useKeyrings`, () => ({
 const say = jest.fn((_message: string) => undefined);
 jest.mock(`../../workbench/notifications/notifications`, () => ({ useNotifications: () => ({ say }) }));
 // The masked field is its own component with its own suite; here it is only somewhere to type.
-jest.mock(`../capabilities/connect/secrets/SecretField.vue`, () => ({
+jest.mock(`../../parts/capabilities/SecretField.vue`, () => ({
     default: defineComponent({
         props: { modelValue: { type: String, default: `` } },
         emits: [`update:modelValue`],
@@ -43,7 +44,7 @@ jest.mock(`../capabilities/connect/secrets/SecretField.vue`, () => ({
             }),
     }),
 }));
-jest.mock(`../chat/transcript/cards/ChatDecisionButton.vue`, () => ({
+jest.mock(`../../components/ChatDecisionButton.vue`, () => ({
     default: defineComponent({
         props: { disabled: Boolean },
         setup: (props, { slots }) => () => h(`button`, { type: `button`, disabled: props.disabled }, slots[`default`]?.()),

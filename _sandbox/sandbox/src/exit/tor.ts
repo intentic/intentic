@@ -2,7 +2,8 @@ import { spawn } from "node:child_process";
 import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import { connect } from "node:net";
 import { sleep } from "@intentic/base/async";
-import { type ExitPoint, ExitPointSchema, type IntenticLine } from "@intentic/sandbox-contract";
+import { type ExitPoint, ExitPointSchema } from "@intentic/sandbox-contract/schemas/exit";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import { halt as haltClient, livePid as livePidOf, logTail, toolMissing } from "../tunnel/net-probe.js";
 import { providerCatalog } from "./exit-catalog.js";
 import { rankCountries, TOR_FALLBACK } from "./exit-countries.js";
@@ -19,6 +20,7 @@ import {
     torrcPath,
 } from "./exit-paths.js";
 import { writeSelection } from "./exit-state.js";
+import { undefinedIfMissing } from "@intentic/base/errors";
 
 // Tor is the free default: no account or payment, country selection is a config line, a new address is a control-port
 // signal, both applied in under a second.
@@ -63,7 +65,7 @@ export const torrc = (id: string, country: string | undefined): string =>
 const control = (id: string, commands: readonly string[]): Promise<string> =>
     new Promise((resolve, reject) => {
         void (async () => {
-            const cookie = await readFile(torCookiePath(id)).catch(() => undefined);
+            const cookie = await readFile(torCookiePath(id)).catch(undefinedIfMissing);
             if (cookie === undefined) {
                 reject(new Error("this exit's tor is not running (no control cookie), start it first"));
                 return;

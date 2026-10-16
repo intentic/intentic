@@ -2,7 +2,7 @@
 import { formatBinaryBytes, formatPercent } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, inject } from "vue";
-import { LIVE_METRICS_KEY, sessionHeavy } from "./liveMetrics";
+import { LIVE_METRICS_KEY, sessionHeavy } from "../../../models/sandbox/liveMetrics";
 import type { Tip } from "@intentic/ui";
 import { sessionTip } from "./sandboxFigures";
 

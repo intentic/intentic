@@ -1,4 +1,4 @@
-import type { TranscriptTool } from "@intentic/sandbox-contract";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import type { Logger } from "pino";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import { type Holding, type LiveRun, turnRunOf } from "../../../conversations/actor/conversation-holdings.js";

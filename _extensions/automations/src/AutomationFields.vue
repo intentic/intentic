@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import type { FireOn, ModelPin, SenderSeen, WatchCheckResult } from "@intentic/sandbox-contract";
-import { canonicalHarness, loopLabel, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
+import type { FireOn, SenderSeen, WatchCheckResult } from "@intentic/sandbox-contract/schemas/automations";
+import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import { canonicalHarness, loopLabel } from "@intentic/sandbox-contract/models/agent-catalog";
+import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract/schemas/automations";
 import {
     Button,
     ui,

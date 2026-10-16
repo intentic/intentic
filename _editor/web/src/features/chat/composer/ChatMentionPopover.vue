@@ -2,9 +2,9 @@
 import { useListNavigation } from "@intentic/ui";
 import ComposerPopover from "./ComposerPopover.vue";
 import { computed, onUnmounted } from "vue";
-import { useFuzzyFiles } from "../../workspace/search/useFuzzyFiles";
+import { useFuzzyFiles } from "../../../models/workspace/search/useFuzzyFiles";
 import { basename, parentDir } from "@intentic/ui/path";
-import { subscribe as watchOtherBoxes } from "../../sandbox/live/fleetAcross";
+import { subscribe as watchOtherBoxes } from "../../../models/sandbox/live/fleetAcross";
 import { kindMeta, type QuickPick, type QuickPickSources, quickRows } from "./composerQuickPick";
 import { parseMentionToken } from "./useMentions";
 import { useT } from "@intentic/ui/i18n";

@@ -1,6 +1,6 @@
 import { anySignal, whenAborted } from "@intentic/base/async";
 import { DisposableStore } from "@intentic/base/lifecycle";
-import type { SubagentSession } from "@intentic/sandbox-contract";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
 import type { PendingChildCard } from "./children.js";
 import { whenFileAppears } from "../tools/file-appears.js";
 import { type BackgroundJob, backgroundJobOf, jobFinished, jobInputWait, type JobReport, jobReport, jobStatusPath, runningJobsOf } from "../tools/jobs/background-jobs.js";

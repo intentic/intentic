@@ -2,11 +2,13 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { pollUntil } from "@intentic/base/async";
 import { forkedExec } from "@intentic/base/git";
-import type { CapabilityStatus, DockerConfig, IntenticLine } from "@intentic/sandbox-contract";
+import type { CapabilityStatus, DockerConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import { packFragment } from "../../image/packs.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 import { DOCKER_PANEL_KEY } from "../../ports/panel-keys.js";
 import { textFile } from "../../store/plain-files/text-file.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // In-sandbox Docker Engine, dormant and unprivileged until this capability is added. Its fragment is a single
 // `--privileged` runtime directive; `apply` starts dockerd as the panel-docker session once privileged, restored on
@@ -81,12 +83,8 @@ export const withEngineSettings = (current: Record<string, unknown>, config: unk
 // the three. A file that exists but cannot be read throws (textFile's read), or the merge would drop what it holds (the
 // GPU runtime).
 const parseDaemonJson = (raw: string): Record<string, unknown> => {
-    try {
-        const parsed: unknown = JSON.parse(raw);
-        return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
-    } catch {
-        return {};
-    }
+    const parsed: unknown = parseJsonOr(raw, undefined);
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
 };
 
 // `docker info` succeeds only when dockerd is up and answering requests.

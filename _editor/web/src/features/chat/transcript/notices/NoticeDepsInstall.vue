@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { openWorkTerminal, useWorkTerminals } from "../../../terminal/useWorkTerminals";
-import type { ChatMessage } from "../transcript";
+import { openWorkTerminal, useWorkTerminals } from "../../../../models/terminal/useWorkTerminals";
+import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 
 /* Reveals the terminal of a dependency install the daemon started, while it still runs. */
 

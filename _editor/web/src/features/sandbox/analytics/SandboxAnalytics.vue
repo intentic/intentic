@@ -2,7 +2,7 @@
 import { Notice, Row, RowNote } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
-import { useSandboxSettings } from "../overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 
 // The box's say over Intentic's product analytics, above each person's own setting (analyticsGate.ts reads it). A row,
 // not a group: Sandbox ▸ Privacy shield sets it under the shield, the one other thing that sends anything about this box

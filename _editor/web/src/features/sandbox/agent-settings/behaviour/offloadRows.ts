@@ -1,4 +1,6 @@
-import type { OffloadKind, RunnerSummary, SandboxSettings, SessionsPlacement } from "@intentic/sandbox-contract";
+import type { OffloadKind, SessionsPlacement } from "@intentic/sandbox-contract/schemas/offload";
+import type { RunnerSummary } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import type { PickerOption } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 

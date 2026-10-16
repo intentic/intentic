@@ -1,6 +1,7 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { UTC, type Zone } from "@intentic/sandbox-contract";
-import { KEYED_PARTS, nextPromptDayAt, promptDay, promptFingerprint } from "./prompt-fingerprint.js";
+import { UTC, type Zone } from "@intentic/sandbox-contract/time/zone";
+import { KEYED_PARTS, promptDay, promptFingerprint } from "./prompt-fingerprint.js";
+import { nextPromptDayAt } from "../../conversations/actor/conversation-state.js";
 
 type InitMessage = Extract<SDKMessage, { type: "system"; subtype: "init" }>;
 

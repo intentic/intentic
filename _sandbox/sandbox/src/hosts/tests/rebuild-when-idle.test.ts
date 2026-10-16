@@ -1,4 +1,4 @@
-import type { DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract";
+import type { DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract/schemas/devices";
 import type { RestartResume } from "../../system/restart-resume.js";
 import { createRebuildWhenIdle, type RebuildWhenIdle } from "../rebuild-when-idle.js";
 

@@ -1,5 +1,5 @@
 import { t } from "@intentic/ui/i18n";
-import { KINDS } from "../terminalMeta";
+import { KINDS } from "../../../models/terminal/terminalMeta";
 import type { TerminalTab } from "../useTerminal";
 
 // Whether killing terminals asks first, and what the question names: a kill confirms only where there is something to

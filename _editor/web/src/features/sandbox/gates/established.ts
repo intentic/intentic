@@ -1,6 +1,6 @@
 import { computed, type ComputedRef } from "vue";
-import { registry } from "../../agents/fleet/useAgents-registry";
-import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
+import { registry } from "../../../models/fleet/useAgents-registry";
+import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 
 // Whether the active sandbox has something to paint before it answers: a workspace tree from the last visit, or a roster
 // restored from it (useAgents-registry.ts), which is what a phone's board draws. The gate (SandboxGate.vue) and the

@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { CONTROL_SCOPE_REACH, type ControlScope, type ControlTokenMint, type ControlTokenSummary } from "@intentic/sandbox-contract";
+import {
+    CONTROL_SCOPE_REACH,
+    type ControlScope,
+    type ControlTokenMint,
+    type ControlTokenSummary,
+} from "@intentic/sandbox-contract/policy/control-scopes";
 import { Button, Code, CopyButton, Notice, Picker, type PickerOption, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { formatDate, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";

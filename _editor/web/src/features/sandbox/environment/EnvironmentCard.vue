@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Environment, EnvironmentItem } from "@intentic/sandbox-contract";
+import type { Environment, EnvironmentItem } from "@intentic/sandbox-contract/schemas/environment";
 import { Button, Code, ConfirmDialog, Notice, type NoticeModel, RowGroup, RowNote, SegmentedControl, StatusBadge, ui } from "@intentic/ui";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, nextTick, ref, watch } from "vue";
@@ -7,7 +7,7 @@ import { useRoute } from "vue-router";
 import { ENVIRONMENT_CONTENTS } from "../../../lib/queryKeys";
 import { useOperation } from "../../../workbench/operations/operations";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
-import { ENVIRONMENT_KEY, useEnvironment } from "./useEnvironment";
+import { ENVIRONMENT_KEY, useEnvironment } from "../../../models/sandbox/environment/useEnvironment";
 import { useEnvironmentContents } from "./useEnvironmentContents";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";

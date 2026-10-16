@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 import { AnchoredOverlay, formatDateTime, freshness, Icon, Notice, type Tip, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, watch } from "vue";
@@ -89,7 +90,7 @@ const attempt = async (key: string, act: () => Promise<void>): Promise<void> => 
         open.value = false;
     } catch (error) {
         open.value = true;
-        failure.value = { key, message: error instanceof Error ? error.message : String(error) };
+        failure.value = { key, message: errorMessage(error) };
     } finally {
         working.value = undefined;
     }
@@ -136,7 +137,7 @@ const forget = async (path: string): Promise<void> => {
     try {
         await host.forget(path);
     } catch (error) {
-        failure.value = { key: path, message: error instanceof Error ? error.message : String(error) };
+        failure.value = { key: path, message: errorMessage(error) };
     }
     await reload();
 };

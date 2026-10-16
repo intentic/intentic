@@ -4,7 +4,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { Capability, TurnReach } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { TurnReach } from "@intentic/sandbox-contract/schemas/agents";
 import { changedInstalls, reachWatch, snapshotInstalls, strandedClones } from "./turn-reach.js";
 
 // The half of a turn's reach only git can tell, read off real checkouts: an installed extension is a git clone under

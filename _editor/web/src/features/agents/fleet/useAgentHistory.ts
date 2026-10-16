@@ -1,4 +1,4 @@
-import type { WorkspaceModule, AgentHistoryCommit } from "@intentic/sandbox-contract";
+import type { WorkspaceModule, AgentHistoryCommit } from "@intentic/sandbox-contract/schemas/git/git";
 import { computed, type Ref } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";

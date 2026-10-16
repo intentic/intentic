@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { writeFileAtomicSync } from "@intentic/base/fs";
-import { type RestartIntent, RestartIntentSchema } from "@intentic/sandbox-contract";
+import { type RestartIntent, RestartIntentSchema } from "@intentic/sandbox-contract/schemas/restart-intent";
 import { z } from "zod";
 import type { Logger } from "pino";
 import { opt } from "../../../opt.js";

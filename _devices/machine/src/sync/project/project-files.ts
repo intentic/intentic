@@ -1,6 +1,6 @@
 import { windowsHolds } from "@intentic/base/contained";
 import { escapeRegExp } from "@intentic/base/escape";
-import type { ProjectChange as PrintedChange, ProjectChangeKind } from "@intentic/sandbox-contract";
+import type { ProjectChange as PrintedChange, ProjectChangeKind } from "@intentic/sandbox-contract/schemas/project-bring-back";
 import { isSafeRelativePath } from "../residue.js";
 
 // WHAT A COPY-FIRST PROJECT'S SANDBOX CHANGED, worked out from two listings of the same folder: this device's copy and

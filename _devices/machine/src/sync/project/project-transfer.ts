@@ -10,7 +10,7 @@ import type {
     ProjectChangesResult,
     ProjectSkipped,
     RestoreResult as PrintedRestore,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/project-bring-back";
 import { type Pairing, pairingKey, pairingRemoteDir, projectDirection } from "../config.js";
 import {
     capped,
@@ -142,7 +142,7 @@ const unchangedHere = async (root: string, conflicts: ReadonlyMap<string, Report
             continue;
         }
         const unmoved = reported.agreed !== undefined && reported.agreed === reported.here;
-        // oxlint-disable-next-line eslint/no-await-in-loop -- ten files at most (Mutagen reports no more)
+        // ten files at most (Mutagen reports no more)
         verdicts.set(path, unmoved && (await mutagenDigestHere(root, path)) === reported.here);
     }
     return verdicts;
@@ -346,7 +346,7 @@ const apply = async (root: string, ready: Ready, entry: RestoreEntry): Promise<v
 // Staging folders a killed bring-back or delivery left: only ever this pairing's, and only removed while holding its lock.
 export const clearStaging = async (dir: string): Promise<void> => {
     for (const name of (await readdir(dir)).filter((entry) => entry.startsWith(".staging-"))) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- rarely more than one
+        // rarely more than one
         await rm(join(dir, name), { recursive: true, force: true });
     }
 };
@@ -390,7 +390,7 @@ const bringBackHeld = async (context: ProjectContext, paths: readonly string[], 
     for (const item of ready) {
         try {
             const request = { path: item.change.path, kind: item.change.kind, applied: item.applied };
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one file at a time, so a failure names one path
+            // one file at a time, so a failure names one path
             kept.push({ ready: item, entry: await backUp(stateDir, key, point.id, pairing.localDir, request, durability) });
         } catch (error) {
             skipped.push({ path: item.change.path, reason: errorMessage(error) });
@@ -402,7 +402,7 @@ const bringBackHeld = async (context: ProjectContext, paths: readonly string[], 
     const done: { readonly entry: RestoreEntry; readonly kind: ChangeKind }[] = [];
     for (const { ready: item, entry } of kept) {
         try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             await apply(pairing.localDir, item, entry);
             done.push({ entry, kind: item.change.kind });
         } catch (error) {
@@ -463,7 +463,7 @@ export const restorePoint = async (context: ProjectContext, id: string): Promise
                 let restored = 0;
                 for (const entry of manifest.entries) {
                     try {
-                        // oxlint-disable-next-line eslint/no-await-in-loop -- one file at a time, so a failure names one path
+                        // one file at a time, so a failure names one path
                         await restoreEntry(stateDir, key, id, pairing.localDir, entry);
                         restored += 1;
                     } catch (error) {

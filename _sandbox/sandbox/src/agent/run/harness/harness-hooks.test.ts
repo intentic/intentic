@@ -5,7 +5,7 @@ import { pino } from "pino";
 import type { Services } from "../../../composition.js";
 import type { PersistedAgent } from "../../../conversations/registry/agents-store.js";
 import { declarationOf, rulesOf } from "../../../rules/repo-checks.js";
-import { noIsolation } from "../../../testing.js";
+import { noIsolation } from "../../../conversations/worktrees/isolation.testing.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { context } from "../turn/turn-plan.testing.js";
 import { harnessHooks, type HarnessHooksDeps, ruleCommandIn } from "./harness-hooks.js";

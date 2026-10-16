@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { KeyringSyncItem } from "@intentic/sandbox-contract";
+import type { KeyringSyncItem } from "@intentic/sandbox-contract/schemas/keyring";
 import { keyFingerprint, seal } from "@intentic/sandbox-contract/keyring-seal";
 import { createKeyringSync, intoMailbox, KeyringPairRefused, MAILBOX_CAP } from "./keyring-sync.js";
 import { fakeDevices, fakeKeyring } from "./keyring.testing.js";

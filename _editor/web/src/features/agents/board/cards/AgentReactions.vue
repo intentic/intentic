@@ -8,13 +8,13 @@
 // a control reserving its seat in that row pushed the line below it onto a second row for good. The press that ADDS a
 // mark is the host's to place, in whatever row it already reveals actions in — `open` is what it calls.
 import { computed, ref, shallowRef, watch } from "vue";
-import type { AgentReaction } from "@intentic/sandbox-contract";
+import type { AgentReaction } from "@intentic/sandbox-contract/schemas/agents";
 import { ResponsiveOverlay, ui } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
-import { reactToAgent } from "../../fleet/agentActions";
-import { refreshAcross } from "../../../sandbox/live/fleetAcross";
-import { useAgents } from "../../fleet/useAgents";
+import { reactToAgent } from "../../../../models/fleet/agentActions";
+import { refreshAcross } from "../../../../models/sandbox/live/fleetAcross";
+import { useAgents } from "../../../../models/fleet/useAgents";
 import { useSandboxSession } from "../../../../client/session/sandboxSession";
 import { PICKER_EMOJI, QUICK_EMOJI, reactionChips, withPress } from "./reactions";
 

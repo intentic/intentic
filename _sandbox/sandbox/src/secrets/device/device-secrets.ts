@@ -1,12 +1,7 @@
-import {
-    DEVICE_FEATURE_KEYRING,
-    deviceSupports,
-    type KeyringRefusalCode,
-    normalizeHostPattern,
-    SECRET_HOSTS_MAX,
-    type SecretHostGuard,
-    type SecretInventoryEntry,
-} from "@intentic/sandbox-contract";
+import { DEVICE_FEATURE_KEYRING, deviceSupports } from "@intentic/sandbox-contract/schemas/hosts";
+import type { KeyringRefusalCode } from "@intentic/sandbox-contract/schemas/keyring";
+import { normalizeHostPattern, SECRET_HOSTS_MAX } from "@intentic/sandbox-contract/policy/secret-hosts";
+import type { SecretHostGuard, SecretInventoryEntry } from "@intentic/sandbox-contract/schemas/secrets";
 import type { HostHub } from "../../hosts/host-peer.js";
 import { opt } from "../../opt.js";
 import { onRuntimeChange } from "../../seams/runtime-feed.js";

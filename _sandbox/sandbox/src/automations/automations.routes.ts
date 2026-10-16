@@ -1,5 +1,7 @@
 import { conversationReader, registryProvenance } from "../auth/scope/conversation-reader.js";
-import { type AutomationSummary, automationsContract, type Zone } from "@intentic/sandbox-contract";
+import type { AutomationSummary } from "@intentic/sandbox-contract/schemas/automations";
+import { automationsContract } from "@intentic/sandbox-contract/contracts/automations.contract";
+import type { Zone } from "@intentic/sandbox-contract/time/zone";
 import { implement, ORPCError } from "@orpc/server";
 import { rm } from "node:fs/promises";
 import { doorChange, listedDoorToken } from "../auth/tokens/door-tokens.js";

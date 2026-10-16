@@ -53,7 +53,7 @@ export const readCappedBytes = async (response: Response, maxBytes: number, opti
         if (Date.now() > deadline) {
             return await stop(join(chunks, size));
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one stream, read in order
+        // one stream, read in order
         const { done, value } = await reader.read();
         if (done) {
             return { bytes: join(chunks, size), truncated: false };

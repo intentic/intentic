@@ -1,19 +1,13 @@
 import { RequestError } from "@agentclientprotocol/sdk";
 import { FetchJsonError, type FetchJsonInit, fetchJsonResponse, type JsonValue } from "@intentic/base/fetch-json";
-import {
-    agentContract,
-    type AgentReply,
-    type AgentTurn,
-    type AttachFrame,
-    AttachFrameSchema,
-    MessageReceiptSchema,
-    procedurePath,
-    sessionsContract,
-    sseData,
-    sseFrames,
-    type TranscriptRow,
-    TranscriptRowSchema,
-} from "@intentic/sandbox-contract";
+import { agentContract } from "@intentic/sandbox-contract/contracts/agent.contract";
+import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { type AgentTurn, MessageReceiptSchema } from "@intentic/sandbox-contract/schemas/agent";
+import { type AttachFrame, AttachFrameSchema } from "@intentic/sandbox-contract/events/agent-events";
+import { procedurePath } from "@intentic/sandbox-contract/protocol/routes";
+import { sessionsContract } from "@intentic/sandbox-contract/contracts/sessions.contract";
+import { sseData, sseFrames } from "@intentic/sandbox-contract/protocol/sse";
+import { type TranscriptRow, TranscriptRowSchema } from "@intentic/sandbox-contract/events/transcript";
 import { z } from "zod";
 
 // The bridge's view of the daemon: POST /agent starts a turn, /agent/attach watches it (head rows, then every change

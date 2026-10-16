@@ -1,0 +1,178 @@
+import type { AgentCommand, ContextUsage } from "@intentic/sandbox-contract/events/requests";
+import type { ConversationQueue } from "@intentic/sandbox-contract/schemas/agent";
+import { newConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import type { TurnFact } from "@intentic/sandbox-contract/events/agent-events";
+import { computed, effectScope, ref, shallowRef, watch } from "vue";
+import type { AgentStanding } from "../../agent-status/agentStatus-standing";
+import type { PendingAttachment } from "../../../features/chat/drafts/useChatAttachments";
+import type { SendLater } from "../drafts/sendLater";
+import type { PickUp } from "../endings/pickUp";
+import { TurnFailures } from "../endings/turnFailures";
+import type { ForkLink, SessionRef } from "../run/turnRequest";
+import { CardReplies } from "./cardReplies";
+import { ComposerSelection } from "./composerSelection";
+import { TranscriptView } from "./transcriptView";
+import { TurnClient } from "./turnClient";
+import { endingStanding } from "./runPhase";
+import { applyTurnEntry } from "./turnFacts";
+
+// One chat conversation, self-contained so several run at once: what it is (identity, placement, the tab's own facts)
+// and the units that do its work — `transcript` (rows, pages, fork/rewind/edit), `selection` (the next turn's picks),
+// `turn` (sending, streaming, the queue's doors, stop), `requests` (answering a card), `failures` (what a failed turn does).
+// It is their composition and nothing else: every behaviour is one unit's, reached through it.
+
+// What a conversation is doing right now, surfaced as the tab's status icon.
+export type ConversationStatus = "idle" | "streaming" | "stopping" | "dismissing" | "awaiting" | "error";
+
+export class Conversation {
+    // The error line: this needs the user. Per-turn chat errors land here; account errors live with the accounts.
+    readonly error = ref<string | null>(null);
+    // Offer to resume a turn that stopped short (stop, crash, outage, spent allowance); cleared by the next turn.
+    readonly pickUp = ref<PickUp | undefined>();
+
+    // Header title for this conversation; null shows "New chat". Derived from the first user message.
+    readonly title = ref<string | null>(null);
+
+    // Whether this conversation's turns run in an isolated git worktree (default) or the shared /work tree.
+    readonly isolated = ref(true);
+
+    // Machine this conversation runs on: a paired runner's id, or undefined for this sandbox; latched early.
+    readonly runner = ref<string | undefined>();
+
+    // Sandbox this conversation lives in, or undefined for this browser's box; every call is aimed at it.
+    readonly box = ref<string | undefined>();
+
+    // Whether the fleet has ever known this conversation; latches rather than tracks the roster, so a dropped roster
+    // can't un-register it. Persisted with the tab.
+    readonly registered = ref(false);
+
+    // A tab opened for a glance (fleet card, history row), swept once focus leaves. Every verb of the reader's that
+    // changes the conversation clears it; only the roster sets it again (useChat-tabs.releaseDone).
+    readonly peek = ref(false);
+
+    // Held on purpose: never tidied, never folded, skipped by every bulk close; only its own Close takes it.
+    readonly pinned = ref(false);
+
+    // When focus last left this chat (epoch ms); the tidy clock counts from it, undefined while never left.
+    readonly leftAt = ref<number | undefined>();
+
+    // Blank fallback a panel shows with no tabs, or after closing its last; says nothing about what the chat is.
+    readonly standIn = ref(false);
+
+    // The daemon's account of this agent when its card opened the chat (AgentStanding: status, attention, watches,
+    // spent-allowance state), carried so a window whose roster hasn't answered still places the card in the lane the
+    // board gives it. Superseded by the roster wherever one exists, and dropped the moment a turn runs here, which is
+    // fresher than anything the card said.
+    readonly standing = ref<AgentStanding | undefined>(undefined);
+
+    // Saved workflow design the next message runs through, if any; not sticky, clears on send.
+    readonly workflowId = ref<string | undefined>();
+    // Saved loop the next message runs as, if any; not sticky, clears on send like `workflowId`.
+    readonly loopId = ref<string | undefined>();
+
+    // When the next message goes, when not now (sendLater.ts): an instant, or after another agent's work lands. Not
+    // sticky: the booking it turns Send into spends it, and the message then waits in the daemon's queue.
+    readonly sendLater = shallowRef<SendLater | undefined>();
+
+    // This conversation's own answer to whether its finished work lands by itself, while the daemon has no record of it
+    // to hold one: the message that opens it carries it (`conversationAutoLand`). Once registered, the card's is the answer.
+    readonly autoLandDraft = ref<boolean | undefined>();
+
+    // This conversation's composer draft: unsent text and staged attachments; per-tab, persisted per sandbox.
+    readonly draft = ref(``);
+    readonly attachments = ref<PendingAttachment[]>([]);
+
+    // When the composer first held something unsent, for age-based UnsentMark; cleared on the reverse edge.
+    readonly draftAt = ref<number | undefined>();
+
+    // Where this conversation was cut from, until the daemon accepts a turn carrying it; a fork's only record.
+    readonly pendingForkOf = ref<ForkLink | undefined>(undefined);
+
+    // The session the daemon last reported for this conversation, with the provider/account that minted it; public for
+    // the manager. Which session the next turn goes on in is the daemon's to say.
+    readonly session = ref<SessionRef | undefined>();
+
+    // tmux session this conversation's Bash runs in (`agent-<sdk session>`); undefined until the first Bash.
+    readonly agentTerminal = ref<string | undefined>();
+
+    // Same as `agentTerminal`, for the browser this conversation's agent drives (`browser-<sdk session>`).
+    readonly agentBrowser = ref<string | undefined>();
+
+    // Worktree identity from the turn's `worktree` frame: agent/<id> branch and base sha; undefined until isolated.
+    readonly worktree = ref<{ branch: string; base: string } | undefined>();
+
+    // The model the SDK actually resolved for the latest turn (from its init message), when reported.
+    readonly activeModel = ref<string | null>(null);
+
+    // Context-window fill for this conversation (tokens sent vs the model's window), updated at the end of each turn.
+    readonly contextUsage = ref<ContextUsage | undefined>();
+
+    // This conversation's slash commands, replaced whole per `commands` frame, listed by the composer's `/` popover.
+    readonly availableCommands = ref<readonly AgentCommand[]>([]);
+
+    // Speed the harness actually served the last turn at, with its reason if not the one asked for; kept across turns.
+    readonly fastMode = ref<Extract<TurnFact, { kind: `fast_mode` }> | undefined>();
+
+    // Whose checkout this chat's files and pictures are read in; undefined for a chat working in the shared tree.
+    readonly scope = computed(() => (this.isolated.value ? this.conversationId : undefined));
+
+    // What waits for this conversation's next turn, as the daemon last told this window: the conversation's, the same in
+    // every window, fed from its card by the pane showing it and from the answers to this window's own changes.
+    readonly queue = shallowRef<ConversationQueue | undefined>();
+
+    readonly transcript: TranscriptView;
+    readonly selection: ComposerSelection;
+    readonly turn: TurnClient;
+    readonly failures: TurnFailures;
+    readonly requests: CardReplies;
+
+    // Words this window holds and nothing else does (a draft, an attachment; never the daemon's queue); guards a tab from
+    // closing. A watcher keeps it, not a computed, so a keystroke wakes none of the strip, fleet and cards that read it.
+    readonly unsent = shallowRef(false);
+
+    // What this conversation is doing, for the tab's status icon.
+    readonly status = computed<ConversationStatus>(() => {
+        if (this.error.value !== null) {
+            return `error`;
+        }
+        // Ended by a person and only unwinding: ahead of a card it was parked on, which the ending takes with it.
+        const ending = this.turn.ending.value;
+        if (ending !== undefined) {
+            return endingStanding(ending);
+        }
+        if (this.transcript.awaitingDecision.value) {
+            return `awaiting`;
+        }
+        return this.turn.streaming.value ? `streaming` : `idle`;
+    });
+
+    // The conversation's whole identity: key for the fleet entry, worktree, tab, and mirror; a word pair, not a UUID.
+    // The runs come first: every other unit reads whether one is live, and an edit sends through them.
+    constructor(readonly conversationId: string = newConversationId()) {
+        this.turn = new TurnClient(this);
+        this.transcript = new TranscriptView((entry, turn, replay) => applyTurnEntry(this, entry, turn, replay), this);
+        this.selection = new ComposerSelection(this);
+        this.failures = new TurnFailures(this);
+        this.requests = new CardReplies(this);
+        // Detached: the conversation outlives whichever component made it, and the watchers are reachable only through it.
+        effectScope(true).run(() => {
+            watch(
+                () => this.draft.value.trim() !== `` || this.attachments.value.length > 0,
+                (now) => {
+                    this.unsent.value = now;
+                },
+                { flush: `sync`, immediate: true },
+            );
+            // A turn streaming is the sandbox answering, and its own freshest copy: a read that failed before it no longer
+            // speaks for what is on screen, and left standing it came back once the turn settled.
+            watch(
+                () => this.turn.streaming.value,
+                (streaming) => {
+                    if (streaming) {
+                        this.transcript.refresh.value = undefined;
+                    }
+                },
+            );
+        });
+    }
+}

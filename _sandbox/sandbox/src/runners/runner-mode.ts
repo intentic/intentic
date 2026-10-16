@@ -1,4 +1,4 @@
-import { RUNNER_PAIR_TOKEN_ENV, RUNNER_PARENT_URL_ENV } from "@intentic/sandbox-contract";
+import { RUNNER_PAIR_TOKEN_ENV, RUNNER_PARENT_URL_ENV } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { Services } from "../composition.js";
 import { parentCredentialSource } from "./runner-credentials.js";
 import { ensureRunnerIdentity, readRunnerIdentity } from "./runner-identity.js";

@@ -1,4 +1,4 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 
 // Where the overlay's contributed fragments come from, as environment/ reads them. The composers sit above the
 // environment (a capability's handler and an extension's checkout in extensions/fragment-sources.ts, a connected

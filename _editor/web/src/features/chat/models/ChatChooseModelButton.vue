@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
 import { ref } from "vue";
-import { requestModelPick } from "./host/hostModelPicker";
-import { usePaneView } from "../panel/useChat-view";
+import { requestModelPick } from "../../../models/conversations/accounts/hostModelPicker";
+import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import { useT } from "@intentic/ui/i18n";
 
 // The model list reached from a notice rather than from the composer's own pill (account gate, trial-spent strip):

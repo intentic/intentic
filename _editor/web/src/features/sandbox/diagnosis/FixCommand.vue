@@ -4,7 +4,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { desktopFixLink, desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useServingSlug } from "../environment/servingSlug";
+import { useServingSlug } from "../../../models/sandbox/environment/servingSlug";
 import { phoneBrowser } from "../../../client/endpoint/endpoint";
 import { fixCommand, useFixCode } from "./fixCommand";
 import RunCommand from "../../../components/RunCommand.vue";

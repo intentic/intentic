@@ -2,7 +2,7 @@ import { readFileSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { NamedSecret } from "../../secrets/secret-registry.js";
-import { syncHookOutput } from "../../testing.js";
+import { syncHookOutput } from "../run/harness/harness-hooks.testing.js";
 import { resolveCommandSecrets, type SecretAccess, type SecretUseReport } from "../../secrets/secret-access.js";
 import { secretCommandHooks } from "./agent-secrets.js";
 import { bashTmuxHooks } from "./agent-terminals.js";

@@ -1,4 +1,4 @@
-import type { CiRunsResponse } from "@intentic/sandbox-contract";
+import type { CiRunsResponse } from "@intentic/sandbox-contract/schemas/ci";
 import type { HostQuery } from "@intentic/extension-api";
 import { host } from "./host";
 

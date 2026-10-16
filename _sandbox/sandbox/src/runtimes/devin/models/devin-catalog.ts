@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { methods } from "@agentclientprotocol/sdk";
-import type { Model } from "@intentic/sandbox-contract";
+import type { Model } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { discoveredCatalog } from "../../../agent/models/model-catalog.js";
 import { opt } from "../../../opt.js";
 import { cacheFile } from "../../../store/open-document.js";

@@ -1,5 +1,5 @@
 import type { HostCheck, HostReport } from "@intentic/api-contract";
-import type { SandboxVitals } from "@intentic/sandbox-contract";
+import type { SandboxVitals } from "@intentic/sandbox-contract/netd/generated/browser-wire";
 import { t } from "@intentic/ui/i18n";
 import type { Diagnosis } from "./diagnose";
 

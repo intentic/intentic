@@ -1,8 +1,10 @@
-import type { AgentEvent, AskQuestion, PushNotification } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AskQuestion } from "@intentic/sandbox-contract/events/requests";
+import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
-import { conversationEntry } from "../testing.js";
+import { conversationEntry } from "../conversations/registry/agents-store.testing.js";
 import { recordingLogger } from "../harness/route-fakes.testing.js";
 import { awaitingCard, notifyAwaiting } from "./awaiting-detail.js";
 import { turnAwaiting } from "./notifications.js";

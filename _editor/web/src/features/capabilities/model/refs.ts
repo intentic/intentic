@@ -1,8 +1,10 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { CapabilityField } from "@intentic/extension-manifest";
-import { compareVersions, parseVersion, type RemoteRef, type RemoteRefs, VAULTED } from "@intentic/sandbox-contract";
+import { compareVersions, parseVersion } from "@intentic/sandbox-contract/state/versions";
+import type { RemoteRef, RemoteRefs } from "@intentic/sandbox-contract/schemas/git/remote-refs";
+import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import type { PickerGroup } from "@intentic/ui";
-import { type FormValues, isCommitSha, type StoredSecrets } from "./form";
+import { type FormValues, isCommitSha, type StoredSecrets } from "../../../models/capabilities/form";
 import { t } from "@intentic/ui/i18n";
 
 // The one field the picker stands in for: an extension's `ref`, the only answer on this form that must be a commit and

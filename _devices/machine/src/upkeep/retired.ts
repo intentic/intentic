@@ -50,7 +50,7 @@ const retiredLoginEntries: UpkeepEntry = {
         const found: Finding[] = [];
         for (const spec of legacyAutostart(base)) {
             const entry = autostart(spec, machineLauncher(), quiet);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- two entries, each a few OS calls; in order keeps them apart
+            // two entries, each a few OS calls; in order keeps them apart
             if (await entry.present()) {
                 found.push({ what: `the ${spec.id} login entry`, act: async () => await entry.unregister() });
             }
@@ -84,11 +84,11 @@ const retiredGenerations: UpkeepEntry = {
         const { dirs, links, files } = retiredPaths(context.home, context.base);
         const found: Finding[] = [];
         for (const dir of dirs) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of paths, each a stat
+            // a handful of paths, each a stat
             if (!(await exists(dir))) {
                 continue;
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            // ditto
             const running = await processesFrom(dir, context.platform);
             found.push(
                 running !== undefined && running.length > 0
@@ -97,14 +97,14 @@ const retiredGenerations: UpkeepEntry = {
             );
         }
         for (const link of links) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of paths, each a stat
+            // a handful of paths, each a stat
             const target = await linkTarget(link);
             if (target !== undefined && dirs.some((dir) => isInside(target, dir))) {
                 found.push(trashing(context, link));
             }
         }
         for (const file of files) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of paths, each a stat
+            // a handful of paths, each a stat
             if (await exists(file)) {
                 found.push(trashing(context, file));
             }
@@ -156,9 +156,9 @@ export const linkWatchEntry = (systemctl: (...args: string[]) => void = userSyst
                     systemctl("disable", "--now", "intentic-link-watch.timer");
                     systemctl("stop", "intentic-link-watch.service");
                     for (const path of linkWatchPaths(context.home)) {
-                        // oxlint-disable-next-line eslint/no-await-in-loop -- four paths, in order
+                        // four paths, in order
                         if (await exists(path)) {
-                            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+                            // ditto
                             await moveToTrash(context.base, path, context.now);
                         }
                     }

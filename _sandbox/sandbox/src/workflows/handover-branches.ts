@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { RepoBase } from "@intentic/sandbox-contract";
+import type { RepoBase } from "@intentic/sandbox-contract/schemas/agent";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { branchSha } from "../git/agent-refs.js";
 

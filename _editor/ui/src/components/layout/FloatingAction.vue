@@ -23,6 +23,10 @@ defineEmits<{ click: [event: MouseEvent] }>();
     <!-- The position rides a wrapper, so PrimeVue's own button rules cannot override it. The wrapper is opaque, since the
          button's tier is a tint: floated over a list, the rows under it showed through the press. -->
     <div class="absolute bottom-4 right-4 z-10 rounded-full bg-card shadow-lg">
+        <!-- allow(buttons): THE UPLOAD FAB, and the exception the vocabulary already names (see ui.ts). A floating
+             action button is a 56px circle by definition — the size IS the affordance on a phone — so it is the one
+             control in the app whose box is not a tier's. The same goes for `rounded`: a circle is what a floating
+             action button is. Nothing else in the app may take this prop. -->
         <Button
             rounded
             class="h-14 py-0"

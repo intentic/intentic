@@ -96,7 +96,7 @@ interface Measured {
 }
 
 /* Measure all geometry in one browser evaluation so every assertion sees one layout. */
-/* oxlint-disable unicorn/consistent-function-scoping -- evaluate helpers must remain in the browser realm. */
+/* evaluate helpers must remain in the browser realm. */
 const measure = async (page: import("@playwright/test").Page, primary: string | undefined): Promise<Measured> => {
     return page.evaluate(
         ({ failPx, warnPx, primarySelector }) => {

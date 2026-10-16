@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { FixResume, MainFailureHandBack, PipelineRun } from "@intentic/sandbox-contract";
+import type { FixResume } from "@intentic/sandbox-contract/state/fix-attempt-plan";
+import type { MainFailureHandBack, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import {
     type AgentRunAttempt,
     AgentRunButton,

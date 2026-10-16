@@ -1,5 +1,11 @@
 import type { ExtensionProcessApi } from "@intentic/extension-api/runtime";
-import type { ListenerDispatchFrame, ListenerMessage, ListenerStatus, ListenerStop, ListenerStopAnswer } from "@intentic/sandbox-contract";
+import type {
+    ListenerDispatchFrame,
+    ListenerMessage,
+    ListenerStatus,
+    ListenerStop,
+    ListenerStopAnswer,
+} from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import { type ListenerState, listenerRouteUrl, ListenerStateSchema } from "@intentic/sandbox-contract/listener-protocol";
 import { parsedJsonLines } from "@intentic/base/json-lines";
 import { chunksOf } from "@intentic/base/web-stream";

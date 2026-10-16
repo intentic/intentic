@@ -1,7 +1,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { extensionIdOf } from "@intentic/extension-manifest";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { isMissing, undefinedIfMissing } from "@intentic/base/errors";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { extensionDir, extensionRootOf, extensionsRoot, readExtensionManifest } from "../../../capabilities/extension-dirs.js";

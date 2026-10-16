@@ -2,11 +2,11 @@
 // (or none) the press changed one small row or nothing, and a reader toggled it eight times looking for the difference.
 import "@intentic/testing/dom";
 import { type App, computed, createApp, h, nextTick } from "vue";
-import type { TranscriptTool } from "@intentic/sandbox-contract";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { IconStub } from "@intentic/ui/testing";
-import { PANE_VIEW } from "../panel/useChat-view";
-import type { ChatMessage } from "../transcript/transcript";
-import { toolCallsNote, useToolCalls } from "./useToolCalls";
+import { PANE_VIEW } from "../../../models/conversations/panel/useChat-view";
+import type { ChatMessage } from "../../../models/conversations/transcript/transcript";
+import { toolCallsNote, useToolCalls } from "../../../models/conversations/tools/useToolCalls";
 
 const { default: ChatToolCallsToggle } = await import("./ChatToolCallsToggle.vue");
 

@@ -3,7 +3,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ApprovedActionOutcome } from "@intentic/extension-api/runtime";
-import { type ActionApprovalSummary, ActionApprovalSummarySchema, type ApprovalSummary, type PostApprovalSummary } from "@intentic/sandbox-contract";
+import {
+    type ActionApprovalSummary,
+    ActionApprovalSummarySchema,
+    type ApprovalSummary,
+    type PostApprovalSummary,
+} from "@intentic/sandbox-contract/schemas/approvals";
 import type { Services } from "../composition.js";
 import { recordApproval, type SpentApproval } from "./approval-decisions.js";
 

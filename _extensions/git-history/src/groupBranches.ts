@@ -1,4 +1,4 @@
-import type { GitBranch, GitRemoteBranch } from "@intentic/sandbox-contract";
+import type { GitBranch, GitRemoteBranch } from "@intentic/sandbox-contract/schemas/git/git";
 
 // Groups a local branch with its remote counterparts by name, not by configured upstream: a branch whose upstream is
 // gone, or that was never pushed, still lines up with same-named remotes. A remote-only branch gets a group with no

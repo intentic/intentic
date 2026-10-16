@@ -1,5 +1,6 @@
 import { mkdir, rm } from "node:fs/promises";
-import type { ExitConfig, IntenticLine, WireguardExitConfig } from "@intentic/sandbox-contract";
+import type { ExitConfig, WireguardExitConfig } from "@intentic/sandbox-contract/schemas/exit";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import { wireguardDial, wireguardDrop, wireguardEndpoint, wireguardMissing, wireguardUp, writeWireguardConf } from "../tunnel/wireguard-tools.js";
 import { isCountryCode, rankCountries } from "./exit-countries.js";
 import type { ExitDriver, ExitProbe } from "./exit-driver.js";

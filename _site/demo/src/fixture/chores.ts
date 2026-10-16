@@ -1,5 +1,5 @@
 import { assessReport, digestOf, ledgerKey } from "@intentic/sandbox-contract/chores";
-import type { ChoreLedgerEntry, ChoresReport, ProbeResult } from "@intentic/sandbox-contract";
+import type { ChoreLedgerEntry, ChoresReport, ProbeResult } from "@intentic/sandbox-contract/schemas/maintenance";
 
 // Evidence `GET /chores` returns for acme-shop, plus its ledger. The route answers only with measurements (probes,
 // package facts, hotspots); the app turns them into verdicts. Numbers are chosen so due, snoozed, clear, unavailable

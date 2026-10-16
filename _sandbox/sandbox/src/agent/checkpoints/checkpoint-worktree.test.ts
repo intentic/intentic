@@ -1,5 +1,5 @@
 import { checkpointNote, checkpointWorktree, type CheckpointDeps, forkWorktreeBase, takeCheckpointNote } from "./checkpoint-worktree.js";
-import type { TurnCheckpoint } from "./turn-checkpoints.js";
+import type { TurnCheckpoint } from "../../store/journals/turn-checkpoints.js";
 
 const CONVERSATION = "conv-1";
 const REPOS = [

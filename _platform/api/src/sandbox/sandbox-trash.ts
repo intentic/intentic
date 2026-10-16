@@ -203,7 +203,7 @@ export const restoreSandbox = async (prisma: PrismaClient, config: Config, owner
 export const sweepSandboxTrash = async (prisma: PrismaClient): Promise<{ purged: number }> => {
     const expired = await prisma.sandboxTrash.findMany({ where: { purgeAfter: { lte: new Date() } }, select: { id: true, appName: true } });
     for (const row of expired) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one small write per expired row, once a day
+        // one small write per expired row, once a day
         await prisma.$transaction(async (tx) => {
             if (row.appName !== null) {
                 await tx.hostedCleanup.upsert({ where: { appName: row.appName }, create: { appName: row.appName }, update: {} });

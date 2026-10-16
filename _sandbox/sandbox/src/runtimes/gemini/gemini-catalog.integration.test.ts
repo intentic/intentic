@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { testConfig } from "../../testing.js";
+import { testConfig } from "../../env.config.testing.js";
 import { createGeminiCatalog } from "./gemini-catalog.js";
 
 // The translator's list is the catalog. Its ids are its own: it serves `gemini-3.8-flash-high` while Google's account

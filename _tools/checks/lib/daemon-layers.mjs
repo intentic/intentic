@@ -24,6 +24,10 @@ import { root } from "./repo.mjs";
 // image/ and workload/ took the helpers system/ and environment/ lent the host layer, and the skill notes the
 // capability handlers print moved in beside them. The 9 left (baselines/daemon-cycles.json) each say why they stand.
 //
+// `subunits` names the units too tangled to leave unchecked inside: each immediate subdirectory, and the unit's root files
+// as one more, is a subunit, and a value import closing a new cycle between two subunits fails (baselines/daemon-subunits.json).
+// 2026-10-16: agent/ and conversations/, which held 31 and 5 such edges when the check arrived.
+//
 // The table lives beside the package rather than here so the editor's Dependencies view draws the same layers this
 // check enforces (the daemon reads it for `workspace.packageModules`); this module is its reader for the checks.
 const declared = JSON.parse(readFileSync(join(root, "_sandbox/sandbox/layers.json"), "utf8"));
@@ -31,5 +35,7 @@ const declared = JSON.parse(readFileSync(join(root, "_sandbox/sandbox/layers.jso
 export const DAEMON_LAYERS = declared.layers;
 // A shelf is a directory whose every subdirectory is a unit of its own: each runtime adapter.
 export const DAEMON_SHELVES = declared.shelves ?? [];
+// Units whose immediate subdirectories (and root files, as one more) are subunits a cycle is looked for between.
+export const DAEMON_SUBUNITS = declared.subunits ?? [];
 // File-name patterns of the surface modules, `*` a wildcard.
 export const DAEMON_SURFACE = declared.surface ?? [];

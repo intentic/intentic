@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Persona } from "@intentic/sandbox-contract";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import {
     Avatar,
     Button,
@@ -23,8 +23,8 @@ import { useRoute, useRouter } from "vue-router";
 import PersonaSelector from "./PersonaSelector.vue";
 import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
 import { useBrowserAccounts } from "../../extensions/useBrowserAccounts";
-import { useCapabilities } from "../../capabilities/connect/useCapabilities";
-import { useExtensions } from "../../extensions/useExtensions";
+import { useCapabilities } from "../../../models/capabilities/useCapabilities";
+import { useExtensions } from "../../../models/extensions/useExtensions";
 import {
     extensionGrantablesFrom,
     grantablesFrom,
@@ -33,10 +33,10 @@ import {
     personaSlug,
     powersDraftOf,
     storedPowers,
-} from "./personaRules";
-import { usePersonas } from "./usePersonas";
+} from "../../../models/sandbox/personas/personaRules";
+import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
-import { useSandboxSettings } from "../overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
 // The personas this sandbox wears when it acts outside: which accounts it speaks through, what it may do, where it

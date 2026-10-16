@@ -35,6 +35,9 @@ const {
 const TONES: Record<MeterTone, { readonly track: string; readonly fill: string }> = {
     accent: { track: `bg-primary-600/15`, fill: `bg-primary-600` },
     muted: { track: `bg-content/10`, fill: `bg-content/35` },
+    // allow(tones): A METER'S TRACK, not a tint: the room left under a fill, a lighter step of the fill's own colour.
+    // Every tone of meter steps its track down the same way (`bg-primary-600/15` beside it), so the number is the
+    // meter's geometry of light, read against its fill, and a box's tint strength would be the wrong one.
     warning: { track: `bg-warning/15`, fill: `bg-warning` },
 };
 

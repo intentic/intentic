@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PackageUnit, PackageUnitEdge, WorkspacePackage } from "@intentic/sandbox-contract";
+import type { PackageUnit, PackageUnitEdge, WorkspacePackage } from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
 import { Card, Notice, noticeOf, RowGroup, Row, SkeletonSnapshot, StatStrip, ui, vSkeletonSource } from "@intentic/extension-ui";
 import { computed, ref, toRef, watch } from "vue";
 import { isUpward, stackOf, unitLinks } from "./layerModel";

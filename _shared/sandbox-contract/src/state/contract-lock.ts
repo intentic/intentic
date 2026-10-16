@@ -1,8 +1,8 @@
 // contract.lock.json is every exported schema serialized to canonical JSON Schema, so git can flag a wire-contract
 // change. contract-shrink demands a `!` commit with a Breaking-Note when a schema, field or type shrinks; additions
-// pass freely. Derived from the package's exports, not a hand-kept list, plus the wire no oRPC route carries: the
-// manifests the Rust crates that define it write beside their TypeScript (the tunnel, what a browser sees of netd
-// and the edge, and netd's control socket with Node), under `wire:` names no export can take.
+// pass freely. Derived from every module's exports (contract-modules.ts), not a hand-kept list, plus the wire no oRPC
+// route carries: the manifests the Rust crates that define it write beside their TypeScript (the tunnel, what a browser
+// sees of netd and the edge, and netd's control socket with Node), under `wire:` names no export can take.
 //
 // And who reaches each route: every raw route's and every procedure's RouteMeta, each reach field with its default
 // resolved (route-meta.ts `routeAccess`), under `access:METHOD /path`. Resolved, so every field is a value on every
@@ -15,7 +15,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
 import { z } from "zod";
-import * as contract from "../index.js";
+import { SANDBOX_ROUTES } from "../index.js";
+import { RAW_ROUTE_LIST } from "../protocol/raw/raw-routes.js";
+import { routeAccess } from "../protocol/route-meta.js";
+import { contractModules } from "./contract-modules.js";
 
 // Canonical key order so two runs are byte-identical and a diff is a real contract change, not key-order noise. Arrays
 // keep zod's own (stable) order.
@@ -39,12 +42,12 @@ const ACCESS_PREFIX = "access:";
 // route moving between procedures is seen.
 const accessEntries = (): Record<string, Readonly<Record<string, string | boolean>>> => {
     const entries = new Map<string, Readonly<Record<string, string | boolean>>>();
-    for (const route of [...contract.RAW_ROUTE_LIST, ...contract.SANDBOX_ROUTES]) {
+    for (const route of [...RAW_ROUTE_LIST, ...SANDBOX_ROUTES]) {
         const key = `${ACCESS_PREFIX}${route.method} ${route.path}`;
         if (entries.has(key)) {
             throw new Error(`two routes declare ${route.method} ${route.path}; the lock can record only one reach for it`);
         }
-        const access = contract.routeAccess(route.method, route.meta);
+        const access = routeAccess(route.method, route.meta);
         const fields = route.name === `${route.method} ${route.path}` ? access : { ...access, procedure: route.name };
         entries.set(key, Object.fromEntries(Object.entries(fields).toSorted(([a], [b]) => a.localeCompare(b))));
     }
@@ -84,13 +87,41 @@ export const accessChanges = (baseText: string, headText: string): string[] => {
 // Each written by its crate's own test: `tunnel`, `browser-wire` and `netd-wire` under _sandbox/netd/crates.
 const WIRE_MANIFESTS = ["browser-wire", "netd-wire", "tunnel"] as const;
 
-export const currentLock = (): Record<string, unknown> => {
-    const lock: Record<string, unknown> = {};
-    for (const name of Object.keys(contract).sort()) {
-        const value = (contract as Record<string, unknown>)[name];
-        if (!(value instanceof z.ZodType)) {
-            continue;
+// Schemas exported where the barrel never re-exported them, so the lock never recorded them; recording one is an addition.
+const UNRECORDED = new Map<string, readonly string[]>([
+    ["contracts/usage.contract", ["RefreshPlanLimitsSchema"]],
+    ["policy/identity-assertion", ["IdentityAssertionMethodSchema"]],
+    // Its ExtensionHealthSchema is not schemas/extension-updates.ts's, so it can only be recorded once one is renamed.
+    [
+        "protocol/raw/extension-protocol",
+        ["ExtensionEventSchema", "ExtensionHealthSchema", "ExtensionOwnSettingsSchema", "ExtensionPermissionsSchema"],
+    ],
+    ["schemas/internal", ["RefNameSchema", "autoStart", "entryId"]],
+]);
+
+// Every schema the lock records, by its export name. A name two modules export as different schemas throws: the lock
+// is keyed by name, and either one recorded alone would hide a change to the other.
+export const lockedSchemas = async (): Promise<ReadonlyMap<string, z.ZodType>> => {
+    const found = new Map<string, { readonly schema: z.ZodType; readonly module: string }>();
+    for (const [module, exports] of await contractModules()) {
+        const skipped = new Set(UNRECORDED.get(module));
+        for (const [name, value] of exports) {
+            if (!(value instanceof z.ZodType) || skipped.has(name)) {
+                continue;
+            }
+            const held = found.get(name);
+            if (held !== undefined && held.schema !== value) {
+                throw new Error(`${held.module} and ${module} both export a schema named ${name}; the lock can record only one`);
+            }
+            found.set(name, { schema: value, module: held?.module ?? module });
         }
+    }
+    return new Map([...found].toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([name, { schema }]) => [name, schema]));
+};
+
+export const currentLock = async (): Promise<Record<string, unknown>> => {
+    const lock: Record<string, unknown> = {};
+    for (const [name, value] of await lockedSchemas()) {
         try {
             const schema = sorted(z.toJSONSchema(value, { unrepresentable: "any" })) as Record<string, unknown>;
             // The dialect banner is identical on every entry; pure weight, no signal.

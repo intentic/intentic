@@ -2,7 +2,7 @@
 import { explorerColorClass } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { useChatSurface } from "../../tools/chatToolSurface";
+import { useChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
 
 /* The frame every attachment chip shares: its border and danger edge, its remove press, its upload bar. The body is the slot's, handed what opening the file takes. */
 

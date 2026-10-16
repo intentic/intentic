@@ -1,4 +1,5 @@
-import type { TodoItem, TurnNote } from "@intentic/sandbox-contract";
+import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { plural } from "@intentic/base/format";
 import type { Services } from "../../composition.js";
 import { changedFiles } from "../../git/changes/changes.js";

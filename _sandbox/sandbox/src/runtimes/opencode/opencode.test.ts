@@ -9,7 +9,7 @@ import type {
     PermissionReplyInput,
     SessionInfo,
 } from "@opencode/client";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { CommandGuard } from "../../guard/command-guard.js";

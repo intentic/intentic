@@ -1,5 +1,8 @@
-import type { Capability, PhoneFacts, PhoneScopes } from "@intentic/sandbox-contract";
+import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { PhoneFacts, PhoneScopes } from "@intentic/sandbox-contract/schemas/phone";
+import type { CompositionCore } from "../composition.js";
 import { createPeerHub, type PeerDoorDeps } from "../peers/peer-hub.js";
+import { defineSlice } from "../seams/slice.js";
 import { filePeerStore } from "../peers/peer-store.js";
 import {
     ownPhoneReach,
@@ -21,7 +24,7 @@ export interface PhonesSlice {
     readonly phoneReach: (granted: readonly Capability[]) => Promise<OwnPhoneReach | undefined>;
 }
 
-export const createPhonesSlice = ({ historyRoot, logger, peerTools }: PeerDoorDeps): PhonesSlice => {
+const createPhonesSlice = ({ historyRoot, logger, peerTools }: PeerDoorDeps): PhonesSlice => {
     const phoneHub = createPeerHub<PhoneClient, PhoneAnnounced, PhoneFacts, PhoneScopes>(PHONE_PEER.hub, logger, peerTools);
     return {
         phones: filePeerStore(historyRoot, PHONE_PEER.store),
@@ -31,3 +34,8 @@ export const createPhonesSlice = ({ historyRoot, logger, peerTools }: PeerDoorDe
         phoneReach: (granted) => ownPhoneReach({ phoneHub }, granted),
     };
 };
+
+export const phonesSlice = defineSlice<PhonesSlice>({
+    build: ({ config, logger, peerTools }: Pick<CompositionCore, "config" | "logger" | "peerTools">) =>
+        createPhonesSlice({ historyRoot: config.historyRoot, logger, peerTools }),
+});

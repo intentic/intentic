@@ -1,4 +1,5 @@
-import { channelId, pushContract } from "@intentic/sandbox-contract";
+import { channelId } from "@intentic/sandbox-contract/schemas/push";
+import { pushContract } from "@intentic/sandbox-contract/contracts/push.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";

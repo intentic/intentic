@@ -78,7 +78,7 @@ export const sweepBlobs = async (historyRoot: string, referenced: ReadonlySet<st
     let removed = 0;
     for (const shard of await readdir(blobsRoot(historyRoot)).catch((): string[] => [])) {
         const dir = join(blobsRoot(historyRoot), shard);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one shard at a time keeps the sweep off the shared I/O pool.
+        // one shard at a time keeps the sweep off the shared I/O pool.
         for (const name of await readdir(dir).catch((): string[] => [])) {
             const path = join(dir, name);
             const hash = name.replace(/\.zst$/u, "");
@@ -86,12 +86,12 @@ export const sweepBlobs = async (historyRoot: string, referenced: ReadonlySet<st
             if (blob && (referenced.has(hash) || inUse(hash))) {
                 continue;
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above.
+            // as above.
             const info = await stat(path).catch(undefinedIfMissing);
             if (info === undefined || now - info.mtimeMs <= graceMs) {
                 continue;
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above.
+            // as above.
             if (blob ? await sweepOne(path, hash, inUse) : await rm(path, { force: true }).then(() => true)) {
                 removed += 1;
             }

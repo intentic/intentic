@@ -1,6 +1,6 @@
 import { CONNECT_TOKEN_HEADER, GOOGLE_REQUIRED_REASON } from "@intentic/api-contract";
 import type { PrismaClient } from "@intentic/prisma";
-import { TRIAL_LABEL, TRIAL_MODEL_ID } from "@intentic/sandbox-contract";
+import { TRIAL_LABEL, TRIAL_MODEL_ID } from "@intentic/sandbox-contract/models/agent-catalog";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { Hono } from "hono";
 import type { Logger } from "pino";

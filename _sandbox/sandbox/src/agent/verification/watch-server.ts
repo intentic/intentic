@@ -1,5 +1,7 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import { classifyCommand, matchCommand, noticeCode, type TurnProfile } from "@intentic/sandbox-contract";
+import { classifyCommand, matchCommand } from "@intentic/sandbox-contract/policy/command-classes";
+import { noticeCode } from "@intentic/sandbox-contract/events/sandbox-notice";
+import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { briefDuration } from "@intentic/base/format";
 import { wrapOutsideContent } from "@intentic/base/outside-text";

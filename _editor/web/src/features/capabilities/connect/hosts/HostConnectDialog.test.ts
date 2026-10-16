@@ -2,7 +2,7 @@
 // (the checkout isn't on that machine). Pins that flipping the script-source switch actually rewrites the copied
 // line.
 import "@intentic/testing/dom";
-import type { Device } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 import PrimeVue from "primevue/config";
 import { waitFor } from "@intentic/testing/bun";
 import { computed, createApp, h, ref } from "vue";
@@ -19,10 +19,10 @@ jest.mock(`../../../../client/sandbox/sandboxClient`, () => ({
 }));
 // Taking the hostname is a rename, which is the capabilities composable's; this spies on the call rather than on the wire.
 const renamed = jest.fn(async (_: { id: string; to: string }) => ({}));
-jest.mock(`../useCapabilities`, () => ({ useCapabilities: () => ({ rename: { mutateAsync: renamed } }) }));
+jest.mock(`../../../../models/capabilities/useCapabilities`, () => ({ useCapabilities: () => ({ rename: { mutateAsync: renamed } }) }));
 // The fleet the dialog reads Windows PCs' distros off; empty unless a test connects one.
 const fleet = ref<Device[]>([]);
-jest.mock(`../../../sandbox/devices/useDevices`, () => ({
+jest.mock(`../../../../models/sandbox/devices/useDevices`, () => ({
     useDevices: () => ({ devices: computed(() => fleet.value), readAt: ref(0), error: ref(undefined), isLoading: ref(false), refetch: () => {} }),
 }));
 

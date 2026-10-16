@@ -2,13 +2,14 @@
 // vendor only where the owner named one first. It stays silent through both the account and endpoint reads
 // rather than claiming anything, and for a spent trial, which is connected but out of allowance.
 import "@intentic/testing/dom";
-import { type AgentProvider, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
-import * as providerCatalogOriginal from "./providerCatalog";
-import * as providerAccountsOriginal from "./providerAccounts";
+import * as providerCatalogOriginal from "../../../models/providers/providerCatalog";
+import * as providerAccountsOriginal from "../../../models/providers/providerAccounts";
 
 const connected = ref(false);
 const accountsLoaded = ref(true);
@@ -35,17 +36,17 @@ const startConnect = jest.fn();
 const connectTranslator = jest.fn();
 
 // The two reads `accessKnown` needs, mocked at their source so `accessKnown` itself runs unmocked.
-jest.mock(`./providerAccounts`, () => ({
+jest.mock(`../../../models/providers/providerAccounts`, () => ({
     ...providerAccountsOriginal,
     accountsLoaded,
 }));
-jest.mock(`./providerCatalog`, () => ({
+jest.mock(`../../../models/providers/providerCatalog`, () => ({
     ...providerCatalogOriginal,
     endpointsLoaded,
 }));
 
 // The pane's view the real panel injects from ChatPane; mounted bare here and handed over directly.
-jest.mock(`../run/useChat`, () => ({
+jest.mock(`../../../models/conversations/run/useChat`, () => ({
     useChat: () => ({
         nativeConnectFlow,
         translatorConnectFlow,
@@ -68,7 +69,7 @@ jest.mock(`../run/useChat`, () => ({
         completeTranslator: () => {},
     }),
 }));
-jest.mock(`../panel/useChat-view`, () => ({
+jest.mock(`../../../models/conversations/panel/useChat-view`, () => ({
     usePaneView: () => ({
         connected,
         provider,
@@ -85,10 +86,10 @@ jest.mock(`vue-router`, () => ({
     RouterLink: RouterLinkStub as never,
 }));
 
-const { modelRequest, settleModelPick } = await import("../models/host/hostModelPicker");
-const { endpointProviders, trialStatus } = await import("./providerCatalog");
+const { modelRequest, settleModelPick } = await import("../../../models/conversations/accounts/hostModelPicker");
+const { endpointProviders, trialStatus } = await import("../../../models/providers/providerCatalog");
 // The stored pick itself, unmocked: whether a vendor may be named at all is exactly "did the owner name one".
-const { turnDefaults } = await import("../run/turnDefaults");
+const { turnDefaults } = await import("../../../models/conversations/run/turnDefaults");
 const { default: ChatAccountPanel } = await import("./ChatAccountPanel.vue");
 
 let app: App | undefined;

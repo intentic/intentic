@@ -2,11 +2,12 @@
 import { browserOwnsClick, SearchBar, type Tip, useDevice, useListNavigation } from "@intentic/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { type AgentProvider, capabilitiesOf, PROVIDERS, termsOf } from "@intentic/sandbox-contract";
-import { accessBadge, accessStateFor, providerReady, trialBadge } from "../session/access";
-import { formatReset } from "../session/usageStatus";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { capabilitiesOf, PROVIDERS, termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { accessBadge, accessStateFor, providerReady, trialBadge } from "../../../models/providers/access";
+import { formatReset } from "../../../models/providers/usageStatus";
 import { badgeMeta } from "./catalog";
-import { acpProviders, type CatalogLoadState, endpointProviders, providerModelsState } from "../accounts/providerCatalog";
+import { acpProviders, type CatalogLoadState, endpointProviders, providerModelsState } from "../../../models/providers/providerCatalog";
 import {
     customEntryFor,
     filterEntries,
@@ -19,11 +20,11 @@ import {
     pickerEntries,
     pickerSections,
     promotesFreeAccess,
-} from "./modelPickerState";
-import { loadAllProviderModels, loadProviderModels } from "./useChat-catalog";
-import { refreshConnections } from "../accounts/useChat-accounts";
-import { useSandboxVersion } from "../../sandbox/overview/version/useSandboxVersion";
-import ProviderLogo from "../accounts/ProviderLogo.vue";
+} from "../../../models/conversations/accounts/modelPickerState";
+import { loadAllProviderModels, loadProviderModels } from "../../../models/conversations/accounts/useChat-catalog";
+import { refreshConnections } from "../../../models/conversations/accounts/useChat-accounts";
+import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
+import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { MODELS_PATH, modelsPath } from "../../../lib/routes/modelsPath";

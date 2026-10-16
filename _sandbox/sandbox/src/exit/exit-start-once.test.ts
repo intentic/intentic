@@ -1,4 +1,5 @@
-import type { ExitConfig, IntenticLine } from "@intentic/sandbox-contract";
+import type { ExitConfig } from "@intentic/sandbox-contract/schemas/exit";
+import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import { startExitOnce } from "./exit-links.js";
 
 // A turn's browser setup gives an exit a budget, then moves on; the abandoned start keeps running. A later call for the

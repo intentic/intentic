@@ -1,8 +1,12 @@
-import { type HandoffOffer, RESUME_NOTES, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import type { HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
+import { RESUME_NOTES } from "@intentic/sandbox-contract/events/resume";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import { pino } from "pino";
-import { beginTurn, fleetStoreOver, noPresences } from "../../../testing.js";
+import { beginTurn } from "../../../conversations/actor/conversation-actors.testing.js";
+import { fleetStoreOver } from "../../../conversations/registry/agents-registry.testing.js";
+import { noPresences } from "../../../conversations/land/landed-presence.testing.js";
 import { openConversationsDb } from "../../../store/conversations-db.js";
 import { createFleet } from "../../../conversations/registry/agents-registry.js";
 import type { LandStandings } from "../../../conversations/land/standing.js";

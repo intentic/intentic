@@ -1,6 +1,6 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { ClientError, type OpenCodeClient, type OpenCodeEvent } from "@opencode/client";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync, realYield } from "@intentic/testing/bun";
 import {
@@ -26,7 +26,7 @@ import type { TurnTokens } from "../decorators/vendor-events.js";
 import { EXECUTE_PROMPT, PLAN_PREAMBLE } from "../decorators/plan-mode.js";
 import { planRevision } from "../../agent/prompt/plan-revision.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { createTurnRelay } from "../daemon-tools/turn-relay.js";
 import { createTurnTaint } from "../../guard/turn-taint.js";
 

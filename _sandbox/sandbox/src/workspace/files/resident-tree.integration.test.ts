@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { WorkspaceTree } from "@intentic/sandbox-contract";
+import type { WorkspaceTree } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { createResidentTree, type ResidentTree } from "./resident-tree.js";
 import { walkWorkspaceTree } from "./workspace-tree.js";
 

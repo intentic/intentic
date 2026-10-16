@@ -1,5 +1,5 @@
 import { computed, type Ref, watch } from "vue";
-import type { FleetAgent } from "../../fleet/useAgents-fleet";
+import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import type { ViewEvent } from "./boardView";
 
 // The card a query names by its id (idMatch.ts), as the board treats it: the lanes lead with it (boardLanes), and here

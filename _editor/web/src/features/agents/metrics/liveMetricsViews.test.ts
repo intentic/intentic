@@ -1,6 +1,6 @@
 // jsdom: the subject is what a reader sees, the board's line and a card's, in the English the catalog holds.
 import "@intentic/testing/dom";
-import type { SandboxMetrics } from "@intentic/sandbox-contract";
+import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
 import { formatPercent, setFormatLocale } from "@intentic/ui/format";
 import { isTip, type TooltipValue } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
@@ -8,18 +8,18 @@ import { type App, type Component, computed, createApp, h, nextTick } from "vue"
 
 const opened = jest.fn((_conversationId: string, _title?: string) => undefined);
 // Two of the reading's conversations are on the board, under their titles; the rest are named by their ids.
-jest.mock("../fleet/useAgents", () => ({
+jest.mock("../../../models/fleet/useAgents", () => ({
     useAgents: () => ({
         agentById: (id: string) =>
             id === `a1` ? { title: `Wire the checkout`, status: `running` } : id === `b2` ? { title: `Translate the notes`, status: `running` } : undefined,
     }),
 }));
-jest.mock("../fleet/useAgents-actions", () => ({ openById: opened }));
+jest.mock("../../../models/fleet/useAgents-actions", () => ({ openById: opened }));
 
 const { default: SessionMetrics } = await import("./SessionMetrics.vue");
 const { default: SandboxMetricsSummary } = await import("./SandboxMetricsSummary.vue");
 const { default: SandboxMetricsDetails } = await import("./SandboxMetricsDetails.vue");
-const { LIVE_METRICS_KEY } = await import("./liveMetrics");
+const { LIVE_METRICS_KEY } = await import("../../../models/sandbox/liveMetrics");
 
 const GIB = 2 ** 30;
 const MIB = 2 ** 20;

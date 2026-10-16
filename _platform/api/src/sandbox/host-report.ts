@@ -215,7 +215,7 @@ export const hostReportHttpRoutes = ({ config, prisma }: HostReportDeps) => {
                 continue;
             }
             const live = wakeIsLive(row.wakeRequestedAt, now);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a machine's few sleepers, each its own conditional clear
+            // a machine's few sleepers, each its own conditional clear
             const cleared = await prisma.sandbox.updateMany({ where: { id: row.id, wakeRequestedAt: row.wakeRequestedAt }, data: { wakeRequestedAt: null } });
             if (live && cleared.count > 0) {
                 wake.push(row.tunnelId);

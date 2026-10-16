@@ -80,16 +80,14 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         });
         // A machine mid-replacement refuses a start; the loop below is the same settling wait provisioning does.
         for (let attempt = 0; attempt < Math.ceil(PROBE_DEADLINE_MS / POLL_MS); attempt += 1) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a poll loop is the shape of this wait
+            // a poll loop is the shape of this wait
             const detail = await getMachineDetail(token(), app, machineId);
             if (detail.state === `stopped` || detail.state === `failed`) {
                 return detail.exitCode;
             }
             if (detail.state !== `replacing` && detail.state !== `starting` && detail.state !== `started`) {
-                // oxlint-disable-next-line eslint/no-await-in-loop
                 await startMachine(token(), app, machineId).catch(() => undefined);
             }
-            // oxlint-disable-next-line eslint/no-await-in-loop
             await sleep(POLL_MS);
         }
         throw new Error(`the probe machine never finished within ${PROBE_DEADLINE_MS / MINUTE_MS} minutes`);
@@ -144,10 +142,9 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             snapshotId = taken.id;
             let finished: string | undefined;
             for (let attempt = 0; attempt < Math.ceil(SUITE_TIMEOUT_MS / POLL_MS) && finished !== `created`; attempt += 1) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- a poll loop is the shape of this wait
+                // a poll loop is the shape of this wait
                 finished = (await listVolumeSnapshots(token(), app, volumeId)).find((snapshot) => snapshot.id === snapshotId)?.status;
                 if (finished !== `created`) {
-                    // oxlint-disable-next-line eslint/no-await-in-loop
                     await sleep(POLL_MS);
                 }
             }
@@ -209,7 +206,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             });
 
             for (let attempt = 0; attempt < Math.ceil(SUITE_TIMEOUT_MS / POLL_MS); attempt += 1) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- a poll loop is the shape of this wait
+                // a poll loop is the shape of this wait
                 const detail = await getMachineDetail(token(), app, arrived.machineId);
                 if (detail.state === `stopped` || detail.state === `failed`) {
                     // 0 means the grep found this run's own sentinel on a volume in another region.
@@ -219,7 +216,6 @@ describe.skipIf(!tier.runs)(tier.title, () => {
                     await destroyMachine(token(), app, arrived.machineId, { force: true });
                     return;
                 }
-                // oxlint-disable-next-line eslint/no-await-in-loop
                 await sleep(POLL_MS);
             }
             throw new Error(`the moved machine never finished its check`);

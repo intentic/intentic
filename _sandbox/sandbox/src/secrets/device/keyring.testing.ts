@@ -8,7 +8,7 @@ import type {
     KeyringSyncState,
     KeyringTypeInput,
     SignedKeyringGrant,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/keyring";
 import { newSealKeyPair, newSignKeyPair, type KeyringKeyPair } from "@intentic/sandbox-contract/keyring-seal";
 import type { SandboxKeyringKeys, SandboxKeyringPairs } from "./keyring-keys.js";
 import type { KeyringClient, KeyringDevices } from "./keyring-link.js";

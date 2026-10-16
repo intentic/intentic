@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
-import type { ExtensionSummary, PendingWorkspaceExtension } from "@intentic/sandbox-contract";
+import type { ExtensionSummary, PendingWorkspaceExtension } from "@intentic/sandbox-contract/schemas/extension-updates";
 import { Button, ui, type NoticeModel, Row, RowGroup, SkeletonRows, SkeletonSnapshot, StatusBadge, vSkeletonSource } from "@intentic/ui";
 import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
 import { type ExtensionSection, sectionsOf } from "../../extensions/extensionCategories";

@@ -2,7 +2,7 @@ import { t } from "@intentic/ui/i18n";
 import type { NoticeModel } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useOperations } from "../../workbench/operations/operations";
-import { revokeSyncDevice } from "../sandbox/devices/useDevices";
+import { revokeSyncDevice } from "../../models/sandbox/devices/useDevices";
 import type { DeviceConnection } from "./model/deviceConnections";
 
 // What a connection's row confirms before it acts: removing a connection, renaming one, and cutting off a machine that

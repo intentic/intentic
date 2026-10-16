@@ -1,18 +1,10 @@
-import {
-    changeIsFrom,
-    type GitChange,
-    landedCommitMessage,
-    originsOfChange,
-    type GitDiffSide,
-    type LandedMessage,
-    type LandedMessageDraft,
-    type LandedMessageStep,
-    type RepoChanges,
-    UNATTRIBUTED_ORIGIN,
-} from "@intentic/sandbox-contract";
+import { changeIsFrom, originsOfChange } from "@intentic/sandbox-contract/schemas/git/git-scope";
+import { type GitChange, type GitDiffSide, type RepoChanges, UNATTRIBUTED_ORIGIN } from "@intentic/sandbox-contract/schemas/git/git";
+import { landedCommitMessage } from "@intentic/sandbox-contract/state/landed-commit";
+import type { LandedMessage, LandedMessageDraft, LandedMessageStep } from "@intentic/sandbox-contract/schemas/agents";
 import type { TooltipValue } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
-import { modelLabelFor } from "../../chat/accounts/providerCatalog";
+import { modelLabelFor } from "../../../models/providers/providerCatalog";
 
 // Attribution layer over each repo's `origins` map (path -> agent ids that landed it, newest first); cleared on commit.
 // Only agents are ever named — an unlanded change carries no origin, and absence is the signal, not a "you" badge.

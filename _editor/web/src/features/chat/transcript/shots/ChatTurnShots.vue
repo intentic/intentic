@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from "vue";
 import { useT } from "@intentic/ui/i18n";
-import { stopWaiting, whenNear } from "../../../workspace/home/nearViewport";
+import { stopWaiting, whenNear } from "../../../../models/workspace/home/nearViewport";
 import { type AsideReason, type ChatShot, shotName, sortShots } from "./shots";
 import { shotLook } from "./shotLooks";
-import { picture } from "../../../workspace/home/thumbnails";
+import { picture } from "../../../../models/workspace/home/thumbnails";
 import PictureQuickLook from "../attachments/PictureQuickLook.vue";
 import { type QuickLookBox, aspectOf, quickLookBox } from "../attachments/pictureQuickLook";
 

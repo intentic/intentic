@@ -3,11 +3,13 @@ import { randomBytes } from "node:crypto";
 import { mkdir, open, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { pollFor, within } from "@intentic/base/async";
-import { writeFileAtomic } from "@intentic/base/fs";
+import { readTextIfExists, writeFileAtomic } from "@intentic/base/fs";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { execBounded } from "@intentic/base/process";
+import { parseJsonOr } from "@intentic/base/json";
 import type { Desktop, WindowInfo } from "@intentic/desktop-automation";
-import { commandLineOf, type DeviceScopes } from "@intentic/sandbox-contract";
+import { commandLineOf } from "@intentic/sandbox-contract/policy/device-programs";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { assertPath, assertScope, ScopeError } from "../../policy.js";
 import { assertNoSandboxPower, destructiveClasses, destructiveRefusal, markedAsAgentCommand } from "../shell.js";
 import { inRuns, listArtifacts, sandboxRunsDir } from "./artifacts.js";
@@ -69,14 +71,10 @@ const children = new Map<string, ChildProcess>();
 // One write at a time per registry, so two exits in one tick do not undo each other.
 let writing: Promise<void> = Promise.resolve();
 
+// No record yet, or one torn by a crash: nothing is known to be running.
 const readRuns = async (sandboxUrl: string): Promise<AppRun[]> => {
-    try {
-        const parsed: unknown = JSON.parse(await readFile(registryPath(sandboxUrl), "utf8"));
-        return Array.isArray(parsed) ? (parsed as AppRun[]) : [];
-    } catch {
-        // allow(silent-catch): no record yet, or one torn by a crash: nothing is known to be running
-        return [];
-    }
+    const parsed: unknown = parseJsonOr((await readTextIfExists(registryPath(sandboxUrl))) ?? "", undefined);
+    return Array.isArray(parsed) ? (parsed as AppRun[]) : [];
 };
 
 const updateRuns = async (sandboxUrl: string, change: (runs: AppRun[]) => AppRun[]): Promise<void> => {

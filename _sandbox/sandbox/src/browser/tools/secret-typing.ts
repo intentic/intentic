@@ -1,4 +1,4 @@
-import type { KeyringTypeResult } from "@intentic/sandbox-contract";
+import type { KeyringTypeResult } from "@intentic/sandbox-contract/schemas/keyring";
 import { opt } from "../../opt.js";
 import type { DesktopTypist } from "../../desktop/desktop-secret-typing.js";
 import { keyringNextStep, sandboxHeld } from "../../secrets/device/device-secrets.js";

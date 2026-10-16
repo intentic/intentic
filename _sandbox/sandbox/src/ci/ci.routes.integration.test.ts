@@ -4,11 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/base/git";
-import { type AgentTurn, type ModelPin, NATIVE_PROVIDERS, SandboxSettingsSchema, setupsFromRoleLists } from "@intentic/sandbox-contract";
+import type { AgentTurn, ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import { setupsFromRoleLists } from "@intentic/sandbox-contract/models/model-setups";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
-import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { sqliteTurnJournal } from "../store/journals/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { OrpcContext } from "../app-env.js";
@@ -19,7 +22,8 @@ import type { FetchFn } from "./providers.js";
 import { createRunsCache } from "./runs-cache.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { createDomainEvents } from "../seams/domain-events.js";
-import { drivenBy, memoryFleet } from "../testing.js";
+import { drivenBy } from "../seams/turn-starter.testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 
 /* What Fix on a failed pipeline actually starts: a session nobody has limited, carrying a prepared prompt. */
 

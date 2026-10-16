@@ -1,8 +1,9 @@
+import { parseJsonWith } from "@intentic/base/json";
 import { type SandboxSummary, type User, UserSchema } from "@intentic/api-contract";
-import { MemberRoleSchema } from "@intentic/sandbox-contract";
+import { MemberRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
 import { ref } from "vue";
 import { z } from "zod";
-import { storedValue, storeValue } from "../../lib/browserStorage";
+import { storedValue, storeValue } from "../../app/storage/browserStorage";
 import { normalizeDaemonUrl } from "../../lib/daemonUrl";
 
 // THE SANDBOXES THIS DEVICE REMEMBERS, per account: where each answered when the platform last listed it, so a
@@ -65,13 +66,8 @@ const read = (): DeviceDirectory => {
     if (raw === undefined) {
         return EMPTY;
     }
-    try {
-        const parsed = DirectorySchema.safeParse(JSON.parse(raw));
-        return parsed.success ? parsed.data : EMPTY;
-    } catch {
-        // allow(silent-catch): a value that is not JSON is a directory this device can no longer read, so it starts over.
-        return EMPTY;
-    }
+    // A value that is not JSON is a directory this device can no longer read, so it starts over.
+    return parseJsonWith(raw, DirectorySchema) ?? EMPTY;
 };
 
 // allow(module-state): the device's memory, mirrored so cards and screens react to every write

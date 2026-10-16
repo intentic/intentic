@@ -3,8 +3,8 @@ import { Icon } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import { useWakeListener } from "./useWakeListener";
-import { wakeStatus } from "./wakeStatus";
+import { useWakeListener } from "../../../models/voice/useWakeListener";
+import { wakeStatus } from "../../../models/voice/wakeStatus";
 
 // The wake word's place in the desktop status bar, while listening is switched on for this device: what it listens for,
 // that it is paused and until when, or what stops it. A press pauses it for an hour, brings it back, or opens the Voice

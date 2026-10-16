@@ -1,4 +1,4 @@
-import type { PreparingUpdate } from "@intentic/sandbox-contract";
+import type { PreparingUpdate } from "@intentic/sandbox-contract/schemas/system";
 import { DOWNLOAD_POLL_MS, downloadPercent, downloadPollMs, downloadStep, downloading, mayStart, OFFER_POLL_MS, START_AGAIN_MS } from "./updateDownload";
 
 const NOW = 1_790_000_000_000;

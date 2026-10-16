@@ -8,6 +8,7 @@ import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import { idCatalog } from "../../agent/models/model-discovery.js";
 import { cacheFile } from "../../store/open-document.js";
 import { discoverXaiModels, isChatModel, SEED_XAI_MODELS, xaiEffortsOf } from "./xai-models.js";
+import { parseJsonOr } from "@intentic/base/json";
 
 // What OpenCode holds for a provider's sign-in, read where OpenCode keeps it, without asking its server: whether Grok is
 // connected is asked by health checks and the provider list all day, and a question must not boot a 300 MB runtime, nor
@@ -54,13 +55,9 @@ const credentialsInDatabase = (database: string, integrationID: string): StoredC
             .prepare("SELECT value FROM credential WHERE integration_id = ? ORDER BY active DESC, time_updated DESC")
             .all(integrationID) as { value: string }[];
         return rows.flatMap((row) => {
-            try {
-                const parsed = asCredential(JSON.parse(row.value));
-                return parsed === undefined ? [] : [parsed];
-            } catch {
-                // allow(silent-catch): a row this daemon cannot read is one it cannot use
-                return [];
-            }
+            // A row this daemon cannot read is one it cannot use.
+            const parsed = asCredential(parseJsonOr(row.value, undefined));
+            return parsed === undefined ? [] : [parsed];
         });
     } catch (error) {
         // Still locked after the wait says nothing about what is stored: answering "no credentials" would tell the caller

@@ -1,6 +1,6 @@
 import { sleep } from "@intentic/base/async";
 import { type Browser, BrowserError, renderPage } from "@intentic/browser";
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { assertScope } from "../policy.js";
 
 // The browser, driven by what is on the page rather than where it is on screen: snapshot it, act on an element

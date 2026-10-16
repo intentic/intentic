@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { PAGE_BRIDGE, PAGE_MAX_HEIGHT, type TranscriptRow, type TranscriptTool } from "@intentic/sandbox-contract";
+import { PAGE_BRIDGE } from "@intentic/sandbox-contract/text/pages";
+import { PAGE_MAX_HEIGHT } from "@intentic/sandbox-contract/events/requests";
+import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import Icon from "@intentic/ui/icon";
 import Markdown from "@intentic/ui/markdown-view";
 import { formatDate, formatDateTime } from "@intentic/ui/format";
-import { CHAT_SURFACE } from "@intentic/web/features/chat/tools/chatToolSurface";
-import { dayMarksOf, turnsOf } from "@intentic/web/features/chat/transcript/transcript";
+import { CHAT_SURFACE } from "@intentic/web/models/conversations/tools/chatToolSurface";
+import { dayMarksOf, turnsOf } from "@intentic/web/models/conversations/transcript/transcript";
 import ChatToolCard from "@intentic/web/features/chat/tools/ChatToolCard.vue";
 import { computed, onBeforeUnmount, onMounted, provide, ref } from "vue";
 import { readPayload } from "./payload";

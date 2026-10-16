@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Workflow } from "@intentic/sandbox-contract";
+import type { Workflow } from "@intentic/sandbox-contract/schemas/workflows";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";

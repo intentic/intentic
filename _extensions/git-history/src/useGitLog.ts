@@ -1,4 +1,6 @@
-import type { FileDiff, GitActionResult, GitCommit, GitCommitDiff, GitDiffSide } from "@intentic/sandbox-contract";
+import type { FileDiff } from "@intentic/sandbox-contract/schemas/history";
+import type { GitActionResult, GitCommit, GitCommitDiff } from "@intentic/sandbox-contract/schemas/git/git-history";
+import type { GitDiffSide } from "@intentic/sandbox-contract/schemas/git/git";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";

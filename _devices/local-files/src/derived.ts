@@ -2,13 +2,14 @@ import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { within } from "@intentic/base/async";
-import { errorMessage } from "@intentic/base/errors";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { estimateTokens } from "@intentic/base/format";
 import { neutralizeOutsideText } from "@intentic/base/outside-text";
+import { parseJsonWith } from "@intentic/base/json";
 import { refuse } from "@intentic/contract-serve";
 import type { Format } from "@intentic/fileq/formats";
-import type { DerivedState, WorkspaceDerived } from "@intentic/sandbox-contract";
+import type { DerivedState, WorkspaceDerived } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { z } from "zod";
 import { resolveExisting } from "./paths.js";
 import { Turns } from "./turns.js";
@@ -73,8 +74,8 @@ const sourceOf = async (root: string, path: string): Promise<Source | undefined>
     if (resolved.kind === `refused`) {
         return refuse(resolved.why, 400);
     }
-    // allow(silent-catch): a file gone since it resolved is the undefined that answers "nothing there".
-    const found = resolved.kind === `found` ? await stat(resolved.abs).catch(() => undefined) : undefined;
+    // A file gone since it resolved is the undefined that answers "nothing there".
+    const found = resolved.kind === `found` ? await stat(resolved.abs).catch(undefinedIfMissing) : undefined;
     if (resolved.kind !== `found` || found?.isFile() !== true) {
         return undefined;
     }
@@ -181,15 +182,8 @@ export class DerivedTexts {
     async #cached(key: string): Promise<Cached | undefined> {
         // allow(silent-catch): nothing kept, or something unreadable kept, is a rendering still to make.
         const text = await readFile(join(this.deps.dir, `${key}.json`), `utf8`).catch(() => undefined);
-        if (text === undefined) {
-            return undefined;
-        }
-        try {
-            return CachedSchema.parse(JSON.parse(text));
-        } catch {
-            // allow(silent-catch): a kept rendering that does not parse is one to make again, over it.
-            return undefined;
-        }
+        // A kept rendering that does not parse is one to make again, over it.
+        return text === undefined ? undefined : parseJsonWith(text, CachedSchema);
     }
 
     #rendering(key: string, source: Source, format: Format): Promise<Outcome> {

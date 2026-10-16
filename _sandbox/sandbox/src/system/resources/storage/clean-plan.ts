@@ -1,4 +1,4 @@
-import type { StorageCategoryId } from "@intentic/sandbox-contract";
+import type { StorageCategoryId } from "@intentic/sandbox-contract/schemas/metrics";
 import {
     classifyStoragePath,
     isProtectedStoragePath,

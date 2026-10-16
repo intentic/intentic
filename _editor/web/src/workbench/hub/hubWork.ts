@@ -1,5 +1,5 @@
 import { inject, type InjectionKey, provide, type Ref, shallowRef } from "vue";
-import { activeSandboxId } from "../../lib/activeSandbox";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
 import { t } from "@intentic/ui/i18n";
 
 // WORK IN FLIGHT BEHIND A HUB ROW. A hub mounts one section at a time, so the rebuild started on Environment leaves

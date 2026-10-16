@@ -1,5 +1,5 @@
-import type { MemberRole } from "@intentic/sandbox-contract";
-import { roleAtLeast } from "@intentic/sandbox-contract";
+import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
+import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { computed, type ComputedRef } from "vue";
 import { selfAgents } from "./useMembers";
 import { useSandbox } from "./useSandbox";

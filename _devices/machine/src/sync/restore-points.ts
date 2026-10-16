@@ -2,6 +2,7 @@ import { copyFile, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errnoCode, undefinedIfMissing } from "@intentic/base/errors";
 import { writeFileAtomic } from "@intentic/base/fs";
+import { parseJsonWith } from "@intentic/base/json";
 import { z } from "zod";
 import type { ChangeKind } from "./project/project-files.js";
 import { type Durability, hashFile, installFile, localFile, localTarget, removeFile } from "./project/project-local.js";
@@ -59,14 +60,7 @@ export const writeManifest = async (stateDir: string, key: string, manifest: Man
     await writeFileAtomic(manifestPath(stateDir, key, manifest.id), `${JSON.stringify(manifest, undefined, 2)}\n`, 0o600, { durable: true });
 
 // A manifest as this build reads it, or undefined for one it cannot: torn, or of a shape it has no word for.
-const parsedManifest = (raw: string): Manifest | undefined => {
-    try {
-        return ManifestSchema.safeParse(JSON.parse(raw)).data;
-    } catch {
-        // allow(silent-catch): bytes that are not JSON are a manifest this build cannot read, said by the caller.
-        return undefined;
-    }
-};
+const parsedManifest = (raw: string): Manifest | undefined => parseJsonWith(raw, ManifestSchema);
 
 // The point with this id for this folder, or a sentence saying why there is none. A point of another folder (this sandbox
 // paired with a different one before) is not this folder's to restore.
@@ -98,7 +92,7 @@ export const listPoints = async (stateDir: string, key: string, dir: string): Pr
     const points: PointSummary[] = [];
     for (const id of names.filter((name) => POINT_ID.test(name)).toSorted().toReversed()) {
         // allow(silent-catch): a point of another folder, or one this build cannot read, is not this folder's to offer.
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of small files, read in the order they are listed
+        // a handful of small files, read in the order they are listed
         const manifest = await readManifest(stateDir, key, id, dir).catch(() => undefined);
         if (manifest !== undefined && manifest.entries.length > 0) {
             points.push({ id: manifest.id, createdAt: manifest.createdAt, entries: manifest.entries.length });
@@ -145,11 +139,11 @@ export const pruneRestorePoints = async (stateDir: string, key: string, now: num
     const names = ((await readdir(dir).catch(undefinedIfMissing)) ?? []).filter((name) => POINT_ID.test(name));
     const points: PointOnDisk[] = [];
     for (const id of names) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of small files
+        // a handful of small files
         points.push({ id, holding: await holdingOf(stateDir, key, id) });
     }
     for (const id of expiredPoints(points, now, keep)) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- few, and one at a time keeps a failure to one point
+        // few, and one at a time keeps a failure to one point
         await rm(join(dir, id), { recursive: true, force: true });
     }
 };
@@ -160,7 +154,7 @@ export const createPointDir = async (stateDir: string, key: string, now: number)
     for (let at = now; ; at += 1) {
         const created = new Date(at);
         try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- tries the next millisecond only when this one is taken
+            // tries the next millisecond only when this one is taken
             await mkdir(join(restoreDir(stateDir, key), pointId(created)), { mode: 0o700 });
             return { id: pointId(created), createdAt: created.toISOString() };
         } catch (error) {
@@ -219,7 +213,7 @@ const foldersIn = async (dir: string): Promise<string[]> => {
 export const sealPoint = async (stateDir: string, key: string, id: string, durability: Durability): Promise<void> => {
     const dir = join(restoreDir(stateDir, key), id);
     for (const folder of [...(await foldersIn(join(dir, "files"))), dir, restoreDir(stateDir, key)]) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- deepest first, so each folder is flushed after what it lists
+        // deepest first, so each folder is flushed after what it lists
         await durability.folder(folder);
     }
 };

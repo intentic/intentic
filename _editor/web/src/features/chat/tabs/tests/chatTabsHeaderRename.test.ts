@@ -8,8 +8,8 @@ import { createApp, h, nextTick } from "vue";
 import ChatTabs from "../ChatTabs.vue";
 import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { useChat } from "../../run/useChat";
-import { draftConversation, reveal } from "../../panel/useChat-reveal";
+import { useChat } from "../../../../models/conversations/run/useChat";
+import { draftConversation, reveal } from "../../../../models/conversations/panel/useChat-reveal";
 import { queryClient } from "../../../../lib/queryPersistence";
 import { router } from "../../../../router/index";
 

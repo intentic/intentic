@@ -1,5 +1,5 @@
 import type { errorMessage } from "@intentic/base/errors";
-import type { MintedProvider } from "@intentic/sandbox-contract";
+import type { MintedProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import type { Services } from "../../composition.js";
 import { forgetAccountState, signInIdentity } from "../../agent/providers/accounts/account-identity.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";

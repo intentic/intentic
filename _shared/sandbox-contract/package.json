@@ -347,6 +347,17 @@
                 "@intentic/src": "./src/protocol/doors/webext-links.ts",
                 "default": "./dist/protocol/doors/webext-links.js"
             }
+        },
+        "./*": {
+            "types": "./dist/*.d.ts",
+            "import": {
+                "@intentic/src": "./src/*.ts",
+                "default": "./dist/*.js"
+            },
+            "require": {
+                "@intentic/src": "./src/*.ts",
+                "default": "./dist/*.js"
+            }
         }
     },
     "scripts": {

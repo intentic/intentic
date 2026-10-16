@@ -1,7 +1,7 @@
 // Pins what the picker says before a message goes: which persona speaks, whether it can reach an account, and what "no
 // persona" means on the attended side.
 import "@intentic/testing/dom";
-import type { Persona } from "@intentic/sandbox-contract";
+import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { type App, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
@@ -15,7 +15,7 @@ const connected = ref<string[]>([]);
 const isGuest = ref(false);
 jest.mock(`../../../client/sandbox/useRole`, () => ({ useRole: () => ({ isGuest }) }));
 
-jest.mock(`../../sandbox/personas/usePersonas`, () => ({
+jest.mock(`../../../models/sandbox/personas/usePersonas`, () => ({
     usePersonas: () => ({
         personas,
         connected,

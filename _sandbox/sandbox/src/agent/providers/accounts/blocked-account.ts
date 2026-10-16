@@ -1,4 +1,6 @@
-import { type AgentProvider, providerLabel, roomiestAccount } from "@intentic/sandbox-contract";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
+import { roomiestAccount } from "@intentic/sandbox-contract/models/plan-pools";
 import type { Services } from "../../../composition.js";
 import { FIRST_RECHECK_MS, LONGEST_RECHECK_MS } from "../../../runtimes/claude/claude-seat-check.js";
 import { serviceabilities, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";

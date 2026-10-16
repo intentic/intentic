@@ -1,7 +1,7 @@
 // jsdom, since every claim here is about what the published page renders — including what it does not render.
 // This is the one surface an outsider touches, so "nothing here reaches back into the workspace" is checked
 // against real output, not the source.
-import type { TranscriptRow, SharePayload } from "@intentic/sandbox-contract";
+import type { TranscriptRow, SharePayload } from "@intentic/sandbox-contract/events/transcript";
 import { type App, createApp } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { formatDate } from "@intentic/ui/format";

@@ -1,7 +1,7 @@
 import { open, realpath, stat } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { PUBLIC_DIR } from "@intentic/workspace-ignore";
-import { holdsCredentialToken } from "@intentic/sandbox-contract";
+import { holdsCredentialToken } from "@intentic/sandbox-contract/policy/credential-material";
 import { insideRel } from "@intentic/base/contained";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { escapeHtml } from "@intentic/base/format";

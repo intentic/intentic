@@ -76,7 +76,7 @@ export const adoptFolder = async ({ localDir, sandbox, ignores, log, now = new D
     for (const [path, mine] of sized.listing) {
         const counterpart = theirs.get(path);
         if (mine !== "other" && counterpart !== undefined && counterpart !== "other" && counterpart.size === mine.size) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one file at a time keeps a large folder's read bounded
+            // one file at a time keeps a large folder's read bounded
             // A file gone since the listing reads as differing; one that cannot be read stops the comparison.
             const hash = await hashFile(join(localDir, path)).catch(undefinedIfMissing);
             here.set(path, hash === undefined ? "other" : { size: mine.size, hash });
@@ -91,7 +91,7 @@ export const adoptFolder = async ({ localDir, sandbox, ignores, log, now = new D
     }
     const aside = asideFolder(localDir, now);
     for (const path of moving) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- sequential moves keep the order a log can follow
+        // sequential moves keep the order a log can follow
         await moveFile(join(localDir, path), join(aside, path));
     }
     await pruneEmptied(localDir, moving);
@@ -127,12 +127,12 @@ const pruneEmptied = async (root: string, moved: readonly string[]): Promise<voi
     }
     for (const folder of [...folders].toSorted((a, b) => b.split("/").length - a.split("/").length)) {
         const full = join(root, folder);
-        // oxlint-disable-next-line eslint/no-await-in-loop -- deepest first, so a parent is read after its children went
+        // deepest first, so a parent is read after its children went
         const left = await readdir(full).catch(undefinedIfMissing);
         if (left !== undefined && left.length === 0) {
             // A folder already gone, or one something was written into since it was read empty, is left as it is; any
             // other failure to remove it is the caller's to hear.
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            // as above
             await rmdir(full).catch((failure) => (errnoCode(failure) === "ENOTEMPTY" ? undefined : undefinedIfMissing(failure)));
         }
     }

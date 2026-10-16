@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { TRIM_KEEPS_RESULTS } from "@intentic/sandbox-contract";
+import { TRIM_KEEPS_RESULTS } from "@intentic/sandbox-contract/schemas/providers/handoff";
 
 /* A COPY OF A CLAUDE CODE SESSION, TO RESUME INSTEAD OF THE ORIGINAL.
 

@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
-import { readFile, rename, rm } from "node:fs/promises";
+import { rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
-import { writeFileAtomic } from "@intentic/base/fs";
+import { readJsonIfExists, writeFileAtomic } from "@intentic/base/fs";
 import type { Log } from "@intentic/local-agent";
-import { DEV_VERSION } from "@intentic/sandbox-contract";
+import { DEV_VERSION } from "@intentic/sandbox-contract/state/versions";
 import { z } from "zod";
 import { baseDir } from "./config.js";
 import { readMachineConfig, updateMachineConfig } from "./environments/machine.js";
@@ -52,20 +52,9 @@ export const withCleanExit = (ledger: StartLedger, pid: number): StartLedger => 
 export const crashLooping = (ledger: StartLedger, healthy: string | undefined, now: number): boolean =>
     ledger.version !== healthy && ledger.starts.filter((start) => start.clean !== true && now - start.at < HEALTHY_AFTER_MS).length >= CRASH_LOOP_STARTS;
 
-const readJson = async <T>(path: string, schema: z.ZodType<T>): Promise<T | undefined> => {
-    // allow(silent-catch): no file is no history, and a torn one is treated the same: it starts the count over
-    const raw = await readFile(path, "utf8").catch(() => undefined);
-    try {
-        const parsed = raw === undefined ? undefined : schema.safeParse(JSON.parse(raw));
-        return parsed?.success === true ? parsed.data : undefined;
-    } catch {
-        // allow(silent-catch): bytes that are not JSON are a torn write, the same as no file
-        return undefined;
-    }
-};
-
-const readLedger = async (): Promise<StartLedger | undefined> => await readJson(startsPath, StartLedgerSchema);
-const readHealthyVersion = async (): Promise<string | undefined> => (await readJson(healthyPath, HealthySchema))?.version;
+// No file is no history, and a torn one is treated the same: it starts the count over.
+const readLedger = async (): Promise<StartLedger | undefined> => await readJsonIfExists(startsPath, StartLedgerSchema);
+const readHealthyVersion = async (): Promise<string | undefined> => (await readJsonIfExists(healthyPath, HealthySchema))?.version;
 const writeLedger = async (ledger: StartLedger): Promise<void> => await writeFileAtomic(startsPath, JSON.stringify(ledger));
 
 // The agent `pid` was stopped on purpose, recorded by whoever stopped it: on Windows a stop ends the process without

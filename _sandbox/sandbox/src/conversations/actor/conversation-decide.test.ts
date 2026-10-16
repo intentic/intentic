@@ -1,7 +1,8 @@
 import { STATE_DIR } from "@intentic/constants";
-import type { AgentEvent, AgentJob, AgentWatch, TurnProof, TurnReach } from "@intentic/sandbox-contract";
-import { isolatedAgent } from "../../testing.js";
-import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentJob, AgentWatch, TurnProof, TurnReach } from "@intentic/sandbox-contract/schemas/agents";
+import { isolatedAgent } from "../registry/agents-store.testing.js";
+import type { JournalledTurn } from "../../store/journals/turn-journal.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
 import { ASK_MAX_CHARS, type BeginTurn, type ConversationEffect, type ConversationEvent, decide, type SettleFlush } from "./conversation-decide.js";
 import { hold, joined, NO_QUEUE, released, rescheduled, scheduled } from "./conversation-queue.js";

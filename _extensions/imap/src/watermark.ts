@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { writeFileAtomic } from "@intentic/base/fs";
+import { errorMessage } from "@intentic/base/errors";
 
 // Per-account resume state: highest UID dispatched for one capability's watched mailbox, persisted so mail from
 // downtime is recovered on reconnect. uidValidity is a string because imapflow reports it as a bigint, which JSON can't
@@ -31,7 +32,7 @@ export const readWatermark = async (path: string, onUnreadable: (detail: string)
     try {
         parsed = JSON.parse(raw);
     } catch (error) {
-        onUnreadable(`not JSON: ${error instanceof Error ? error.message : String(error)}`);
+        onUnreadable(`not JSON: ${errorMessage(error)}`);
         return undefined;
     }
     if (typeof parsed !== "object" || parsed === null) {

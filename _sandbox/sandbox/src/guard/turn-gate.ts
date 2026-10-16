@@ -1,4 +1,5 @@
-import { type AgentCapabilities, type CommandJudgeMode, DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
+import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import { type CommandJudgeMode, DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
 import { type CommandGuard, type CommandGuardOptions, createCommandGuard } from "./command-guard.js";
 import { clearTurnTaint, createTurnTaint, publishTurnTaint, type TurnTaint } from "./turn-taint.js";
 

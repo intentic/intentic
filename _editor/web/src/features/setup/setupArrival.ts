@@ -1,5 +1,5 @@
 import type { SandboxSummary } from "@intentic/api-contract";
-import { projectDirNameFor } from "@intentic/sandbox-contract";
+import { projectDirNameFor } from "@intentic/sandbox-contract/ids/project-dir";
 import type { LocationQueryValue } from "vue-router";
 
 // Decides, in one place, what arriving on /setup does by itself: the desktop app hands the setup code to itself;

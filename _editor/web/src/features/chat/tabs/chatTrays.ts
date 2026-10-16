@@ -1,21 +1,21 @@
-import type { SubagentSession } from "@intentic/sandbox-contract";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
 import { computed, type Ref } from "vue";
-import type { ChildRowsBoard } from "../../agents/board/cards/childRows";
+import type { ChildRowsBoard } from "../../../models/fleet/board/childRows";
 import type { IdMatch } from "../../agents/board/idMatch";
-import { useBoardTrays } from "../../agents/board/view/boardTrays";
-import { withoutSteps } from "../../agents/board/view/boardScope";
-import { type ChildFold, foldChildren, steadyFold } from "../../agents/board/view/childFold";
-import { useSubagentRoster } from "../../agents/fleet/subagentRoster";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { agentSeed } from "../../agents/fleet/useAgents-actions";
-import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
-import { runIdsInLedger, useWorkflowRuns } from "../../agents/fleet/useWorkflowRuns";
+import { useBoardTrays } from "../../../models/fleet/board/boardTrays";
+import { withoutSteps } from "../../../models/fleet/board/boardScope";
+import { type ChildFold, foldChildren, steadyFold } from "../../../models/fleet/board/childFold";
+import { useSubagentRoster } from "../../../models/fleet/subagentRoster";
+import { useAgents } from "../../../models/fleet/useAgents";
+import { agentSeed } from "../../../models/fleet/useAgents-actions";
+import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
+import { runIdsInLedger, useWorkflowRuns } from "../../../models/fleet/useWorkflowRuns";
 import { navigateInApp } from "../../../workbench/window/mainWindow";
 import { useRouter } from "vue-router";
-import { agentTabOf } from "../panel/useChat-reveal";
-import { subagentOnScreen } from "../panel/subagent/subagentView";
-import { summonChat } from "../run/summon";
-import { openLinkedSubagent } from "../../agents/fleet/linkedSubagent";
+import { agentTabOf } from "../../../models/conversations/panel/useChat-reveal";
+import { subagentOnScreen } from "../../../models/conversations/panel/subagentView";
+import { summonChat } from "../../../models/conversations/run/summon";
+import { openLinkedSubagent } from "../../../models/fleet/linkedSubagent";
 
 // THE BOARD'S TRAYS, UNDER THE CHAT LIST'S CARDS. Every agent a chat's conversation started rides under that chat's card
 // in the list, as it does under the card on the board: the conversations it spawned and the subagents its runtime ran

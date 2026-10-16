@@ -7,8 +7,8 @@ import {
     DEVICE_FEATURE_PROGRAMS,
     DEVICE_FEATURE_PROJECT_DELIVERY,
     type DeviceFacts,
-    type DeviceScopes,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/hosts";
+import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { type LinkReading, readLinkStates, unreachableIn } from "../config.js";
 import { rootsOf, rootsText } from "../policy.js";
 import { shellFor } from "./shell.js";

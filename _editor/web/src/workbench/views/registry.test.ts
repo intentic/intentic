@@ -1,7 +1,7 @@
 import type { CapabilityFacts, Disposable, IntenticApi, ViewBadge, ViewRegistration } from "@intentic/extension-api";
 import * as apps from "@intentic/ext-repo-apps";
 import * as preview from "@intentic/ext-preview";
-import type { PanelSummary } from "@intentic/sandbox-contract";
+import type { PanelSummary } from "@intentic/sandbox-contract/schemas/panels";
 import { ref } from "vue";
 import { setProjectScope } from "../../app/projectScope";
 import { useAudience } from "../../app/useAudience";

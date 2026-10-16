@@ -6,10 +6,9 @@ import {
     type OrgSectionMode,
     OrgSectionModeSchema,
     orgPersonPreimage,
-    PRESET_GROUPS,
-    PresetGroupSchema,
     orgSectionMode,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/organisation";
+import { PRESET_GROUPS, PresetGroupSchema } from "@intentic/sandbox-contract/schemas/compliance";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Prisma, PrismaClient } from "@intentic/prisma";
 import { ORPCError } from "@orpc/server";

@@ -10,11 +10,54 @@
     // declared so the edge is stated in the manifest, not so anything imports the package by name.
     // `@stryker-mutator/command-runner` is core's built-in runner (stryker.conf.mjs `testRunner: "command"`), not a package;
     // core itself is run by the test-strength chore (sandbox-contract/src/chores/probes.ts) through `pnpm exec`, which no script names.
-    "ignoreDependencies": ["tslib", "@intentic/entry-css", "@stryker-mutator/command-runner", "@stryker-mutator/core"],
-    "ignoreBinaries": ["docker", "docker compose", "ssh", "mutagen", "cloudflared", "rg", "tmux", "psql", "bun"],
+    // `@commitlint/cli` is run by path from .githooks/commit-msg (node_modules/.bin/commitlint). `gpt-tokenizer` is
+    // optional: _tools/nav/lib/tokens.mjs loads it only under NAV_TOKENIZER=real and falls back to its estimator.
+    "ignoreDependencies": ["gpt-tokenizer", "tslib", "@intentic/entry-css", "@stryker-mutator/command-runner", "@stryker-mutator/core", "@commitlint/cli"],
+    // `check` is `bun check`'s subcommand, which knip reads as a binary of its own; the rest are system tools.
+    "ignoreBinaries": [
+        "docker",
+        "docker compose",
+        "ssh",
+        "mutagen",
+        "cloudflared",
+        "rg",
+        "tmux",
+        "psql",
+        "bun",
+        "check",
+        "unshare",
+        "bwrap",
+        "ssh-keygen",
+        "openssl",
+        "script",
+        "pdftoppm",
+        "ffmpeg",
+        "ffprobe",
+        "openbox",
+        "xdotool",
+        "xmessage",
+        "tor",
+        "openvpn",
+        "openconnect",
+        "valgrind",
+        "intentic",
+        "ocr",
+        "choom",
+        "zstdcat",
+        // `pnpm exec tauri` with the desktop app as cwd (release-checksums.mjs), whose own @tauri-apps/cli provides it.
+        "tauri"
+    ],
     "workspaces": {
         ".": {
-            "entry": ["_tools/scripts/**/*.sh", "_tools/checks/*.mjs", "_tools/scripts/**/*.mjs"],
+            "entry": [
+                "_tools/scripts/**/*.sh",
+                "_tools/checks/*.mjs",
+                "_tools/scripts/**/*.mjs",
+                "_tools/nav/**/*.mjs",
+                "_tools/oxlint/*.mjs",
+                "_tools/turbo-cache/*.mjs",
+                ".githooks/*"
+            ],
             "ignore": ["desired-state/**", "intent/**", "_tools/extension-example/seed/**", "_editor/ios-app/**", "_editor/android-app/**"]
         },
         "_editor/web": {
@@ -23,27 +66,42 @@
                 "index.html",
                 "vite.config.ts",
                 "bun.setup.ts",
-                "src/**/*.test.ts",
+                "src/**/*.test.{ts,mts,mjs}",
                 "scripts/*.mjs",
                 "src/app/environments/environment.local.ts",
                 "src/app/environments/environment.deployment.ts"
             ],
-            "ignore": ["public/**"]
+            "ignore": ["public/**"],
+            // Its config reads the localhost cert as it loads, so knip cannot load it; the entries above stand in for it.
+            "vite": false,
+            // Declared for @intentic/ui, which this app bundles from source and which imports it.
+            "ignoreDependencies": ["vue-i18n"]
         },
         "_site/demo": {
             "entry": ["src/main.ts", "index.html", "vite.config.ts", "scripts/*.mjs"],
             "ignore": ["vendor/**"]
         },
         "_editor/desktop-app": {
-            "entry": ["src/main.ts", "index.html", "vite.config.ts", "scripts/*.sh", "src/**/*.test.ts"]
+            "entry": [
+                "src/main.ts",
+                "index.html",
+                "vite.config.ts",
+                "scripts/*.sh",
+                "scripts/*.mjs",
+                "src/**/*.test.{ts,mts,mjs}",
+                "local/**/*.test.ts",
+                ".preview-setup/main.ts"
+            ],
+            // Orders the local-files build before the app's, which bundles its binary.
+            "ignoreDependencies": ["@intentic/local-files"]
         },
         // A page, not a library: the suite and the preload that resolves the app's components for it.
         "_editor/share-view": {
-            "entry": ["src/**/*.test.ts", "bun.setup.ts"]
+            "entry": ["src/**/*.test.{ts,mts,mjs}", "bun.setup.ts"]
         },
         "_platform/api": {
             // browser-api.ts: the api as the sign-in tier boots it (_tools/e2e/signin), run by path with bun.
-            "entry": ["src/**/*.test.ts", "src/e2e/browser-api.ts"]
+            "entry": ["src/**/*.test.{ts,mts,mjs}", "src/e2e/browser-api.ts"]
         },
         "_sandbox/sandbox": {
             "entry": [
@@ -52,101 +110,168 @@
                 "src/**/*-worker.ts",
                 "src/extensions/backend/backend-host-main.ts",
                 "src/runtimes/cursor/cursor-agent-runtime.ts",
-                "src/**/*.test.ts",
+                "src/**/*.test.{ts,mts,mjs}",
                 "src/fences/*.ts",
+                // Stubs the invariant check reads as text, generators run by hand, and hooks Claude Code runs by path.
+                "src/**/invariant.ts",
+                "claude-policy/plugins/*/hooks/*.mjs",
                 "bin/*.mjs",
                 "bin/*.test.mjs",
                 "scripts/*.{sh,mjs}"
             ],
-            "ignoreDependencies": ["@intentic/webq", "vitest"]
+            // @playwright/mcp is found with require.resolve (browser-tools.ts); graph and sdk are linked into /work/intent
+            // by path (ensure-intent.ts); the image runs iq from node_modules (Dockerfile); pino-pretty is a transport loaded
+            // by name (logger.ts).
+            "ignoreDependencies": [
+                "@intentic/webq",
+                "vitest",
+                "@playwright/mcp",
+                "@intentic/graph",
+                "@intentic/sdk",
+                "@intentic/iq",
+                "pino-pretty"
+            ]
         },
         "_search/iq": {
-            "entry": ["src/cli.ts", "plugin/**", "src/**/*.test.ts"]
+            "entry": ["src/cli.ts", "plugin/**", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_sandbox/webq": {
-            "entry": ["src/cli.ts", "plugin/**", "src/**/*.test.ts"]
+            "entry": ["src/cli.ts", "plugin/**", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_sandbox/fileq": {
-            "entry": ["src/cli.ts", "src/**/*.test.ts"]
+            "entry": ["src/cli.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_deploy/cli": {
-            "entry": ["src/cli.ts", "src/demo.ts", "src/**/*.test.ts", "doh-lookup.mjs"]
+            "entry": ["src/cli.ts", "src/demo.ts", "src/**/*.test.{ts,mts,mjs}", "doh-lookup.mjs"],
+            // dind-host is read from node_modules as a docker build context (demo.ts); tsx is spawned from node_modules/.bin.
+            "ignoreDependencies": ["@intentic/dind-host", "tsx"]
         },
         "_devices/machine": {
-            "entry": ["src/cli.ts", "src/**/*.test.ts"]
+            "entry": ["src/cli.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_sandbox/gate-action": {
-            "entry": ["src/main.ts", "src/**/*.test.ts"]
+            "entry": ["src/main.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_search/lsp": {
-            "entry": ["src/cli.ts", "src/**/*.test.ts"]
+            "entry": ["src/cli.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_site/site": {
-            "entry": ["astro.config.mjs", "src/pages/**/*.{astro,ts}", "worker.ts"],
+            "entry": ["astro.config.mjs", "src/pages/**/*.{astro,ts}", "worker.ts", "scripts/*.mjs"],
+            // Orders the demo's build before the site's, which serves it.
+            "ignoreDependencies": ["@intentic/demo"],
             "ignore": ["public/**"]
         },
         "_extensions/discord": {
-            "entry": ["src/gateway.ts", "src/**/*.test.ts"]
+            "entry": ["src/gateway.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/e-urzad": {
-            "entry": ["src/server/server.ts", "src/cli.ts", "src/**/*.test.ts"]
+            "entry": ["src/server/server.ts", "src/cli.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/imap": {
-            "entry": ["src/cli.ts", "src/gateway.ts", "src/**/*.test.ts"]
+            "entry": ["src/cli.ts", "src/gateway.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/slack": {
-            "entry": ["src/gateway.ts", "src/**/*.test.ts"]
+            "entry": ["src/gateway.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/telegram": {
-            "entry": ["src/gateway.ts", "src/**/*.test.ts"]
+            "entry": ["src/gateway.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/whatsapp": {
-            "entry": ["src/gateway.ts", "src/**/*.test.ts"]
+            "entry": ["src/gateway.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/microsoft-365": {
-            "entry": ["src/cli.ts", "src/gateway.ts", "src/**/*.test.ts"]
+            "entry": ["src/cli.ts", "src/gateway.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/google-workspace": {
-            "entry": ["src/cli.ts", "src/gateway.ts", "src/**/*.test.ts"]
+            "entry": ["src/cli.ts", "src/gateway.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/prawo": {
-            "entry": ["src/main.ts", "src/**/*.test.ts"]
+            "entry": ["src/main.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/deployments": {
-            "entry": ["src/server/server.ts", "src/**/*.test.ts"]
+            "entry": ["src/server/server.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/knowledge": {
-            "entry": ["src/server/server.ts", "src/cli/kb.ts", "src/cli/obsidian.ts", "src/**/*.test.ts"]
+            "entry": ["src/server/server.ts", "src/cli/kb.ts", "src/cli/obsidian.ts", "src/**/*.test.{ts,mts,mjs}"]
+        },
+        // The editor is a page of its own built by editor/vite.config.ts, and the harness is run by path.
+        "_extensions/onlyoffice": {
+            "entry": [
+                "src/index.ts",
+                "src/**/*.test.{ts,mts,mjs}",
+                "editor/src/main.ts",
+                "editor/src/**/*.test.ts",
+                "editor/src/guards/x2t-worker.ts",
+                "scripts/*.ts",
+                "editor/vite.config.ts"
+            ]
         },
         "_extensions/*": {
-            "entry": ["src/index.ts", "src/**/*.test.ts"]
+            "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_search/iq-engine": {
-            "entry": ["src/index.ts", "scripts/*.mjs", "src/**/*.test.ts"]
+            "entry": ["src/index.ts", "scripts/*.mjs", "src/**/*.test.{ts,mts,mjs}"]
         },
         // The browser extension has no library entry point, so the `_devices/*` default (src/index.ts) would
         // read every file in it as unreachable. Its three real roots — the service worker, the content script,
         // the popup — are already found in its build script, so what is left to declare is the suite.
         "_devices/webext": {
-            "entry": ["src/**/*.test.ts"]
+            "entry": ["src/**/*.test.{ts,mts,mjs}"]
+        },
+        "_devices/local-files": {
+            "entry": ["src/index.ts", "src/cli.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_devices/*": {
-            "entry": ["src/index.ts", "src/**/*.test.ts"]
+            "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_deploy/examples": {
             "entry": ["*.config.ts"]
         },
         "_deploy/*": {
-            "entry": ["src/index.ts", "src/**/*.test.ts"]
+            "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"]
+        },
+        // The grammars are imported dynamically by @intentic/code-read's table, which this package's highlighter loads.
+        "_editor/ui": {
+            "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"],
+            "ignoreDependencies": ["@shikijs/langs"]
         },
         "_editor/*": {
-            "entry": ["src/index.ts", "src/**/*.test.ts"]
+            "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"]
+        },
+        // The client and its adapter are imported from the ignored generated/ client.
+        "_platform/prisma": {
+            "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"],
+            "ignoreDependencies": ["@prisma/client", "@prisma/adapter-pg"]
         },
         "_platform/*": {
-            "entry": ["src/index.ts", "src/**/*.test.ts"]
+            "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"]
+        },
+        // Hooks run by path from hooks/hooks.json, and a suite outside src/.
+        "_sandbox/claude-plugin": {
+            "entry": ["src/{emit,prompt-submit}.ts", "src/**/*.test.{ts,mts,mjs}", "tests/**", "build.mjs"],
+            // emit.ts copies files out of @intentic/iq by subpath (packageFile), which no import names; `claude-code/testing`
+            // is provided by `claude plugin test`, which runs tests/ (test-mod.mjs).
+            "ignoreDependencies": ["@intentic/iq", "claude-code"]
+        },
+        // OCR runs in a worker thread loaded by path.
+        "_sandbox/ocr": {
+            "entry": ["src/index.ts", "src/**/*-worker.ts", "src/**/*.test.{ts,mts,mjs}"]
+        },
+        // The name lists' generators, run by hand.
+        // No suite imports @intentic/testing by name: the package reaches it through its `suites` test bin and the
+        // `@intentic/testing/globals` types in tsconfig.test.json, neither of which knip reads.
+        "_sandbox/privacy-detect": {
+            "entry": ["src/index.ts", "src/data/*.mjs", "src/**/*.test.{ts,mts,mjs}"],
+            "ignoreDependencies": ["@intentic/testing"]
+        },
+        // Dictation and speaking each run in a child process forked by path; the image build runs the model fetcher.
+        // tsx is the fork's loader from source, found with require.resolve (speech-engine.ts, voice-process.ts).
+        "_sandbox/speech": {
+            "entry": ["src/index.ts", "src/**/*-worker.ts", "scripts/*.mjs", "src/**/*.test.{ts,mts,mjs}"],
+            "ignoreDependencies": ["tsx"]
         },
         "_sandbox/*": {
-            "entry": ["src/index.ts", "src/**/*.test.ts"]
+            "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         // Stylesheets, not modules: no `src/`, no TypeScript. Empty rather than `["entry.css", "house.css"]` because knip's
         // own defaults already find the file — what has to be overridden is the `_shared/*` default below, which
@@ -154,23 +279,36 @@
         "_shared/entry-css": {
             "entry": []
         },
+        // Its scripts are run by hand or by `lock`: the codemod and the aggregate writer, with their suites.
+        "_shared/sandbox-contract": {
+            "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}", "scripts/*.mjs"]
+        },
         "_shared/*": {
-            "entry": ["src/index.ts", "src/**/*.test.ts"]
+            "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_search/*": {
-            "entry": ["src/index.ts", "src/**/*.test.ts"]
+            "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"]
+        },
+        // Its tsconfig.test.json extends the shared base.
+        "_site/astro-integrations": {
+            "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"],
+            "ignoreDependencies": ["@intentic/tsconfig"]
         },
         "_site/*": {
-            "entry": ["src/index.ts", "src/**/*.test.ts"]
+            "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_tools/testing": {
-            "entry": ["src/index.ts", "src/**/*.test.ts"],
+            "entry": ["src/index.ts", "src/**/*.test.{ts,mts,mjs}"],
             // jsdom is reached through require (src/jsdom.ts), and `suites` is this package's own bin.
             "ignoreDependencies": ["jsdom"],
             "ignoreBinaries": ["suites"]
         },
+        // The echo worker is loaded by path from the worker suite.
+        "_tools/base": {
+            "entry": ["src/{index,cli,main}.ts", "src/workers/*.testing.ts", "src/**/*.test.{ts,mts,mjs}"]
+        },
         "_tools/*": {
-            "entry": ["src/{index,cli,main}.ts", "src/**/*.test.ts"]
+            "entry": ["src/{index,cli,main}.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         // The probe is spawned under Valgrind by path and each scenario is imported by its file name, so neither is
         // reachable through an import.
@@ -180,8 +318,12 @@
                 "src/browser/perf-browser.ts",
                 "src/instr/counted-process.ts",
                 "src/instr/scenarios/*.ts",
-                "src/**/*.test.ts"
-            ]
+                "src/{chat,mobile}/perf-*.ts",
+                "src/*/*-scenarios.ts",
+                "src/**/*.test.{ts,mts,mjs}"
+            ],
+            // Resolved from the web app's own manifest (mobile/wire.ts), not this package's.
+            "ignoreDependencies": ["posthog-js"]
         },
         "_search/iq-bench": {
             "entry": ["src/**/*.ts"]
@@ -195,8 +337,17 @@
                 "promo/*.{mjs,js}",
                 "shots/*.mts",
                 "signin/*.spec.ts",
-                "signin/boot.ts"
-            ]
+                "signin/boot.ts",
+                "accessibility/*.mts",
+                "local-face/*.ts",
+                "compat/compat-boot.ts",
+                "window-sync/fixture.js",
+                "window-sync/*.playwright.config.ts",
+                // The window-sync page is served by its own vite config from _editor/web, which no import reaches.
+                "window-sync/vite.config.ts",
+                "window-sync/index.html"
+            ],
+            "playwright": { "config": ["playwright.config.ts", "*/*.playwright.config.ts"] }
         }
     }
 }

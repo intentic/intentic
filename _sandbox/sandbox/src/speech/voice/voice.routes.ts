@@ -8,18 +8,17 @@ import {
     VoiceIdSchema,
     type VoiceClientMessage,
     type VoiceServerMessage,
-} from "@intentic/sandbox-contract";
-import { Hono } from "hono";
+} from "@intentic/sandbox-contract/schemas/voice";
 import type { WSContext } from "hono/ws";
-import type { AppEnv } from "../../app-env.js";
 import { redeemTicket } from "../../auth/tokens/ws-tickets.js";
 import type { Services } from "../../composition.js";
 import { readBoundedBytes } from "../../http/bounded-body.js";
-import { rawRouteServer } from "../../http/raw-route-server.js";
+import { defineRawRoutes, type RawRouteTable } from "../../http/raw-route-server.js";
 import { opt } from "../../opt.js";
-import type { VoiceChunk } from "./cloud-voices.js";
-import { paced, pcm16, resampled } from "./voice-audio.js";
-import { type SpeakRequest, VoiceUnprovisionedError } from "./voice.js";
+import type { VoiceChunk } from "@intentic/speech/voice/cloud-voices";
+import { paced, pcm16, resampled } from "@intentic/speech/voice/voice-audio";
+import { type SpeakRequest, VoiceUnprovisionedError } from "@intentic/speech/voice/voice";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Text in, speech out, off oRPC since audio doesn't fit its JSON contract (schemas/voice.ts).
 // - `GET /speech/voices` lists the voices to choose from, and what speaks a language nobody chose for.
@@ -32,13 +31,10 @@ export type VoiceRoutesDeps = Pick<Services, "voice">;
 // A request's text, counted as it arrives like dictation's audio: a chunked body declares no length.
 const MAX_BODY_BYTES = MAX_SPOKEN_TEXT * 4;
 
-export const createVoiceRoute = (services: VoiceRoutesDeps): Hono<AppEnv> => {
-    const app = new Hono<AppEnv>();
-    const serve = rawRouteServer(app);
+export const createVoiceRoute = (services: VoiceRoutesDeps): RawRouteTable<"GET /speech/voices" | "POST /speech/say"> => ({
+    "GET /speech/voices": async (c) => c.json(await services.voice.voices()),
 
-    serve("GET /speech/voices", async (c) => c.json(await services.voice.voices()));
-
-    serve("POST /speech/say", async (c) => {
+    "POST /speech/say": async (c) => {
         const body = await readBoundedBytes(c.req.raw, MAX_BODY_BYTES);
         if (body.kind !== "ok") {
             return c.json({ error: "text too long" }, 413);
@@ -87,10 +83,8 @@ export const createVoiceRoute = (services: VoiceRoutesDeps): Hono<AppEnv> => {
         return new Response(stream, {
             headers: { "content-type": `audio/L16; rate=${rate}; channels=1`, "x-sample-rate": String(rate), "cache-control": "no-store" },
         });
-    });
-
-    return app;
-};
+    },
+});
 
 export type VoiceStreamDeps = Pick<Services, "voice" | "auth" | "wsTickets" | "logger">;
 
@@ -183,11 +177,9 @@ export const createVoiceStreamRoute = (services: VoiceStreamDeps) =>
                 if (closed || binaryFrame(event.data) !== undefined) {
                     return;
                 }
-                let parsed: unknown;
-                try {
-                    parsed = JSON.parse(String(event.data));
-                } catch {
-                    // allow(silent-catch): a text frame that is not JSON is no message of the protocol, dropped like one the schema refuses below
+                const parsed = parseJsonOr(String(event.data), undefined);
+                if (parsed === undefined) {
+                    // A text frame that is not JSON is no message of the protocol, dropped like one the schema refuses below.
                     return;
                 }
                 const message = VoiceClientMessageSchema.safeParse(parsed);
@@ -205,3 +197,9 @@ export const createVoiceStreamRoute = (services: VoiceStreamDeps) =>
             onError: cleanup,
         };
     });
+
+// Speaking a reply aloud: the voices to choose from, the HTTP door Discord's calls read, and the editor's player.
+export const voiceRawRoutes = defineRawRoutes((services: VoiceRoutesDeps & VoiceStreamDeps) => ({
+    ...createVoiceRoute(services),
+    "GET /speech/say": createVoiceStreamRoute(services),
+}));

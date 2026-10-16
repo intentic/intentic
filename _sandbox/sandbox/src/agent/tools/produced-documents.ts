@@ -2,15 +2,10 @@ import { within } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { stat } from "node:fs/promises";
 import { isAbsolute, join, posix, relative } from "node:path";
-import {
-    type AgentEvent,
-    DELIVERABLE_EXTENSIONS,
-    deliverableKindOf,
-    isLockedWorkspacePath,
-    type ToolCallContent,
-    type ToolCallLocation,
-    type ToolCallStatus,
-} from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { DELIVERABLE_EXTENSIONS, deliverableKindOf } from "@intentic/sandbox-contract/text/documents";
+import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
+import type { ToolCallContent, ToolCallLocation, ToolCallStatus } from "@intentic/sandbox-contract/events/requests";
 
 // The documents a command wrote that a person would open (the deck a python script built, the PDF a converter printed),
 // named on the command's own card as `locations` once it ends. An edit tool's card already names its file; a command's

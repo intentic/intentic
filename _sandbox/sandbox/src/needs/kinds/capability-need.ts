@@ -1,5 +1,7 @@
 import { type CapabilityCatalogEntry, instancesOf } from "@intentic/capability-catalog";
-import type { Capability, CapabilityNeed, CapabilityStatus, CredentialGate, Need, NeedAsk, NeedSubject } from "@intentic/sandbox-contract";
+import type { Capability, CapabilityStatus } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { CapabilityNeed, Need, NeedAsk, NeedSubject } from "@intentic/sandbox-contract/schemas/needs";
+import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
 import type { AskContext, Met, NeedKindHandler, Resolved } from "../need-kinds.js";
 
 // A connection the agent needs, or one it asks a person to take away (docs/architecture/needs.md): answered for the

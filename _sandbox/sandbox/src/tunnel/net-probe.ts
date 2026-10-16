@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { readFile, rm } from "node:fs/promises";
 import { promisify } from "node:util";
 import { errnoCode, errorMessage, isMissing, undefinedIfMissing } from "@intentic/base/errors";
+import { parseJsonOr } from "@intentic/base/json";
 
 // Reads a live tunnel back off the machine: address, routes, and whether a backgrounded client is alive. iproute2 ships
 // in the base image, so this works before VPN tooling is rebuilt in; a missing interface just reads as absent.
@@ -23,13 +24,9 @@ const ipJson = async <T>(args: readonly string[]): Promise<T[]> => {
     if (stdout.trim() === "") {
         return [];
     }
-    try {
-        const parsed: unknown = JSON.parse(stdout);
-        return Array.isArray(parsed) ? (parsed as T[]) : [];
-    } catch {
-        // A build of iproute2 without JSON support prints usage here; no address is a fair reading.
-        return [];
-    }
+    // A build of iproute2 without JSON support prints usage here; no address is a fair reading.
+    const parsed: unknown = parseJsonOr(stdout, []);
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
 };
 
 // IPv4 address the gateway assigned, e.g. "10.212.134.200/32"; undefined while an interface exists but isn't configured

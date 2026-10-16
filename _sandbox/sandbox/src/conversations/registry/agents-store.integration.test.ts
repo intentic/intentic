@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { conversationsDbPath, openConversationsDb } from "../../store/conversations-db.js";
-import { conversationEntry, isolatedAgent } from "../../testing.js";
+import { conversationEntry, isolatedAgent } from "./agents-store.testing.js";
 import { sqliteAgentsStore } from "./agents-store.js";
 
 // The store guards the fleet's only record, on the history volume: these are the ways a restart could lose part of it.

@@ -2,10 +2,10 @@
 import { AnchoredOverlay, formatElapsed, ui } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref } from "vue";
-import { useAgents } from "../../../agents/fleet/useAgents";
-import { openWorkTerminal } from "../../../terminal/useWorkTerminals";
+import { useAgents } from "../../../../models/fleet/useAgents";
+import { openWorkTerminal } from "../../../../models/terminal/useWorkTerminals";
 import { portsLine, runningJobs } from "../../transcript/jobPhase";
-import { usePaneView } from "../useChat-view";
+import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import { useT } from "@intentic/ui/i18n";
 
 // Absent while nothing runs; the rows that started the jobs scroll away, this does not.

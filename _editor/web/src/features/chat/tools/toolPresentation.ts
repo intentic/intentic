@@ -1,6 +1,9 @@
+import { parseJsonWith } from "@intentic/base/json";
 import type { IconName } from "@intentic/ui";
 import { z } from "zod";
-import { type RequestDocument, documentOf, type ToolCallContent, type TranscriptTool } from "@intentic/sandbox-contract";
+import type { RequestDocument, ToolCallContent } from "@intentic/sandbox-contract/events/requests";
+import { documentOf } from "@intentic/sandbox-contract/text/documents";
+import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { codeLangForPath } from "@intentic/code-read";
 import { t } from "@intentic/ui/i18n";
 import { diffStat } from "./chatToolDiff";
@@ -226,16 +229,12 @@ const spawnAnswer = (text: string): ToolBody | undefined => {
     }
     // An answer that is not the door's JSON (an older one, a runtime's own wrapper) is shown as it came.
     const asItCame: ToolBody = { kind: `text`, text };
-    try {
-        const answer = SpawnAnswerSchema.safeParse(JSON.parse(text));
-        if (!answer.success) {
-            return asItCame;
-        }
-        const words = answer.data.note ?? answer.data.message;
-        return words === undefined ? undefined : { kind: `text`, text: words };
-    } catch {
+    const answer = parseJsonWith(text, SpawnAnswerSchema);
+    if (answer === undefined) {
         return asItCame;
     }
+    const words = answer.note ?? answer.message;
+    return words === undefined ? undefined : { kind: `text`, text: words };
 };
 
 const SPAWN_PRESENTER: Presenter = { icon: `users`, delegates: true, body: spawnAnswer };

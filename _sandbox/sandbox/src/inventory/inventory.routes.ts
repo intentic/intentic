@@ -1,4 +1,4 @@
-import { inventoryContract } from "@intentic/sandbox-contract";
+import { inventoryContract } from "@intentic/sandbox-contract/contracts/inventory.contract";
 import { ManagedRegionError, readManagedRegion } from "@intentic/scaffold";
 import { implement, ORPCError } from "@orpc/server";
 

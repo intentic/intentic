@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import { isInside } from "@intentic/base/contained";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { writeFileAtomic } from "@intentic/base/fs";
 import { envSuffix } from "@intentic/sandbox-contract/capability-env";
 import { STATE_GROUP_DIR } from "@intentic/sandbox-contract/workspace-state";
 import { type ActionRow, emptySnapshot, type SavedFile, type Snapshot, SnapshotSchema } from "./snapshot.js";
@@ -78,10 +79,7 @@ export class OfficeRecords {
     async update(change: (current: Snapshot) => Snapshot): Promise<Snapshot> {
         const directory = await this.inside(this.directory);
         const next = change(await this.snapshot());
-        const target = join(directory, "snapshot.json");
-        const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
-        await writeFile(temporary, `${JSON.stringify(next, undefined, 2)}\n`, { mode: 0o600 });
-        await rename(temporary, target);
+        await writeFileAtomic(join(directory, "snapshot.json"), `${JSON.stringify(next, undefined, 2)}\n`, 0o600);
         return next;
     }
 

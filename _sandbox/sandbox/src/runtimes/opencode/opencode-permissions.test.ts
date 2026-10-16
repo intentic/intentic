@@ -1,12 +1,12 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { unstubbed } from "@intentic/testing";
 import { realYield } from "@intentic/testing/bun";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import type { CommandGuard, CommandWhere } from "../../guard/command-guard.js";
 import { createTurnGate } from "../../guard/turn-gate.js";
-import { memoryFleet } from "../../testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { answerPermission, type PermissionAsk, permissionAskOf, type SessionJudge } from "./opencode-permissions.js";
 
 // Who answers OpenCode 2's permission asks: a registered session's ask goes through the same rulebook pipeline every

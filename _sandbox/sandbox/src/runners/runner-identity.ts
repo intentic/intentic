@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { runnerEnrollUrl } from "@intentic/sandbox-contract";
+import { runnerEnrollUrl } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";

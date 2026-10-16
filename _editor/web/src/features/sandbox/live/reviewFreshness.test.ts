@@ -25,12 +25,12 @@ jest.mock("../../../client/sandbox/sandboxClient", () => ({
 // module-scope watch. Hoisted so a case can flip `streaming` before the frame is routed.
 const streaming = { value: false };
 const conversations = { value: [] as { streaming: { value: boolean } }[] };
-jest.mock("../../chat/run/useChat", () => ({ useChat: () => ({ streaming, conversations }) }));
+jest.mock("../../../models/conversations/run/useChat", () => ({ useChat: () => ({ streaming, conversations }) }));
 
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { rpcKey, rpcKeyAt } from "../../../lib/queryKeys";
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
-import { registry } from "../../agents/fleet/useAgents-registry";
+import { registry } from "../../../models/fleet/useAgents-registry";
 import { applySystemEvent, CHANGES_REFRESH_MS } from "./systemEvents";
 
 // One roster entry mid-land; nothing below reads past its status.

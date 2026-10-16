@@ -1,11 +1,13 @@
-import { type ChildAgentAsk, type ChildRun, childRunOf, loopLabel, sameChildRun } from "@intentic/sandbox-contract";
+import type { ChildAgentAsk, ChildRun } from "@intentic/sandbox-contract/events/requests";
+import { childRunOf, sameChildRun } from "@intentic/sandbox-contract/events/child-run";
+import { loopLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { t } from "@intentic/ui/i18n";
-import { modelLabelFor } from "../../accounts/providerCatalog";
-import { accountsOf } from "../../accounts/useChat-accounts";
-import type { ModelChoice } from "../../models/host/hostModelPicker";
-import { effortLabelOf } from "../../models/run-settings/effortScale";
-import { offeredLoops, selectedLoop } from "../../models/offeredLoops";
-import { defaultPinRunSettings } from "../../models/run-settings/pickerRunSettings";
+import { modelLabelFor } from "../../../../models/providers/providerCatalog";
+import { accountsOf } from "../../../../models/conversations/accounts/useChat-accounts";
+import type { ModelChoice } from "../../../../models/conversations/accounts/hostModelPicker";
+import { effortLabelOf } from "../../../../models/providers/effortScale";
+import { offeredLoops, selectedLoop } from "../../../../models/providers/offeredLoops";
+import { defaultPinRunSettings } from "../../../../models/providers/pickerRunSettings";
 
 // How the child-agent card reads the run a child would start on, and turns the shell picker's answer back into one.
 // The card only draws what these return.

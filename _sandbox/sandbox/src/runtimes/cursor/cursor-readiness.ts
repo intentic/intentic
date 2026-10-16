@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { CursorStore } from "./accounts/cursor-credentials.js";
 import { CURSOR_SDK_MISSING, cursorSdk } from "./cursor-sdk.js";
 

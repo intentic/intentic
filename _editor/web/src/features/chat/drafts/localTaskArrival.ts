@@ -4,9 +4,9 @@ import { useAuth } from "../../../client/auth/useAuth";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { openDesktopLink } from "../../../app/environments/desktop";
 import { useNotifications } from "../../../workbench/notifications/notifications";
-import { startAgent } from "../../agents/fleet/agentActions";
-import { drawsChat } from "../run/chatEcho";
-import { conversations } from "../tabs/useChat-tabs";
+import { startAgent } from "../../../models/fleet/agentActions";
+import { drawsChat } from "../../../models/conversations/run/chatEcho";
+import { conversations } from "../../../models/conversations/tabs/useChat-tabs";
 import { rememberTaskSent, takeTaskHandoff } from "./localTaskHandoff";
 
 const inShell = (path: string): boolean => path === `/` || path.startsWith(`/workspace`);

@@ -1,8 +1,8 @@
 import { layoutDag } from "@intentic/ui";
 import type { DagNode } from "@intentic/ui";
 import { workflowDag } from "./workflowDag";
-import type { WorkflowRun, WorkflowStepRun } from "@intentic/sandbox-contract";
-import { type RunColumn, type RunSession, sessionOf } from "./chatRun";
+import type { WorkflowRun, WorkflowStepRun } from "@intentic/sandbox-contract/schemas/workflows";
+import { type RunColumn, type RunSession, sessionOf } from "../../../models/conversations/run/chatRun";
 
 // The diagram's columns: split from chatRun so run state stays importable everywhere (the summons channel reaches it
 // from every window) without dragging in the UI/dag layout library. Only the diagram imports this.

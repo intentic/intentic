@@ -5,19 +5,14 @@ import { basename, dirname, join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { isMissing } from "@intentic/base/errors";
 import { jsonLines } from "@intentic/base/json-lines";
-import type {
-    AgentEvent,
-    AgentProvider,
-    SubagentKind,
-    SubagentSession,
-    SubagentStatus,
-    SubagentVerification,
-} from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import type { SubagentKind, SubagentSession, SubagentStatus, SubagentVerification } from "@intentic/sandbox-contract/schemas/terminal";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import type { Holding } from "../../conversations/actor/conversation-holdings.js";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { childVerification, childVerificationNote, forgetChild, resetChildVerification } from "./child-verification.js";
-import { ROSTER } from "./subagent-roster.js";
+import { LIVE, ROSTER, subagentRunning } from "../../conversations/actor/subagent-roster.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { opt } from "../../opt.js";
 
@@ -97,9 +92,6 @@ const sweep = (actors: Actors): void => {
         forgetChild(actors, id);
     }
 };
-
-const LIVE: ReadonlySet<SubagentStatus> = new Set<SubagentStatus>(["pending", "running", "blocked", "paused"]);
-export const subagentRunning = (record: Pick<SubagentSession, "status">): boolean => LIVE.has(record.status);
 
 // Notified synchronously on every open() and patch(), which makes waitForSubagent race-free: a listener added before
 // the read cannot miss a transition. Not the runtime-watch bus, which rate-limits per domain. Held by the conversation
@@ -185,12 +177,6 @@ export const subagentInParentTree = (actors: Actors, conversationId: string): bo
         .holdings(ROSTER)
         .of(conversationId)
         .some((record) => record.kind !== "spawned" && subagentRunning(record));
-
-/** Live and total child counts for a conversation, the fleet card's count chip, read off the actors the card is. */
-export const subagentCountsOf = (actors: Actors, conversationId: string): { readonly running: number; readonly total: number } => {
-    const own = actors.holdings(ROSTER).of(conversationId);
-    return { running: own.filter(subagentRunning).length, total: own.length };
-};
 
 // One handle per turn, held for its life and shared by every child it opens, so a late-learned fact reaches children
 // born earlier: `subagentsDir` fills from the first child's start hook.

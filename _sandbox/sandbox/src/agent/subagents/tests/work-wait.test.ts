@@ -5,7 +5,7 @@ import { type BackgroundJob, noteJobShell, openBackgroundJob } from "../../tools
 import { noteSpawnedChild, openSpawnedChild, resetSubagents, settleSpawnedChild, subagentEndingReporter } from "../subagents.js";
 import { noteQueuedReport } from "../queued-reports.js";
 import { waitForWork, workWaitAnswer } from "../work-wait.js";
-import { memoryFleet } from "../../../testing.js";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 
 // One fleet's actors, which hold every record the registry under test files.
 const actors = memoryFleet().conversations;

@@ -1,7 +1,7 @@
-import type { ChildAgentAsk } from "@intentic/sandbox-contract";
-import { DEFAULT_EFFORT, DEFAULT_THINKING } from "../../models/run-settings/pickerRunSettings";
+import type { ChildAgentAsk } from "@intentic/sandbox-contract/events/requests";
+import { DEFAULT_EFFORT, DEFAULT_THINKING } from "../../../../models/providers/pickerRunSettings";
 import { childRunFacts, childRunLine, pickedChildRun } from "./childAgentRun";
-import { advertisedLoops } from "../../models/offeredLoops";
+import { advertisedLoops } from "../../../../models/providers/offeredLoops";
 
 // The picker opens every knob at a state, never at "unset", so what it hands back for a child whose agent named no
 // effort already carries the picker's default. Only what the owner actually moved may count as a change, or merely

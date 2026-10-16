@@ -3,17 +3,15 @@
 import { type CapabilityContribution, type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
 import {
     type CapabilityKind,
-    type ExitPoint,
     LOCAL_MODEL_KV_BYTES_PER_TOKEN,
     LOCAL_MODEL_WINDOW_DEFAULT,
     LOCAL_MODEL_WINDOWS,
     LOCAL_MODELS,
     localModelChoice,
     type LocalModelWindow,
-    type ServiceKind,
-    TOR_EXIT_COUNTRIES,
-    VPNGATE_EXIT_COUNTRIES,
-} from "@intentic/sandbox-contract";
+} from "@intentic/sandbox-contract/schemas/capabilities";
+import { type ExitPoint, TOR_EXIT_COUNTRIES, VPNGATE_EXIT_COUNTRIES } from "@intentic/sandbox-contract/schemas/exit";
+import type { ServiceKind } from "@intentic/sandbox-contract/schemas/inventory";
 
 // BINARY gigabytes, written "GB", because every number this feature prints is a memory quantity compared against a
 // machine's RAM, and RAM is sold and reported in powers of two. Decimal made the one figure a reader can check against

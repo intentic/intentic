@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
-import { useSandboxSettings } from "../../overview/useSandboxSettings";
+import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
 // Whether the daemon keeps every document's text shadow current in the background (derived/shadow-keeper.ts), and

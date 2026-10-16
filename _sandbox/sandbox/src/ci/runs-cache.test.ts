@@ -1,4 +1,4 @@
-import type { PipelineRun } from "@intentic/sandbox-contract";
+import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { createRunsCache } from "./runs-cache.js";
 
 const run = (over: Partial<PipelineRun> = {}): PipelineRun => ({

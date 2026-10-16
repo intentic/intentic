@@ -1,6 +1,7 @@
 import { noteAudit } from "../audit/audit-http.js";
-import type { ApprovalSummary } from "@intentic/sandbox-contract";
-import { APPROVAL_HOLD_MS, approvalsContract } from "@intentic/sandbox-contract";
+import type { ApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
+import { APPROVAL_HOLD_MS } from "@intentic/sandbox-contract/policy/approvals-execution";
+import { approvalsContract } from "@intentic/sandbox-contract/contracts/approvals.contract";
 import { implement, ORPCError } from "@orpc/server";
 import { requireMaintainer } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";

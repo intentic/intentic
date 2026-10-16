@@ -15,7 +15,7 @@ stubGlobal(`localStorage`, {
 
 // The switch itself: the one ref the whole app scopes by.
 const activeSandboxId = ref<string | undefined>(`sbx-a`);
-jest.mock("../../lib/activeSandbox", () => ({
+jest.mock("../../app/storage/activeSandbox", () => ({
     ACTIVE_KEY: `intentic.activeSandboxId`,
     activeSandboxId,
     sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId],

@@ -17,7 +17,7 @@ const active = ref<Partial<SandboxSummary> | undefined>(undefined);
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
 const hostedPlan = ref<HostedPlanState | undefined>(undefined);
 const planOffered = ref(true);
-jest.mock(`../../settings/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ state: hostedPlan, offered: planOffered }) }));
+jest.mock(`../../../models/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ state: hostedPlan, offered: planOffered }) }));
 // SAFETY: the card's one link passes a string `to`, which the stub renders as the anchor RouterLink would; vue-router's
 // own type describes the whole component API, which no stub can claim to be.
 jest.mock(`vue-router`, () => ({ ...vueRouterOriginal, RouterLink: RouterLinkStub as never }));

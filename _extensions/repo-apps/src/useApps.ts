@@ -1,4 +1,4 @@
-import type { AppsList, RepoApp, TemplateSummary } from "@intentic/sandbox-contract";
+import type { AppsList, RepoApp, TemplateSummary } from "@intentic/sandbox-contract/schemas/workspace/workspace-repos";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
