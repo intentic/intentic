@@ -85,8 +85,14 @@ export const ORG_SECTION_ROUTES = {
     updates: { changes: ["system.autoUpdate", "system.skipUpdate"] },
 } as const satisfies Readonly<Record<OrgSection, SectionRoutes>>;
 
+// Refused on ANY bound sandbox, whatever its sections say: acts by which the sandbox's owner would take the organisation's
+// sandbox away from everyone else in it. Closing the daemon to every browser (what deleting one's account does to each
+// owned sandbox) would leave a department's work unreachable by the colleagues who carry it on; the organisation
+// releases the sandbox first if that is what it wants. Listed under `access`, the part of the sandbox it belongs to.
+export const ORG_BOUND_ROUTES: readonly string[] = ["POST /system/access/disable"];
+
 // Route name → the section it belongs to and whether it is a change or a reveal; built once.
-type Covered = { readonly section: OrgSection; readonly kind: "change" | "reveal" };
+type Covered = { readonly section: OrgSection; readonly kind: "change" | "reveal" | "bound" };
 const COVERED: ReadonlyMap<string, Covered> = (() => {
     const covered = new Map<string, Covered>();
     for (const section of ORG_SECTIONS) {
@@ -97,6 +103,9 @@ const COVERED: ReadonlyMap<string, Covered> = (() => {
         for (const name of routes.reveals ?? []) {
             covered.set(name, { section, kind: "reveal" });
         }
+    }
+    for (const name of ORG_BOUND_ROUTES) {
+        covered.set(name, { section: "access", kind: "bound" });
     }
     return covered;
 })();
@@ -122,7 +131,7 @@ export const orgLockRefusal = (policy: OrgPolicy | undefined, routeName: string 
         return undefined;
     }
     const mode = orgSectionMode(policy, covered.section);
-    const refused = covered.kind === "change" ? mode !== "open" : mode === "hidden";
+    const refused = covered.kind === "bound" || (covered.kind === "change" ? mode !== "open" : mode === "hidden");
     return refused
         ? {
               error: `${policy.orgName} manages this part of the sandbox (${covered.section}); ask your organisation's admin to change it`,
@@ -132,3 +141,33 @@ export const orgLockRefusal = (policy: OrgPolicy | undefined, routeName: string 
           }
         : undefined;
 };
+
+// A write refused because it would undo an organisation's pinned settings (schemas/organisation.ts `preset`): the
+// preset items it would have loosened, by the ids the data protection page shows them under.
+export interface OrgPinRefusal {
+    readonly error: string;
+    readonly reason: "org-pinned";
+    readonly items: readonly string[];
+    readonly org: string;
+}
+
+export const orgPinRefusal = (policy: Pick<OrgPolicy, "orgName">, items: readonly string[]): OrgPinRefusal => ({
+    error: `${policy.orgName} requires ${items.join(", ")} to stay as it set them; ask your organisation's admin to change it`,
+    reason: "org-pinned",
+    items,
+    org: policy.orgName,
+});
+
+// A grant refused because the organisation keeps its sandboxes to its own members (schemas/organisation.ts
+// `membersOnly`).
+export interface OrgMembersOnlyRefusal {
+    readonly error: string;
+    readonly reason: "org-members-only";
+    readonly org: string;
+}
+
+export const orgMembersOnlyRefusal = (policy: Pick<OrgPolicy, "orgName">): OrgMembersOnlyRefusal => ({
+    error: `${policy.orgName} gives access to its sandboxes only to its own members; ask your organisation's admin to add this person first`,
+    reason: "org-members-only",
+    org: policy.orgName,
+});

@@ -4,7 +4,7 @@ import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../config.js";
 import { stopMachine } from "../sandbox/hosted/fly/fly.js";
-import { eraseAccount } from "../account-erase.js";
+import { eraseAccount, OwnsOrganisationSandboxes } from "../account-erase.js";
 import { hostedEnabled } from "../sandbox/hosted/hosted.js";
 import type { StripeGateway } from "../sandbox/hosted/plan/hosted-plan-stripe.js";
 import { hostedSuspensionOf, liftHostedSuspension, suspendHosted } from "../sandbox/hosted/abuse/hosted-standing.js";
@@ -40,7 +40,17 @@ export const deleteUserAccount = async (
     // Injectable so tests drive the Stripe erasure without Stripe, as in the plan routes.
     gateway?: StripeGateway,
 ): Promise<AdminActionResult> => {
-    const erased = await eraseAccount(prisma, config, logger, userId, gateway === undefined ? {} : { gateway });
+    // An organisation's sandboxes are not an operator's to erase with their owner either: refused with what holds them,
+    // and the account left as it was (the erase rolls back whole).
+    let erased: Awaited<ReturnType<typeof eraseAccount>>;
+    try {
+        erased = await eraseAccount(prisma, config, logger, userId, gateway === undefined ? {} : { gateway });
+    } catch (error) {
+        if (error instanceof OwnsOrganisationSandboxes) {
+            return { ok: false, message: error.message };
+        }
+        throw error;
+    }
     const user = await prisma.user.delete({ where: { id: userId }, select: { email: true } });
     const pending = erased.apps.length - erased.destroyed.length;
     return {

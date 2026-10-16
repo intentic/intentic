@@ -89,6 +89,7 @@ onMounted(load);
                         type="text"
                         autocomplete="organization"
                         :placeholder="t(`organisations.console.namePlaceholder`)"
+                        :aria-label="t(`organisations.console.namePlaceholder`)"
                         :class="ui.input({ size: `sm` }, `min-w-48 flex-1`)"
                     />
                     <Button type="submit" :label="t(`organisations.console.create`)" size="small" :loading="busy" :disabled="busy" />

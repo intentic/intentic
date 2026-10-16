@@ -94,6 +94,32 @@ export const recordDecision = async (historyRoot: string, key: string, digest: s
 export const recordApproval = async (roots: ApprovalRoots, item: ApprovalSummary, approver: string | undefined, now = Date.now()): Promise<void> =>
     recordDecision(roots.historyRoot, item.id, await approvalDigest(roots.workspaceRoot, item), approver, now);
 
+// One yes, as it was spent: who gave it and when. A yes given again (a retry) has a later `approvedAt`.
+export interface SpentApproval {
+    readonly approver: string | undefined;
+    readonly approvedAt: number;
+}
+
+// Spends the yes of every item that still matches it, in ONE serialized read-change-write of the ledger, and answers the
+// ones this call spent. A yes is removed only if its digest is the item's as it stands now, so whoever acts on the answer
+// acts on exactly what was approved, and two callers racing for one item cannot both get it: the second finds the pin
+// gone. An item whose yes is absent or no longer matches is left alone; its standing says why.
+export const spendApprovals = async (roots: ApprovalRoots, items: readonly ApprovalSummary[]): Promise<ReadonlyMap<string, SpentApproval>> => {
+    const wanted = await Promise.all(items.map(async (item) => ({ id: item.id, digest: await approvalDigest(roots.workspaceRoot, item) })));
+    const spent = new Map<string, SpentApproval>();
+    await ledgerOf(roots.historyRoot).update((approved) => {
+        spent.clear();
+        for (const { id, digest } of wanted) {
+            const pin = Object.hasOwn(approved, id) ? approved[id] : undefined;
+            if (pin?.digest === digest) {
+                spent.set(id, { approver: pin.approver, approvedAt: pin.approvedAt });
+            }
+        }
+        return spent.size === 0 ? approved : Object.fromEntries(Object.entries(approved).filter(([id]) => !spent.has(id)));
+    });
+    return spent;
+};
+
 // Drops the yes for these keys: a rejection, an item put back in review, or whoever acts on it spending it as it starts.
 export const forgetApprovals = async (historyRoot: string, ids: readonly string[]): Promise<void> => {
     await ledgerOf(historyRoot).update((approved) => {

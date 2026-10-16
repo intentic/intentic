@@ -298,6 +298,10 @@ model Sandbox {
     // The policy edition this sandbox's daemon last said it holds (POST /sandbox/org-policy), so the organisation's
     // console can tell applied from pending. Null until a bound daemon first asks.
     orgPolicyApplied   Int?
+    // When this sandbox's daemon last asked holding none, or an older one, of the editions it had reported holding: its
+    // held policy was deleted, broken or restored from an older copy, and the platform sent it again. Kept as evidence
+    // for the organisation's console; null for a sandbox that never did. Binding resets the edition record, not this.
+    orgPolicyResetAt   DateTime?
     createdAt          DateTime        @default(now())
     updatedAt          DateTime        @updatedAt
 

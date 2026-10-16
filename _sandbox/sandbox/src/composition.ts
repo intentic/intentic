@@ -105,7 +105,8 @@ import { notifyAwaiting } from "./push/awaiting-detail.js";
 import { createDomainEvents, type DomainEvents } from "./seams/domain-events.js";
 import { type Announcer, createAnnouncer } from "./system/boot/announce.js";
 import { createOrgPolicyHolder, type OrgPolicyHolder } from "./org/org-policy.js";
-import { platformOrgPolicyFetch } from "./org/org.routes.js";
+import { platformOrgPolicyFetch } from "./system/org-policy-fetch.js";
+import { createOrgPins } from "./compliance/org-pins.js";
 import { type ReachReporter, createReachReporter } from "./system/listeners/reach-report.js";
 import { type BootTracker, createBootTracker } from "./system/boot/boot.js";
 import { DAEMON_OWNER } from "./seams/workload-stamp.js";
@@ -508,6 +509,7 @@ const createDaemonMembers = (
         | "scanPorts"
         | "ownerGrants"
         | "platformIdentityKey"
+        | "orgPolicy"
     > & { readonly manifestHost: ExtensionHost },
 ) => {
     const { config, logger, workspace, capabilities, conversations, chores, runtimeInstalls, processes, serviceProcesses, ownerGrants } = deps;
@@ -520,7 +522,7 @@ const createDaemonMembers = (
         clientLogger: createClientLogger(config),
         boot,
         announcer: createAnnouncer(config, logger, { identityKey: deps.platformIdentityKey.learn }),
-        orgPolicy: createOrgPolicyHolder({ authRoot: authRootOf(config), logger, fetch: platformOrgPolicyFetch(config) }),
+        orgPolicy: deps.orgPolicy,
         reach: createReachReporter(config, logger, () => boot),
         browserRouters: createBrowserRouters(() => ({ capabilities, workspace, logger })),
         desktopServers: desktopServersOf,
@@ -594,9 +596,13 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const { workspace } = workspaceSlice;
     const authRoot = authRootOf({ agentAuthDir: config.agentAuthDir, workspaceRoot: workspace.root });
     const agentDomainPolicy = fileAgentDomainPolicy(join(authRoot, agentDomainPolicyDocument.path));
+    // Hoisted: the HTTP locks, the roster and the pins (compliance/org-pins.ts) the settings and the privacy shield are
+    // read through all read the one policy this sandbox holds.
+    const orgPolicy = createOrgPolicyHolder({ authRoot, logger, fetch: platformOrgPolicyFetch(config) });
+    const orgPins = createOrgPins({ holder: orgPolicy, logger, whole });
     const providers = createProviderAreas(config, logger, authRoot, whole);
     // Who may call this daemon, and how: the roster, passkeys, sessions and every per-boot and per-extension token.
-    const authSlice = createAuthSlice(config, workspace.root, logger);
+    const authSlice = createAuthSlice(config, workspace.root, logger, orgPolicy);
     // Hoisted: worktree ops and the Changes scan must file into the same tracker the summary line reads.
     const perf = createPerfTracker(logger, createPerfLogger(config));
     const conversationsParts = createConversationsSlice({
@@ -690,7 +696,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
     // Hoisted: the CI fixer files into the same log and reads the same settings the routes do.
     const activity = fileActivityStore(join(config.historyRoot, activityLogDocument.path));
-    const sandboxSettings = fileSandboxSettingsStore(join(workspace.root, settingsDocument.path));
+    const sandboxSettings = fileSandboxSettingsStore(join(workspace.root, settingsDocument.path), orgPins.settingsPin, orgPins.warn);
     const audit = auditServiceOf(config.historyRoot, sandboxSettings, whole, logger);
     // Transcripts, session files and phrase search, and what a conversation's purge takes with it.
     const sessionsSlice = createSessionsSlice({
@@ -742,6 +748,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             capabilities: () => capabilities.list(),
             loopbackBase: () => `http://127.0.0.1:${config.sandbox.port}`,
             warn: (message, error) => logger.warn({ err: error }, message),
+            pin: orgPins.privacyPin,
         }),
         ...createNeedsSlice({ workspaceRoot: workspace.root, logger, whole }),
         ...extensionsSlice,
@@ -799,6 +806,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             manifestHost: capabilitiesParts.manifestHost,
             ownerGrants,
             platformIdentityKey: authSlice.platformIdentityKey,
+            orgPolicy,
         }),
         trial,
         platformTunnel,

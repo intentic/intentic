@@ -28,6 +28,8 @@ import { fileBrowserAccess } from "./browser-access.js";
 import { allowedOriginsOf, originAllowedBy } from "./browser-origins.js";
 import { type AuthConnections, createAuthConnections } from "./connections.js";
 import { createPasskeyCeremonies, filePasskeys, type PasskeyCeremonies, passkeysDocument, type PasskeyStore } from "./passkeys/passkey-store.js";
+import { fencedMembers } from "../org/org-roster.js";
+import type { OrgPolicyHolder } from "../org/org-policy.js";
 import { createPlatformIdentityKey, type PlatformIdentityKey } from "./platform/platform-identity-key.js";
 import { createSessions, type MintedSession } from "./session.js";
 import { type ControlTokens, controlTokensDocument, fileControlTokens, minterBound } from "./tokens/control-tokens.js";
@@ -152,8 +154,16 @@ const noGoogle: IdTokenVerifier = () => Promise.reject(new Error("this sandbox t
 
 // Builds the auth slice from config; loopback (no way to verify anybody, auth-enabled.ts) leaves `auth` undefined, so
 // every route is open.
-export const createAuthSlice = (config: Config, workspaceRoot: string, logger: Pick<Logger, "error">): AuthSlice => {
-    const members = fileMembersStore(join(config.historyRoot, membersDocument.path));
+// `orgPolicy` narrows every read of the roster to the people a bound sandbox's organisation lists (org/org-roster.ts);
+// without one, or for a personal sandbox, the roster reads as its file says.
+export const createAuthSlice = (
+    config: Config,
+    workspaceRoot: string,
+    logger: Pick<Logger, "error">,
+    orgPolicy?: Pick<OrgPolicyHolder, "current">,
+): AuthSlice => {
+    const rosterFile = fileMembersStore(join(config.historyRoot, membersDocument.path));
+    const members = orgPolicy === undefined ? rosterFile : fencedMembers(rosterFile, orgPolicy);
     const { passkeys, passkeyCeremonies, passkeyPolicy } = passkeysOf(config, logger);
     // Bound owner, hoisted since the Access roster and gate routes both need to read, never write, the email.
     const ownerStore = noticedOwnerStore(fileOwnerStore(join(config.historyRoot, ownerDocument.path)), logger, config.connectToken);

@@ -1,4 +1,4 @@
-import { OrgPolicyRulesSchema } from "@intentic/sandbox-contract";
+import { OrgPolicyRulesSchema, PresetGroupSchema } from "@intentic/sandbox-contract";
 import { oc } from "@orpc/contract";
 import { z } from "zod";
 
@@ -36,6 +36,9 @@ export const OrgSandboxSchema = z.object({
     lastSeenAt: z.string().optional(),
     // The policy edition its daemon last said it holds; behind the organisation's own edition means not yet applied.
     policyApplied: z.number().int().optional(),
+    // When its daemon last came back holding less of the policy than it had reported (its held copy deleted, broken or
+    // restored from an older one) and was sent it again; absent for one that never has.
+    policyResetAt: z.string().optional(),
 });
 export type OrgSandbox = z.infer<typeof OrgSandboxSchema>;
 
@@ -68,9 +71,16 @@ export const orgContract = {
     get: oc.route({ method: "POST", path: "/org/get" }).input(orgIdInput).output(OrgDetailSchema),
     // A new edition of the rules. `expectedVersion` is the edition the admin edited, so two admins saving at once
     // cannot silently undo each other: the second is answered CONFLICT and reloads.
+    // The pinned preset groups are checked against this build's here, where an admin saves them; the policy as a daemon
+    // reads it takes any name, so a group a newer platform adds never stops a policy reaching an older daemon.
     setPolicy: oc
         .route({ method: "POST", path: "/org/policy" })
-        .input(orgIdInput.extend({ rules: OrgPolicyRulesSchema, expectedVersion: z.number().int().min(1) }))
+        .input(
+            orgIdInput.extend({
+                rules: OrgPolicyRulesSchema.extend({ preset: z.array(PresetGroupSchema).max(20).optional() }),
+                expectedVersion: z.number().int().min(1),
+            }),
+        )
         .output(OrgDetailSchema),
     addMember: oc
         .route({ method: "POST", path: "/org/member/add" })

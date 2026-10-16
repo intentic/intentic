@@ -56,10 +56,9 @@ const TONE: Record<WorkflowRun["state"], string> = {
 
 <template>
     <div
-        role="button"
-        tabindex="0"
-        :aria-label="t(`agents.workflowRunCard.openSessions`, { name: run.workflow.name })"
-        class="session-card group flex w-full select-none flex-col rounded-2xl border border-dashed text-left outline-none [--card-border:var(--color-line-strong)] focus-visible:ring-2 focus-visible:ring-primary-500/25"
+        role="group"
+        :aria-label="run.workflow.name"
+        class="session-card group flex w-full select-none flex-col rounded-2xl border border-dashed text-left outline-none [--card-border:var(--color-line-strong)]"
         :class="[
             // Same step the agent cards take (AgentCard's `live`), so a lane draws one card size.
             bigLane ? 'gap-2.5 p-4' : 'gap-2 p-3.5',
@@ -77,8 +76,6 @@ const TONE: Record<WorkflowRun["state"], string> = {
         ]"
         :style="blade"
         @click="emit(`open`)"
-        @keydown.enter.self.prevent="emit(`open`)"
-        @keydown.space.self.prevent="emit(`open`)"
     >
         <div class="flex items-center gap-2.5">
             <!-- Graph glyph where an agent card has its identity tile: one look says this row is a shape, not a session. -->
@@ -88,10 +85,13 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 </span>
             </span>
             <!-- `break-words` for the reason AgentCard's title states: a clamp only ellipsises a VERTICAL overrun. -->
-            <span
-                class="min-w-0 flex-1 font-semibold text-content"
+            <button
+                type="button"
+                :aria-label="t(`agents.workflowRunCard.openSessions`, { name: run.workflow.name })"
+                class="min-w-0 flex-1 rounded-sm text-left font-semibold text-content"
                 :class="bigLane ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs'"
-                >{{ run.workflow.name }}</span
+                @click.stop="emit(`open`)"
+                >{{ run.workflow.name }}</button
             >
             <!-- Waiting runs use the agent card's attention chip. -->
             <span

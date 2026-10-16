@@ -182,8 +182,17 @@ flowchart LR
   approving through the route records `{digest, approvedAt, approver}` in `/history/approval-decisions.json`, the
   digest covering every field the executor acts on and the bytes of each media file. The queue itself sits in
   `.intentic/config/approvals/`, which agents write, so an item an agent marked approved, or changed after the owner's
-  yes, is failed with the reason instead of run, and a yes is spent by the run it allowed. Only a signed-in maintainer
-  or the owner may approve; the panel and control tokens may propose.
+  yes, is failed with the reason instead of run, and a yes is spent by the run it allowed. Spending is a compare-and-
+  remove in one serialized ledger change (`spendApprovals`), so two passes racing for one item cannot both act on it.
+  Only a signed-in maintainer or the owner may approve; the panel and control tokens may propose.
+- An action naming a `performer` (e-urzad's office acts) never reaches a turn: once its yes is spent, the executor hands
+  it to that extension's backend through the backend host's `POST /approvals/<id>` door, which no `/x` route, panel or
+  agent token reaches (`approvals/approval-performers.ts`), with the yes, the item as approved and the action rules as
+  the daemon reads them. The extension recomputes the digest over what it is about to send and answers done, refused or
+  uncertain; an uncertain one is failed and never retried by itself, and each hand-over is an `approvals.performed`
+  audit record (2026-10-15: until then a turn ran the extension's command, which could only read the agent-written
+  item to decide whether it was approved). Agents still run as root, so this holds against a turn that cannot reach
+  `/history` or the host process, not against one that tampers with them.
 - A plugin connection is pinned like an extension: its install resolves the branch or tag it names to a full commit,
   stored as `commit` (`CapabilityHandler.installed`), and re-applying the stored entry checks that commit out again.
   Adding it anew is the update.

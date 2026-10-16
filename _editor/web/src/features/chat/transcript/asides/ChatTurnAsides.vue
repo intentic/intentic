@@ -131,6 +131,9 @@ const tip = computed((): TooltipValue => {
              scroll box, never a box inside it (`.chat-mark-material` in chat.css). -->
         <div
             v-if="thought !== undefined"
+            :tabindex="shown ? 0 : undefined"
+            role="region"
+            :aria-label="label"
             class="chat-mark-material chat-spine-material chat-inset max-h-64 overflow-auto"
             :class="found && `chat-mark-found`"
             :hidden.attr="shown ? undefined : `until-found`"

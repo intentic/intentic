@@ -254,7 +254,14 @@ onBeforeUnmount(() => {
 
 <template>
     <!-- `flex-row`: with the chat here too, the two stand side by side rather than one over the other. -->
-    <aside class="side-panel relative flex min-h-0 min-w-0 border-l border-line bg-card" :class="{ 'side-fills': fills }" :style="panelStyle">
+    <div
+        :id="fills ? `main-content` : undefined"
+        :role="fills ? `main` : `complementary`"
+        :tabindex="fills ? -1 : undefined"
+        class="side-panel relative flex min-h-0 min-w-0 border-l border-line bg-card"
+        :class="{ 'side-fills': fills }"
+        :style="panelStyle"
+    >
         <!-- What was opened beside: the strip, then every tab's body stacked in one box, the one on screen visible. -->
         <section
             v-if="tabsOnScreen"
@@ -364,5 +371,5 @@ onBeforeUnmount(() => {
         />
 
         <ContextMenu ref="tabMenu" :model="menuItems" :min-width="12" />
-    </aside>
+    </div>
 </template>

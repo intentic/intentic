@@ -8,11 +8,10 @@ import { OfficeRecords } from "../core/records.js";
 import { EzdClient } from "../ezd/integrator.js";
 import { type CaseStatusName, CaseStatusNameSchema } from "../ezd/integrator-schemas.js";
 import { saveDocument, syncCasesAndTasks } from "../ezd/sync.js";
-import { type Context, pathArgument, print, printOutcome, required, UsageError } from "./context.js";
-import { performNow } from "./perform.js";
+import { type Context, pathArgument, print, printHeld, required, UsageError } from "./context.js";
 
-// `e-urzad ezd …`: EZD RP for the connected card. Reads answer JSON; writes go through the guard and print either the
-// office's answer (when the action rules allow) or the approval they were held under.
+// `e-urzad ezd …`: EZD RP for the connected card. Reads answer JSON; writes go through the guard and print the approval
+// they were held under: once a person approves one, the sandbox carries it out itself (core/guard.ts).
 
 export const EZD_USAGE = `e-urzad ezd <command> [--card <id>]
   test                                  exchange the API key and read the user and one task
@@ -115,18 +114,18 @@ export const runEzd = async (context: Context, argv: readonly string[]): Promise
             return;
         case "attach": {
             const files = rest.slice(1).map((path) => ({ path: pathArgument(path) }));
-            printOutcome(context, await guard.run(proposeAttach(settings, required(rest[0], "the case id"), files), (operation) => performNow(operation, { ezd: client }, records)));
+            printHeld(context, await guard.propose(proposeAttach(settings, required(rest[0], "the case id"), files)));
             return;
         }
         case "register-incoming": {
             const metadata = values["rpw-metadata"] === undefined ? undefined : await readObject(values["rpw-metadata"], "the RPW metadata file");
             const proposal = proposeRegisterIncoming(settings, { documentId: values.document, file: values.file === undefined ? undefined : { path: pathArgument(values.file) }, metadata });
-            printOutcome(context, await guard.run(proposal, (operation) => performNow(operation, { ezd: client }, records)));
+            printHeld(context, await guard.propose(proposal));
             return;
         }
         case "register-outgoing": {
             const payload = await readObject(required(rest[0], "the payload file"), "the payload file");
-            printOutcome(context, await guard.run(proposeRegisterOutgoing(settings, payload), (operation) => performNow(operation, { ezd: client }, records)));
+            printHeld(context, await guard.propose(proposeRegisterOutgoing(settings, payload)));
             return;
         }
         default:

@@ -2,7 +2,7 @@
 <script setup lang="ts" generic="T extends string">
 import type { IconName } from "../../icons/iconSets.js";
 import { useDevice } from "../../composables/useDevice.js";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { ui } from "../../lib/ui.js";
 import { segmented } from "./segmented.js";
 import { countBadgePlate, countBadgeText } from "../feedback/countBadge.js";
@@ -49,6 +49,25 @@ const {
 }>();
 
 const model = defineModel<T>({ required: true });
+const track = ref<HTMLElement>();
+const tabStop = computed(() => Math.max(0, options.findIndex((option) => option.value === model.value)));
+
+// One tab stop per group. Arrow keys select and focus the adjacent tab; Home and End reach its edges.
+const navigate = (event: KeyboardEvent, index: number): void => {
+    if (event.altKey || event.ctrlKey || event.metaKey || options.length === 0) {
+        return;
+    }
+    const target = event.key === `ArrowRight` ? (index + 1) % options.length
+        : event.key === `ArrowLeft` ? (index + options.length - 1) % options.length
+            : event.key === `Home` ? 0 : event.key === `End` ? options.length - 1 : undefined;
+    const option = target === undefined ? undefined : options[target];
+    if (option === undefined || target === undefined) {
+        return;
+    }
+    event.preventDefault();
+    model.value = option.value;
+    track.value?.querySelectorAll<HTMLButtonElement>(`[role="tab"]`)[target]?.focus();
+};
 
 // Derived from the device, not a prop, so a coarse pointer is served everywhere without a call site opting in. The
 // pill leaves it to `touch-target`'s CSS overlay; the underline tab reads this and grows for real (see below).
@@ -83,17 +102,19 @@ const optionClass = (active: boolean): string => (variant === `underline` ? unde
 </script>
 
 <template>
-    <div role="tablist" :class="look.track()">
+    <div ref="track" role="tablist" :class="look.track()">
         <button
-            v-for="option in options"
+            v-for="(option, index) in options"
             :key="option.value"
             type="button"
             role="tab"
             :aria-selected="model === option.value"
+            :tabindex="index === tabStop ? 0 : -1"
             :aria-label="nameOf(option)"
             v-tooltip.bottom="option.markTitle ?? option.title"
             :class="optionClass(model === option.value)"
             @click="model = option.value"
+            @keydown="navigate($event, index)"
         >
             <Icon v-if="option.icon !== undefined" :name="option.icon" class="mr-1.5 text-sm" /><!--
             The same fill Avatar gives a person, shrunk to what a pill can carry: no face, just enough colour to tie

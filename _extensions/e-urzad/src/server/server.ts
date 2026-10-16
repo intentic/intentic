@@ -6,13 +6,15 @@ import { EdClient } from "../ed/mailbox.js";
 import { syncInbox } from "../ed/deliveries.js";
 import { EzdClient } from "../ezd/integrator.js";
 import { syncCasesAndTasks } from "../ezd/sync.js";
+import { approvedPerformer } from "./perform.js";
 import { causeText, ensureCryptoEngines } from "../signatures/engine.js";
 import { ezdTools } from "./tools.js";
 
-// The backend: the EZD RP card's agent tools (tools.ts), and the rail view's three requests per connected card,
-// served from this extension's own namespace. The view reads what is saved; Refresh and Test read the office live, with
+// The backend: the EZD RP card's agent tools (tools.ts), the rail view's three requests per connected card, served from
+// this extension's own namespace, and the one place an office act is carried out: an approved one, handed over by the
+// daemon's approvals executor (perform.ts). The view reads what is saved; Refresh and Test read the office live, with
 // the card's settings read through the daemon every time (never a copy), and only ever read: no office write is
-// reachable from the view.
+// reachable from the view, the tools or any /x route.
 
 const ServiceSchema = z.enum(["ezd-rp", "e-doreczenia"]);
 
@@ -25,6 +27,7 @@ const ROUTE = /^\/accounts\/([^/]+)\/(overview|sync|test)$/;
 export const activateServer = (api: ExtensionServerApi, _context: ExtensionServerContext): void => {
     ensureCryptoEngines();
     api.tools.serve((card) => (card === undefined ? [] : ezdTools(card, api.workspaceRoot)));
+    api.approvals.perform(approvedPerformer(api));
 
     // The typed contract call: the daemon answers only for a card of a kind this extension contributes.
     const connection = async (id: string): Promise<{ readonly service: Service; readonly config: Readonly<Record<string, string>> }> => {

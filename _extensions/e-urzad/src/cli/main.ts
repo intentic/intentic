@@ -10,13 +10,13 @@ import { runTrust, runVerify, VERIFY_USAGE } from "./signatures.js";
 // until an office connects an EZD RP or e-Doręczenia card; `verify` works with no card at all.
 
 const USAGE = `e-urzad: EZD RP cases and documents, e-Doręczenia deliveries and proofs, electronic signatures.
-Every office write is held for the owner's approval unless the sandbox's action rules allow it.
+Every office write is held for a person's approval, or refused by the sandbox's action rules.
 
   e-urzad cards                 the connected office cards in this shell
 ${EZD_USAGE}
 ${ED_USAGE}
 ${VERIFY_USAGE}
-e-urzad approved <approval-id>  carry out an office act the owner approved (only in the turn the approval starts)`;
+Approved office acts are carried out by the sandbox itself; nothing here performs one.`;
 
 const dispatch = async (context: Context, argv: readonly string[]): Promise<void> => {
     const [group, ...rest] = argv;

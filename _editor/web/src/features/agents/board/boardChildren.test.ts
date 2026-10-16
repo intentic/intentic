@@ -81,7 +81,7 @@ const family = [
 
 // Every card on the board, by the name its focus press carries.
 const cards = (board: HTMLElement): string[] =>
-    [...board.querySelectorAll(`[role="button"][aria-label^="Focus agent: "]`)].map((card) => card.getAttribute(`aria-label`) ?? ``);
+    [...board.querySelectorAll(`button[aria-label^="Focus agent: "]`)].map((card) => card.getAttribute(`aria-label`) ?? ``);
 const tray = (board: HTMLElement): HTMLElement | null =>
     board.querySelector(`[role="group"][aria-label="${t(`agents.childRows.startedBy`, { title: `ship the release` })}"]`);
 const rows = (board: HTMLElement): string[] =>
@@ -135,7 +135,7 @@ it(`carries a child's ask to Attention on its parent's card, and names the ask o
     const board = await mountBoard();
 
     const attention = board.querySelector(`[data-lane="attention"]`);
-    const parent = attention?.querySelector(`[aria-label="Focus agent: ship the release"]`);
+    const parent = attention?.querySelector(`[aria-label="Focus agent: ship the release"]`)?.closest(`.session-card`);
     expect(parent?.textContent).toContain(t(`agents.agentStatus.permission`));
     expect(board.querySelector(`[data-lane="active"] [aria-label="Focus agent: ship the release"]`)).toBeNull();
     expect(rows(board)[0]).toContain(t(`agents.agentStatus.permission`));
@@ -147,7 +147,7 @@ it(`keeps Attention empty for children stopped under a parent still at work, one
     const board = await mountBoard();
     await focus(board, `ship the release`);
 
-    expect(board.querySelector(`[data-lane="attention"] [role="button"]`)).toBeNull();
+    expect(board.querySelector(`[data-lane="attention"] button[aria-label^="Focus agent: "]`)).toBeNull();
     const groups = [...(tray(board)?.querySelectorAll(`button[aria-expanded]`) ?? [])].map((row) => row.textContent?.replace(/\s+/g, ` `).trim());
     expect(groups).toEqual([t(`agents.childRows.limitGroup`, { count: 3, provider: providerLabel(`codex`) })]);
     expect(rows(board)).toEqual([expect.stringMatching(/^port the parser/)]);
@@ -266,5 +266,5 @@ it(`draws no tray for a card that started nothing`, async () => {
     const board = await mountBoard();
 
     expect(cards(board)).toEqual([`Focus agent: agent alone`]);
-    expect(board.querySelector(`[role="group"]`)).toBeNull();
+    expect(board.querySelector(`[role="group"][aria-label="${t(`agents.childRows.startedBy`, { title: `agent alone` })}"]`)).toBeNull();
 });

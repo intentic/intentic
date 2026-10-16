@@ -46,7 +46,7 @@ export const manifestFindings = (path, text) => {
 const EXTENSION = /^@intentic\/ext-[^/]+$/;
 
 // Outside _extensions, the packages that may depend on an extension at all, and through which import specifiers. An
-// extension is the end of the line: it stands on the SDK and nothing stands on it, apart from these two. The web app
+// extension is the end of the line: it stands on the SDK and nothing stands on it, apart from its hosts. The web app
 // compiles the UI extensions into its bundle (_editor/web/src/extension-host/builtins.ts), so it may name any of them.
 // The desktop app's files sidecar runs ONLYOFFICE's browser engine for folders on the user's own disk, with no sandbox,
 // through the one entry the extension exports for it: the engine is the extension's (about 3,000 lines it also runs in
@@ -54,6 +54,8 @@ const EXTENSION = /^@intentic\/ext-[^/]+$/;
 export const CONSUMERS = new Map([
     ["_editor/web", { extensions: undefined, specifiers: undefined }],
     ["_devices/local-files", { extensions: new Set(["@intentic/ext-onlyoffice"]), specifiers: new Set(["@intentic/ext-onlyoffice/local-office"]) }],
+    // The real editor demo hosts the office view; its backend fixture shares only the snapshot wire shape.
+    ["_site/demo", { extensions: new Set(["@intentic/ext-e-urzad"]), specifiers: new Set(["@intentic/ext-e-urzad/snapshot"]) }],
 ]);
 
 /** `path:line` findings for a manifest outside _extensions: every extension it names that CONSUMERS does not allow it. */

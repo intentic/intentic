@@ -7,7 +7,7 @@ import { emailOTP, oneTap, oneTimeToken } from "better-auth/plugins";
 import type { Logger } from "pino";
 import type { Config } from "./config.js";
 import { encryptSecret } from "./crypto.js";
-import { eraseAccount } from "./account-erase.js";
+import { eraseAccount, OwnsOrganisationSandboxes } from "./account-erase.js";
 import { emailSignInEnabled, prismaCodeAllowances, SIGN_IN_CODE_ATTEMPTS, SIGN_IN_CODE_TTL_SECONDS, sendSignInCode } from "./sign-in.js";
 import type { PrismaClient } from "@intentic/prisma";
 
@@ -84,7 +84,13 @@ export const createAuth = (config: Config, prisma: PrismaClient, logger: Logger)
             deleteUser: {
                 enabled: true,
                 beforeDelete: async (user) => {
-                    await eraseAccount(prisma, config, logger, user.id);
+                    // An account that owns an organisation's sandboxes is not erased until its admin releases them.
+                    await eraseAccount(prisma, config, logger, user.id).catch((error: Error) => {
+                        if (error instanceof OwnsOrganisationSandboxes) {
+                            throw new APIError(`FORBIDDEN`, { message: error.message });
+                        }
+                        throw error;
+                    });
                 },
             },
         },

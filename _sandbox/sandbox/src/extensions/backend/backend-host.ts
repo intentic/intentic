@@ -5,6 +5,7 @@ import { errorMessage } from "@intentic/base/errors";
 import type { ExtensionServerModule, ServerActivation } from "@intentic/extension-api";
 import { activateServerModule, createServerApi, deactivateWithin, healthWithin, type ServerApiSlots } from "@intentic/extension-api/runtime";
 import { tokenEquals } from "../../auth/token-equals.js";
+import { approvedActionIn } from "./backend-approvals.js";
 import { answerToolMessage, type ToolRequest } from "./backend-tools.js";
 import {
     BACKEND_HOST_HEADER,
@@ -195,6 +196,31 @@ export const createBackendHostApp = async (config: BackendDeviceConfig): Promise
         return json({ answer: answer ?? null }, 200);
     };
 
+    // POST /approvals/<id>: an approved action the extension carries out itself (`api.approvals.perform`), reached only
+    // from the daemon's approvals executor after it matched and spent the person's yes (approvals/approval-performers.ts).
+    // Never under /x, which a person's or a panel's bearer reaches: what arrives here is already authorised. 404 and 400
+    // mean the handler never ran; a handler that throws answers 500, which the executor reads as an outcome it cannot
+    // know, since the handler may have reached the outside world before it threw.
+    const answerApproval = async (id: string, request: Request): Promise<Response> => {
+        const extension = loadedOr(id);
+        if (extension instanceof Response) {
+            return extension;
+        }
+        const performer = extension.slots?.performer();
+        if (performer === undefined) {
+            return json({ error: `the "${id}" backend carries out no approved actions` }, 404);
+        }
+        const action = await approvedActionIn(request);
+        if (action === undefined) {
+            return json({ error: "an approval request carries { action: { id, digest, summary, details, approvedAt, actionRules } }" }, 400);
+        }
+        try {
+            return json(await performer(action, { signal: request.signal }), 200);
+        } catch (error) {
+            return json({ error: errorMessage(error) }, 500);
+        }
+    };
+
     // /x/<id>/<suffix>: the extension's own namespace, rebased onto its own synthetic origin with owner credentials and
     // the host token already stripped.
     const answerNamespace = async (target: { readonly id: string; readonly suffix: string }, url: URL, request: Request): Promise<Response> => {
@@ -247,6 +273,10 @@ export const createBackendHostApp = async (config: BackendDeviceConfig): Promise
             const toolsOf = /^\/tools\/([^/]+)$/.exec(url.pathname)?.[1];
             if (request.method === "POST" && toolsOf !== undefined) {
                 return answerTools(decodeURIComponent(toolsOf), request);
+            }
+            const approvalOf = /^\/approvals\/([^/]+)$/.exec(url.pathname)?.[1];
+            if (request.method === "POST" && approvalOf !== undefined) {
+                return answerApproval(decodeURIComponent(approvalOf), request);
             }
             const target = splitNamespace(url.pathname);
             return target === undefined ? json({ error: "not found" }, 404) : answerNamespace(target, url, request);

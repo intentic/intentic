@@ -2,9 +2,10 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ActionApprovalSummary, ApprovalSummary, PostApprovalSummary } from "@intentic/sandbox-contract";
+import type { ApprovedActionOutcome } from "@intentic/extension-api/runtime";
+import { type ActionApprovalSummary, ActionApprovalSummarySchema, type ApprovalSummary, type PostApprovalSummary } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { recordApproval } from "./approval-decisions.js";
+import { recordApproval, type SpentApproval } from "./approval-decisions.js";
 
 // Tests when the executor wakes and which door each item goes through, both decided from the queue on disk, and that
 // an item runs only on the owner's yes as the approve route records it. The fake store below behaves like the real one
@@ -16,9 +17,18 @@ const startTurn = jest.fn(async () => undefined);
 // the daemon refuses before asking, are themselves under test.
 const sendDiscord = jest.fn(async (..._args: unknown[]): Promise<{ url?: string } | undefined> => ({ url: "https://discord.com/channels/1/2/3" }));
 
+// The extension's backend door: what an action naming a `performer` is handed to once its yes is spent. Whether it is
+// asked at all, how often, and with which yes, is what the performer tests below are about.
+const performByExtension = jest.fn(
+    async (_services: Services, _item: ActionApprovalSummary, _yes: SpentApproval): Promise<ApprovedActionOutcome> => ({ outcome: "done", result: "RPW/12/2026" }),
+);
+
 jest.mock("../seams/runtime-feed.js", () => ({ publishRuntimeChange: jest.fn() }));
 jest.mock("../extensions/listener/listener-deliver.js", () => ({
     deliverThroughGateway: (...args: unknown[]) => sendDiscord(...args),
+}));
+jest.mock("./approval-performers.js", () => ({
+    performApprovedAction: (services: Services, item: ActionApprovalSummary, yes: SpentApproval) => performByExtension(services, item, yes),
 }));
 
 const { createApprovalsExecutor, nextDueAt } = await import("./approvals-executor.js");
@@ -75,6 +85,7 @@ const servicesWith = async (...seed: ApprovalSummary[]) => {
             ],
         },
         logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn() },
+        audit: { record: jest.fn() },
         // The detached start is the one door a turn goes through; `started` keeps this suite's own, since an earlier
         // test's executor re-arms on the real clock and may start a turn of its own while a later test runs.
         turns: {
@@ -98,6 +109,7 @@ const sentBy = (services: object): unknown[][] => sendDiscord.mock.calls.filter(
 beforeEach(() => {
     startTurn.mockClear();
     sendDiscord.mockClear();
+    performByExtension.mockClear();
 });
 
 test("the next wake is the soonest approved item, and there is none when nothing is approved", () => {
@@ -355,4 +367,97 @@ test("a yes runs its item once: put back to approved by hand afterwards, it is f
     await executor.runDue(NOW);
     expect(sentBy(services)).toHaveLength(1);
     expect(services.rows.get("d")).toMatchObject({ status: "failed" });
+});
+
+// An office act an extension carries out itself: the item names it as `performer` with the digest of what it will do.
+const office = (overrides: Partial<ActionApprovalSummary> & { id: string }): ActionApprovalSummary =>
+    action({
+        summary: "EZD RP: register incoming mail in the RPW register",
+        details: "Registers the scanned letter.",
+        instructions: "Nothing for a turn to run.",
+        performer: { extension: "intentic.e-urzad", digest: "a".repeat(64) },
+        ...overrides,
+    });
+
+// What this suite's services handed the extension, whatever another test's executor hands it meanwhile.
+const performedBy = (services: object): unknown[][] => performByExtension.mock.calls.filter(([via]) => via === services);
+
+describe("an action its extension carries out", () => {
+    test("goes to the extension with the yes it was approved under, never to a turn, and its answer is the result", async () => {
+        const services = await servicesWith(office({ id: "rpw" }));
+        await createApprovalsExecutor(services).runDue(NOW);
+        expect(services.started).toEqual([]);
+        expect(performedBy(services)).toEqual([
+            [services, expect.objectContaining({ id: "rpw", performer: { extension: "intentic.e-urzad", digest: "a".repeat(64) } }), { approver: "owner@example.com", approvedAt: expect.any(Number) }],
+        ]);
+        expect(services.rows.get("rpw")).toMatchObject({ status: "done", result: "RPW/12/2026" });
+        expect(services.audit.record).toHaveBeenCalledWith(
+            expect.objectContaining({ action: "approvals.performed", target: "rpw", outcome: "ok", details: expect.objectContaining({ extension: "intentic.e-urzad", approver: "owner@example.com" }) }),
+        );
+    });
+
+    test("an item a turn marked approved itself, or running, never reaches the extension", async () => {
+        const services = await servicesWith();
+        services.rows.set("forged", office({ id: "forged" }));
+        // Running on the real clock, so the re-arm after the pass does not sweep it as a dead run: it only sits there.
+        services.rows.set("running", office({ id: "running", status: "running", startedAt: Date.now() }));
+        await createApprovalsExecutor(services).runDue(NOW);
+        expect(performedBy(services)).toEqual([]);
+        expect(services.rows.get("forged")).toMatchObject({ status: "failed" });
+        expect(services.rows.get("forged")?.error).toContain("never by writing");
+        expect(services.rows.get("running")).toMatchObject({ status: "running" });
+    });
+
+    test("a digest, a detail or a performer changed after the yes is not carried out", async () => {
+        const approved = [office({ id: "digest" }), office({ id: "details" }), office({ id: "who" })];
+        const services = await servicesWith(...approved);
+        services.rows.set("digest", office({ id: "digest", performer: { extension: "intentic.e-urzad", digest: "b".repeat(64) } }));
+        services.rows.set("details", office({ id: "details", details: "Registers a different letter." }));
+        services.rows.set("who", office({ id: "who", performer: { extension: "someone.else", digest: "a".repeat(64) } }));
+        await createApprovalsExecutor(services).runDue(NOW);
+        expect(performedBy(services)).toEqual([]);
+        for (const id of ["digest", "details", "who"]) {
+            expect(services.rows.get(id)).toMatchObject({ status: "failed" });
+            expect(services.rows.get(id)?.error).toContain("changed after it was approved");
+        }
+    });
+
+    test("two executors racing for one yes hand it over once", async () => {
+        const services = await servicesWith(office({ id: "rpw" }));
+        // Two executors share no in-process lock; only the ledger's compare-and-spend stands between them.
+        await Promise.all([createApprovalsExecutor(services).runDue(NOW), createApprovalsExecutor(services).runDue(NOW)]);
+        expect(performedBy(services)).toHaveLength(1);
+        expect(services.rows.get("rpw")).toMatchObject({ status: "done" });
+    });
+
+    test("a yes is handed over once: put back to approved afterwards, it is failed rather than carried out again", async () => {
+        const services = await servicesWith(office({ id: "rpw" }));
+        const executor = createApprovalsExecutor(services);
+        await executor.runDue(NOW);
+        const done = ActionApprovalSummarySchema.parse(services.rows.get("rpw"));
+        expect(done.status).toBe("done");
+        services.rows.set("rpw", { ...done, status: "approved" });
+        await executor.runDue(NOW);
+        expect(performedBy(services)).toHaveLength(1);
+        expect(services.rows.get("rpw")).toMatchObject({ status: "failed" });
+    });
+
+    test("a refusal says nothing was done; an uncertain outcome says it may have happened, and neither is retried", async () => {
+        const services = await servicesWith(office({ id: "refused" }), office({ id: "uncertain" }));
+        performByExtension.mockImplementation(async (_services, item) =>
+            item.id === "refused"
+                ? { outcome: "refused", error: "the card now points at another office" }
+                : { outcome: "uncertain", error: "integrator-api.example.test answered HTTP 500" },
+        );
+        const executor = createApprovalsExecutor(services);
+        await executor.runDue(NOW);
+        await executor.runDue(NOW + 60_000);
+        performByExtension.mockImplementation(async () => ({ outcome: "done", result: "RPW/12/2026" }));
+        expect(performedBy(services)).toHaveLength(2);
+        expect(services.rows.get("refused")).toMatchObject({ status: "failed", error: "Nothing was done: the card now points at another office" });
+        expect(services.rows.get("uncertain")).toMatchObject({
+            status: "failed",
+            error: "This may already have happened: integrator-api.example.test answered HTTP 500. Check the system it was sent to before approving it again; it is never retried by itself.",
+        });
+    });
 });

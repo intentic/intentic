@@ -319,7 +319,11 @@ const confirmRemove = async (): Promise<void> => {
                 :description="personaRouting ? t(`sandbox.sandboxPersonas.firstMessageReadSend`) : t(`sandbox.sandboxPersonas.nothingReadChatActs`)"
             >
                 <template #control>
-                    <ToggleSwitch :model-value="personaRouting" @update:model-value="setPersonaRouting" />
+                    <ToggleSwitch
+                        :model-value="personaRouting"
+                        :aria-label="t(`sandbox.sandboxPersonas.matchNewChatsTo`)"
+                        @update:model-value="setPersonaRouting"
+                    />
                 </template>
             </Row>
         </RowGroup>

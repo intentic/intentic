@@ -2,6 +2,7 @@ import { DEFAULT_PRIVACY_SHIELD, type PrivacyShieldPolicy, PrivacyShieldPolicySc
 import { mapValue } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
+import type { Pin } from "../compliance/org-pins.js";
 
 // The owner's privacy shield policy, stored beside the credential gates and host guards (mode 0600, off the workspace)
 // for the same reason they are: `.intentic/config/` is agent-editable, and a turn must not be able to switch off the
@@ -32,7 +33,9 @@ export class PrivacyPolicyUnreadableError extends Error {
     }
 }
 
-export const filePrivacyPolicy = (path: string): PrivacyPolicyStore => {
+// `pin` is the organisation's (compliance/org-pins.ts), as for settings.json: reads come back with the pinned items applied,
+// a looser file is written back pinned, and a write is stored pinned.
+export const filePrivacyPolicy = (path: string, pin?: Pin<PrivacyShieldPolicy>, warn?: (message: string, error: Error) => void): PrivacyPolicyStore => {
     const file = openDocument(privacyShieldDocument, path, {
         fallback: (): PrivacyShieldPolicy => ({ ...DEFAULT_PRIVACY_SHIELD }),
         mode: 0o600,
@@ -45,10 +48,19 @@ export const filePrivacyPolicy = (path: string): PrivacyPolicyStore => {
             if (state.unreadable) {
                 throw new PrivacyPolicyUnreadableError(path, state.detail);
             }
-            return state.value;
+            if (pin === undefined) {
+                return state.value;
+            }
+            const outcome = await pin(state.value);
+            if (outcome.loosened.length > 0) {
+                void file.update(outcome.reapply).catch((error: Error) => warn?.("privacy: writing the organisation's pinned values back failed", error));
+            }
+            return outcome.value;
         },
         set: async (policy) => {
-            await file.update(() => PrivacyShieldPolicySchema.parse(policy));
+            const parsed = PrivacyShieldPolicySchema.parse(policy);
+            const stored = pin === undefined ? parsed : (await pin(parsed)).value;
+            await file.update(() => stored);
         },
     };
 };

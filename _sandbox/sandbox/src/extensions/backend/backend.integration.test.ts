@@ -15,6 +15,8 @@ import { workspacePaths } from "../../workspace/workspace.js";
 import { approveExtension } from "../extension-approvals.js";
 import { createExtensionBackend, type ExtensionBackend, type ExtensionBackendOptions } from "./backend-supervisor.js";
 import { extensionMcpToolsOf } from "./extension-mcp.js";
+import { performApprovedAction } from "../../approvals/approval-performers.js";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 
 // Extension backend system end-to-end against a real spawned host process (supervisor, /x proxy, containment rules).
 // Slow (node spawn + health poll); it catches seams the unit tests fake.
@@ -441,4 +443,68 @@ test("a host that dies on arrival keeps the exit it died of as the reason", asyn
     await backend.start();
 
     expect(backend.status()).toMatchObject({ state: "error", detail: "the backend host exited (3)" });
+});
+
+// An extension that carries out approved actions itself: it answers with exactly what the daemon handed it, so the test
+// sees what crossed the door; an item it was told to fail throws, as a handler that broke mid-act would.
+const performerServer = `export const activateServer = (api) => {
+    api.approvals.perform(async (action) => {
+        if (action.summary === "throw") {
+            throw new Error("the office connection dropped mid-act");
+        }
+        return { outcome: "done", result: JSON.stringify(action) };
+    });
+};
+`;
+
+test("an approved action reaches its extension's backend only through the host's door, with the yes and the daemon's rules", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ext-backend-performer-"));
+    await writeExtension(root, "performer", performerServer);
+    await writeExtension(root, "echo", echoServer);
+    const { svc, backend } = harness(root);
+    // The rules as the daemon reads them, never as a workspace file says: this is what an organisation's pins tighten.
+    const settings = { ...svc, sandboxSettings: { ...svc.sandboxSettings, get: async () => SandboxSettingsSchema.parse({ actionRules: { "ezdrp.*": "deny" } }) } };
+    await backend.start();
+    const item = {
+        id: "e-urzad-1",
+        kind: "action" as const,
+        summary: "EZD RP: register incoming mail",
+        details: "Registers the letter.",
+        instructions: "Nothing for a turn to run.",
+        performer: { extension: "acme.performer", digest: "a".repeat(64) },
+        status: "running" as const,
+    };
+    const yes = { approver: "urzednik@example.gov.pl", approvedAt: 1_760_000_000_000 };
+
+    const done = await performApprovedAction(settings, item, yes);
+    expect(done.outcome).toBe("done");
+    expect(JSON.parse(done.outcome === "done" ? done.result : "{}")).toEqual({
+        id: "e-urzad-1",
+        digest: "a".repeat(64),
+        summary: "EZD RP: register incoming mail",
+        details: "Registers the letter.",
+        approver: "urzednik@example.gov.pl",
+        approvedAt: 1_760_000_000_000,
+        actionRules: { "ezdrp.*": "deny" },
+    });
+
+    // An extension that carries out nothing refuses before any code of its runs; one that throws mid-act is uncertain.
+    expect(await performApprovedAction(settings, { ...item, performer: { extension: "acme.echo", digest: "a".repeat(64) } }, yes)).toEqual({
+        outcome: "refused",
+        error: `the extension's backend did not take it (HTTP 404: {"error":"the \\"acme.echo\\" backend carries out no approved actions"})`,
+    });
+    expect(await performApprovedAction(settings, { ...item, summary: "throw" }, yes)).toEqual({
+        outcome: "uncertain",
+        error: `the extension's backend failed while carrying it out (HTTP 500: {"error":"the office connection dropped mid-act"})`,
+    });
+    expect(await performApprovedAction(settings, { ...item, performer: { extension: "acme.nobody", digest: "a".repeat(64) } }, yes)).toEqual({
+        outcome: "refused",
+        error: `no enabled extension "acme.nobody" with a backend carries this out`,
+    });
+
+    // No person's, panel's or agent's route reaches the door: not under /x, and not on the host without its token.
+    const app = createApp(svc);
+    expect((await app.request("http://sandbox.test/x/acme.performer/approvals/acme.performer", { method: "POST", body: "{}" })).status).toBe(404);
+    const target = backend.proxyTarget();
+    expect((await fetch(`http://127.0.0.1:${target!.port}/approvals/acme.performer`, { method: "POST", body: JSON.stringify({ action: item }) })).status).toBe(401);
 });

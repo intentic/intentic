@@ -19,7 +19,7 @@ const {
     src?: string | null;
     /** HSL hue for the identity fill. Omitted ⇒ neutral surface + border, the account/author look. */
     hue?: number;
-    /** All the member's tabs are hidden: dimmed and desaturated, never removed. */
+    /** All the member's tabs are hidden: desaturated, while the initials remain readable. */
     idle?: boolean;
     /** Hairline against the surface behind, for avatars that overlap in a stack; 0 = none. */
     ring?: number;
@@ -37,18 +37,20 @@ const hideBrokenImage = (event: Event): void => {
 
 <template>
     <span
-        class="relative flex shrink-0 items-center justify-center overflow-hidden rounded-full transition-opacity"
-        :class="[idle ? `opacity-50 grayscale` : ``, hue === undefined ? `border border-line bg-content/5 text-muted` : `text-white`]"
+        class="relative flex shrink-0 items-center justify-center overflow-hidden rounded-full"
+        :class="[idle ? `grayscale` : ``, hue === undefined ? `border border-line bg-content/5 text-muted` : `text-white`]"
         :style="{
             width: `${size}px`,
             height: `${size}px`,
             fontSize: `${Math.max(7, size * 0.375)}px`,
-            ...(hue === undefined ? {} : { backgroundColor: `hsl(${hue} 55% 42%)` }),
+            ...(hue === undefined ? {} : { backgroundColor: `hsl(${hue} 55% 28%)` }),
             ...(ring > 0 ? { boxShadow: `0 0 0 ${ring}px var(--color-card)` } : {}),
         }"
         :aria-label="name"
+        :role="name === undefined ? undefined : `img`"
+        :aria-hidden="name === undefined ? true : undefined"
     >
-        <span v-if="initials !== undefined" class="font-semibold leading-none">{{ initials }}</span>
+        <span v-if="initials !== undefined" aria-hidden="true" class="font-semibold leading-none">{{ initials }}</span>
         <Icon v-else name="user" />
         <!-- Layered over the fallback tier, so a failed load reveals it rather than leaving a hole. -->
         <img

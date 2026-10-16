@@ -146,10 +146,8 @@
     --role-faint:       color-mix(in oklab, var(--role-subtle) 68%, var(--role-card));
 /* 800 RATHER THAN 700, because 700 is 58% L and orange at 58% on near-white is 4.3:1 — the accent colour. */
     --role-link:        var(--color-primary-800);
-/* HALFWAY BETWEEN THE FILL AND THE LINK — 500, which every accent mark used to be written in, is 2.4:1 on the canvas: a
-   tick beside the picked option and the ring of a running job were the faintest things in their rows. 700 alone is the
-   fill (3.9:1, a white label's ground); this is ~4.6:1, an ink, and still the accent rather than the link's brown. */
-    --role-accent:      color-mix(in oklab, var(--color-primary-700) 45%, var(--color-primary-800));
+/* Accent labels also sit on tinted buttons and pills, so they need the link's ink rather than the brighter fill. */
+    --role-accent:      var(--role-link);
 /* THE STATUS ROLES ARE TEXT COLOURS FIRST, so they sit at the lightness `--role-link` does — around 50% L — and not one step up. */
     --role-danger:      var(--color-danger-700);
     --role-success:     var(--color-success-700);
@@ -244,7 +242,8 @@
 /* 94% L rather than the ramp's 98%, because CONTRAST IS WHAT FEEDS THE HALATION. */
     --role-content:     color-mix(in oklab, var(--color-surface-100) 50%, var(--color-surface-200));
     --role-muted:       var(--color-surface-400);
-    --role-subtle:      var(--color-surface-500);
+/* Small metadata must remain readable on the raised chat and status surfaces as well as the canvas. */
+    --role-subtle:      color-mix(in oklab, var(--color-surface-400) 70%, var(--color-surface-500));
 /* On near-black a mark in `subtle` is already as quiet as it can be and still read, so the two are one here. */
     --role-faint:       var(--role-subtle);
     --role-link:        var(--color-primary-400);

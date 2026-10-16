@@ -33,6 +33,20 @@
             "personas": "Personas",
             "updates": "Mises à jour automatiques"
         },
+        "preset": {
+            "group": "Réglages imposés",
+            "note": "Chaque groupe activé ici s'applique dans chaque sandbox de cette organisation, quels que soient ses propres réglages. On peut rendre un de ces réglages plus strict, jamais plus souple, et une modification faite directement dans un fichier de réglages est annulée.",
+            "pinned": "Imposé",
+            "notPinned": "Non imposé",
+            "privacy": "Bouclier de confidentialité activé, images masquées",
+            "retention": "Conversations, points de restauration et caches conservés moins longtemps",
+            "audit": "Journal d'audit conservé au moins deux ans, lectures enregistrées",
+            "analytics": "Analyse du produit désactivée",
+            "notice": "Avis sur l'IA affiché à tous",
+            "actions": "Les messages sortants et les actes administratifs attendent une approbation",
+            "admission": "Le travail lancé depuis l'extérieur du sandbox attend une approbation",
+            "judge": "Juge des commandes activé"
+        },
         "detail": {
             "couldntSave": "Impossible d'enregistrer la politique",
             "couldntAdd": "Impossible d'ajouter cette personne",
@@ -52,7 +66,10 @@
             "noSandboxes": "Aucun sandbox n'appartient encore à cette organisation.",
             "pickSandbox": "Choisissez un de vos sandboxes",
             "bind": "Ajouter à l'organisation",
-            "bindNote": "Seuls vos propres sandboxes peuvent être ajoutés. Une fois ajouté, la politique ci-dessus s'applique jusqu'à ce qu'un administrateur le libère."
+            "bindNote": "Seuls vos propres sandboxes peuvent être ajoutés. Une fois ajouté, la politique ci-dessus s'applique jusqu'à ce qu'un administrateur le libère.",
+            "membersOnly": "Seulement les personnes de cette organisation",
+            "membersOnlyNote": "L'accès à ces sandboxes ne peut être donné qu'aux personnes de cette liste. Retirer quelqu'un de l'organisation lui retire l'accès à chaque sandbox en quelques minutes, sans que personne dans le sandbox n'ait à agir. Les propriétaires des sandboxes ne sont pas concernés.",
+            "policyReset": "est revenu sans sa copie de la politique le {date} et l'a reçue à nouveau"
         }
     },
     "a11yKit": { "toggleDetails": "Afficher ou masquer les détails du titre", "selectRow": "Sélectionner la ligne d’exemple", "settingsButton": "Exemple de bouton des paramètres", "codeField": "Exemple de champ de code" },
@@ -3544,6 +3561,7 @@
             "tools": "Outils"
         },
         "sandboxAreas": {
+            "toggleArea": "Afficher ou masquer les détails de {name}",
             "areaName": "Nom de la zone",
             "areas": "Vos zones",
             "briefPlaceholder": "Ce qu'est cette partie de l'espace de travail, en une ligne",
@@ -5198,6 +5216,7 @@
         "worthKnowing": "Bon à savoir"
     },
     "shell": {
+        "skipToContent": "Aller au contenu principal",
         "accountPanel": {
             "signOut2": "Se déconnecter"
         },

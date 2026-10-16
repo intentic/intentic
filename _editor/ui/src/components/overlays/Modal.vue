@@ -1,7 +1,7 @@
 <!-- The app's one centred, dismissable box; forms, confirms and documents are all built on it. Its anatomy and why is dialog.css. -->
 <script setup lang="ts">
 import Dialog from "primevue/dialog";
-import { computed, ref, useId, useSlots, type VNode } from "vue";
+import { computed, nextTick, ref, useId, useSlots, type VNode } from "vue";
 import { useBackDismiss } from "../../composables/useBackDismiss.js";
 import { useDevice } from "../../composables/useDevice.js";
 import { provideDialogGround } from "./dialogGround.js";
@@ -183,6 +183,13 @@ const settleFocus = (): void => {
 const onShow = (): void => {
     watchEdges();
     emit(`show`);
+    // PrimeVue waits until the entrance animation ends to move focus. A quick Tab must already stay in the box.
+    // The next tick lets PrimeVue remember the opener and lets a caller's show handler focus its own field first.
+    void nextTick(() => {
+        if (open.value && box !== undefined && !box.contains(box.ownerDocument.activeElement)) {
+            box.focus({ preventScroll: true });
+        }
+    });
 };
 
 const onHide = (): void => {

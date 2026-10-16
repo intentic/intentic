@@ -1,4 +1,5 @@
 {
+    "loading": "Odczytywanie danych z urzędu…",
     "title": "e-Urząd",
     "refresh": "Odśwież z urzędu",
     "test": "Sprawdź połączenie",
@@ -7,7 +8,7 @@
     "testedEd": "Zalogowano do skrzynki {mailbox} ({environment}).",
     "neverSynced": "Nic jeszcze nie zapisano. Odśwież, żeby odczytać dane z urzędu; agent może też uruchomić e-urzad … sync.",
     "syncedAt": "Ostatni odczyt z urzędu: {at}",
-    "ezdNote": "Tylko odczyt. Rejestracja pism, dołączanie plików do sprawy i korespondencja wychodząca czekają na Twoją zgodę w Zatwierdzeniach, chyba że reguły działań na to pozwalają.",
+    "ezdNote": "Tylko odczyt. Rejestracja pism, dołączanie plików do sprawy i korespondencja wychodząca wymagają zgody na konkretne działanie w Zatwierdzeniach.",
     "edNote": "Lista pokazuje tylko metadane: nic tu nie otwiera przesyłki. Otwarcie (które może oznaczać doręczenie) i wysyłka czekają na Twoją zgodę w Zatwierdzeniach.",
     "cases": "Sprawy w toku",
     "noCases": "Brak spraw w toku albo jeszcze ich nie odczytano.",

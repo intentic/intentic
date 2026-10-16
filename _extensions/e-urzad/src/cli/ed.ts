@@ -8,8 +8,7 @@ import { OfficeRecords } from "../core/records.js";
 import { EdClient } from "../ed/mailbox.js";
 import { deliveryRow } from "../ed/mailbox-schemas.js";
 import { saveProofs, syncInbox } from "../ed/deliveries.js";
-import { type Context, pathArgument, print, printOutcome, required, UsageError } from "./context.js";
-import { performNow } from "./perform.js";
+import { type Context, pathArgument, print, printHeld, required, UsageError } from "./context.js";
 
 // `e-urzad ed …`: e-Doręczenia for the connected system card. Listing and metadata open nothing; `open` is held,
 // because opening a delivery is an act with legal effect; `send` is held.
@@ -98,7 +97,7 @@ export const runEd = async (context: Context, argv: readonly string[]): Promise<
                 return undefined;
             })) ?? undefined;
             const proposal = proposeOpen(settings, messageId, known === undefined ? undefined : deliveryRow(known));
-            printOutcome(context, await guard.run(proposal, (operation) => performNow(operation, { ed: client }, records)));
+            printHeld(context, await guard.propose(proposal));
             return;
         }
         case "attachment": {
@@ -120,7 +119,7 @@ export const runEd = async (context: Context, argv: readonly string[]): Promise<
         case "send": {
             const message = parseJsonObject(await readFile(pathArgument(required(rest[0], "the message file")), "utf8"), "the message file");
             const files = (values.file ?? []).map((path) => ({ path: pathArgument(path) }));
-            printOutcome(context, await guard.run(proposeSend(settings, message, files), (operation) => performNow(operation, { ed: client }, records)));
+            printHeld(context, await guard.propose(proposeSend(settings, message, files)));
             return;
         }
         case "task": {

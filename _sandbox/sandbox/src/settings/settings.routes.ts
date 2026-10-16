@@ -20,6 +20,7 @@ import { settingsDocument } from "./settings-store.js";
 import { versionedSettingsWrite } from "../seams/settings-versions.js";
 import { reconcileBakedSkills } from "./skills.js";
 import { requireAgentDomainRollout } from "../workload/domain/agent-domain-rollout.js";
+import { settingsPinRefusal } from "../compliance/org-pins.js";
 
 // `get` applies defaults when the manifest is absent, `set` overwrites it. `savings` reads whichever backend's ledger
 // is currently compressing: the setting picking the cleaner also picks the ledger read here.
@@ -61,6 +62,12 @@ export const createSettingsRoutes = (services: Services) => {
         ...createAiLiteracyRoutes(services),
         get: i.get.handler(() => services.sandboxSettings.get()),
         set: i.set.handler(async ({ input }) => {
+            // A save that would undo what the sandbox's organisation pinned is refused with the items named, rather than
+            // stored pinned and leaving the page showing a value that did not stick (compliance/org-pins.ts).
+            const pinned = await settingsPinRefusal(services.orgPolicy, input);
+            if (pinned !== undefined) {
+                throw new ORPCError("FORBIDDEN", { message: pinned.error, data: pinned });
+            }
             const before = await services.sandboxSettings.get();
             await versioned("agent settings", () => services.sandboxSettings.set(input)).catch((error: unknown) => {
                 // The owner's file to fix, not a server fault: the message names it and what this build could not read.

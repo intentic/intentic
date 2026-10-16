@@ -14,6 +14,7 @@ import { prefetchViewsAtIdle } from "../router/prefetch";
 import { useChat } from "../features/chat/run/useChat";
 import { mobileChatPath } from "../lib/routes/tabRoots";
 import { useGuestFence } from "./guestFence";
+import SkipToContent from "./SkipToContent.vue";
 
 // Persistent post-login chrome, split by form factor: ShellDesktop (rail, side panel, terminal) under a
 // pointer, ShellMobile (tab bar, full-screen views) below 768px. State lives in module composables, so
@@ -67,6 +68,7 @@ watch(mobile, (isMobile) => {
 </script>
 
 <template>
+    <SkipToContent />
     <ShellMobile v-if="mobile" />
     <ShellDesktop v-else />
 </template>

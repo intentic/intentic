@@ -660,6 +660,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                                 <!-- Named only when there is a second kind to tell apart; a folder of one kind reads without a label. -->
                                 <h3
                                     v-if="band.kind === 'label'"
+                                    aria-hidden="true"
                                     class="absolute inset-x-0 px-2 pt-3 pb-1 text-2xs text-muted"
                                     :style="{ top: `${top}px` }"
                                 >
@@ -667,6 +668,8 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                                 </h3>
                                 <div
                                     v-else
+                                    role="group"
+                                    :aria-label="groups.find((group) => band.key.startsWith(`${group.key}#`))?.label"
                                     class="absolute inset-x-0 grid gap-0.5"
                                     :style="{ top: `${top}px`, gridTemplateColumns: `repeat(${gridLayout.columns}, minmax(0, 1fr))` }"
                                 >

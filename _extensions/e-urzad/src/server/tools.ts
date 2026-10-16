@@ -13,9 +13,9 @@ import { verifyFile } from "../signatures/verify.js";
 
 // The agent's tools for one connected EZD RP card, served by the host (`contributes.tools.perCard: "ezd-rp"`): the
 // daemon mounts them into every turn granted the card, on every runtime, as a server named by the card's id, and hands
-// the card's settings with each call. Reads and signature checks only. The office writes stay on the `e-urzad` CLI,
-// where they go through the action-rule guard and the approvals queue. e-Doręczenia is on the CLI as well: the manifest
-// format serves tools for one card kind per extension.
+// the card's settings with each call. Reads and signature checks only. An office write is proposed on the `e-urzad`
+// CLI, which holds it in the approvals queue, and carried out only by this backend once a person approved it
+// (perform.ts). e-Doręczenia is on the CLI as well: the manifest format serves tools for one card kind per extension.
 
 const answer = <T>(value: T): ToolResult => ({ content: [{ type: "text", text: JSON.stringify(value ?? null, undefined, 2) }] });
 const failure = (cause: unknown): ToolResult => ({ content: [{ type: "text", text: causeText(cause) }], isError: true });

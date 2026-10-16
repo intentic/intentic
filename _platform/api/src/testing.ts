@@ -184,7 +184,8 @@ interface FakeGoogleAccount {
 export type FakeAccountRows = {
     users: FakeUser[];
     accounts: { userId: string; providerId: string; accountId: string }[];
-    sandboxes: { id: string; ownerId: string }[];
+    // `orgId` and `name` only where a test is about an organisation's sandbox; absent reads as a personal one.
+    sandboxes: { id: string; ownerId: string; orgId?: string | null; name?: string }[];
     machines: { sandboxId: string; appName: string; tier: string; wokeAt: Date | null; createdAt: Date }[];
     trash: { id: string; ownerId: string; appName: string | null }[];
     provisions: { userId: string; appName: string }[];

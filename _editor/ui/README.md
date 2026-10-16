@@ -132,6 +132,11 @@ flowchart LR
   (`_editor/web/src/app/replayText.ts`).
 - **Tests and preview.** The kit's suites live in `_editor/web/src/design-system`. The editor's dev server shows
   every component variant at `/kit`.
+- **Accessibility.** Named avatars expose one image label; idle avatars keep readable initials. Search controls have
+  24px targets. Off switches have visible tracks and handles in all three looks, with contrast measured in the demo suite.
+  Segmented controls use one tab stop and support Left/Right, Home and End to select and focus a tab.
+  Modals move focus inside before their entrance animation finishes, retain the caller's chosen field,
+  and return focus to the opener when dismissed. The demo accessibility suite exercises the modal on desktop and mobile.
 - **Assistant faces.** Every persona is the same clay companion, told apart by two things. Its body color comes
   from a hash of the persona's id, so a rename keeps it. The prop it holds comes from its name, because the prop is
   what says at a glance what the persona helps with. `personaAccessory` reads the name. A project persona still

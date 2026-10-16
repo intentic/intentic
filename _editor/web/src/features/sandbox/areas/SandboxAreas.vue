@@ -297,6 +297,7 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                     hit="pair"
                     body="drawer"
                     icon="folder"
+                    :toggle-label="t(`sandbox.sandboxAreas.toggleArea`, { name: area.label ?? area.id })"
                     :disabled="!isOwner"
                     :open="isOpen(area)"
                     @update:open="toggleOpen(area)"

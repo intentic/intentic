@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId } from "vue";
 import { type JumpScope, jumpScopes, scopedQuery } from "../../workbench/commands/jumpSearch";
 import { type PaletteRow, useFileJumpRows, useJumpRows } from "./useJumpRows";
 import { useQuickOpen } from "../../workbench/commands/useQuickOpen";
@@ -16,6 +16,8 @@ const t = useT();
 // no agents, terminals or commands to jump to and no route but its own. Read once, as a window is one kind or the other.
 const { openFile } = defineProps<{ openFile?: (path: string) => void }>();
 const filesOnly = openFile !== undefined;
+const titleId = useId();
+const label = computed(() => filesOnly ? t(`local.quickOpen.goToFile`) : t(`shell.quickOpen.jumpTo`));
 
 const { isOpen, mode, seed, mounted } = useQuickOpen();
 onMounted(() => {
@@ -96,13 +98,9 @@ const onShow = async (): Promise<void> => {
 </script>
 
 <template>
-    <Modal v-model:open="isOpen" size="md" :chrome="false" :scroll="false" position="top" @show="onShow">
-        <div
-            role="combobox"
-            aria-haspopup="listbox"
-            aria-expanded="true"
-            :aria-label="filesOnly ? t(`local.quickOpen.goToFile`) : t(`shell.quickOpen.jumpTo`)"
-        >
+    <Modal v-model:open="isOpen" size="md" :chrome="false" :scroll="false" :labelled-by="titleId" position="top" @show="onShow">
+        <div>
+            <h2 :id="titleId" class="sr-only">{{ label }}</h2>
             <!-- field-bare: the search is the panel's top band, not a boxed field — the panel border and this divider are already its frame. -->
             <div class="ui-search-row relative border-b border-line">
                 <Icon
@@ -117,7 +115,10 @@ const onShow = async (): Promise<void> => {
                     type="text"
                     :placeholder="filesOnly ? t(`local.quickOpen.fileName`) : t(`shell.quickOpen.jumpToPaste`)"
                     class="field-bare w-full min-w-0 py-2.5 pl-9 pr-3"
-                    role="searchbox"
+                    role="combobox"
+                    :aria-label="label"
+                    aria-expanded="true"
+                    aria-autocomplete="list"
                     aria-controls="quick-open-list"
                     :aria-activedescendant="activeIndex < rows.length ? `quick-open-opt-${activeIndex}` : undefined"
                     @keydown.down.prevent="move(1)"
@@ -146,37 +147,35 @@ const onShow = async (): Promise<void> => {
                     <kbd v-if="scope.prefix" class="font-mono text-subtle">{{ scope.prefix }}</kbd>
                 </button>
             </div>
-            <div
-                id="quick-open-list"
-                class="max-h-80 overflow-auto py-1"
-                role="listbox"
-                :aria-label="filesOnly ? t(`local.quickOpen.goToFile`) : t(`shell.quickOpen.jumpTo`)"
-            >
+            <div class="max-h-80 overflow-auto py-1">
                 <Notice v-if="truncated" tone="warning" size="xs" class="mx-1.5 mb-1">{{ t(`shell.quickOpen.showingFirstMatchesOnly`) }}</Notice>
-                <template v-for="section in sections" :key="section.heading">
-                    <p class="px-3 pb-1 pt-0.5 text-2xs font-medium uppercase tracking-wide text-subtle">{{ section.heading }}</p>
-                    <button
-                        v-for="(row, index) in section.rows"
-                        :id="`quick-open-opt-${section.from + index}`"
-                        :key="row.key"
-                        :ref="(el) => setRowEl(row.key, el)"
-                        type="button"
-                        role="option"
-                        :aria-selected="section.from + index === activeIndex"
-                        class="ui-row-select flex w-full items-center gap-2 px-3 py-1.5 text-left"
-                        :class="{ 'ui-row-select-on': section.from + index === activeIndex }"
-                        @click="run(row)"
-                        @mouseenter="activeIndex = section.from + index"
-                    >
-                        <Icon :name="row.icon as IconName" class="shrink-0 text-2xs" :class="row.tone ?? `text-muted`" />
-                        <span class="min-w-0 truncate text-sm text-content">{{ row.title }}</span>
-                        <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ row.detail }}</span>
-                        <kbd v-if="row.chord" class="shrink-0 rounded border border-line bg-overlay px-1.5 py-0.5 font-mono text-2xs text-muted">{{
-                            row.chord
-                        }}</kbd>
-                    </button>
-                </template>
-                <p v-if="error" class="px-3 py-3 text-center text-2xs text-danger">{{ error }}</p>
+                <div id="quick-open-list" role="listbox" :aria-label="label" :aria-busy="searching || pending">
+                    <div v-for="section in sections" :key="section.heading" role="group" :aria-label="section.heading">
+                        <p aria-hidden="true" class="px-3 pb-1 pt-0.5 text-2xs font-medium uppercase tracking-wide text-subtle">{{ section.heading }}</p>
+                        <button
+                            v-for="(row, index) in section.rows"
+                            :id="`quick-open-opt-${section.from + index}`"
+                            :key="row.key"
+                            :ref="(el) => setRowEl(row.key, el)"
+                            type="button"
+                            role="option"
+                            tabindex="-1"
+                            :aria-selected="section.from + index === activeIndex"
+                            class="ui-row-select flex w-full items-center gap-2 px-3 py-1.5 text-left"
+                            :class="{ 'ui-row-select-on': section.from + index === activeIndex }"
+                            @click="run(row)"
+                            @mouseenter="activeIndex = section.from + index"
+                        >
+                            <Icon :name="row.icon as IconName" class="shrink-0 text-2xs" :class="row.tone ?? `text-muted`" />
+                            <span class="min-w-0 truncate text-sm text-content">{{ row.title }}</span>
+                            <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ row.detail }}</span>
+                            <kbd v-if="row.chord" class="shrink-0 rounded border border-line bg-overlay px-1.5 py-0.5 font-mono text-2xs text-muted">{{
+                                row.chord
+                            }}</kbd>
+                        </button>
+                    </div>
+                </div>
+                <p v-if="error" role="alert" class="px-3 py-3 text-center text-2xs text-danger">{{ error }}</p>
                 <p v-else-if="rows.length === 0 && (searching || pending)" class="px-3 py-3 text-center text-2xs text-subtle">
                     <Icon name="spinner" spin />
                 </p>
@@ -195,7 +194,7 @@ const onShow = async (): Promise<void> => {
                 <p v-else-if="rows.length === 0 && parsed.text.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">
                     {{ t(`shell.quickOpen.typeToSearch`) }}
                 </p>
-                <p v-else-if="rows.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">{{ t(`shell.quickOpen.noMatches`) }}</p>
+                <p v-else-if="rows.length === 0" role="status" class="px-3 py-3 text-center text-2xs text-subtle">{{ t(`shell.quickOpen.noMatches`) }}</p>
             </div>
         </div>
     </Modal>

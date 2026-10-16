@@ -1,37 +1,14 @@
-import { edTarget, ezdTarget } from "../actions.js";
-import { edFromEnv, ezdFromEnv, pickCard } from "../core/cards.js";
-import { ActionGuard, type Operation } from "../core/guard.js";
-import { OfficeRecords } from "../core/records.js";
-import { EdClient } from "../ed/mailbox.js";
-import { EzdClient } from "../ezd/integrator.js";
-import { type Context, print, required } from "./context.js";
-import { performNow } from "./perform.js";
+import { type Context, required } from "./context.js";
 
-// `e-urzad approved <id>`: the one way a held office act is carried out, by the fresh turn the daemon starts after the
-// owner approved it. The guard re-checks the item and the bytes; this re-checks that the card still points at the office
-// the owner saw on the card (same instance, same environment, same mailbox).
+// `e-urzad approved <id>` carried a held office act out from the agent's shell until 2026-10-15, deciding by the
+// approval file's status, which any turn can write. It performs nothing now: once a person approves an office act, the
+// daemon checks that yes against its own record, spends it, and hands the act to this extension's backend, which writes
+// the office's answer into the approval's result. The command stays to say so to a turn an older approval still points
+// here, rather than fail as an unknown command.
 
-const run = async (context: Context, operation: Operation, approvalId: string): Promise<void> => {
-    if (operation.key.startsWith("ezdrp.")) {
-        const card = pickCard(context.env, "ezd-rp", operation.card);
-        const settings = ezdFromEnv(context.env, card);
-        if (ezdTarget(settings) !== operation.target) {
-            throw new Error(`the card now points at ${ezdTarget(settings)}, not ${operation.target} as approved; nothing was done`);
-        }
-        const records = new OfficeRecords(context.root, card, "ezd-rp");
-        print(context, { approvalId, key: operation.key, result: await performNow(operation, { ezd: new EzdClient(settings) }, records, approvalId) });
-        return;
-    }
-    const card = pickCard(context.env, "e-doreczenia", operation.card);
-    const settings = edFromEnv(context.env, card);
-    if (edTarget(settings) !== operation.target) {
-        throw new Error(`the card now points at ${edTarget(settings)}, not ${operation.target} as approved; nothing was done`);
-    }
-    const records = new OfficeRecords(context.root, card, "e-doreczenia");
-    print(context, { approvalId, key: operation.key, result: await performNow(operation, { ed: new EdClient(settings) }, records, approvalId) });
-};
-
-export const runApproved = async (context: Context, argv: readonly string[]): Promise<void> => {
+export const runApproved = async (_context: Context, argv: readonly string[]): Promise<void> => {
     const approvalId = required(argv[0], "the approval id (e-urzad-…)");
-    await run(context, await new ActionGuard(context.root).approved(approvalId), approvalId);
+    throw new Error(
+        `nothing was done: \`e-urzad approved\` no longer carries out office acts. Once a person approves ${approvalId} in Approvals, the sandbox carries it out itself and writes the office's answer into the approval's "result". An approval proposed before this change has no performer and is never carried out: propose the act again.`,
+    );
 };

@@ -11,7 +11,7 @@ const { account, service } = defineProps<{ account: string; service: OfficeServi
 const describeTest = (detail: Readonly<Record<string, string | number>>): string =>
     service === `ezd-rp` ? t(`testedEzd`, { user: String(detail[`user`] ?? ``) }) : t(`testedEd`, { mailbox: String(detail[`mailbox`] ?? ``), environment: String(detail[`environment`] ?? ``) });
 
-const { snapshot, error, tested, refresh, test } = useOffice(
+const { snapshot, error, tested, pending, refresh, test } = useOffice(
     () => account,
     () => service,
     describeTest,
@@ -24,7 +24,7 @@ const when = (value: string | undefined): string => {
 
 // A deadline is a day, not a moment: shown as a date so a midnight in UTC does not read as the evening before.
 const day = (value: string | undefined): string => {
-    const at = instant(value);
+    const at = instant(value !== undefined && /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value);
     return at === undefined ? (value ?? ``) : formatDate(at);
 };
 
@@ -55,69 +55,73 @@ const deliveryLabel = (row: (typeof deliveries.value)[number]): string => {
 <template>
     <Page width="wide">
         <div class="flex flex-col gap-4">
-            <PageHeader :title="title" :description="synced">
+            <PageHeader :title="title">
                 <template #actions>
-                    <Button :label="t(`test`)" icon="check-circle" tier="boring" @click="test" />
-                    <Button :label="t(`refresh`)" icon="refresh" @click="refresh" />
+                    <Button :label="t(`test`)" icon="check-circle" tier="boring" :disabled="pending !== undefined" :loading="pending === `test`" @click="test" />
+                    <Button :label="t(`refresh`)" icon="refresh" :disabled="pending !== undefined" :loading="pending === `refresh`" @click="refresh" />
                 </template>
             </PageHeader>
+
+            <p role="status" aria-atomic="true" class="text-xs text-muted">{{ pending === undefined ? synced : t(`loading`) }}</p>
 
             <Notice v-if="error" :of="noticeOf(error)" />
             <Notice v-if="tested" :of="{ tone: `success`, title: t(`connected`), detail: tested }" />
             <p class="text-xs text-muted">{{ service === `ezd-rp` ? t(`ezdNote`) : t(`edNote`) }}</p>
 
-            <template v-if="service === `ezd-rp`">
-                <section>
-                    <h3 :class="ui.sectionLabel(`mb-2 px-1`)">{{ t(`cases`) }}</h3>
-                    <p v-if="cases.length === 0" class="px-1 text-sm text-muted">{{ t(`noCases`) }}</p>
-                    <RowGroup v-else>
-                        <Row v-for="row in cases" :key="row.id" icon="folder" :title="row.title" :description="caseLine(row)">
-                            <template #meta><StatusBadge variant="neutral" :label="row.status" size="xs" /></template>
-                        </Row>
-                    </RowGroup>
-                </section>
-                <section>
-                    <h3 :class="ui.sectionLabel(`mb-2 px-1`)">{{ t(`tasks`) }}</h3>
-                    <p v-if="tasks.length === 0" class="px-1 text-sm text-muted">{{ t(`noTasks`) }}</p>
-                    <RowGroup v-else>
-                        <Row v-for="row in tasks" :key="row.id" icon="list-check" :title="row.documentTitle" :description="taskLine(row)">
-                            <template #meta><StatusBadge variant="info" :label="row.status" size="xs" /></template>
-                        </Row>
-                    </RowGroup>
-                </section>
-            </template>
+            <div v-if="snapshot !== undefined" class="flex flex-col gap-4" :aria-busy="pending !== undefined">
+                <template v-if="service === `ezd-rp`">
+                    <section>
+                        <h3 :class="ui.sectionLabel(`mb-2 px-1`)">{{ t(`cases`) }}</h3>
+                        <p v-if="cases.length === 0" class="px-1 text-sm text-muted">{{ t(`noCases`) }}</p>
+                        <RowGroup v-else>
+                            <Row v-for="row in cases" :key="row.id" icon="folder" :title="row.title" :description="caseLine(row)">
+                                <template #meta><StatusBadge variant="neutral" :label="row.status" size="xs" /></template>
+                            </Row>
+                        </RowGroup>
+                    </section>
+                    <section>
+                        <h3 :class="ui.sectionLabel(`mb-2 px-1`)">{{ t(`tasks`) }}</h3>
+                        <p v-if="tasks.length === 0" class="px-1 text-sm text-muted">{{ t(`noTasks`) }}</p>
+                        <RowGroup v-else>
+                            <Row v-for="row in tasks" :key="row.id" icon="list-check" :title="row.documentTitle" :description="taskLine(row)">
+                                <template #meta><StatusBadge variant="info" :label="row.status" size="xs" /></template>
+                            </Row>
+                        </RowGroup>
+                    </section>
+                </template>
 
-            <template v-else>
-                <section>
-                    <h3 :class="ui.sectionLabel(`mb-2 px-1`)">{{ t(`deliveries`) }}</h3>
-                    <p v-if="deliveries.length === 0" class="px-1 text-sm text-muted">{{ t(`noDeliveries`) }}</p>
-                    <RowGroup v-else>
-                        <Row v-for="row in deliveries" :key="row.id" icon="envelope" :title="row.subject || row.id" :description="deliveryLine(row)">
-                            <template #meta>
-                                <StatusBadge :variant="deliveryTone(row)" :label="deliveryLabel(row)" size="xs" />
-                                <StatusBadge v-if="row.status" variant="neutral" :label="row.status" size="xs" />
-                            </template>
-                        </Row>
-                    </RowGroup>
-                </section>
-                <section>
-                    <h3 :class="ui.sectionLabel(`mb-2 px-1`)">{{ t(`proofs`) }}</h3>
-                    <p class="mb-2 px-1 text-xs text-muted">{{ t(`proofNote`) }}</p>
-                    <p v-if="proofs.length === 0" class="px-1 text-sm text-muted">{{ t(`noProofs`) }}</p>
-                    <RowGroup v-else>
-                        <Row v-for="proof in proofs" :key="proof.evidenceId" icon="shield" :title="t(`proofTitle`, { type: proof.type, message: proof.messageId })" :description="proof.path">
-                            <template v-if="proof.eventDate" #meta><span class="text-2xs text-subtle">{{ when(proof.eventDate) }}</span></template>
-                        </Row>
-                    </RowGroup>
-                </section>
-            </template>
+                <template v-else>
+                    <section>
+                        <h3 :class="ui.sectionLabel(`mb-2 px-1`)">{{ t(`deliveries`) }}</h3>
+                        <p v-if="deliveries.length === 0" class="px-1 text-sm text-muted">{{ t(`noDeliveries`) }}</p>
+                        <RowGroup v-else>
+                            <Row v-for="row in deliveries" :key="row.id" icon="envelope" :title="row.subject || row.id" :description="deliveryLine(row)">
+                                <template #meta>
+                                    <StatusBadge :variant="deliveryTone(row)" :label="deliveryLabel(row)" size="xs" />
+                                    <StatusBadge v-if="row.status" variant="neutral" :label="row.status" size="xs" />
+                                </template>
+                            </Row>
+                        </RowGroup>
+                    </section>
+                    <section>
+                        <h3 :class="ui.sectionLabel(`mb-2 px-1`)">{{ t(`proofs`) }}</h3>
+                        <p class="mb-2 px-1 text-xs text-muted">{{ t(`proofNote`) }}</p>
+                        <p v-if="proofs.length === 0" class="px-1 text-sm text-muted">{{ t(`noProofs`) }}</p>
+                        <RowGroup v-else>
+                            <Row v-for="proof in proofs" :key="proof.evidenceId" icon="shield" :title="t(`proofTitle`, { type: proof.type, message: proof.messageId })" :description="proof.path">
+                                <template v-if="proof.eventDate" #meta><span class="text-2xs text-subtle">{{ when(proof.eventDate) }}</span></template>
+                            </Row>
+                        </RowGroup>
+                    </section>
+                </template>
 
-            <section v-if="actions.length > 0">
-                <h3 :class="ui.sectionLabel(`mb-2 px-1`)">{{ t(`actions`) }}</h3>
-                <RowGroup>
-                    <Row v-for="action in actions" :key="`${action.at}-${action.key}`" icon="send" :title="action.outcome" :description="`${action.key} · ${when(action.at)}`" />
-                </RowGroup>
-            </section>
+                <section v-if="actions.length > 0">
+                    <h3 :class="ui.sectionLabel(`mb-2 px-1`)">{{ t(`actions`) }}</h3>
+                    <RowGroup>
+                        <Row v-for="action in actions" :key="`${action.at}-${action.key}`" icon="send" :title="action.outcome" :description="`${action.key} · ${when(action.at)}`" />
+                    </RowGroup>
+                </section>
+            </div>
         </div>
     </Page>
 </template>

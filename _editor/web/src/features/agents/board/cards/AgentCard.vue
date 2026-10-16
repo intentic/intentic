@@ -93,7 +93,7 @@ import { formatChord, isApplePlatform } from "../../../../workbench/commands/key
 // One fleet agent: identity tile + title + status chip, a model/session line, and a closing summary line (stats,
 // drill-in, and either the running elapsed or the settled date).
 // The clock corner (AgentCardClock) reads the shared useNow clock itself, so a tick redraws that corner and not the card
-// or the board; root is a div-button (not <button>) so the nested rename input stays valid HTML.
+// or the board. The title is the open button; the card groups it with the independent action controls.
 // `dense` is the same card as a row, for stacked lanes: identical DOM and facts, just wrapped onto one line instead of
 // stacked, so a lane fits more cards.
 
@@ -666,10 +666,9 @@ const grab = (event: PointerEvent): void => {
 <template>
     <div
         ref="cardRoot"
-        role="button"
-        tabindex="0"
-        :aria-label="t(`agents.agentCard.focusAgent`, { displayTitle })"
-        class="session-card group flex w-full select-none flex-col rounded-2xl border text-left focus-visible:ring-2 focus-visible:ring-primary-500/25"
+        role="group"
+        :aria-label="displayTitle"
+        class="session-card group flex w-full select-none flex-col rounded-2xl border text-left"
         :class="[
             /* A LIVE CARD IS A BIGGER CARD (see `live`): the two lanes about work in flight get 16px of padding and a 14px title, the ledger keeps 14 and 12. */
             live ? 'gap-2.5 p-4' : 'gap-2 p-3.5',
@@ -686,8 +685,6 @@ const grab = (event: PointerEvent): void => {
         @click="openCard"
         @dblclick="reviewCard"
         @contextmenu="openMenu"
-        @keydown.enter.self.prevent="openCard()"
-        @keydown.space.self.prevent="openCard()"
     >
         <!-- THE TITLE COMES FIRST: it keeps a readable width (basis-28) and what trails it (the presses, the chip, the marks)
              wraps onto a line of its own when a narrow column has no room for both, rather than squeezing the name to a
@@ -716,17 +713,21 @@ const grab = (event: PointerEvent): void => {
             <template v-else>
                 <!-- A LIVE CARD'S TITLE WRAPS, a receipt's clips. -->
                 <!-- Its whole text in a hover, only while it is cut short. -->
-                <span
+                <button
+                    type="button"
                     v-tooltip.top.overflow="displayTitle"
-                    class="min-w-0 grow basis-28 font-semibold text-content"
+                    :aria-label="t(`agents.agentCard.focusAgent`, { displayTitle })"
+                    class="min-w-0 grow basis-28 rounded-sm text-left font-semibold text-content"
                     :class="live ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs'"
+                    @click.stop="openCard"
+                    @dblclick.stop="reviewCard"
                 >
                     <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
                         run.text
                     }}</span>
                     <!-- The peek state rides along as text for a screen reader, not an aria-label with no role. -->
                     <span v-if="peek" class="sr-only">{{ t(`agents.agentCard.temporary`) }}</span>
-                </span>
+                </button>
             </template>
             <span class="ml-auto flex shrink-0 items-center gap-2.5">
                 <!-- The card's own presses (headerActions), revealed on hover where there is a pointer and folded behind one ⋯ on a

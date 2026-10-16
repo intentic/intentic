@@ -57,6 +57,39 @@ export interface ToolDefinition {
 // the host answers 404.
 export type BackendRouteHandler = (request: Request) => Promise<Response | undefined>;
 
+// An action in the approvals queue that names this extension as its `performer`, handed over by the daemon only after
+// it found a person's yes on record matching the item as it stands, and spent that yes. The workspace file is never
+// what decides: an item marked approved without a recorded yes, or changed since, never reaches the backend.
+export interface ApprovedAction {
+    // The item's id in the approvals queue.
+    readonly id: string;
+    // `performer.digest` as the yes pinned it: the SHA-256 the extension wrote when it held the act. The extension
+    // recomputes it over what it is about to do and refuses on any difference.
+    readonly digest: string;
+    // The item's headline and details, exactly as they stood when the person said yes.
+    readonly summary: string;
+    readonly details: string;
+    // Who said yes (their sign-in) and when, as the daemon recorded it. No approver when the sandbox runs without
+    // sign-in. A yes given again (a retry) has a later `approvedAt`, so the pair names one yes.
+    readonly approver?: string | undefined;
+    readonly approvedAt: number;
+    // The sandbox's action rules as the daemon reads them now, organisation pins applied: a rule set to deny after the
+    // yes still refuses.
+    readonly actionRules: Readonly<Record<string, string>>;
+}
+
+// What carrying out an approved action came to, in the three states the queue keeps apart.
+export type ApprovedActionOutcome =
+    // It happened. `result` is the row's one line: a registry number, a task id.
+    | { readonly outcome: "done"; readonly result: string }
+    // It did not happen and nothing reached the outside world, so a new yes may safely run it again.
+    | { readonly outcome: "refused"; readonly error: string }
+    // It may have happened: the request went out and its answer failed or was lost part-way. The queue never repeats
+    // it by itself; the person checks the outside system first.
+    | { readonly outcome: "uncertain"; readonly error: string };
+
+export type ApprovedActionHandler = (action: ApprovedAction, context: { readonly signal: AbortSignal }) => Promise<ApprovedActionOutcome>;
+
 // An extension's own setting values, keyed as its manifest's `contributes.settings` declares them.
 export type ExtensionSettingValues = Readonly<Record<string, string | number | boolean>>;
 
@@ -157,6 +190,13 @@ export interface ExtensionServerApi {
     readonly tools: {
         serve(tools: (card: ToolCard | undefined) => readonly ToolDefinition[] | Promise<readonly ToolDefinition[]>): void;
     };
+    // The approved actions this extension carries out itself, in place of an agent turn: an approvals-queue item whose
+    // `performer` names this extension reaches `perform` from the daemon's approvals executor alone, through a door of
+    // the backend host that no /x route, panel or agent token reaches, after the daemon has matched and spent the yes.
+    // The credentials stay in the backend, read from the daemon. A second perform replaces the first.
+    readonly approvals: {
+        perform(handler: ApprovedActionHandler): void;
+    };
     // Authenticated transport to the daemon's own routes; every call is checked against the manifest's
     // `permissions.daemon` allowlist.
     readonly daemon: {
@@ -175,9 +215,10 @@ export interface ExtensionServerContext {
 }
 
 // What a declared process (`contributes.processes`) gets, from `connectExtensionProcess` in
-// `@intentic/extension-api/runtime`: the backend's api without the two halves only the backend host can serve. A
-// process answers on its own port, so it mounts no routes and serves tools there (`contributes.tools.process`).
-export type ExtensionProcessApi = Omit<ExtensionServerApi, "routes" | "tools">;
+// `@intentic/extension-api/runtime`: the backend's api without the halves only the backend host can serve. A process
+// answers on its own port, so it mounts no routes, serves tools there (`contributes.tools.process`) and carries out no
+// approved action.
+export type ExtensionProcessApi = Omit<ExtensionServerApi, "routes" | "tools" | "approvals">;
 
 // Shape of the manifest `server` bundle's default (or named) export; `activateServer` runs once per activation, which
 // is once per backend-host start unless the extension returns a `deactivate`, after which a change to it alone

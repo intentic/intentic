@@ -25,6 +25,7 @@ import type * as OrpcClient from "@orpc/client";
 import type * as OpenApiFetch from "@orpc/openapi-client/fetch";
 import type { Disposable } from "./disposable.js";
 import type {
+    ApprovedActionHandler,
     BackendRouteHandler,
     ExtensionHealth,
     ExtensionProcessApi,
@@ -43,6 +44,9 @@ import { extensionApiVersion } from "./version.js";
 // The backend half's types, from here as well as from the package root: the root also carries the browser half, whose
 // types name Vue's, which a gateway's program has no business loading.
 export type {
+    ApprovedAction,
+    ApprovedActionHandler,
+    ApprovedActionOutcome,
     BackendRouteHandler,
     ExtensionHealth,
     ExtensionHealthState,
@@ -412,12 +416,14 @@ export const createExtensionRuntime = (options: ExtensionRuntimeOptions): Extens
     };
 };
 
-// The backend api a `server` bundle is handed: the runtime plus the two slots only the host serves, its route namespace
-// and its tools. A second `mount` or `serve` replaces the first, per the api's contract.
+// The backend api a `server` bundle is handed: the runtime plus the slots only the host serves, its route namespace, its
+// tools and the approved actions it carries out. A second `mount`, `serve` or `perform` replaces the first, per the
+// api's contract.
 export interface ServerApiSlots {
     readonly api: ExtensionServerApi;
     readonly handler: () => BackendRouteHandler | undefined;
     readonly tools: () => ToolSource | undefined;
+    readonly performer: () => ApprovedActionHandler | undefined;
     close(): void;
 }
 
@@ -425,6 +431,7 @@ export const createServerApi = (options: ExtensionRuntimeOptions): ServerApiSlot
     const runtime = createExtensionRuntime(options);
     let mounted: BackendRouteHandler | undefined;
     let tools: ToolSource | undefined;
+    let performer: ApprovedActionHandler | undefined;
     return {
         api: {
             ...runtime.api,
@@ -438,9 +445,15 @@ export const createServerApi = (options: ExtensionRuntimeOptions): ServerApiSlot
                     tools = source;
                 },
             },
+            approvals: {
+                perform: (handler) => {
+                    performer = handler;
+                },
+            },
         },
         handler: () => mounted,
         tools: () => tools,
+        performer: () => performer,
         close: runtime.close,
     };
 };

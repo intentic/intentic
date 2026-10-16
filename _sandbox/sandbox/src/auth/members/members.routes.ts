@@ -8,6 +8,7 @@ import {
     type MemberSelf,
     MemberGrantSchema,
     memberAccess,
+    orgMembersOnlyRefusal,
     tierOf,
 } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
@@ -15,12 +16,15 @@ import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
 import { type PersonaReachDeps, reachablePersonas } from "../../personas/persona-reach.js";
 import { ownershipDenied, unavailableIfUnreadable } from "../owner-gates.js";
+import { orgAdmits } from "../../org/org-roster.js";
+import { revokeHeld } from "./revoke-held.js";
 
 // The shared-access roster (/members): who besides the owner may reach this sandbox, and at what tier.
 // Owner-gated by ownership rather than the maintainer-equivalent operating gate, since membership is the one thing a
 // revokable grant must not change.
 
-export type MembersRoutesDeps = Pick<Services, "auth" | "members" | "ownerEmail" | "wsTickets" | "mediaTickets" | "personas" | "areas">;
+export type MembersRoutesDeps = Pick<Services, "auth" | "members" | "ownerEmail" | "wsTickets" | "mediaTickets" | "personas" | "areas"> &
+    Partial<Pick<Services, "orgPolicy">>;
 
 // The lowercased email in a member-management request body, or undefined when absent/malformed.
 const memberEmail = async (c: Context): Promise<string | undefined> => {
@@ -120,13 +124,6 @@ const guestReachRefusal = async (services: PersonaReachDeps, grant: { role: Gran
         : "no assistant works in those areas, so a guest fenced to them would have nobody to talk to; give an assistant a starting folder inside one, or fence the guest to an area that already has one";
 };
 
-// Everything a person's browser still holds here once their grant changes or goes: live sockets, and the tickets their
-// sessions minted, which would otherwise outlive the grant they were minted under.
-const revokeHeld = (services: Pick<MembersRoutesDeps, "auth" | "wsTickets" | "mediaTickets">, email: string): void => {
-    services.auth?.connections.revoke(email);
-    services.wsTickets.revoke(email);
-    services.mediaTickets.revoke(email);
-};
 
 // A roster this build cannot read is refused rather than replaced (auth.ts `fileMembersStore`), so a grant or a removal
 // over it answers 503 (`unavailableIfUnreadable`) and leaves every socket and ticket as it was.
@@ -157,6 +154,12 @@ export const createMembersRoutes = (services: MembersRoutesDeps) => ({
         const refusal = accessRefused(grant) ?? reachRefusal(grant) ?? (await areaRefusal(services, grant)) ?? (await guestReachRefusal(services, grant));
         if (refusal !== undefined) {
             return c.json({ error: refusal }, 400);
+        }
+        // A bound sandbox whose organisation keeps it to its own people grants nobody else (org/org-roster.ts): the
+        // grant would be written and then never read, so it is refused where the owner can see why.
+        const policy = await services.orgPolicy?.current();
+        if (policy !== undefined && !orgAdmits(policy, grant.email)) {
+            return c.json(orgMembersOnlyRefusal(policy), 403);
         }
         return unavailableIfUnreadable(c, async () => {
             const before = (await services.members.list()).find((member) => member.email === grant.email.toLowerCase());

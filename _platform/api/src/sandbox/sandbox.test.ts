@@ -29,6 +29,8 @@ const sandboxRow = {
     removedAt: null,
     removedBy: null,
     tunnelId: sandboxIdFromToken(`tok`)!,
+    // A personal sandbox: no organisation holds it.
+    orgId: null,
 };
 
 // Minimal prisma stub; each test supplies only the calls its route actually makes.
@@ -38,7 +40,8 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof j
         $transaction: jest.fn((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
         $queryRaw: jest.fn().mockResolvedValue([]),
         sandbox: {
-            findUnique: jest.fn().mockResolvedValue({ tokenDigest: sha256Hex(`tok`) }),
+            // A personal sandbox's row: the delete reads `orgId` under its row lock (sandbox-trash.ts).
+            findUnique: jest.fn().mockResolvedValue({ tokenDigest: sha256Hex(`tok`), orgId: null, org: null }),
             findUniqueOrThrow: jest.fn().mockResolvedValue({ ...sandboxRow, hosted: null }),
             update: jest.fn().mockResolvedValue({}),
             ...overrides[`sandbox`],
@@ -321,6 +324,27 @@ describe(`sandbox routes`, () => {
         expect(data.appName).toBeUndefined();
         expect(data.purgeAfter.getTime()).toBeGreaterThanOrEqual(before + RECOVERY_WINDOW_MS);
         expect(data.purgeAfter.getTime()).toBeLessThanOrEqual(after + RECOVERY_WINDOW_MS);
+    });
+
+    it(`refuses to delete a sandbox an organisation holds, and touches nothing`, async () => {
+        const deleteRow = jest.fn().mockResolvedValue({});
+        const trash = jest.fn().mockResolvedValue({});
+        // What the delete reads under the row lock: bound, as a bind that committed first left it.
+        const prisma = fakePrisma({
+            sandbox: {
+                findFirst: jest.fn().mockResolvedValue(sandboxRow),
+                findUnique: jest.fn().mockResolvedValue({ orgId: `org-1`, org: { name: `Urząd Gminy` } }),
+                delete: deleteRow,
+            },
+            sandboxTrash: { create: trash },
+        });
+        const refused = await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma }) }).then(
+            () => undefined,
+            (thrown: unknown) => thrown,
+        );
+        expect(refused).toMatchObject({ code: `CONFLICT`, message: `Urząd Gminy holds this sandbox; an admin of Urząd Gminy must release it before it can be deleted` });
+        expect(deleteRow).not.toHaveBeenCalled();
+        expect(trash).not.toHaveBeenCalled();
     });
 
     it(`creates a second sandbox for an owner who already has one: there is no cap`, async () => {

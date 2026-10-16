@@ -231,6 +231,20 @@ const ENTRIES: readonly PresetEntry[] = [
 
 export const PRESET_ITEM_IDS: readonly string[] = ENTRIES.map((entry) => entry.id);
 
+// The items an organisation pins by naming their groups (compliance/org-pins.ts), in preset order: the privacy shield's apart
+// from the rest, since the two live in different files and are read through different stores.
+export interface PinnedPresetItems {
+    readonly settings: readonly string[];
+    readonly privacy: readonly string[];
+}
+export const presetItemsOfGroups = (groups: readonly PresetGroup[]): PinnedPresetItems => {
+    const named = ENTRIES.filter((entry) => groups.includes(entry.group));
+    return {
+        settings: named.filter((entry) => entry.group !== "privacy").map((entry) => entry.id),
+        privacy: named.filter((entry) => entry.group === "privacy").map((entry) => entry.id),
+    };
+};
+
 const itemOf = (entry: PresetEntry, state: PresetState): PresetItem => {
     const current = entry.current(state);
     const proposed = entry.proposed(state);

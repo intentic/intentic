@@ -59,7 +59,7 @@ import { hostedRegionFor } from "./hosted/region.js";
 import { hostReportsOf, mintFixCode } from "./host-report.js";
 import { duplicateCopiesOf } from "./announce-copies.js";
 import { mintSandbox } from "./mint-sandbox.js";
-import { listTrash, restoreSandbox, trashSandbox, TrashedSandboxGone } from "./sandbox-trash.js";
+import { listTrash, restoreSandbox, SandboxHeldByOrganisation, trashSandbox, TrashedSandboxGone } from "./sandbox-trash.js";
 import { definitionSeedFor } from "./profiles/profiles.js";
 import { mintSetupCodeFor, ReachabilityUnavailable } from "./setup-code.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
@@ -420,9 +420,18 @@ export const sandboxRoutes = {
     }),
     // The identity goes now; the disk under it is held for the recovery window (sandbox-trash.ts), which is also
     // why no cleanup is kicked here — there is nothing yet to tear down.
+    // A sandbox an organisation holds is not its owner's to delete (sandbox-trash.ts `SandboxHeldByOrganisation`, checked
+    // under the row lock a bind takes): an admin of the organisation releases it first (org.unbindSandbox).
     delete: os.sandbox.delete.handler(async ({ context, input }) => {
         await requireOwnedSandbox(context, input.sandboxId);
-        await trashSandbox(context.prisma, context.config, context.logger, input.sandboxId);
+        try {
+            await trashSandbox(context.prisma, context.config, context.logger, input.sandboxId);
+        } catch (error) {
+            if (error instanceof SandboxHeldByOrganisation) {
+                throw new ORPCError(`CONFLICT`, { message: error.message });
+            }
+            throw error;
+        }
         return { ok: true };
     }),
     trash: os.sandbox.trash.handler(async ({ context }) => {

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { MemberRole, OrgPolicy } from "@intentic/sandbox-contract";
@@ -14,6 +14,11 @@ import { createOrgPolicyHolder, ORG_POLICY_FILE, type OrgPolicyFetch } from "./o
  * edition applies, an old one does not, and losing the platform never loosens what is held. */
 
 const policy = (version: number, sections: OrgPolicy["sections"]): OrgPolicy => ({ orgId: "org-1", orgName: "Urząd Gminy", version, sections });
+
+// What a test's platform answers next: undefined is no answer at all (unreachable, refused).
+interface PlatformAnswer {
+    answer: OrgPolicy | null | undefined;
+}
 
 const daemon = (options: { readonly role?: MemberRole; readonly fetch?: OrgPolicyFetch } = {}) => {
     const authRoot = mkdtempSync(join(tmpdir(), "org-locks-"));
@@ -63,18 +68,124 @@ test("the lock holds without a signed-in caller too: the owner's own tools and t
     expect(await errorCode(client.areas.save({ id: "finance", folders: ["finance", "payroll"] }))).toBe("FORBIDDEN");
 });
 
-test("a newer edition applies, an older one is ignored, and the platform's null unbinds", async () => {
+test("the platform's answer is the policy, an edition numbered below the held one included, and its null unbinds", async () => {
     const { client, orgPolicy, authRoot } = daemon();
     await orgPolicy.accept(policy(2, { secrets: "locked" }));
-    await orgPolicy.accept(policy(1, {}));
     expect(await errorCode(client.secrets.set({ key: "API_KEY", value: "x" }))).toBe("FORBIDDEN");
-    await orgPolicy.accept(policy(3, { secrets: "open" }));
+    // A platform restored from an older backup still governs its sandboxes.
+    await orgPolicy.accept(policy(1, {}));
     expect(await client.secrets.set({ key: "API_KEY", value: "x" })).toEqual({ ok: true });
     await orgPolicy.accept(policy(4, { secrets: "locked" }));
     await orgPolicy.accept(null);
     expect(await client.org.policy()).toEqual({ bound: false });
     expect(existsSync(join(authRoot, ORG_POLICY_FILE))).toBe(false);
     expect(await client.secrets.set({ key: "API_KEY", value: "y" })).toEqual({ ok: true });
+});
+
+test("a held file edited to an edition far ahead of the platform's is replaced by the platform's next answer", async () => {
+    const { authRoot } = daemon();
+    // What phase 1 let outlive every later answer: a looser policy numbered past anything the platform will reach.
+    writeFileSync(join(authRoot, ORG_POLICY_FILE), JSON.stringify({ policy: policy(999_999, {}), receivedAt: "2026-10-15T00:00:00.000Z" }));
+    const asked: (number | undefined)[] = [];
+    const restarted = createOrgPolicyHolder({
+        authRoot,
+        logger: createLogger(testConfig),
+        fetch: async (applied) => {
+            asked.push(applied);
+            return { policy: policy(3, { secrets: "locked" }) };
+        },
+    });
+    await restarted.refresh();
+    expect(asked).toEqual([999_999]);
+    expect(await restarted.current()).toMatchObject({ version: 3, sections: { secrets: "locked" } });
+    expect(JSON.parse(readFileSync(join(authRoot, ORG_POLICY_FILE), "utf8"))).toMatchObject({ policy: { version: 3 } });
+});
+
+test("a held file that does not read holds every section read-only until the platform answers, reporting no edition", async () => {
+    const authRoot = mkdtempSync(join(tmpdir(), "org-locks-"));
+    // Readable JSON, but not a policy: an edition that is not a number. The name in it is still the one the refusal uses.
+    writeFileSync(join(authRoot, ORG_POLICY_FILE), JSON.stringify({ policy: { orgId: "org-1", orgName: "Urząd Gminy", version: "seven", sections: {} } }));
+    const asked: (number | undefined)[] = [];
+    // What the platform answers: nothing yet, then a policy.
+    const platform: PlatformAnswer = { answer: undefined };
+    const orgPolicy = createOrgPolicyHolder({
+        authRoot,
+        logger: createLogger(testConfig),
+        fetch: async (applied) => {
+            asked.push(applied);
+            return platform.answer === undefined ? undefined : { policy: platform.answer };
+        },
+    });
+    const client = clientFor(createApp(services({ orgPolicy })));
+    expect(await errorCode(client.areas.save({ id: "finance", folders: ["finance"] }))).toBe("FORBIDDEN");
+    expect(await errorCode(client.secrets.set({ key: "API_KEY", value: "x" }))).toBe("FORBIDDEN");
+    expect(await client.org.policy()).toMatchObject({ bound: true, provisional: true, policy: { orgName: "Urząd Gminy", sections: { agent: "locked", access: "locked" } } });
+    // A platform that does not answer keeps the hold; its answer replaces it.
+    await orgPolicy.refresh();
+    expect(await errorCode(client.secrets.set({ key: "API_KEY", value: "x" }))).toBe("FORBIDDEN");
+    platform.answer = policy(6, { areas: "locked" });
+    await orgPolicy.refresh();
+    expect(asked).toEqual([undefined, undefined]);
+    expect(await client.secrets.set({ key: "API_KEY", value: "x" })).toEqual({ ok: true });
+    expect(await errorCode(client.areas.save({ id: "finance", folders: ["finance"] }))).toBe("FORBIDDEN");
+    expect(await client.org.policy()).toEqual({ bound: true, policy: policy(6, { areas: "locked" }), receivedAt: expect.any(String) });
+});
+
+test("with no held file, a covered change waits for the platform's first answer instead of passing as personal", async () => {
+    const authRoot = mkdtempSync(join(tmpdir(), "org-locks-"));
+    let release: (() => void) | undefined;
+    const answered = new Promise<void>((resolve) => (release = resolve));
+    const orgPolicy = createOrgPolicyHolder({
+        authRoot,
+        logger: createLogger(testConfig),
+        fetch: async () => {
+            await answered;
+            return { policy: policy(2, { secrets: "locked" }) };
+        },
+    });
+    const client = clientFor(createApp(services({ orgPolicy })));
+    orgPolicy.start();
+    try {
+        // A route no lock covers does not wait.
+        expect(await client.org.policy()).toEqual({ bound: false });
+        const change = errorCode(client.secrets.set({ key: "API_KEY", value: "x" }));
+        release?.();
+        expect(await change).toBe("FORBIDDEN");
+    } finally {
+        orgPolicy.stop();
+    }
+});
+
+test("a personal sandbox's first change after boot waits only for the platform's null", async () => {
+    const authRoot = mkdtempSync(join(tmpdir(), "org-locks-"));
+    const orgPolicy = createOrgPolicyHolder({ authRoot, logger: createLogger(testConfig), fetch: async () => ({ policy: null }) });
+    const client = clientFor(createApp(services({ orgPolicy })));
+    orgPolicy.start();
+    try {
+        expect(await client.secrets.set({ key: "API_KEY", value: "x" })).toEqual({ ok: true });
+        expect(orgPolicy.waiting()).toBe(false);
+    } finally {
+        orgPolicy.stop();
+    }
+});
+
+test("refreshes run one at a time, so a slow earlier answer never lands after a later one", async () => {
+    const authRoot = mkdtempSync(join(tmpdir(), "org-locks-"));
+    const answers = [
+        { delay: 30, policy: policy(1, {}) },
+        { delay: 0, policy: policy(2, { secrets: "locked" }) },
+    ];
+    const orgPolicy = createOrgPolicyHolder({
+        authRoot,
+        logger: createLogger(testConfig),
+        fetch: async () => {
+            const next = answers.shift();
+            await new Promise((resolve) => setTimeout(resolve, next?.delay ?? 0));
+            return { policy: next?.policy ?? null };
+        },
+    });
+    await Promise.all([orgPolicy.refresh(), orgPolicy.refresh()]);
+    expect(await orgPolicy.current()).toMatchObject({ version: 2, sections: { secrets: "locked" } });
 });
 
 test("a restart keeps enforcing the last edition, and a platform that cannot be reached loosens nothing", async () => {

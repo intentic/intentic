@@ -242,6 +242,41 @@ describe(`erasing an account`, () => {
     });
 });
 
+describe(`an account that owns an organisation's sandbox`, () => {
+    // The seeded account, one of whose sandboxes an office's organisation holds.
+    const institutional = () => {
+        const store = seededStore();
+        store.rows.sandboxes.push({ id: `s3`, ownerId: `u1`, orgId: `org-1`, name: `Kancelaria` });
+        return store;
+    };
+
+    it(`is refused on its owner's own deletion before anything is queued, destroyed or carried`, async () => {
+        const store = institutional();
+        const fly = flyWith();
+        const auth = createAuth(config, store.prisma, logger);
+        const beforeDelete = auth.options.user?.deleteUser?.beforeDelete;
+        await expect(
+            beforeDelete?.({ id: `u1`, email: `gone@example.test`, name: `Gone`, emailVerified: true, createdAt: NOW, updatedAt: NOW }),
+        ).rejects.toMatchObject({ message: expect.stringContaining(`must release it before the account can be deleted`) });
+        expect(store.rows.sandboxes.map((sandbox) => sandbox.id)).toEqual([`s1`, `s2`, `s3`]);
+        expect(store.rows.cleanup).toEqual([{ appName: APPS.released, deleteAfter: new Date(NOW.getTime() + 7 * DAY_MS) }]);
+        expect([...fly.apps].toSorted()).toEqual(Object.values(APPS).toSorted());
+        expect(store.rows.erasures).toEqual([]);
+    });
+
+    it(`is refused on an operator's deletion too, with what holds it`, async () => {
+        const store = institutional();
+        flyWith();
+        const result = await deleteUserAccount(store.prisma, config, logger, `u1`, stripeWith().gateway);
+        expect(result).toEqual({
+            ok: false,
+            message: `this account owns Kancelaria, which an organisation holds; an admin of an organisation must release it before the account can be deleted`,
+        });
+        expect(store.rows.users.map((user) => user.id)).toEqual([`u1`, `u2`]);
+        expect(store.rows.sandboxes.map((sandbox) => sandbox.id)).toEqual([`s1`, `s2`, `s3`]);
+    });
+});
+
 describe(`signing in again after an erase`, () => {
     // The erased account comes back as u3 with the same Google subject; u4 is somebody else.
     const returned = async () => {

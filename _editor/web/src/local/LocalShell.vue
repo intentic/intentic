@@ -9,6 +9,7 @@ import { useAccount } from "../client/auth/useAccount";
 import { useSandbox } from "../client/sandbox/useSandbox";
 import CloseGuardDialog from "../features/workspace/tabs/CloseGuardDialog.vue";
 import AccountPanel from "../shell/AccountPanel.vue";
+import SkipToContent from "../shell/SkipToContent.vue";
 import { railFrame } from "../shell/rail/railFrame";
 import RailTile from "../shell/rail/RailTile.vue";
 import { useIconRailSize } from "../workbench/window/useIconRailSize";
@@ -89,6 +90,7 @@ onUnmounted(() => stopTaking?.());
 
 <template>
     <div class="local-shell grid h-screen overflow-hidden bg-canvas text-content" :style="gridStyle">
+        <SkipToContent />
         <nav class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
             <!-- Top of the rail: the place this window shows, and the account's sandboxes (other folders are Files' folder menu). -->
             <LocalPlaceSwitcher />
@@ -114,7 +116,7 @@ onUnmounted(() => stopTaking?.());
             </div>
         </nav>
 
-        <main class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">
+        <main id="main-content" tabindex="-1" class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">
             <div class="min-h-0 flex-1 overflow-auto">
                 <!-- Keyed by the folder: one pointed at in this window's place gets a page of its own, not the last one's
                      search, selection and layout (folderSwitch.ts). -->

@@ -28,6 +28,7 @@ export interface Office {
     readonly snapshot: ComputedRef<Snapshot | undefined>;
     readonly error: ComputedRef<string | undefined>;
     readonly tested: Ref<string | undefined>;
+    readonly pending: ComputedRef<`load` | `refresh` | `test` | undefined>;
     readonly refresh: () => Promise<void>;
     readonly test: () => Promise<void>;
 }
@@ -36,6 +37,7 @@ export const useOffice = (account: () => string, service: () => OfficeService, d
     const api = host();
     const failed = ref<string>();
     const tested = ref<string>();
+    const active = ref<`refresh` | `test`>();
     const base = (): string => `accounts/${encodeURIComponent(account())}`;
 
     // `null` for an office never synced: a cached read cannot hold undefined.
@@ -44,23 +46,31 @@ export const useOffice = (account: () => string, service: () => OfficeService, d
         queryFn: async () => (await call(`${base()}/overview?service=${service()}`, `GET`)).snapshot ?? null,
     });
 
-    const guarded = async (run: () => Promise<void>): Promise<void> => {
+    const pending = computed(() => active.value ?? (query.isFetching.value ? `load` : undefined));
+
+    const guarded = async (kind: `refresh` | `test`, run: () => Promise<void>): Promise<void> => {
+        if (pending.value !== undefined) {
+            return;
+        }
+        active.value = kind;
         failed.value = undefined;
         try {
             await run();
         } catch (cause) {
             failed.value = cause instanceof Error ? cause.message : String(cause);
+        } finally {
+            active.value = undefined;
         }
     };
 
     // The sync writes the records, whose push refetches the read; asking again here covers a write the watcher missed.
     const refresh = (): Promise<void> =>
-        guarded(async () => {
+        guarded(`refresh`, async () => {
             await call(`${base()}/sync`, `POST`);
             query.refetch();
         });
     const test = (): Promise<void> =>
-        guarded(async () => {
+        guarded(`test`, async () => {
             tested.value = undefined;
             tested.value = describeTest((await call(`${base()}/test`, `POST`)).detail ?? {});
         });
@@ -69,6 +79,7 @@ export const useOffice = (account: () => string, service: () => OfficeService, d
         snapshot: computed(() => query.data.value ?? undefined),
         error: computed(() => failed.value ?? readError.value),
         tested,
+        pending,
         refresh,
         test,
     };

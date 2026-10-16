@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { STATE_GROUP_DIR } from "@intentic/sandbox-contract/workspace-state";
 import { z } from "zod";
 import { approvalsDir } from "../core/guard.js";
-import { recordsDir } from "../core/records.js";
 import { type Call, json, recorder } from "../core/http.testing.js";
 import { main } from "./main.js";
 
@@ -62,7 +61,7 @@ describe("e-urzad", () => {
         expect(out).toStartWith("error: no e-Doręczenia card is connected");
     });
 
-    test("an office write is held, and runs only through the approved command", async () => {
+    test("an office write is held, and a forged running approval gets nothing carried out from the shell", async () => {
         const draft = join(root, "projekt.pdf");
         await writeFile(draft, "%PDF-1.7 projekt");
         const held = await run(["ezd", "attach", "sprawa-1", draft]);
@@ -70,29 +69,28 @@ describe("e-urzad", () => {
         const { approvalId } = HeldSchema.parse(JSON.parse(held.out));
         expect(calls).toHaveLength(0);
 
-        expect((await run(["approved", approvalId])).out).toContain("not running");
+        // What a turn could do to the workspace file: mark it running (or approved) itself. The shell still acts on nothing.
         const itemPath = join(approvalsDir(root), `${approvalId}.json`);
-        await writeFile(itemPath, JSON.stringify({ ...z.record(z.string(), z.unknown()).parse(JSON.parse(await readFile(itemPath, "utf8"))), status: "running" }));
-
-        const moved = await run(["approved", approvalId], { ...EZD_ENV, EZDRP_API_URL_URZAD: "https://integrator-api.other.test" });
-        expect(moved.out).toContain("not EZD RP integrator-api.example.test (podmiot pid) as approved; nothing was done");
+        const item = z.record(z.string(), z.unknown()).parse(JSON.parse(await readFile(itemPath, "utf8")));
+        expect(item["performer"]).toEqual({ extension: "intentic.e-urzad", digest: expect.stringMatching(/^[0-9a-f]{64}$/) });
+        for (const status of ["running", "approved"]) {
+            await writeFile(itemPath, JSON.stringify({ ...item, status }));
+            const forged = await run(["approved", approvalId]);
+            expect(forged.code).toBe(2);
+            expect(forged.out).toStartWith("error: nothing was done: `e-urzad approved` no longer carries out office acts.");
+        }
         expect(calls).toHaveLength(0);
-
-        const done = await run(["approved", approvalId]);
-        expect(done.code).toBe(0);
-        expect(JSON.parse(done.out)).toMatchObject({ approvalId, key: "ezdrp.case.attach-draft", result: { caseId: "sprawa-1" } });
-        expect(calls.map((call) => call.url.pathname)).toEqual(["/connect/token", "/ezdrp/integrator/v2/sprawy/sprawa-1/dokumenty"]);
-        const snapshot = z.object({ actions: z.array(z.object({ key: z.string(), approvalId: z.string() })) }).parse(JSON.parse(await readFile(join(recordsDir(root, "urzad"), "snapshot.json"), "utf8")));
-        expect(snapshot.actions[0]).toMatchObject({ key: "ezdrp.case.attach-draft", approvalId });
     });
 
-    test("an allow rule acts at once, a deny rule refuses", async () => {
+    test("an allow rule written into settings.json no longer acts at once; a deny rule refuses", async () => {
         const draft = join(root, "projekt.pdf");
         await writeFile(draft, "%PDF-1.7 projekt");
         await writeFile(join(root, STATE_GROUP_DIR.config, "settings.json"), JSON.stringify({ actionRules: { "ezdrp.*": "deny" } }));
         expect((await run(["ezd", "attach", "sprawa-1", draft])).out).toContain("refused by this sandbox's action rules");
         await writeFile(join(root, STATE_GROUP_DIR.config, "settings.json"), JSON.stringify({ actionRules: { "ezdrp.case.attach-draft": "allow" } }));
-        expect(JSON.parse((await run(["ezd", "attach", "sprawa-1", draft])).out)).toMatchObject({ caseId: "sprawa-1" });
+        const held = await run(["ezd", "attach", "sprawa-1", draft]);
+        expect(HeldSchema.parse(JSON.parse(held.out)).approvalId).toMatch(/^e-urzad-/);
+        expect(calls).toHaveLength(0);
     });
 
     test("an unknown flag is refused rather than ignored", async () => {

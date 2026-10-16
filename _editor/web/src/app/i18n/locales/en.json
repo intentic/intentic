@@ -33,6 +33,20 @@
             "personas": "Personas",
             "updates": "Automatic updates"
         },
+        "preset": {
+            "group": "Required settings",
+            "note": "Each group switched on here is held in every sandbox of this organisation, whatever the sandbox's own settings say. People can make one of these settings stricter, never looser, and a change made by editing a settings file directly is put back.",
+            "pinned": "Required",
+            "notPinned": "Not required",
+            "privacy": "Privacy shield on, with images masked",
+            "retention": "Transcripts, restore points and caches kept for a shorter time",
+            "audit": "Audit trail kept for at least two years, with reads recorded",
+            "analytics": "Product analytics off",
+            "notice": "AI notice shown to everyone",
+            "actions": "Outgoing messages and office acts wait for approval",
+            "admission": "Work started from outside the sandbox waits for approval",
+            "judge": "Command judge on"
+        },
         "detail": {
             "couldntSave": "Couldn't save the policy",
             "couldntAdd": "Couldn't add that person",
@@ -52,7 +66,10 @@
             "noSandboxes": "No sandbox belongs to this organisation yet.",
             "pickSandbox": "Choose one of your sandboxes",
             "bind": "Add to organisation",
-            "bindNote": "Only sandboxes you own can be added. Once added, the policy above applies to it until an admin releases it."
+            "bindNote": "Only sandboxes you own can be added. Once added, the policy above applies to it until an admin releases it.",
+            "membersOnly": "Only this organisation's people",
+            "membersOnlyNote": "Access to these sandboxes can be given only to people listed here. Removing someone from this organisation removes them from every sandbox within a few minutes, without anyone in the sandbox acting. Sandbox owners are not affected.",
+            "policyReset": "came back without its policy copy on {date} and was sent it again"
         }
     },
     "a11yKit": {
@@ -7604,6 +7621,7 @@
             "sandboxStoppedResponding": "The sandbox stopped responding."
         },
         "sandboxAreas": {
+            "toggleArea": "Toggle details for {name}",
             "areas": "Your areas",
             "everyoneSeesWhole": "Everyone sees the whole workspace",
             "whatAnAreaIs": "An area is a named slice of the workspace. Grant one and someone sees only those folders — in the tree, search, and conversations — and can talk only to people and assistants in that area. An assistant belongs to the area of its starting folder.",
@@ -9926,6 +9944,7 @@
         "worthKnowing": "Worth knowing"
     },
     "shell": {
+        "skipToContent": "Skip to main content",
         "accountPanel": {
             "signOut2": "Sign Out"
         },

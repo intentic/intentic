@@ -200,4 +200,10 @@
 // by the surface guard: a name joining is a minor, and a name leaving is a major, allowed only once names.mjs declares
 // it deprecated and only at or past the floor it gives. Recorded here: `RepoPicker`, added on 2026-10-12 without a
 // version, and `RepoRail`, back and deprecated until 3.0.0. Additive.
-export const extensionApiVersion = "2.31.0";
+// 2.32.0 lets a backend carry out an approved action itself: `api.approvals.perform(handler)`. An approvals-queue action
+// whose `performer` names the extension is handed to it by the daemon's approvals executor, through a backend-host door
+// no /x route reaches, only after the daemon matched a person's recorded yes against the item and spent it. Until now an
+// approved action ran as an agent turn following the item's instructions, and a connection's own command could only
+// read the workspace file to decide whether it was approved, which any turn writes. Additive: a backend that never calls
+// it is unchanged, and an action naming no performer still runs as a turn. The recorded surface grows the member.
+export const extensionApiVersion = "2.32.0";

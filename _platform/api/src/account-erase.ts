@@ -36,6 +36,34 @@ export interface AccountErasure {
     readonly carried: boolean;
 }
 
+// Refused before anything is touched: the account owns sandboxes an organisation holds (docs/architecture/organisations.md).
+// The organisation's work in them is not the person's to erase with their account, and the erase would destroy them with
+// no recovery window. An admin of the organisation releases them first (org.unbindSandbox), or hands the account's
+// work over; then the account goes as any other does.
+export class OwnsOrganisationSandboxes extends Error {
+    constructor(readonly sandboxes: readonly { readonly name: string; readonly org: string }[]) {
+        const orgs = [...new Set(sandboxes.map((sandbox) => sandbox.org))].join(`, `);
+        super(
+            `this account owns ${sandboxes.map((sandbox) => sandbox.name).join(`, `)}, which ${orgs} holds; an admin of ${orgs} must release ${
+                sandboxes.length === 1 ? `it` : `them`
+            } before the account can be deleted`,
+        );
+        this.name = `OwnsOrganisationSandboxes`;
+    }
+}
+
+// The account's sandboxes an organisation holds, or none. The erase reads it inside its transaction, after it has taken
+// every owned sandbox's row lock: a bind takes the same lock (org.routes.ts), so one that committed first is seen here
+// and refuses the erase, and one still waiting finds the sandbox gone.
+export const organisationSandboxesOf = async (prisma: Pick<Prisma.TransactionClient, "sandbox">, userId: string): Promise<{ name: string; org: string }[]> =>
+    (
+        await prisma.sandbox.findMany({
+            where: { ownerId: userId, orgId: { not: null } },
+            select: { name: true, org: { select: { name: true } } },
+            orderBy: { createdAt: `asc` },
+        })
+    ).map((sandbox) => ({ name: sandbox.name, org: sandbox.org?.name ?? `an organisation` }));
+
 // The latest of the moments a standing was last changed at, or null when there are none.
 const latest = (moments: readonly (Date | null | undefined)[]): Date | null =>
     moments.reduce<Date | null>((best, at) => (at != null && (best === null || at > best) ? at : best), null);
@@ -89,6 +117,11 @@ export const eraseAccount = async (
         for (const sandbox of sandboxes) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- row locks, taken one after another in a fixed order
             await lockHostedSandbox(tx, sandbox.id);
+        }
+        // Before anything is queued, carried or deleted: the transaction rolls back whole if an organisation holds one.
+        const institutional = await organisationSandboxesOf(tx, userId);
+        if (institutional.length > 0) {
+            throw new OwnsOrganisationSandboxes(institutional);
         }
         const machines = await tx.hostedMachine.findMany({ where: { sandbox: { ownerId: userId } }, select: { appName: true } });
         const trashed = await tx.sandboxTrash.findMany({ where: { ownerId: userId, appName: { not: null } }, select: { appName: true } });

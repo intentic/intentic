@@ -50,6 +50,9 @@ const body = (text: string): string => text.replace(/^#{1,6} .*(\n|$)/, ``).trim
              The list is the one scroll box: a note scrolling inside it would be a scroller under a shut list
              (`.chat-mark-material` in chat.css). -->
         <div
+            :tabindex="open ? 0 : undefined"
+            role="region"
+            :aria-label="t(`chat.chatNotes.sentMessage`)"
             class="chat-mark-material chat-spine-material chat-inset max-h-80 overflow-auto"
             :class="found && `chat-mark-found`"
             :hidden.attr="open ? undefined : `until-found`"

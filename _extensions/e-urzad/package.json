@@ -8,6 +8,10 @@
     "main": "src/index.ts",
     "types": "src/index.ts",
     "exports": {
+        "./snapshot": {
+            "types": "./src/core/snapshot.ts",
+            "default": "./src/core/snapshot.ts"
+        },
         ".": {
             "types": "./src/index.ts",
             "default": "./src/index.ts"

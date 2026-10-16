@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { findWorkspaceRoot } from "@intentic/connector-runtime";
-import type { GuardOutcome } from "../core/guard.js";
+import type { Held } from "../core/guard.js";
 
 // What every command shares: the workspace, the environment the daemon gave this shell (each connected card's env
 // vars, suffixed by card), and how to answer. The agent-CLI contract the other first-party CLIs keep: everything goes
@@ -33,12 +33,9 @@ export const pathArgument = (value: string): string => resolve(process.cwd(), va
 // Prints a command's answer as JSON; an absent optional field is simply left out.
 export const print = <T>(context: Context, value: T): void => context.out(`${JSON.stringify(value ?? null, undefined, 2)}\n`);
 
-export const printOutcome = <T>(context: Context, outcome: GuardOutcome<T>): void => {
-    if (outcome.done) {
-        print(context, outcome.result);
-        return;
-    }
-    print(context, { held: true, approvalId: outcome.approvalId, message: outcome.message });
+// What a held office act answers: it was written to the approvals queue, and nothing reached the office.
+export const printHeld = (context: Context, held: Held): void => {
+    print(context, { held: true, approvalId: held.approvalId, message: held.message });
 };
 
 export const required = (value: string | undefined, what: string): string => {

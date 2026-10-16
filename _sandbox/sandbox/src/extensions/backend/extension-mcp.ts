@@ -111,7 +111,7 @@ const cardFor = async (
 const RESTART_HOLD_MS = 15_000;
 const RESTART_POLL_MS = 200;
 
-const heldTarget = async (backend: Services["extensionBackend"], signal: AbortSignal): Promise<ReturnType<Services["extensionBackend"]["proxyTarget"]>> => {
+export const heldTarget = async (backend: Services["extensionBackend"], signal: AbortSignal): Promise<ReturnType<Services["extensionBackend"]["proxyTarget"]>> => {
     await pollUntil(
         () => {
             const state = backend.status().state;
@@ -122,7 +122,7 @@ const heldTarget = async (backend: Services["extensionBackend"], signal: AbortSi
     return backend.proxyTarget();
 };
 
-const backendDown = (backend: Services["extensionBackend"]): string => {
+export const backendDown = (backend: Services["extensionBackend"]): string => {
     const status = backend.status();
     return `extension backends are ${status.state}${status.detail !== undefined ? `, ${status.detail}` : ""}`;
 };

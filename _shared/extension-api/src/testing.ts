@@ -6,6 +6,8 @@ import { type ExtensionEvent, extensionEventsUrl, extensionSettingsUrl } from "@
 import { EXTENSION_TOKEN_HEADER } from "@intentic/sandbox-contract/headers";
 import { activateServerModule, createServerApi, deactivateWithin, healthWithin } from "./runtime.js";
 import type {
+    ApprovedAction,
+    ApprovedActionOutcome,
     ExtensionHealth,
     ExtensionServerApi,
     ExtensionServerModule,
@@ -69,6 +71,8 @@ export interface FakeExtension {
     // Answers whatever the tool's own `call` answers, as ToolDefinition declares it; the host turns that into what the
     // model reads.
     callTool(name: string, args?: ToolArguments, card?: ToolCard, context?: Partial<ToolCallContext>): ReturnType<ToolDefinition["call"]>;
+    // An approved action handed over as the daemon's approvals executor hands it, through the host's door.
+    perform(action: ApprovedAction, signal?: AbortSignal): Promise<ApprovedActionOutcome>;
     // The owner changing its settings: stored, and told to the extension over its event stream as the daemon would.
     setSettings(values: ExtensionSettingValues): void;
     // A frame on its event stream, as the daemon sends it (`files`, `refs`, `repos`, `settings`).
@@ -210,6 +214,13 @@ export const fakeExtensionApi = async (options: FakeExtensionOptions): Promise<F
                 throw new Error(`"${id}" serves no tool named ${name}${card === undefined ? "" : ` for card ${card.id}`}`);
             }
             return tool.call(args, { signal: context.signal ?? new AbortController().signal, conversationId: context.conversationId });
+        },
+        perform: async (action, signal = new AbortController().signal) => {
+            const performer = slots.performer();
+            if (performer === undefined) {
+                throw new Error(`"${id}" carries out no approved actions`);
+            }
+            return performer(action, { signal });
         },
         setSettings: (values) => {
             const keys = changedKeys(settings, values);

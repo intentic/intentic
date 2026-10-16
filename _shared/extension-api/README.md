@@ -17,7 +17,7 @@ flowchart LR
   its own backend through `api.backend`, by a path relative to its namespace, never by spelling `/x/<id>`.
 - The backend api is one shape wherever an extension's Node code runs. `./runtime` builds it: `createServerApi` for the
   daemon's backend host, and `connectExtensionProcess` for a declared process, which gets the same api less the two
-  slots only the host serves (`ExtensionProcessApi`: no `routes`, no `tools`). Besides the daemon it carries the
+  slots only the host serves (`ExtensionProcessApi`: no `routes`, `tools` or `approvals`). Besides the daemon it carries the
   extension's own `stateDir` and `cacheDir` (keyed by its identity, made before its code runs, deleted with it),
   `document` (a JSON file there, evolved by the same `conversions` as `sandboxDocument`), `settings` (its own values,
   secrets included, and `onDidChange`) and `workspace` (file, ref and repository changes). Settings and events ride two
@@ -39,6 +39,11 @@ flowchart LR
   as MCP annotations with both hints spelled out; a tool that declares none is listed without them, and Claude Code
   runs it alone as a destructive write. A plugin's `.mcp.json` is
   deprecated, and a cli card's `mcp` is kept one release as an alias.
+- A backend may carry out approved actions itself: `api.approvals.perform(handler)`. An approvals-queue action whose
+  `performer` names the extension reaches the handler from the daemon's approvals executor alone, through a host door no
+  `/x` route reaches, after the daemon matched a person's recorded yes against the item and spent it. The handler gets
+  the pinned digest, the details as approved, who approved and when, and the daemon's action rules; it answers `done`,
+  `refused` (nothing went out) or `uncertain` (it may have), and holds its credentials itself.
 - This package is published to npm, and its API only grows within a major. `extensionApiVersion` moves
   with every surface change (additive is a minor), and a manifest's `engines.intentic` range is matched against it at
   load, failing closed. The editor's `surface-guard.test.ts` fails when the surface moves without a new entry in

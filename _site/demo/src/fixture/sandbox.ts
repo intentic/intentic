@@ -12,6 +12,7 @@ import { LOCAL_MODEL_KV_BYTES_PER_TOKEN, LOCAL_MODEL_WINDOWS, LOCAL_MODELS } fro
 import { deskEdition, enabledExtensions, freshEdition } from "../mode";
 import pins from "../../vendor/extensions.json";
 import { DESK_REPOS } from "./desk";
+import { officeCapabilities } from "./offices/office";
 
 // acme-shop's workspace furniture: what it's made of, what it's wired to, the extensions supplying that wiring, and the
 // Usage tab's spend ledger. Connector entries copy the real `_extensions/connectors` and `_extensions/discord`
@@ -78,6 +79,7 @@ const CODE_PANELS: PanelSummary[] = [
 // One capability per system the agents operate. `config` is the secret-stripped echo the daemon returns; `secrets`
 // names the stripped keys so a form can show dots for them.
 export const demoCapabilities = (): CapabilitySummary[] => [
+    ...officeCapabilities,
     // A phone added and never paired, so its row offers Connect and the pairing dialog draws its QR code (it shows
     // only where the phones extension is switched on).
     {

@@ -55,6 +55,13 @@ flowchart LR
   absent from `accessibility/baseline.json`. Each accepted pair needs a note explaining why it remains. The baseline
   starts empty. `accessibility/scan-demo.mts` scans the backend-free demo and public site on local dev servers;
   findings from the development-only design kit are reported separately from user screens.
+- `accessibility/demo.playwright.config.ts` runs the real editor with fixture backends and no sign-in. Its WCAG 2.2
+  A/AA axe checks require no violations at any severity across Light, Dark and Sanctum, plus English/Polish reflow at
+  320px. Interaction cases cover keyboard bypass, native agent buttons, the command palette, modal focus, office
+  loading/error/empty/success states, organisation policy tabs and switches, 200% root text size and OS reduced-motion/forced-colour preferences.
+  Off-switch track and handle contrast is measured separately because axe does not detect every non-text contrast failure. These
+  checks do not establish screen-reader or legal conformance. `A11Y_DEMO_URL` reuses an explicitly chosen demo;
+  without it the suite starts its own server on port 47237 and refuses to reuse another session's server.
 - `local-face/` boots the desktop app's local face (`_editor/desktop-app`, `dist/files`, built by its global setup) the
   way a window on a folder boots it, without Tauri: the bundle behind a server that resolves paths as the app's asset
   protocol does, the real `intentic-files` sidecar from source granted a temp folder on its stdin, and
@@ -89,4 +96,5 @@ node --experimental-strip-types _tools/e2e/accessibility/scan-demo.mts
 node --experimental-strip-types _tools/e2e/shots/capture.mts [--light | --desk] [shot names]
 pnpm --filter @intentic/e2e smoke:signin https://app.intentic.dev
 cd _tools/e2e && pnpm exec playwright test -c window-sync/window-sync.playwright.config.ts
+pnpm -C _tools/e2e exec playwright test -c accessibility/demo.playwright.config.ts
 ```

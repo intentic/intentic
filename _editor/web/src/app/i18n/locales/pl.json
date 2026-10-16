@@ -33,6 +33,20 @@
             "personas": "Persony",
             "updates": "Automatyczne aktualizacje"
         },
+        "preset": {
+            "group": "Wymagane ustawienia",
+            "note": "Każda włączona tu grupa obowiązuje w każdym sandboxie tej organizacji, niezależnie od jego własnych ustawień. Ustawienie można zaostrzyć, ale nie złagodzić, a zmiana wprowadzona bezpośrednio w pliku ustawień zostaje cofnięta.",
+            "pinned": "Wymagane",
+            "notPinned": "Niewymagane",
+            "privacy": "Osłona prywatności włączona, obrazy maskowane",
+            "retention": "Krótsze przechowywanie rozmów, punktów przywracania i pamięci podręcznej",
+            "audit": "Dziennik audytu przechowywany co najmniej dwa lata, z zapisem odczytów",
+            "analytics": "Analityka produktu wyłączona",
+            "notice": "Informacja o AI wyświetlana wszystkim",
+            "actions": "Wysyłane wiadomości i czynności urzędowe czekają na zatwierdzenie",
+            "admission": "Praca zlecona spoza sandboxa czeka na zatwierdzenie",
+            "judge": "Ocena poleceń włączona"
+        },
         "detail": {
             "couldntSave": "Nie udało się zapisać zasad",
             "couldntAdd": "Nie udało się dodać tej osoby",
@@ -52,7 +66,10 @@
             "noSandboxes": "Żaden sandbox nie należy jeszcze do tej organizacji.",
             "pickSandbox": "Wybierz jeden ze swoich sandboxów",
             "bind": "Dodaj do organizacji",
-            "bindNote": "Dodać można tylko sandboxy, których jesteś właścicielem. Po dodaniu obowiązują go powyższe zasady, dopóki administrator go nie odłączy."
+            "bindNote": "Dodać można tylko sandboxy, których jesteś właścicielem. Po dodaniu obowiązują go powyższe zasady, dopóki administrator go nie odłączy.",
+            "membersOnly": "Tylko osoby z tej organizacji",
+            "membersOnlyNote": "Dostęp do tych sandboxów można dać tylko osobom z tej listy. Usunięcie kogoś z organizacji w ciągu kilku minut odbiera mu dostęp do każdego sandboxa, bez udziału kogokolwiek w sandboxie. Nie dotyczy to właścicieli sandboxów.",
+            "policyReset": "{date} wrócił bez swojej kopii zasad i otrzymał ją ponownie"
         }
     },
     "a11yKit": {
@@ -6679,6 +6696,7 @@
             "tools": "Narzędzia"
         },
         "sandboxAreas": {
+            "toggleArea": "Pokaż lub ukryj szczegóły obszaru {name}",
             "areaName": "Nazwa obszaru",
             "areas": "Twoje obszary",
             "briefPlaceholder": "Czym jest ta część przestrzeni roboczej, w jednej linii",
@@ -9518,6 +9536,7 @@
         "worthKnowing": "Warto wiedzieć"
     },
     "shell": {
+        "skipToContent": "Przejdź do głównej treści",
         "accountPanel": {
             "signOut2": "Wyloguj się"
         },

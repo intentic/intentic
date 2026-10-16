@@ -109,6 +109,8 @@ every platform that posts through a logged-in browser needs (see below).
 - instructions: what to do once approved, written for the FRESH TURN that will do it, which has none of this
   conversation: name files, ids, accounts and steps; never "do what we discussed". Do exactly what the owner
   approved and nothing beyond it.
+- performer: never write it yourself. A connection's own command (e-urzad's office acts) writes it when it
+  holds an act, and once the owner approves, the sandbox carries that act out itself, without a turn.
 
 ## Both kinds
 

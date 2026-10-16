@@ -33,6 +33,20 @@
             "personas": "Personas",
             "updates": "Automatische Updates"
         },
+        "preset": {
+            "group": "Vorgeschriebene Einstellungen",
+            "note": "Jede hier eingeschaltete Gruppe gilt in jeder Sandbox dieser Organisation, egal was deren eigene Einstellungen sagen. Eine dieser Einstellungen kann strenger, aber nie lockerer gemacht werden, und eine direkt in einer Einstellungsdatei vorgenommene Änderung wird zurückgesetzt.",
+            "pinned": "Vorgeschrieben",
+            "notPinned": "Nicht vorgeschrieben",
+            "privacy": "Datenschutzfilter an, Bilder maskiert",
+            "retention": "Gespräche, Wiederherstellungspunkte und Caches kürzer aufbewahrt",
+            "audit": "Prüfprotokoll mindestens zwei Jahre aufbewahrt, Lesezugriffe erfasst",
+            "analytics": "Produktanalyse aus",
+            "notice": "KI-Hinweis für alle angezeigt",
+            "actions": "Ausgehende Nachrichten und Amtshandlungen warten auf Freigabe",
+            "admission": "Von außerhalb der Sandbox gestartete Arbeit wartet auf Freigabe",
+            "judge": "Befehlsprüfung an"
+        },
         "detail": {
             "couldntSave": "Die Richtlinie konnte nicht gespeichert werden",
             "couldntAdd": "Diese Person konnte nicht hinzugefügt werden",
@@ -52,7 +66,10 @@
             "noSandboxes": "Noch gehört keine Sandbox zu dieser Organisation.",
             "pickSandbox": "Wähle eine deiner Sandboxes",
             "bind": "Zur Organisation hinzufügen",
-            "bindNote": "Nur Sandboxes, die dir gehören, können hinzugefügt werden. Danach gilt die Richtlinie oben, bis ein Admin sie freigibt."
+            "bindNote": "Nur Sandboxes, die dir gehören, können hinzugefügt werden. Danach gilt die Richtlinie oben, bis ein Admin sie freigibt.",
+            "membersOnly": "Nur Personen dieser Organisation",
+            "membersOnlyNote": "Zugang zu diesen Sandboxes kann nur Personen auf dieser Liste gegeben werden. Wer aus der Organisation entfernt wird, verliert innerhalb weniger Minuten den Zugang zu jeder Sandbox, ohne dass jemand in der Sandbox etwas tun muss. Besitzer von Sandboxes sind nicht betroffen.",
+            "policyReset": "kam am {date} ohne ihre Kopie der Richtlinie zurück und hat sie erneut erhalten"
         }
     },
     "a11yKit": { "toggleDetails": "Überschriftdetails ein- oder ausblenden", "selectRow": "Beispielzeile auswählen", "settingsButton": "Beispiel für eine Einstellungsschaltfläche", "codeField": "Beispiel für ein Codefeld" },
@@ -3541,6 +3558,7 @@
             "tools": "Werkzeuge"
         },
         "sandboxAreas": {
+            "toggleArea": "Details für {name} ein- oder ausblenden",
             "areaName": "Name des Bereichs",
             "areas": "Ihre Bereiche",
             "briefPlaceholder": "Was dieser Teil des Workspace ist, in einer Zeile",
@@ -5220,6 +5238,7 @@
         "worthKnowing": "Wissenswert"
     },
     "shell": {
+        "skipToContent": "Zum Hauptinhalt springen",
         "accountPanel": {
             "signOut2": "Abmelden"
         },

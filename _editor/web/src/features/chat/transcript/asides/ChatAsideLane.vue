@@ -70,6 +70,9 @@ const said = computed(() => slots[`default`] !== undefined);
         <div
             v-for="mark in findable"
             :key="mark.key"
+            :tabindex="opened === mark.key ? 0 : undefined"
+            role="region"
+            :aria-label="mark.label"
             class="chat-mark-material max-h-64 overflow-auto rounded-lg"
             :class="found === mark.key && `chat-mark-found`"
             :hidden.attr="opened === mark.key ? undefined : `until-found`"

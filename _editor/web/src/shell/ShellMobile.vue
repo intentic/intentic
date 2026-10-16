@@ -71,7 +71,7 @@ useKeybindings();
 
 <template>
     <div class="flex h-dvh flex-col overflow-hidden bg-canvas text-content" style="overscroll-behavior: none">
-        <main ref="surface" class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <main id="main-content" ref="surface" tabindex="-1" class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <!-- What an edge swipe uncovers (edgeBack.ts): the place a release goes back to, darker while the page still
                  covers most of it, and the arrow that fills once letting go would go there. Hidden unless a swipe is on. -->
             <div aria-hidden="true" class="pointer-events-none invisible absolute inset-0 bg-canvas">

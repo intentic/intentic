@@ -22,6 +22,7 @@ import {
     saveKnowledgeNote,
 } from "../fixture/knowledge";
 import { PAGE_FILES } from "../fixture/pages";
+import { officeResponse } from "../fixture/offices/office";
 import { demoEnvironment, demoEnvironmentContents, vendoredBundle } from "../fixture/sandbox";
 import { fileBody, writeFile } from "../fixture/workspace";
 import { demoQuiet } from "../mode";
@@ -295,6 +296,6 @@ export const raw = {
                 },
             ],
         }),
-    // An extension backend's namespace: only the knowledge extension's is fixtured.
-    "ALL /x/*": (context) => knowledge[`${context.request.method} ${context.url.pathname}`]?.(context),
+    // The two office cards and knowledge share the same namespace their real backends use.
+    "ALL /x/*": (context) => officeResponse(context.request, context.url) ?? knowledge[`${context.request.method} ${context.url.pathname}`]?.(context),
 } satisfies RawRoutes;

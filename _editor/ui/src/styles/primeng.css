@@ -65,6 +65,11 @@
         --ui-button-tone: var(--color-danger-fill);
     }
 
+    /* Quiet destructive actions need the same readable ink as their notices, including on hover. */
+    .p-button-danger:where(.p-button-text, .p-button-outlined) {
+        color: var(--color-danger);
+    }
+
 /* IN DAYLIGHT A TINTED BUTTON IS THE TONE'S TINT WITH THE TONE'S INK ON IT — the same pair a notice and a pill wear
    (tone.ts), so a success button agrees with the success box beside it. A fill is tuned to carry a white label, not to
    be one: written on its own 10% the accent's fill read 3.5:1 and the warning's 3.9:1, and a tenth of a deep fill came
@@ -309,7 +314,17 @@
         }
     }
 
-/* Compact switch — the size a LIST of toggles needs. */
+    /* An off switch still needs a visible track and a distinguishable handle in every look. */
+    .p-toggleswitch:not(.p-disabled):not(.p-toggleswitch-checked) .p-toggleswitch-slider {
+        background: color-mix(in oklab, var(--color-content) 65%, var(--color-card));
+        border-color: transparent;
+    }
+
+    .p-toggleswitch:not(.p-disabled):not(.p-toggleswitch-checked) .p-toggleswitch-handle {
+        background: var(--color-card);
+    }
+
+    /* Compact switch — the size a LIST of toggles needs. */
     .ui-switch-sm {
         --p-toggleswitch-width: 2rem;
         --p-toggleswitch-height: 1.125rem;

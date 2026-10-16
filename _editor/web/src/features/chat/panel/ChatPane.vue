@@ -638,12 +638,12 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                 ></textarea>
 
                                 <!-- The control row keeps model controls and actions in separate groups. -->
-                                <!-- ONE LINE IN A NARROW COMPOSER, whatever is set: every chip there is its glyph alone, as square as the presses
+                                <!-- In a narrow composer every chip is its glyph alone, as square as the presses
                                  beside it (the name is in its label and its sheet), the mic and Send share one slot, and the chips that still
                                  do not fit scroll inside their own strip instead of breaking the row. A persona's name, a 5-rung meter and a
-                                 dead Send were a 375px phone's row and more, so it broke into three under the text and moved every press. -->
+                                 dead Send were a 375px phone's row and more. The groups can wrap when enlarged text needs more room. -->
                                 <div
-                                    class="flex flex-wrap items-center gap-x-1 gap-y-1.5 px-2.5 pb-2.5 @max-md:flex-nowrap @max-md:gap-x-0.5 @max-md:px-2 @max-md:pb-2"
+                                    class="flex flex-wrap items-center gap-x-1 gap-y-1.5 px-2.5 pb-2.5 @max-md:gap-x-0.5 @max-md:px-2 @max-md:pb-2"
                                 >
                                     <!-- Workflow sends disable controls that do not affect the workflow step. -->
                                     <!-- `min-w-0` lets the model name truncate first, since it's the one shrinkable middle in the row. -->

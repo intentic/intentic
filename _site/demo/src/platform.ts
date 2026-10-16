@@ -2,6 +2,7 @@ import { apiContract, type HostedPlanState, type SandboxSummary, type TrashedSan
 import { FREE_TIER, hostedTier } from "@intentic/constants";
 import { inviteRecords } from "./fixture/access";
 import { DESK_SANDBOX_NAME } from "./fixture/desk";
+import { officeOrganisation, officeOrganisations } from "./fixture/offices/organisation";
 import { deskEdition, demoTier } from "./mode";
 import { demoOutage, outageHosted, outageReport } from "./outage";
 import { DEMO_DAEMON_ORIGIN, json } from "./transport";
@@ -126,6 +127,7 @@ const roster = () => ({ members: inviteRecords() });
 const sent = () => ({ members: inviteRecords(), link: INVITE_LINK, delivery: `local-link` as const });
 
 const ANSWERS: PlatformAnswers = {
+    org: { list: () => officeOrganisations, get: () => officeOrganisation },
     sandbox: {
         list: () => ({ sandboxes: [DEMO_SANDBOX] }),
         trash: () => ({ sandboxes: [...DEMO_TRASH] }),

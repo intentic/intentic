@@ -1,4 +1,5 @@
 import { SETTINGS_HISTORY, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import type { Pin } from "../compliance/org-pins.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
@@ -20,7 +21,10 @@ export interface SandboxSettingsStore {
     readonly set: (settings: SandboxSettings) => Promise<void>;
 }
 
-export const fileSandboxSettingsStore = (path: string): SandboxSettingsStore => {
+// `pin` is the organisation's (compliance/org-pins.ts): with it, every read is the file with the organisation's pinned values
+// applied, a read that finds the file looser writes the pinned values back, and every write is stored pinned. Without
+// it (a personal sandbox's composition still passes one; a policy-less pin changes nothing) the file is read as is.
+export const fileSandboxSettingsStore = (path: string, pin?: Pin<SandboxSettings>, warn?: (message: string, error: Error) => void): SandboxSettingsStore => {
     const file = openDocument(settingsDocument, path, {
         // Unknown keys reported rather than a bare parse: this is the manifest a person is most likely to open and
         // edit, and a misspelled flag would otherwise be stripped in silence and simply never take effect.
@@ -33,14 +37,30 @@ export const fileSandboxSettingsStore = (path: string): SandboxSettingsStore => 
         // The one manifest the owner edits by hand: a version this build cannot parse is theirs to fix, never replaced.
         onUnreadable: "refuse",
     });
+    // The pinned value, converging the file in the background when it was found looser. The convergence re-pins what the
+    // file holds by then, under the file's own queue, so it can never write back a value a save replaced meanwhile.
+    const pinned = async (stored: SandboxSettings, unreadable: boolean): Promise<SandboxSettings> => {
+        if (pin === undefined) {
+            return stored;
+        }
+        const outcome = await pin(stored);
+        if (outcome.loosened.length > 0 && !unreadable) {
+            void file.update(outcome.reapply).catch((error: Error) => warn?.("settings: writing the organisation's pinned values back failed", error));
+        }
+        return outcome.value;
+    };
     return {
-        get: file.read,
+        get: async () => {
+            const { value, unreadable } = await file.state();
+            return pinned(value, unreadable);
+        },
         load: async () => {
             const { value, unreadable } = await file.state();
-            return { settings: value, unreadable };
+            return { settings: await pinned(value, unreadable), unreadable };
         },
         set: async (settings) => {
-            await file.update(() => settings);
+            const stored = pin === undefined ? settings : (await pin(settings)).value;
+            await file.update(() => stored);
         },
     };
 };

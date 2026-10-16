@@ -94,6 +94,20 @@ export const ActionApprovalSchema = z.object({
         .describe(
             "What to do once approved, written for the fresh turn that will do it: names, ids and steps, since it has none of this conversation.",
         ),
+    // Written by a connection's own command when it holds an act (e-urzad's office acts), never by hand. Part of what
+    // the yes pins, like every field but the bookkeeping, so an item edited after the yes no longer matches it.
+    performer: z
+        .object({
+            extension: z.string().min(1).describe("The extension that carries it out, by its publisher.name (\"intentic.e-urzad\")."),
+            digest: z
+                .string()
+                .regex(/^[0-9a-f]{64}$/)
+                .describe("The SHA-256 of exactly what it will do, which the extension recomputes before acting and refuses on any difference."),
+        })
+        .optional()
+        .describe(
+            "Who carries this out instead of an agent turn: once you approve it, the sandbox hands it to that extension's backend, which acts only if what it holds still matches the digest. Written by the extension's own command when it holds an act; an item written by hand never needs one.",
+        ),
     ...envelope,
 });
 export type ActionApproval = z.infer<typeof ActionApprovalSchema>;

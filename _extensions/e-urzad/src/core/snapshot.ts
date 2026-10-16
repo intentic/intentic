@@ -60,6 +60,8 @@ export const ActionRowSchema = z.object({
     at: z.string(),
     key: z.string(),
     approvalId: z.string().optional(),
+    // Who approved it, as the daemon recorded their sign-in; absent on a sandbox without sign-in and on older rows.
+    approvedBy: z.string().optional(),
     outcome: z.string(),
 });
 export type ActionRow = z.infer<typeof ActionRowSchema>;

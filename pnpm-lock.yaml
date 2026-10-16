@@ -3639,6 +3639,9 @@ importers:
       '@intentic/contract-serve':
         specifier: workspace:*
         version: link:../../_shared/contract-serve
+      '@intentic/ext-e-urzad':
+        specifier: workspace:*
+        version: link:../../_extensions/e-urzad
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../../_shared/sandbox-contract

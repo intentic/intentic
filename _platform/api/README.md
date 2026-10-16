@@ -216,6 +216,11 @@ flowchart LR
   `{ sandbox, key }`. The code stays redeemable until it expires; unknown, expired, removed and hosted all answer 404.
   Neither route is rate-limited, and a fix code carries the setup code's 65 bits. Releasing
   a hosted machine rotates the connect token, so it clears both columns with the setup ones.
+- Organisation policy (`src/org/`) pins public-office preset groups and can restrict bound sandboxes to organisation
+  members. Admin mutations lock the organisation row before checking the caller's current role and the last-admin
+  rule. Binding also locks the sandbox row, shared with deletion and account erasure, so concurrent requests cannot
+  delete a bound sandbox. An organisation admin must release it first. The personal owner remains; ownership transfer
+  is still unfinished. [Organisation architecture](../../docs/architecture/organisations.md) describes enforcement and limits.
 - Deleting an account runs one erase path whichever side asks (`src/account-erase.ts`): Better Auth's `beforeDelete`
   for the owner's own deletion, `deleteUserAccount` for an operator's. Before the cascade, in one transaction, it queues
   every Fly app the account owns (live machines, trashed sandboxes, a release's held volume, a provision in flight)
@@ -224,6 +229,8 @@ flowchart LR
   destroys the apps and deletes the Stripe customer at once, best-effort. The cleanup sweep retries a failed app every
   minute and is not held back by the orphan reaper's caps; the retention sweep retries a failed Stripe customer daily.
   Running it again after a partial failure is safe: the queues are upserts, and the standing is moved, not copied.
+  If the account owns an organisation-bound sandbox, it refuses before any erasure work, after taking the sandbox
+  locks. A database trigger also refuses a later account cascade while a bound sandbox remains.
 - A deleted account's hosted standing outlives it (`sandbox/hosted/abuse/carried-standing.ts`): the suspension, the
   abuse watch's strike count and the month's free minutes, keyed by HMAC-SHA256 of the Google subject and, beside it,
   of the canonical email (lowercased, a `+tag` dropped, and for Gmail the dots dropped), both under a key derived from

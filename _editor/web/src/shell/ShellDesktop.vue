@@ -743,6 +743,8 @@ useGettingStarted();
         <!-- Under what was opened while it fills the middle: hidden and inert, but mounted at its own size, so the section
              comes back as it was left, scrolled where it was. -->
         <main
+            :id="besideFills ? undefined : `main-content`"
+            tabindex="-1"
             class="relative flex min-w-0 flex-col overflow-hidden"
             :class="{ invisible: besideFills }"
             :inert="besideFills ? true : undefined"

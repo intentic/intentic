@@ -2,6 +2,7 @@ import { AxeBuilder } from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 
 export const WCAG_21_AA = [`wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`];
+export const WCAG_22_AA = [...WCAG_21_AA, `wcag22aa`];
 
 export interface Finding {
     rule: string;
@@ -10,8 +11,8 @@ export interface Finding {
     help: string;
 }
 
-export async function auditPage(page: Page): Promise<Finding[]> {
-    const result = await new AxeBuilder({ page }).withTags(WCAG_21_AA).analyze();
+export async function auditPage(page: Page, tags: readonly string[] = WCAG_21_AA): Promise<Finding[]> {
+    const result = await new AxeBuilder({ page }).withTags([...tags]).analyze();
     return result.violations.flatMap((violation) => violation.nodes.map((node) => ({
         rule: violation.id,
         impact: violation.impact ?? `unknown`,

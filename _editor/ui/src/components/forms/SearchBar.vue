@@ -48,8 +48,8 @@ const rootClass = computed(() =>
 );
 // Right padding reserved by how many controls exist, not drawn, so text doesn't reflow as the query changes.
 const RIGHT_ROOM = {
-    panel: [``, `pr-8`, `pr-14`],
-    field: [``, `pr-7`, `pr-12`],
+    panel: [``, `pr-10`, `pr-16`],
+    field: [``, `pr-9`, `pr-16`],
 } as const;
 const controls = computed(() => (clearable ? 1 : 0) + (matchCase.value === undefined ? 0 : 1));
 const inputClass = computed(() =>
@@ -104,7 +104,7 @@ const clear = (): void => {
             <button
                 v-if="matchCase !== undefined"
                 type="button"
-                class="touch-target flex h-4 w-4 items-center justify-center rounded font-mono text-3xs leading-none text-subtle transition-colors hover:bg-overlay hover:text-content"
+                class="touch-target flex h-6 w-6 items-center justify-center rounded font-mono text-3xs leading-none text-subtle transition-colors hover:bg-overlay hover:text-content"
                 :class="{ 'bg-primary-600/20 text-link': matchCase }"
                 :aria-pressed="matchCase"
                 v-tooltip.bottom="t(`ui.searchBar.matchCase`)"
@@ -117,7 +117,7 @@ const clear = (): void => {
             <button
                 v-if="clearable && query !== ``"
                 type="button"
-                class="touch-target flex items-center rounded text-2xs text-subtle transition-colors hover:text-content"
+                class="touch-target flex h-6 w-6 items-center justify-center rounded text-2xs text-subtle transition-colors hover:text-content"
                 v-tooltip.bottom="{ title: t(`ui.action.clear`), keys: t(`ui.keys.esc`) }"
                 :aria-label="t(`ui.action.clearFilter`)"
                 @click="clear"

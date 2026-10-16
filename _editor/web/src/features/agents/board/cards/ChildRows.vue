@@ -93,7 +93,7 @@ const inset = computed(() => (props.rail ? `ml-9.25` : props.live ? `ml-11.75` :
     <div
         v-if="board !== undefined && tray !== undefined"
         :role="drawn ? `group` : undefined"
-        :aria-label="label"
+        :aria-label="drawn ? label : undefined"
         class="relative flex flex-col"
         :class="[inset, { 'child-tray': drawn }]"
     >

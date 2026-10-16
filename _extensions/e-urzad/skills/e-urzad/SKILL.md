@@ -18,7 +18,7 @@ description: Polish office systems through the e-urzad CLI - EZD RP cases, docum
 - `download <idDokumentPrzestrzeni>` saves the file into the records. Read it with `fileq`.
 - `sync` refreshes the rail view: cases in progress plus tasks.
 
-Writes are HELD by default:
+Writes are always HELD for a person's approval:
 
 - `attach <idSprawa> <file>...` adds files to a case.
 - `register-incoming (--document <id> | --file <path>) [--rpw-metadata m.json]` registers incoming mail in the RPW register.
@@ -38,7 +38,7 @@ The EZD card also gives you MCP tools for the reads and `verify_signature`.
 
 ## Approvals
 
-A held command prints `{"held": true, "approvalId": …}` and sends nothing. Tell the owner what you proposed and stop. They approve it in Approvals. The fresh turn that approval starts runs `e-urzad approved <approvalId>` exactly once; the command re-checks the approval and the bytes. Never edit approval files or action rules yourself. Never retry an office write that failed or timed out: the office may already have registered it, so check first (`ezd case`, `ed task`).
+A held command prints `{"held": true, "approvalId": …}` and sends nothing, even when the action rules say `allow`. Tell the owner what you proposed and stop. Once a person approves it in Approvals, the sandbox carries it out itself, without a turn: it checks the yes, the exact operation and file bytes, and the card's office, then writes what the office answered into the approval's `result`. Read the result there. Nothing you run carries out an approved act; `e-urzad approved` only says so. Never edit approval files, their media folder or the action rules yourself: an approval changed after the yes is refused. An approval that failed as uncertain may already have reached the office: check first (`ezd case`, `ed task`) and never propose it again blind.
 
 ## Signatures (`e-urzad verify <file> [--content <signed file>]`)
 

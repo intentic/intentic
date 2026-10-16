@@ -1,8 +1,11 @@
+import { errorMessage } from "@intentic/base/errors";
+import type { ApprovedActionOutcome } from "@intentic/extension-api/runtime";
 import type { ActionApprovalSummary, AgentTurn, ApprovalSummary, PostApprovalSummary } from "@intentic/sandbox-contract";
 import { actionTurnPrompt, DIRECT_PUBLISH_PLATFORMS, publishTurnPrompt } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
-import { type ApprovalStanding, approvalStandings, forgetApprovals } from "./approval-decisions.js";
+import { type ApprovalStanding, approvalStandings, type SpentApproval, spendApprovals } from "./approval-decisions.js";
+import { type PerformedAction, performApprovedAction } from "./approval-performers.js";
 import { canPublishDirectly, publishDirectly } from "./direct-publish.js";
 
 // Sleeps until the exact due moment, one timer at a time, armed from disk (never memory) since both this daemon and the
@@ -10,7 +13,8 @@ import { canPublishDirectly, publishDirectly } from "./direct-publish.js";
 // Dispatched by kind: a Discord post goes out through its gateway, other posts and all actions need an agent turn.
 // `running` is written before any action starts, so a mid-death daemon leaves a stuck item rather than one done twice.
 // An item's `approved` is only a claim, since the agent writes the file too: it runs when the owner's yes on the history
-// volume (approval-decisions.ts) matches what it says now.
+// volume (approval-decisions.ts) matches what it says now. An action naming a `performer` never reaches a turn: once its
+// yes is spent, the extension's backend carries it out (approval-performers.ts) and its outcome is written here.
 
 // How long a turn may sit before another pass reconsiders it; else a dead turn leaves `running` forever.
 const RUNNING_STALE_MS = 30 * 60_000;
@@ -52,6 +56,7 @@ const byPersona = <T extends ApprovalSummary>(items: readonly T[]): Map<string, 
 
 const isPost = (item: ApprovalSummary): item is PostApprovalSummary => item.kind === `post`;
 const isAction = (item: ApprovalSummary): item is ActionApprovalSummary => item.kind === `action`;
+const isPerformed = (item: ApprovalSummary): item is PerformedAction => isAction(item) && item.performer !== undefined;
 
 const actionTitle = (actions: readonly ActionApprovalSummary[]): string =>
     actions.length === 1 ? (actions[0]?.summary ?? `Carry out 1 action`) : `Carry out ${actions.length} actions`;
@@ -64,6 +69,13 @@ const NOT_APPROVED: Readonly<Record<Exclude<ApprovalStanding, `approved`>, strin
     unreadable: `Nothing was done: the record of what was approved could not be read. Read it, then retry to approve it again.`,
 };
 
+// What an extension's outcome becomes on the item's row. A refusal reached nothing outside, so a new yes may run it again;
+// an uncertain one may already have happened, and nothing here repeats it.
+const performedError = (outcome: { readonly outcome: `refused` | `uncertain`; readonly error: string }): string =>
+    outcome.outcome === `refused`
+        ? `Nothing was done: ${outcome.error}`
+        : `This may already have happened: ${outcome.error}. Check the system it was sent to before approving it again; it is never retried by itself.`;
+
 export const createApprovalsExecutor = (services: Services): ApprovalsExecutor => {
     let timer: NodeJS.Timeout | undefined;
     // One pass at a time: two overlapping passes could read `approved` before either writes `running`, twice.
@@ -75,9 +87,11 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
     const fail = (item: ApprovalSummary, error: string): Promise<void> => mark(item, { status: `failed`, error });
 
     // Fails unsent every due item without a yes matching it, then spends the yes of the rest before anything acts on
-    // them, so the file being put back to approved later runs nothing a second time. Returns the items that can go.
-    const settleUnapproved = async <T extends ApprovalSummary>(items: readonly T[]): Promise<T[]> => {
-        const standingOf = await approvalStandings({ historyRoot: services.config.historyRoot, workspaceRoot: services.workspace.root });
+    // them, so the file being put back to approved later runs nothing a second time. Returns the items this pass spent a
+    // yes for, with the yes: an item whose yes another caller spent first is that caller's to carry out.
+    const settleUnapproved = async <T extends ApprovalSummary>(items: readonly T[]): Promise<{ due: T[]; yeses: ReadonlyMap<string, SpentApproval> }> => {
+        const roots = { historyRoot: services.config.historyRoot, workspaceRoot: services.workspace.root };
+        const standingOf = await approvalStandings(roots);
         const cleared: T[] = [];
         for (const item of items) {
             const standing = await standingOf(item);
@@ -91,11 +105,37 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
             );
             await fail(item, NOT_APPROVED[standing]);
         }
-        await forgetApprovals(
-            services.config.historyRoot,
-            cleared.map((item) => item.id),
-        );
-        return cleared;
+        const yeses = await spendApprovals(roots, cleared);
+        for (const item of cleared.filter((entry) => !yeses.has(entry.id))) {
+            services.logger.warn({ approval: item.id }, `approvals: another pass spent this item's yes first, so this one leaves it alone`);
+        }
+        return { due: cleared.filter((item) => yeses.has(item.id)), yeses };
+    };
+
+    // An action its extension carries out itself: `running` first, as for every door, then the backend's own outcome.
+    // Its yes is already spent, so nothing here can carry it out twice; an uncertain outcome is failed, never redone.
+    const performByExtension = async (item: PerformedAction, yes: SpentApproval): Promise<void> => {
+        await mark(item, { status: `running`, startedAt: Date.now() });
+        let outcome: ApprovedActionOutcome;
+        try {
+            outcome = await performApprovedAction(services, item, yes);
+        } catch (error) {
+            // Whatever throws out of it threw before the door was asked (its request is caught inside): nothing went out.
+            outcome = { outcome: `refused`, error: errorMessage(error) };
+        }
+        services.audit.record({
+            actor: { kind: `system`, reason: `approvals executor` },
+            action: `approvals.performed`,
+            target: item.id,
+            outcome: outcome.outcome === `done` ? `ok` : outcome.outcome === `refused` ? `refused` : `failed`,
+            details: { extension: item.performer.extension, digest: item.performer.digest, approver: yes.approver ?? null, approvedAt: yes.approvedAt },
+        });
+        if (outcome.outcome === `done`) {
+            await mark(item, { status: `done`, finishedAt: Date.now(), result: outcome.result });
+            return;
+        }
+        services.logger.warn({ approval: item.id, outcome: outcome.outcome }, `approvals: an extension did not carry out an approved action`);
+        await fail(item, performedError(outcome));
     };
 
     // Sends one post through the API its platform actually offers; returns whether it's now settled.
@@ -170,7 +210,7 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
             if (marked.length === 0) {
                 return;
             }
-            const due = await settleUnapproved(marked);
+            const { due, yeses } = await settleUnapproved(marked);
 
             const forTurn: PostApprovalSummary[] = [];
             for (const post of due.filter(isPost)) {
@@ -179,9 +219,19 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
                 }
             }
 
+            for (const item of due.filter(isPerformed)) {
+                const yes = yeses.get(item.id);
+                if (yes !== undefined) {
+                    await performByExtension(item, yes);
+                }
+            }
+
             const cast = new Set((await services.personas.list()).map((card) => card.id));
             const posts = await settleUnnamed(await settleGhosts(forTurn, cast));
-            const actions = await settleGhosts(due.filter(isAction), cast);
+            const actions = await settleGhosts(
+                due.filter(isAction).filter((item) => item.performer === undefined),
+                cast,
+            );
 
             let batch = 0;
             // Short by construction: a persona id may run 60 chars, a conversation id 64, so a counter names the turn.

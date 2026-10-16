@@ -6,6 +6,8 @@ import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { nameDictionary } from "./name-dictionary.js";
+import { nerInstalled } from "./ner.js";
+import { privacyPinRefusal } from "../compliance/org-pins.js";
 
 // The privacy shield's page and the agent CLI's door: the status everybody may read, the policy only the owner may
 // change (the route's floor says so, and the agent's token never reaches it), the log and the values behind its tokens
@@ -16,7 +18,7 @@ import { nameDictionary } from "./name-dictionary.js";
 const failing = (error: unknown): ORPCError<"INTERNAL_SERVER_ERROR", unknown> =>
     new ORPCError("INTERNAL_SERVER_ERROR", { message: errorMessage(error), cause: error });
 
-export const createPrivacyRoutes = (services: Pick<Services, "agents" | "privacyShield" | "composeEnvironment" | "logger">) => {
+export const createPrivacyRoutes = (services: Pick<Services, "agents" | "privacyShield" | "composeEnvironment" | "logger" | "orgPolicy">) => {
     const i = implement(privacyContract).$context<OrpcContext>();
     const shield = services.privacyShield;
     return {
@@ -26,6 +28,11 @@ export const createPrivacyRoutes = (services: Pick<Services, "agents" | "privacy
             }),
         ),
         setPolicy: i.setPolicy.handler(async ({ input }) => {
+            // The organisation's pins hold whatever is saved; a save that would undo one is refused with it named.
+            const pinned = await privacyPinRefusal(services.orgPolicy, input, async () => nerInstalled());
+            if (pinned !== undefined) {
+                throw new ORPCError("FORBIDDEN", { message: pinned.error, data: pinned });
+            }
             noteAudit({ details: { mode: input.mode, trusted: input.trusted.length } });
             await shield.setPolicy(input);
             // The policy decides whether the privacy pack rides the overlay (environment/privacy-pack.ts), so the

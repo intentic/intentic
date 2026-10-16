@@ -15,6 +15,16 @@ import { mintSandbox } from "./mint-sandbox.js";
 /* THE OWNER HAS NO SANDBOX IN THE TRASH BY THAT ID. */
 export class TrashedSandboxGone extends Error {}
 
+/* AN ORGANISATION HOLDS THE SANDBOX (docs/architecture/organisations.md): it is not its owner's to delete, since one
+ * restored from the trash comes back unbound, which would be a way out of every lock. An admin of the organisation
+ * releases it first. */
+export class SandboxHeldByOrganisation extends Error {
+    constructor(organisation: string) {
+        super(`${organisation} holds this sandbox; an admin of ${organisation} must release it before it can be deleted`);
+        this.name = `SandboxHeldByOrganisation`;
+    }
+}
+
 // Everything a restore needs to land on the same disk as the same machine; `flyImage` since the sandbox's `image` is its logo.
 const machineSnapshot = (machine: HostedMachine) => ({
     appName: machine.appName,
@@ -70,6 +80,12 @@ export const trashSandbox = async (prisma: PrismaClient, config: Config, logger:
     const purgeAfter = new Date(Date.now() + RECOVERY_WINDOW_MS);
     await prisma.$transaction(async (tx) => {
         await lockHostedSandbox(tx, sandboxId);
+        // Read under the row lock a bind takes too (org.routes.ts), so a bind that committed first is seen here, and one
+        // still waiting finds the row gone.
+        const held = await tx.sandbox.findUnique({ where: { id: sandboxId }, select: { orgId: true, org: { select: { name: true } } } });
+        if (held !== null && held.orgId !== null) {
+            throw new SandboxHeldByOrganisation(held.org?.name ?? `its organisation`);
+        }
         if (hosted !== null) {
             await dropHostedMachine(tx, { ...hosted, ownerId: sandbox.ownerId });
         }

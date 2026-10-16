@@ -13,10 +13,14 @@ flowchart LR
 
 - Tables include Better Auth's users and sessions, sandboxes and their members, the hosted lane (machines, pool,
   builds, usage, plan), the wallet and admin stats. The comments in `schema.prisma` say what each column means.
-- Two things are kept in SQL Prisma does not model, from `20261002120000_platform_memory`: a trigger on `sandbox` that
+- Some database state lives only in SQL. `20261002120000_platform_memory` adds a trigger on `sandbox` that
   writes a `sandbox_tombstone` for the tunnel id of every deleted row and rotated token (cascades included), and the
   one `platform_identity` row that migration minted for its database. Neither appears in a `migrate diff`, and both are
   what tells a forgotten sandbox from a deleted one ([platform.md](../../docs/architecture/platform.md#when-the-platform-forgets)).
+- `20261015130000_org_bound_sandbox_guard` adds a `BEFORE DELETE` trigger that refuses deletion while `sandbox.orgId`
+  is set, including account-deletion cascades. An organisation admin releases the sandbox first. Together with the
+  API's row locks, this preserves the binding under concurrent changes; [organisations.md](../../docs/architecture/organisations.md)
+  covers the remaining ownership limits. `20261015120000_org_policy_reset` records when a daemon reports a lower held policy version.
 - Migrations are append-only. `_tools/scripts/verify/check-migrations.sh` (CI's `migrations` job) fails when an
   applied migration changes, when a new one adds a `NOT NULL` column with no `DEFAULT`, or when replaying the history
   does not produce `schema.prisma`.

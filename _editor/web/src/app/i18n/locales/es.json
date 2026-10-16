@@ -33,6 +33,20 @@
             "personas": "Personas",
             "updates": "Actualizaciones automáticas"
         },
+        "preset": {
+            "group": "Ajustes obligatorios",
+            "note": "Cada grupo activado aquí se aplica en cada sandbox de esta organización, digan lo que digan sus propios ajustes. Se puede hacer uno de estos ajustes más estricto, nunca más laxo, y un cambio hecho directamente en un archivo de ajustes se revierte.",
+            "pinned": "Obligatorio",
+            "notPinned": "No obligatorio",
+            "privacy": "Escudo de privacidad activado, imágenes enmascaradas",
+            "retention": "Conversaciones, puntos de restauración y cachés guardados menos tiempo",
+            "audit": "Registro de auditoría guardado al menos dos años, con las lecturas registradas",
+            "analytics": "Analítica del producto desactivada",
+            "notice": "Aviso sobre la IA mostrado a todos",
+            "actions": "Los mensajes salientes y los actos administrativos esperan aprobación",
+            "admission": "El trabajo iniciado desde fuera del sandbox espera aprobación",
+            "judge": "Juez de comandos activado"
+        },
         "detail": {
             "couldntSave": "No se pudo guardar la política",
             "couldntAdd": "No se pudo añadir a esa persona",
@@ -52,7 +66,10 @@
             "noSandboxes": "Ningún sandbox pertenece todavía a esta organización.",
             "pickSandbox": "Elige uno de tus sandboxes",
             "bind": "Añadir a la organización",
-            "bindNote": "Solo se pueden añadir sandboxes que sean tuyos. Una vez añadido, la política de arriba se le aplica hasta que un administrador lo libere."
+            "bindNote": "Solo se pueden añadir sandboxes que sean tuyos. Una vez añadido, la política de arriba se le aplica hasta que un administrador lo libere.",
+            "membersOnly": "Solo las personas de esta organización",
+            "membersOnlyNote": "El acceso a estos sandboxes solo se puede dar a personas de esta lista. Quitar a alguien de la organización le retira el acceso a cada sandbox en pocos minutos, sin que nadie en el sandbox tenga que actuar. No afecta a los propietarios de los sandboxes.",
+            "policyReset": "volvió sin su copia de la política el {date} y la recibió de nuevo"
         }
     },
     "a11yKit": { "toggleDetails": "Mostrar u ocultar los detalles del título", "selectRow": "Seleccionar la fila de ejemplo", "settingsButton": "Ejemplo de botón de configuración", "codeField": "Ejemplo de campo de código" },
@@ -3555,6 +3572,7 @@
             "tools": "Herramientas"
         },
         "sandboxAreas": {
+            "toggleArea": "Mostrar u ocultar detalles de {name}",
             "areaName": "Nombre del área",
             "areas": "Tus áreas",
             "briefPlaceholder": "Qué es esta parte del espacio de trabajo, en una línea",
@@ -5244,6 +5262,7 @@
         "worthKnowing": "Conviene saber"
     },
     "shell": {
+        "skipToContent": "Saltar al contenido principal",
         "accountPanel": {
             "signOut2": "Cerrar sesión"
         },

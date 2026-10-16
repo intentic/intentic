@@ -1,4 +1,5 @@
 {
+    "loading": "Reading the office…",
     "title": "e-Urząd",
     "refresh": "Refresh from the office",
     "test": "Test connection",
@@ -7,7 +8,7 @@
     "testedEd": "Signed in to mailbox {mailbox} ({environment}).",
     "neverSynced": "Nothing saved yet. Refresh reads the office now; the agent can also run e-urzad … sync.",
     "syncedAt": "Last read from the office {at}",
-    "ezdNote": "Reads only. Registering mail, adding files to a case and outgoing mail wait for your approval in Approvals, unless your action rules allow them.",
+    "ezdNote": "Reads only. Registering mail, adding files to a case and outgoing mail require a matching approval in Approvals.",
     "edNote": "Listing reads metadata only: nothing here opens a delivery. Opening one (which can make it legally delivered) and sending wait for your approval in Approvals.",
     "cases": "Cases in progress",
     "noCases": "No cases in progress, or none read yet.",

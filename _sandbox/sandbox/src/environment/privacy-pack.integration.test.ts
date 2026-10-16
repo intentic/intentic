@@ -5,15 +5,22 @@ import { DEFAULT_PRIVACY_SHIELD, type PrivacyShieldPolicy } from "@intentic/sand
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
 import { createLogger } from "../logger.js";
-import { privacyShieldDocument } from "../privacy/privacy-policy.js";
+import { filePrivacyPolicy, privacyShieldDocument } from "../privacy/privacy-policy.js";
 import { packFragment } from "../image/packs.js";
 import { privacyPackFragments, privacyPackWanted } from "./privacy-pack.js";
+import { createOrgPolicyHolder } from "../org/org-policy.js";
+import { createPinDriftReporter, type Pin, privacyPin } from "../compliance/org-pins.js";
 
 /* The privacy pack rides the overlay exactly when the shield's policy asks for one of its readers. */
 
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 
-const services = (authRoot: string): Pick<Services, "authRoot" | "logger"> => unstubbed<Services>("services", { authRoot, logger });
+// The shield's policy as the shield reads it: the file in `authRoot`, through a bound sandbox's pins when `pin` is given.
+const services = (authRoot: string, pin?: Pin<PrivacyShieldPolicy>): Pick<Services, "privacyShield" | "logger"> =>
+    unstubbed<Services>("services", {
+        logger,
+        privacyShield: unstubbed("privacyShield", { policy: () => filePrivacyPolicy(join(authRoot, privacyShieldDocument.path), pin).get() }),
+    });
 
 const withPolicy = (policy: Partial<PrivacyShieldPolicy> | string): string => {
     const authRoot = mkdtempSync(join(tmpdir(), "privacy-pack-"));
@@ -54,4 +61,12 @@ test("a policy written before images were masked converts and still brings the p
 
 test("an unreadable policy leaves the pack out instead of failing the compose", async () => {
     expect(await privacyPackFragments(services(withPolicy("{half a jso")))).toEqual([]);
+});
+
+test("a shield an organisation pins on brings the pack even when the file says off", async () => {
+    const authRoot = withPolicy({ mode: "off" });
+    const orgPolicy = createOrgPolicyHolder({ authRoot: mkdtempSync(join(tmpdir(), "privacy-pack-org-")), logger });
+    await orgPolicy.accept({ orgId: "org-1", orgName: "Urząd Gminy", version: 1, sections: {}, preset: ["privacy"] });
+    const pin = privacyPin(orgPolicy, async () => false, createPinDriftReporter({ logger, record: () => {} }));
+    expect(await privacyPackFragments(services(authRoot, pin))).toEqual(await privacyPack());
 });
