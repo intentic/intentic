@@ -134,7 +134,7 @@ const fail = (code, why) => { console.error(why); process.exit(code); };
     /* Verify that the image bakes and first boot seeds the starter site. */
     let starter;
     try {
-        starter = await import(pathToFileURL(require.resolve("@intentic/sandbox-contract", { paths: ["/opt/sandbox"] })).href);
+        starter = await import(pathToFileURL(require.resolve("@intentic/sandbox-contract/state/starter", { paths: ["/opt/sandbox"] })).href);
     } catch (error) {
         // Terminal and named: an unreadable contract module is a pruned or unresolvable package, not a slow
         // boot, and retrying it until the timeout would report "still not healthy" over a daemon that is

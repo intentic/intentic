@@ -664,7 +664,7 @@ type RoomHold =
 
 // The refusals at the door that a moment's wait clears by itself: the sandbox short of memory, and the sandbox too loaded
 // to set up the turn's own view of the workspace in time (setup-refusal.ts). Both wait for the same room, and go on the
-// conversation's answer to the memory wall. The card reads the first (agentStatus.ts, memoryHeld).
+// conversation's answer to the memory wall. The card reads the first (agentStatus-standing.ts, memoryHeld).
 const ROOM_REFUSALS: ReadonlySet<string> = new Set(["sandbox-memory-low", "workspace-setup"]);
 
 // Whether the turn a conversation last tried was turned away for room.

@@ -33,6 +33,6 @@ export const badgeChip = (badge: ViewBadge): boolean => (badge.count ?? 0) > 0 |
 export const badgeSpeaks = (badge: ViewBadge): boolean => badgeChip(badge) || badge.running !== undefined;
 
 // The turning mark's own ink: the app's one "in flight" colour, the same link blue a running agent's
-// spinner wears (agentStatus.ts), so activity reads the same wherever it is drawn. Deliberately not a
+// spinner wears (agentStatus-meta.ts), so activity reads the same wherever it is drawn. Deliberately not a
 // BADGE_TONE: a plate would make progress look like an errand, which is the whole thing it isn't.
 export const RUNNING_MARK_CLASS = `text-link`;

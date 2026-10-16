@@ -2,8 +2,8 @@ import type { TurnProof } from "@intentic/sandbox-contract/schemas/agents";
 
 // WHAT A CARD SAYS ABOUT ITS WORK NOW THAT NOTHING CHECKS IT FOR THE CONVERSATION: what its last turn showed of its own
 // work (AgentSummary.proof, read off the checks the turn chose to run after its last edit). Pure functions over plain
-// data, no store, no Vue, like agentStatus.ts: the words belong to the mark that draws these (CardSeal.vue), so a rail
-// row and a board card read one projection and cannot disagree about it.
+// data, no store, no Vue, like agentStatus-standing.ts: the words belong to the mark that draws these (CardSeal.vue), so
+// a rail row and a board card read one projection and cannot disagree about it.
 
 export type ProofVerification = Exclude<TurnProof[`verification`], `no-code`>;
 

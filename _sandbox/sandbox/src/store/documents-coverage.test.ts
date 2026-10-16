@@ -95,8 +95,6 @@ const callArguments = (text: string, callee: string): string[] =>
 // JSON written whole through the atomic writer by hand, past every document: what the shape check and the conversions
 // cannot see, each named with why it stands. The list only shrinks.
 const RAW_JSON_WRITERS = [
-    // What a conversation was last told, overwritten every turn; one an older shape wrote reads as none.
-    "store/journals/prompt-record.ts",
     // Claude Code's own settings.json: one key merged into a file whose shape another program owns.
     "sessions/session-store.ts",
     // Written synchronously as a failed boot exits, where no store's write queue can be waited on.

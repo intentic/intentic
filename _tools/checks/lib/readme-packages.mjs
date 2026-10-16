@@ -1,6 +1,6 @@
 // The packages `intentic-docs validate` expects a README.md of, found by its own rules, and what it reads off one. The
 // CLI lives outside this repository (the documentation extension) and is absent in CI, so package-readmes.mjs asks
-// the same question here; readme-packages.test.mjs runs the CLI where it exists and holds the two answers equal.
+// the same question here; package-readmes.test.mjs runs the CLI where it exists and holds the two answers equal.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
