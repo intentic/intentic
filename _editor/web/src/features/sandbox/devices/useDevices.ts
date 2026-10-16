@@ -42,6 +42,8 @@ export function useDevices({ poll = true }: { poll?: boolean } = {}): {
     error: ComputedRef<string | undefined>;
     isLoading: Ref<boolean>;
     refetch: () => void;
+    /** The same re-read, settling once the answer has landed: for a caller that says "looking" until it has. */
+    reread: () => Promise<void>;
 } {
     const { query, error } = useSandboxQuery({ ...rpcQuery(`system.devices`), refetchInterval: poll ? POLL_MS : false });
     return {
@@ -53,6 +55,9 @@ export function useDevices({ poll = true }: { poll?: boolean } = {}): {
         // True only for the first fetch; a refetch must never blank an already-populated list.
         isLoading: query.isLoading,
         refetch: () => void query.refetch(),
+        reread: async () => {
+            await query.refetch();
+        },
     };
 }
 
@@ -77,6 +82,9 @@ export interface DeviceSandboxPayload {
     severing?: boolean | undefined;
     // The owner asking, as they restart the sandbox relaying this, for the turns it cuts to run again once it is back.
     resumeTurns?: boolean | undefined;
+    // Another of the owner's sandboxes to carry the call, by id: one whose own Devices list reaches the machine when the
+    // active one's does not (the switcher's removal). Absent is the active sandbox; `hostId` is that sandbox's key.
+    at?: string | undefined;
 }
 
 // hash/to/shape/when/resources/setupCode/resumeTurns are set only when present; the schema rejects an explicit undefined.
@@ -190,7 +198,10 @@ const outcomeOf = async (
 };
 
 export async function manageDeviceSandbox(hostId: string, slug: string, op: DeviceSandboxOp, payload: DeviceSandboxPayload = {}): Promise<string> {
-    const frames = await sandboxRpc.system.manageDeviceSandbox(flowInput(hostId, slug, op, payload));
+    const frames = await sandboxRpc.system.manageDeviceSandbox(
+        flowInput(hostId, slug, op, payload),
+        payload.at === undefined ? undefined : { context: { at: payload.at } },
+    );
     return (await outcomeOf(frames, payload.onLine, payload.severing === true)) ?? severedOutcome(op, slug);
 }
 

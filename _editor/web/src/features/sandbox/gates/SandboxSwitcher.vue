@@ -36,8 +36,8 @@ import { connectedSandboxes, unfinishedSandboxes } from "../live/roster";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
-import { manageDeviceSandbox, useDevices, useHostRunning } from "../devices/useDevices";
-import { beginDeviceWork, machineKeyOf } from "../devices/runners/deviceWork";
+import { manageDeviceSandbox } from "../devices/useDevices";
+import { beginDeviceWork } from "../devices/runners/deviceWork";
 import { useOperation } from "../../../workbench/operations/operations";
 import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
 import { oneLiner } from "../../../app/environments/scriptCommand";
@@ -46,6 +46,7 @@ import { oneLinerFits } from "@intentic/constants";
 import { announceDesktopRoster, desktopApp, openThisComputer } from "../../../app/environments/desktop";
 import { useAuth } from "../../../client/auth/useAuth";
 import { removalTakes } from "./switcherRows";
+import { useRemovalDoor } from "./useRemovalDoor";
 import { useT } from "@intentic/ui/i18n";
 
 // Rail control to switch between the user's sandboxes or add another; selecting one re-points every sandbox-backed
@@ -346,10 +347,16 @@ const cleanupCommand = computed(() => {
     return (os: CommandOs): string => oneLiner(`remove`, [slug], os);
 });
 
-// The machine running this sandbox, when it is one of the owner's connected devices: then deleting the container
-// out there is a checkbox here, and the cleanup command above is only for a machine nothing can reach.
-const cleanupHost = useHostRunning(() => cleanupSlug.value);
-const { devices } = useDevices({ poll: false });
+// The machine running this sandbox, when any of the owner's sandboxes reaches it: then deleting the container out there
+// is a checkbox here, and the cleanup command above is only for a machine nothing can reach. Looked up fresh as the
+// dialog opens (useRemovalDoor), so the command never stands in for a press that is merely not known yet.
+const { door: cleanupDoor, looked: machinesLooked, looking: lookingForMachine } = useRemovalDoor(
+    () => pending.value,
+    () => cleanupSlug.value,
+);
+// Never came up: a container for it exists only where a setup was started and broke, so "none of yours has it" is
+// usually the whole story rather than a command's preamble.
+const neverCameUp = computed(() => pending.value !== undefined && pending.value.lastSeenAt === null);
 const alsoDeleteThere = ref(false);
 // Deleting the container out there takes tens of seconds and then drops the account row, so it is the removal's own
 // run, per sandbox removed: closing the dialog mid-delete does not stop it, and the dialog opened again on the same
@@ -403,17 +410,15 @@ const confirmRemove = async (): Promise<void> => {
         return;
     }
     const slug = cleanupSlug.value;
-    const hostId = cleanupHost.value;
-    if (!alsoDeleteThere.value || hostId === undefined || slug === undefined) {
+    const door = cleanupDoor.value;
+    if (!alsoDeleteThere.value || door === undefined || slug === undefined) {
         pending.value = undefined;
         await removeRow(target);
         return;
     }
     // The device first, and the dialog stays open while it runs: a failure out there leaves the account row in place
     // to retry from, rather than dropping the only handle on a container nobody deleted.
-    const device = devices.value.find((candidate) => candidate.hostId === hostId);
-    const machine = device === undefined ? hostId : machineKeyOf(devices.value, device);
-    const label = device?.label ?? hostId;
+    const { machineKey: machine, machineLabel: label } = door;
     const doing = t(`sandbox.deviceOps.workingRemove`, { name: target.name });
     const what = t(`sandbox.deviceOps.doingOn`, { doing, machine: label });
     const outcome = await removal.run({
@@ -423,9 +428,13 @@ const confirmRemove = async (): Promise<void> => {
             // The machine's card and the Devices tile carry it while the reader looks elsewhere.
             const endMark = beginDeviceWork({ machine, sandboxes: [target.id], doing, what });
             try {
-                // Deleting the box serving this page kills the daemon relaying the call, so the stream dies instead of
-                // answering; that is the removal landing, and only a refusal the device sent still counts as a failure.
-                await manageDeviceSandbox(hostId, slug, `remove`, { severing: target.id === sandbox.activeSandboxId.value });
+                // Carried by whichever of the owner's sandboxes reaches that machine. When that is the box being deleted, its
+                // daemon dies relaying the call, so the stream ends instead of answering; that is the removal landing, and
+                // only a refusal the device sent still counts as a failure.
+                await manageDeviceSandbox(door.hostId, slug, `remove`, {
+                    severing: door.severs,
+                    at: door.relay === sandbox.activeSandboxId.value ? undefined : door.relay,
+                });
             } finally {
                 endMark();
             }
@@ -755,20 +764,42 @@ const confirmRemove = async (): Promise<void> => {
             </p>
             <!-- The hosted lane is the only removal that destroys a machine; no cleanup command, since nothing else exists. -->
             <template v-if="pending.hosted === null && cleanupCommand !== undefined">
-                <!-- The machine is one of the owner's connected devices, so this is a tick box rather than a command: the same removal the Devices tab's own button runs. -->
-                <div v-if="cleanupHost !== undefined" class="flex flex-col gap-2">
+                <!-- One of the owner's sandboxes reaches the machine holding it, so this is a tick box rather than a command:
+                     the same removal the Devices tab's own button runs. -->
+                <div v-if="cleanupDoor !== undefined" class="flex flex-col gap-2">
                     <label class="flex items-start gap-2 text-muted">
                         <!-- Same plain box the extension cards use; the kit has no checkbox component, on purpose. -->
                         <input v-model="alsoDeleteThere" type="checkbox" :disabled="deletingThere" class="mt-0.5" />
                         <span>
-                            {{ t(`sandbox.sandboxSwitcher.alsoDelete`) }} <span class="font-medium text-content">{{ cleanupHost }}</span>
+                            {{ t(`sandbox.sandboxSwitcher.alsoDelete`) }} <span class="font-medium text-content">{{ cleanupDoor.machineLabel }}</span>
                             {{ t(`sandbox.sandboxSwitcher.containerFilesHistoryGone`) }}
                         </span>
                     </label>
                     <Notice v-if="thereFailed" tone="danger" class="text-2xs">{{ thereFailed }}</Notice>
                 </div>
+                <!-- Not found YET: the fresh reads are out, and a command drawn now was most often replaced by the tick box a
+                     second later. -->
+                <p v-else-if="lookingForMachine" class="flex items-center gap-2 text-muted">
+                    <Icon name="spinner" spin class="shrink-0 text-xs" />
+                    {{ t(`sandbox.sandboxSwitcher.lookingOnMachines`) }}
+                </p>
                 <div v-else class="flex flex-col gap-2">
-                    <p class="text-muted">{{ t(`sandbox.sandboxSwitcher.toAlsoRemoveMachine`) }}</p>
+                    <!-- Said only as a reading: machines that listed what they hold, and none holds it. One asleep or
+                         refusing to list said nothing, and is not named. -->
+                    <p v-if="machinesLooked.length > 0" class="text-muted">
+                        {{
+                            neverCameUp
+                                ? t(`sandbox.sandboxSwitcher.neverCameUpNotOn`, { machines: machinesLooked.join(`, `) })
+                                : t(`sandbox.sandboxSwitcher.notOnMachines`, { machines: machinesLooked.join(`, `) })
+                        }}
+                    </p>
+                    <p class="text-muted">
+                        {{
+                            neverCameUp && machinesLooked.length > 0
+                                ? t(`sandbox.sandboxSwitcher.startedElsewhere`)
+                                : t(`sandbox.sandboxSwitcher.toAlsoRemoveMachine`)
+                        }}
+                    </p>
                     <RunCommand :command="cleanupCommand" :label="t(`sandbox.sandboxSwitcher.cleanupCommand`)" />
                 </div>
             </template>

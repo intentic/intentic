@@ -28,5 +28,8 @@ const store = createAcrossStore<BoxDevices>({
 
 export const subscribeDevicesAcross = store.subscribe;
 
+/** Re-reads one other sandbox's devices now and settles once it answered or failed; no subscription needed. */
+export const readDevicesAcross = store.readOne;
+
 /** Every other connected sandbox and the devices it last reported; one never read reports none. */
 export const devicesAcross = store.entries;

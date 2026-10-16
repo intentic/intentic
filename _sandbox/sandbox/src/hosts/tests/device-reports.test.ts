@@ -2,6 +2,7 @@ import {
     type HostSummary,
     type DeviceFlowLine,
     type DeviceReport,
+    type DeviceSandbox,
     type DeviceSandboxFlow,
     HOST_NATIVE_ENVIRONMENT,
     hostConnectionKey,
@@ -453,6 +454,41 @@ test("announces only a landing that changes what the view says", async () => {
     // A reading that had gone quiet, replaced: the frame is the whole point of the wait ending early.
     jest.setSystemTime(Date.now() + 61_000);
     await devices(services);
+    expect(published).toEqual(["hosts"]);
+});
+
+// The switcher's remove dialog offers a button instead of a command only when a connected machine lists the sandbox,
+// and it does not poll: a container created or removed out there has to reach it as news, not wait for a reload.
+test("announces a refresh that finds a container appear, stop or go", async () => {
+    jest.useFakeTimers();
+    let fleet = "[]";
+    const { services, calls } = fakeServices("fleet-pc", async (call) => (call.tool === "report" ? report("fleet", { capturedAt: Date.now() }) : answer(fleet)));
+    const box = (slug: string, running: boolean): DeviceSandbox => ({ slug, container: `intentic-sandbox-${slug}`, running, image: "img" });
+    const refreshed = async (pulls: number): Promise<void> => {
+        jest.setSystemTime(Date.now() + 31_000);
+        await devices(services);
+        await waitFor(() => expect(calls).toHaveLength(pulls * 2));
+    };
+
+    await devices(services);
+    published.length = 0;
+
+    fleet = JSON.stringify([box("sandbox-new", true)]);
+    await refreshed(2);
+    expect(published).toEqual(["hosts"]);
+    published.length = 0;
+
+    // The same containers in the same state: a routine refresh, said nowhere.
+    await refreshed(3);
+    expect(published).toEqual([]);
+
+    fleet = JSON.stringify([box("sandbox-new", false)]);
+    await refreshed(4);
+    expect(published).toEqual(["hosts"]);
+    published.length = 0;
+
+    fleet = "[]";
+    await refreshed(5);
     expect(published).toEqual(["hosts"]);
 });
 

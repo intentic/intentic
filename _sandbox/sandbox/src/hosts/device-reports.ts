@@ -222,11 +222,24 @@ const noteReading = (services: Pick<Services, "logger">, id: string, result: Pul
     }
 };
 
-// A landing worth waking watchers for: the machine's first reading, a change in whether it answers at all, or a fresh
-// reading replacing one already old enough to read as quiet. A routine refresh of a healthy device announces nothing,
-// so an open Devices tab is not refetched every TTL for news it already has.
+// Which containers the machine holds and whether each runs, as one comparable string; undefined when it did not list.
+const containersOf = (result: PullResult): string | undefined =>
+    result.sandboxes
+        ?.map((box) => `${box.slug}:${box.running ? "up" : "down"}`)
+        .toSorted()
+        .join(",");
+
+// A landing worth waking watchers for: the machine's first reading, a change in whether it answers at all or in the
+// containers it holds, or a fresh reading replacing one already old enough to read as quiet. Containers count because
+// a reader that does not poll (the switcher's remove dialog, a row's placement) decides "is there a button for this" on
+// them, and a sandbox created or removed out there would otherwise stay unknown to it until the page reloads. A
+// routine refresh of a healthy device announces nothing, so an open Devices tab is not refetched every TTL for news it
+// already has.
 const worthAnnouncing = (before: { at: number; result: PullResult | undefined }, after: PullResult, at: number): boolean =>
-    before.result === undefined || gapOf(before.result) !== gapOf(after) || at - before.at > REPORT_QUIET_AFTER_MS;
+    before.result === undefined ||
+    gapOf(before.result) !== gapOf(after) ||
+    containersOf(before.result) !== containersOf(after) ||
+    at - before.at > REPORT_QUIET_AFTER_MS;
 
 // One refresh per machine, stamped when it lands, not when it started, so a slow pull's duration is already spent
 // against the reading's age.
