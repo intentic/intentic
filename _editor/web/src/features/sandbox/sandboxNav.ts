@@ -12,30 +12,19 @@ export interface SandboxSection {
     readonly icon: IconName;
     /** Withheld below maintainer, where the daemon refuses what the section is for. */
     readonly maintainer?: boolean;
+    /**
+     * The `publisher.name` id of a first-party extension whose `sandbox` view under this same slug the section draws as one
+     * of its own parts, rather than as a row of its own. Only that extension's view is taken: a stranger's view under the
+     * name would read as the sandbox's own record. Below maintainer, a section that is only that view leaves the index
+     * while no view fills it.
+     */
+    readonly embeds?: string;
 }
-
-/**
- * A row a first-party extension's `sandbox` view fills, filed among the hub's own sections for what it is rather than
- * under "Added by extensions" for who built it. Its words and glyph are the view's own, it shows only while that
- * extension contributes the view, and no other extension may take its slug. The rail does the same for its listed
- * first-party tiles (workbench/views/registry.ts), by view id; this keys on the owner too, since a slot sits beside the
- * audit trail and a stranger's view under the same name would read as the sandbox's own record.
- */
-export interface SandboxSlot {
-    /** The view's activation key, which is also its `:tab` route param. */
-    readonly slug: string;
-    /** The `publisher.name` id the view registers under. */
-    readonly extension: string;
-}
-
-export type SandboxRow = SandboxSection | SandboxSlot;
-
-export const isSandboxSlot = (row: SandboxRow): row is SandboxSlot => `extension` in row;
 
 export interface SandboxSectionGroup {
     readonly key: string;
     readonly label: string;
-    readonly items: readonly SandboxRow[];
+    readonly items: readonly SandboxSection[];
 }
 
 /** The section a param-less `/sandbox` shows; its row writes no param, so no section has two URLs. */
@@ -83,60 +72,69 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
         ],
     },
     {
-        // What happened in this box and what it can show for it: the two records, then what an officer files from
-        // them. Below Reach, since every row here reads the groups above it; Data protection's measures link back into
-        // both. The audit trail was the last Reach row and Data protection a Configuration row until 2026-10-13, and
-        // Activity sat under "Added by extensions": one errand, three groups.
-        key: `oversight`,
-        label: t(`sandbox.sandboxNav.oversight`),
+        // How this box handles what passes through it, as the pages that set it: what a data protection officer reads
+        // first, then what may leave the box and in what form, what the agent may do without asking a person, and how
+        // long each record is kept. Each was a part of another page until 2026-10-16 (the shield and the judge were Agent ▸
+        // Safety, retention Agent ▸ Finishing and Audit log ▸ How it is kept), so Data protection's measures led out into
+        // pages named for something else. A setting about one thing stays with that thing: a secret's gate on Secrets, a
+        // member's role on Access, an area on Areas; Data protection links to them as it links to these.
+        // Maintainer, as the daemon refuses their reads and writes below; an organisation's Agent lock holds the three
+        // that write settings (organisations/useOrgPolicy.ts), since the daemon files their routes under it.
+        key: `privacy`,
+        label: t(`sandbox.sandboxNav.privacy`),
         items: [
-            // What woke the agent, what it called and how each turn went. The Activity extension's view, filed here
-            // because it is the other half of the record; a member sees it too, narrowed to the conversations they may see.
-            { slug: `activity`, extension: `intentic.activity` },
+            { slug: `data-protection`, label: t(`sandbox.sandboxNav.dataProtection`), icon: `lock`, maintainer: true },
+            { slug: `privacy-shield`, label: t(`sandbox.sandboxNav.privacyShield`), icon: `eye-slash`, maintainer: true },
+            { slug: `guardrails`, label: t(`sandbox.sandboxNav.guardrails`), icon: `approvals`, maintainer: true },
+            { slug: `retention`, label: t(`sandbox.sandboxNav.retention`), icon: `history`, maintainer: true },
+        ],
+    },
+    {
+        // What happened, split by who did it: agents (Activity) and people (the audit trail). Read, never set, so below the
+        // pages that set what they record. Oversight held these two and Data protection until 2026-10-16.
+        key: `records`,
+        label: t(`sandbox.sandboxNav.records`),
+        items: [
+            // What woke the agent, what it called and how each turn went, then every command the judge checked and every
+            // request the shield masked. Core, though its turns are the Activity extension's view: the judge's and the
+            // shield's records sat at the foot of their settings until 2026-10-16, and an extension can be switched off.
+            // A member sees it too, the turns narrowed to the conversations they may see; the other two parts are a
+            // maintainer's.
+            { slug: `activity`, label: t(`sandbox.sandboxNav.activity`), icon: `wave-pulse`, embeds: `intentic.activity` },
             // Who changed what anywhere above, and who signed in: the audit trail and how it is kept. Core, not an
             // extension: the daemon writes it from every route, and an extension can be switched off. Maintainer, as the
             // daemon refuses it below (it names every member and what they did).
             { slug: `audit`, label: t(`sandbox.sandboxNav.audit`), icon: `list-check`, maintainer: true },
-            // What a data protection officer files before the box handles anyone's data, read off everything above it.
-            // Maintainer, as the daemon refuses its reads below.
-            { slug: `data-protection`, label: t(`sandbox.sandboxNav.dataProtection`), icon: `lock`, maintainer: true },
         ],
     },
     // Recently deleted was a last `account` group here until 2026-10-07; it is the foot of the Devices board now
     // (devices/deleted), since nothing in it is about the sandbox this hub is named for.
 ];
 
-// The rows the hub draws itself, without the slots. Functions, not constants, here and below: the rows carry words, and
-// at import time no catalog is registered to read them from.
-const builtInSections = (): readonly SandboxSection[] =>
-    sandboxSectionGroups()
-        .flatMap((group) => group.items)
-        .filter((row): row is SandboxSection => !isSandboxSlot(row));
+// Functions, not constants, here and below: the rows carry words, and at import time no catalog is registered to read
+// them from.
+const builtInSections = (): readonly SandboxSection[] => sandboxSectionGroups().flatMap((group) => group.items);
 
 // Every built-in slug, derived from the rows themselves so adding a section cannot forget to guard its name. The hub also
-// asks it which sections an organisation's lock may wrap (organisations/OrgHeldSection.vue): slots are extensions' own.
+// asks it which sections an organisation's lock may wrap (organisations/OrgHeldSection.vue).
 export const sandboxBuiltInSlugs = (): ReadonlySet<string> => new Set(builtInSections().map((section) => section.slug));
 
-/** The slots, each kept for the one extension it names. */
-export const sandboxSlots = (): readonly SandboxSlot[] =>
-    sandboxSectionGroups()
-        .flatMap((group) => group.items)
-        .filter(isSandboxSlot);
+/** The extension whose view a section draws as one of its parts, if it draws one. */
+export const sandboxEmbedOf = (slug: string): string | undefined => builtInSections().find((section) => section.slug === slug)?.embeds;
 
 /**
- * Whether an extension's `sandbox` view may sit on the hub under this key: never a built-in's name, and a slot's only for
- * the extension it is kept for. Asked by the hub and by the palette, so neither offers a row that opens something else.
+ * Whether an extension's `sandbox` view may sit on the hub as a row of its own under this key: never a built-in's name.
+ * A section that embeds one extension's view under its own name takes it through `sandboxEmbedOf`, not as a row. Asked
+ * by the hub and by the palette, so neither offers a row that opens something else.
  */
-export const sandboxKeyAllowed = (owner: string, key: string): boolean =>
-    !sandboxBuiltInSlugs().has(key) && sandboxSlots().every((slot) => slot.slug !== key || slot.extension === owner);
+export const sandboxKeyAllowed = (key: string): boolean => !sandboxBuiltInSlugs().has(key);
 
 /** The one section a guest member has business in: their own passkeys, and giving their grant back. */
 export const GUEST_SECTION = `access`;
 
 /**
  * The built-in sections this reader can actually open; anything else would land on a row the hub redirects away from. A
- * guest sees one row, since the daemon refuses it every other section's reads. Slots are not here: an extension fills
- * them, and whoever lists the extension's views lists those.
+ * guest sees one row, since the daemon refuses it every other section's reads.
  */
 export const sandboxSections = (canShip: boolean, guest = false, orgHidden: ReadonlySet<string> = new Set()): readonly SandboxSection[] =>
     builtInSections()

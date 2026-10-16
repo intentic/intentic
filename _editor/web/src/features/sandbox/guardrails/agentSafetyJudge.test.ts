@@ -12,7 +12,7 @@ const patch = jest.fn((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
-jest.mock(`../../overview/useSandboxSettings`, () => ({
+jest.mock(`../overview/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 
@@ -23,8 +23,8 @@ const CATALOGS: Record<string, readonly { value: string; label: string }[]> = {
 };
 const connected = ref<readonly string[]>([`codex`, `claude`]);
 
-jest.mock(`../../../chat/session/access`, () => ({ providerReady: (provider: string) => connected.value.includes(provider) }));
-jest.mock(`../../../chat/accounts/providerCatalog`, () => ({
+jest.mock(`../../chat/session/access`, () => ({ providerReady: (provider: string) => connected.value.includes(provider) }));
+jest.mock(`../../chat/accounts/providerCatalog`, () => ({
     endpointProviders: ref([]),
     providerModels: ref({}),
     demandCatalog: () => undefined,
@@ -40,7 +40,7 @@ const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: `/sandbox/:tab?`, name: `sandbox`, component: defineComponent({ render: () => h(`div`) }) }],
 });
-await router.push({ name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } });
+await router.push({ name: `sandbox`, params: { tab: `guardrails` } });
 await router.isReady();
 
 let app: App | undefined;

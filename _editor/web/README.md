@@ -68,9 +68,19 @@ flowchart LR
   rail tile, the page or the control itself, the closest one on screen leading (`features/tour/`). The list is never
   offered on a sandbox where work has already landed, so nobody who is past their first run meets it. `?mode=fresh`
   in `_site/demo` shows it.
-- **Oversight.** The hub's last group holds the records of what happened and what an officer files from them:
-  Activity (the Activity extension's view, filed here by a slot kept for `intentic.activity` in `sandboxNav.ts`, so no
-  other extension's view can sit beside the audit trail under its name), the audit log and data protection.
+- **Privacy & safety, then Records.** The hub's last two groups (`sandboxNav.ts`). Privacy & safety holds what the
+  whole box does with what passes through it, each a page that sets it: Data protection (below), Privacy shield
+  (`features/sandbox/privacy-shield/`: the shield, its trusted providers, and Intentic's product analytics), Guardrails
+  (`features/sandbox/guardrails/`: the command judge, its policy, project installs, then per service whether an
+  outward action runs, asks first or is refused, `settings.actionRules`, and whether work started from outside may
+  run, `settings.admission`) and Retention (`features/sandbox/retention/`: every record's period, the audit trail's
+  included). A setting about one thing stays with that thing (a gate on Secrets, a role on Access). An organisation's
+  Agent lock holds the three that write settings (`organisations/useOrgPolicy.ts`), as the daemon files their routes
+  under it. Records are what happened, split by who did it: Activity (`features/sandbox/activity/`; the Activity
+  extension's turns, drawn inside it as the one view `intentic.activity` may fill under that name, then every command
+  the judge checked and every request the shield handled, which stay when the extension is switched off) and the audit
+  log. Each settings page ends on the way to its record, and each record on the way to its settings
+  (`SectionLink.vue`).
 - **Data protection.** `/sandbox/data-protection` (`features/sandbox/data-protection/`, maintainer and up) draws the
   daemon's compliance report as three steps (`?step=`), each a tile that says how it stands before it is opened.
   Protections: every measure, the public-office preset's changes filed under the measure each switches (current →
@@ -81,8 +91,8 @@ flowchart LR
 - **Audit log.** `/sandbox/audit`, for the owner and maintainers (`features/sandbox/audit/`), in two parts. Records,
   the default: whether the daemon's hash-chained trail is intact (`/audit/verify`), a period downloaded as the JSON
   Lines the daemon stored, and the records, filtered by who and by what was touched and paged backwards on asking.
-  How it is kept (`?section=keeping`): `settings.audit`, the days kept, whether reads are recorded, a forward address
-  and the stored secret sent with it.
+  How it is kept (`?section=keeping`): `settings.audit`, whether reads are recorded, a forward address and the stored
+  secret sent with it; how many days are kept is Retention's, which the part names with the way there.
 - **Personas.** `/sandbox/personas` shows square selectors with the selected persona's editor below.
   `PersonaSelector.vue` wraps `components/PersonaTile.vue` (face, label, selected appearance) for renaming and removal
   directly on the selector. It saves a queued edit against its original persona when the selection changes. A persona

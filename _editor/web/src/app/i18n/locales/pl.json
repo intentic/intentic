@@ -23,7 +23,7 @@
         },
         "section": {
             "models": "Modele",
-            "agent": "Agent",
+            "agent": "Agent, osłona prywatności, bezpieczniki i przechowywanie danych",
             "environment": "Środowisko",
             "secrets": "Sekrety i połączenia",
             "data-protection": "Ochrona danych",
@@ -3127,7 +3127,7 @@
             "privacyOwnerOnly": "Przepuścić go może tylko właściciel sandboxa.",
             "privacyRefused": "Osłona prywatności nie wyśle tego do {provider}, i nie z powodu tego, co napisałeś: agent {provider} sam czyta pliki i wyniki poleceń i wysyła je swojemu dostawcy kanałem, którego osłona nie może odczytać ani zamaskować.",
             "privacyRefusedRunner": "Osłona prywatności nie uruchomi tego na {runner}, i nie z powodu tego, co napisałeś: {runner} wywołałby {provider} z własnej maszyny, gdzie osłona nie może zamaskować tego, co wysyła. Uruchom to tutaj albo pozwól {provider} czytać tę rozmowę.",
-            "privacySafety": "Ustawienia bezpieczeństwa",
+            "privacySafety": "Osłona prywatności",
             "privacyTakeBack": "Cofnij",
             "privacyTakeBackTitle": "Znów pod osłoną",
             "resumesIfAnswers": "Wznawia, gdy odpowie",
@@ -4796,22 +4796,6 @@
             "notCovered": "Bez czyściciela",
             "runs": "{count} uruchomienie | {count} uruchomienia | {count} uruchomień"
         },
-        "agentDataRetention": {
-            "caches": "Przekonwertowane dokumenty",
-            "cachesNote": "Tekst odczytany z plików PDF i dokumentów biurowych, odczyty skanów i obrazów oraz podglądy. W razie potrzeby powstają ponownie z oryginału.",
-            "days": "dni",
-            "forever": "bez końca",
-            "intro": "Ile dni przechowywany jest każdy rodzaj zapisów. 0 oznacza przechowywanie bez końca – tak zaczyna każda piaskownica. Liczba większa od 0 trwale usuwa wszystko, co starsze, i nie da się tego przywrócić. Archiwizacja powyżej niczego nie usuwa.",
-            "privacyVault": "Pamięć osłony prywatności",
-            "privacyVaultNote": "Dane osobowe znalezione przez osłonę prywatności (imiona i nazwiska, numery PESEL, adresy) oraz zakryte przez nią obrazy, liczone od chwili, gdy widziała je ostatnio. Listy, których ją nauczono, zostają, dopóki ich nie zapomnisz.",
-            "rawOutput": "Pełne wyniki poleceń",
-            "rawOutputNote": "Cały wynik poleceń uruchomionych przez agentów, przechowywany obok skróconej wersji, którą czytał agent, oraz nagrania terminala.",
-            "restorePoints": "Punkty przywracania",
-            "restorePointsNote": "Kopie przestrzeni roboczej robione co minutę, gdy agenci pracują. Pozwalają odzyskać zmienione lub usunięte pliki.",
-            "title": "Przechowywanie danych",
-            "transcripts": "Rozmowy",
-            "transcriptsNote": "Wszystko, co powiedziano w rozmowie, wraz z przesłanymi plikami, stronami i kopiami zapasowymi, liczone od ostatniej wiadomości. Rozmowa, która wciąż pracuje albo czeka na Ciebie, zostaje."
-        },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Wprowadzaj skończoną pracę wprost do przestrzeni roboczej jako niezacommitowane zmiany.",
             "archiveFinishedAgents": "Archiwizuj skończone agenty",
@@ -4896,7 +4880,6 @@
             "howAutoChooses": "Jak Auto wybiera",
             "nothingJudgingCommandsAt": "W tej chwili nic nie ocenia poleceń, więc to nie jest w użyciu.",
             "turnJudgeOn": "Włącz sędziego",
-            "underSafety": "w sekcji Bezpieczeństwo.",
             "whatYoudTellSomebody": "Co powiedziałbyś komuś, kto wybiera model dla nowego czatu: która praca może pójść taniej, którego konta nie ruszać, kiedy sięgnąć po najmocniejszy.",
             "notInUse": "nieużywane",
             "emptyHelpers": "Brak modeli: nic tutaj nie działa, dopóki nie dodasz modelu.",
@@ -4938,7 +4921,8 @@
             "placeSuggested": "Przypisz do sugerowanych zestawów",
             "dropToUnassign": "Upuść tutaj zadanie, żeby zdjąć je z zestawu",
             "suggestedFor": "{name} (sugerowany)",
-            "startsEmpty": "Zaczyna bez modeli"
+            "startsEmpty": "Zaczyna bez modeli",
+            "inGuardrails": "w sekcji Bezpieczniki."
         },
         "agentRecovery": {
             "consecutiveFailuresBeforeAutomation": "Kolejne niepowodzenia, zanim automatyzacja zostanie wyłączona",
@@ -5273,7 +5257,8 @@
             "spawningRefusedOutright": "Uruchamianie jest odrzucane wprost, więc limity poniżej ograniczają tylko podagenty, które środowisko uruchomieniowe startuje w swoim procesie.",
             "subagentsAtOnce": "Podagentów naraz",
             "subagentsPerConversation": "Podagentów na rozmowę",
-            "totalDelegatedAgentsAllowed": "Łączna liczba delegowanych agentów dozwolona na rozmowę."
+            "totalDelegatedAgentsAllowed": "Łączna liczba delegowanych agentów dozwolona na rozmowę.",
+            "whetherInGuardrails": "Czy w ogóle może uruchamiać podagenty i kiedy najpierw pyta:"
         },
         "aiAccountSection": {
             "account": "Konto {managedLabel}",
@@ -6573,7 +6558,6 @@
             "whatWouldAdd": "Co to by dodało"
         },
         "sandboxAccess": {
-            "noticeAndAnalytics": "Informacja o AI i analityka",
             "wholeWorkspace": "Cała przestrzeń robocza",
             "areaNoAssistant": "brak asystenta",
             "guestHasNobodyAnywhere": "W żadnym obszarze nie pracuje jeszcze asystent.",
@@ -6690,7 +6674,8 @@
             "wordOwner": "Właściciel",
             "addPersonSub": "Na start tylko podgląd",
             "addPersonKeys": "Enter zaprasza, Esc anuluje",
-            "inviteExpired": "Zaproszenie wygasło"
+            "inviteExpired": "Zaproszenie wygasło",
+            "aiNotice": "Informacja o AI"
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Kategoria ustawień agenta",
@@ -6699,9 +6684,9 @@
             "jobs": "Zadania",
             "jobsFromModels": "Każde zadanie wybiera spośród modeli podłączonych w tym sandboxie.",
             "manageModels": "Modele",
-            "safety": "Bezpieczeństwo",
             "sandboxOfflineSettingsCant": "Twój sandbox jest offline, jego ustawień nie da się stąd odczytać ani zmienić.",
-            "tools": "Narzędzia"
+            "tools": "Narzędzia",
+            "deletingIsRetention": "Archiwizacja niczego nie usuwa. Jak długo przechowywane są rozmowy i punkty przywracania:"
         },
         "sandboxAreas": {
             "toggleArea": "Pokaż lub ukryj szczegóły obszaru {name}",
@@ -6844,11 +6829,16 @@
             "extensions": "Rozszerzenia",
             "overview": "Przegląd",
             "reach": "Zasięg",
-            "oversight": "Nadzór",
             "secrets": "Sekrety",
             "usage": "Zużycie",
             "dataProtection": "Ochrona danych",
-            "audit": "Dziennik zdarzeń"
+            "audit": "Dziennik zdarzeń",
+            "privacy": "Prywatność i bezpieczeństwo",
+            "privacyShield": "Osłona prywatności",
+            "guardrails": "Bezpieczniki",
+            "retention": "Przechowywanie danych",
+            "records": "Rejestry",
+            "activity": "Aktywność"
         },
         "sandboxOutdatedNotice": {
             "manual": "Instalowałeś ją sam? Zainstaluj ją ponownie albo uruchom to na urządzeniu, na którym działa:",
@@ -8544,7 +8534,15 @@
                 "messageSend": "Wysyłanie wiadomości",
                 "messageEdit": "Edytowanie wiadomości",
                 "reactionAdd": "Dodawanie reakcji",
-                "reactionRemove": "Usuwanie reakcji"
+                "reactionRemove": "Usuwanie reakcji",
+                "mailSend": "Wysyłanie poczty",
+                "calendarWrite": "Zmiany w kalendarzu",
+                "filesUpload": "Przesyłanie plików",
+                "documentRegisterIncoming": "Rejestrowanie korespondencji przychodzącej",
+                "documentRegisterOutgoing": "Rejestrowanie korespondencji wychodzącej",
+                "caseAttachDraft": "Dodawanie projektu do sprawy",
+                "deliverySend": "Wysyłanie przesyłki",
+                "deliveryOpen": "Otwieranie przesyłki"
             },
             "value": {
                 "allow": "dozwolone",
@@ -8581,8 +8579,6 @@
             "prunedNote": "Wpisy do {date} usunięto zgodnie z okresem przechowywania; sprawdzanie zaczyna się po nich.",
             "reachNote": "To sprawdzenie wykrywa ingerencję, ale jej nie zapobiega: ktoś z pełną kontrolą nad sandboxem mógłby edytować te pliki. Kopia wysyłana do innego systemu to ta, której nikt wewnątrz sandboxa nie może zmienić.",
             "keeping": "Przechowywanie",
-            "retentionTitle": "Przechowuj wpisy przez (dni)",
-            "retentionDescription": "Starsze miesiące są usuwane w całości. Co najmniej 30 dni. Urzędy w Polsce przechowują dzienniki systemów przez 730 dni (2 lata).",
             "readsTitle": "Zapisuj też, kto co otworzył",
             "readsDescription": "Dodaje wpis za każdym razem, gdy ktoś otworzy rozmowę, plik lub ten dziennik. Gdy wyłączone, zapisywane są tylko zmiany i logowania.",
             "forwardTitle": "Wysyłaj kopię do innego systemu",
@@ -8756,7 +8752,8 @@
                 "retention-delete": "Usunięto przeterminowane dane",
                 "file-read": "Otwarto plik",
                 "activity-read": "Otwarto dziennik aktywności"
-            }
+            },
+            "keptFor": "Zapisy są przechowywane przez {count} dzień. | Zapisy są przechowywane przez {count} dni. | Zapisy są przechowywane przez {count} dni."
         },
         "linkedSandboxes": {
             "title": "Połączone sandboxy",
@@ -8794,6 +8791,67 @@
             "revoked": "unieważnione tam",
             "notAnswering": "nie odpowiada",
             "manage": "Zarządzaj"
+        },
+        "retention": {
+            "caches": "Przekonwertowane dokumenty",
+            "cachesNote": "Tekst odczytany z plików PDF i dokumentów biurowych, odczyty skanów i obrazów oraz podglądy. W razie potrzeby powstają ponownie z oryginału.",
+            "days": "dni",
+            "forever": "bez końca",
+            "intro": "Ile dni przechowywany jest każdy rodzaj zapisów. 0 oznacza przechowywanie bez końca – tak zaczyna każdy sandbox. Liczba większa od 0 trwale usuwa wszystko, co starsze, i nie da się tego przywrócić. Archiwizacja zakończonego agenta niczego nie usuwa.",
+            "privacyVault": "Pamięć osłony prywatności",
+            "privacyVaultNote": "Dane osobowe znalezione przez osłonę prywatności (imiona i nazwiska, numery PESEL, adresy) oraz zakryte przez nią obrazy, liczone od chwili, gdy widziała je ostatnio. Listy, których ją nauczono, zostają, dopóki ich nie zapomnisz.",
+            "rawOutput": "Pełne wyniki poleceń",
+            "rawOutputNote": "Cały wynik poleceń uruchomionych przez agentów, przechowywany obok skróconej wersji, którą czytał agent, oraz nagrania terminala.",
+            "restorePoints": "Punkty przywracania",
+            "restorePointsNote": "Kopie przestrzeni roboczej robione co minutę, gdy agenci pracują. Pozwalają odzyskać zmienione lub usunięte pliki.",
+            "transcripts": "Rozmowy",
+            "transcriptsNote": "Wszystko, co powiedziano w rozmowie, wraz z przesłanymi plikami, stronami i kopiami zapasowymi, liczone od ostatniej wiadomości. Rozmowa, która wciąż pracuje albo czeka na Ciebie, zostaje.",
+            "auditNote": "Starsze miesiące są usuwane w całości. Co najmniej 30 dni. Urzędy w Polsce przechowują dzienniki systemów przez 730 dni (2 lata).",
+            "title": "Jak długo przechowywany jest każdy zapis",
+            "audit": "Dziennik zdarzeń"
+        },
+        "privacyShieldPage": {
+            "intro": "Co może opuścić ten sandbox i w jakiej postaci.",
+            "wherePlaces": "Dokąd trafiają dane",
+            "sentToIntentic": "Wysyłane do Intentic",
+            "record": "Co osłona zastąpiła, zapytanie po zapytaniu:",
+            "recordLink": "Aktywność"
+        },
+        "guardrails": {
+            "rule": {
+                "allow": "Zezwalaj",
+                "hold": "Najpierw pytaj",
+                "deny": "Odmawiaj"
+            },
+            "actions": {
+                "title": "Zanim agent zadziała na zewnątrz",
+                "intro": "Co agent może zrobić na zewnątrz, zanim ktoś się zgodzi. „Najpierw pytaj” czeka w Zatwierdzeniach, aż ktoś pozwoli.",
+                "mixed": "Różnie",
+                "noServices": "Włącz Discorda, Slacka, e-mail lub inną usługę, a tutaj ustawisz, co agent może przez nią wysyłać."
+            },
+            "admission": {
+                "title": "Praca uruchomiona z zewnątrz",
+                "intro": "Czy praca, którą uruchomił ktoś lub coś z zewnątrz, może ruszyć. Automatyzacja może sama prosić o więcej; wygrywa surowsze z dwóch.",
+                "webchat": "Interesant na stronie",
+                "issues": "Zgłoszenie błędu",
+                "listener": "Wiadomość na czacie zespołu",
+                "event": "Webhook",
+                "schedule": "Harmonogram",
+                "workspace": "Zdarzenie w obszarze roboczym",
+                "workflow": "Przepływ CI"
+            },
+            "record": "Każde polecenie sprawdzone przez sędziego i co postanowił:",
+            "recordLink": "Aktywność"
+        },
+        "activityPage": {
+            "parts": "Część zapisu aktywności",
+            "turns": "Tury",
+            "commands": "Sprawdzone polecenia",
+            "personal": "Dane osobowe",
+            "turnsOff": "Tury pochodzą z rozszerzenia Aktywność, które jest w tym sandboxie wyłączone.",
+            "turnsOffHow": "Włącz je ponownie, aby widzieć, co obudziło agenta i jak poszła każda tura:",
+            "commandsSettings": "Czy sędzia działa i według czego sprawdza:",
+            "personalSettings": "Czego szuka osłona i którym dostawcom ufa:"
         }
     },
     "settings": {

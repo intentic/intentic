@@ -3,7 +3,7 @@ import type { RepoCheckMoment, RepoChecksSummary } from "@intentic/sandbox-contr
 import { Row, timeAgo } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
-import RuleCommand from "../safety/RuleCommand.vue";
+import RuleCommand from "../../guardrails/RuleCommand.vue";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

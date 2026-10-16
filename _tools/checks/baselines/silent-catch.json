@@ -91,7 +91,7 @@
     "_editor/web/src/features/chat/transcript/transcriptCache.ts": 1,
     "_editor/web/src/features/preview/previewLane.ts": 1,
     "_editor/web/src/features/sandbox/access/SandboxAccess.vue": 1,
-    "_editor/web/src/features/sandbox/agent-settings/safety/RuleCommand.vue": 1,
+    "_editor/web/src/features/sandbox/guardrails/RuleCommand.vue": 1,
     "_editor/web/src/features/sandbox/environment/rebuild/useDevRebuild.ts": 1,
     "_editor/web/src/features/sandbox/environment/useEngines.ts": 1,
     "_editor/web/src/features/sandbox/live/fleetAcross.ts": 1,

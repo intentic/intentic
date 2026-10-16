@@ -496,7 +496,7 @@ test("with the judge off its chip says it is not in use, and its panel says wher
     expect(chip(host, labelOf(JUDGE)).textContent).toContain(`not in use`);
     await openJob(host, labelOf(JUDGE));
     const link = [...document.querySelectorAll<HTMLAnchorElement>(`.job-panel a[href]`)].find((anchor) => anchor.textContent?.includes(`Turn the judge on`));
-    expect(link?.getAttribute(`href`)).toBe(`/sandbox/agent?section=safety`);
+    expect(link?.getAttribute(`href`)).toBe(`/sandbox/guardrails`);
 });
 
 test("with the judge merely watching its chip is like any other", async () => {

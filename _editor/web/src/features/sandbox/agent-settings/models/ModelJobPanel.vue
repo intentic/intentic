@@ -86,10 +86,10 @@ const choices = computed<readonly Choice[]>(() => [
         <!-- The judge reads untrusted text, and can be switched off elsewhere: both are said where its setup is picked. -->
         <p v-if="role === `safety-judge` && judgeOff" class="text-2xs text-subtle">
             {{ t(`sandbox.agentModels.nothingJudgingCommandsAt`) }}
-            <RouterLink :to="{ name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } }" class="text-link hover:underline">{{
+            <RouterLink :to="{ name: `sandbox`, params: { tab: `guardrails` } }" class="text-link hover:underline">{{
                 t(`sandbox.agentModels.turnJudgeOn`)
             }}</RouterLink>
-            {{ t(`sandbox.agentModels.underSafety`) }}
+            {{ t(`sandbox.agentModels.inGuardrails`) }}
         </p>
         <p v-else-if="role === `safety-judge`" class="text-2xs text-subtle">{{ t(`sandbox.words.worthBetterModelThan`) }}</p>
 

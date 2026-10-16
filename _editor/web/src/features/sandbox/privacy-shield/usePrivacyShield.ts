@@ -6,19 +6,30 @@ import type {
     PrivacyShieldPolicy,
     PrivacyShieldStatus,
 } from "@intentic/sandbox-contract";
+import type { NoticeModel } from "@intentic/ui";
 import { keepPreviousData, useMutation } from "@tanstack/vue-query";
-import { useSettled } from "@intentic/ui/async";
+import { noticeFrom, useSettled } from "@intentic/ui/async";
 import { computed, type Ref } from "vue";
-import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
-import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
-import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
-import { rpcKey } from "../../../../lib/queryKeys";
-import { queryClient } from "../../../../lib/queryPersistence";
-import { optimisticUpdate, restoreChanged } from "../../../../lib/optimistic";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
+import { rpcKey } from "../../../lib/queryKeys";
+import { queryClient } from "../../../lib/queryPersistence";
+import { optimisticUpdate, restoreChanged } from "../../../lib/optimistic";
 
 // The privacy shield's reads and the owner's two writes, through the daemon's privacy routes. Its own composable
 // rather than part of useSandboxSettings: the policy is stored off the workspace and only the owner may change it, so
 // it has its own route, its own refusal (403 for anyone else) and its own cache entry.
+
+// A refused write, as the notice said beside the control that sent it. A 403 is the one refusal with a known cause: the
+// policy is the owner's alone. Anything else keeps the daemon's words.
+export const shieldRefusal = (cause: Error | null, ownerOnly: string, failed: string): NoticeModel | undefined => {
+    if (cause === null) {
+        return undefined;
+    }
+    return noticeFrom(cause, cause instanceof SandboxHttpError && cause.status === 403 ? ownerOnly : failed);
+};
 
 export function usePrivacyShield() {
     const { query, error } = useSandboxQuery(rpcQuery(`privacy.status`));

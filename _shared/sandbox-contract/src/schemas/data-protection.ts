@@ -5,6 +5,7 @@
 // data protection page, never through a changed default: most sandboxes belong to developers and individuals, and a
 // stricter default would take away something they rely on.
 import { z } from "zod";
+import type { AdmissionRule } from "./agent.js";
 
 export const RETENTION_DAYS_MAX = 3650;
 const retentionDays = () => z.number().int().min(0).max(RETENTION_DAYS_MAX).default(0);
@@ -70,6 +71,52 @@ export const AuditSettingsSchema = z.object({
         ),
 });
 export type AuditSettings = z.infer<typeof AuditSettingsSchema>;
+
+// Every outward action the agent can take that the action rules (SandboxSettings.actionRules) gate, by the key its gate
+// consults: the outbound sniffer's (the daemon's activity/outbound.ts: discord, slack, telegram, whatsapp) and the
+// subagent gate's (guard/actions.ts childSpawn). Writes only: a rule on `messages.read` would hold a bot reading its own
+// channel. Email sending is the key the IMAP extension's sender consults (_extensions/imap/src/send.ts); the three
+// `microsoft365.*` keys are what `m365` consults before sending, changing a calendar or uploading
+// (_extensions/microsoft-365/src/actions.ts); the `ezdrp.*` and `edoreczenia.*` keys are the office acts the e-urzad
+// extension's guard consults (_extensions/e-urzad/src/core/guard.ts): registering mail and adding files in EZD RP, sending
+// an e-Doręczenia delivery, and opening one, the one read here with legal effect (it can make the delivery received).
+// One list for the public-office preset, which holds every one of them, and the editor's Guardrails page, which sets them.
+export const OUTWARD_ACTION_KEYS = [
+    "discord.message.send",
+    "discord.reaction.add",
+    "slack.message.send",
+    "slack.message.edit",
+    "slack.reaction.add",
+    "slack.reaction.remove",
+    "telegram.message.send",
+    "telegram.message.edit",
+    "telegram.reaction.add",
+    "whatsapp.message.send",
+    "imap.message.send",
+    "microsoft365.mail.send",
+    "microsoft365.calendar.write",
+    "microsoft365.files.upload",
+    "ezdrp.document.register-incoming",
+    "ezdrp.document.register-outgoing",
+    "ezdrp.case.attach-draft",
+    "edoreczenia.delivery.send",
+    "edoreczenia.delivery.open",
+    "agents.spawn",
+] as const;
+export type OutwardActionKey = (typeof OUTWARD_ACTION_KEYS)[number];
+
+// The service an action key belongs to: its first segment (`discord`, `imap`, `agents`).
+export const outwardActionService = (key: string): string => key.split(".")[0] ?? key;
+
+// The rule an action's gate applies today: the exact key, else the service's wildcard (guard/actions.ts outboundSend).
+// `agents.spawn` has no wildcard of its own. Undefined is no rule, which every gate reads as allowed, except the
+// subagent gate, which holds a spawn after outside content.
+export const effectiveActionRule = (rules: Readonly<Record<string, AdmissionRule>>, key: string): AdmissionRule | undefined => {
+    if (rules[key] !== undefined) {
+        return rules[key];
+    }
+    return key === "agents.spawn" ? undefined : rules[`${outwardActionService(key)}.*`];
+};
 
 export const AI_NOTICE_TEXT_MAX = 4000;
 

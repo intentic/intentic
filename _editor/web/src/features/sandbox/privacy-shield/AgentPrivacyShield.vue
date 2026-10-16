@@ -13,7 +13,6 @@ import {
     formatDate,
     formatDateTime,
     Notice,
-    type NoticeModel,
     Row,
     RowGroup,
     RowNote,
@@ -22,28 +21,25 @@ import {
     SkeletonSnapshot,
     vSkeletonSource,
 } from "@intentic/ui";
-import { noticeFrom } from "@intentic/ui/async";
 import { formatFixed } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import Checkbox from "primevue/checkbox";
 import { computed, ref } from "vue";
-import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
-import { allowAdding, ledgerTime, withClass } from "./privacyShield";
+import { ledgerTime, withClass } from "./privacyShield";
 import PrivacyNameDictionary from "./PrivacyNameDictionary.vue";
 import PrivacyNeverMasked from "./PrivacyNeverMasked.vue";
-import PrivacyShieldActivity from "./PrivacyShieldActivity.vue";
 import PrivacyTrustedProviders from "./PrivacyTrustedProviders.vue";
-import { usePrivacyLog, usePrivacyShield, usePrivacySources } from "./usePrivacyShield";
+import { shieldRefusal, usePrivacyShield, usePrivacySources } from "./usePrivacyShield";
 
 // The privacy shield: whether personal data is kept from model providers the owner does not trust, and what the
 // gateway in front of them looks for. Off by default, so off draws the switch alone; the rest appears once the shield
-// runs, or while it still has datasets or a record to show. The policy is the owner's alone: a member's write comes
-// back 403, and the refusal is said beside the control that sent it.
+// runs, or while it still has datasets to show. What it did is Activity's (Personal data), with every other record of
+// what agents did. The policy is the owner's alone: a member's write comes back 403, and the refusal is said beside the
+// control that sent it.
 
 const t = useT();
 
 const { status, setPolicy, saveError, isLoading, error } = usePrivacyShield();
-const { entries, isLoading: logLoading, error: logError } = usePrivacyLog();
 const { sources, forget, forgetError, isLoading: sourcesLoading, error: sourcesError } = usePrivacySources();
 
 const policy = computed<PrivacyShieldPolicy | undefined>(() => status.value?.policy);
@@ -113,40 +109,23 @@ const KINDS = computed(
 );
 
 // Which group sent the last write, so a refusal is said in that group and not one a scroll away from the press.
-type WriteSource = `shield` | `trusted` | `activity`;
+type WriteSource = `shield` | `trusted`;
 const writtenFrom = ref<WriteSource>(`shield`);
 const write = (from: WriteSource, change: (current: PrivacyShieldPolicy) => PrivacyShieldPolicy): void => {
     writtenFrom.value = from;
     setPolicy(change);
 };
 
-// A 403 is the one refusal with a known cause: the policy is the owner's alone. Anything else keeps the daemon's words.
-const refusal = (cause: Error | null, ownerOnly: string, failed: string): NoticeModel | undefined => {
-    if (cause === null) {
-        return undefined;
-    }
-    return noticeFrom(cause, cause instanceof SandboxHttpError && cause.status === 403 ? ownerOnly : failed);
-};
-const saveNotice = computed(() => refusal(saveError.value, t(`sandbox.agentPrivacyShield.ownerOnly`), t(`sandbox.agentPrivacyShield.couldntSave`)));
+const saveNotice = computed(() => shieldRefusal(saveError.value, t(`sandbox.agentPrivacyShield.ownerOnly`), t(`sandbox.agentPrivacyShield.couldntSave`)));
 const forgetNotice = computed(() =>
-    refusal(forgetError.value, t(`sandbox.agentPrivacyShield.ownerOnlyForget`), t(`sandbox.agentPrivacyShield.couldntForget`)),
+    shieldRefusal(forgetError.value, t(`sandbox.agentPrivacyShield.ownerOnlyForget`), t(`sandbox.agentPrivacyShield.couldntForget`)),
 );
 
 const providers = computed<readonly PrivacyProvider[]>(() => status.value?.providers ?? []);
 
-// A value the activity showed being masked, pressed as one to leave alone: added to what is saved, unless the shield
-// already reads it as listed.
-const neverMask = (value: string): void => {
-    write(`activity`, (current) => {
-        const added = allowAdding(current.allow, value);
-        return added.kind === `added` ? { ...current, allow: added.allow } : current;
-    });
-};
-
 // Shown while the shield runs, or while it still has something to show: a dataset taught while it was off is the
-// owner's to forget whatever the switch says, and a record outlives the switch that made it.
+// owner's to forget whatever the switch says.
 const showSources = computed(() => running.value || sources.value.length > 0);
-const showActivity = computed(() => running.value || entries.value.length > 0);
 
 // Each taught dataset with its date read once; a date the daemon wrote unreadably is left off rather than drawn wrong.
 const datasets = computed(() => sources.value.map((source) => ({ source, time: ledgerTime(source.at) })));
@@ -333,20 +312,5 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
 
             <RowNote v-if="forgetNotice !== undefined" variant="block"><Notice :of="forgetNotice" /></RowNote>
         </RowGroup>
-
-        <SkeletonSnapshot v-if="showActivity && logLoading" of="sandbox.agent.privacy-activity">
-            <RowGroup :label="t(`sandbox.agentPrivacyShield.activity`)"><SkeletonRows :rows="3" description /></RowGroup>
-        </SkeletonSnapshot>
-        <PrivacyShieldActivity
-            v-else-if="showActivity"
-            v-skeleton-source="`sandbox.agent.privacy-activity`"
-            :entries="entries"
-            :providers="providers"
-            :policy="policy"
-            :ready="ready"
-            :error="logError"
-            :notice="writtenFrom === `activity` ? saveNotice : undefined"
-            @never-mask="neverMask"
-        />
     </div>
 </template>

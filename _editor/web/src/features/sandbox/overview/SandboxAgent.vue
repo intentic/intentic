@@ -12,7 +12,6 @@ import AgentClock from "../agent-settings/behaviour/AgentClock.vue";
 import AgentCodeSearch from "../agent-settings/behaviour/AgentCodeSearch.vue";
 import AgentDocumentSearch from "../agent-settings/behaviour/AgentDocumentSearch.vue";
 import AgentCommandOutput from "../agent-settings/behaviour/AgentCommandOutput.vue";
-import AgentDataRetention from "../agent-settings/behaviour/AgentDataRetention.vue";
 import AgentFinishedWork from "../agent-settings/behaviour/AgentFinishedWork.vue";
 import AgentInstructions from "../agent-settings/skills/AgentInstructions.vue";
 import AgentMemory from "../agent-settings/skills/AgentMemory.vue";
@@ -20,16 +19,12 @@ import AgentMemoryImport from "../agent-settings/skills/AgentMemoryImport.vue";
 import AgentModels from "../agent-settings/models/AgentModels.vue";
 import AgentRecovery from "../agent-settings/behaviour/AgentRecovery.vue";
 import AgentRepoChecks from "../agent-settings/behaviour/AgentRepoChecks.vue";
-import AgentPrivacyShield from "../agent-settings/safety/AgentPrivacyShield.vue";
-import AgentProjectInstalls from "../agent-settings/safety/AgentProjectInstalls.vue";
-import AgentSafetyJudge from "../agent-settings/safety/AgentSafetyJudge.vue";
-import AgentSafetyLog from "../agent-settings/safety/AgentSafetyLog.vue";
-import AgentSafetyPolicy from "../agent-settings/safety/AgentSafetyPolicy.vue";
 import AgentSkills from "../agent-settings/skills/AgentSkills.vue";
 import AgentSubagents from "../agent-settings/behaviour/AgentSubagents.vue";
 import AgentVoice from "../agent-settings/behaviour/AgentVoice.vue";
 import AgentOffload from "../agent-settings/behaviour/AgentOffload.vue";
 import { useT } from "@intentic/ui/i18n";
+import SectionLink from "../SectionLink.vue";
 
 // Agent tab: how the agent works in this sandbox. Each group reads and writes the same settings object via
 // useSandboxSettings; only page-level state (which category, blocked/dropped notices) lives here. Categories are one
@@ -37,7 +32,9 @@ import { useT } from "@intentic/ui/i18n";
 //
 // What it runs on is not here: accounts, subscriptions, local models and endpoints are Sandbox ▸ Models, since they are
 // what this box holds rather than how the agent behaves. Jobs, first, is the hinge between the two: which of those
-// models does which job.
+// models does which job. Nor is what it may not do: the command judge, the privacy shield and how long records are kept
+// are Privacy & safety's pages (Guardrails, Privacy shield, Retention), a Safety category here until 2026-10-16. This
+// page is what the agent can do; those are what it may not, and what is kept about it.
 
 const t = useT();
 
@@ -47,7 +44,6 @@ const SECTIONS = computed(
             { label: t(`sandbox.sandboxAgent.jobs`), value: `jobs` },
             { label: t(`sandbox.words.instructions`), value: `instructions` },
             { label: t(`sandbox.sandboxAgent.tools`), value: `tools` },
-            { label: t(`sandbox.sandboxAgent.safety`), value: `safety` },
             { label: t(`sandbox.sandboxAgent.finishing`), value: `finishing` },
         ] as const,
 );
@@ -69,6 +65,18 @@ const section = computed<Section>({
     set: (value) => void router.push({ query: { ...route.query, section: value === DEFAULT ? undefined : value } }),
 });
 
+// `?section=safety` was the command judge and the privacy shield, which are Privacy & safety's pages now; an older link
+// lands on Guardrails, where the first of them, the judge, is.
+watch(
+    () => route.query[`section`],
+    (named) => {
+        if (named === `safety`) {
+            void router.replace({ name: `sandbox`, params: { tab: `guardrails` } });
+        }
+    },
+    { immediate: true },
+);
+
 // `?connect=<provider>` opened a provider's accounts here, back when they lived on this tab. They are Sandbox ▸ Models
 // now, which reads the same request as `?provider=`, so the old link is forwarded there rather than broken.
 watch(
@@ -80,6 +88,8 @@ watch(
     },
     { immediate: true },
 );
+
+const RETENTION = { name: `sandbox`, params: { tab: `retention` } } as const;
 
 const sandbox = useSandbox();
 const { settings, error: settingsError, dropped: settingsDropped } = useSandboxSettings();
@@ -145,24 +155,12 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentOffload />
         </template>
 
-        <!-- Whether anything judges, then what it judges against; the decision log sits last so it doesn't bury the controls above it. -->
-        <template v-else-if="section === `safety`">
-            <AgentSafetyJudge />
-            <!-- Beside the judge: the other answer to whether a person is asked before an agent's command runs. -->
-            <AgentProjectInstalls />
-            <AgentSafetyPolicy />
-            <!-- After the command gate, before its log: the other thing kept from leaving, personal data bound for a model provider, and the log still sits last.
-                 The AI notice and the product analytics switch sat here until 2026-10-13; both are about the people using the box, so they are on Access. -->
-            <AgentPrivacyShield />
-            <AgentSafetyLog />
-        </template>
-
         <!-- Whether main's failing CI gets a fix agent, then delivery, and last the recovery path for a turn that broke instead. -->
         <template v-else>
             <AgentChecks />
             <AgentFinishedWork />
-            <!-- Under the archive row: archiving puts a card away, this is what deletes, and the two read as a pair. -->
-            <AgentDataRetention />
+            <!-- Under the archive row: archiving puts a card away, Retention is what deletes, and the two read as a pair. -->
+            <SectionLink :text="t(`sandbox.sandboxAgent.deletingIsRetention`)" :to="RETENTION" :label="t(`sandbox.sandboxNav.retention`)" />
             <AgentChangelog />
             <AgentRecovery />
             <!-- Beside the automation failure limit above, which is the other setting that only matters once

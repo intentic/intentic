@@ -5,13 +5,12 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import {
     GUEST_SECTION,
-    isSandboxSlot,
     SANDBOX_DEFAULT_SECTION,
-    type SandboxRow,
+    type SandboxSection,
     sandboxBuiltInSlugs,
+    sandboxEmbedOf,
     sandboxKeyAllowed,
     sandboxSectionGroups,
-    sandboxSlots,
 } from "./sandboxNav";
 import { useCapabilities } from "../capabilities/connect/useCapabilities";
 import { useExtensions } from "../extensions/useExtensions";
@@ -42,15 +41,19 @@ import SandboxOverview from "./overview/SandboxOverview.vue";
 import SandboxSecrets from "./secrets/SandboxSecrets.vue";
 import SandboxUsage from "./usage/SandboxUsage.vue";
 import SandboxDataProtection from "./data-protection/SandboxDataProtection.vue";
+import SandboxPrivacyShield from "./privacy-shield/SandboxPrivacyShield.vue";
+import SandboxGuardrails from "./guardrails/SandboxGuardrails.vue";
+import SandboxRetention from "./retention/SandboxRetention.vue";
+import SandboxActivity from "./activity/SandboxActivity.vue";
 import OrgHeldSection from "../organisations/OrgHeldSection.vue";
 import { useOrgPolicy } from "../organisations/useOrgPolicy";
 import { useT } from "@intentic/ui/i18n";
 
 // One home for the active sandbox, reached from the rail's chip; the selected section lives in the URL, and only it
 // mounts (composables are module singletons, so remounting is cheap). Index is the hub's own sections (sandboxNav.ts,
-// shared with the palette's "Sandbox: …" destinations), with the first-party views it keeps slots for filed among them,
-// then every other extension-contributed `sandbox`-surface view. Both render a body through ExtensionView rather than
-// their own Page.
+// shared with the palette's "Sandbox: …" destinations), then every extension-contributed `sandbox`-surface view, which
+// renders a body through ExtensionView rather than its own Page. A section may draw one first-party extension's view as
+// a part of its own (Activity draws the Activity extension's turns), and that view is then no row of its own.
 
 const t = useT();
 
@@ -119,18 +122,19 @@ const runningIn = (slug: string): string | undefined =>
         ? t(`connect.modelSources.signingInTo`, { provider: providerDisplayLabel(liveSignIn.value.provider) })
         : undefined);
 
-// A colliding activation key is dropped, not shadowed by the v-if chain; built-ins own their names, and a slot's name is
-// its extension's alone.
-const contributed = computed<readonly ActiveExtension[]>(() =>
-    detectActivations(panels.value, capabilities.value).filter(
-        ({ owner, extension, activation }) => extension.surface === `sandbox` && sandboxKeyAllowed(owner, activation.key),
-    ),
+const activations = computed<readonly ActiveExtension[]>(() =>
+    detectActivations(panels.value, capabilities.value).filter(({ extension }) => extension.surface === `sandbox`),
 );
+// A colliding activation key is dropped, not shadowed by the v-if chain: built-ins own their names.
+const contributed = computed<readonly ActiveExtension[]>(() => activations.value.filter(({ activation }) => sandboxKeyAllowed(activation.key)));
 const extensionFor = (slug: string): ActiveExtension | undefined => contributed.value.find(({ activation }) => activation.key === slug);
 
-// The view filling a slot, if its extension contributes one now: switched off or not yet loaded, the row is simply absent.
-const slotted = (slug: string, extension: string): ActiveExtension | undefined =>
-    contributed.value.find(({ owner, activation }) => owner === extension && activation.key === slug);
+// The view a section draws as a part of its own, if the one extension it names contributes it now: switched off or not
+// yet loaded, the section goes without that part.
+const embedded = (slug: string): ActiveExtension | undefined => {
+    const owner = sandboxEmbedOf(slug);
+    return owner === undefined ? undefined : activations.value.find((active) => active.owner === owner && active.activation.key === slug);
+};
 
 // Activation's own icon and badge, no room for them in the rail strip. Unknown or missing icon falls back to the icon
 // set's generic glyph.
@@ -142,13 +146,14 @@ const contributedRow = (active: ActiveExtension): HubTab => ({
 });
 
 // One table row as this reader's index draws it: a built-in with this reader's gating, the two live counts and whatever
-// is running laid over it; a slot as its extension's own row, or nothing while no view fills it.
-const rowOf = (row: SandboxRow): readonly HubTab[] => {
-    if (isSandboxSlot(row)) {
-        const active = slotted(row.slug, row.extension);
-        return active === undefined ? [] : [contributedRow(active)];
-    }
+// is running laid over it.
+const rowOf = (row: SandboxSection): readonly HubTab[] => {
     if (isGuest.value ? row.slug !== GUEST_SECTION : !canShip.value && row.maintainer === true) {
+        return [];
+    }
+    // Below maintainer, a section that embeds a view is that view alone (Activity is a member's turns), so without it the
+    // reader would open an empty page.
+    if (row.embeds !== undefined && !canShip.value && embedded(row.slug) === undefined) {
         return [];
     }
     // A section the sandbox's organisation hides leaves the index (organisations/useOrgPolicy.ts).
@@ -158,17 +163,14 @@ const rowOf = (row: SandboxRow): readonly HubTab[] => {
     return [{ ...row, badge: sectionBadge(row.slug, { updates: updatable.value, models: modelsNeedingSomeone.value }, runningIn(row.slug)) }];
 };
 
-// The table's own grouping, kept intact, then whatever extensions add that no slot is kept for.
-const unplaced = computed(() =>
-    contributed.value.filter(({ owner, activation }) => !sandboxSlots().some((slot) => slot.slug === activation.key && slot.extension === owner)),
-);
+// The table's own grouping, kept intact, then whatever extensions add.
 const groups = computed<readonly NavGroup<HubTab>[]>(() => [
     ...sandboxSectionGroups()
         .map((group) => ({ key: group.key, label: group.label, items: group.items.flatMap(rowOf) }))
         .filter((group) => group.items.length > 0),
-    ...(unplaced.value.length === 0
+    ...(contributed.value.length === 0
         ? []
-        : [{ key: `contributed`, label: t(`sandbox.sandboxHub.addedByExtensions`), items: unplaced.value.map(contributedRow) }]),
+        : [{ key: `contributed`, label: t(`sandbox.sandboxHub.addedByExtensions`), items: contributed.value.map(contributedRow) }]),
 ]);
 </script>
 
@@ -188,6 +190,12 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
                 <SandboxUsage v-else-if="slug === `usage`" />
                 <SandboxSecrets v-else-if="slug === `secrets`" />
                 <SandboxDataProtection v-else-if="slug === `data-protection`" />
+                <SandboxPrivacyShield v-else-if="slug === `privacy-shield`" />
+                <SandboxGuardrails v-else-if="slug === `guardrails`" />
+                <SandboxRetention v-else-if="slug === `retention`" />
+                <SandboxActivity v-else-if="slug === `activity`" :turns="embedded(`activity`) !== undefined">
+                    <template #turns><ExtensionView v-bind="embedded(`activity`)!" /></template>
+                </SandboxActivity>
                 <SandboxEnvironment v-else-if="slug === `environment`" />
                 <SandboxAccess v-else-if="slug === `access`" :open="openPersona" />
                 <SandboxPersonas v-else-if="slug === `personas`" :open="openPersona" />

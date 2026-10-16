@@ -2,8 +2,8 @@
 import { MarkdownDocument, Notice, type NoticeModel, RowGroup, RowNote } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed } from "vue";
-import { useSafetyPolicy } from "../../environment/useSafetyPolicy";
-import { useDraft } from "../../../../lib/useDraft";
+import { useSafetyPolicy } from "../environment/useSafetyPolicy";
+import { useDraft } from "../../../lib/useDraft";
 import { useT } from "@intentic/ui/i18n";
 
 // Replaces six regex-verdict pickers, which couldn't tell a real `rm -rf /` from one quoted in a README; danger is now

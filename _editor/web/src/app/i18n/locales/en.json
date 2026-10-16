@@ -23,7 +23,7 @@
         },
         "section": {
             "models": "Models",
-            "agent": "Agent",
+            "agent": "Agent, privacy shield, guardrails and retention",
             "environment": "Environment",
             "secrets": "Secrets and connections",
             "data-protection": "Data protection",
@@ -3127,7 +3127,7 @@
             "privacyOwnerOnly": "Only the sandbox's owner can let it through.",
             "privacyRefused": "The privacy shield won't send this to {provider}, and nothing you wrote is the reason: {provider}'s agent reads files and command output on its own and sends them to its provider on a wire the shield can't read or mask.",
             "privacyRefusedRunner": "The privacy shield won't run this on {runner}, and nothing you wrote is the reason: {runner} would call {provider} from its own machine, where the shield can't mask what it sends. Run it here instead, or let {provider} read this conversation.",
-            "privacySafety": "Safety settings",
+            "privacySafety": "Privacy shield",
             "privacyTakeBack": "Take back",
             "privacyTakeBackTitle": "Shielded here again",
             "resumesIfAnswers": "Resumes if it answers",
@@ -5204,22 +5204,6 @@
             "notCovered": "No cleaner covers",
             "runs": "{count} run | {count} runs"
         },
-        "agentDataRetention": {
-            "caches": "Converted documents",
-            "cachesNote": "Text read out of PDFs and office files, what was read from scans and pictures, and previews. Made again from the original when needed.",
-            "days": "days",
-            "forever": "keep forever",
-            "intro": "How many days each kind of record is kept. 0 keeps it forever, which is how every sandbox starts. A number above 0 deletes everything older for good, and it cannot be brought back. Archiving, above, deletes nothing.",
-            "privacyVault": "Privacy shield memory",
-            "privacyVaultNote": "Personal data the privacy shield found (names, PESEL numbers, addresses) and the pictures it covered, counted from when it last saw them. Lists you taught it stay until you forget them.",
-            "rawOutput": "Full command output",
-            "rawOutputNote": "The whole output of commands agents ran, kept beside the shortened version the agent read, and terminal recordings.",
-            "restorePoints": "Restore points",
-            "restorePointsNote": "The copies of the workspace taken every minute while agents work, which let you bring back files that were changed or deleted.",
-            "title": "Data retention",
-            "transcripts": "Conversations",
-            "transcriptsNote": "Everything said in a conversation, with its uploads, pages and backups, counted from its last message. A conversation still working, or waiting for you, is kept."
-        },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Apply completed work directly to workspace as uncommitted changes.",
             "archiveFinishedAgents": "Archive finished agents",
@@ -5304,7 +5288,6 @@
             "howAutoChooses": "How Auto chooses",
             "nothingJudgingCommandsAt": "Nothing is judging commands at the moment, so this is not in use.",
             "turnJudgeOn": "Turn the judge on",
-            "underSafety": "under Safety.",
             "whatYoudTellSomebody": "What you'd tell somebody choosing the model for a new chat: which work can go cheap, which account to leave alone, when to reach for the strongest one.",
             "notInUse": "not in use",
             "emptyHelpers": "No models: nothing here runs until one is added.",
@@ -5346,7 +5329,8 @@
             "placeSuggested": "Place on suggested setups",
             "dropToUnassign": "Drop a job here to take it off its setup",
             "suggestedFor": "{name} (suggested)",
-            "startsEmpty": "Starts with no models"
+            "startsEmpty": "Starts with no models",
+            "inGuardrails": "in Guardrails."
         },
         "agentRecovery": {
             "consecutiveFailuresBeforeAutomation": "Consecutive failures before an automation is disabled",
@@ -5681,7 +5665,8 @@
             "spawningRefusedOutright": "Spawning is refused outright, so the limits below bound only the subagents a runtime starts in-process.",
             "subagentsAtOnce": "Subagents at once",
             "subagentsPerConversation": "Subagents per conversation",
-            "totalDelegatedAgentsAllowed": "Total delegated agents allowed per conversation."
+            "totalDelegatedAgentsAllowed": "Total delegated agents allowed per conversation.",
+            "whetherInGuardrails": "Whether it may start subagents at all, and when it asks first:"
         },
         "aiAccountSection": {
             "account": "{managedLabel} account",
@@ -6975,7 +6960,6 @@
             "whatWouldAdd": "What this would add"
         },
         "sandboxAccess": {
-            "noticeAndAnalytics": "AI notice and analytics",
             "browser": "This browser",
             "ciNotifications": "CI notifications",
             "collaborator": "Collaborator",
@@ -7092,7 +7076,8 @@
             "wordOwner": "Owner",
             "addPersonSub": "Starts read-only",
             "addPersonKeys": "Enter to invite, Esc to cancel",
-            "inviteExpired": "Invite expired"
+            "inviteExpired": "Invite expired",
+            "aiNotice": "AI notice"
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Agent settings category",
@@ -7101,9 +7086,9 @@
             "jobs": "Jobs",
             "jobsFromModels": "Each job picks from the models this sandbox has connected.",
             "manageModels": "Models",
-            "safety": "Safety",
             "sandboxOfflineSettingsCant": "Your sandbox is offline, its settings can't be read or changed from here.",
-            "tools": "Tools"
+            "tools": "Tools",
+            "deletingIsRetention": "Archiving deletes nothing. How long conversations and restore points are kept:"
         },
         "sandboxAttention": {
             "agentProposedChangeTo": "The agent proposed a change to your environment",
@@ -7219,11 +7204,16 @@
             "extensions": "Extensions",
             "overview": "Overview",
             "reach": "Reach",
-            "oversight": "Oversight",
             "secrets": "Secrets",
             "usage": "Usage",
             "dataProtection": "Data protection",
-            "audit": "Audit log"
+            "audit": "Audit log",
+            "privacy": "Privacy & safety",
+            "privacyShield": "Privacy shield",
+            "guardrails": "Guardrails",
+            "retention": "Retention",
+            "records": "Records",
+            "activity": "Activity"
         },
         "sandboxOutdatedNotice": {
             "manual": "Installed it yourself? Reinstall it, or run this on the device that runs it:",
@@ -8952,7 +8942,15 @@
                 "messageSend": "Sending messages",
                 "messageEdit": "Editing messages",
                 "reactionAdd": "Adding reactions",
-                "reactionRemove": "Removing reactions"
+                "reactionRemove": "Removing reactions",
+                "mailSend": "Sending mail",
+                "calendarWrite": "Changing the calendar",
+                "filesUpload": "Uploading files",
+                "documentRegisterIncoming": "Registering incoming mail",
+                "documentRegisterOutgoing": "Registering outgoing mail",
+                "caseAttachDraft": "Adding a draft to a case",
+                "deliverySend": "Sending a delivery",
+                "deliveryOpen": "Opening a delivery"
             },
             "value": {
                 "allow": "allowed",
@@ -8989,8 +8987,6 @@
             "prunedNote": "Records up to {date} were deleted under the retention setting; the check starts after them.",
             "reachNote": "This check shows tampering but cannot prevent it: anyone with full control of the sandbox could edit these files. The copy sent to another system is the one nobody inside the sandbox can change.",
             "keeping": "How it is kept",
-            "retentionTitle": "Keep records for (days)",
-            "retentionDescription": "Older months are deleted whole. At least 30 days. Public offices in Poland keep system logs for 730 days (2 years).",
             "readsTitle": "Also record who opened what",
             "readsDescription": "Adds a record every time someone opens a conversation, a file or this log. When off, only changes and sign-ins are recorded.",
             "forwardTitle": "Send a copy to another system",
@@ -9164,7 +9160,8 @@
                 "retention-delete": "Expired data deleted",
                 "file-read": "File opened",
                 "activity-read": "Activity log opened"
-            }
+            },
+            "keptFor": "Records are kept for {count} day. | Records are kept for {count} days."
         },
         "linkedSandboxes": {
             "title": "Linked sandboxes",
@@ -9202,6 +9199,67 @@
             "revoked": "revoked there",
             "notAnswering": "not answering",
             "manage": "Manage"
+        },
+        "privacyShieldPage": {
+            "intro": "What may leave this sandbox, and in what form.",
+            "wherePlaces": "Where data goes",
+            "sentToIntentic": "Sent to Intentic",
+            "record": "What the shield replaced, request by request:",
+            "recordLink": "Activity"
+        },
+        "guardrails": {
+            "rule": {
+                "allow": "Allow",
+                "hold": "Ask first",
+                "deny": "Refuse"
+            },
+            "actions": {
+                "title": "Before the agent acts outside",
+                "intro": "What the agent may do out in the world without a person saying yes. Ask first waits in Approvals until someone allows it.",
+                "mixed": "Mixed",
+                "noServices": "Switch on Discord, Slack, e-mail or another service, and what the agent may send through it is set here."
+            },
+            "admission": {
+                "title": "Work started from outside",
+                "intro": "Whether work started by someone or something outside may run. An automation can ask for more on its own; the stricter of the two wins.",
+                "webchat": "A website visitor",
+                "issues": "A bug report",
+                "listener": "A team chat message",
+                "event": "A webhook",
+                "schedule": "A schedule",
+                "workspace": "An event in the workspace",
+                "workflow": "A CI workflow"
+            },
+            "record": "Every command the judge checked, and what it decided:",
+            "recordLink": "Activity"
+        },
+        "retention": {
+            "caches": "Converted documents",
+            "cachesNote": "Text read out of PDFs and office files, what was read from scans and pictures, and previews. Made again from the original when needed.",
+            "days": "days",
+            "forever": "keep forever",
+            "intro": "How many days each kind of record is kept. 0 keeps it forever, which is how every sandbox starts. A number above 0 deletes everything older for good, and it cannot be brought back. Archiving a finished agent deletes nothing.",
+            "privacyVault": "Privacy shield memory",
+            "privacyVaultNote": "Personal data the privacy shield found (names, PESEL numbers, addresses) and the pictures it covered, counted from when it last saw them. Lists you taught it stay until you forget them.",
+            "rawOutput": "Full command output",
+            "rawOutputNote": "The whole output of commands agents ran, kept beside the shortened version the agent read, and terminal recordings.",
+            "restorePoints": "Restore points",
+            "restorePointsNote": "The copies of the workspace taken every minute while agents work, which let you bring back files that were changed or deleted.",
+            "transcripts": "Conversations",
+            "transcriptsNote": "Everything said in a conversation, with its uploads, pages and backups, counted from its last message. A conversation still working, or waiting for you, is kept.",
+            "title": "How long each record is kept",
+            "audit": "Audit trail",
+            "auditNote": "Older months are deleted whole. At least 30 days. Public offices in Poland keep system logs for 730 days (2 years)."
+        },
+        "activityPage": {
+            "parts": "Part of the activity record",
+            "turns": "Turns",
+            "commands": "Commands checked",
+            "personal": "Personal data",
+            "turnsOff": "The turns come from the Activity extension, which is switched off in this sandbox.",
+            "turnsOffHow": "Switch it back on to see what woke the agent and how each turn went:",
+            "commandsSettings": "Whether the judge runs, and what it checks against:",
+            "personalSettings": "What the shield looks for, and which providers it trusts:"
         }
     },
     "settings": {

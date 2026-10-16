@@ -244,7 +244,7 @@ describe("documents", () => {
     it("lists the measures by category with where each is changed", () => {
         const text = renderDocument(facts, report, "toms", "en");
         expect(text).toContain("## Confidentiality");
-        expect(text).toContain("Sandbox ▸ Agent ▸ Safety ▸ Privacy shield");
+        expect(text).toContain("Sandbox ▸ Privacy shield");
         expect(text).toContain("Backups");
         expect(documentFilename("toms", "pl")).toBe("srodki-techniczne-i-organizacyjne");
     });

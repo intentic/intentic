@@ -113,7 +113,7 @@ const codexRoute = async (services: CodexPlanDeps, input: AgentTurn): Promise<Co
             return {
                 ok: false,
                 message:
-                    "The privacy shield is on, and Codex here would call OpenAI with the container's own key, past the shield. Connect your ChatGPT subscription so it runs through the translator, or mark Codex as trusted in Sandbox ▸ Agent ▸ Safety.",
+                    "The privacy shield is on, and Codex here would call OpenAI with the container's own key, past the shield. Connect your ChatGPT subscription so it runs through the translator, or mark Codex as trusted in Sandbox ▸ Privacy shield.",
             };
         }
     } catch (error) {

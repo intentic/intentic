@@ -3,6 +3,8 @@ import {
     type AdmissionPolicy,
     type AdmissionRule,
     AdmissionRuleSchema,
+    effectiveActionRule,
+    OUTWARD_ACTION_KEYS,
     type PresetApplyResult,
     type PresetGroup,
     type PresetItem,
@@ -36,36 +38,9 @@ export const PUBLIC_OFFICE_RETENTION: RetentionSettings = {
     rawOutputDays: 30,
 };
 
-// Every outward action the agent can take that the action rules (SandboxSettings.actionRules) gate, as the outbound
-// sniffer names it (activity/outbound.ts: discord, slack, telegram, whatsapp) and the subagent gate does
-// (guard/actions.ts childSpawn). Writes only: a rule on `messages.read` would hold a bot reading its own channel. Email
-// sending is the key the IMAP extension's sender consults (_extensions/imap/src/send.ts); the three `microsoft365.*`
-// keys are what `m365` consults before sending, changing a calendar or uploading (_extensions/microsoft-365/src/actions.ts);
-// the `ezdrp.*` and `edoreczenia.*` keys are the office acts the e-urzad extension's guard consults
-// (_extensions/e-urzad/src/core/guard.ts): registering mail and adding files in EZD RP, sending an e-Doręczenia delivery,
-// and opening one, the one read here with legal effect (it can make the delivery received). All of them hold by default.
-export const PUBLIC_OFFICE_ACTION_KEYS = [
-    "discord.message.send",
-    "discord.reaction.add",
-    "slack.message.send",
-    "slack.message.edit",
-    "slack.reaction.add",
-    "slack.reaction.remove",
-    "telegram.message.send",
-    "telegram.message.edit",
-    "telegram.reaction.add",
-    "whatsapp.message.send",
-    "imap.message.send",
-    "microsoft365.mail.send",
-    "microsoft365.calendar.write",
-    "microsoft365.files.upload",
-    "ezdrp.document.register-incoming",
-    "ezdrp.document.register-outgoing",
-    "ezdrp.case.attach-draft",
-    "edoreczenia.delivery.send",
-    "edoreczenia.delivery.open",
-    "agents.spawn",
-] as const;
+// Every outward action the action rules gate (the contract's OUTWARD_ACTION_KEYS, which says which gate consults each).
+// All of them hold by default.
+export const PUBLIC_OFFICE_ACTION_KEYS = OUTWARD_ACTION_KEYS;
 
 // Work started from outside the sandbox: a webhook, a team-chat message, a visitor's web chat, a bug report. A clock
 // (`schedule`) and the workspace's own files are the office's own doing, and `workflow` takes no hold (a CI runner
@@ -74,16 +49,6 @@ export const PUBLIC_OFFICE_ADMISSION_KEYS = ["event", "listener", "webchat", "is
 
 const STRICTNESS = { allow: 0, hold: 1, deny: 2 } as const satisfies Record<AdmissionRule, number>;
 const stricter = (current: AdmissionRule, wanted: AdmissionRule): AdmissionRule => (STRICTNESS[current] >= STRICTNESS[wanted] ? current : wanted);
-
-// The rule the gate would apply today: the exact key, else the provider's wildcard (guard/actions.ts outboundSend).
-// `agents.spawn` has no wildcard of its own.
-const effectiveActionRule = (rules: Readonly<Record<string, AdmissionRule>>, key: string): AdmissionRule | undefined => {
-    if (rules[key] !== undefined) {
-        return rules[key];
-    }
-    const provider = key.split(".")[0] ?? key;
-    return key === "agents.spawn" ? undefined : rules[`${provider}.*`];
-};
 
 const shorterRetention = (current: number, wanted: number): number => (current > 0 && current < wanted ? current : wanted);
 

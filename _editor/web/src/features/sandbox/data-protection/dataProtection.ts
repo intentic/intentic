@@ -176,34 +176,39 @@ export const STATUS_TONE = { on: `success`, partial: `info`, off: `warning`, una
     Tone
 >;
 
-const SAFETY = { name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } } as const;
-const RETENTION = { name: `sandbox`, params: { tab: `agent` }, query: { section: `finishing` } } as const;
-const AUDIT_KEEPING = { name: `sandbox`, params: { tab: `audit` }, query: { section: `keeping` } } as const;
 const tab = (name: string): RouteLocationRaw => ({ name: `sandbox`, params: { tab: name } });
+const SHIELD = tab(`privacy-shield`);
+const GUARDRAILS = tab(`guardrails`);
+const RETENTION = tab(`retention`);
+const AUDIT_KEEPING = { name: `sandbox`, params: { tab: `audit` }, query: { section: `keeping` } } as const;
 
 // Where each measure is changed in the editor; one with no link here and a preset item points at the panel below on this
-// page instead, and those set outside the editor (the key file, backups) have none. The audit trail's, retention's, the
-// AI notice's and analytics' went to that panel until 2026-10-13, which only ever tightens them.
+// page instead, and those set outside the editor (the key file, backups) have none. Until 2026-10-16 the shield's and the
+// judge's went to Agent ▸ Safety, retention's to Agent ▸ Finishing, and the two approval floors had no page at all: the
+// box-wide ones are this page's siblings under Privacy & safety now, and a measure about one thing (a member, an area,
+// a secret, a model) still goes to that thing. Running the agent without administrator rights has no control in the
+// editor (only its owner-only route), so it has no link: it went to Agent, which says nothing about it.
 export const MEASURE_LINKS = new Map<MeasureId, RouteLocationRaw>([
-    [`privacy-shield`, SAFETY],
-    [`privacy-images`, SAFETY],
-    [`privacy-names`, SAFETY],
-    [`trusted-providers`, SAFETY],
-    [`command-judge`, SAFETY],
+    [`privacy-shield`, SHIELD],
+    [`privacy-images`, SHIELD],
+    [`privacy-names`, SHIELD],
+    [`trusted-providers`, SHIELD],
+    [`product-analytics`, SHIELD],
+    [`command-judge`, GUARDRAILS],
+    [`action-rules`, GUARDRAILS],
+    [`admission`, GUARDRAILS],
+    [`retention`, RETENTION],
+    [`audit`, RETENTION],
+    [`audit-reads`, AUDIT_KEEPING],
+    [`audit-forward`, AUDIT_KEEPING],
     [`local-models`, tab(`models`)],
     [`member-roles`, tab(`access`)],
     [`guest-jail`, tab(`access`)],
     [`sign-in`, tab(`access`)],
+    [`ai-notice`, tab(`access`)],
     [`areas`, tab(`areas`)],
     [`credential-gates`, tab(`secrets`)],
     [`host-guards`, tab(`secrets`)],
-    [`agent-domain`, tab(`agent`)],
-    [`retention`, RETENTION],
-    [`audit`, AUDIT_KEEPING],
-    [`audit-reads`, AUDIT_KEEPING],
-    [`audit-forward`, AUDIT_KEEPING],
-    [`ai-notice`, tab(`access`)],
-    [`product-analytics`, tab(`access`)],
 ]);
 
 // A preset item's own words: the setting it changes, and for an action rule, which action on which service.
@@ -213,19 +218,27 @@ export const presetLabel = (item: PresetItem): string => {
         if (service === `agents`) {
             return t(`sandbox.dataProtection.presetItem.agentsSpawn`);
         }
-        return t(`sandbox.dataProtection.presetItem.action`, { service: serviceName(service), action: t(`sandbox.dataProtection.action.${keyOf(rest.join(`.`))}`) });
+        return t(`sandbox.dataProtection.presetItem.action`, { service: serviceName(service), action: actionLabel(rest.join(`.`)) });
     }
     return t(`sandbox.dataProtection.presetItem.${keyOf(item.id)}`);
 };
 
+// Proper names, the same in every language. A service is its action keys' first segment (OUTWARD_ACTION_KEYS): e-mail is
+// the IMAP extension's sender, so `imap`.
 const SERVICE_NAMES = new Map([
     [`discord`, `Discord`],
     [`slack`, `Slack`],
     [`telegram`, `Telegram`],
     [`whatsapp`, `WhatsApp`],
-    [`email`, `e-mail`],
+    [`imap`, `e-mail`],
+    [`microsoft365`, `Microsoft 365`],
+    [`ezdrp`, `EZD RP`],
+    [`edoreczenia`, `e-Doręczenia`],
 ]);
 export const serviceName = (service: string): string => SERVICE_NAMES.get(service) ?? service;
+
+// What one action does, by its key less the service (`message.send`, `document.register-incoming`).
+export const actionLabel = (action: string): string => t(`sandbox.dataProtection.action.${keyOf(action)}`);
 
 const SWITCHES = new Set([`audit.recordReads`, `productAnalytics`, `aiNotice.show`]);
 const DAY_COUNTS = new Set([`audit.retentionDays`]);

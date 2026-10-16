@@ -23,7 +23,7 @@
         },
         "section": {
             "models": "Modelos",
-            "agent": "Agente",
+            "agent": "Agente, escudo de privacidad, salvaguardas y conservación",
             "environment": "Entorno",
             "secrets": "Secretos y conexiones",
             "data-protection": "Protección de datos",
@@ -72,7 +72,12 @@
             "policyReset": "volvió sin su copia de la política el {date} y la recibió de nuevo"
         }
     },
-    "a11yKit": { "toggleDetails": "Mostrar u ocultar los detalles del título", "selectRow": "Seleccionar la fila de ejemplo", "settingsButton": "Ejemplo de botón de configuración", "codeField": "Ejemplo de campo de código" },
+    "a11yKit": {
+        "toggleDetails": "Mostrar u ocultar los detalles del título",
+        "selectRow": "Seleccionar la fila de ejemplo",
+        "settingsButton": "Ejemplo de botón de configuración",
+        "codeField": "Ejemplo de campo de código"
+    },
     "agents": {
         "accountChip": {
             "org": "Organización"
@@ -1468,7 +1473,7 @@
             "privacyOwnerOnly": "Solo el propietario del sandbox puede dejarlo pasar.",
             "privacyRefused": "El escudo de privacidad no enviará esto a {provider}, y no es por nada de lo que escribiste: el agente de {provider} lee archivos y la salida de comandos por su cuenta y los envía a su proveedor por un canal que el escudo no puede leer ni enmascarar.",
             "privacyRefusedRunner": "El escudo de privacidad no ejecutará esto en {runner}, y no es por nada de lo que escribiste: {runner} llamaría a {provider} desde su propia máquina, donde el escudo no puede enmascarar lo que envía. Ejecútalo aquí o deja que {provider} lea esta conversación.",
-            "privacySafety": "Ajustes de seguridad",
+            "privacySafety": "Escudo de privacidad",
             "privacyTakeBack": "Revocar",
             "privacyTakeBackTitle": "De nuevo protegida",
             "resumesIfAnswers": "Sigue si responde",
@@ -2424,22 +2429,6 @@
             "notCovered": "Sin limpiador",
             "runs": "{count} ejecución | {count} ejecuciones"
         },
-        "agentDataRetention": {
-            "caches": "Documentos convertidos",
-            "cachesNote": "El texto leído de PDF y archivos de oficina, lo leído de escaneos e imágenes, y las vistas previas. Se vuelve a crear desde el original cuando hace falta.",
-            "days": "días",
-            "forever": "para siempre",
-            "intro": "Cuántos días se guarda cada tipo de registro. 0 lo guarda para siempre, que es como empieza cada sandbox. Un número mayor que 0 borra para siempre todo lo anterior, y no se puede recuperar. Archivar, arriba, no borra nada.",
-            "privacyVault": "Memoria del escudo de privacidad",
-            "privacyVaultNote": "Los datos personales que encontró el escudo de privacidad (nombres, números PESEL, direcciones) y las imágenes que tapó, contados desde la última vez que los vio. Las listas que le enseñaste se quedan hasta que las olvides.",
-            "rawOutput": "Salida completa de los comandos",
-            "rawOutputNote": "La salida entera de los comandos que ejecutaron los agentes, guardada junto a la versión acortada que leyó el agente, y las grabaciones de la terminal.",
-            "restorePoints": "Puntos de restauración",
-            "restorePointsNote": "Las copias del espacio de trabajo que se hacen cada minuto mientras trabajan los agentes, con las que recuperas archivos cambiados o borrados.",
-            "title": "Conservación de datos",
-            "transcripts": "Conversaciones",
-            "transcriptsNote": "Todo lo dicho en una conversación, con sus archivos subidos, páginas y copias de seguridad, contado desde su último mensaje. Una conversación que sigue trabajando o te está esperando se conserva."
-        },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Aplicar el trabajo terminado directamente al espacio de trabajo como cambios sin commit.",
             "archiveFinishedAgents": "Archivar los agentes terminados",
@@ -2490,8 +2479,8 @@
             "howAutoChooses": "Cómo elige Auto",
             "nothingJudgingCommandsAt": "Ahora mismo nada está juzgando comandos, así que esto no está en uso.",
             "turnJudgeOn": "Activar el juez",
-            "underSafety": "en Seguridad.",
-            "whatYoudTellSomebody": "Lo que le dirías a alguien que elige el modelo para un chat nuevo: qué trabajo puede ir barato, qué cuenta conviene no tocar, cuándo recurrir al más potente."
+            "whatYoudTellSomebody": "Lo que le dirías a alguien que elige el modelo para un chat nuevo: qué trabajo puede ir barato, qué cuenta conviene no tocar, cuándo recurrir al más potente.",
+            "inGuardrails": "en Salvaguardas."
         },
         "agentRecovery": {
             "consecutiveFailuresBeforeAutomation": "Fallos consecutivos antes de desactivar una automatización",
@@ -2606,7 +2595,8 @@
             "spawningRefusedOutright": "Lanzar subagentes está rechazado de plano, así que los límites de abajo solo acotan los subagentes que un entorno inicia dentro de su proceso.",
             "subagentsAtOnce": "Subagentes a la vez",
             "subagentsPerConversation": "Subagentes por conversación",
-            "totalDelegatedAgentsAllowed": "Total de agentes delegados permitidos por conversación."
+            "totalDelegatedAgentsAllowed": "Total de agentes delegados permitidos por conversación.",
+            "whetherInGuardrails": "Si puede lanzar subagentes, y cuándo pregunta antes:"
         },
         "aiAccountSection": {
             "account": "Cuenta de {managedLabel}",
@@ -3528,7 +3518,6 @@
             "whatWouldAdd": "Qué añadiría esto"
         },
         "sandboxAccess": {
-            "noticeAndAnalytics": "Aviso de IA y analítica",
             "wholeWorkspace": "Todo el espacio de trabajo",
             "areaNoAssistant": "sin asistente",
             "giveAssistantFolder": "Dale a uno una carpeta de inicio",
@@ -3560,15 +3549,16 @@
             "signedInBrowsers": "Navegadores con sesión iniciada",
             "sureEveryoneWorkingIn": "¿Seguro? Todo el que esté trabajando en este sandbox ahora mismo tendrá que iniciar sesión de nuevo.",
             "viewer": "Espectador",
-            "writer": "Editor"
+            "writer": "Editor",
+            "aiNotice": "Aviso de IA"
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Categoría de ajustes del agente",
             "couldntReadSandboxsSettings": "No se pudieron leer los ajustes de este sandbox.",
             "finishing": "Al terminar",
-            "safety": "Seguridad",
             "sandboxOfflineSettingsCant": "Tu sandbox está desconectado; sus ajustes no se pueden leer ni cambiar desde aquí.",
-            "tools": "Herramientas"
+            "tools": "Herramientas",
+            "deletingIsRetention": "Archivar no borra nada. Cuánto se guardan las conversaciones y los puntos de restauración:"
         },
         "sandboxAreas": {
             "toggleArea": "Mostrar u ocultar detalles de {name}",
@@ -3680,11 +3670,16 @@
             "extensions": "Extensiones",
             "overview": "Resumen",
             "reach": "Alcance",
-            "oversight": "Supervisión",
             "secrets": "Secretos",
             "usage": "Uso",
             "dataProtection": "Protección de datos",
-            "audit": "Registro de auditoría"
+            "audit": "Registro de auditoría",
+            "privacy": "Privacidad y seguridad",
+            "privacyShield": "Escudo de privacidad",
+            "guardrails": "Salvaguardas",
+            "retention": "Conservación",
+            "records": "Registros",
+            "activity": "Actividad"
         },
         "sandboxOutdatedNotice": {
             "manual": "¿La instalaste tú? Reinstálala o ejecuta esto en el dispositivo donde se ejecuta:",
@@ -4466,7 +4461,15 @@
                 "messageSend": "Enviar mensajes",
                 "messageEdit": "Editar mensajes",
                 "reactionAdd": "Añadir reacciones",
-                "reactionRemove": "Quitar reacciones"
+                "reactionRemove": "Quitar reacciones",
+                "mailSend": "Enviar correo",
+                "calendarWrite": "Cambiar el calendario",
+                "filesUpload": "Subir archivos",
+                "documentRegisterIncoming": "Registrar correspondencia de entrada",
+                "documentRegisterOutgoing": "Registrar correspondencia de salida",
+                "caseAttachDraft": "Añadir un borrador a un expediente",
+                "deliverySend": "Enviar una notificación",
+                "deliveryOpen": "Abrir una notificación"
             },
             "value": {
                 "allow": "permitido",
@@ -4503,8 +4506,6 @@
             "prunedNote": "Las entradas hasta el {date} se eliminaron según el periodo de conservación; la comprobación empieza después de ellas.",
             "reachNote": "Esta comprobación muestra manipulaciones pero no las impide: quien controle por completo la sandbox podría editar estos archivos. La copia enviada a otro sistema es la que nadie dentro de la sandbox puede cambiar.",
             "keeping": "Conservación",
-            "retentionTitle": "Conservar entradas durante (días)",
-            "retentionDescription": "Los meses más antiguos se eliminan enteros. Al menos 30 días. Las administraciones públicas en Polonia conservan los registros del sistema 730 días (2 años).",
             "readsTitle": "Registrar también quién abrió qué",
             "readsDescription": "Añade una entrada cada vez que alguien abre una conversación, un archivo o este registro. Desactivado, solo se registran los cambios y los inicios de sesión.",
             "forwardTitle": "Enviar una copia a otro sistema",
@@ -4678,13 +4679,75 @@
                 "retention-delete": "Datos caducados eliminados",
                 "file-read": "Archivo abierto",
                 "activity-read": "Registro de actividad abierto"
-            }
+            },
+            "keptFor": "Los registros se guardan {count} día. | Los registros se guardan {count} días."
         },
         "agentVoice": {
             "wakeWord": "Palabra de activación",
             "wakeWordNote": "El nombre que escucha cada dispositivo de este sandbox donde se activó la escucha en Ajustes ▸ Voz. Dos o tres sílabas lo activan con fiabilidad.",
             "wakeWordInvalid": "Usa solo letras, con un espacio, guion o apóstrofo entre ellas.",
             "wakeWordShort": "Una palabra tan corta lo activa por error. Funcionan mejor dos o tres sílabas."
+        },
+        "retention": {
+            "caches": "Documentos convertidos",
+            "cachesNote": "El texto leído de PDF y archivos de oficina, lo leído de escaneos e imágenes, y las vistas previas. Se vuelve a crear desde el original cuando hace falta.",
+            "days": "días",
+            "forever": "para siempre",
+            "intro": "Cuántos días se guarda cada tipo de registro. 0 lo guarda para siempre, que es como empieza cada sandbox. Un número mayor que 0 borra para siempre todo lo anterior, y no se puede recuperar. Archivar un agente terminado no borra nada.",
+            "privacyVault": "Memoria del escudo de privacidad",
+            "privacyVaultNote": "Los datos personales que encontró el escudo de privacidad (nombres, números PESEL, direcciones) y las imágenes que tapó, contados desde la última vez que los vio. Las listas que le enseñaste se quedan hasta que las olvides.",
+            "rawOutput": "Salida completa de los comandos",
+            "rawOutputNote": "La salida entera de los comandos que ejecutaron los agentes, guardada junto a la versión acortada que leyó el agente, y las grabaciones de la terminal.",
+            "restorePoints": "Puntos de restauración",
+            "restorePointsNote": "Las copias del espacio de trabajo que se hacen cada minuto mientras trabajan los agentes, con las que recuperas archivos cambiados o borrados.",
+            "transcripts": "Conversaciones",
+            "transcriptsNote": "Todo lo dicho en una conversación, con sus archivos subidos, páginas y copias de seguridad, contado desde su último mensaje. Una conversación que sigue trabajando o te está esperando se conserva.",
+            "auditNote": "Los meses más antiguos se eliminan enteros. Al menos 30 días. Las administraciones públicas en Polonia conservan los registros del sistema 730 días (2 años).",
+            "title": "Cuánto se guarda cada registro",
+            "audit": "Registro de auditoría"
+        },
+        "privacyShieldPage": {
+            "intro": "Qué puede salir de este sandbox, y de qué forma.",
+            "wherePlaces": "Adónde van los datos",
+            "sentToIntentic": "Enviado a Intentic",
+            "record": "Qué sustituyó el escudo, petición a petición:",
+            "recordLink": "Actividad"
+        },
+        "guardrails": {
+            "rule": {
+                "allow": "Permitir",
+                "hold": "Preguntar antes",
+                "deny": "Rechazar"
+            },
+            "actions": {
+                "title": "Antes de que el agente actúe fuera",
+                "intro": "Qué puede hacer el agente fuera sin que una persona diga que sí. «Preguntar antes» espera en Aprobaciones hasta que alguien lo permita.",
+                "mixed": "Mixto",
+                "noServices": "Activa Discord, Slack, el correo u otro servicio, y aquí decides qué puede enviar el agente por él."
+            },
+            "admission": {
+                "title": "Trabajo iniciado desde fuera",
+                "intro": "Si el trabajo que inició alguien o algo de fuera puede ejecutarse. Una automatización puede pedir más por su cuenta; gana la más estricta de las dos.",
+                "webchat": "Un visitante del sitio",
+                "issues": "Un informe de error",
+                "listener": "Un mensaje del chat del equipo",
+                "event": "Un webhook",
+                "schedule": "Una programación",
+                "workspace": "Un evento en el espacio de trabajo",
+                "workflow": "Un flujo de CI"
+            },
+            "record": "Cada comando que revisó el juez, y qué decidió:",
+            "recordLink": "Actividad"
+        },
+        "activityPage": {
+            "parts": "Parte del registro de actividad",
+            "turns": "Turnos",
+            "commands": "Comandos revisados",
+            "personal": "Datos personales",
+            "turnsOff": "Los turnos vienen de la extensión Actividad, que está desactivada en este sandbox.",
+            "turnsOffHow": "Vuelve a activarla para ver qué despertó al agente y cómo fue cada turno:",
+            "commandsSettings": "Si el juez funciona, y con qué revisa:",
+            "personalSettings": "Qué busca el escudo, y en qué proveedores confía:"
         }
     },
     "settings": {

@@ -19,8 +19,8 @@ import {
     vSkeletonSource,
 } from "@intentic/ui";
 import { computed, ref } from "vue";
-import { useSafetyLog } from "../../environment/useSafetyPolicy";
-import { useSandboxSettings } from "../../overview/useSandboxSettings";
+import { useSafetyLog } from "../environment/useSafetyPolicy";
+import { useSandboxSettings } from "../overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
 // Every judged command, including allowed ones: what the policy actually did, not just what it says. Collapsed rows are

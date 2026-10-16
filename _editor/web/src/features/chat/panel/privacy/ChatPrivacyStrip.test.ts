@@ -54,7 +54,7 @@ const updatePolicy = jest.fn(async (change: (current: PrivacyShieldPolicy) => Pr
     written.push(policy.value);
     status.value = statusOf(policy.value);
 });
-jest.mock(`../../../sandbox/agent-settings/safety/usePrivacyShield`, () => ({
+jest.mock(`../../../sandbox/privacy-shield/usePrivacyShield`, () => ({
     usePrivacyShield: () => ({ status, updatePolicy, isSaving: ref(false) }),
 }));
 // SAFETY: the stub renders the one prop the strip passes (`to`), which is all a RouterLink is asked for here.
@@ -143,7 +143,7 @@ it(`says before the send that an agent the shield can't read would be turned awa
     const element = mount();
     expect(element.textContent).toContain(`won't send this to My agent, and nothing you wrote is the reason`);
     expect(named(element, `Let My agent read this conversation`)?.tagName).toBe(`BUTTON`);
-    expect(named(element, `Safety settings`)?.tagName).toBe(`A`);
+    expect(named(element, `Privacy shield`)?.tagName).toBe(`A`);
 });
 
 // Third (2026-10-11): a Cursor chat placed on a runner was turned away after the send, and the refusal read as the

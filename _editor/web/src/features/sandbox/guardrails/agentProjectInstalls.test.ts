@@ -10,7 +10,7 @@ const patch = jest.fn((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
-jest.mock(`../../overview/useSandboxSettings`, () => ({
+jest.mock(`../overview/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 

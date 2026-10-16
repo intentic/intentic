@@ -2,9 +2,9 @@
 import { Button, InfoDialog, Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { modelChoiceLabel } from "../../../chat/models/modelPins";
-import { useRoleModel } from "../../../chat/accounts/roleModel";
-import { useSandboxSettings } from "../../overview/useSandboxSettings";
+import { modelChoiceLabel } from "../../chat/models/modelPins";
+import { useRoleModel } from "../../chat/accounts/roleModel";
+import { useSandboxSettings } from "../overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 import AgentSafetyRules from "./AgentSafetyRules.vue";
 

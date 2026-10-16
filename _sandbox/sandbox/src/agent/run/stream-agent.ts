@@ -228,7 +228,7 @@ const runnerShieldRefusal = async (services: Pick<Services, "privacyShield">, pr
     } catch (error) {
         return error instanceof Error ? error.message : "the privacy shield's policy could not be read";
     }
-    return `The privacy shield is on, and a runner would call ${provider} from its own machine, past the shield. Run this conversation here, or mark ${provider} as trusted in Sandbox ▸ Agent ▸ Safety.`;
+    return `The privacy shield is on, and a runner would call ${provider} from its own machine, past the shield. Run this conversation here, or mark ${provider} as trusted in Sandbox ▸ Privacy shield.`;
 };
 
 // The fleet-registry lifecycle around every turn: `conversationId` acquires the mutex and publishes frames, and where

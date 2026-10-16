@@ -23,7 +23,7 @@
         },
         "section": {
             "models": "Modèles",
-            "agent": "Agent",
+            "agent": "Agent, bouclier de confidentialité, garde-fous et conservation",
             "environment": "Environnement",
             "secrets": "Secrets et connexions",
             "data-protection": "Protection des données",
@@ -72,7 +72,12 @@
             "policyReset": "est revenu sans sa copie de la politique le {date} et l'a reçue à nouveau"
         }
     },
-    "a11yKit": { "toggleDetails": "Afficher ou masquer les détails du titre", "selectRow": "Sélectionner la ligne d’exemple", "settingsButton": "Exemple de bouton des paramètres", "codeField": "Exemple de champ de code" },
+    "a11yKit": {
+        "toggleDetails": "Afficher ou masquer les détails du titre",
+        "selectRow": "Sélectionner la ligne d’exemple",
+        "settingsButton": "Exemple de bouton des paramètres",
+        "codeField": "Exemple de champ de code"
+    },
     "agents": {
         "accountChip": {
             "org": "Organisation"
@@ -1461,7 +1466,7 @@
             "privacyOwnerOnly": "Seul le propriétaire du sandbox peut le laisser passer.",
             "privacyRefused": "Le bouclier de confidentialité n'enverra pas ceci à {provider}, et rien de ce que vous avez écrit n'en est la cause : l'agent de {provider} lit lui-même des fichiers et des sorties de commandes et les envoie à son fournisseur par un canal que le bouclier ne peut ni lire ni masquer.",
             "privacyRefusedRunner": "Le bouclier de confidentialité n'exécutera pas ceci sur {runner}, et rien de ce que vous avez écrit n'en est la cause : {runner} appellerait {provider} depuis sa propre machine, où le bouclier ne peut pas masquer ce qui est envoyé. Exécutez-le ici, ou laissez {provider} lire cette conversation.",
-            "privacySafety": "Réglages de sécurité",
+            "privacySafety": "Bouclier de confidentialité",
             "privacyTakeBack": "Révoquer",
             "privacyTakeBackTitle": "De nouveau protégée",
             "resumesIfAnswers": "Reprend s'il répond",
@@ -2414,22 +2419,6 @@
             "notCovered": "Aucun nettoyeur pour",
             "runs": "{count} exécution | {count} exécutions"
         },
-        "agentDataRetention": {
-            "caches": "Documents convertis",
-            "cachesNote": "Le texte lu dans les PDF et les fichiers bureautiques, ce qui a été lu dans les scans et les images, et les aperçus. Refait à partir de l'original au besoin.",
-            "days": "jours",
-            "forever": "pour toujours",
-            "intro": "Combien de jours chaque type d'enregistrement est conservé. 0 le garde pour toujours, c'est ainsi que démarre chaque sandbox. Un nombre supérieur à 0 supprime définitivement tout ce qui est plus ancien, sans retour possible. L'archivage, plus haut, ne supprime rien.",
-            "privacyVault": "Mémoire du bouclier de confidentialité",
-            "privacyVaultNote": "Les données personnelles trouvées par le bouclier de confidentialité (noms, numéros PESEL, adresses) et les images qu'il a masquées, comptées depuis la dernière fois qu'il les a vues. Les listes que vous lui avez apprises restent jusqu'à ce que vous les oubliiez.",
-            "rawOutput": "Sortie complète des commandes",
-            "rawOutputNote": "La sortie entière des commandes lancées par les agents, gardée à côté de la version raccourcie que l'agent a lue, et les enregistrements du terminal.",
-            "restorePoints": "Points de restauration",
-            "restorePointsNote": "Les copies de l'espace de travail prises chaque minute pendant que les agents travaillent, qui permettent de récupérer des fichiers modifiés ou supprimés.",
-            "title": "Conservation des données",
-            "transcripts": "Conversations",
-            "transcriptsNote": "Tout ce qui a été dit dans une conversation, avec ses fichiers envoyés, ses pages et ses sauvegardes, compté depuis son dernier message. Une conversation encore en cours, ou qui vous attend, est conservée."
-        },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Appliquer le travail terminé directement à l'espace de travail, en changements non committés.",
             "archiveFinishedAgents": "Archiver les agents terminés",
@@ -2480,8 +2469,8 @@
             "howAutoChooses": "Comment Auto choisit",
             "nothingJudgingCommandsAt": "Rien ne juge de commandes en ce moment : ceci n'est donc pas utilisé.",
             "turnJudgeOn": "Activer le juge",
-            "underSafety": "sous Sécurité.",
-            "whatYoudTellSomebody": "Ce que vous diriez à quelqu'un qui choisit le modèle d'un nouveau chat : quel travail peut partir au moins cher, quel compte ménager, quand prendre le plus puissant."
+            "whatYoudTellSomebody": "Ce que vous diriez à quelqu'un qui choisit le modèle d'un nouveau chat : quel travail peut partir au moins cher, quel compte ménager, quand prendre le plus puissant.",
+            "inGuardrails": "dans Garde-fous."
         },
         "agentRecovery": {
             "consecutiveFailuresBeforeAutomation": "Échecs consécutifs avant qu'une automatisation ne soit désactivée",
@@ -2596,7 +2585,8 @@
             "spawningRefusedOutright": "Le lancement est refusé d'emblée : les limites ci-dessous ne bornent donc que les sous-agents qu'un environnement démarre dans son propre processus.",
             "subagentsAtOnce": "Sous-agents à la fois",
             "subagentsPerConversation": "Sous-agents par conversation",
-            "totalDelegatedAgentsAllowed": "Total d'agents délégués autorisés par conversation."
+            "totalDelegatedAgentsAllowed": "Total d'agents délégués autorisés par conversation.",
+            "whetherInGuardrails": "S'il peut lancer des sous-agents, et quand il demande d'abord :"
         },
         "aiAccountSection": {
             "account": "Compte {managedLabel}",
@@ -3517,7 +3507,6 @@
             "whatWouldAdd": "Ce que cela ajouterait"
         },
         "sandboxAccess": {
-            "noticeAndAnalytics": "Avis sur l’IA et analyse",
             "wholeWorkspace": "Tout l’espace de travail",
             "areaNoAssistant": "aucun assistant",
             "giveAssistantFolder": "Donner un dossier de départ à un assistant",
@@ -3549,15 +3538,16 @@
             "signedInBrowsers": "Navigateurs connectés",
             "sureEveryoneWorkingIn": "Sûr ? Tous ceux qui travaillent dans ce sandbox en ce moment devront se reconnecter.",
             "viewer": "Observateur",
-            "writer": "Rédacteur"
+            "writer": "Rédacteur",
+            "aiNotice": "Avis sur l’IA"
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Catégorie de paramètres de l'agent",
             "couldntReadSandboxsSettings": "Impossible de lire les paramètres de ce sandbox.",
             "finishing": "Fin de tour",
-            "safety": "Sécurité",
             "sandboxOfflineSettingsCant": "Votre sandbox est hors ligne, ses paramètres ne peuvent être ni lus ni modifiés d'ici.",
-            "tools": "Outils"
+            "tools": "Outils",
+            "deletingIsRetention": "Archiver ne supprime rien. Combien de temps les conversations et les points de restauration sont conservés :"
         },
         "sandboxAreas": {
             "toggleArea": "Afficher ou masquer les détails de {name}",
@@ -3667,9 +3657,14 @@
             "box": "Cette boîte",
             "overview": "Vue d'ensemble",
             "reach": "Portée",
-            "oversight": "Supervision",
             "dataProtection": "Protection des données",
-            "audit": "Journal d’audit"
+            "audit": "Journal d’audit",
+            "privacy": "Confidentialité et sécurité",
+            "privacyShield": "Bouclier de confidentialité",
+            "guardrails": "Garde-fous",
+            "retention": "Conservation",
+            "records": "Registres",
+            "activity": "Activité"
         },
         "sandboxOutdatedNotice": {
             "manual": "Installée toi-même ? Réinstalle-la ou exécute ceci sur l'appareil où elle tourne :",
@@ -4446,7 +4441,15 @@
                 "messageSend": "Envoi de messages",
                 "messageEdit": "Modification de messages",
                 "reactionAdd": "Ajout de réactions",
-                "reactionRemove": "Retrait de réactions"
+                "reactionRemove": "Retrait de réactions",
+                "mailSend": "Envoi de courriels",
+                "calendarWrite": "Modification du calendrier",
+                "filesUpload": "Envoi de fichiers",
+                "documentRegisterIncoming": "Enregistrement du courrier entrant",
+                "documentRegisterOutgoing": "Enregistrement du courrier sortant",
+                "caseAttachDraft": "Ajout d'un brouillon à un dossier",
+                "deliverySend": "Envoi d'un recommandé électronique",
+                "deliveryOpen": "Ouverture d'un recommandé électronique"
             },
             "value": {
                 "allow": "autorisé",
@@ -4483,8 +4486,6 @@
             "prunedNote": "Les entrées jusqu’au {date} ont été supprimées selon la durée de conservation ; la vérification commence après elles.",
             "reachNote": "Cette vérification révèle une falsification mais ne l’empêche pas : quiconque contrôle entièrement la sandbox pourrait modifier ces fichiers. La copie envoyée à un autre système est celle que personne dans la sandbox ne peut changer.",
             "keeping": "Conservation",
-            "retentionTitle": "Conserver les entrées (jours)",
-            "retentionDescription": "Les mois plus anciens sont supprimés en entier. Au moins 30 jours. En Pologne, les administrations conservent les journaux système 730 jours (2 ans).",
             "readsTitle": "Noter aussi qui a ouvert quoi",
             "readsDescription": "Ajoute une entrée chaque fois que quelqu’un ouvre une conversation, un fichier ou ce journal. Désactivé, seuls les changements et les connexions sont notés.",
             "forwardTitle": "Envoyer une copie à un autre système",
@@ -4658,13 +4659,75 @@
                 "retention-delete": "Données expirées supprimées",
                 "file-read": "Fichier ouvert",
                 "activity-read": "Journal d’activité ouvert"
-            }
+            },
+            "keptFor": "Les enregistrements sont conservés {count} jour. | Les enregistrements sont conservés {count} jours."
         },
         "agentVoice": {
             "wakeWord": "Mot d'éveil",
             "wakeWordNote": "Le nom qu'écoute chaque appareil de cette sandbox où l'écoute est activée dans Réglages ▸ Voix. Deux ou trois syllabes le réveillent de façon fiable.",
             "wakeWordInvalid": "Uniquement des lettres, avec une espace, un trait d'union ou une apostrophe entre elles.",
             "wakeWordShort": "Un mot aussi court le réveille par erreur. Deux ou trois syllabes fonctionnent le mieux."
+        },
+        "retention": {
+            "caches": "Documents convertis",
+            "cachesNote": "Le texte lu dans les PDF et les fichiers bureautiques, ce qui a été lu dans les scans et les images, et les aperçus. Refait à partir de l'original au besoin.",
+            "days": "jours",
+            "forever": "pour toujours",
+            "intro": "Combien de jours chaque type d'enregistrement est conservé. 0 le garde pour toujours, c'est ainsi que démarre chaque sandbox. Un nombre supérieur à 0 supprime définitivement tout ce qui est plus ancien, sans retour possible. Archiver un agent terminé ne supprime rien.",
+            "privacyVault": "Mémoire du bouclier de confidentialité",
+            "privacyVaultNote": "Les données personnelles trouvées par le bouclier de confidentialité (noms, numéros PESEL, adresses) et les images qu'il a masquées, comptées depuis la dernière fois qu'il les a vues. Les listes que vous lui avez apprises restent jusqu'à ce que vous les oubliiez.",
+            "rawOutput": "Sortie complète des commandes",
+            "rawOutputNote": "La sortie entière des commandes lancées par les agents, gardée à côté de la version raccourcie que l'agent a lue, et les enregistrements du terminal.",
+            "restorePoints": "Points de restauration",
+            "restorePointsNote": "Les copies de l'espace de travail prises chaque minute pendant que les agents travaillent, qui permettent de récupérer des fichiers modifiés ou supprimés.",
+            "transcripts": "Conversations",
+            "transcriptsNote": "Tout ce qui a été dit dans une conversation, avec ses fichiers envoyés, ses pages et ses sauvegardes, compté depuis son dernier message. Une conversation encore en cours, ou qui vous attend, est conservée.",
+            "auditNote": "Les mois plus anciens sont supprimés en entier. Au moins 30 jours. En Pologne, les administrations conservent les journaux système 730 jours (2 ans).",
+            "title": "Combien de temps chaque enregistrement est conservé",
+            "audit": "Journal d’audit"
+        },
+        "privacyShieldPage": {
+            "intro": "Ce qui peut quitter ce sandbox, et sous quelle forme.",
+            "wherePlaces": "Où vont les données",
+            "sentToIntentic": "Envoyé à Intentic",
+            "record": "Ce que le bouclier a remplacé, requête par requête :",
+            "recordLink": "Activité"
+        },
+        "guardrails": {
+            "rule": {
+                "allow": "Autoriser",
+                "hold": "Demander d'abord",
+                "deny": "Refuser"
+            },
+            "actions": {
+                "title": "Avant que l'agent agisse à l'extérieur",
+                "intro": "Ce que l'agent peut faire à l'extérieur sans qu'une personne dise oui. « Demander d'abord » attend dans Approbations jusqu'à ce que quelqu'un l'autorise.",
+                "mixed": "Mixte",
+                "noServices": "Activez Discord, Slack, l'e-mail ou un autre service, et vous réglez ici ce que l'agent peut envoyer par lui."
+            },
+            "admission": {
+                "title": "Travail lancé de l'extérieur",
+                "intro": "Si un travail lancé par quelqu'un ou quelque chose de l'extérieur peut s'exécuter. Une automatisation peut demander plus de son côté ; la plus stricte des deux l'emporte.",
+                "webchat": "Un visiteur du site",
+                "issues": "Un rapport de bogue",
+                "listener": "Un message du chat d'équipe",
+                "event": "Un webhook",
+                "schedule": "Une planification",
+                "workspace": "Un événement dans l'espace de travail",
+                "workflow": "Un workflow de CI"
+            },
+            "record": "Chaque commande vérifiée par le juge, et ce qu'il a décidé :",
+            "recordLink": "Activité"
+        },
+        "activityPage": {
+            "parts": "Partie du registre d'activité",
+            "turns": "Tours",
+            "commands": "Commandes vérifiées",
+            "personal": "Données personnelles",
+            "turnsOff": "Les tours viennent de l'extension Activité, désactivée dans ce sandbox.",
+            "turnsOffHow": "Réactivez-la pour voir ce qui a réveillé l'agent et comment s'est passé chaque tour :",
+            "commandsSettings": "Si le juge fonctionne, et selon quoi il vérifie :",
+            "personalSettings": "Ce que cherche le bouclier, et à quels fournisseurs il fait confiance :"
         }
     },
     "settings": {

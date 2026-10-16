@@ -10,8 +10,8 @@ import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
 
 // The AI notice (art. 4 of the EU AI Act): whether people are shown it before they start, its words, and who confirmed
-// which wording. Rows only, no group of its own: Sandbox ▸ Access sets them beside the product analytics switch, the
-// other thing about the people using the box rather than about the agent.
+// which wording. Rows only, no group of its own: Sandbox ▸ Access sets them in a group of their own, about the people
+// using the box rather than about the agent.
 
 const t = useT();
 const { settings, patch, refusal, save } = useSandboxSettings();

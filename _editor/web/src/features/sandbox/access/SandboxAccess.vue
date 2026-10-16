@@ -37,7 +37,6 @@ import AiLiteracySettings from "../ai-literacy/AiLiteracySettings.vue";
 import ControlTokensSection from "./ControlTokensSection.vue";
 import LinkedSandboxesSection from "./LinkedSandboxesSection.vue";
 import PasskeysSection from "./PasskeysSection.vue";
-import SandboxAnalytics from "../analytics/SandboxAnalytics.vue";
 import { type AccessDraft, accessWord, draftGrant, draftOf, draftProblem, newPerson } from "./accessGrant";
 import { usePersonaReach } from "./usePersonaReach";
 import PersonCard from "./PersonCard.vue";
@@ -669,13 +668,12 @@ const revoke = async (target: string): Promise<void> => {
             </RowGroup>
         </div>
 
-        <!-- What everyone let in is told and what their visits send, beside who they are: the AI notice they confirm before
-             they start, and whether Intentic's product analytics may run here at all. Maintainer and up, as the daemon
-             lists the confirmations and takes the settings from no one below. On Agent ▸ Safety until 2026-10-13, where
-             neither is about the agent. -->
-        <RowGroup v-if="canShip" :label="t(`sandbox.sandboxAccess.noticeAndAnalytics`)">
+        <!-- What everyone let in is told, beside who they are: the AI notice they confirm before they start. Maintainer and
+             up, as the daemon lists the confirmations and takes the setting from no one below. On Agent ▸ Safety until
+             2026-10-13, where it is not about the agent; the product analytics switch beside it went to Privacy shield on
+             2026-10-16, being data that leaves the box rather than words people read. -->
+        <RowGroup v-if="canShip" :label="t(`sandbox.sandboxAccess.aiNotice`)">
             <AiLiteracySettings />
-            <SandboxAnalytics />
         </RowGroup>
 
         <!-- How people prove themselves to this sandbox, before what programs hold. -->

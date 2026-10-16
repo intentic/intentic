@@ -146,8 +146,8 @@ export const unshieldedRefusal = (label: string, inConversation: boolean): strin
         `The privacy shield turned ${label} away before reading anything: nothing in what you sent was flagged.`,
         `${label}'s agent reads files and command output on its own and sends them to its provider on a wire the shield can't read, so it can't mask personal data on the way, and an untrusted ${label} does not run while the shield is on.`,
         inConversation
-            ? `Let ${label} read this conversation as it is from the strip above the composer, trust it everywhere in Sandbox ▸ Agent ▸ Safety, or pick a provider the shield covers.`
-            : `Trust it in Sandbox ▸ Agent ▸ Safety, or pick a provider the shield covers.`,
+            ? `Let ${label} read this conversation as it is from the strip above the composer, trust it everywhere in Sandbox ▸ Privacy shield, or pick a provider the shield covers.`
+            : `Trust it in Sandbox ▸ Privacy shield, or pick a provider the shield covers.`,
     ].join(" ");
 
 // What one read through the shared reader came to: the text as the provider may read it, how to read tokens in its

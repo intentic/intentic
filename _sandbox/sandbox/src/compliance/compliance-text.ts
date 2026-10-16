@@ -102,22 +102,22 @@ const PL: Words = {
         "privacy-shield": {
             name: "Osłona prywatności",
             what: "Wykrywa dane osobowe (imiona i nazwiska, PESEL, NIP, numery dokumentów, rachunków, kart, e-mail, telefon, adres) i zastępuje je tokenami, zanim treść trafi do niezaufanego dostawcy modelu; odpowiedź jest odtwarzana lokalnie.",
-            where: "Sandbox ▸ Agent ▸ Bezpieczeństwo ▸ Osłona prywatności",
+            where: "Sandbox ▸ Osłona prywatności",
         },
         "privacy-images": {
             name: "Maskowanie danych na obrazach",
             what: "Tekst na obrazach jest odczytywany lokalnie (OCR), a znalezione dane osobowe są zamalowywane przed wysłaniem.",
-            where: "Sandbox ▸ Agent ▸ Bezpieczeństwo ▸ Osłona prywatności",
+            where: "Sandbox ▸ Osłona prywatności",
         },
         "privacy-names": {
             name: "Rozpoznawanie imion i nazwisk modelem lokalnym",
             what: "Oprócz słowników imion i nazwisk używany jest lokalny model rozpoznawania nazw własnych (HerBERT).",
-            where: "Sandbox ▸ Agent ▸ Bezpieczeństwo ▸ Osłona prywatności",
+            where: "Sandbox ▸ Osłona prywatności",
         },
         "trusted-providers": {
             name: "Lista zaufanych dostawców",
             what: "Dostawcy, którym osłona przekazuje dane bez maskowania. Pusta lista oznacza, że każdy dostawca spoza serwera otrzymuje tylko tokeny.",
-            where: "Sandbox ▸ Agent ▸ Bezpieczeństwo ▸ Osłona prywatności",
+            where: "Sandbox ▸ Osłona prywatności",
         },
         "local-models": {
             name: "Modele uruchamiane lokalnie",
@@ -147,17 +147,17 @@ const PL: Words = {
         "action-rules": {
             name: "Zatwierdzanie działań na zewnątrz",
             what: "Wysłanie wiadomości, reakcji lub poczty oraz uruchomienie kolejnych agentów czeka na zatwierdzenie przez człowieka.",
-            where: "Sandbox ▸ Ochrona danych ▸ Zabezpieczenia",
+            where: "Sandbox ▸ Bezpieczniki",
         },
         admission: {
             name: "Zatwierdzanie pracy zleconej z zewnątrz",
             what: "Praca uruchomiona przez wiadomość z komunikatora, czat na stronie, webhook lub zgłoszenie błędu czeka na zatwierdzenie.",
-            where: "Sandbox ▸ Ochrona danych ▸ Zabezpieczenia",
+            where: "Sandbox ▸ Bezpieczniki",
         },
         "command-judge": {
             name: "Ocena poleceń przed wykonaniem",
             what: "Model ocenia ryzykowne polecenia agenta według polityki bezpieczeństwa urzędu i zatrzymuje je do decyzji człowieka.",
-            where: "Sandbox ▸ Agent ▸ Bezpieczeństwo",
+            where: "Sandbox ▸ Bezpieczniki",
         },
         "credential-gates": {
             name: "Zatwierdzanie użycia poświadczeń",
@@ -172,17 +172,17 @@ const PL: Words = {
         retention: {
             name: "Terminy usuwania danych",
             what: "Zapisy rozmów, punkty przywracania, pamięć osłony prywatności, kopie dokumentów i surowe wyniki poleceń są trwale usuwane po upływie ustalonego terminu.",
-            where: "Sandbox ▸ Ochrona danych ▸ Zabezpieczenia",
+            where: "Sandbox ▸ Przechowywanie danych",
         },
         audit: {
             name: "Dziennik zdarzeń (audyt)",
             what: "Zmiany polityk, uprawnień, sekretów i ustawień są zapisywane w dzienniku z łańcuchem skrótów, który ujawnia każdą zmianę lub usunięcie wpisu.",
-            where: "Sandbox ▸ Ochrona danych ▸ Zabezpieczenia",
+            where: "Sandbox ▸ Przechowywanie danych",
         },
         "audit-reads": {
             name: "Rejestrowanie odczytów",
             what: "Dziennik zapisuje także, kto otworzył którą rozmowę, plik lub dziennik.",
-            where: "Sandbox ▸ Ochrona danych ▸ Zabezpieczenia",
+            where: "Sandbox ▸ Dziennik zdarzeń ▸ Przechowywanie",
         },
         "audit-forward": {
             name: "Kopia dziennika poza systemem",
@@ -207,12 +207,12 @@ const PL: Words = {
         "product-analytics": {
             name: "Wyłączona analityka produktu",
             what: "Edytor nie wysyła do Intentic zdarzeń ani nagrań sesji z tej piaskownicy, niezależnie od zgód poszczególnych osób.",
-            where: "Sandbox ▸ Ochrona danych ▸ Zabezpieczenia",
+            where: "Sandbox ▸ Osłona prywatności",
         },
         "ai-notice": {
             name: "Informacja o pracy z AI dla pracowników",
             what: "Przy pierwszym wejściu pracownik potwierdza, że pracuje z systemem AI, który popełnia błędy, i czego nie należy do niego wklejać (art. 4 aktu w sprawie AI).",
-            where: "Sandbox ▸ Ochrona danych ▸ Zabezpieczenia",
+            where: "Sandbox ▸ Dostęp",
         },
         "webchat-ai-disclosure": {
             name: "Informacja dla interesantów, że rozmawiają z AI",
@@ -313,22 +313,22 @@ const EN: Words = {
         "privacy-shield": {
             name: "Privacy shield",
             what: "Finds personal data (names, PESEL and tax numbers, document, bank account and card numbers, email, phone, address) and replaces it with tokens before text reaches an untrusted model provider; the answer is restored locally.",
-            where: "Sandbox ▸ Agent ▸ Safety ▸ Privacy shield",
+            where: "Sandbox ▸ Privacy shield",
         },
         "privacy-images": {
             name: "Masking personal data in images",
             what: "Text in images is read locally (OCR) and personal data found in it is painted over before sending.",
-            where: "Sandbox ▸ Agent ▸ Safety ▸ Privacy shield",
+            where: "Sandbox ▸ Privacy shield",
         },
         "privacy-names": {
             name: "Finding names with a local model",
             what: "Besides first-name and surname lists, a local named-entity model (HerBERT) finds names.",
-            where: "Sandbox ▸ Agent ▸ Safety ▸ Privacy shield",
+            where: "Sandbox ▸ Privacy shield",
         },
         "trusted-providers": {
             name: "Trusted providers list",
             what: "Providers the shield lets read personal data unmasked. An empty list means every provider off the server reads tokens only.",
-            where: "Sandbox ▸ Agent ▸ Safety ▸ Privacy shield",
+            where: "Sandbox ▸ Privacy shield",
         },
         "local-models": {
             name: "Models run locally",
@@ -358,17 +358,17 @@ const EN: Words = {
         "action-rules": {
             name: "Approval of outward actions",
             what: "Sending a message, reaction or email, and starting further agents, waits for a person's approval.",
-            where: "Sandbox ▸ Data protection ▸ Protections",
+            where: "Sandbox ▸ Guardrails",
         },
         admission: {
             name: "Approval of work started from outside",
             what: "Work started by a team-chat message, the website chat, a webhook or a bug report waits for approval.",
-            where: "Sandbox ▸ Data protection ▸ Protections",
+            where: "Sandbox ▸ Guardrails",
         },
         "command-judge": {
             name: "Commands judged before they run",
             what: "A model judges the agent's risky commands against the office's safety policy and holds them for a person.",
-            where: "Sandbox ▸ Agent ▸ Safety",
+            where: "Sandbox ▸ Guardrails",
         },
         "credential-gates": {
             name: "Approval of credential use",
@@ -383,17 +383,17 @@ const EN: Words = {
         retention: {
             name: "Deletion periods",
             what: "Transcripts, restore points, the privacy shield's memory, converted documents and raw command output are deleted for good after a set period.",
-            where: "Sandbox ▸ Data protection ▸ Protections",
+            where: "Sandbox ▸ Retention",
         },
         audit: {
             name: "Audit trail",
             what: "Changes to policies, permissions, secrets and settings are written to a hash-chained log that shows any changed or removed record.",
-            where: "Sandbox ▸ Data protection ▸ Protections",
+            where: "Sandbox ▸ Retention",
         },
         "audit-reads": {
             name: "Recording reads",
             what: "The audit trail also records who opened which conversation, file or log.",
-            where: "Sandbox ▸ Data protection ▸ Protections",
+            where: "Sandbox ▸ Audit log ▸ How it is kept",
         },
         "audit-forward": {
             name: "Copy of the audit trail outside the system",
@@ -418,12 +418,12 @@ const EN: Words = {
         "product-analytics": {
             name: "Product analytics switched off",
             what: "The editor sends Intentic no events or session recordings from this sandbox, whatever each person agreed to.",
-            where: "Sandbox ▸ Data protection ▸ Protections",
+            where: "Sandbox ▸ Privacy shield",
         },
         "ai-notice": {
             name: "AI notice for staff",
             what: "On first entry, staff confirm they are working with an AI system that makes mistakes, and what not to paste into it (AI Act Art. 4).",
-            where: "Sandbox ▸ Data protection ▸ Protections",
+            where: "Sandbox ▸ Access",
         },
         "webchat-ai-disclosure": {
             name: "Telling visitors they are talking to an AI",

@@ -5,7 +5,8 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
 
 // The box's say over Intentic's product analytics, above each person's own setting (analyticsGate.ts reads it). A row,
-// not a group: Sandbox ▸ Access sets it beside the AI notice, both about the people using the box.
+// not a group: Sandbox ▸ Privacy shield sets it under the shield, the one other thing that sends anything about this box
+// out. It sat on Access beside the AI notice until 2026-10-16.
 
 const t = useT();
 const { settings, patch, refusal } = useSandboxSettings();

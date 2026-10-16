@@ -92,8 +92,8 @@ export function useNavigationCommands(): void {
     );
 
     // The sandbox hub's sections, plus the ones extensions add to it — the same filter the hub applies, so a key that
-    // collides with a built-in section, or with a slot kept for another extension, is dropped here too rather than
-    // registering a row that opens something else.
+    // collides with a built-in section (Activity's, whose turns are the Activity extension's view drawn inside it, among
+    // them) is dropped here too rather than registering a row that opens something else.
     const sandboxDestinations = computed<readonly NavCommand[]>(() => [
         ...sandboxSections(canShip.value, isGuest.value, orgHidden.value).map((section) => ({
             command: `view.sandbox.${section.slug}`,
@@ -103,7 +103,7 @@ export function useNavigationCommands(): void {
             to: sandboxSectionPath(section.slug),
         })),
         ...detectActivations(panels.value, capabilities.value)
-            .filter(({ owner, extension, activation }) => extension.surface === `sandbox` && sandboxKeyAllowed(owner, activation.key))
+            .filter(({ extension, activation }) => extension.surface === `sandbox` && sandboxKeyAllowed(activation.key))
             .map(({ activation }) => ({
                 command: `view.sandbox.${activation.key}`,
                 title: activation.title,

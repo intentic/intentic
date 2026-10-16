@@ -117,21 +117,21 @@ it(`follows an extension onto the sandbox hub`, () => {
     view.dispose();
 });
 
-it(`keeps Activity's name for the Activity extension`, () => {
-    // Oversight's Activity row is kept for `intentic.activity`; a stranger's view under the same key would open beside the
-    // audit trail as if it were the sandbox's own record, so it earns no destination.
+it(`gives Activity's name to the sandbox's own section, never to an extension's view`, () => {
+    // Activity is a built-in section that draws the Activity extension's turns inside it; a view under the same key, a
+    // stranger's or that extension's own, would open beside the audit trail as if it were the sandbox's record, so it
+    // earns no destination of its own.
     // SAFETY: the palette never loads a view's component, so an empty module stands in for one.
     const stranger = { id: `activity`, label: `Activity`, surface: `sandbox` as const, view: async () => ({}) as never };
     const impostor = registerView(`someone.activity`, { ...stranger, detect: () => [{ key: `activity`, title: `Not the record`, icon: `file` }] });
+    const own = registerView(`intentic.activity`, { ...stranger, detect: () => [{ key: `activity`, title: `Turns`, icon: `wave-pulse` }] });
     const app = mountShell();
-    expect(commands.value.find((entry) => entry.command === `view.sandbox.activity`)).toBeUndefined();
+    const activity = commands.value.filter((entry) => entry.command === `view.sandbox.activity`);
+    expect(activity).toHaveLength(1);
+    expect(activity[0]?.title).not.toBe(`Not the record`);
+    expect(activity[0]?.title).not.toBe(`Turns`);
     app.unmount();
     impostor.dispose();
-
-    const own = registerView(`intentic.activity`, { ...stranger, detect: () => [{ key: `activity`, title: `Activity`, icon: `wave-pulse` }] });
-    const again = mountShell();
-    expect(commands.value.find((entry) => entry.command === `view.sandbox.activity`)).toMatchObject({ category: `Sandbox`, title: `Activity` });
-    again.unmount();
     own.dispose();
 });
 

@@ -8,12 +8,12 @@ const entries = ref<SafetyLogEntry[]>([]);
 const isLoading = ref(false);
 const error = ref<string | undefined>(undefined);
 
-jest.mock(`../../environment/useSafetyPolicy`, () => ({
+jest.mock(`../environment/useSafetyPolicy`, () => ({
     useSafetyLog: () => ({ entries, isLoading, error }),
 }));
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
-jest.mock(`../../overview/useSandboxSettings`, () => ({
+jest.mock(`../overview/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch: jest.fn(), dropped: ref(undefined), error: ref(undefined), isLoading: ref(false) }),
 }));
 

@@ -1,5 +1,5 @@
-// Pins which groups render in which category, how the `section` query param picks one, and that an old `connect` link
-// is forwarded to Sandbox ▸ Models, where accounts live now.
+// Pins which groups render in which category, how the `section` query param picks one, and that old links are forwarded:
+// `connect` to Sandbox ▸ Models, where accounts live now, and the Safety category to Sandbox ▸ Guardrails.
 // jsdom: mounts the component tree and reads rendered DOM.
 import "@intentic/testing/dom";
 import { waitFor } from "@intentic/testing/bun";
@@ -26,17 +26,12 @@ jest.mock(`../agent-settings/behaviour/AgentCommandOutput.vue`, () => stub(`Comm
 jest.mock(`../agent-settings/behaviour/AgentSubagents.vue`, () => stub(`Subagents`));
 jest.mock(`../agent-settings/behaviour/AgentOffload.vue`, () => stub(`Where heavy work runs`));
 jest.mock(`../agent-settings/behaviour/AgentRecovery.vue`, () => stub(`When a turn breaks`));
-jest.mock(`../agent-settings/safety/AgentSafetyJudge.vue`, () => stub(`Safety judge`));
-jest.mock(`../agent-settings/safety/AgentProjectInstalls.vue`, () => stub(`Project installs`));
-jest.mock(`../agent-settings/safety/AgentSafetyPolicy.vue`, () => stub(`Safety policy`));
-jest.mock(`../agent-settings/safety/AgentPrivacyShield.vue`, () => stub(`Privacy shield`));
-jest.mock(`../agent-settings/safety/AgentSafetyLog.vue`, () => stub(`Recent decisions`));
 jest.mock(`../agent-settings/behaviour/AgentChecks.vue`, () => stub(`After work lands`));
 jest.mock(`../agent-settings/behaviour/AgentFinishedWork.vue`, () => stub(`Finished work`));
 jest.mock(`../agent-settings/behaviour/AgentChangelog.vue`, () => stub(`Changelog`));
 
 // Categories the strip offers; the coverage test walks this array instead of a hand-copied list.
-const EVERY_SECTION = [`jobs`, `instructions`, `tools`, `safety`, `finishing`];
+const EVERY_SECTION = [`jobs`, `instructions`, `tools`, `finishing`];
 
 // Every group name, used to check each lands in exactly one category.
 const EVERY_GROUP = [
@@ -51,11 +46,6 @@ const EVERY_GROUP = [
     `Subagents`,
     `Where heavy work runs`,
     `When a turn breaks`,
-    `Safety judge`,
-    `Project installs`,
-    `Safety policy`,
-    `Privacy shield`,
-    `Recent decisions`,
     `After work lands`,
     `Finished work`,
     `Changelog`,
@@ -134,32 +124,21 @@ it(`opens jobs for the category's old name`, async () => {
     expect(shown(el)).toEqual([`Jobs`]);
 });
 
-it(`opens the safety category with the gate rules alone`, async () => {
-    const { el } = await mount({ section: `safety` });
-    expect(shown(el)).toEqual([
-        `Safety judge`,
-        `Project installs`,
-        `Safety policy`,
-        `Privacy shield`,
-        `Recent decisions`,
-    ]);
+// The judge, the shield and their records were a Safety category here until 2026-10-16; they are Privacy & safety's pages.
+it(`sends an old Safety link to Guardrails`, async () => {
+    const { router } = await mount({ section: `safety` });
+    await waitFor(() => expect(router.currentRoute.value.path).toBe(`/sandbox/guardrails`));
+    expect(pill(document.body, `Safety`)).toBeUndefined();
 });
 
-it(`holds delegation under tools, not under the gate rules`, async () => {
+it(`holds delegation under tools`, async () => {
     const { el } = await mount({ section: `tools` });
     expect(shown(el)).toEqual([`Code search`, `Checks after edits`, `Command output`, `Subagents`, `Where heavy work runs`]);
-    app?.unmount();
-    app = undefined;
-    document.body.innerHTML = ``;
+});
 
-    const { el: safety } = await mount({ section: `safety` });
-    expect(shown(safety)).toEqual([
-        `Safety judge`,
-        `Project installs`,
-        `Safety policy`,
-        `Privacy shield`,
-        `Recent decisions`,
-    ]);
+it(`says under finished work that deleting is Retention's`, async () => {
+    const { el } = await mount({ section: `finishing` });
+    expect(el.querySelector(`a[href="/sandbox/retention"]`)).not.toBeNull();
 });
 
 // `?connect=` opened a provider's accounts here when they lived on this tab; a link from then lands on them now.

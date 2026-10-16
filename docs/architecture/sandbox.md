@@ -184,7 +184,7 @@ Nothing the sandbox runs checks a push, and nothing is kept about one. The app p
 
 ## Privacy shield
 
-- Off unless the owner turns it on (Sandbox ▸ Agent ▸ Safety). Its policy is a document under the credentials root
+- Off unless the owner turns it on (Sandbox ▸ Privacy shield). Its policy is a document under the credentials root
   ([`privacy-policy.ts`](../../_sandbox/sandbox/src/privacy/privacy-policy.ts)), off the agent-editable workspace, and only the
   owner's session changes it: `watch` records what it would mask, `on` masks for every provider not on the owner's
   trusted list. A model this machine serves is trusted whatever the list says; the free trial never is, though the

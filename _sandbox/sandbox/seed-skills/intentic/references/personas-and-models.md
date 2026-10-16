@@ -93,8 +93,10 @@ runs on (the pill, or the persona's **Runs on**). A spawned subagent's provider 
 on each spawn: both are required, and no setting picks them. So "spawn the cheap work on model X", written into
 `AGENTS.md` or the persona's `PROMPT.md`, is followed by the model, not enforced. What is enforced:
 
-- **Spawn subagents** on Sandbox ▸ Agent ▸ Tools: **Default** (runs, asks after outside content), **Always
-  allow**, **Ask me**, **Never** (`actionRules["agents.spawn"]` in settings.json). A per-provider key,
+- **Spawn subagents** on Sandbox ▸ Guardrails: **Default** (runs, asks after outside content), **Always
+  allow**, **Ask me**, **Never** (`actionRules["agents.spawn"]` in settings.json). The same group sets, per
+  connected service, whether sending a message or an office act runs, asks first or is refused (the other
+  `actionRules` keys), and the group below it whether work started from outside may run (`admission`). A per-provider key,
   `actionRules["agents.spawn.<provider>"]` set to `deny` or `hold`, wins over the general one: that is how a
   provider is refused for subagents.
 - With **Ask me**, every start raises a card, **Start a subagent on <provider>?**, naming what the child runs on;

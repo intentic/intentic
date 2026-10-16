@@ -365,7 +365,7 @@ export const instructionRefusal = async (shield: TurnShield, root: string, label
     return [
         `The privacy shield did not send this to ${label}: ${holding.join(", ")} hold${holding.length === 1 ? "s" : ""} personal data (${kindsSaid([...kinds])}).`,
         `${label} reads ${holding.length === 1 ? "that file" : "those files"} itself and sends ${holding.length === 1 ? "it" : "them"} to its own servers, so the shield can't mask ${holding.length === 1 ? "it" : "them"} on the way; everything else in this conversation it can.`,
-        `Let ${label} read this conversation as it is, trust it in Sandbox ▸ Agent ▸ Safety, or take the personal data out of ${holding.length === 1 ? "that file" : "those files"}.`,
+        `Let ${label} read this conversation as it is, trust it in Sandbox ▸ Privacy shield, or take the personal data out of ${holding.length === 1 ? "that file" : "those files"}.`,
     ].join(" ");
 };
 

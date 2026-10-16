@@ -4,7 +4,7 @@ import { Button, Icon, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { usePrivacyShield } from "../../../sandbox/agent-settings/safety/usePrivacyShield";
+import { usePrivacyShield } from "../../../sandbox/privacy-shield/usePrivacyShield";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { privacyStanding } from "./privacyStanding";
 import { usePaneView } from "../useChat-view";
@@ -46,7 +46,7 @@ const grant = async (on: boolean): Promise<void> => {
     }
 };
 
-const safety = { name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } } as const;
+const shield = { name: `sandbox`, params: { tab: `privacy-shield` } } as const;
 </script>
 
 <template>
@@ -73,7 +73,7 @@ const safety = { name: `sandbox`, params: { tab: `agent` }, query: { section: `s
             >
                 {{ t(`chat.chatPaneNotices.privacyLetRead`, { provider: standing.label }) }}
             </Button>
-            <Button :as="RouterLink" :to="safety" size="small" thumb tier="quiet">{{ t(`chat.chatPaneNotices.privacySafety`) }}</Button>
+            <Button :as="RouterLink" :to="shield" size="small" thumb tier="quiet">{{ t(`chat.chatPaneNotices.privacySafety`) }}</Button>
         </template>
     </Notice>
     <!-- Granted: said for as long as it holds, since this conversation's reads leave unmasked while it does. -->

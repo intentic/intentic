@@ -1,4 +1,4 @@
-import type { DataFlow, Measure, PresetItem } from "@intentic/sandbox-contract";
+import { type DataFlow, type Measure, OUTWARD_ACTION_KEYS, type PresetItem } from "@intentic/sandbox-contract";
 import {
     documentLanguageFor,
     flowFacts,
@@ -162,13 +162,28 @@ it(`writes the documents in Polish for a Polish reader and in English for anyone
 });
 
 // "Change" opens the setting itself wherever the editor has one, and the preset only tightens, so a measure with a home is
-// sent there rather than to the panel at the foot of the page.
-it(`sends the audit trail's, retention's and the people-facing measures to where each is set`, () => {
+// sent there rather than to the panel at the foot of the page. What the whole box does with data is this page's siblings
+// under Privacy & safety; a measure about one thing goes to that thing.
+it(`sends each measure to where it is set: the box-wide ones to this page's siblings`, () => {
+    const tab = (name: string) => ({ name: `sandbox`, params: { tab: name } });
+    for (const id of [`privacy-shield`, `privacy-images`, `privacy-names`, `trusted-providers`, `product-analytics`] as const) {
+        expect(MEASURE_LINKS.get(id)).toEqual(tab(`privacy-shield`));
+    }
+    for (const id of [`command-judge`, `action-rules`, `admission`] as const) {
+        expect(MEASURE_LINKS.get(id)).toEqual(tab(`guardrails`));
+    }
+    expect(MEASURE_LINKS.get(`retention`)).toEqual(tab(`retention`));
+    expect(MEASURE_LINKS.get(`audit`)).toEqual(tab(`retention`));
     const keeping = { name: `sandbox`, params: { tab: `audit` }, query: { section: `keeping` } };
-    expect(MEASURE_LINKS.get(`audit`)).toEqual(keeping);
     expect(MEASURE_LINKS.get(`audit-reads`)).toEqual(keeping);
     expect(MEASURE_LINKS.get(`audit-forward`)).toEqual(keeping);
-    expect(MEASURE_LINKS.get(`retention`)).toEqual({ name: `sandbox`, params: { tab: `agent` }, query: { section: `finishing` } });
-    expect(MEASURE_LINKS.get(`ai-notice`)).toEqual({ name: `sandbox`, params: { tab: `access` } });
-    expect(MEASURE_LINKS.get(`product-analytics`)).toEqual({ name: `sandbox`, params: { tab: `access` } });
+    expect(MEASURE_LINKS.get(`ai-notice`)).toEqual(tab(`access`));
+    expect(MEASURE_LINKS.get(`credential-gates`)).toEqual(tab(`secrets`));
+});
+
+it(`names every outward action the preset holds in words, not as a key`, () => {
+    for (const key of OUTWARD_ACTION_KEYS) {
+        expect(presetLabel(item(`actionRules.${key}`, `actions`))).not.toMatch(/sandbox\.|imap|microsoft365|ezdrp|edoreczenia/u);
+    }
+    expect(presetLabel(item(`actionRules.imap.message.send`, `actions`))).toBe(`Sending messages on e-mail`);
 });

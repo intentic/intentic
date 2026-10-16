@@ -6,7 +6,7 @@ import { IconStub } from "@intentic/ui/testing";
 import * as uiOriginal from "@intentic/ui";
 
 const saveError = ref<Error | null>(null);
-jest.mock(`../../environment/useSafetyPolicy`, () => ({
+jest.mock(`../environment/useSafetyPolicy`, () => ({
     useSafetyPolicy: () => ({
         text: computed(() => `Ask before deleting anything.\n`),
         custom: computed(() => true),

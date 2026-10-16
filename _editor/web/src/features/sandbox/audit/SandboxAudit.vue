@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AuditSettings } from "@intentic/sandbox-contract";
+import { AUDIT_RETENTION_DAYS_DEFAULT, type AuditSettings } from "@intentic/sandbox-contract";
 import {
     AnchoredOverlay,
     Button,
@@ -29,9 +29,8 @@ import { formatClock, formatTimestamp } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { useSecretInventory } from "../../capabilities/connect/secrets/useSecrets";
-import { commitCount } from "../agent-settings/models/numberInputs";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
 import {
     actionFilters,
@@ -106,7 +105,9 @@ const integrity = computed<{ readonly tone: ChipTone; readonly icon: IconName; r
 
 const { settings, patch, refusal } = useSandboxSettings();
 const audit = computed<AuditSettings | undefined>(() => settings.value?.audit);
-const RETENTION = { min: 30, max: 3650 };
+// How long records are kept is Retention's, beside every other record's period; it was the first row here until
+// 2026-10-16. This part says the number and the way there, since it is the first thing asked of a trail.
+const RETENTION_PAGE = { name: `sandbox`, params: { tab: `retention` } } as const;
 const setAudit = (fields: Partial<AuditSettings>): void => {
     if (audit.value !== undefined) {
         patch({ audit: { ...audit.value, ...fields } });
@@ -451,20 +452,10 @@ const rowTone = (entry: AuditEntry): `default` | `warning` | `danger` => {
         </template>
 
         <RowGroup v-else :label="t(`sandbox.sandboxAudit.keeping`)">
-            <Row icon="clock" :title="t(`sandbox.sandboxAudit.retentionTitle`)" :description="t(`sandbox.sandboxAudit.retentionDescription`)">
-                <template #control>
-                    <input
-                        type="number"
-                        :min="RETENTION.min"
-                        :max="RETENTION.max"
-                        :value="audit?.retentionDays ?? 365"
-                        :disabled="audit === undefined"
-                        :aria-label="t(`sandbox.sandboxAudit.retentionTitle`)"
-                        :class="ui.input({ size: `sm` }, 'w-24 text-right')"
-                        @change="(event: Event) => commitCount(event, audit?.retentionDays ?? 365, RETENTION, (retentionDays: number) => setAudit({ retentionDays }))"
-                    />
-                </template>
-            </Row>
+            <RowNote>
+                {{ t(`sandbox.sandboxAudit.keptFor`, { count: audit?.retentionDays ?? AUDIT_RETENTION_DAYS_DEFAULT }, audit?.retentionDays ?? AUDIT_RETENTION_DAYS_DEFAULT) }}
+                <RouterLink :to="RETENTION_PAGE" :class="ui.textButton()">{{ t(`sandbox.sandboxNav.retention`) }}<Icon name="arrow-right" class="text-2xs" /></RouterLink>
+            </RowNote>
             <Row icon="eye" :title="t(`sandbox.sandboxAudit.readsTitle`)" :description="t(`sandbox.sandboxAudit.readsDescription`)">
                 <template #control>
                     <ToggleSwitch

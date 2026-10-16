@@ -1,10 +1,10 @@
-// Pins that the posture (`agents.spawn`) writes into the shared `actionRules` record without clobbering other
-// keys (e.g. the outbound sniffer's `<provider>.<type>` rules), unlike the three plain-number ceilings beside it.
+// The three subagent ceilings, each writing its own key, and the line that says where spawning itself is decided:
+// Guardrails, which also says here when it is refused, since that leaves the ceilings bounding only in-process subagents.
 import "@intentic/testing/dom";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick, ref } from "vue";
-import { postureOf, postures, SPAWN_KEY, withPosture } from "../safety/spawnPosture";
+import { createMemoryHistory, createRouter } from "vue-router";
 import { IconStub } from "@intentic/ui/testing";
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
@@ -25,6 +25,7 @@ const mount = (): HTMLElement => {
     document.body.append(host);
     app = createApp({ render: () => h(AgentSubagents) });
     app.use(PrimeVue);
+    app.use(createRouter({ history: createMemoryHistory(), routes: [{ path: `/sandbox/:tab?`, name: `sandbox`, component: { render: () => null } }] }));
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(host);
@@ -41,16 +42,14 @@ afterEach(() => {
 
 const numberBox = (host: HTMLElement, label: string): HTMLInputElement => host.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
 
-// Reached by its aria-label, not `numberBox`: the posture control isn't a number input.
-const postureTrigger = (host: HTMLElement): HTMLElement => host.querySelector<HTMLElement>(`[aria-label="Spawn subagents"]`)!;
-
-test("draws the posture and all three ceilings together", () => {
+test("draws the three ceilings, and sends whether it may spawn at all to Guardrails", () => {
     const host = mount();
 
-    expect(postureTrigger(host)).not.toBeNull();
+    expect(host.querySelector(`[aria-label="Spawn subagents"]`)).toBeNull();
     for (const label of [`Subagents at once`, `Subagents per conversation`, `Nesting depth`]) {
         expect(numberBox(host, label), label).not.toBeNull();
     }
+    expect(host.querySelector(`a[href="/sandbox/guardrails"]`)).not.toBeNull();
 });
 
 test("each ceiling opens on the daemon's own default", () => {
@@ -70,53 +69,6 @@ test("a ceiling writes its own key and nothing else", async () => {
     await nextTick();
 
     expect(patch).toHaveBeenCalledWith({ subagentsAtOnce: 5 });
-});
-
-// Checked directly against `withPosture`, not through <Picker>: jsdom never opens the overlay to click through.
-
-test("writing the posture keeps every other action rule", () => {
-    // `slack.message` stands in for the outbound sniffer's own keys, sharing the same `actionRules` record.
-    expect(withPosture({ "slack.message": `hold` }, `deny`)).toEqual({ "slack.message": `hold`, "agents.spawn": `deny` });
-});
-
-test("returning to Default removes the rule instead of writing one", () => {
-    const rules = withPosture({ "agents.spawn": `deny`, "slack.message": `hold` }, `default`);
-
-    expect(rules).toEqual({ "slack.message": `hold` });
-    expect(SPAWN_KEY in rules).toBe(false);
-});
-
-test("an absent rule reads back as Default, not as allow", () => {
-    expect(postureOf({})).toBe(`default`);
-    expect(postureOf({ "agents.spawn": `allow` })).toBe(`allow`);
-});
-
-// Checked against the exported `postures()` list, not the rendered row: <Picker> draws options into an overlay
-// jsdom never opens.
-test("offers exactly the four postures, and Default is one of them", () => {
-    expect(postures().map((option) => option.value)).toEqual([`default`, `allow`, `hold`, `deny`]);
-});
-
-test("puts Default first and says what it actually does", () => {
-    const fallback = postures()[0];
-
-    expect(fallback?.value).toBe(`default`);
-    // Guards that the outside-content nuance is described on this option, not filed elsewhere.
-    expect(fallback?.description).toContain(`outside content`);
-});
-
-test("every posture round-trips through the write", () => {
-    for (const option of postures()) {
-        const rules = withPosture({}, option.value);
-        expect(postureOf(rules), option.value).toBe(option.value);
-    }
-});
-
-test("leaves the rules it was given alone", () => {
-    const before = { "agents.spawn": `hold` } as const;
-    withPosture(before, `deny`);
-
-    expect(before).toEqual({ "agents.spawn": `hold` });
 });
 
 // Refusing the spawn door leaves the runtime's own Agent tool, which the same ceilings still bound.

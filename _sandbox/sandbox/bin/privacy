@@ -6,7 +6,7 @@
 //
 // The values are read HERE, from the file, and go straight to the daemon over loopback: they are never printed, so
 // teaching a dataset does not itself put it in front of the model. Teaching only masks more, so the agent's token may do
-// it; switching the shield, trusting a provider or forgetting a dataset is the owner's, in Sandbox ▸ Agent ▸ Safety.
+// it; switching the shield, trusting a provider or forgetting a dataset is the owner's, in Sandbox ▸ Privacy shield.
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";

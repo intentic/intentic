@@ -1,17 +1,18 @@
 <script setup lang="ts">
-import type { AdmissionRule } from "@intentic/sandbox-contract";
-import { ui, Notice, Picker, Row, RowGroup, RowNote } from "@intentic/ui";
+import { Icon, ui, Notice, Row, RowGroup, RowNote } from "@intentic/ui";
 import { computed } from "vue";
+import { RouterLink } from "vue-router";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { commitCount } from "../models/numberInputs";
-import { type Posture, postureOf, postures, withPosture } from "../safety/spawnPosture";
+import { postureOf } from "../../guardrails/spawnPosture";
 import { useT } from "@intentic/ui/i18n";
 
-// Four rows over one activity, starting subagents: whether it may spawn them (a conversation of their own, on any
-// provider), how wide one fan-out is, the lifetime budget per conversation, and how deep delegation nests. The three
-// ceilings bound every subagent, spawned or started in-process by the runtime's own Agent tool; the posture governs
-// spawning alone. Raising only the width just hits the per-conversation ceiling later. Bounds mirror
-// SandboxSettingsSchema so the box never accepts a number the save would reject.
+// Three ceilings over one activity, starting subagents: how wide one fan-out is, the lifetime budget per conversation,
+// and how deep delegation nests. They bound every subagent, spawned or started in-process by the runtime's own Agent
+// tool. Raising only the width just hits the per-conversation ceiling later. Bounds mirror SandboxSettingsSchema so the
+// box never accepts a number the save would reject. Whether it may spawn one at all (a conversation of its own, on any
+// provider) is a guardrail, set on Guardrails beside every other thing it may do without asking; it led this group
+// until 2026-10-16, and the group still says when it is refused, since that changes what these bound.
 const t = useT();
 
 const { settings, patch, refusal } = useSandboxSettings();
@@ -20,37 +21,17 @@ const AT_ONCE = { min: 1, max: 200 };
 const PER_TURN = { min: 1, max: 2000 };
 const DEPTH = { min: 1, max: 10 };
 
-// Stored in `actionRules` (allow/ask/refuse), not a number: the only row here that isn't a ceiling. Postures
-// and the merge logic live in spawnPosture.ts.
-const rules = computed<Readonly<Record<string, AdmissionRule>>>(() => settings.value?.actionRules ?? {});
-const posture = computed<Posture>(() => postureOf(rules.value));
-const setPosture = (next: Posture): void => patch({ actionRules: withPosture(rules.value, next) });
-
 // Whether spawning is refused, which leaves the ceilings below bounding only the subagents a runtime starts itself.
-const spawnDenied = computed(() => posture.value === `deny`);
+const spawnDenied = computed(() => postureOf(settings.value?.actionRules ?? {}) === `deny`);
+const GUARDRAILS = { name: `sandbox`, params: { tab: `guardrails` } } as const;
 </script>
 
 <template>
-    <RowGroup :label="t(`shared.subagents`)" :equal-rows="!spawnDenied">
-        <!-- Leads the group: narrows from "may it delegate" to "how far", the natural reading order. -->
-        <Row icon="robot" :title="t(`sandbox.agentSubagents.spawnSubagents`)" :description="t(`sandbox.agentSubagents.spawnedSubagentSpends`)">
-            <template #control>
-                <Picker
-                    :model-value="posture"
-                    :options="postures()"
-                    :disabled="settings === undefined"
-                    class="w-36 justify-between text-xs"
-                    :aria-label="t(`sandbox.agentSubagents.spawnSubagents`)"
-                    :header="t(`sandbox.agentSubagents.spawnSubagents`)"
-                    @update:model-value="(next: Posture | undefined) => next !== undefined && setPosture(next)"
-                />
-            </template>
-            <template v-if="spawnDenied" #below>
-                <p class="text-2xs text-muted">
-                    {{ t(`sandbox.agentSubagents.spawningRefusedOutright`) }}
-                </p>
-            </template>
-        </Row>
+    <RowGroup :label="t(`shared.subagents`)" equal-rows>
+        <RowNote>
+            {{ spawnDenied ? t(`sandbox.agentSubagents.spawningRefusedOutright`) : t(`sandbox.agentSubagents.whetherInGuardrails`) }}
+            <RouterLink :to="GUARDRAILS" :class="ui.textButton()">{{ t(`sandbox.sandboxNav.guardrails`) }}<Icon name="arrow-right" class="text-2xs" /></RouterLink>
+        </RowNote>
 
         <!-- First ceiling a fan-out hits; the assistant stops rather than retries here, so a low number serializes work instead of failing it. -->
         <Row
