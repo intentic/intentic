@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, statSync } from "node:fs";
 import { mkdir, readdir, rename, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { SingleFlight } from "@intentic/base/async";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { BoundedMap } from "@intentic/base/held";
 import { archiveFormat, archivePrefixOf, archiveRootOf, archiveStem, isBrowsableArchive, type WorkspaceChildren } from "@intentic/sandbox-contract";
 import { tidyUnpacked, unpack } from "./workspace-extract.js";
@@ -116,8 +117,10 @@ const watchSize = (dir: string, maxBytes: number, stop: AbortController): (() =>
     return () => clearInterval(timer);
 };
 
-// Unpacks into `<hash>.partial` and renames it onto `<hash>`: a half-written tree is never mistaken for a complete
-// one, whatever kills the daemon mid-unpack.
+// Unpacks into `<hash>.<unique>.partial` and renames it onto `<hash>`: a half-written tree is never mistaken for a
+// complete one, whatever kills the daemon mid-unpack. The partial is this call's own: SingleFlight only serialises
+// unpacks within one process, and another process sharing /tmp (a second daemon, a parallel test file) unpacking the
+// same content must not clear the directory this one's tool is writing into.
 const unpackInto = async (absArchive: string, target: string, maxBytes: number): Promise<void> => {
     const name = basename(absArchive);
     const format = archiveFormat(name);
@@ -125,8 +128,7 @@ const unpackInto = async (absArchive: string, target: string, maxBytes: number):
     if (format === undefined || stem === undefined) {
         throw new Error(`${name} holds no directory to open`);
     }
-    const partial = `${target}.partial`;
-    await rm(partial, { recursive: true, force: true });
+    const partial = `${target}.${randomUUID()}.partial`;
     await mkdir(partial, { recursive: true });
     const stop = new AbortController();
     const unwatch = watchSize(partial, maxBytes, stop);
@@ -143,7 +145,15 @@ const unpackInto = async (absArchive: string, target: string, maxBytes: number):
     } finally {
         unwatch();
     }
-    await rename(partial, target);
+    try {
+        await rename(partial, target);
+    } catch (failure) {
+        // Another process landed the same content first: its tree is as good as ours.
+        await rm(partial, { recursive: true, force: true });
+        if ((await stat(target).catch(undefinedIfMissing)) === undefined) {
+            throw failure;
+        }
+    }
 };
 
 // One unpack per hash, however many readers ask at once: the second caller awaits the first's work instead of racing
