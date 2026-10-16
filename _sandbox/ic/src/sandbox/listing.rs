@@ -6,6 +6,7 @@ use serde_json::{json, Map, Value};
 use crate::docker;
 use crate::record::Phase;
 use crate::record::{self, ChannelRecord};
+use crate::sandbox::loopback;
 use crate::sandbox::side::{self, Adoption, Side};
 use crate::sandbox::{
     desired, versions, CONTAINER_PREFIX, MOVED_SUFFIX, PARKED_SUFFIX, TUNNEL_PREFIX,
@@ -312,8 +313,7 @@ fn ps_rows() -> Result<Vec<Row>> {
 }
 
 /// One sandbox as the listing names it, without the reads a whole listing makes: for the flows that only need to know
-/// what this machine has and what of it runs (`ic os record`, `ic os reboot`, `ic os pair`).
-#[cfg_attr(not(unix), allow(dead_code))] // read by `ic os`, which is unix-only
+/// what this machine has and what of it runs (`ic os record`, `ic os reboot`, `ic os pair`, `ic sandbox attention`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Seen {
     pub slug: String,
@@ -329,7 +329,6 @@ pub fn seen() -> Result<Vec<Seen>> {
 }
 
 /// The same, over rows docker already gave. Pure.
-#[cfg_attr(not(unix), allow(dead_code))] // read by `ic os`, which is unix-only
 fn seen_from(rows: &[Row]) -> Vec<Seen> {
     rows.iter()
         .filter(|row| !is_sidecar(&row.name, rows))
@@ -344,20 +343,38 @@ fn seen_from(rows: &[Row]) -> Vec<Seen> {
         .collect()
 }
 
+/// One bounded `docker inspect` over every row, keyed by container name. A container that vanished between the two
+/// calls fails the command with the others still on stdout, so what came back is kept.
+fn inspect_all(rows: &[Row]) -> HashMap<String, Value> {
+    if rows.is_empty() {
+        return HashMap::new();
+    }
+    let mut inspect = vec!["inspect", "--format", "{{json .}}"];
+    inspect.extend(rows.iter().map(|row| row.name.as_str()));
+    docker::capture_bounded(&inspect, READ_LIMIT)
+        .map(|ran| inspected_from(&ran.stdout))
+        .unwrap_or_default()
+}
+
+/// Every sandbox on this machine with its inspect object (None when docker would not inspect it): for the flows that
+/// dial each one over its loopback port (`ic sandbox attention`).
+pub fn seen_inspected() -> Result<Vec<(Seen, Option<Value>)>> {
+    let rows = ps_rows()?;
+    let mut inspected = inspect_all(&rows);
+    Ok(seen_from(&rows)
+        .into_iter()
+        .map(|seen| {
+            let found = inspected.remove(&seen.container);
+            (seen, found)
+        })
+        .collect())
+}
+
 /// `ic sandbox list --json`: one line of JSON on stdout, and nothing else there.
 pub fn list_json() -> Result<()> {
     docker::require_daemon()?;
     let rows = ps_rows()?;
-    let inspected = if rows.is_empty() {
-        HashMap::new()
-    } else {
-        let mut inspect = vec!["inspect", "--format", "{{json .}}"];
-        inspect.extend(rows.iter().map(|row| row.name.as_str()));
-        // A container that vanished between the two calls fails the command with the others still on stdout.
-        docker::capture_bounded(&inspect, READ_LIMIT)
-            .map(|ran| inspected_from(&ran.stdout))
-            .unwrap_or_default()
-    };
+    let inspected = inspect_all(&rows);
     let here = side::here();
     let mut records = HashMap::new();
     let mut leases: Leases = HashMap::new();
@@ -396,12 +413,21 @@ pub fn list_json() -> Result<()> {
             records.insert(slug.to_string(), record);
         }
     }
+    let listed = listing(&rows, &inspected, &records, &leases, &|image| {
+        docker::image_exists(image)
+    });
+    // How this machine reaches each one with no network (loopback.rs): its id, its loopback port, the platform's id.
+    let containers: Vec<String> = listed
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|row| row["container"].as_str().map(str::to_string))
+        .collect();
+    let platform_ids = loopback::platform_ids(&containers, &inspected);
     // allow(terminal-output): the --json answer, one line of JSON the desktop app and the machine agent read.
     println!(
         "{}",
-        listing(&rows, &inspected, &records, &leases, &|image| {
-            docker::image_exists(image)
-        })
+        loopback::with_addressing(listed, &inspected, &platform_ids)
     );
     Ok(())
 }

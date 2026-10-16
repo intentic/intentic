@@ -18,6 +18,11 @@ ARG VERSION=0.0.0
 ARG CHANNEL=stable
 ARG REPOSITORY=ghcr.io/intentic/os
 
+# The machine's own settings (`ic os network|drives`, _os/README.md "Settings"): fedora-bootc:44 has NetworkManager but
+# not its Wi-Fi plugin or the wpa_supplicant behind it (2026-10-16: neither is in the 2026-10-13 build), and has udisks,
+# which opens, closes and powers off USB drives and memory cards, only as fwupd's weak dependency, so it is named here to
+# stay. rootfs/usr/share/polkit-1/rules.d/50-intentic.rules says which of their actions the intentic user may take.
+#
 # kata-containers' own %post builds the microVM's initrd from the RUNNING kernel, which during an image build is the
 # build host's: it is installed without scripts, and its kata-osbuilder-generate.service builds that initrd on the
 # box at boot, from the kernel this image boots. Its dracut config asks for the `dbus` module, which needs
@@ -30,6 +35,9 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
         greenboot \
         nss-mdns \
         dbus-daemon \
+        NetworkManager-wifi \
+        wpa_supplicant \
+        udisks2 \
     && dnf -y --setopt=keepcache=1 --setopt=tsflags=noscripts install kata-containers \
     && dnf clean all \
     && rm -rf /var/log/dnf5.log* /var/lib/dnf /run/dnf

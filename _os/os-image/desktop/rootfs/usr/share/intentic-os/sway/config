@@ -1,6 +1,5 @@
-# Intentic OS kiosk session. The Intentic app fills workspace 1, edge to edge with nothing drawn around it; the owner's
-# Chromium opens on workspace 2. Super+B opens Chromium, Super+Tab goes back and forth between the two, Super+1 and
-# Super+2 go to either, Super+Q closes a Chromium window. Nothing here leaves the session or starts a terminal.
+# Intentic OS Spaces. The app fills a tiled workspace below the system bar. Super+1–9 opens the account's
+# sandboxes, Super+0 this computer, Super+B or Super+W the web, Super+Space a new chat. Nothing starts a terminal.
 
 output * bg #0b0b0f solid_color
 font pango:Noto Sans 10
@@ -15,16 +14,47 @@ seat * hide_cursor 10000
 exec_always systemctl --user import-environment WAYLAND_DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP XDG_SESSION_TYPE
 exec_always dbus-update-activation-environment --systemd WAYLAND_DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP
 
-workspace number 1
+bar {
+    position top
+    height 32
+    workspace_buttons yes
+    strip_workspace_numbers yes
+    binding_mode_indicator no
+    tray_output none
+    status_command /usr/bin/ic os bar
+    colors {
+        background #0b0b0f
+        statusline #e6e6ef
+        focused_workspace #b6a0ff #292235 #e6e6ef
+        active_workspace #17171f #17171f #e6e6ef
+        inactive_workspace #0b0b0f #0b0b0f #a6a8b6
+        urgent_workspace #f2b86b #292235 #f2b86b
+    }
+}
+
+workspace "0:This computer"
 exec /usr/libexec/intentic-os/kiosk-app
+exec mako --config /usr/share/intentic-os/mako/mako.conf
 
-assign [app_id="^chromium"] workspace number 2
+assign [app_id="^chromium"] workspace "Web"
 
-bindsym --to-code Mod4+b exec chromium-browser --ozone-platform=wayland --no-first-run; workspace number 2
+bindsym --to-code Mod4+b exec chromium-browser --ozone-platform=wayland --no-first-run; workspace "Web"
+bindsym --to-code Mod4+w exec chromium-browser --ozone-platform=wayland --no-first-run; workspace "Web"
 bindsym --to-code Mod4+Tab workspace back_and_forth
-bindsym --to-code Mod4+1 workspace number 1
-bindsym --to-code Mod4+2 workspace number 2
+bindsym --to-code Mod4+0 nop intentic-space 0
+bindsym --to-code Mod4+1 nop intentic-space 1
+bindsym --to-code Mod4+2 nop intentic-space 2
+bindsym --to-code Mod4+3 nop intentic-space 3
+bindsym --to-code Mod4+4 nop intentic-space 4
+bindsym --to-code Mod4+5 nop intentic-space 5
+bindsym --to-code Mod4+6 nop intentic-space 6
+bindsym --to-code Mod4+7 nop intentic-space 7
+bindsym --to-code Mod4+8 nop intentic-space 8
+bindsym --to-code Mod4+9 nop intentic-space 9
+bindsym --to-code Mod4+space nop intentic-chat
 bindsym --to-code Mod4+q [con_id=__focused__ app_id="^chromium"] kill
 
+# Image rules (including the sandbox security-context rules) precede the owner's choices.
+include /usr/share/intentic-os/sway/config.d/*
 # Keyboard layout and screen settings are the owner's, from /etc/intentic/sway.d/ (written by the app or by hand).
 include /etc/intentic/sway.d/*

@@ -54,6 +54,8 @@
                     "__INTENTIC_LOCAL_HOST__",
                     // How a loaded workspace page is taken to a path without a reload (web desktop.ts `installDesktopOpener`).
                     "__INTENTIC_OPEN__",
+                    // The desktop app's bundled editor on this computer's sandboxes, offline (desktop-app local/sandbox.ts).
+                    "__INTENTIC_SANDBOX_FACE__",
                     "__termFrames",
                     "__name",
                     "_core",

@@ -49,6 +49,11 @@ flowchart LR
   `blocked` with its `fix` · `unknown`), and `SPENT_UTILIZATION` is the only spent line. The daemon runs it for every
   picker and publishes it as `state` on each account row. The editor reads that field and never judges a row itself: a
   row without it (a daemon from before v1.313) reads as `unknown`, and the editor says the sandbox needs an update.
+- So is which lane the board files a conversation in and what of a fleet calls the person (`src/models/agent-standing.ts`,
+  `src/models/agent-lanes.ts`, `src/models/agent-starter.ts`, moved from the editor on 2026-10-16): the editor draws
+  the board by them and re-exports them where it always imported them, and the daemon counts `GET /agents/attention`
+  by `fleetAttention` (the Attention lane's cards plus held wakes, and the turns producing something), which the
+  desktop app's status bar reads through `ic sandbox attention`, so the bar and the board cannot disagree.
 - So are the rules the daemon and a device must agree on about the owner's machine. `DEVICE_PROGRAM_TOOLS` in
   `src/policy/device-programs.ts` says which device tools carry a program and how to read it, and
   `sandboxPowerCommands` in `src/policy/sandbox-power.ts` recognises a command that starts, stops or replaces a

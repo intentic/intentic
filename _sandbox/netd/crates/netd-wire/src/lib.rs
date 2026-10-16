@@ -59,18 +59,26 @@ pub enum NetdHeader {
     /// A preview request whose upstream refused the connection; the value is that upstream's port.
     #[serde(rename = "x-intentic-preview-unreachable")]
     PreviewUnreachable,
+    /// A request for Node that arrived on the machine-published loopback port, valued `loopback`: what lets the daemon
+    /// admit the desktop app's own bundled page there (its CORS, app.ts), and nowhere a stranger could send from.
+    #[serde(rename = "x-intentic-listener")]
+    Listener,
 }
 
 impl NetdHeader {
-    pub const ALL: [Self; 2] = [Self::Preview, Self::PreviewUnreachable];
+    pub const ALL: [Self; 3] = [Self::Preview, Self::PreviewUnreachable, Self::Listener];
 
     pub const fn name(self) -> &'static str {
         match self {
             Self::Preview => "x-intentic-preview",
             Self::PreviewUnreachable => "x-intentic-preview-unreachable",
+            Self::Listener => "x-intentic-listener",
         }
     }
 }
+
+/// The value [`NetdHeader::Listener`] carries on a request that arrived on the loopback port.
+pub const LOOPBACK_LISTENER: &str = "loopback";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(test, derive(schemars::JsonSchema))]

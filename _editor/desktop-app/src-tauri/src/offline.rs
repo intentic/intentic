@@ -12,32 +12,42 @@
 // draws no bar of its own: it is local content in a window whose capabilities are the remote page's, which are
 // none), and the workspace's page takes the frame off again as it always does (`chrome_is_up`).
 //
-// Windows only: WebView2 says whether a navigation failed and why; Tauri does not, on any platform.
-#![cfg_attr(not(windows), allow(dead_code))]
+// Tauri says on no platform whether a navigation failed, so each is asked through its own webview: WebView2's
+// NavigationCompleted on Windows, WebKitGTK's `load-failed` on Linux (2026-10-16). On Linux, and so on Intentic OS,
+// whose whole screen this window is, the internet being out is not the end of the road either: the sandboxes on this
+// computer still run, and the app's own copy of the editor opens them (machine_face.rs). There a window that cannot
+// reach its page goes to that face, or to this page (which offers it) on a computer that hosts none.
 
 /// The page, as a page window loads it. Tauri serves the app's bundle on `http://tauri.localhost` on Windows
-/// (`useHttpsScheme` is not set in tauri.conf.json, which a test pins).
+/// (`useHttpsScheme` is not set in tauri.conf.json, which a test pins) and on `tauri://localhost` elsewhere.
+#[cfg(windows)]
 pub const PAGE: &str = "http://tauri.localhost/offline.html";
+#[cfg(not(windows))]
+pub const PAGE: &str = "tauri://localhost/offline.html";
 
-/// Whether `url` is the offline page: the one local page a page window may navigate to.
+/// Whether `url` is the offline page: the one local page a page window may navigate to besides the sandbox face.
 pub fn is_offline_page(url: &url::Url) -> bool {
-    url.scheme() == "http"
-        && url.host_str() == Some("tauri.localhost")
-        && url.path() == "/offline.html"
+    let Ok(page) = url::Url::parse(PAGE) else {
+        return false;
+    };
+    url.scheme() == page.scheme() && url.host_str() == page.host_str() && url.path() == page.path()
 }
 
-/// The offline page's address for a navigation to `target` that failed with `status`.
+/// The offline page's address for a navigation to `target` that failed with `status`. It offers this computer's own
+/// sandboxes (`face`, the bundled editor's address) where the face is built for this platform.
 pub fn page_for(target: &str, status: &str) -> String {
     let mut url = url::Url::parse(PAGE).expect("the offline page's address parses");
     url.query_pairs_mut()
         .append_pair("to", target)
-        .append_pair("status", status);
+        .append_pair("status", status)
+        .append_pair("face", crate::machine_face::FACE_URL);
     url.to_string()
 }
 
 /// The failures that mean "this computer cannot reach the page", by WebView2's name for them. Everything else
 /// (a cancelled navigation, which is every link this app takes out of the window; an HTTP error, which is a page
 /// the server did send) is left to the page.
+#[cfg_attr(not(windows), allow(dead_code))] // WebView2's names; WebKitGTK says it with its error domains
 pub fn unreachable(status: &str) -> bool {
     matches!(
         status,
@@ -142,8 +152,83 @@ pub fn watch(window: &tauri::WebviewWindow, app_origin: &url::Url) {
     }
 }
 
-/// Off Windows the platform's error page stays: the webview there does not say a navigation failed.
-#[cfg(not(windows))]
+/// A WebKitGTK load error that means "this computer cannot reach the page". A cancelled load (every link this app
+/// takes out of the window) and a policy refusal (a navigation the window handler turned down) are not; everything else
+/// that fails a load (a name that does not resolve, a refused or reset connection, a timeout) is. Pure.
+#[cfg(target_os = "linux")]
+fn unreachable_on_webkit(error: &webkit2gtk::glib::Error) -> bool {
+    !error.matches(webkit2gtk::NetworkError::Cancelled)
+        && error.kind::<webkit2gtk::PolicyError>().is_none()
+}
+
+/// Linux: a load of the page that fails for a network reason sends the window to this computer's sandboxes (or to the
+/// offline page, on a computer that hosts none: machine_face.rs `fallback_for`), and so does a quick probe at the start,
+/// so a name that takes WebKit half a minute to give up on is not half a minute of a blank screen. The probe never moves
+/// a page that has started showing: only a load that has not committed by the time it answers is replaced.
+#[cfg(target_os = "linux")]
+pub fn watch(window: &tauri::WebviewWindow, app_origin: &url::Url) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    use webkit2gtk::{LoadEvent, WebViewExt};
+
+    let origin = app_origin.origin();
+    // Whether a page of the workspace's origin has started showing in this window.
+    let shown = Arc::new(AtomicBool::new(false));
+    let handle = window.clone();
+    let seen = shown.clone();
+    let _ = window.with_webview(move |webview| {
+        let webview = webview.inner();
+        let ours = origin.clone();
+        webview.connect_load_changed(move |view, event| {
+            let at = view.uri().and_then(|uri| url::Url::parse(&uri).ok());
+            if event == LoadEvent::Committed && at.is_some_and(|url| url.origin() == ours) {
+                seen.store(true, Ordering::SeqCst);
+            }
+        });
+        webview.connect_load_failed(move |_view, _event, failing, error| {
+            let Ok(url) = url::Url::parse(failing) else {
+                return false;
+            };
+            if url.origin() != origin || !unreachable_on_webkit(error) {
+                return false;
+            }
+            crate::launch::note_unreachable("load-failed");
+            leave_for_fallback(&handle, url.as_str(), "load-failed");
+            // Handled: WebKitGTK draws no error page of its own under the one this is navigating to.
+            true
+        });
+    });
+    let window = window.clone();
+    tauri::async_runtime::spawn(async move {
+        let app = tauri::Manager::app_handle(&window).clone();
+        let target = tauri::Manager::state::<crate::state::AppState>(&app).app_url();
+        if crate::machine_face::answers(&target, crate::machine_face::PROBE_LIMIT).await
+            || shown.load(Ordering::SeqCst)
+        {
+            return;
+        }
+        crate::launch::note_unreachable("probe-failed");
+        leave_for_fallback(&window, &target, "unreachable");
+    });
+}
+
+/// Where a workspace window that could not reach its page goes, off the event that said so: navigating from inside
+/// WebKitGTK's own signal re-enters it (the same rule as WebView2's callback above).
+#[cfg(target_os = "linux")]
+fn leave_for_fallback(window: &tauri::WebviewWindow, target: &str, status: &str) {
+    let app = tauri::Manager::app_handle(window).clone();
+    let hosts = tauri::Manager::state::<crate::state::AppState>(&app).hosts_sandboxes();
+    let page = crate::machine_face::fallback_for(hosts, target, status);
+    let window = window.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Ok(page) = page.parse() {
+            let _ = window.navigate(page);
+        }
+    });
+}
+
+/// Elsewhere the platform's error page stays: the webview there does not say a navigation failed.
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn watch(_window: &tauri::WebviewWindow, _app_origin: &url::Url) {}
 
 #[cfg(test)]
@@ -159,7 +244,7 @@ mod tests {
                 .unwrap()
         ));
         assert!(!is_offline_page(
-            &"http://tauri.localhost/index.html".parse().unwrap()
+            &PAGE.replace("offline.html", "index.html").parse().unwrap()
         ));
         assert!(!is_offline_page(
             &"https://tauri.localhost/offline.html".parse().unwrap()
@@ -167,6 +252,25 @@ mod tests {
         assert!(!is_offline_page(
             &"https://app.intentic.dev/offline.html".parse().unwrap()
         ));
+    }
+
+    #[test]
+    fn the_page_offers_this_computers_sandboxes_by_the_faces_own_address() {
+        let page: url::Url = page_for("https://app.intentic.dev/", "timeout")
+            .parse()
+            .unwrap();
+        let pairs: std::collections::HashMap<_, _> = page.query_pairs().into_owned().collect();
+        assert_eq!(pairs["face"], crate::machine_face::FACE_URL);
+        // Compared by scheme and host: `tauri://` is not a special scheme, so its origins are opaque and never equal.
+        let (face, page) = (
+            url::Url::parse(&pairs["face"]).unwrap(),
+            url::Url::parse(PAGE).unwrap(),
+        );
+        assert_eq!(
+            (face.scheme(), face.host_str()),
+            (page.scheme(), page.host_str()),
+            "the face is the offline page's own bundle, so its button is a same-origin navigation"
+        );
     }
 
     #[test]

@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { DeviceFacts } from "@intentic/sandbox-contract/schemas/hosts";
 import { isIntenticOs } from "@intentic/sandbox-contract/schemas/intentic-os";
 import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract/schemas/run-targets";
@@ -322,6 +323,43 @@ the first sandbox paired with a box is the one meant to look after it. Its OS ha
    \`list_sandboxes\` (everything that ran before is running again). A boot that keeps failing its health checks is
    rebooted by greenboot and, after three tries, rolled back to the previous deployment by itself: if \`booted\` is not
    the version you staged, that is what happened, and the owner should hear it from you.
+
+Its settings have tools of their own too, the same things a person changes from This computer on its own screen:
+
+| Tool | What it does |
+| --- | --- |
+| \`mcp__\${id}__os_network_status\` | How it is online now: Wi-Fi, a wire or not at all, with the network's name and signal. |
+| \`mcp__\${id}__os_wifi_list\` | The Wi-Fi networks in reach, after a fresh scan: signal, whether each needs a password, is known, is in use. |
+| \`mcp__\${id}__os_wifi_connect\` | Join a network by its name. One it has joined before, or an open one, needs no \`password\`. |
+| \`mcp__\${id}__os_wifi_forget\` | Forget a network it knows, so it stops rejoining it. |
+| \`mcp__\${id}__os_wifi_radio\` | Turn Wi-Fi on or off. |
+| \`mcp__\${id}__os_sound_status\` | The volume, whether it is muted, and what it plays on. |
+| \`mcp__\${id}__os_sound_set\` | Set the volume, mute or unmute; answers with the sound after. |
+| \`mcp__\${id}__os_sound_outputs\` | Every speaker, headphone and screen that can play sound, each by an \`id\`. |
+| \`mcp__\${id}__os_sound_output\` | Play the sound on another of those. |
+| \`mcp__\${id}__os_display_list\` | Its screens, each with the modes it offers and its scale. The server edition has none and says so. |
+| \`mcp__\${id}__os_display_set\` | Change a screen's mode or scale. |
+| \`mcp__\${id}__os_keyboard_status\` | The keyboard layout in use. |
+| \`mcp__\${id}__os_keyboard_layouts\` | The layouts it knows, about a hundred: give \`search\` ("German", "ch"). |
+| \`mcp__\${id}__os_keyboard_set\` | Set the layout, and its variant. |
+| \`mcp__\${id}__os_drives_list\` | The USB sticks, disks and memory cards plugged into it. |
+| \`mcp__\${id}__os_drive_import\` | Copy everything on one of them into a sandbox here; minutes for a big drive. |
+| \`mcp__\${id}__os_drive_eject\` | Eject one so it can be pulled out safely. |
+
+1. **Read before you change**: \`os_network_status\` or \`os_wifi_list\` before a Wi-Fi change, \`os_sound_outputs\`
+   before switching outputs (an id can change when a device is plugged in again), \`os_display_list\` before a mode,
+   \`os_keyboard_layouts\` before a layout, \`os_drives_list\` before an import or an eject. Use these rather than
+   \`nmcli\`, \`wpctl\`, \`swaymsg\` or \`udisksctl\` through \`run_command\`.
+2. **Reading takes "Run commands" or "Manage sandboxes on this device"; every change takes "Manage sandboxes on this
+   device"**: Wi-Fi, sound, screens, the keyboard, and importing or ejecting a drive.
+3. **Never ask for a Wi-Fi password in chat**: it would stay in the transcript. When a network needs one, ask the owner
+   to join it from This computer on the machine's own screen, or to give it to you some way that does not leave it in
+   the transcript.
+4. **Get the owner's yes before turning Wi-Fi off or forgetting the network in use.** When Wi-Fi is how the box is
+   online, either cuts every sandbox here off, your own model included, and nothing on this side could turn it back on.
+5. **Confirm before ejecting a drive, or importing into a sandbox other than the one asking.** An import lands in
+   \`${WORKSPACE_ROOT}/Imports/<label>-<date>\` of the sandbox it names (or in \`path\` inside its \`${WORKSPACE_ROOT}\`), and leaves the drive
+   as it was.
 
 `;
 

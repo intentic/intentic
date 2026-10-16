@@ -23,6 +23,7 @@ import { z } from "zod";
 import type { AgentTool } from "../agent/tools/agent-tools.js";
 import type { InProcessServer, RpcMessage, TurnLease } from "../agent/tools/turn-mounts.js";
 import { type AgentDesktop, agentDesktop, assertAgentMayDrive, DESKTOP_SIZE, DesktopHeldError, desktopAvailable } from "./agent-desktop.js";
+import { onScreenGuidance, SCREEN_SOCKET } from "./on-screen.js";
 
 /* The `desktop` tools: the sandbox's own virtual desktop (agent-desktop.ts), driven the way a connected machine is
    (screenshot, then a mouse or keyboard action read in that screenshot's pixels) through the same frame and pointing
@@ -42,7 +43,7 @@ const MAX_UNCHANGED = 2;
 type ToolAnswer = Awaited<ReturnType<McpTool<undefined>["call"]>>;
 
 const where = (desk: AgentDesktop): string =>
-    `This is the sandbox's own desktop, X display ${desk.display.name}: start a GUI program on it from your shell with \`DISPLAY=${desk.display.name} <command> &\`, or with \`open\`.`;
+    `This is the sandbox's own desktop, X display ${desk.display.name}: start a GUI program on it from your shell with \`DISPLAY=${desk.display.name} <command> &\`, or with \`open\`.${onScreenGuidance()}`;
 
 const shotContent = (shot: Shot, what: string, desk: AgentDesktop): unknown[] => {
     frames.sent();
@@ -186,9 +187,9 @@ const TOOLS: readonly McpTool<undefined>[] = [
     }),
 ];
 
-const handleDesktopMessage = createMcpServer<undefined>({
+const desktopMessageHandler = (screenNote: string) => createMcpServer<undefined>({
     serverInfo: () => ({ name: DESKTOP_SERVER, version: "1" }),
-    tools: TOOLS,
+    tools: TOOLS.map((entry) => entry.name === "screenshot" ? { ...entry, description: entry.description + screenNote } : entry),
     noSuchTool: (name) => `The sandbox's desktop has no tool called "${name}".`,
     refused: (error) => error instanceof DesktopHeldError,
     // Where a program the desktop is missing comes from in a sandbox: not `apt install` by hand, which the next rebuild
@@ -202,15 +203,19 @@ const handleDesktopMessage = createMcpServer<undefined>({
 });
 
 // The in-process server a turn's lease mounts; nothing to close, since the desktop outlives every turn.
-export const desktopRouter = (): InProcessServer => ({
-    handle: async (message: RpcMessage) => {
-        const answer = await handleDesktopMessage(message, undefined);
-        // SAFETY: createMcpServer answers a JSON-RPC 2.0 object ({ jsonrpc, id, result | error }) or nothing for a
-        // notification, which is the shape RpcMessage names.
-        return answer as RpcMessage | undefined;
-    },
-    close: () => {},
-});
+export const desktopRouter = (screenSocket: string = SCREEN_SOCKET): InProcessServer => {
+    // A router is mounted for each turn, so its tool description notices a newly available host display.
+    const handleDesktopMessage = desktopMessageHandler(onScreenGuidance(screenSocket));
+    return {
+        handle: async (message: RpcMessage) => {
+            const answer = await handleDesktopMessage(message, undefined);
+            // SAFETY: createMcpServer answers a JSON-RPC 2.0 object ({ jsonrpc, id, result | error }) or nothing for a
+            // notification, which is the shape RpcMessage names.
+            return answer as RpcMessage | undefined;
+        },
+        close: () => {},
+    };
+};
 
 // A turn's `desktop` mount: offered where the sandbox has a display to give it and the persona holds both the browser
 // shelf and the shell shelf. The browser shelf is the power to put a program on a screen under the agent's hands; the

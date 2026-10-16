@@ -6,6 +6,7 @@ import type { SecretsSlice } from "../secrets/secrets-slice.js";
 import type { SandboxSettingsStore } from "../settings/settings-store.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
+import { drainAuditInbox } from "../auth/host/host-session.js";
 import { createAuditForwarder } from "./audit-forward.js";
 import { type AuditLog, fileAuditLog } from "./audit-store.js";
 import { settingsDiff } from "./settings-diff.js";
@@ -85,6 +86,9 @@ export const createAuditService = (deps: AuditServiceDeps): AuditService => {
         const current = await deps.settings();
         reads = current.recordReads;
         await noticeOutsideChange(current);
+        // What a verb run inside the container wrote for the trail, which only this process may append to (a sign-in
+        // the machine minted: auth/host/host-session.ts).
+        await drainAuditInbox(deps.historyRoot, log.record, deps.warn);
         if (Date.now() - lastPrune >= HOUR_MS) {
             lastPrune = Date.now();
             const deleted = await log.prune(current.retentionDays);

@@ -217,7 +217,7 @@ pub fn check_from(stdout: &str) -> Option<Value> {
 }
 
 /// What ic said on its way out of a short call that failed: its `error:` line, else its last line. Pure.
-fn last_words(stdout: &str, stderr: &str, what: &str) -> String {
+pub(crate) fn last_words(stdout: &str, stderr: &str, what: &str) -> String {
     let mut reading = Reading::default();
     for line in stderr.lines() {
         reading.hear(Stream::Stderr, line);
@@ -299,7 +299,7 @@ impl Reading {
         self.last = Some(line.to_string());
     }
 
-    fn reason(&self) -> Option<String> {
+    pub(crate) fn reason(&self) -> Option<String> {
         self.error.clone().or_else(|| self.last.clone())
     }
 
@@ -371,7 +371,7 @@ pub fn claim() -> Option<Claim> {
 /* RUNNING `ic os`. */
 
 /// `ic os <args>` from the OS's own ic, told what every run of this app is (`app_env`).
-fn ic_os_command(image: &Image, args: &[&str]) -> Result<Command, String> {
+pub(crate) fn ic_os_command(image: &Image, args: &[&str]) -> Result<Command, String> {
     let ic = image.ic()?;
     let mut command = Command::new(ic);
     command.args(args);

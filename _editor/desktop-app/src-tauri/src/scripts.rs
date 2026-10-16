@@ -1825,6 +1825,30 @@ pub fn run_ic_quietly(args: &[&str], limit: Duration) -> Result<(), String> {
     Err(IC_MISSING.to_string())
 }
 
+/// Run the installed `ic` with `args` and answer what it printed on stdout, stopped with everything it started once it
+/// has run for `limit`. BLOCKING. For a verb that answers one line of JSON a caller reads (`ic sandbox session --json`,
+/// machine_face.rs); `Err` is a machine with no `ic`, one that ran out of time, or ic's own sentence for why it failed.
+/// Nothing it printed is logged here: such an answer can be a credential.
+pub fn ic_answer(args: &[&str], limit: Duration) -> Result<String, String> {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok();
+    for candidate in ic_candidates(Host::current(), home.as_deref()) {
+        let mut command = quiet(Command::new(&candidate));
+        command.args(args);
+        match intentic_bounded::capture(command, limit, intentic_bounded::Reach::Tree) {
+            // Not at this path: the next one.
+            Err(_) => continue,
+            Ok(ran) if ran.timed_out => {
+                return Err(format!("ic did not finish within {}s", limit.as_secs()))
+            }
+            Ok(ran) if ran.success() => return Ok(ran.stdout),
+            Ok(ran) => return Err(ran.stderr.trim().to_string()),
+        }
+    }
+    Err(IC_MISSING.to_string())
+}
+
 /// Run the installed `ic` with `args`, streamed and transcribed under `id` as a script run is, and stopped with
 /// everything it started once it has run for `limit`. BLOCKING. `ic` is looked for where [`ic_listing`] looks, in the
 /// same order; there is no shim to fall back on here, so a machine without one is told so. `Err` only when no `ic`

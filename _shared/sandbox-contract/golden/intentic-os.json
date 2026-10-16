@@ -56,5 +56,106 @@
   "updateCheck": [
     { "available": true, "version": "2026.10.20.0", "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222" },
     { "available": false, "version": null, "digest": null }
-  ]
+  ],
+  "networkStatus": [
+    { "connected": true, "kind": "wifi", "name": "Home Fiber", "signal": 72 },
+    { "connected": true, "kind": "ethernet", "name": "Wired connection 1", "signal": null },
+    { "connected": false, "kind": "none", "name": null, "signal": null }
+  ],
+  "wifiList": [
+    {
+      "adapter": true,
+      "enabled": true,
+      "networks": [
+        { "ssid": "Home Fiber", "signal": 72, "secured": true, "known": true, "active": true },
+        { "ssid": "Café: Guest", "signal": 55, "secured": false, "known": false, "active": false },
+        { "ssid": "Office", "signal": 48, "secured": true, "known": true, "active": false },
+        { "ssid": "Neighbours 5G", "signal": 31, "secured": true, "known": false, "active": false }
+      ]
+    },
+    { "adapter": true, "enabled": false, "networks": [] },
+    { "adapter": false, "enabled": false, "networks": [] }
+  ],
+  "soundStatus": [
+    { "volume": 40, "muted": false, "output": "Built-in Audio Analog Stereo" },
+    { "volume": 100, "muted": true, "output": "HDMI / DisplayPort 1 Output" },
+    { "volume": 0, "muted": false, "output": null }
+  ],
+  "soundOutputs": [
+    {
+      "outputs": [
+        { "id": 49, "name": "Built-in Audio Analog Stereo", "default": true },
+        { "id": 58, "name": "HDMI / DisplayPort 1 Output", "default": false }
+      ]
+    },
+    { "outputs": [] }
+  ],
+  "displayList": [
+    {
+      "outputs": [
+        {
+          "name": "eDP-1",
+          "make": "BOE",
+          "model": "0x095F",
+          "enabled": true,
+          "current": { "width": 2256, "height": 1504, "refresh": 59.999 },
+          "modes": [
+            { "width": 2256, "height": 1504, "refresh": 59.999 },
+            { "width": 2256, "height": 1504, "refresh": 48 }
+          ],
+          "scale": 1.5
+        },
+        {
+          "name": "DP-2",
+          "make": "Dell Inc.",
+          "model": "DELL U2720Q",
+          "enabled": true,
+          "current": { "width": 3840, "height": 2160, "refresh": 60 },
+          "modes": [
+            { "width": 3840, "height": 2160, "refresh": 60 },
+            { "width": 3840, "height": 2160, "refresh": 29.981 },
+            { "width": 2560, "height": 1440, "refresh": 59.951 },
+            { "width": 1920, "height": 1080, "refresh": 60 },
+            { "width": 1920, "height": 1080, "refresh": 59.94 }
+          ],
+          "scale": 2
+        },
+        {
+          "name": "HDMI-A-1",
+          "make": null,
+          "model": null,
+          "enabled": false,
+          "current": null,
+          "modes": [{ "width": 1920, "height": 1080, "refresh": 60 }],
+          "scale": null
+        }
+      ]
+    }
+  ],
+  "keyboardStatus": [
+    { "layout": "de", "variant": "nodeadkeys", "name": "German (no dead keys)" },
+    { "layout": "us", "variant": null, "name": "English (US)" }
+  ],
+  "keyboardLayouts": [
+    {
+      "layouts": [
+        { "layout": "us", "name": "English (US)", "variants": [{ "variant": "intl", "name": "English (US, intl., with dead keys)" }, { "variant": "dvorak", "name": "English (Dvorak)" }] },
+        { "layout": "de", "name": "German", "variants": [{ "variant": "nodeadkeys", "name": "German (no dead keys)" }] },
+        { "layout": "pl", "name": "Polish", "variants": [] }
+      ]
+    }
+  ],
+  "drives": [
+    {
+      "drives": [
+        { "device": "/dev/sda1", "label": "KINGSTON", "size": 7743733760, "filesystem": "vfat", "mountedAt": null, "readOnly": false, "model": "DataTraveler 3.0", "kind": "usb" },
+        { "device": "/dev/sdb1", "label": "Photos", "size": 1000203091968, "filesystem": "exfat", "mountedAt": "/run/media/intentic/Photos", "readOnly": false, "model": "Expansion HDD", "kind": "usb" },
+        { "device": "/dev/sdc", "label": null, "size": 4026531840, "filesystem": "vfat", "mountedAt": null, "readOnly": true, "model": "Flash Disk", "kind": "usb" },
+        { "device": "/dev/mmcblk0p1", "label": "CANON_DC", "size": 63848939520, "filesystem": "exfat", "mountedAt": null, "readOnly": false, "model": null, "kind": "card" }
+      ]
+    },
+    { "drives": [] }
+  ],
+  "driveImportProgress": [{ "progress": { "bytes": 61728394, "total": 123456789 } }],
+  "driveImport": [{ "device": "/dev/sda1", "sandbox": "work", "path": "/work/Imports/KINGSTON-2026-10-16", "bytes": 123456789, "files": 42 }]
 }

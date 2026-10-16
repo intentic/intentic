@@ -1,280 +1,39 @@
-import {
-    type AgentAttention,
-    type AgentJob,
-    type AgentStatus,
-    type AgentWatch,
-    awaitsWake,
-    type LandConflictReason,
-    type LandFailure,
-} from "@intentic/sandbox-contract/schemas/agents";
-import type { QueuePause } from "@intentic/sandbox-contract/schemas/agent";
+import { type AgentStanding, type QueueHold, soonestHold } from "@intentic/sandbox-contract/models/agent-standing";
 
-// Every projection of a fleet agent's state (lane, attention label, drill-in verb, glyphs). Nothing else may
-// derive these from `status` alone: a parked turn is `idle` with an attention flag raised. Pure functions over
-// plain data, no store, no Vue.
-
-// Four standings a conversation gets when the daemon has not registered it. `draft`: not sent yet. `starting`:
-// sent but not yet filed as an agent. `failed`: send refused, never became an agent. `resumed`: a past conversation
-// reopened from History with no surviving registry entry. All four have no registry entry, so nothing to archive,
-// review, land or drop (`unregistered` below). None may be widened into `AgentStatus`: that enum is only the
-// daemon's account of agents it has.
-export type ClientAgentStatus = "draft" | "starting" | "failed" | "resumed";
-
-// Enough of an agent to place one; every predicate below takes only this, so a FleetAgent, a roster AgentSummary,
-// or a test literal can all answer the same question.
-export interface AgentStanding {
-    readonly status: AgentStatus | ClientAgentStatus;
-    readonly attention: AgentAttention;
-    // Outside conditions this conversation is parked on (AgentSummary.watches); `laneOf` reads it alongside `status`
-    // and `attention`. Absent for nearly every conversation.
-    readonly watches?: readonly AgentWatch[];
-    // Whether it runs again by itself (AgentSummary.awaitingWake): the daemon's one reading, which `watching` asks.
-    readonly awaitingWake?: boolean;
-    // The commands it left running and how the recent ones ended (AgentSummary.jobs); `heldByPrompt` reads which of its
-    // watches a job at a prompt holds. Absent for nearly every conversation.
-    readonly jobs?: readonly AgentJob[];
-    // Why a refused land is still refusing (AgentSummary.conflictCauses), which decides whose press can clear it.
-    // Absent for every card but one refusing to merge.
-    readonly conflictCauses?: readonly LandConflictReason[];
-    // Which kind of failure ended the last turn. `status: "error"` alone conflates a broken harness with a spent
-    // allowance; both belong in Attention, but this says which so the card can tell them apart. `laneOf` reads it too,
-    // so the lane, badge and chip stay in agreement.
-    readonly failureCode?: string;
-    // The words that turn died on (AgentSummary.failure), cleared with the code when it runs again.
-    readonly failure?: string;
-    /** When the spent allowance reopens, in epoch SECONDS (the wire's unit). Absent when nobody published one. */
-    readonly limitResetsAt?: number;
-    /** Whether the refused turn is held whole, so a press re-runs it rather than sending a new message after it. */
-    readonly limitHeld?: boolean;
-    /** Whether a fire is already booked for it (at the reset, or a move now), so no press is needed. */
-    readonly limitScheduled?: boolean;
-    /** The account the owner's policy is moving the held turn to, while that move is booked (a scheduled card's sentence). */
-    readonly limitMoving?: string;
-    // A land that broke (AgentSummary.landFailure), standing until one goes through whatever turns run after it. Absent
-    // from a sandbox older than it, where only a turn's own `failure` can say so.
-    readonly landFailure?: LandFailure;
-    // What waits for its next turn (AgentSummary.queue), read here only for its hold: messages booked to go by
-    // themselves at a time or once another agent's work lands (`scheduled`), which make the conversation one that runs
-    // again by itself. Never the words.
-    readonly queue?: QueueHold | undefined;
-}
-
-// The part of a conversation's queue the board reads: why it holds, and what a scheduled hold waits for. A queue-level
-// `scheduled` with its `until` or `after` is the soonest booked message's; a Stop's or a refusal's hold on the messages
-// with no booking takes that place, so each message's own booking (`items`, from sandboxes that book each message on its
-// own) is read then.
-interface QueueHold {
-    readonly paused?: QueuePause | undefined;
-    readonly until?: number | undefined;
-    readonly after?: string | undefined;
-    readonly items?: readonly { readonly until?: number | undefined; readonly after?: string | undefined }[] | undefined;
-}
-
-// The soonest booking a queue holds, as a scheduled hold: the queue's own while it reads `scheduled`, else the earliest
-// message's time, else the first message waiting on a land; undefined when nothing is booked. One thing, never both.
-export const soonestHold = (queue: QueueHold | undefined): QueueHold | undefined => {
-    if (queue?.paused === `scheduled`) {
-        if (queue.after !== undefined) {
-            return { paused: `scheduled`, after: queue.after };
-        }
-        return queue.until === undefined ? { paused: `scheduled` } : { paused: `scheduled`, until: queue.until };
-    }
-    const items = queue?.items ?? [];
-    const instants = items.flatMap((item) => (item.until === undefined ? [] : [item.until]));
-    if (instants.length > 0) {
-        return { paused: `scheduled`, until: Math.min(...instants) };
-    }
-    const after = items.find((item) => item.after !== undefined)?.after;
-    return after === undefined ? undefined : { paused: `scheduled`, after };
-};
-
-// Messages booked to go by themselves (sendLater.ts, or a spent allowance's reopen): the conversation runs again with
-// nobody pressing anything, so it is not finished, and nothing is owed by the reader for it to.
-export const scheduledSend = (agent: Pick<AgentStanding, "queue">): boolean => soonestHold(agent.queue) !== undefined;
-
-// How many messages are booked to go by themselves: each by its own booking, or all of them when an older sandbox booked
-// the queue whole. What an archive by hand cancels (the sandbox's archive.ts), which the card's Archive says first.
-export const scheduledCount = (agent: Pick<AgentStanding, "queue">): number => {
-    const items = agent.queue?.items ?? [];
-    return agent.queue?.paused === `scheduled` ? items.length : items.filter((item) => item.until !== undefined || item.after !== undefined).length;
-};
+// Every projection of a fleet agent's state (lane, attention label, drill-in verb, glyphs) lives in the contract
+// (@intentic/sandbox-contract/models/agent-standing.ts) since 2026-10-16, so the daemon counts what needs the person by the
+// same rules (its `agents.attention`, the desktop app's status bar). Re-exported here, where every surface of the editor
+// has always imported it; what stays below is the editor's own: a card's standing copied for a tab or another window,
+// and the auto-land default.
+export {
+    soonestHold,
+    scheduledSend,
+    scheduledCount,
+    limited,
+    memoryHeld,
+    limitClosed,
+    limitScheduled,
+    limitMoveBooked,
+    conflictIsYours,
+    watching,
+    promptHeldJob,
+    heldByPrompt,
+    unregistered,
+    turnInFlight,
+    endingOf,
+    endingByHand,
+    turnWorking,
+    writingNow,
+    landBroken,
+    blocked,
+    awaitingUser,
+    onlyOwnerCanAnswer,
+    heardByParent,
+} from "@intentic/sandbox-contract/models/agent-standing";
+export type { ClientAgentStatus, AgentStanding, EndingByHand } from "@intentic/sandbox-contract/models/agent-standing";
 
 // The scheduled hold alone, copied for a standing that outlives its card (standingFrom); undefined for any other queue.
 const scheduledHold = (agent: Pick<AgentStanding, "queue">): QueueHold | undefined => soonestHold(agent.queue);
-
-// A spent allowance, not a failure to fix: nothing broken, and it comes back. Read off `failureCode` rather than
-// the provider's own sentence, which varies per provider; the code is the daemon's own classification
-// (error-frames.ts).
-export const limited = (agent: AgentStanding): boolean => agent.status === `error` && agent.failureCode === `rate_limit`;
-
-// A message held at the door because the sandbox is short of memory (turn-admission): nothing ran and nothing failed,
-// it waits for a person's "send anyway". The daemon files it as an `error`, so this is read off the code, as `limited`
-// is, and the chip and glyph say held rather than error; the lane stays Attention, since the press is the reader's.
-export const memoryHeld = (agent: Pick<AgentStanding, "status" | "failureCode">): boolean =>
-    agent.status === `error` && agent.failureCode === `sandbox-memory-low`;
-
-// Whether the window is still shut, feeding only the card's countdown, never the lane: a stranded card stays in
-// Attention shut or open. No published instant means never closed, not a guessed one.
-export const limitClosed = (agent: AgentStanding, now: number = Date.now()): boolean =>
-    limited(agent) && agent.limitResetsAt !== undefined && agent.limitResetsAt * 1_000 > now;
-
-// A booked fire needs no press: the held turn goes again at the reset by itself. Only where this conversation's answer
-// for the limit says so (`resend` or `move`); that answer starts at `wait`. Nothing is owed then, so it leaves Attention
-// for Active, as an armed watch does: a card counted in the badge and the tab title for the hours until a reset the
-// reader already answered was a call nobody could answer. The stall still shows, on the card's own chip and clock.
-export const limitScheduled = (agent: AgentStanding): boolean => limited(agent) && agent.limitScheduled === true;
-
-// A booked move: the owner's policy is already carrying the held turn to another account, on the resume pass's next
-// beat, seconds away, so the card names where it is going rather than when it goes.
-export const limitMoveBooked = (agent: AgentStanding): boolean => limitScheduled(agent) && agent.limitMoving !== undefined;
-
-// A refused land nothing the agent does can clear: every blocker left is a file the user has uncommitted edits on,
-// which only a commit or stash releases (git cannot merge through unstaged work, and the agent's checkout cannot
-// even see it). The distinction the board used to lack: it offered "have the agent resolve it" for every conflict,
-// including the ones where that press was refused the moment it was made.
-// False when the daemon named no causes, which is a build that predates them or a refusal it could not attribute;
-// the board then falls back to offering the agent, as it always did.
-export const conflictIsYours = (agent: AgentStanding): boolean =>
-    agent.conflictCauses !== undefined && agent.conflictCauses.length > 0 && agent.conflictCauses.every((cause) => cause === `workspace`);
-
-// This conversation runs again by itself, with nobody pressing anything: its last turn ended (status is `idle`/`landed`,
-// never `ready`, since the daemon holds the land for the wake), but the conversation is not over. The daemon's own
-// reading (a watch, or a wake waiting in its queue); a daemon older than it is read by its watches.
-export const watching = (agent: AgentStanding): boolean => awaitsWake(agent);
-
-// The running job behind one of its armed watches that sits at a prompt (AgentJob.inputWait: blocked reading its
-// terminal, nothing moving), the first such where there are several. Its watch fires only on an exit that will not
-// come, so the card names it and offers to end it.
-export const promptHeldJob = (agent: AgentStanding): AgentJob | undefined => {
-    const armed = new Set((agent.watches ?? []).map((watch) => watch.id));
-    return agent.jobs?.find((job) => job.endedAt === undefined && job.inputWait !== undefined && job.watch !== undefined && armed.has(job.watch));
-};
-
-// Parked only on jobs at a prompt: every watch it holds waits on an exit nobody in the sandbox will bring about, so the
-// conversation is not resuming by itself, it is stuck until the reader ends the command (or types into its terminal).
-// Not while a turn runs, whose own readout says what it is doing. On 2026-10-04 such a card sat in Active for hours
-// under a six-hour countdown, with its Land press hidden behind the wake it was waiting for.
-export const heldByPrompt = (agent: AgentStanding): boolean => {
-    const watches = agent.watches ?? [];
-    if (watches.length === 0 || turnInFlight(agent)) {
-        return false;
-    }
-    const prompts = new Set(
-        (agent.jobs ?? [])
-            .filter((job) => job.endedAt === undefined && job.inputWait !== undefined && job.watch !== undefined)
-            .map((job) => job.watch),
-    );
-    return watches.every((watch) => prompts.has(watch.id));
-};
-
-// No registry entry behind this card: archiving, reviewing, landing, discarding and dropping all address an agent
-// by id through the daemon, and none of these ids name anything there.
-// Takes the status alone, unlike the lane predicates: callers like the tab's `open` and the detail page's
-// `registered` hold a status without an attention block to pair it with.
-export const unregistered = (status: AgentStatus | ClientAgentStatus): boolean =>
-    status === `draft` || status === `starting` || status === `failed` || status === `resumed`;
-
-// A turn is in flight: running, unwinding after a Stop, or repairing itself after its daemon died. Every hands-off
-// guard (its worktree is a live turn's working state) and the live readouts (elapsed, activity line) key off this.
-// `starting` counts even though nothing is registered yet, elapsed should tick from the send. `dismissing` and
-// `landing` count for the guards only; both settle in Finished, so their lane is decided separately (see laneOf).
-// A land runs no turn, but the daemon holds the worktree exactly as a turn would, and every guard wants the same answer.
-// `awaiting` is deliberately excluded: it's live but parked, handled by `awaitingUser` instead.
-export const turnInFlight = (agent: AgentStanding): boolean =>
-    agent.status === `running` ||
-    agent.status === `starting` ||
-    agent.status === `stopping` ||
-    agent.status === `dismissing` ||
-    agent.status === `resuming` ||
-    agent.status === `landing`;
-
-// The two standings a person's ending unwinds as, from the press until the turn has let go: Stop, or waving away the
-// question it was parked on. Both differ only in the lane they settle in (see laneOf).
-export type EndingByHand = Extract<AgentStatus, `stopping` | `dismissing`>;
-
-// How a person ended this turn, while it unwinds; undefined for a turn nobody ended. The one reading both the board's
-// card and the chat's live line are drawn from, so the two say the same word about the same press.
-export const endingOf = (agent: AgentStanding): EndingByHand | undefined =>
-    agent.status === `stopping` || agent.status === `dismissing` ? agent.status : undefined;
-
-// A person already ended this turn and it's unwinding. Narrower than `turnInFlight`, which also covers turns nobody
-// ended.
-export const endingByHand = (agent: AgentStanding): boolean => endingOf(agent) !== undefined;
-
-// A turn actually producing something, as a card's readouts mean it: `landing` is in flight for the hands-off guards
-// but spends no model, and its `startedAt` belongs to the turn before it, so an elapsed clock would be someone else's.
-// A turn a person already ended produces nothing more either: its readout is the ending itself (the card's chip, the
-// chat's line), not the step it was on under a clock still counting, which reads as a Stop that did not take.
-export const turnWorking = (agent: AgentStanding): boolean => turnInFlight(agent) && agent.status !== `landing` && !endingByHand(agent);
-
-// The browser's copy of the daemon's `writing` guard (agents-registry.ts); exists for Land, where typing vs.
-// parked matters (everything else treats them alike). `stopping` and `resuming` are excluded because the provider
-// isn't producing anything then; the two sides must stay in step or the UI offers a press the daemon refuses.
-export const writingNow = (agent: AgentStanding): boolean => agent.status === `running` || agent.status === `starting`;
-
-// "Blocked on you": the agent cannot proceed (or has failed) until the user acts. Not the same as unread.
-// `stopped`/`interrupted` leave a half-written worktree only a new message can carry forward; `stopping` is
-// counted the moment the press lands rather than once the unwind finishes, since it settles in the same lane
-// either way; `failed` is the same kind of dead end one step earlier, before a worktree existed. A spent allowance
-// counts until something is booked to carry it on (limitScheduled): a resend at the reset, or a move now.
-const BLOCKING_ENDINGS: ReadonlySet<AgentStatus | ClientAgentStatus> = new Set([`error`, `interrupted`, `stopping`, `stopped`, `failed`]);
-
-// A land that broke and still stands: its work is stuck on the branch, whatever the turn after it did, so the card is
-// the reader's to look at. Not while a turn or a land is under way, which ends in another land of its own.
-export const landBroken = (agent: AgentStanding): boolean => agent.landFailure !== undefined && !turnInFlight(agent);
-
-export const blocked = (agent: AgentStanding): boolean =>
-    limitScheduled(agent)
-        ? false
-        : agent.attention.plan ||
-          agent.attention.question ||
-          agent.attention.permission ||
-          agent.attention.capability ||
-          agent.attention.conflict ||
-          // A need outlives its turn (docs/architecture/needs.md): a conversation still running carries on beside it
-          // and stays in Active, one that stopped is waiting on nothing but the answer.
-          (agent.attention.need === true && agent.status !== `running`) ||
-          landBroken(agent) ||
-          heldByPrompt(agent) ||
-          BLOCKING_ENDINGS.has(agent.status);
-
-// The half of `blocked` that is literally waiting on an answer (plan, question, permission, capability), narrower
-// than `blocked`: dead ends (a failed turn, an unlandable conflict) want looking at but owe the user nothing, so
-// ending the agent loses no answer.
-export const awaitingUser = (agent: AgentStanding): boolean =>
-    agent.attention.plan || agent.attention.question || agent.attention.permission || agent.attention.capability || agent.status === `awaiting`;
-
-// An ask only the owner may answer: a plan to approve, a permission, a setup, a credential release, a hand-off to a
-// browser or terminal (a bare `awaiting`), or a refused land only their own commit clears. The parent a child agent
-// works for can answer its question (subagents/children.ts) and hears how its turns end, but none of these, so these
-// are what reach the reader from a child whatever its parent is doing (callsOwner).
-export const onlyOwnerCanAnswer = (agent: AgentStanding): boolean =>
-    agent.attention.plan ||
-    agent.attention.permission ||
-    agent.attention.capability ||
-    agent.attention.credential ||
-    agent.attention.need === true ||
-    (agent.status === `awaiting` && !agent.attention.question) ||
-    ((agent.attention.conflict || agent.status === `conflict`) && conflictIsYours(agent));
-
-// Whether a child agent's stop is news its parent has already had. Every ending of a turn the parent started reaches
-// the parent (subagents/child-report.ts: a parked `wait` takes it, or it wakes the parent like any wake), so a parent
-// that moved after the child stopped (ran a turn, landed) heard it, and its own ending is the account the reader gets:
-// an orchestrator that worked around three spent allowances and landed is done, not stuck. Only a turn's ending
-// counts. A question is still parked and waits for an answer whoever has moved since, and a land refused or broken
-// leaves work stuck on the child's branch that no report settles. A turn a person ran in the child's own chat is never
-// reported to the parent, and it ends after the parent's last move, so it still reads as unheard here.
-// `updatedAt` is the clock on both sides: a rename keeps it (agents-registry), and reading does not move it.
-export const heardByParent = (child: AgentStanding & { readonly updatedAt: number }, parentAt: number): boolean =>
-    BLOCKING_ENDINGS.has(child.status) &&
-    // Still unwinding: its ending has not reached anyone yet.
-    child.status !== `stopping` &&
-    // Booked to run again by itself: not over, whatever its parent made of the pause.
-    !limitScheduled(child) &&
-    !child.attention.question &&
-    !child.attention.conflict &&
-    !landBroken(child) &&
-    child.updatedAt < parentAt;
 
 // A card's standing on its own, carried where a whole card can't go (a chat tab, a summons to another window):
 // every field `laneOf` reads and nothing else, with absent ones left out rather than spelled as undefined, since

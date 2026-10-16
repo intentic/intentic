@@ -16,7 +16,8 @@ import { installedModule, root, subjectFiles, subjectScope, trackedFiles, untrac
 // which is why the table maps a directory to a prefix for resolution rather than to the mount itself.
 const CATALOGS = [
     { dir: "_editor/ui/src/i18n/locales", prefix: "ui.", owns: ["_editor/ui/src/", "_editor/web/src/", "_editor/desktop-app/src/", "_editor/share-view/src/"] },
-    { dir: "_editor/desktop-app/src/i18n/locales", prefix: "desktop.", owns: ["_editor/desktop-app/src/"] },
+    // `local/` too: the sandbox face's bootstrap (local/sandbox.ts) draws the app's words before the editor runs.
+    { dir: "_editor/desktop-app/src/i18n/locales", prefix: "desktop.", owns: ["_editor/desktop-app/src/", "_editor/desktop-app/local/"] },
     { dir: "_editor/share-view/src/i18n/locales", prefix: "share.", owns: ["_editor/share-view/src/"] },
     { dir: "_editor/web/src/app/i18n/locales", prefix: "", owns: ["_editor/web/src/", "_editor/share-view/src/"] },
 ];

@@ -121,6 +121,9 @@ describe("a device on Intentic OS", () => {
         expect(skill).toContain("mcp__my-laptop__os_status");
         expect(skill).toContain("Never ask for\n   the Docker socket");
         expect(skill).toContain("only after the owner says yes in chat");
+        // Its settings too, with the rule that keeps a Wi-Fi password out of the transcript.
+        expect(skill).toContain("mcp__my-laptop__os_wifi_connect");
+        expect(skill).toContain("Never ask for a Wi-Fi password in chat");
         // The rest of the note is all still there, around it.
         expect(skill).toContain("mcp__my-laptop__run_command");
         expect(skill).toContain("## Using a website");

@@ -22,3 +22,16 @@ export const AgentsListSchema = z.object({
         ),
 });
 export type AgentsList = z.infer<typeof AgentsListSchema>;
+
+// What the fleet owes its owner, counted by the board's own rules (models/agent-lanes.ts `fleetAttention`): what the
+// desktop app's status bar and `ic sandbox attention` read over the loopback port, so neither has to fetch the whole
+// roster and fold it the way the board does.
+export const AgentsAttentionSchema = z.object({
+    needsYou: z
+        .number()
+        .int()
+        .nonnegative()
+        .describe("How many cards the board's Attention lane draws (a child agent counted through its family's one card), plus the automations waiting for a yes."),
+    working: z.number().int().nonnegative().describe("How many conversations are producing something right now."),
+});
+export type AgentsAttention = z.infer<typeof AgentsAttentionSchema>;

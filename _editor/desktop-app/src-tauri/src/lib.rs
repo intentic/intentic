@@ -15,12 +15,14 @@ mod found;
 mod keyring;
 mod launch;
 mod local;
+mod machine_face;
 mod machine_sandbox;
 mod microphone;
 mod notice;
 mod offline;
 mod onboarding;
 mod os;
+mod os_settings;
 mod prefetch;
 mod project;
 mod repair;
@@ -28,6 +30,7 @@ mod resume;
 mod sandbox_wakes;
 mod scripts;
 mod setup_link;
+mod shell;
 mod shown;
 mod sidecar;
 mod state;
@@ -184,6 +187,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             sign_in,
             commands::desktop_info,
+            machine_face::machine_face,
+            machine_face::machine_face_renew,
+            machine_face::machine_face_online,
             commands::docker_ready,
             commands::docker_listening,
             commands::docker_start,
@@ -288,6 +294,30 @@ pub fn run() {
             os::os_rollback,
             os::os_reboot,
             os::os_channel,
+            shell::lock::os_lock_status,
+            shell::lock::os_lock_set_pin,
+            shell::lock::os_lock_off,
+            shell::lock::os_lock_idle,
+            // Intentic OS: this computer's network, sound, screens, keyboard and drives (os_settings.rs).
+            os_settings::os_network_status,
+            os_settings::os_wifi_list,
+            os_settings::os_wifi_connect,
+            os_settings::os_wifi_forget,
+            os_settings::os_wifi_radio,
+            os_settings::os_sound_status,
+            os_settings::os_sound_set,
+            os_settings::os_sound_outputs,
+            os_settings::os_sound_output,
+            os_settings::os_display_list,
+            os_settings::os_display_set,
+            os_settings::os_keyboard_status,
+            os_settings::os_keyboard_layouts,
+            os_settings::os_keyboard_set,
+            os_settings::os_drives_list,
+            os_settings::os_drives_seen,
+            os_settings::os_drive_words,
+            os_settings::os_drive_import,
+            os_settings::os_drive_eject,
         ])
         .setup(|app| {
             // The plugins are up, the single-instance handoff among them: this launch is the copy that runs.
@@ -411,6 +441,9 @@ pub fn run() {
             machine_sandbox::start(app.handle());
             // Intentic's engine, started again when it stops while this app runs (engine_keeper.rs).
             engine_keeper::start(app.handle());
+            shell::start(app.handle());
+            // On Intentic OS, the drives a person plugs in, watched and told to every window (os_settings.rs).
+            os_settings::start(app.handle());
             // What earlier runs left on disk (2026-10-05): run transcripts past the newest few (scripts.rs), and the paths
             // files of bring-backs a crash cut short (project.rs). Off the launch's thread: it is a folder or two read.
             let sweeping = app.handle().clone();

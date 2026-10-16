@@ -1,5 +1,6 @@
 import { sandboxRef } from "@intentic/extension-api";
 import type { SessionOwner } from "@intentic/sandbox-contract/schemas/agents";
+import { starterLook, type StarterLook } from "@intentic/sandbox-contract/models/agent-starter";
 import { identityHue } from "../../lib/identityHue";
 
 // Whose a conversation is, as the board draws and filters it. Pure over the summary's `owner` and `startedBy`, so the
@@ -40,28 +41,10 @@ export const ownerLook = (owner: { readonly email: string; readonly name?: strin
     return { email: owner.email, name, short: shortNameOf(name), hue: identityHue(owner.email), mine: sameAddress(owner.email, me) };
 };
 
-// A starter that is not a person: a program holding a control token, or the conversation that spawned this one.
-export type StarterLook = { readonly kind: "token"; readonly label: string } | { readonly kind: "child"; readonly parent: string };
-
-const TOKEN_PREFIX = `token:`;
-const CHILD_PREFIX = `agent:`;
-
-export const starterLook = (startedBy: string | undefined): StarterLook | undefined => {
-    if (startedBy?.startsWith(TOKEN_PREFIX) === true) {
-        return { kind: `token`, label: startedBy.slice(TOKEN_PREFIX.length) };
-    }
-    if (startedBy?.startsWith(CHILD_PREFIX) === true) {
-        return { kind: `child`, parent: startedBy.slice(CHILD_PREFIX.length) };
-    }
-    return undefined;
-};
-
-// The conversation that spawned this one, when one did. A fact apart from whose it is: a child inherits its parent's
-// owner, so on the reader's own work an ownership mark would never get to say it.
-export const parentOf = (startedBy: string | undefined): string | undefined => {
-    const look = starterLook(startedBy);
-    return look?.kind === `child` ? look.parent : undefined;
-};
+// Who started a conversation when it was not a person (a control token's program, a parent conversation): the
+// contract's models/agent-starter.ts since 2026-10-16, since which card a child rides under is the daemon's count too.
+export { parentOf, starterLook } from "@intentic/sandbox-contract/models/agent-starter";
+export type { StarterLook } from "@intentic/sandbox-contract/models/agent-starter";
 
 // What a card says about whose it is, decided in one place so the mark and the line it rides agree on whether there
 // is anything to draw. The reader's own says nothing at all; somebody else's is a person; an unowned one is the program

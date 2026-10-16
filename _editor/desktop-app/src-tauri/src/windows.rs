@@ -238,6 +238,7 @@ fn swap_in(window: &WebviewWindow, other: Option<WebviewWindow>, keyboard: Keybo
         let _ = other.hide();
         crate::shown::tell(&other, false);
     }
+    crate::shell::face_shown(window);
 }
 
 /// Whether the keyboard comes with the face being raised: a face taking over a window somebody is reading has
@@ -252,11 +253,10 @@ enum Keyboard {
 /// whether it is maximised. The two faces are one window to the reader, who moved and sized it once. A face with
 /// nothing on screen to take over keeps the frame it has (the platform remembers a hidden window's).
 ///
-/// In kiosk mode (os.rs `kiosk`, the desktop edition of Intentic OS) every face fills the screen instead, a cold start's
-/// included: the session has nothing else to show (2026-10-13).
+/// In kiosk mode sway tiles the faces edge to edge below the system bar. Fullscreen would hide that bar.
 fn take_frame(window: &WebviewWindow, from: Option<&WebviewWindow>) {
     if crate::os::kiosk() {
-        let _ = window.set_fullscreen(true);
+        let _ = window.set_fullscreen(false);
         return;
     }
     let Some(from) = from else {
@@ -793,8 +793,12 @@ fn page_window<'a>(
                     });
                     return false;
                 }
-                // The app's own page for a workspace that cannot be reached (offline.rs), which sends the window here.
-                if stays_in_webview(url, &origin) || crate::offline::is_offline_page(url) {
+                // The app's own page for a workspace that cannot be reached (offline.rs), which sends the window here,
+                // and its own copy of the editor on this computer's sandboxes (machine_face.rs), which it offers.
+                if stays_in_webview(url, &origin)
+                    || crate::offline::is_offline_page(url)
+                    || crate::machine_face::is_face_page(url)
+                {
                     return true;
                 }
                 open_in_browser(&app, url.as_str());
@@ -1797,7 +1801,7 @@ fn work_the_window(app: &AppHandle, label: &str, verb: WindowVerb) {
     };
     match verb {
         WindowVerb::Ready => chrome_is_up(&window),
-        // A face in kiosk mode stays full screen: the page's own bar still draws the two buttons.
+        // Sway owns kiosk sizing: these buttons must not hide the face or cover the system bar.
         WindowVerb::Minimize | WindowVerb::Maximize
             if crate::os::kiosk() && (label == WORKSPACE || label == HOME) => {}
         WindowVerb::Minimize => {
@@ -2186,6 +2190,7 @@ fn setup_announcement(report: &SetupReport) -> String {
 /// [`confirm_setup`] for what it has to answer first.
 pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
     match parse_link(link, source) {
+        Some(Link::Shell(target)) => crate::shell::open(app, target),
         Some(Link::Setup(args)) => match source {
             // A project's setup gets the folder this app parked for it, and only here (project.rs).
             Source::App { .. } => park_setup(app, crate::project::bind(app, *args)),
@@ -2278,7 +2283,9 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
             // A sandbox the account lists no more: its folders' records and this machine's sync of it go (project.rs).
             let before = app.state::<AppState>().roster();
             crate::project::roster_changed(app, before, roster.clone());
-            app.state::<AppState>().remember_roster(roster);
+            app.state::<AppState>().remember_roster(roster.clone());
+            let _ = tauri::Emitter::emit(app, "desktop://roster", &roster);
+            crate::shell::roster_changed(app);
             // Who is signed in is what this computer's sandbox is made for (machine_sandbox.rs).
             crate::machine_sandbox::account_changed();
         }

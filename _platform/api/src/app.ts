@@ -316,10 +316,10 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (announced.count === 0) {
             return kit.refuse(404, `unknown sandbox`);
         }
-        // The identity key rides along so the daemon can verify the platform's identity assertions (sign-in.ts): every
-        // sandbox learns it at its first announce and follows a rotation within the hour.
+        // The identity key rides along so the daemon can verify the platform's identity assertions (sign-in.ts), and the
+        // row's own id, so the machine that runs it can open it by that id with no network (ingress-schemas.ts).
         const identityKey = identityKeyOf(config);
-        const answer = { ok: true as const, ...(await identityField(prisma)) };
+        const answer = { ok: true as const, ...(await identityField(prisma)), platformId: sandbox.id };
         return kit.answer(identityKey === undefined ? answer : { ...answer, identityKey });
     });
 

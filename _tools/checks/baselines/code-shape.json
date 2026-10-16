@@ -1613,10 +1613,6 @@
         "count": 127,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/app.ts": {
-        "count": 688,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/app.ts#createApp#cognitive": {
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
@@ -1853,10 +1849,7 @@
         "count": 115,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/composition.ts": {
-        "count": 886,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
+    "_sandbox/sandbox/src/composition.ts": 935,
     "_sandbox/sandbox/src/composition.ts#createServices#lines": {
         "count": 273,
         "why": "standing when the check arrived (2026-10-16); came in with main's own changes"

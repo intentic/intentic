@@ -3,7 +3,39 @@ import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
 import { DeviceFactsSchema } from "./hosts.js";
 import {
+    displayModeArg,
+    IC_OS_DRIVE_NO_ROOM_EXIT,
+    IC_OS_NO_SCREEN_EXIT,
+    IC_OS_NOT_INTENTIC_OS_EXIT,
+    IC_OS_WIFI_PASSWORD_EXIT,
     icOsChannelArgs,
+    icOsDisplayListArgs,
+    icOsDisplaySetArgs,
+    icOsDriveEjectArgs,
+    icOsDriveImportArgs,
+    icOsDrivesListArgs,
+    icOsKeyboardLayoutsArgs,
+    icOsKeyboardSetArgs,
+    icOsKeyboardStatusArgs,
+    icOsNetworkStatusArgs,
+    icOsSoundOutputArgs,
+    icOsSoundOutputsArgs,
+    icOsSoundSetArgs,
+    icOsSoundStatusArgs,
+    icOsWifiConnectArgs,
+    icOsWifiForgetArgs,
+    icOsWifiListArgs,
+    icOsWifiRadioArgs,
+    IntenticOsDisplayListSchema,
+    IntenticOsDriveImportProgressSchema,
+    IntenticOsDriveImportSchema,
+    IntenticOsDrivesSchema,
+    IntenticOsKeyboardLayoutsSchema,
+    IntenticOsKeyboardStatusSchema,
+    IntenticOsNetworkStatusSchema,
+    IntenticOsSoundOutputsSchema,
+    IntenticOsSoundStatusSchema,
+    IntenticOsWifiListSchema,
     icOsRebootArgs,
     icOsRollbackArgs,
     icOsStatusArgs,
@@ -25,6 +57,7 @@ const GOLDEN = JSON.parse(readFileSync(join(packageRoot(import.meta.url), "golde
     readonly release: unknown;
     readonly status: readonly Readonly<Record<string, unknown>>[];
     readonly updateCheck: readonly Readonly<Record<string, unknown>>[];
+    readonly [settings: string]: unknown;
 };
 
 test("every status and update check in the golden reads back field for field", () => {
@@ -83,4 +116,119 @@ test("a channel ic does not have never reaches it, even past the type", () => {
         // SAFETY: deliberately not a channel: what a caller that skipped its own schema would pass.
         expect(() => icOsChannelArgs(channel as IntenticOsChannel), channel).toThrow();
     }
+});
+
+/* THE MACHINE'S SETTINGS: the network, sound, screens, keyboard and drives, as ic's settings verbs print them. */
+
+test("every settings answer in the golden reads back field for field", () => {
+    const readers = {
+        networkStatus: IntenticOsNetworkStatusSchema,
+        wifiList: IntenticOsWifiListSchema,
+        soundStatus: IntenticOsSoundStatusSchema,
+        soundOutputs: IntenticOsSoundOutputsSchema,
+        displayList: IntenticOsDisplayListSchema,
+        keyboardStatus: IntenticOsKeyboardStatusSchema,
+        keyboardLayouts: IntenticOsKeyboardLayoutsSchema,
+        drives: IntenticOsDrivesSchema,
+        driveImportProgress: IntenticOsDriveImportProgressSchema,
+        driveImport: IntenticOsDriveImportSchema,
+    } as const;
+    for (const [key, schema] of Object.entries(readers)) {
+        const examples = GOLDEN[key];
+        expect(Array.isArray(examples), key).toBe(true);
+        // SAFETY: checked to be an array just above.
+        for (const example of examples as unknown[]) {
+            const read: unknown = schema.parse(example);
+            expect(read, key).toEqual(example);
+        }
+    }
+});
+
+test("the status bar's two shapes are exactly what it reads, and nothing looser", () => {
+    expect(IntenticOsNetworkStatusSchema.safeParse({ connected: true, kind: "wifi", name: "x", signal: 101 }).success).toBe(false);
+    expect(IntenticOsNetworkStatusSchema.safeParse({ connected: true, kind: "cellular", name: "x", signal: null }).success).toBe(false);
+    expect(IntenticOsSoundStatusSchema.safeParse({ volume: -1, muted: false, output: null }).success).toBe(false);
+    expect(IntenticOsSoundStatusSchema.safeParse({ volume: 40.5, muted: false, output: null }).success).toBe(false);
+});
+
+test("the exit codes a caller tells apart are distinct", () => {
+    const codes = [IC_OS_NOT_INTENTIC_OS_EXIT, IC_OS_NO_SCREEN_EXIT, IC_OS_WIFI_PASSWORD_EXIT, IC_OS_DRIVE_NO_ROOM_EXIT];
+    expect(new Set(codes).size).toBe(codes.length);
+    expect(codes).not.toContain(0);
+    expect(codes).not.toContain(1);
+});
+
+test("the settings argv is ic's own verbs, and a password never rides on it", () => {
+    expect(icOsNetworkStatusArgs()).toEqual(["os", "network", "status", "--json"]);
+    expect(icOsWifiListArgs()).toEqual(["os", "network", "wifi", "list", "--json"]);
+    expect(icOsWifiConnectArgs("Home Fiber", false)).toEqual(["os", "network", "wifi", "connect", "--", "Home Fiber"]);
+    expect(icOsWifiConnectArgs("-guest", true)).toEqual(["os", "network", "wifi", "connect", "--password-stdin", "--", "-guest"]);
+    expect(icOsWifiForgetArgs("Office")).toEqual(["os", "network", "wifi", "forget", "--", "Office"]);
+    expect(icOsWifiRadioArgs(false)).toEqual(["os", "network", "wifi", "off"]);
+    expect(icOsWifiRadioArgs(true)).toEqual(["os", "network", "wifi", "on"]);
+    expect(icOsSoundStatusArgs()).toEqual(["os", "sound", "status", "--json"]);
+    expect(icOsSoundSetArgs({ volume: 40 })).toEqual(["os", "sound", "set", "--volume", "40", "--json"]);
+    expect(icOsSoundSetArgs({ volume: 39.6, muted: false })).toEqual(["os", "sound", "set", "--volume", "40", "--unmute", "--json"]);
+    expect(icOsSoundSetArgs({ muted: true })).toEqual(["os", "sound", "set", "--mute", "--json"]);
+    expect(icOsSoundOutputsArgs()).toEqual(["os", "sound", "outputs", "--json"]);
+    expect(icOsSoundOutputArgs(58)).toEqual(["os", "sound", "output", "58"]);
+    expect(icOsDisplayListArgs()).toEqual(["os", "display", "list", "--json"]);
+    expect(icOsDisplaySetArgs("DP-2", { mode: { width: 1920, height: 1080, refresh: 59.94 } })).toEqual([
+        "os",
+        "display",
+        "set",
+        "DP-2",
+        "--mode",
+        "1920x1080@59.94",
+    ]);
+    expect(icOsDisplaySetArgs("eDP-1", { scale: 1.25 })).toEqual(["os", "display", "set", "eDP-1", "--scale", "1.25"]);
+    expect(displayModeArg({ width: 2256, height: 1504, refresh: 59.9994 })).toBe("2256x1504@59.999");
+    expect(displayModeArg({ width: 3840, height: 2160, refresh: 60 })).toBe("3840x2160@60");
+    expect(icOsKeyboardStatusArgs()).toEqual(["os", "keyboard", "status", "--json"]);
+    expect(icOsKeyboardLayoutsArgs()).toEqual(["os", "keyboard", "layouts", "--json"]);
+    expect(icOsKeyboardSetArgs("de", "nodeadkeys")).toEqual(["os", "keyboard", "set", "de", "--variant", "nodeadkeys"]);
+    expect(icOsKeyboardSetArgs("us")).toEqual(["os", "keyboard", "set", "us"]);
+    expect(icOsDrivesListArgs()).toEqual(["os", "drives", "list", "--json"]);
+    expect(icOsDriveImportArgs("/dev/sda1", "work")).toEqual(["os", "drives", "import", "/dev/sda1", "--to", "work", "--json"]);
+    expect(icOsDriveImportArgs("/dev/sda1", "work", "Photos/2026")).toEqual([
+        "os",
+        "drives",
+        "import",
+        "/dev/sda1",
+        "--to",
+        "work",
+        "--path",
+        "Photos/2026",
+        "--json",
+    ]);
+    expect(icOsDriveEjectArgs("/dev/sdb1")).toEqual(["os", "drives", "eject", "/dev/sdb1"]);
+});
+
+test("a value that would reach ic as a flag, a path out, or nothing to change never does", () => {
+    const refused: (() => readonly string[])[] = [
+        () => icOsWifiConnectArgs("", false),
+        () => icOsWifiConnectArgs("x".repeat(33), false),
+        // 11 two-byte letters is 22 characters' worth of bytes past 32, though only 17 characters.
+        () => icOsWifiForgetArgs("ü".repeat(17)),
+        () => icOsSoundSetArgs({}),
+        () => icOsSoundSetArgs({ volume: 101 }),
+        () => icOsSoundOutputArgs(-1),
+        () => icOsDisplaySetArgs("--all", { scale: 1 }),
+        () => icOsDisplaySetArgs("DP-2", {}),
+        () => icOsDisplaySetArgs("DP-2", { scale: 9 }),
+        () => icOsKeyboardSetArgs("-de"),
+        () => icOsKeyboardSetArgs("de", "x y"),
+        () => icOsDriveImportArgs("/etc/passwd", "work"),
+        () => icOsDriveImportArgs("/dev/../etc", "work"),
+        () => icOsDriveImportArgs("/dev/sda1", "--rm"),
+        () => icOsDriveImportArgs("/dev/sda1", "a..b"),
+        () => icOsDriveImportArgs("/dev/sda1", "work", "../history"),
+        () => icOsDriveImportArgs("/dev/sda1", "work", "/etc"),
+        () => icOsDriveImportArgs("/dev/sda1", "work", "a//b"),
+        () => icOsDriveEjectArgs("sda"),
+    ];
+    for (const [index, call] of refused.entries()) {
+        expect(call, String(index)).toThrow();
+    }
+    expect(icOsWifiForgetArgs("ü".repeat(16))).toHaveLength(6);
 });

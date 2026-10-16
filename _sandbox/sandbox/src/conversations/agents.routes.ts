@@ -101,8 +101,8 @@ export const createAgentsRoutes = (services: Services) => {
     // root, so its path has no session. `sessionIdOf`, not `entry.sessionId`, flushed only at finish.
     const sdkSessionIdOf = (agent: Pick<PersistedAgent, "id" | "profile">): string | undefined =>
         capabilitiesOf(agent.profile.provider, agent.profile.harness).runtime === "claude-code" ? services.conversations.sessionIdOf(agent.id) : undefined;
-    // `i.router()`, not a plain object: typechecked against agentsContract, so a dropped handler fails the build.
-    return i.router({
+    // Merged with attention.routes.ts in router.ts, whose SandboxRouter type fails the build for a dropped handler.
+    return {
         documents: i.documents.handler(async ({ input, context }) => ({ paths: await documentsOf(services, entryFor(input.id, context)) })),
         // Revision the roster was taken at, so the browser can tell this apart from a racing /events snapshot
         // (AgentsListSchema). Refreshes standings first, which is what makes a roster read self-healing.
@@ -590,5 +590,5 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return { removed };
         }),
-    });
+    };
 };

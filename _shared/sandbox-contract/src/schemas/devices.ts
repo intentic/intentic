@@ -104,6 +104,13 @@ export const DeviceSandboxSchema = z.object({
     // (2026-10-10) Stopped by the machine's keeper after a stretch nobody needed it (`ic sandbox sleep`), and started
     // again by itself when somebody opens it. `running` is false while this is true.
     asleep: z.boolean().optional(),
+    // (2026-10-16) How this machine reaches it with no network (ic's sandbox/loopback.rs): its 12-hex id from its connect
+    // token (null without one), the host port its loopback listener is published on (null when it publishes none), and
+    // the platform's own id for its row as its last announce said (null before one did). Absent from an older ic, and
+    // from a row whose container docker would not inspect.
+    sandboxId: z.string().nullable().optional(),
+    localPort: z.number().int().nullable().optional(),
+    platformId: z.string().nullable().optional(),
 });
 export type DeviceSandbox = z.infer<typeof DeviceSandboxSchema>;
 // One operation on one sandbox, streamed as lines ending in a `result` or `error` frame. `prepare` builds the pending

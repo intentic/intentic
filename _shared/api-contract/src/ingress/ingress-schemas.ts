@@ -249,7 +249,15 @@ export const IngressOkSchema = z.object({ ok: z.literal(true) });
 // `identityKey` is the public half of the key this platform signs identity assertions with (sandbox-contract
 // policy/identity-assertion.ts), in SPKI PEM: the daemon keeps the newest it was answered, so a sandbox started by any
 // `ic` learns it at its first announce and follows a rotation within the hour. Absent from a platform that signs none.
-export const AnnounceAcceptedSchema = z.object({ ok: z.literal(true), identity: z.string().min(1).optional(), identityKey: z.string().min(1).optional() });
+// `platformId` is this platform's own id for the sandbox's row: the daemon keeps it on its history volume, so the machine
+// that runs it can open it by the same id with no network (`ic sandbox session`, the desktop app's offline face). Absent
+// from a platform older than it.
+export const AnnounceAcceptedSchema = z.object({
+    ok: z.literal(true),
+    identity: z.string().min(1).optional(),
+    identityKey: z.string().min(1).optional(),
+    platformId: z.string().min(1).optional(),
+});
 
 // `POST /sandbox/adopt`: the owner's adoption ticket the browser handed the daemon, the grant this platform signed for
 // the token, the address the token derives and the owner the daemon bound, with what the owner's browser remembers of

@@ -49,15 +49,47 @@ pub const DRAIN_GRACE: Duration = Duration::from_millis(750);
 /// because a child blocked writing into a full pipe never exits; the child is polled rather than waited on,
 /// because a blocking wait cannot be given up on. `Err` only when the child could not be started at all.
 pub fn capture(command: Command, limit: Duration, reach: Reach) -> std::io::Result<Captured> {
+    run(command, None, limit, reach)
+}
+
+/// [`capture`], with `input` written to the child's stdin and stdin then closed: for a secret that must not ride on the
+/// command line, where anyone on the machine can read it (`ps`), such as a Wi-Fi password handed to `nmcli` or `ic`.
+/// Written on a thread of its own, so a child that never reads it cannot hold the deadline up.
+pub fn capture_with_input(
+    command: Command,
+    input: &[u8],
+    limit: Duration,
+    reach: Reach,
+) -> std::io::Result<Captured> {
+    run(command, Some(input.to_vec()), limit, reach)
+}
+
+fn run(
+    command: Command,
+    input: Option<Vec<u8>>,
+    limit: Duration,
+    reach: Reach,
+) -> std::io::Result<Captured> {
     let mut command = command;
     if reach == Reach::Tree {
         own_group(&mut command);
     }
     let mut child = command
-        .stdin(Stdio::null())
+        .stdin(if input.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
+    if let (Some(input), Some(mut stdin)) = (input, child.stdin.take()) {
+        std::thread::spawn(move || {
+            use std::io::Write as _;
+            // A child that exits without reading leaves a broken pipe: its exit says what happened, not this write.
+            let _ = stdin.write_all(&input);
+        });
+    }
     let (drained, drains) = channel::<()>();
     let stdout = collect(child.stdout.take(), drained.clone());
     let stderr = collect(child.stderr.take(), drained);
@@ -209,6 +241,29 @@ mod tests {
             );
             assert!(!answer.success());
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn input_reaches_the_childs_stdin_and_then_ends() {
+        let answer = capture_with_input(
+            shell("read -r line; echo \"got $line\"; cat; echo end"),
+            b"secret\nmore\n",
+            Duration::from_secs(20),
+            Reach::Tree,
+        )
+        .expect("sh runs");
+        assert_eq!(answer.stdout, "got secret\nmore\nend\n");
+        assert!(answer.success());
+        // A child that never reads its input is not held up by it.
+        let ignored = capture_with_input(
+            shell("exit 0"),
+            &[b'x'; 1 << 20],
+            Duration::from_secs(20),
+            Reach::Child,
+        )
+        .expect("sh runs");
+        assert!(ignored.success());
     }
 
     #[cfg(unix)]

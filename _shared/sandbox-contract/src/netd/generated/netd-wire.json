@@ -648,7 +648,8 @@
   },
   "headers": [
     "x-intentic-preview",
-    "x-intentic-preview-unreachable"
+    "x-intentic-preview-unreachable",
+    "x-intentic-listener"
   ],
   "toNode": {
     "$defs": {

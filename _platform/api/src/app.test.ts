@@ -700,7 +700,8 @@ describe(`POST /sandbox/announce`, () => {
         expect(tombstone).toHaveBeenCalledWith({ where: { tunnelId: TUNNEL_ID }, select: { tunnelId: true } });
     });
 
-    it(`answers an accepted announce with the identity of the database that took it`, async () => {
+    // The row's own id rides too: the machine that runs the sandbox opens it by that id when it has no network.
+    it(`answers an accepted announce with the identity of the database that took it, and the row's id`, async () => {
         const prisma = fakePrisma({
             sandbox: {
                 findUnique: jest.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null }),
@@ -711,7 +712,7 @@ describe(`POST /sandbox/announce`, () => {
             },
         });
         const res = await announce(prisma, `tok`, `https://sandbox-abc.intentic.dev`);
-        expect(await res.json()).toEqual({ ok: true, identity: `a0028692-7cf2-4ef4-8429-86a98d60be8a` });
+        expect(await res.json()).toEqual({ ok: true, identity: `a0028692-7cf2-4ef4-8429-86a98d60be8a`, platformId: `s1` });
     });
 
     // Every sandbox learns the key that verifies the platform's identity assertions from its announces, so one started
@@ -730,7 +731,7 @@ describe(`POST /sandbox/announce`, () => {
             headers: { "content-type": `application/json`, "x-intentic-connect": `tok` },
             body: JSON.stringify({ daemonUrl: `https://sandbox-abc.intentic.dev` }),
         });
-        expect(await res.json()).toEqual({ ok: true, identityKey: keys.publicKey });
+        expect(await res.json()).toEqual({ ok: true, identityKey: keys.publicKey, platformId: `s1` });
     });
 
     it(`still accepts the announce when the database cannot say which it is`, async () => {
@@ -743,7 +744,7 @@ describe(`POST /sandbox/announce`, () => {
         });
         const res = await announce(prisma, `tok`, `https://sandbox-abc.intentic.dev`);
         expect(res.status).toBe(200);
-        expect(await res.json()).toEqual({ ok: true });
+        expect(await res.json()).toEqual({ ok: true, platformId: `s1` });
     });
 
     it(`404s an unknown token with no oracle`, async () => {

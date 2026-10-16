@@ -1,7 +1,7 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
 import { computed } from "vue";
-import { attentionCards } from "../../agent-status/agentStatus-lanes";
+import { fleetAttention } from "../../agent-status/agentStatus-lanes";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKeyAt } from "../../../lib/queryKeys";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
@@ -52,13 +52,14 @@ export const otherBoxes = store.entries;
 export const silentBoxes = computed<readonly BoxFleet[]>(() => otherBoxes.value.filter((box) => box.state === `unreachable`));
 
 // How many cards one other box's Attention lane draws, its child agents folded under their parents as the board folds
-// them (agentStatus.attentionCards), plus held automation wakes. Undefined means never-answered; rendering that as `0`
-// would falsely claim nothing is waiting, so surfaces draw a dash.
+// them, plus held automation wakes: the contract's fleetAttention, the very count the daemon gives the desktop app's
+// status bar. Undefined means never-answered; rendering that as `0` would falsely claim nothing is waiting, so surfaces
+// draw a dash.
 export const boxAttention = (box: BoxFleet): number | undefined => {
     if (box.readAt === undefined) {
         return undefined;
     }
-    return attentionCards(box.agents) + box.held.length;
+    return fleetAttention(box.agents, box.held).needsYou;
 };
 
 // `useAgents.markSeen` only writes the roster this browser streams, so it's a no-op for an agent elsewhere; this

@@ -203,6 +203,20 @@ flowchart LR
   every decision is in the tidy log. (2026-10-05: none of these had a retention rule; rog held a 40.9 GB duplicate.)
   `ic sandbox reset-owner <slug>` moves an unreadable owner file aside, the one way back in for an owner the daemon
   locks out because it cannot read who owns it.
+- **This machine's sandboxes with no network** (2026-10-16, [`loopback.rs`](src/sandbox/loopback.rs)).
+  `ic sandbox list --json` rows also carry `sandboxId` (the 12-hex id of the connect token, null without one),
+  `localPort` (the host port the loopback listener is published on, from the binding docker holds, null when it
+  publishes none) and `platformId` (the platform's id for the row, read off the sandbox's `/history/platform-row.json`,
+  null before an announce named one). `ic sandbox session <slug> --json` ([`session.rs`](src/sandbox/session.rs))
+  prints one line `{"slug","sandboxId","platformId","localPort","email","token","expiresAt"}`: a daemon session for
+  the bound owner, minted by `docker exec`ing the image's `host-session-cli.js` (the daemon's README says why the machine is
+  a proof). It refuses a sandbox nobody has signed in to yet, and one too old to have the script (update it). The token
+  goes to stdout and to `~/.intentic/sessions/<slug>.json` (folder 0700, file 0600), never to a log.
+  `ic sandbox attention --json` ([`attention.rs`](src/sandbox/attention.rs)) asks every running sandbox's
+  `GET /agents/attention` on `http://127.0.0.1:<localPort>` at once (1 s to connect, 3 s in all), with the cached
+  session, minted again when missing, near its end or refused, and prints
+  `{"needsYou","working","sandboxes":[{"slug","name","sandboxId","platformId","needsYou","working","reachable"}]}`; a
+  sandbox asleep, stopped or silent is `reachable: false` with zeros.
 - A sandbox's **shape** is the owner's own ask for memory, CPUs, privileged and GPU, always whole
   ([`shape.rs`](src/shape.rs)). `ic sandbox shape <slug> … --when now` restarts onto it; `--when next-restart` checks
   it against the image's run contract (a bad value is refused here, not by the next update) and saves it as the
@@ -249,6 +263,16 @@ flowchart LR
   `ic sandbox doctor` is the same engine, read-only.
 - The image owns its `docker run` flags. `ic` asks the image for its run command (`contract.rs`) instead of
   writing one, so a flag change ships with the image.
+- **Sandbox windows on Intentic OS desktop.** `ic os screen serve` runs inside sway's session and registers one
+  security-context-v1 listener per running runc sandbox (`os/screen.rs`). It uses engine `dev.intentic.sandbox`,
+  the slug as app id and the full container id as instance id, never an unrestricted Wayland socket. A held close
+  endpoint revokes new connections when the container stops or the service dies. Missing sockets and replacement
+  containers get fresh listeners. `ic os screen status --json` returns `{available, reason, sandboxes: [{slug,
+  socket}]}` and checks the service's live file lock, so stale files do not claim availability. On desktop edition
+  only, `os/policy.rs` creates `/run/user/1990/intentic/screen/<slug>` (0700, intentic) before Docker and mounts the
+  directory at `/run/intentic/screen` in connect, recreate and runner run lines. Existing sandboxes get the mount on
+  their next recreate. Kata skips it with a warning because a Unix socket cannot cross the VM boundary. Windows
+  and macOS compile without the Linux-only Wayland dependencies. See the [OS image's protocol restrictions](../../_os/os-image/README.md#sandbox-window-boundary).
 - **Intentic OS (2026-10-13).** On a machine whose image carries `/usr/lib/intentic-os/release.json`
   ([_os/README.md](../../_os/README.md)), `ic os` is the one door through which the OS changes, and its callers read
   its JSON rather than bootc's. Anywhere else every verb stops with exit 3 and one sentence. `status --json` maps
@@ -268,6 +292,11 @@ flowchart LR
   site), reads the code out of a whole setup command, runs `ic sandbox connect <code> -y` as its own process with
   the output on both, and leaves `/var/lib/intentic-os/paired` once that succeeds. `INTENTIC_OS_ROOT` puts every
   one of these paths under another folder, for tests.
+  On the desktop edition, `ic os bar` streams i3bar JSON with optional attention, network, sound and update
+  readers; clicks only navigate through `intentic://shell`. `ic os lock status --json`, `set-pin`, `off` and
+  `idle <minutes>` control the optional screen lock. A PIN of 4–12 digits arrives on stdin, the narrow root
+  helper changes only `intentic`'s local password, and settings hold no PIN. Turning it off locks that password
+  again. The idle delay is 1–240 minutes, initially 5.
 - **Isolation on Intentic OS.** The policy is `/usr/lib/intentic-os/os.json` with `/etc/intentic/os.json` over it,
   key by key: `isolation` (`auto`, `vm`, `container`; a word nobody knows is `auto`, said), `pairOnLan`, `updates`
   (`stage`, `off`). Connect, every recreate and `runner up` pass the sandbox's run line through `os/policy.rs`. Off

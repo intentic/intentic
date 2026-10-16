@@ -172,6 +172,9 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
 
     // Signs every browser session cookie; carrying it would let the holder mint sessions against the target.
     { path: "session-secret", portability: "identity", note: "Sign in again, the target signs its own sessions." },
+    // The platform's id for this sandbox's row, as its announce last said (system/boot/platform-row.ts): the target is
+    // its own row, and learns its own id at its first announce.
+    { path: "platform-row.json", portability: "identity", note: "The target learns its own platform id when it first announces." },
     // Who owns this sandbox, who else may reach it and at what tier, and the hashed control tokens programs present:
     // the daemon's to decide, so kept off the workspace every turn writes (auth/members/identity-off-workspace.ts moved
     // them from `.intentic/identity/` on 2026-10-06). An access list that traveled would let a source sandbox hand

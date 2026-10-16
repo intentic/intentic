@@ -41,7 +41,7 @@ export type NetdAnswer = { "answer": "sync", generations: Array<number | null>, 
  * Request headers only netd sets on what it forwards to Node; it strips them from everything arriving outside.
  * Exported as a literal type, so a Node constant naming one that drifts from this spelling fails to compile.
  */
-export type NetdHeader = "x-intentic-preview" | "x-intentic-preview-unreachable";
+export type NetdHeader = "x-intentic-preview" | "x-intentic-preview-unreachable" | "x-intentic-listener";
 
 /**
  * A question Node asks netd.

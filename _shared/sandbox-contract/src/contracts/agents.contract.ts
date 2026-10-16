@@ -26,7 +26,7 @@ import {
     AgentUnsentSchema,
     LandResultSchema,
 } from "../schemas/agents.js";
-import { AgentsListSchema } from "../schemas/agents-list.js";
+import { AgentsAttentionSchema, AgentsListSchema } from "../schemas/agents-list.js";
 import { AgentChangesSchema, AgentConflictsSchema, AgentIgnoredSchema, AgentScratchSchema, AgentHistorySchema } from "../schemas/git/git.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";
@@ -51,6 +51,18 @@ export const agentsContract = {
         })
         .meta({ guest: true })
         .output(AgentsListSchema),
+    // The owner's only, and never a program's or a panel's: it is how the machine that runs the sandbox reads it with a
+    // session it minted for the owner (`ic sandbox attention`), and a member's count would not be the owner's anyway.
+    attention: procedure
+        .route({
+            method: "GET",
+            path: "/agents/attention",
+            summary: "What needs you, and what is working",
+            description:
+                "Two counts over the live fleet, by the board's own rules: the cards in its Attention lane plus the automations waiting for a yes, and the conversations producing something right now. What a status bar shows without reading the whole fleet.",
+        })
+        .meta({ floor: "owner", control: "never", panel: false })
+        .output(AgentsAttentionSchema),
     archived: procedure
         .route({
             method: "GET",

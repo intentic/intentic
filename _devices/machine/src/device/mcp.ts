@@ -49,6 +49,7 @@ import {
     swapSandbox,
 } from "./tools/sandboxes.js";
 import { osTools } from "./tools/os/os.js";
+import { osSettingsTools } from "./tools/os/settings.js";
 import { DEFAULT_TIMEOUT_MS, describeResult, MAX_TIMEOUT_MS, runCommand } from "./tools/shell.js";
 import { appLogs, appStatus, appStop, DEFAULT_LOG_LINES as DEFAULT_APP_LOG_LINES, MAX_LOG_LINES as MAX_APP_LOG_LINES, startApp } from "./tools/programs/programs.js";
 import { calling } from "./indicator.js";
@@ -726,21 +727,24 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     }),
     // os_status, os_update, os_rollback, os_reboot and os_channel, on Intentic OS only (tools/os/os.ts).
     ...osTools(),
+    // Its network, sound, screens, keyboard and drives, on Intentic OS only (tools/os/settings.ts).
+    ...osSettingsTools(),
 ];
 
 // Arguments are logged verbatim except typed text, which is redacted to its length: a `device` or `android_act` "type",
 // `clipboard` "write" or `ui_act` set_value call routinely carries a password. A key combination is not redacted; there is nothing
-// in it to leak.
-const auditDetail = (name: string, args: McpAuditEntry["args"]): string => {
+// in it to leak. A `password` argument (os_wifi_connect's) is one, whichever tool carries it.
+export const auditDetail = (name: string, args: McpAuditEntry["args"]): string => {
     const redact =
         ((name === "device" || name === "android_act") && args["action"] === "type") ||
         (name === "clipboard" && args["action"] === "write") ||
         name === "browser_fill";
-    const safe = redact
+    const typed = redact
         ? { ...args, text: `<${String(args["text"] ?? "").length} characters>` }
         : name === "ui_act" && args["value"] !== undefined
           ? { ...args, value: `<${String(args["value"]).length} characters>` }
           : args;
+    const safe = typed["password"] === undefined ? typed : { ...typed, password: `<${String(typed["password"]).length} characters>` };
     return JSON.stringify(safe).slice(0, 500);
 };
 

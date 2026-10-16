@@ -12,16 +12,38 @@ it to the sandbox's run line, and off Intentic OS it changes nothing. */
 
 pub mod policy;
 
+#[cfg(target_os = "linux")]
+pub mod screen;
+
+#[cfg(unix)]
+pub mod bar;
+#[cfg(unix)]
+pub mod lock;
+
 #[cfg(unix)]
 mod bootc;
 #[cfg(unix)]
+pub mod display;
+#[cfg(unix)]
+pub mod drives;
+#[cfg(unix)]
 pub mod health;
+#[cfg(unix)]
+pub mod keyboard;
+#[cfg(unix)]
+pub mod network;
 #[cfg(unix)]
 pub mod pair;
 #[cfg(unix)]
 pub mod reboot;
 #[cfg(unix)]
+pub mod sound;
+#[cfg(unix)]
 pub mod status;
+#[cfg(unix)]
+pub mod sway;
+#[cfg(unix)]
+mod tool;
 #[cfg(unix)]
 pub mod update;
 

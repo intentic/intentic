@@ -107,6 +107,8 @@
             "entry": [
                 "src/main.ts",
                 "src/state-plan.ts",
+                // Run by path inside the container, through `docker exec`, by `ic sandbox session` (_sandbox/ic session.rs).
+                "src/auth/host/host-session-cli.ts",
                 "src/**/*-worker.ts",
                 "src/extensions/backend/backend-host-main.ts",
                 "src/runtimes/cursor/cursor-agent-runtime.ts",

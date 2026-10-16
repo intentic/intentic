@@ -43,6 +43,24 @@ flowchart LR
   target?, details? })`, which never waits and never throws. Records are hash-chained in monthly files, pruned by
   `settings.audit.retentionDays` behind a checkpoint, and forwarded to `settings.audit.forwardUrl` from a persisted
   cursor. The chain shows tampering; only the forwarded copy is out of the agent's reach.
+- The machine that runs a sandbox is a sign-in of its own (`auth/host/host-session.ts`, 2026-10-16), so the desktop
+  app and Intentic OS open their own sandboxes with no network. `ic sandbox session <slug>` runs
+  `node /opt/sandbox/dist/auth/host/host-session-cli.js` through `docker exec`, as root: it reads the 0600 session secret and the
+  owner file and prints an ordinary daemon session for the BOUND owner, proven by `host`. The trust model: whoever can
+  `docker exec` into the container is root over it already, so the session adds nothing they lack; there is no HTTP
+  route that mints one, and an agent in the unprivileged domain cannot read either file; a sandbox nobody has bound
+  refuses (the first binding still takes a real sign-in with the connect token); every request is still authorized
+  against the owner file and roster, so a new owner or "sign out everywhere" (which re-keys the secret) ends it; a
+  `host` proof meets the require-passkey policy, as root over the box would anyway. Each mint is an `auth.sign_in`
+  record with `methods: ["host"]`: the trail has one writer, so the script leaves a note in `/history/audit/inbox/`
+  that the audit tick records and deletes. The platform's own id for the sandbox's row, which its announce answers,
+  is kept in `/history/platform-row.json` for the same reader (`store/platform-row.ts`).
+- On the loopback port, and only there, CORS also admits the desktop app's bundled page (`tauri://localhost`,
+  `http://tauri.localhost`): netd marks a request that arrived on that port (`x-intentic-listener: loopback`, stripped
+  from anything arriving from outside), so no sandbox needs recreating with a wider `WEB_ORIGIN`
+  (`auth/browser-origins.ts`). CORS decides which page may read an answer; the bearer is still the boundary.
+  `GET /agents/attention` (the owner's only) counts what needs the owner and what is working by the board's own rules
+  (sandbox-contract `models/agent-lanes.ts`), for the desktop app's status bar and `ic sandbox attention`.
 - Routes that hand out a conversation's words by id (`/activity`, `/fleet`, `/loops`, `/share`, `/privacy/log`, held
   wakes, `/sessions`, `/children`, `/needs/mine`) answer someone below maintainer only for conversations the roster
   shows them (`auth/scope/conversation-reader.ts`). _(2026-10-13) They answered every member alike._
@@ -218,6 +236,15 @@ flowchart LR
   says whether it is up and how many windows are open on it, counted off openbox's client list by one `xprop -spy` and
   pushed as the `desktop` runtime domain: the editor tiles it while a window is open, and says an empty desktop is empty
   rather than showing a black screen that looks like a broken stream.
+- On Intentic OS desktop edition, `on-screen <command>` can also show native Wayland apps on the owner's physical
+  screen through `/run/intentic/screen/wayland-0`. The host mounts its per-sandbox security-context directory when
+  creating or recreating a runc container; existing containers need their next recreate, and Kata VMs cannot use
+  the socket. The launcher unsets `DISPLAY` and `WAYLAND_SOCKET`, selects Wayland for GTK, Qt, SDL, Firefox and
+  Electron, and gives the app a private writable `XDG_RUNTIME_DIR`. Missing sockets produce a plain explanation;
+  it never falls back to another display. Desktop tool descriptions and responses offer this command only while a socket exists,
+  and tell the agent to check the app on its own desktop first: the tools cannot see or screenshot the owner's
+  screen. Sway labels each window with the sandbox slug in an amber titlebar. Debian trixie does not package
+  `xwayland-satellite`, so `--x11` explains the limit and X11-only apps stay on the sandbox's virtual desktop.
 - Every MCP server the daemon hosts for a turn (its browser routers, the machines and browsers it was granted, its
   extension cards' endpoints, the desktop) is a mount at one door, `ALL /mcp/<name>` (`agent/tools/turn-mounts.ts`). Each
   turn holds a bearer of its own, leased the names it mounted and forgotten when the turn ends, and the door refuses

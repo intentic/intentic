@@ -1,0 +1,7 @@
+{
+    "$schema": "../gen/schemas/desktop-schema.json",
+    "identifier": "machine-face",
+    "description": "The sandbox face (machine_face.rs): the app's own copy of the editor, which the workspace window shows when app.intentic.dev cannot be reached, on this computer's own sandboxes. Local content only: no `remote` is set, so the hosted editor the same window shows the rest of the time is granted nothing here, and its one channel into the app stays the intentic:// navigation. The page may ask for this computer's sandboxes with a session the machine minted for each one's owner (the token goes to the page, which talks to that sandbox's daemon on its loopback port with it), for a fresh one when a daemon refused it, and whether the online workspace answers again.",
+    "windows": ["workspace"],
+    "permissions": ["core:default", "allow-machine-face", "allow-machine-face-renew", "allow-machine-face-online"]
+}

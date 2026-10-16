@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { agentHome } from "@intentic/local-agent";
 import { DEVICE_PROGRAM_TOOLS } from "@intentic/sandbox-contract/policy/device-programs";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
-import { handleMcpMessage } from "./mcp.js";
+import { auditDetail, handleMcpMessage } from "./mcp.js";
 
 const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     shell: "on",
@@ -385,4 +385,15 @@ test("reshape_sandbox refuses an empty ask as a readable result, not a transport
     const refused = await call("reshape_sandbox", { slug: "work", memoryGib: 12, when: "nextRestart" }, scopes({ sandboxes: "off" }));
     expect(refused.isError).toBe(true);
     expect(refused.text).toMatch(/Manage sandboxes on this device/);
+});
+
+// What the audit log records of a call's arguments: typed text and a password are cut to their length, since the record
+// is a file on the machine anyone at it can read, and everything else is kept so the owner can see what ran.
+test("the audit record keeps a Wi-Fi password's length, never the password", () => {
+    expect(JSON.parse(auditDetail("os_wifi_connect", { ssid: "Office", password: "correct horse" }))).toEqual({ ssid: "Office", password: "<13 characters>" });
+    expect(auditDetail("os_wifi_connect", { ssid: "Café: Guest" })).toBe(JSON.stringify({ ssid: "Café: Guest" }));
+    // The redactions already there still hold beside it.
+    expect(JSON.parse(auditDetail("device", { action: "type", text: "hunter22" }))).toEqual({ action: "type", text: "<8 characters>" });
+    expect(JSON.parse(auditDetail("ui_act", { element: "kd3", action: "set_value", value: "hunter22" }))).toMatchObject({ value: "<8 characters>" });
+    expect(auditDetail("device", { action: "key", text: "ctrl+c" })).toContain("ctrl+c");
 });

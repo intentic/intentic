@@ -1,10 +1,9 @@
 # INTENTIC OS, DESKTOP EDITION: the server edition plus a screen. greetd logs the intentic user straight into a sway
-# session that shows the Intentic desktop app full screen (the shell: This device, the OS card, every sandbox's
-# editor) with Chromium one key away for the owner's own browsing. No other window manager, panel or launcher: what
-# runs on the screen is the app, and the app is where the machine is operated from.
+# session that tiles the Intentic desktop app below a system bar (This computer and each sandbox's editor), with
+# Chromium one key away. The session also owns notifications and an optional PIN screen lock; the app operates them.
 #
-# Physical access is trust here, as on any desk machine: the session is the intentic user's, who manages every
-# sandbox. Each sandbox still asks its own sign-in (Google, email or a passkey) in the editor.
+# The session is the intentic user's, who manages every sandbox. Each sandbox still asks its own sign-in
+# (Google, email or a passkey) in the editor.
 ARG BASE=ghcr.io/intentic/os:stable
 FROM ${BASE}
 
@@ -16,7 +15,7 @@ ARG REPOSITORY=ghcr.io/intentic/os-desktop
 COPY desktop/rpm/ /tmp/intentic-rpm/
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
     dnf -y --setopt=keepcache=1 install \
-        sway swaybg greetd xdg-desktop-portal-wlr \
+        sway swaybg greetd xdg-desktop-portal-wlr mako swayidle swaylock python3 \
         chromium \
         google-noto-sans-fonts google-noto-emoji-fonts \
         mesa-dri-drivers mesa-vulkan-drivers \
@@ -29,6 +28,7 @@ COPY desktop/rootfs/ /
 # The screen is the app's: pairing happens in it (This device) or on the LAN page, never on tty1.
 RUN rm /usr/lib/systemd/system/intentic-pair.service.d/50-console.conf \
     && chmod 0755 /usr/libexec/intentic-os/* \
+    && visudo -cf /etc/sudoers.d/intentic-os \
     && systemctl enable greetd.service \
     && systemctl set-default graphical.target \
     && printf '{"name":"Intentic OS","edition":"desktop","version":"%s","channel":"%s","repository":"%s"}\n' \

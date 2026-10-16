@@ -482,6 +482,11 @@ export const operatesSandbox =
         return (await members.list()).some((member) => sameEmail(member.email, email) && roleAtLeast(member.role, "maintainer"));
     };
 
+// The proofs the require-passkey policy lets through: a passkey; a recovery code, which exists to get an owner with no
+// passkey left back to registering one; and the machine that runs the sandbox (host/host-session.ts), since the policy keeps
+// out somebody holding the owner's Google account, and whoever holds the machine is root over this container already.
+const MEETS_PASSKEY_POLICY: ReadonlySet<ProofMethod> = new Set(["passkey", "recovery", "host"]);
+
 export const createAuthorizer = (deps: {
     readonly verify: IdTokenVerifier;
     // Local verify for daemon-minted sessions (no JWKS round trip); optional for a session-less composition.
@@ -574,13 +579,12 @@ export const createAuthorizer = (deps: {
             ...(access.see === undefined ? {} : { areas: access.see }),
         };
     };
-    // The require-passkey policy, read per request like the roster. A recovery code counts: it exists to get an owner
-    // with no passkey left back to registering one.
+    // The require-passkey policy, read per request like the roster (MEETS_PASSKEY_POLICY says which proofs pass it).
     const requirePasskey = async (caller: ProvenCaller, enrolment: boolean): Promise<void> => {
         if (deps.passkeys === undefined || !(await deps.passkeys.required())) {
             return;
         }
-        if (caller.methods.includes("passkey") || caller.methods.includes("recovery")) {
+        if (caller.methods.some((method) => MEETS_PASSKEY_POLICY.has(method))) {
             return;
         }
         const enrolled = await deps.passkeys.enrolled(caller.email);

@@ -10,7 +10,7 @@ import { runIc } from "./sandboxes.js";
 /* A background round's deadline over a real child: an `ic` that never finishes (what a Docker Desktop that never comes
    up looks like from here) is stopped with everything it started, and the run says so. HOME points at a temp dir holding
    a fake `ic` where the agent looks first (~/.intentic/ic/bin/ic), answering `--version` like the real one so nothing is
-   fetched. */
+   fetched. The same fake reads its stdin back, for the one secret a run hands ic that way (a Wi-Fi password). */
 
 const posix = requires(process.platform !== "win32", "POSIX process groups");
 
@@ -26,6 +26,8 @@ beforeAll(async () => {
     const script = [
         "#!/bin/sh",
         'if [ "$1" = "--version" ]; then echo "ic 0.0.0"; exit 0; fi',
+        // `cat` returns only once stdin is closed, so an answer at all says the run ended it.
+        'if [ "$1" = "stdin" ]; then printf "read %s from stdin, argv %s" "$(cat)" "$*"; exit 0; fi',
         'echo \'intentic-fix: {"report":{"stage":"fixing","doing":"Starting Docker Desktop","checks":[]}}\'',
         "sleep 600 &",
         `echo $! > "${join(home, "child.pid")}"`,
@@ -76,4 +78,9 @@ test.skipIf(!posix.runs)(posix.title("a run past its deadline is stopped with th
 test.skipIf(!posix.runs)(posix.title("a run with no deadline is never stopped by one"), async () => {
     const run = await runIc(["--version"], () => undefined);
     expect(run).toEqual({ code: 0, output: "ic 0.0.0" });
+});
+
+test.skipIf(!posix.runs)(posix.title("a run's input reaches ic on its stdin, which is then closed, and stays out of its argv"), async () => {
+    const run = await runIc(["stdin", "--password-stdin"], () => undefined, {}, { input: "correct horse", deadlineMs: 10_000 });
+    expect(run).toEqual({ code: 0, output: "read correct horse from stdin, argv stdin --password-stdin" });
 });

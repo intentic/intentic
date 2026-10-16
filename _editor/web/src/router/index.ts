@@ -32,7 +32,7 @@ import { ownsMissingSandboxes } from "../client/directory/deviceDirectory";
 import { signInAt } from "../lib/routes/signIn";
 import { t } from "@intentic/ui/i18n";
 import { useVocabulary } from "../workbench/views/vocabulary";
-import { localFace } from "../app/environments/local";
+import { localFace, sandboxFace } from "../app/environments/local";
 import { localHost } from "../app/environments/localHost";
 import { receiveHandoff } from "../features/chat/drafts/localHandoff";
 import { receiveTaskHandoff } from "../features/chat/drafts/localTaskHandoff";
@@ -498,8 +498,9 @@ export const router = createRouter({
     //
     // A local window keeps its route in the hash instead: the app's asset protocol answers `files/local` with the local
     // page (vite.local.config.ts) and an address below it with the bundle's other page, so a reload of `files/local/device`
-    // would load the wrong app. `files/local#/device` reloads onto the screen it was on.
-    history: localFace() === undefined ? createWebHistory(import.meta.env.BASE_URL) : createWebHashHistory(),
+    // would load the wrong app. `files/local#/device` reloads onto the screen it was on. The app's sandbox face is served
+    // the same way (`files/sandbox`), so it does the same.
+    history: localFace() === undefined && !sandboxFace() ? createWebHistory(import.meta.env.BASE_URL) : createWebHashHistory(),
     routes: localFace() === undefined ? routes : localRoutes(),
     // Makes a hash like `/sandbox/usage#accounts` actually scroll into view; vue-router ignores a fragment on its
     // pushState navigations. `{ el }` finds whichever pane owns the scrollbar; no hash means no opinion.

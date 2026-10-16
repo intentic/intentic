@@ -25,6 +25,7 @@ import {
 import * as docker from "./docker";
 import * as engine from "./engine";
 import * as fixing from "./fix";
+import * as drives from "./intenticOs/drives";
 import * as system from "./intenticOs/system";
 import * as machine from "./machine";
 import * as runs from "./runs";
@@ -150,6 +151,8 @@ const startOnce = async (options: DeviceOptions): Promise<void> => {
     void engine.loadEngine();
     // Whether this computer runs Intentic OS, and what waits for its next boot: nothing at all anywhere else.
     void system.loadOs();
+    // On Intentic OS, the drives plugged in and every copy off one, and the words of the app's notification for a new drive.
+    void drives.startDrives();
     // Registered before a parked setup can start a run, or its first seconds would show an empty log. A move between
     // engines, and a change to Intentic OS, is heard by every window, whichever started it.
     const listening = [

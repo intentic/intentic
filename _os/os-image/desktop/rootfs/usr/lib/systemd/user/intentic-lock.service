@@ -1,0 +1,8 @@
+[Unit]
+Description=Lock the screen when this computer is idle
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/libexec/intentic-os/idle-lock
+Restart=on-failure
+RestartSec=5

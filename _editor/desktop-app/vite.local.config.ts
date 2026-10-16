@@ -13,14 +13,15 @@ import { withPlatformOrigin } from "./local/origin.ts";
 const fromRoot = (path: string): string => join(repoRoot(import.meta.url), path);
 const here = (path: string): string => join(packageRoot(import.meta.url), path);
 
-// Every document request answers with the one page, as the app's asset protocol does in a built app.
+// Every document request answers with the one page, as the app's asset protocol does in a built app: the sandbox face
+// for `/files/sandbox`, the folder face for everything else.
 const onePage = (): Plugin => ({
     name: `local-face-one-page`,
     configureServer: (server) => {
-        const entry = `${server.config.base}local.html`;
+        const base = server.config.base;
         server.middlewares.use((request, _response, next) => {
             if (request.method === `GET` && request.headers.accept?.includes(`text/html`) === true) {
-                request.url = entry;
+                request.url = request.url?.startsWith(`${base}sandbox`) === true ? `${base}sandbox.html` : `${base}local.html`;
             }
             next();
         });
@@ -61,15 +62,25 @@ const POLICY: Readonly<Record<string, readonly string[]>> = {
 
 const INLINE_SCRIPT = /<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g;
 
+// WHAT MAY RUN ON THE SANDBOX FACE (sandbox.html): the same, and the editor's own sockets to the sandboxes on this
+// computer, which a page on a folder never opens (a terminal, a live view). WebKit does not read `http:` as covering `ws:`.
+const SANDBOX_POLICY = {
+    ...POLICY,
+    "connect-src": [...(POLICY[`connect-src`] ?? []), `ws://127.0.0.1:*`],
+} satisfies Readonly<Record<string, readonly string[]>>;
+
+// Which page's policy a built page gets, by its file.
+const policyOf = (file: string): Readonly<Record<string, readonly string[]>> => (file.endsWith(`sandbox.html`) ? SANDBOX_POLICY : POLICY);
+
 const contentPolicy = (): Plugin => ({
     name: `local-face-content-policy`,
     apply: `build`,
     transformIndexHtml: {
         order: `post`,
-        handler: (html) => {
+        handler: (html, context) => {
             const inline = [...html.matchAll(INLINE_SCRIPT)].map(([, body = ``]) => `'sha256-${createHash(`sha256`).update(body).digest(`base64`)}'`);
             // WebAssembly compiles under 'wasm-unsafe-eval' (the syntax highlighter's engine), which is not eval.
-            const directives = { ...POLICY, "script-src": [`'self'`, `'wasm-unsafe-eval'`, ...inline] };
+            const directives = { ...policyOf(context.filename), "script-src": [`'self'`, `'wasm-unsafe-eval'`, ...inline] };
             const content = Object.entries(directives)
                 .map(([directive, sources]) => `${directive} ${sources.join(` `)}`)
                 .join(`; `);
@@ -108,6 +119,7 @@ export default defineConfig({
         // As the app's own build: no preload wait on the whole route graph, one stylesheet.
         modulePreload: false,
         cssCodeSplit: false,
-        rolldownOptions: { input: { local: here(`local.html`) } },
+        // The folder face, and the sandbox face (local/sandbox.ts): this computer's sandboxes when the internet is out.
+        rolldownOptions: { input: { local: here(`local.html`), sandbox: here(`sandbox.html`) } },
     },
 });

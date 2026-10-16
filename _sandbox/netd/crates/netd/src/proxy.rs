@@ -15,7 +15,8 @@ use hyper::body::Incoming;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use netd_wire::{
-    Answer, ListenConfig, NetdHeader, Page, PreviewRoute, Question, Scheme, TerminalPlan, Upstream,
+    Answer, LOOPBACK_LISTENER, ListenConfig, NetdHeader, Page, PreviewRoute, Question, Scheme,
+    TerminalPlan, Upstream,
 };
 use relay::body::{self, Body};
 use relay::{for_next_hop, host_of, is_upgrade, strip_hop_by_hop};
@@ -136,7 +137,7 @@ impl Netd {
         }
         let upgrade = is_upgrade(request.headers(), request.version());
         let (mut parts, incoming) = request.into_parts();
-        outbound(&destination, &mut parts, upgrade);
+        outbound(&destination, &mut parts, upgrade, listener);
         let outbound = Request::from_parts(parts, body::incoming(incoming));
         if upgrade {
             return match self.dial(&destination, outbound.uri().clone()).await {
@@ -416,7 +417,7 @@ fn strip_netd_headers(headers: &mut HeaderMap) {
 // Rewrites a request for its destination: an h1 request to that address, Host present, hop-by-hop headers gone. A
 // target naming its authority (h2's `:authority`, an h1 absolute form) was routed by it, so it is the Host sent on,
 // whatever Host the request came with (RFC 9112 §3.2.2).
-fn outbound(destination: &Destination, parts: &mut Parts, upgrade: bool) {
+fn outbound(destination: &Destination, parts: &mut Parts, upgrade: bool, listener: Listener) {
     if let Some(authority) = parts
         .uri
         .authority()
@@ -436,6 +437,13 @@ fn outbound(destination: &Destination, parts: &mut Parts, upgrade: bool) {
                 parts
                     .headers
                     .insert(NetdHeader::Preview.name(), HeaderValue::from_static(OUTBOX));
+            }
+            // Said only by netd, which stripped any copy the request arrived with (`strip_netd_headers`).
+            if matches!(listener, Listener::Loopback { .. }) {
+                parts.headers.insert(
+                    NetdHeader::Listener.name(),
+                    HeaderValue::from_static(LOOPBACK_LISTENER),
+                );
             }
             "http://node".to_owned()
         }
@@ -644,6 +652,43 @@ mod tests {
             causes(&Stage(reset)),
             "client error (SendRequest): connection reset by peer"
         );
+    }
+
+    /// Only netd says a request came in on the loopback port: a copy of the header from outside is gone before the
+    /// request is routed, and a request from any other listener reaches Node without one.
+    #[test]
+    fn only_a_request_that_arrived_on_loopback_reaches_node_marked_as_one() {
+        let forwarded = |listener: Listener, sent: Option<&'static str>| {
+            let mut request = Request::get("/agents/attention").body(()).unwrap();
+            if let Some(value) = sent {
+                request
+                    .headers_mut()
+                    .insert(NetdHeader::Listener.name(), HeaderValue::from_static(value));
+            }
+            strip_netd_headers(request.headers_mut());
+            let (mut parts, ()) = request.into_parts();
+            outbound(
+                &Destination::Node { outbox: false },
+                &mut parts,
+                false,
+                listener,
+            );
+            parts
+                .headers
+                .get(NetdHeader::Listener.name())
+                .map(|value| value.to_str().unwrap().to_owned())
+        };
+        assert_eq!(
+            forwarded(Listener::Loopback { tls: false }, None).as_deref(),
+            Some(LOOPBACK_LISTENER)
+        );
+        assert_eq!(
+            forwarded(Listener::Loopback { tls: true }, None).as_deref(),
+            Some(LOOPBACK_LISTENER)
+        );
+        assert_eq!(forwarded(Listener::Tunnel, Some(LOOPBACK_LISTENER)), None);
+        assert_eq!(forwarded(Listener::Daemon, Some(LOOPBACK_LISTENER)), None);
+        assert_eq!(forwarded(Listener::Preview, None), None);
     }
 
     #[test]

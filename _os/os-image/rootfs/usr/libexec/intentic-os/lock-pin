@@ -1,0 +1,17 @@
+#!/usr/bin/python3 -I
+"""The only password this helper may change is intentic's; a PIN arrives only on stdin."""
+import subprocess
+import sys
+
+if sys.argv[1:] == ["--off"]:
+    if sys.stdin.buffer.read(1):
+        sys.exit(1)
+    sys.exit(subprocess.run(["/usr/sbin/usermod", "--lock", "intentic"], check=False).returncode)
+if sys.argv[1:]:
+    sys.exit(1)
+pin = sys.stdin.buffer.read(14)
+if pin.endswith(b"\n"):
+    pin = pin[:-1]
+if not 4 <= len(pin) <= 12 or any(byte < 48 or byte > 57 for byte in pin):
+    sys.exit(1)
+sys.exit(subprocess.run(["/usr/sbin/chpasswd"], input=b"intentic:" + pin + b"\n", check=False).returncode)

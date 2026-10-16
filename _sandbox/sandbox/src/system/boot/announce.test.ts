@@ -283,6 +283,16 @@ describe("createAnnouncer", () => {
             expect(announcer.status()).toEqual({ state: "registered", at: Date.now() });
         });
 
+        // The machine that runs the sandbox opens it by the platform's own id with no network (platform-row.ts).
+        it("hands on the platform's own id for the sandbox's row, and nothing from a platform too old to say it", async () => {
+            const named: string[] = [];
+            outcomes.push({ status: 200, body: `{"ok":true,"platformId":"cm1row"}` }, { status: 200, body: `{"ok":true}` });
+            const announcer = createAnnouncer(config, logger, { platformId: (id) => named.push(id) });
+            announcer.start();
+            await settle();
+            expect(named).toEqual(["cm1row"]);
+        });
+
         it("reports registered without an identity from a platform too old to send one", async () => {
             outcomes.push({ status: 200, body: `{"ok":true}` });
             const announcer = createAnnouncer(config, logger);

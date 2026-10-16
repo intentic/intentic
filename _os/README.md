@@ -37,7 +37,7 @@ agent gets something wrong.
 - **server** (`ghcr.io/intentic/os`): headless. Reached from app.intentic.dev and the phone apps, paired from a
   page on the local network or the console.
 - **desktop** (`ghcr.io/intentic/os-desktop`): the server image plus a sway kiosk session that opens the Intentic
-  desktop app full screen, and Chromium for the owner's own browsing.
+  desktop app tiled below a system bar, sandbox Spaces, notifications, an optional screen PIN, and Chromium for the owner's own browsing.
 - A channel is the image tag: `stable` or `beta`. `ic os channel beta` switches, keeping the edition.
 
 ## The host interface
@@ -48,6 +48,11 @@ machine that is not Intentic OS (no `/usr/lib/intentic-os/release.json`).
 
 | Verb | What it does | Needs root |
 | --- | --- | --- |
+| `ic os bar` | Desktop system bar: an i3bar JSON stream with navigation-only click actions | no |
+| `ic os lock status --json` | Desktop screen lock: `{ "enabled": bool, "idleMinutes": number }` | no |
+| `ic os lock set-pin` | Set or change a screen PIN (4–12 digits on stdin); enables the idle lock | narrow sudo helper |
+| `ic os lock off` | Disable the idle lock and lock the local password again | narrow sudo helper |
+| `ic os lock idle <minutes>` | Set the idle delay, 1–240 minutes; does not enable a lock without a PIN | no |
 | `ic os status --json` | One line of JSON, the shape below | no (bootc status through `sudo -n`) |
 | `ic os update --check --json` | Asks the registry whether a newer image is out: `{"available", "version", "digest"}` | sudo |
 | `ic os update` | Downloads and stages the newer image for the next boot; nothing restarts | sudo |
@@ -59,6 +64,19 @@ machine that is not Intentic OS (no `/usr/lib/intentic-os/release.json`).
 | `ic os record` | Writes which sandboxes run now to `/var/lib/intentic-os/expected-running.json` | docker |
 | `ic os health [--wait <s>]` | The boot's health verdict; exit 0 when healthy (greenboot calls it) | docker |
 | `ic os pair` | First boot: waits for a setup code on the console and on a LAN page, then `ic sandbox connect` | docker |
+| `ic os screen serve` | Desktop sway session: serves restricted, labelled Wayland sockets for running sandboxes | intentic + docker |
+| `ic os screen status --json` | `{"available":bool,"reason":string\|null,"sandboxes":[{"slug","socket":bool}]}` | no |
+| `ic os network status --json` | How the machine is online: `{"connected", "kind": "wifi"\|"ethernet"\|"none", "name", "signal"}` | no |
+| `ic os network wifi list --json` | Scans, then the networks in reach: `{"adapter", "enabled", "networks": [{"ssid", "signal", "secured", "known", "active"}]}` | polkit rule |
+| `ic os network wifi connect [--password-stdin] -- <ssid>` | Joins a network; a password only on stdin. Exit 5 when it needs one, or refused the one given | polkit rule |
+| `ic os network wifi forget -- <ssid>`, `wifi on\|off` | Forgets a network's saved profile; turns Wi-Fi on or off | polkit rule |
+| `ic os sound status --json` | `{"volume": 0-100, "muted", "output"}` of what plays now | no |
+| `ic os sound set [--volume N] [--mute\|--unmute] [--json]`, `sound outputs --json`, `sound output <id>` | The volume and mute; every speaker and headphone, and which one plays | no |
+| `ic os display list --json`, `display set <output> [--mode WxH@Hz] [--scale N]` | The screens, their modes and scale; a change kept in `/etc/intentic/sway.d/50-display.conf` and shown at once. Exit 4 on the server edition | no |
+| `ic os keyboard status\|layouts --json`, `keyboard set <layout> [--variant v]` | The keyboard layout, xkb's list of them; a change kept in `/etc/intentic/sway.d/40-keyboard.conf` and applied at once. Exit 4 on the server edition | no |
+| `ic os drives list --json` | The USB drives and memory cards plugged in, never the machine's own disks | no |
+| `ic os drives import <device> --to <slug> [--path <folder>] [--json]` | Copies a drive into a sandbox's `/work/Imports/<label>-<YYYY-MM-DD>/`. Exit 6, nothing copied, when it would not fit | docker, polkit rule |
+| `ic os drives eject <device>` | Closes every part of the drive and powers it off | polkit rule |
 
 ### `ic os status --json`
 
@@ -118,6 +136,41 @@ refuses a form posted from another site, so a page elsewhere cannot pair the box
 the same network who reaches it first still can, which is why the console is the place to pair a box on a shared
 network. When port 80 cannot be opened the page moves to 8080 and says so.
 
+### Settings
+
+What a person changes in the desktop app's This computer cards, the agent in the machine's own sandbox changes through
+the machine agent's tools, and both go through these verbs, as the `intentic` user and without sudo: the network
+(NetworkManager, through `nmcli`), the sound (WirePlumber, through `wpctl`), the screens and the keyboard (the desktop
+edition's sway session, through `swaymsg`), and removable drives (udisks, through `udisksctl`, and `lsblk`). Nothing
+that calls `ic os` speaks to those tools itself; the shapes are the contract's (`intentic-os.ts`), with an example of
+each in `golden/intentic-os.json`.
+
+- **Who may.** The machine agent starts at boot with no session on a seat, which polkit treats as an inactive caller
+  that needs an administrator. `/usr/share/polkit-1/rules.d/50-intentic.rules` lets the `intentic` user turn Wi-Fi on
+  and off, scan, join and leave networks and add or delete the machine's connection profiles, and mount, unmount and
+  power off removable drives (udisks' `drive.removable`), and nothing else. A Wi-Fi profile is the machine's, so it
+  rejoins at boot before anyone signs in. The user is in the `audio` group, so its sound server opens the sound card
+  with nobody at the screen.
+- **A password never rides on a command line**, which anyone on the machine can read: `wifi connect --password-stdin`
+  takes it on stdin and hands it to NetworkManager the same way (a `passwd-file` on nmcli's stdin). A new profile is
+  added without it and deleted again when the network refuses it, so a wrong password is not retried at every boot.
+- **The screen's session** is found without help: the machine agent starts before sway and has no `SWAYSOCK`, so ic
+  takes the newest `sway-ipc.<uid>.<pid>.sock` in `/run/user/1990` whose sway still runs. A screen or keyboard setting
+  is written under `/etc/intentic/sway.d` (group-writable by `intentic`), which the session's config includes, so it
+  holds at the next start.
+- **An import** opens the drive read-only when it is not open already, measures it, and stops with exit 6 before
+  copying a byte when the sandbox would be left with less than 256 MB. It copies with `docker cp`, gives the files to
+  whoever owns the sandbox's `/work`, and closes the drive again if it opened it. `--json` prints
+  `{"progress": {"bytes", "total"}}` every few seconds, then the result `{"device", "sandbox", "path", "bytes", "files"}`
+  last.
+
+| Exit | Means |
+| --- | --- |
+| 3 | Not Intentic OS (every verb) |
+| 4 | A screen verb on the server edition, which has no screen |
+| 5 | `wifi connect`: the network needs a password it was not given, or refused the one given |
+| 6 | `drives import`: it would not fit in the sandbox; nothing was copied |
+
 ### Host policy: `/etc/intentic/os.json`
 
 Defaults ship in `/usr/lib/intentic-os/os.json`; the owner's own values in `/etc/intentic/os.json` win, key by key.
@@ -137,6 +190,21 @@ Defaults ship in `/usr/lib/intentic-os/os.json`; the owner's own values in `/etc
 - `updates`: `stage` downloads a new OS image daily and waits for an approval to reboot into it (`ic os update
   --apply`, from the agent's card or the desktop app); `off` checks nothing.
 
+### Sandbox windows
+
+On the desktop edition, the sway session keeps `ic os screen serve` running. Every running runc sandbox gets its
+own security-context-v1 listener at `/run/user/1990/intentic/screen/<slug>/wayland-0`, under directories owned by
+`intentic` with mode 0700. The host policy mounts that **directory** at `/run/intentic/screen` before Docker starts
+the container, so a sway restart can replace the socket without replacing the container. Existing sandboxes receive
+the mount at their next recreate. Server editions and other operating systems receive no mount. Kata containers
+receive no mount and a warning: Unix sockets cannot cross their VM boundary; waypipe over vsock is future work.
+
+Inside the sandbox, `on-screen <command>` runs a native Wayland app on the owner's screen. Its amber titlebar names
+the sandbox using compositor-supplied metadata, and it starts tiled. The sandbox's desktop tools can still see only
+its own virtual desktop, so agents are told to check the app there first. Missing security-context-v1 support is an
+error, never a reason to expose the unrestricted display. The [image README](os-image/README.md#sandbox-window-boundary)
+lists the protocols sway withholds and the remaining limits.
+
 ### Files
 
 | Path | What |
@@ -146,4 +214,9 @@ Defaults ship in `/usr/lib/intentic-os/os.json`; the owner's own values in `/etc
 | `/etc/intentic/os.json` | The owner's policy |
 | `/var/lib/intentic-os/expected-running.json` | `{ "recordedAt": <ms>, "slugs": [...] }` |
 | `/run/intentic-os/health.json` | `{ "verdict": "green"\|"red", "failed": [...], "at": <ms> }` |
-| `/etc/sudoers.d/intentic-os` | The `intentic` user may run `bootc` and `systemctl reboot` without a password |
+| `/run/user/1990/intentic/screen/<slug>/wayland-0` | The sandbox's security-context Wayland listener; its directory is bind-mounted |
+| `/etc/sudoers.d/intentic-os` | The `intentic` user may run `bootc`, `systemctl reboot` and the narrow `lock-pin` helper without a password |
+| `/etc/intentic/sway.d/60-lock.conf` | Desktop only: screen-lock enabled state, idle minutes and the user-service reload command; no PIN |
+| `/etc/ssh/sshd_config.d/40-intentic.conf` | The local PIN can never authenticate an SSH password or keyboard-interactive login |
+| `/usr/share/polkit-1/rules.d/50-intentic.rules` | The `intentic` user may change Wi-Fi and open, close and power off removable drives without a password |
+| `/etc/intentic/sway.d/40-keyboard.conf`, `50-display.conf` | The keyboard layout and each screen's mode and scale, written by `ic os keyboard\|display set` |

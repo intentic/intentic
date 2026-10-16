@@ -60,6 +60,10 @@ flowchart LR
   and still attach, though their local grid can differ; newer editors fall back to local fitting with older netd versions.)
   A terminal is a WebSocket however it arrives: a browser's over TCP, or one the
   editor speaks on a WebTransport stream, which the edge relays as the same HTTP/1.1 upgrade.
+- A request it hands Node from the machine-published loopback port carries `x-intentic-listener: loopback`
+  (`NetdHeader::Listener`), which netd strips from every request arriving from outside, like its other headers. It is
+  how the daemon admits the desktop app's own bundled page there and nowhere else (2026-10-16: the offline sandbox face,
+  the daemon's `auth/browser-origins.ts`): only netd knows which port a request came in on.
 - Every address netd has is Node's word: its ports, the loopback certificate and the tunnel, sent over the control
   socket. netd writes the last of each down (`remember.rs`, `last-config.json` in the run directory, 0600) and applies
   them again when it starts, before any Node has spoken, and the next Node's word replaces them. A container whose

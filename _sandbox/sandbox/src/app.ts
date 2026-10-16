@@ -4,6 +4,7 @@ import { CONNECT_TOKEN_HEADER, REQUEST_ID_HEADER } from "@intentic/sandbox-contr
 import type { RouteMeta } from "@intentic/sandbox-contract/protocol/route-meta";
 import { sandboxRouteFor } from "@intentic/sandbox-contract";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
+import type { NetdHeader } from "@intentic/sandbox-contract/netd-wire";
 import { ORPCError } from "@orpc/server";
 import { withGitCaller } from "@intentic/base/git";
 import { type Context, Hono } from "hono";
@@ -12,7 +13,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { compressResponses } from "./http/compress-responses.js";
 import { watchResponseLength } from "./http/response-length.js";
 import { bearerFrom, ForbiddenError, OwnerUnreadableError, PasskeyRequiredError, PlatformKeyUnknownError } from "./auth/auth.js";
-import { allowedOriginsOf, originAllowedBy } from "./auth/browser-origins.js";
+import { allowedOriginsOf, desktopBundleOnLoopback, originAllowedBy } from "./auth/browser-origins.js";
 import { memberRefusal } from "./auth/role-floor.js";
 import { orgLocks } from "./org/org-locks.middleware.js";
 import { admitByGrant, grantsOf } from "./auth/grants.js";
@@ -49,6 +50,9 @@ const routedPath = (path: string): string => path.replace(/\/+$/u, "") || "/";
 // caller's session.
 // services.boot gates data routes behind the boot chain instead of racing it, while listeners come up as soon as the
 // process can serve.
+// The header netd marks a request with when it arrived on the loopback port (netd-wire `NetdHeader::Listener`).
+const LISTENER_HEADER: NetdHeader = "x-intentic-listener";
+
 export const createApp = (services: Services): Hono<AppEnv> => {
     const orpcHandler = new OpenAPIHandler(createRouter(services), {
         interceptors: [
@@ -148,8 +152,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                     return origin ?? "*";
                 }
                 // Reflect only a match; the first entry for a foreign origin would hide a misconfig. null means no
-                // header.
-                return originAllowed(origin) ? origin : null;
+                // header. The desktop app's own bundled page is a match on the loopback port alone (browser-origins.ts).
+                return originAllowed(origin) || desktopBundleOnLoopback(origin, c.req.header(LISTENER_HEADER)) ? origin : null;
             },
             allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             // REQUEST_ID_HEADER must be allow-listed too, or the preflight drops it and the correlation stays empty.

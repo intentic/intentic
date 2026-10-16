@@ -208,8 +208,11 @@ export type DaemonSession = z.infer<typeof DaemonSessionSchema>;
 // How a session's identity was proven. A session carries the set it was minted from; the require-passkey policy reads
 // it on every request, so a session minted before the switch stops working on its next call. `email` is the platform's
 // signed word that the person controls the address (policy/identity-assertion.ts), accepted only where the owner opted
-// that person in, and on hosted machines.
-export const ProofMethodSchema = z.enum(["google", "ticket", "passkey", "recovery", "email"]);
+// that person in, and on hosted machines. `host` is the machine that runs the sandbox: a session `ic sandbox session`
+// minted through `docker exec` for the bound owner, so the desktop app and Intentic OS reach their own sandboxes with no
+// network (the daemon's auth/host/host-session.ts). It is never a sign-in a browser can offer, so no daemon lists it in
+// `signIn.proofs`.
+export const ProofMethodSchema = z.enum(["google", "ticket", "passkey", "recovery", "email", "host"]);
 export type ProofMethod = z.infer<typeof ProofMethodSchema>;
 
 // The `reason` a daemon's refusal of an identity assertion carries beside its `error`, so the editor can say what to do:

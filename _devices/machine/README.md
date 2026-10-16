@@ -82,6 +82,19 @@ flowchart LR
   they are not registered, since `ic os` refuses there. The same switch covers `ic os …` and `bootc
   upgrade|switch|rollback` sent through `run_command` or another program door, and the facts carry `intenticOs`
   (edition, version, channel) read off the same file.
+- (2026-10-16) **Its settings**, on the same machines ([`tools/os/settings.ts`](src/device/tools/os/settings.ts)):
+  every setting a person can change from This computer on the machine's own screen is a tool too, so the agent in the
+  machine's own sandbox can join the guest Wi-Fi or copy a USB stick in. Each is one `ic os` verb, argv and JSON as
+  the contract's (`icOsWifiConnectArgs`, `IntenticOsDrivesSchema`): `os_network_status`, `os_wifi_list`,
+  `os_wifi_connect`, `os_wifi_forget`, `os_wifi_radio`; `os_sound_status`, `os_sound_set`, `os_sound_outputs`,
+  `os_sound_output`; `os_display_list`, `os_display_set`; `os_keyboard_status`, `os_keyboard_layouts` (with a `search`
+  applied here, since ic lists every layout xkb knows), `os_keyboard_set`; `os_drives_list`, `os_drive_import` and
+  `os_drive_eject`. Reads are gated like the listing, every change behind `sandboxes`; reads and short changes have a
+  deadline, and an import, which takes minutes for a big drive, has none and holds the sandbox it copies into in
+  flight, like any ic flow on it. ic's own exit codes are said in words: no screen on the server edition, a Wi-Fi
+  network that needs its password, a drive that would not fit. A Wi-Fi password reaches ic on its stdin
+  (`--password-stdin`, `runIc`'s `input`), never its argv; it is cut out of whatever ic prints back, and the audit log
+  records only its length.
 - **sync** (`src/sync/`): `sync setup` enrolls this machine and runs Mutagen against the sandbox: over ssh to its
   sshd, reached through a loopback port tunnelled over a WebSocket, or, for a project whose sandbox container runs on
   this machine's own Docker engine, through Docker itself (below). It keeps a folder two-way synced (a project

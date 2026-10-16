@@ -3,7 +3,9 @@
     The workspace that cannot be reached (src-tauri/src/offline.rs sends a page window here when its navigation fails
     for a network reason). Local content in a window that has no app commands: it can only navigate, so it checks
     for the workspace by asking for it, goes back the moment it answers, and closes through the same intentic://
-    link the workspace's own title bar uses. The window wears the platform's frame while this is up.
+    link the workspace's own title bar uses. The window wears the platform's frame while this is up. Where the app has
+    its own copy of the editor (`face`, src-tauri/src/machine_face.rs) it also offers this computer's own sandboxes,
+    which work with no internet at all.
 -->
 <html lang="en">
     <head>
@@ -121,6 +123,7 @@
             <div class="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span id="status"></span></div>
             <div class="actions">
                 <button id="retry" class="primary" type="button"></button>
+                <button id="face" type="button" hidden></button>
                 <button id="close" type="button"></button>
             </div>
             <code id="detail"></code>
@@ -136,6 +139,8 @@
                         checking: "Checking...",
                         retry: "Try now",
                         close: "Close",
+                        face: "Use this computer's sandboxes",
+                        stillHere: "The sandboxes on this computer keep working without it.",
                     },
                     pl: {
                         title: "Intentic nie ma połączenia z internetem",
@@ -144,6 +149,8 @@
                         checking: "Sprawdzam...",
                         retry: "Spróbuj teraz",
                         close: "Zamknij",
+                        face: "Użyj sandboxów z tego komputera",
+                        stillHere: "Sandboxy na tym komputerze działają dalej bez internetu.",
                     },
                     de: {
                         title: "Intentic erreicht das Internet nicht",
@@ -152,6 +159,8 @@
                         checking: "Wird geprüft...",
                         retry: "Jetzt versuchen",
                         close: "Schließen",
+                        face: "Sandboxen dieses Computers verwenden",
+                        stillHere: "Die Sandboxen auf diesem Computer funktionieren auch ohne Internet weiter.",
                     },
                     fr: {
                         title: "Intentic n'arrive pas à joindre Internet",
@@ -160,6 +169,8 @@
                         checking: "Vérification...",
                         retry: "Réessayer",
                         close: "Fermer",
+                        face: "Utiliser les sandboxes de cet ordinateur",
+                        stillHere: "Les sandboxes de cet ordinateur continuent de fonctionner sans Internet.",
                     },
                     es: {
                         title: "Intentic no puede conectarse a internet",
@@ -168,6 +179,8 @@
                         checking: "Comprobando...",
                         retry: "Intentar ahora",
                         close: "Cerrar",
+                        face: "Usar los sandboxes de este ordenador",
+                        stillHere: "Los sandboxes de este ordenador siguen funcionando sin internet.",
                     },
                 };
                 var lang = (navigator.language || "en").slice(0, 2).toLowerCase();
@@ -185,6 +198,20 @@
                 document.getElementById("retry").textContent = t.retry;
                 document.getElementById("close").textContent = t.close;
                 document.getElementById("detail").textContent = status;
+
+                // This computer's own sandboxes, when the app built the page that opens them: only ever a page of this
+                // page's own bundle, so nothing a link put in the address can send the window anywhere else.
+                var face = query.get("face") || "";
+                var bundle = location.protocol + "//" + location.host + "/";
+                if (face.indexOf(bundle) === 0) {
+                    var offer = document.getElementById("face");
+                    offer.textContent = t.face;
+                    offer.hidden = false;
+                    offer.addEventListener("click", function () {
+                        location.replace(face);
+                    });
+                    document.getElementById("body").textContent = t.body + " " + t.stillHere;
+                }
                 var said = document.getElementById("status");
 
                 // A no-cors request settles when the server answers at all and fails when nothing does: an answer is

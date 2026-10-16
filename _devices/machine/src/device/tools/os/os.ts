@@ -39,21 +39,22 @@ const STATUS_DEADLINE_MS = 60_000;
 // A registry round trip for the newest image's digest.
 const CHECK_DEADLINE_MS = 3 * 60_000;
 
-/** One `ic os` run: a bounded read when `deadlineMs` is set, else a flow left to finish (a download, a reboot). */
-export type OsIc = (args: readonly string[], options: { readonly deadlineMs?: number }) => Promise<IcRun>;
+/** One `ic os` run: a bounded read when `deadlineMs` is set, else a flow left to finish (a download, a reboot).
+ *  `input` goes to ic's stdin, for a secret that must not be in its argv (settings.ts, a Wi-Fi password). */
+export type OsIc = (args: readonly string[], options: { readonly deadlineMs?: number | undefined; readonly input?: string | undefined }) => Promise<IcRun>;
 
-const runOsIc: OsIc = async (args, { deadlineMs }) => await runIc(args, () => {}, {}, deadlineMs === undefined ? {} : { deadlineMs });
+const runOsIc: OsIc = async (args, { deadlineMs, input }) => await runIc(args, () => {}, {}, { deadlineMs, input });
 
 // What `ic os` says on a machine that is not Intentic OS. The tools are not offered there, so this is a release.json
 // that went missing under a running agent.
-const notIntenticOs = (run: IcRun): void => {
+export const notIntenticOs = (run: IcRun): void => {
     if (run.code === IC_OS_NOT_INTENTIC_OS_EXIT) {
         throw new Error(`This device is not running Intentic OS (it has no ${INTENTIC_OS_RELEASE_PATH}), so it has no OS for ic to manage.\n\n${run.output}`);
     }
 };
 
 // ic prints its one line of JSON last (a note, if any, goes before it on stderr): read and checked, never trusted.
-const answerOf = <T>(output: string, schema: z.ZodType<T>, verb: string): T => {
+export const answerOf = <T>(output: string, schema: z.ZodType<T>, verb: string): T => {
     const line = output
         .split(/\r?\n/)
         .map((text) => text.trim())
@@ -83,15 +84,15 @@ const REBOOT_NOTE =
     "If a boot fails its health checks, greenboot reboots it, and after three failed boots rolls back to the previous deployment by itself. " +
     "Once it is back, check os_status (`health`) and list_sandboxes.";
 
-const said = (run: IcRun, fallback: string): string => lastLine(run.output) ?? fallback;
+export const said = (run: IcRun, fallback: string): string => lastLine(run.output) ?? fallback;
 
 export interface OsDeps {
     readonly ic: OsIc;
 }
-const OS_DEPS: OsDeps = { ic: runOsIc };
+export const OS_DEPS: OsDeps = { ic: runOsIc };
 
-// A way of seeing, like the sandbox listing: either grant.
-const assertSeeing = (scopes: DeviceScopes): void => {
+// A way of seeing, like the sandbox listing: either grant. The settings tools' reads are gated the same (settings.ts).
+export const assertSeeing = (scopes: DeviceScopes): void => {
     if (scopes.shell !== "on") {
         assertScope(scopes, "sandboxes");
     }

@@ -1,0 +1,14 @@
+#!/bin/sh
+# The live sway IPC socket belongs to this session. Probe it so a stale file after a sway crash leaves no old
+# server racing the next login. The server's file lock also makes duplicate starts harmless.
+delay=1
+while timeout 3 swaymsg -s "$SWAYSOCK" -t get_version >/dev/null 2>&1; do
+    started=$(date +%s)
+    /usr/bin/ic os screen serve || true
+    if [ $(( $(date +%s) - started )) -lt 10 ]; then
+        delay=$(( delay < 30 ? delay * 2 : 30 ))
+    else
+        delay=1
+    fi
+    sleep "$delay"
+done

@@ -657,6 +657,7 @@ COPY --chmod=755 \
     _sandbox/sandbox/bin/agents \
     _sandbox/sandbox/bin/devices \
     _sandbox/sandbox/bin/offload-run \
+    _sandbox/sandbox/bin/on-screen \
     _sandbox/sandbox/bin/sandboxes \
     /usr/local/bin/
 # Entrypoint starts sshd (for Mutagen sync) then execs the daemon as PID 1.

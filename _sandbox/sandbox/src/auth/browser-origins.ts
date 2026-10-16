@@ -25,3 +25,24 @@ export const originAllowedBy =
 
 // The WebAuthn relying-party id an origin implies: its host, so a passkey answers only from the editor it was made on.
 export const rpIdOf = (origin: string): string => new URL(origin).hostname;
+
+/* THE DESKTOP APP'S OWN PAGES, ON THE LOOPBACK PORT ONLY (2026-10-16).
+
+With no network the desktop app (and Intentic OS, which runs it as its screen) opens this machine's sandboxes from a page
+in its own bundle: `tauri://localhost` on Linux and macOS, `http://tauri.localhost` on Windows. That origin is not in
+`webOrigin` (the editor's), and adding it there would mean recreating every sandbox, so it is admitted here instead, and
+only on a request netd says arrived on the machine-published loopback port (its `x-intentic-listener` header, which it
+strips from anything arriving from outside). Every Tauri app on every machine shares these origins, so they are never
+admitted on the tunnel.
+
+CORS is not the boundary here, and was not before: it only decides which pages may READ an answer. Every route still
+takes a bearer (a session the machine minted for the owner: auth/host/host-session.ts), and a page that holds none gets
+nothing either way. */
+
+const DESKTOP_BUNDLE_ORIGINS: ReadonlySet<string> = new Set(["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]);
+
+// The value netd's listener header carries on a request that came in on the loopback port (netd-wire LOOPBACK_LISTENER).
+const LOOPBACK_LISTENER = "loopback";
+
+export const desktopBundleOnLoopback = (origin: string, listener: string | undefined): boolean =>
+    listener === LOOPBACK_LISTENER && DESKTOP_BUNDLE_ORIGINS.has(origin);

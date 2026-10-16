@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+minutes=$(awk '/^# intentic-lock \{"enabled":true,/ { enabled=1 } /^# idle-minutes [0-9]+$/ { minutes=$3 } END { if (enabled) print minutes }' /etc/intentic/sway.d/60-lock.conf)
+[ -n "$minutes" ] || exit 0
+case "$minutes" in ''|*[!0-9]*) exit 1 ;; esac
+[ "$minutes" -ge 1 ] && [ "$minutes" -le 240 ] || exit 1
+exec swayidle -w timeout "$((minutes * 60))" \
+    'swaylock -f --config /usr/share/intentic-os/sway/lock.conf' \
+    before-sleep 'swaylock -f --config /usr/share/intentic-os/sway/lock.conf'

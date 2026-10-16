@@ -6,6 +6,7 @@ import { createAuditRoutes } from "./audit/audit.routes.js";
 import { createAgentRoutes } from "./agent/routes/agent.routes.js";
 import { createProvidersRoutes } from "./agent/routes/providers.routes.js";
 import { createAgentsRoutes } from "./conversations/agents.routes.js";
+import { createAttentionRoutes } from "./conversations/attention.routes.js";
 import { portJobOf } from "./agent/tools/jobs/background-jobs.js";
 import { createTranslatorRoutes } from "./agent/routes/translator.routes.js";
 import { createAutomationsRoutes } from "./automations/automations.routes.js";
@@ -70,7 +71,7 @@ export const createRouter = (services: Services): SandboxRouter => ({
     activity: createActivityRoutes(services),
     audit: createAuditRoutes(services),
     agent: createAgentRoutes(services),
-    agents: createAgentsRoutes(services),
+    agents: { ...createAgentsRoutes(services), ...createAttentionRoutes(services) },
     automations: createAutomationsRoutes(services),
     capabilities: createCapabilitiesRoutes(services),
     chores: createChoresRoutes(services),

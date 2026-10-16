@@ -27,6 +27,25 @@ flowchart LR
   window is the local face: the same editor built into this package's bundle (`dist/files/`, `local/main.ts`), on a
   folder of this computer. A panel the editor floats out gets a frameless window of its own. This package's own `src/`
   bundle (`index.html`) now draws one thing, the close question (`CloseConfirm.vue`).
+- **No internet: this computer's own sandboxes** (2026-10-16, `src-tauri/src/machine_face.rs`, `local/sandbox.ts`).
+  When the workspace's address does not answer, the workspace window shows the sandbox face instead of WebKitGTK's
+  error page: the same editor built into this bundle (`files/sandbox`, `dist/files/sandbox.html`), whole (every route
+  and extension, unlike the folder face), on the sandboxes `ic sandbox list --json` lists here. Its platform questions
+  are answered in the page (`local/machineFace.ts`): who is signed in is the account `roster.json` names, the list is
+  each sandbox with a loopback port, at `http://127.0.0.1:<localPort>` and keyed by the platform's id for it (or
+  `machine-<id>` before one is known), and anything else of the platform answers in plain words that it needs the
+  internet. Each running sandbox is opened with a session the machine minted for its owner (`ic sandbox session`,
+  kept in the app's memory only), written where the editor's sandbox client reads one; a sandbox that wakes later, or
+  whose daemon refuses its session, gets one minted again and handed over on the editor's own session channel. The
+  daemon admits the face's origin on the loopback port alone (the sandbox daemon's README). The page is granted
+  `machine_face`, `machine_face_renew` and `machine_face_online` (`capabilities/machine-face.json`) as local content
+  in the workspace window, which the hosted editor in the same window never is. Every 30 s it asks whether the
+  workspace answers again and then offers it ("You're back online"), never taking the page away. On Linux (so on
+  Intentic OS) `offline.rs` decides: a load of the workspace that fails for a network reason (WebKitGTK's
+  `load-failed`), or a 4 s probe at the start that finds nothing answering while nothing has started to show, sends the
+  window to the face on a computer that hosts sandboxes, else to `offline.html`, which also offers the face. On Windows
+  the offline page offers it after WebView2 says a load failed. Not yet: an agent's preview site on the loopback port
+  (netd routes preview hosts there, the editor does not dial them yet), and a panel floated out of the face.
 - **The main window.** The editor's shell with the sandbox shell's rail, holding what needs no sandbox and no
   account: at the top the place chip (the folder this window shows, and the account's sandboxes, each opening the
   workspace on itself at `/?sandbox=<id>` and picked from anywhere in the window by Alt+1–9 as in the workspace, or
@@ -74,6 +93,17 @@ flowchart LR
   `found=claude,codex` (`with_found`, read from the last reading so a window is never kept waiting on the disk), so the
   new sandbox's Connect offers them. Nothing found leaves the computer
   except those ids.
+- **The OS shell.** Linux kiosk sessions use `src-tauri/src/shell/`: a small synchronous i3 IPC client over
+  `$SWAYSOCK` (fixed framing, bounded payloads, no extra runtime or crate) subscribes to sway’s bindings, workspace
+  focus and windows. Super+1–9 opens the account’s roster in order, Super+0 This computer; the visible face moves
+  into that Space. Sandbox windows are matched only by sway’s `sandbox_engine=dev.intentic.sandbox` and the attested
+  `sandbox_app_id` (the security context’s app id), then the slug’s `ic sandbox list --json` platform id. Unknown ids stay where they opened, and sandbox fullscreen is undone
+  to keep the system label visible. Roster handovers also emit `desktop://roster` to the windows and rename occupied
+  Spaces. Super+Space uses `/chat?sandbox=<id>&shellChat=<nonce>` to reveal an empty draft and focus its message box;
+  the query is consumed once and sends no message. External `intentic://shell?open=device` and
+  `?open=sandbox&id=<id>&at=agents` links only navigate, and a sandbox must still belong to the stored roster.
+  The desktop edition’s Security card calls `ic os lock` through local-only commands; PINs travel on stdin, and
+  settings store no PIN. The machine agent’s lock tools are separate from this shell.
 - **This device.** A view this app adds to the local shell (`src/host.ts`, the web's
   `app/environments/localHost.ts`), titled This computer on screen, the name the workspace's switcher, the tray and the
   place chip give this machine (this page and the code keep This device as the view's name), where the launcher's card
@@ -562,9 +592,36 @@ flowchart LR
   call runs the OS's own `/usr/bin/ic`, never the `ic` beside the app (only the OS's is sure to know `ic os`), and never
   bootc or systemctl. Changes run one at a time and stream like an engine move, each line to every window on
   `desktop://os-run`; a restart is refused while any other run of the app's is going. The sway session starts the app
-  with `INTENTIC_KIOSK=1`: both faces open full screen, the × is refused instead of hiding the only thing on screen,
+  with `INTENTIC_KIOSK=1`: sway tiles both faces below its system bar, the × is refused instead of hiding the only thing on screen,
   minimise and maximise do nothing, and the app never updates itself, since the OS image carries it (nor anywhere
   release.json is present).
+- **This computer's own settings on Intentic OS** ([src-tauri/src/os_settings.rs](src-tauri/src/os_settings.rs),
+  2026-10-16). Under This system, a This computer heading holds five cards (`src/device/intenticOs/ThisComputer.vue`),
+  each shown once `ic os` has said what it is and hidden where it says there is nothing (exit 3, not Intentic OS; exit 4,
+  no screen on the server edition, for the screen and keyboard cards). Network: online by Wi-Fi (with its strength), by
+  cable or not at all, Wi-Fi on and off, the networks nearby with a lock on those that want a password, Join (a locked
+  network not joined before asks for its password first, and again after a wrong one, `ic os network wifi connect`
+  exit 5), and Forget for one joined before. The password goes to ic on its stdin (`--password-stdin`, through
+  `intentic_bounded::capture_with_input`), never on its command line. Sound: a volume slider sent once it rests,
+  mute, and which speaker it plays on. Screens: each by what a person calls it (the built-in one, else its model), its
+  resolution and refresh rate, and the size of text and apps (100% to 200%); a change is on trial for 15 seconds and
+  goes back by itself unless the reader keeps it, since a screen that went black cannot be read to undo it. Keyboard:
+  every layout by name with a box to find one, its variants, and a line to try it in. USB drives and memory cards: each
+  by its label, else its model, with its size; Copy into a sandbox on this computer (into a folder the reader names, or
+  a new one in Imports), its progress while it runs and a Stop, how much it copied and where, or that there was no room
+  (exit 6) and nothing was copied; and Eject. The commands, one per verb, check what reaches ic's command line as the
+  contract's schemas do (a drive is `/dev/…`, a folder stays inside `/work`, a screen or layout is a plain name, a
+  network's name goes after `--`), and read ic's answers strictly, tested against the contract's golden examples.
+  The statuses are read as the page opens and every 10 seconds while it is on screen; the Wi-Fi list (a rescan of
+  seconds) as the card opens and at Look again. A thread of the app's (`os_settings::start`) asks `ic os drives list`
+  every 3 seconds while the app runs on Intentic OS and tells every window when the list changes
+  (`desktop://os-drives`). A drive plugged in after its first read is fresh: it gets a system notification ("USB drive
+  KINGSTON plugged in", "Choose where it goes") whose press opens This device, where the Drives card is brought into
+  view with the drive lit up. Once the card has been on screen a few seconds the drive is seen, and its notification is
+  taken down, as it is when the drive leaves, is copied or is ejected. The notification is in the reader's language:
+  each window hands the app its words as it starts and when the language changes (`os_drive_words`), and the app says
+  them in English until one has. A copy runs one at a time, transcribed and stoppable like every run of the app's
+  (`os-drive-import`), each progress line and its end told to every window (`desktop://os-drive-import`).
 - **Deletes go to the Recycle Bin.** A delete in a local window reaches the sidecar, which asks the app (`ask`,
   `verb: trash`); the app moves the entry to the OS's Recycle Bin or Trash (the `trash` crate) when it lies strictly
   inside the folder of an open folder window, and answers.
@@ -633,7 +690,9 @@ A local window also hears the app's Tauri events, which This device listens on: 
 `started`, `line` and `exit`), `desktop://pending-setup`, `desktop://setup-stop` (a sandbox id),
 `desktop://pending-recreate`, `desktop://pending-sync`, `desktop://update`, `desktop://machine-sandbox` (this
 computer's own sandbox, its whole record on every change), and on Intentic OS `desktop://os-run` (a change to the
-system's `started`, each `line` and its `exit`).
+system's `started`, each `line` and its `exit`), `desktop://os-drives` (the drives plugged in, `{ drives, fresh }`,
+whenever that changes) and `desktop://os-drive-import` (a copy off a drive: `started`, `progress` with `bytes` and
+`total`, and its `exit`).
 
 ## A big drop, copied by the app (2026-10-09)
 
@@ -744,6 +803,7 @@ reloaded onto their new address and token.
 - [src-tauri/src/engine.rs](src-tauri/src/engine.rs) and [src/components/EngineCard.vue](src/components/EngineCard.vue) — which engine this PC's sandboxes run on (Docker Desktop or Intentic's own), and the move between them (`ic engine move`), step by step on the card.
 - [src-tauri/src/engine_keeper.rs](src-tauri/src/engine_keeper.rs) — Intentic's engine started again when it stops while this app runs.
 - [src-tauri/src/os.rs](src-tauri/src/os.rs) and [src/device/intenticOs/SystemCard.vue](src/device/intenticOs/SystemCard.vue) — Intentic OS: the system as `ic os` reports it, the changes This device makes to it, and kiosk mode.
+- [src-tauri/src/os_settings.rs](src-tauri/src/os_settings.rs) and [src/device/intenticOs/ThisComputer.vue](src/device/intenticOs/ThisComputer.vue) — Intentic OS: this computer's network, sound, screens, keyboard and drives as `ic os` reports them, the changes the This computer cards make, and the thread that watches the drives.
 
 ## Building
 

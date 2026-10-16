@@ -22,6 +22,12 @@ intentic-bounded = { path = "bounded" }
 # What docker's refusals mean and where Docker Desktop lives, read the same way by the desktop app (docker-host/src/lib.rs).
 intentic-docker-host = { path = "docker-host" }
 
+# The generated client owns Wayland framing and SCM_RIGHTS. Its default Rust backend needs no libwayland at runtime;
+# keeping it Linux-only leaves the Windows/macOS bootstrap binary unchanged.
+[target.'cfg(target_os = "linux")'.dependencies]
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "staging"] }
+
 # The engine's named-pipe relay (src/engine/relay.rs) speaks TLS to the engine with its client certificate. ureq already
 # builds this rustls with ring, so naming it here adds no crate and no bytes.
 [target.'cfg(windows)'.dependencies]

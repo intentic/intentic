@@ -26,10 +26,17 @@ flowchart LR
 - **Nothing reboots by itself.** bootc's own update timer (which pulls and reboots) is masked;
   `intentic-os-update.timer` only stages. Rebooting into an update is `ic os update --apply`, from the steward agent
   with the owner's yes or from the desktop app.
-- **The `intentic` user (uid 1990) is who Intentic runs as.** It is in the `docker` group, has sudo for `bootc` and
-  reboot only, and its user manager starts at boot (linger), so the machine agent that `ic sandbox connect` installs
+- **The `intentic` user (uid 1990) is who Intentic runs as.** It is in the `docker` group, has sudo for `bootc`, reboot and the narrow screen-PIN helper, and its user manager starts at boot (linger), so the machine agent that `ic sandbox connect` installs
   as a systemd user unit runs without anyone logging in. The uid is fixed because a system unit has no way to name
   the runtime directory of its own `User=`.
+- **The machine's settings need no administrator.** `NetworkManager-wifi` and `wpa_supplicant` (which fedora-bootc
+  leaves out) and `udisks2` are installed, and a polkit rule
+  ([rootfs/usr/share/polkit-1/rules.d/50-intentic.rules](rootfs/usr/share/polkit-1/rules.d/50-intentic.rules)) lets
+  the `intentic` user change Wi-Fi and mount, unmount and power off removable drives, nothing broader, since the
+  machine agent calling `ic os network|drives` has no seat session for the stock policies to trust. The user is in the
+  `audio` group, so PipeWire, which its user manager socket-activates, opens the sound card with nobody at the screen.
+  On the desktop edition `/etc/intentic/sway.d` belongs to the `intentic` group, where `ic os keyboard|display set`
+  keep what a person chose.
 - **First boot pairs.** `intentic-pair.service` runs `ic os pair` until a sandbox exists: on tty1 (server edition) and
   on a page on port 80 (both), it takes the setup code from app.intentic.dev and runs `ic sandbox connect`, which
   also connects this machine as that sandbox's device.
@@ -37,9 +44,76 @@ flowchart LR
   so it is installed without scripts and `kata-osbuilder-generate.service` runs before Docker on each boot, building
   only when the booted kernel has none yet.
 - **The desktop edition is the server edition plus a screen.** greetd logs `intentic` into a sway session
-  (`desktop/rootfs/usr/share/intentic-os/sway/config`) that keeps the Intentic desktop app full screen
-  (`INTENTIC_KIOSK=1`, restarted if it exits) with Chromium on a second workspace (Super+B, Super+Tab to switch).
+  (`desktop/rootfs/usr/share/intentic-os/sway/config`) that tiles the Intentic desktop app below a system bar
+  (`INTENTIC_KIOSK=1`, restarted if it exits). Super+1–9 opens the account’s sandboxes in roster order, Super+0
+  opens This computer, Super+B or Super+W opens Chromium in the Web Space, Super+Tab goes back and forth, and
+  Super+Space opens a new chat with its message box focused. Sandbox windows join their sandbox’s Space by the
+  compositor’s security context; fullscreen is undone so the system bar and Space label remain visible. The app
+  follows binding and window events over sway IPC, without starting a process for each sandbox shortcut.
   Pairing happens in the app or on the LAN page, so the console drop-in is removed.
+- **The bar and notifications belong to the session.** swaybar reads `ic os bar`, an i3bar JSON stream: needs-you
+  and working counts (hidden at zero), network, sound, a staged update, and the clock. Missing or failing readers
+  quietly lose their block. Clicks open This computer or the first sandbox needing attention on its Agents board
+  through a navigation-only `intentic://shell` link. Mako displays the app’s existing notifications and their default
+  click action, at the top right below the bar.
+- **Screen locking is optional until a PIN is set.** This computer’s Security card calls `ic os lock`: a PIN of
+  4–12 digits goes on stdin to the narrow root helper, which changes only `intentic`’s local password. Turning
+  locking off locks that password again. The PIN is never kept in the settings file. `60-lock.conf` in the owner’s
+  sway directory records only the enabled state and idle minutes (1–240, initially 5); an `exec_always` restarts
+  one systemd user service, so reloads cannot stack swayidle processes. swayidle locks with swaylock before sleep
+  and after the chosen idle delay. Password and keyboard-interactive SSH login for `intentic` are disabled: the
+  PIN is local only. greetd’s initial automatic login stays the same; its agreety fallback now accepts the PIN if
+  the session ends (with locking off, that account’s password remains locked).
+
+## Sandbox window boundary
+
+The desktop sway include `desktop/rootfs/usr/share/intentic-os/sway/config.d/50-sandbox-windows.conf` starts
+`/usr/libexec/intentic-os/screen-serve`. Its restart loop inherits the session's display and stops when that sway
+IPC socket no longer answers, including a stale file left after a crash. This avoids a user unit importing a stale
+display environment; `ic` also holds a file lock so duplicate starts cannot replace a live server's sockets.
+The service polls Docker every three seconds, identifies
+each running primary container by its full container id, and commits a security context with engine
+`dev.intentic.sandbox`, app id `<slug>` and instance id `<container id>`. Container replacement, disappearance of a
+socket file, and a restarted compositor all create a new listener. Docker listing failures revoke listeners until
+Docker answers again. A close socketpair held by the service revokes **new connections** when dropped; Wayland's
+protocol deliberately leaves clients already connected alive. Stopping their container ends those clients.
+The listener binds through a short `/proc/self/fd/<directory fd>` path so even the longest valid sandbox slug fits
+Linux's Unix socket address limit; the socket file still lives in the sandbox's own directory.
+
+As checked on 2026-10-16, [Fedora 44 ships sway 1.11-3.fc44](https://packages.fedoraproject.org/pkgs/sway/sway/fedora-44.html).
+Its [package spec](https://src.fedoraproject.org/rpms/sway/raw/f44/f/sway.spec) uses the upstream 1.11 source with no
+protocol-filter patch. In that version, [`is_privileged` and `filter_global` in sway/server.c](https://github.com/swaywm/sway/blob/1.11/sway/server.c)
+withhold these globals from security-context clients:
+
+| Protocol globals | Power withheld |
+| --- | --- |
+| `wp_drm_lease_device_v1` (when the DRM backend is built) | DRM leases |
+| `zwlr_output_manager_v1`, `zwlr_output_power_manager_v1`, `zxdg_output_manager_v1` | Output management, power and extended output descriptions |
+| `zwp_input_method_manager_v2` | Input methods |
+| `ext_foreign_toplevel_list_v1`, `zwlr_foreign_toplevel_manager_v1` | Listing and controlling other windows |
+| `zwlr_data_control_manager_v1`, `ext_data_control_manager_v1` | Unfocused clipboard control |
+| `zwlr_screencopy_manager_v1`, `ext_image_copy_capture_manager_v1`, `zwlr_export_dmabuf_manager_v1` | Screen capture |
+| `wp_security_context_manager_v1` | Creating nested security contexts |
+| `zwlr_gamma_control_manager_v1` | Output gamma |
+| `zwlr_layer_shell_v1` | Desktop layers and panels |
+| `ext_session_lock_manager_v1` | Locking the session |
+| `zwp_keyboard_shortcuts_inhibit_manager_v1` | Inhibiting compositor shortcuts |
+| `zwp_virtual_keyboard_manager_v1`, `zwlr_virtual_pointer_manager_v1`, `ext_transient_seat_manager_v1` | Synthetic input and transient seats |
+
+Sway separately exposes `xwayland_shell_v1` only to its own Xwayland server. Normal focused keyboard, pointer and
+clipboard interactions remain available to sandbox windows. Security-context metadata does not make a privileged
+runc container safe from the host: that container already has the host powers described in the OS isolation policy.
+The title is a compositor decoration using `%sandbox_app_id`, with Pango markup enabled and an amber frame; clients
+cannot supply that identity through their own app id or title. The palette applies to visible server decorations;
+the kiosk's normal borderless windows remain borderless.
+
+No extra desktop package is needed beyond sway 1.11 or later. The `ic` client uses Wayland's Rust backend, without a
+runtime dependency on libwayland. The sandbox image's Debian trixie repositories have
+[no xwayland-satellite package](https://packages.debian.org/search?keywords=xwayland-satellite&searchon=names&suite=trixie&section=all),
+so `on-screen --x11` reports that limit; X11-only apps use the sandbox's virtual desktop. Apps must supply their own
+native Wayland toolkit support. Screen sockets are offered only to runc containers, on their next recreate. A full
+desktop image boot must still check physical GPU rendering, Fedora SELinux access to the bind-mounted socket, and
+the shell's workspace/fullscreen handling together.
 
 ## Installing
 
@@ -63,7 +137,8 @@ built outside Fedora (NVIDIA's) would need a machine owner key, which this image
 | QEMU/KVM, q35, OVMF with Secure Boot on, swtpm TPM2, blank 40 GiB disk (install-test.sh) | server, from the installer ISO | unattended install; first boot unlocks the LUKS2 root through the TPM with nobody typing, shows the recovery key, serves the pairing page; the disk ends with only the TPM and recovery-key slots (2026-10-13) |
 
 Physical machines are added here as they are tried. The base is Fedora 44's kernel, so anything Fedora supports is
-expected to boot; Wi-Fi is configured with `nmcli` until the desktop app's network card exists.
+expected to boot. Wi-Fi is joined from the desktop app's network card, or with `ic os network wifi connect` on the
+console.
 
 ## Key files
 
@@ -71,5 +146,6 @@ expected to boot; Wi-Fi is configured with `nmcli` until the desktop app's netwo
 - [Containerfile.desktop](Containerfile.desktop) — the desktop edition on top of it.
 - [rootfs/usr/lib/systemd/system/intentic-pair.service](rootfs/usr/lib/systemd/system/intentic-pair.service) — first-boot pairing.
 - [rootfs/usr/libexec/intentic-os/tpm-enroll](rootfs/usr/libexec/intentic-os/tpm-enroll) — the disk bound to the TPM, the recovery key.
+- [rootfs/usr/share/polkit-1/rules.d/50-intentic.rules](rootfs/usr/share/polkit-1/rules.d/50-intentic.rules) — what the `intentic` user may change without an administrator: Wi-Fi, removable drives.
 - [build.sh](build.sh), [disk.sh](disk.sh), [smoke.sh](smoke.sh) — build an image, make a disk or installer, boot and check it.
 - [install-test.sh](install-test.sh) — the installer end to end, with a software TPM and Secure Boot.

@@ -113,6 +113,38 @@ test("a refused identity assertion answers its reason beside the error", async (
     expect(await early.json()).toEqual({ error: "unauthorized", reason: PLATFORM_KEY_UNKNOWN });
 });
 
+// The desktop app's own bundled page opens this machine's sandboxes with no network (auth/browser-origins.ts): its
+// origin is admitted only on a request netd marked as arriving on the loopback port, never on the tunnel, where every
+// Tauri app on every machine would share it.
+test("CORS admits the desktop app's bundled page on the loopback port alone", async () => {
+    const app = createApp(
+        services({
+            config: { ...testConfig, connectToken: "tok", webOrigin: "https://app.intentic.dev" },
+            auth: { authorize: rejectAuth, authorizeOwner: rejectAuth },
+        }),
+    );
+    const originOf = async (origin: string, listener?: string) => {
+        const headers = new Headers({ origin });
+        if (listener !== undefined) {
+            headers.set("x-intentic-listener", listener);
+        }
+        return (await app.request("/health", { headers })).headers.get("access-control-allow-origin");
+    };
+    expect(await originOf("tauri://localhost", "loopback")).toBe("tauri://localhost");
+    expect(await originOf("http://tauri.localhost", "loopback")).toBe("http://tauri.localhost");
+    expect(await originOf("tauri://localhost")).toBeNull();
+    expect(await originOf("tauri://localhost", "tunnel")).toBeNull();
+    // The loopback port does not open the daemon to any other page.
+    expect(await originOf("https://evil.example", "loopback")).toBeNull();
+    // A preflight from the bundled page is answered the same way, with the bearer header allowed.
+    const preflight = await app.request("/agents/attention", {
+        method: "OPTIONS",
+        headers: { origin: "tauri://localhost", "x-intentic-listener": "loopback", "access-control-request-method": "GET", "access-control-request-headers": "authorization" },
+    });
+    expect(preflight.headers.get("access-control-allow-origin")).toBe("tauri://localhost");
+    expect(preflight.headers.get("access-control-allow-headers")).toContain("authorization");
+});
+
 // /health answers a stranger with the sandbox id, which the loopback port also derives from.
 // CORS is the actual gate here: without an allowlist, any open page could read the id and derive every preview
 // hostname.

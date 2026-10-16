@@ -411,12 +411,15 @@ const stopRun = (child: ChildProcess): void => {
 // judges it. The one exception is a `deadlineMs` its caller set, which only a background round does (the keeper's fix,
 // where a Docker Desktop that never comes up must not hold every later round): past it the run is stopped and answers
 // `timedOut`. Windows has no groups to leave, and a detached child there would get a console window.
+// `input`, when a caller has one, is written to ic's stdin and the stream ended, so ic reads it to its end: the way a
+// secret reaches it (a Wi-Fi password, `--password-stdin`), since a command line is readable by anyone on the machine.
+// Without it ic's stdin is left as it always was.
 const runStreamed = (
     binary: string,
     args: readonly string[],
     onLine: (line: string) => void,
     env: Readonly<Record<string, string>>,
-    deadlineMs: number | undefined,
+    { deadlineMs, input }: { readonly deadlineMs: number | undefined; readonly input: string | undefined },
 ): Promise<IcRun | "missing"> => {
     const lines: string[] = [];
     const take = (line: string): void => {
@@ -432,6 +435,12 @@ const runStreamed = (
     };
     return new Promise((resolve) => {
         const child = spawn(binary, [...args], { windowsHide: true, env: { ...process.env, ...env }, detached: process.platform !== "win32" });
+        if (input !== undefined) {
+            // An ic that exits without reading it (one too old to know the flag) is answered by its exit code, not by
+            // an EPIPE thrown here.
+            child.stdin.on("error", () => undefined);
+            child.stdin.end(input);
+        }
         let missing = false;
         let timedOut = false;
         const deadline =
@@ -469,17 +478,18 @@ const runStreamed = (
 
 // An `ic` run, over the install locations in order: ENOENT means that candidate is not installed, so the next one is
 // tried rather than the run being failed. Exported for the auto-prepare tick. `deadlineMs` bounds a background round's
-// run (see runStreamed); every flow a person or a sandbox asked for leaves it unset.
+// run (see runStreamed); every flow a person or a sandbox asked for leaves it unset. `input` goes to ic's stdin (see
+// runStreamed), never into its argv or a line of any log.
 export const runIc = async (
     args: readonly string[],
     onLine: (line: string) => void,
     env: Readonly<Record<string, string>> = {},
-    { deadlineMs }: { readonly deadlineMs?: number } = {},
+    { deadlineMs, input }: { readonly deadlineMs?: number | undefined; readonly input?: string | undefined } = {},
 ): Promise<IcRun> => {
     await ensureCurrentIc();
     const candidates = icCandidates(process.platform, homeDir());
     for (const [index, binary] of candidates.entries()) {
-        const attempt = await runStreamed(binary, args, onLine, env, deadlineMs);
+        const attempt = await runStreamed(binary, args, onLine, env, { deadlineMs, input });
         if (attempt !== "missing") {
             return attempt;
         }

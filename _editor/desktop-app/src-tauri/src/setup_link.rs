@@ -604,7 +604,52 @@ pub enum LauncherTo {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ShellTarget {
+    Device,
+    Sandbox { id: String, agents: bool },
+}
+
+/// A shell link can only navigate. Even an external link has no settings, command, URL or message to apply.
+fn shell_target(url: &url::Url) -> Option<ShellTarget> {
+    if !matches!(url.path(), "" | "/")
+        || url.fragment().is_some()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.port().is_some()
+    {
+        return None;
+    }
+    let pairs: Vec<_> = url.query_pairs().collect();
+    if pairs.iter().enumerate().any(|(i, (key, _))| {
+        !matches!(key.as_ref(), "open" | "id" | "at")
+            || pairs[..i].iter().any(|(seen, _)| seen == key)
+    }) {
+        return None;
+    }
+    let get = |key| {
+        pairs
+            .iter()
+            .find(|(name, _)| name == key)
+            .map(|(_, value)| value.as_ref())
+    };
+    match get("open") {
+        Some("device") if pairs.len() == 1 => Some(ShellTarget::Device),
+        Some("sandbox") => {
+            let id = get("id").filter(|id| is_sandbox_id(id))?.to_string();
+            let agents = match get("at") {
+                None => false,
+                Some("agents") => true,
+                _ => return None,
+            };
+            Some(ShellTarget::Sandbox { id, agents })
+        }
+        _ => None,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Link {
+    Shell(ShellTarget),
     AnalyticsConsent(bool),
     Setup(Box<SetupArgs>),
     Recreate(RecreateArgs),
@@ -758,6 +803,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
                 profile: get("profile").filter(|name| PROFILES.contains(&name.as_str())),
             })))
         }
+        "shell" => shell_target(&parsed).map(Link::Shell),
         "signin" => Some(Link::SignIn {
             switch_account: get("switch").is_some(),
         }),
@@ -950,6 +996,37 @@ fn switch(value: Option<String>) -> Option<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn external_shell_links_only_navigate() {
+        assert_eq!(
+            parse_link("intentic://shell?open=device", Source::External),
+            Some(Link::Shell(ShellTarget::Device))
+        );
+        assert_eq!(
+            parse_link(
+                "intentic://shell?open=sandbox&id=box_2&at=agents",
+                Source::External
+            ),
+            Some(Link::Shell(ShellTarget::Sandbox {
+                id: "box_2".into(),
+                agents: true
+            }))
+        );
+        for link in [
+            "intentic://shell?open=reboot",
+            "intentic://shell?open=device&command=reboot",
+            "intentic://shell?open=sandbox&id=box&at=terminal",
+            "intentic://shell?open=sandbox&id=../box",
+            "intentic://shell?open=sandbox&id=box&id=other",
+            "intentic://shell?open=device&open=sandbox",
+            "intentic://shell/anything?open=device",
+            "intentic://shell?open=device#reboot",
+            "intentic://shell?open=sandbox&id=box&url=https://elsewhere.test",
+        ] {
+            assert_eq!(parse_link(link, Source::External), None, "{link}");
+        }
+    }
 
     /* The app's own workspace window, which is where every in-app link in these tests comes from. */
     const APP: Source<'static> = Source::App {

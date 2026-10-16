@@ -228,20 +228,18 @@ pub fn with_kata(argv: &[String]) -> Vec<String> {
     crate::sandbox::labels::into_run(argv, &["--runtime=kata".to_string()])
 }
 
-/// A sandbox's run line as ic is about to execute it, under this machine's policy: unchanged off Intentic OS and under
-/// `isolation: container`, and otherwise with the runtime [`vm_runtime`] picks. What was decided is said once a run, as
-/// a note for a microVM and a warning for a microVM the policy wanted and could not have.
+/// A sandbox's run line under the host's runtime and desktop policies. Off Intentic OS nothing changes. What runtime
+/// was decided is said once a run; the desktop socket is mounted only when it can cross the container boundary.
 pub fn sandbox_run(argv: Vec<String>) -> Vec<String> {
     if !super::on_intentic_os() {
         return argv;
     }
     let policy = current();
-    if policy.isolation == Isolation::Container {
-        return argv;
-    }
+    // Container isolation needs no Docker runtime probe, but still gets the desktop policy below.
+    let kata = policy.isolation != Isolation::Container && kata_available();
     static SAID: AtomicBool = AtomicBool::new(false);
     let first = !SAID.swap(true, Ordering::SeqCst);
-    match vm_runtime(&argv, &policy, kata_available()) {
+    let argv = match vm_runtime(&argv, &policy, kata) {
         Decision::Runc => argv,
         Decision::Kata => {
             if first {
@@ -259,6 +257,59 @@ pub fn sandbox_run(argv: Vec<String>) -> Vec<String> {
                     policy.isolation.word()
                 ));
             }
+            argv
+        }
+    };
+    #[cfg(target_os = "linux")]
+    let argv = screen_mount(argv, &Paths::here());
+    argv
+}
+
+/// The sandbox's host-stamped label supplies its identity, including runners. Values inside environment flags and
+/// the image's own arguments are not options. Pure; shared with the screen mount tests.
+#[cfg(target_os = "linux")]
+fn screen_slug(argv: &[String]) -> Option<String> {
+    if argv.first().is_none_or(|first| first != "run") {
+        return None;
+    }
+    options(argv).iter().find_map(|(name, value)| {
+        let slug = (name == "label")
+            .then_some(value.as_deref())??
+            .strip_prefix("dev.intentic.sandbox=")?;
+        crate::sandbox::is_slug(slug).then(|| slug.to_string())
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn screen_mount(argv: Vec<String>, paths: &Paths) -> Vec<String> {
+    if !super::screen::desktop_edition(paths) {
+        return argv;
+    }
+    let Some(slug) = screen_slug(&argv) else {
+        return argv;
+    };
+    if options(&argv).iter().any(|(name, value)| {
+        name == "runtime"
+            && value
+                .as_deref()
+                .is_some_and(|runtime| runtime.starts_with("kata"))
+    }) {
+        crate::ui::warn("This sandbox cannot show windows on this computer's screen: a Wayland socket cannot cross a Kata VM boundary (waypipe over vsock is not implemented).");
+        return argv;
+    }
+    match super::screen::prepare_directory(paths, &slug) {
+        Ok(directory) => crate::sandbox::labels::into_run(
+            &argv,
+            &[
+                "-v".to_string(),
+                format!("{}:/run/intentic/screen", directory.display()),
+            ],
+        ),
+        Err(err) => {
+            crate::ui::warn(&format!(
+                "This sandbox cannot show windows on this computer's screen: {}",
+                err.0
+            ));
             argv
         }
     }
@@ -479,6 +530,26 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn screen_identity_comes_only_from_a_valid_host_label_before_the_image() {
+        assert_eq!(
+            screen_slug(&argv("run --label dev.intentic.sandbox=work img")),
+            Some("work".into())
+        );
+        assert_eq!(
+            screen_slug(&argv("run --label=dev.intentic.sandbox=runner-lab img")),
+            Some("runner-lab".into())
+        );
+        for line in [
+            "run --label dev.intentic.sandbox=../bad img",
+            "run -e dev.intentic.sandbox=work img",
+            "run img --label dev.intentic.sandbox=work",
+            "create --label dev.intentic.sandbox=work img",
+        ] {
+            assert_eq!(screen_slug(&argv(line)), None, "{line}");
+        }
+    }
     fn argv(words: &str) -> Vec<String> {
         words.split_whitespace().map(str::to_string).collect()
     }

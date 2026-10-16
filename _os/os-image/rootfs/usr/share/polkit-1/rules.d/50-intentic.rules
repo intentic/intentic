@@ -1,0 +1,43 @@
+// THE INTENTIC USER'S OWN SETTINGS, WITHOUT AN ADMINISTRATOR'S PASSWORD (Intentic OS, _os/README.md "Settings").
+//
+// Every change a person makes in the desktop app's This computer cards, and every change the agent in the machine's own
+// sandbox makes through the device tools, goes through `ic os network|drives` as the `intentic` user. Most of those
+// calls come from the machine agent, a systemd user service that linger starts at boot: it has no session on a seat,
+// so polkit counts it as an inactive caller, and the stock policies of NetworkManager and udisks then ask for an
+// administrator's password that nobody is there to type. This rule lets that one user do exactly what those verbs do,
+// and nothing broader:
+//
+//   - NetworkManager: turn Wi-Fi on and off, scan for networks, join and leave them, and add and delete the machine's
+//     own connection profiles. Profiles are system-wide on purpose: the machine rejoins its Wi-Fi at boot, before
+//     anyone signs in, which is when its sandboxes need the network.
+//   - udisks: open (mount), close and power off REMOVABLE drives only: USB sticks and disks and memory cards, the drives
+//     udisks marks `drive.removable`. `-other-seat` is the same action asked by a caller with no seat, which is what the
+//     machine agent is. Never the machine's own disks (filesystem-mount-system), never formatting, partitioning,
+//     unlocking an encrypted drive, or closing what another user opened.
+//
+// Every other action, and every other user, keeps the stock policy.
+
+polkit.addRule(function (action, subject) {
+    if (subject.user !== "intentic") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    var network = [
+        "org.freedesktop.NetworkManager.enable-disable-wifi",
+        "org.freedesktop.NetworkManager.wifi.scan",
+        "org.freedesktop.NetworkManager.network-control",
+        "org.freedesktop.NetworkManager.settings.modify.system"
+    ];
+    if (network.indexOf(action.id) >= 0) {
+        return polkit.Result.YES;
+    }
+    var drives = [
+        "org.freedesktop.udisks2.filesystem-mount",
+        "org.freedesktop.udisks2.filesystem-mount-other-seat",
+        "org.freedesktop.udisks2.power-off-drive",
+        "org.freedesktop.udisks2.power-off-drive-other-seat"
+    ];
+    if (drives.indexOf(action.id) >= 0 && action.lookup("drive.removable") === "true") {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

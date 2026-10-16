@@ -46,6 +46,19 @@ export const localFace = (): LocalFace | undefined => {
     return window.__INTENTIC_LOCAL__;
 };
 
+/* THE DESKTOP APP'S SANDBOX FACE (2026-10-16, desktop-app local/sandbox.ts): this whole editor from the app's own bundle,
+on the sandboxes of the computer it runs on, for when the internet is out. It is no local window (every route and
+extension runs, and it has no folder), but it is served as one is, so it keeps its route in the hash for the same reason
+(router/index.ts). The app's bootstrap marks the window before any module runs. */
+
+declare global {
+    interface Window {
+        __INTENTIC_SANDBOX_FACE__?: true;
+    }
+}
+
+export const sandboxFace = (): boolean => window.__INTENTIC_SANDBOX_FACE__ === true;
+
 /** The window now shows another folder, without a reload (local/folderSwitch.ts): the face it wears from here on. */
 export const wearFace = (face: LocalFace): void => {
     window.__INTENTIC_LOCAL__ = Object.freeze({ ...face });

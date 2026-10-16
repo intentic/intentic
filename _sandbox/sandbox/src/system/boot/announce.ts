@@ -107,10 +107,23 @@ const verdictOf = (answer: IngressAnswer<IngressOutput<"announce">>, at: number)
 };
 
 // What the announcer hands on from an accepted announce besides the verdict: the platform's identity key, which the
-// authorizer verifies identity assertions with (auth/platform/platform-identity-key.ts).
+// authorizer verifies identity assertions with (auth/platform/platform-identity-key.ts), and the platform's own id for
+// this sandbox's row (store/platform-row.ts).
 export interface AnnounceListeners {
     readonly identityKey?: (pem: string) => void;
+    readonly platformId?: (id: string) => void;
 }
+
+// What an accepted announce carries besides its verdict, to whoever listens for it.
+const handOn = (answer: IngressAnswer<IngressOutput<"announce">>, listeners: AnnounceListeners): void => {
+    const accepted = answer.status === 200 ? answer.data : undefined;
+    if (accepted?.identityKey !== undefined) {
+        listeners.identityKey?.(accepted.identityKey);
+    }
+    if (accepted?.platformId !== undefined) {
+        listeners.platformId?.(accepted.platformId);
+    }
+};
 
 export const createAnnouncer = (config: Config, logger: Logger, listeners: AnnounceListeners = {}): Announcer => {
     let fastUntil = 0;
@@ -133,10 +146,7 @@ export const createAnnouncer = (config: Config, logger: Logger, listeners: Annou
         flight.run("announce", () =>
             callIngress(config, { route: "announce", input: announceBody, signal }).then(
                 (answer) => {
-                    const identityKey = answer.status === 200 ? answer.data?.identityKey : undefined;
-                    if (identityKey !== undefined) {
-                        listeners.identityKey?.(identityKey);
-                    }
+                    handOn(answer, listeners);
                     return verdictOf(answer, Date.now());
                 },
                 (error: Error): AnnounceState => ({

@@ -91,6 +91,7 @@ import { awaitingResolved, turnFinished } from "./push/notifications.js";
 import { notifyAwaiting } from "./push/awaiting-detail.js";
 import { createDomainEvents, type DomainEvents } from "./seams/domain-events.js";
 import { type Announcer, createAnnouncer } from "./system/boot/announce.js";
+import { rememberPlatformRow } from "./store/platform-row.js";
 import { createOrgPolicyHolder, type OrgPolicyHolder } from "./org/org-policy.js";
 import { platformOrgPolicyFetch } from "./system/org-policy-fetch.js";
 import { createOrgPins } from "./compliance/org-pins.js";
@@ -520,7 +521,10 @@ const createDaemonMembers = (
         // The browser's own reports, in their own file.
         clientLogger: createClientLogger(config),
         boot,
-        announcer: createAnnouncer(config, logger, { identityKey: deps.platformIdentityKey.learn }),
+        announcer: createAnnouncer(config, logger, {
+            identityKey: deps.platformIdentityKey.learn,
+            platformId: (id) => void rememberPlatformRow(config.historyRoot, id).catch((error: Error) => logger.warn({ err: error }, "announce: the platform's id for this sandbox was not kept")),
+        }),
         orgPolicy: deps.orgPolicy,
         reach: createReachReporter(config, logger, () => boot),
         browserRouters: createBrowserRouters(() => ({ capabilities, workspace, logger })),

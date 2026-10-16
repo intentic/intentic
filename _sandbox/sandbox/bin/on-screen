@@ -1,0 +1,28 @@
+#!/bin/sh
+# The absolute Wayland path reaches only the host's security-context listener. Never inherit an X display or try
+# sway's unrestricted socket when it is missing. A private runtime directory also works for non-root app processes.
+set -eu
+
+if [ "$#" -eq 0 ] || [ "$1" = "--help" ]; then
+    echo "Usage: on-screen <command> [args...] — show an app on this computer's screen."
+    echo "Check the app on your own desktop first: you cannot see or screenshot it on the owner's screen."
+    exit 0
+fi
+if [ ! -S /run/intentic/screen/wayland-0 ]; then
+    echo "This sandbox can't show windows on this computer's screen: its screen socket is unavailable. This needs Intentic OS desktop edition, a running screen session, and a sandbox recreated with the screen mount; Kata VMs cannot use it." >&2
+    exit 1
+fi
+if [ "$1" = "--x11" ]; then
+    echo "This sandbox can't show X11-only windows on this computer's screen: xwayland-satellite is not packaged for this image's Debian trixie base. Use a native Wayland app, or your sandbox's own desktop." >&2
+    exit 1
+fi
+
+# mktemp makes a directory owned by the caller, with mode 0700 as Wayland toolkits require. Reap it when the app exits.
+XDG_RUNTIME_DIR=$(mktemp -d /tmp/intentic-on-screen.XXXXXX)
+export XDG_RUNTIME_DIR
+trap 'rmdir "$XDG_RUNTIME_DIR" 2>/dev/null || true' EXIT
+unset DISPLAY WAYLAND_SOCKET
+export WAYLAND_DISPLAY=/run/intentic/screen/wayland-0
+export GDK_BACKEND=wayland QT_QPA_PLATFORM=wayland SDL_VIDEODRIVER=wayland MOZ_ENABLE_WAYLAND=1
+export ELECTRON_OZONE_PLATFORM_HINT=wayland
+"$@"

@@ -110,6 +110,14 @@ enum Command {
 
 #[derive(Subcommand)]
 enum OsCommand {
+    /// Let sandboxes show labelled windows on the owner's screen (desktop edition, Linux only)
+    #[command(subcommand)]
+    Screen(ScreenCommand),
+    /// The desktop system bar (i3bar JSON stream with click events)
+    Bar,
+    /// The optional screen PIN and automatic screen lock
+    #[command(subcommand)]
+    Lock(LockCommand),
     /// Where this machine stands: edition, version, channel, the booted, staged and rollback images, whether a reboot
     /// is needed, this boot's health verdict and the isolation policy
     Status {
@@ -179,6 +187,197 @@ enum OsCommand {
         #[arg(long = "no-console")]
         no_console: bool,
     },
+    /// How this machine is online, and the Wi-Fi it joins
+    #[command(subcommand)]
+    Network(OsNetworkCommand),
+    /// The volume, mute, and which speaker or headphones play
+    #[command(subcommand)]
+    Sound(OsSoundCommand),
+    /// The screens: resolution and size (desktop edition; exit 4 on the server edition)
+    #[command(subcommand)]
+    Display(OsDisplayCommand),
+    /// The keyboard layout (desktop edition; exit 4 on the server edition)
+    #[command(subcommand)]
+    Keyboard(OsKeyboardCommand),
+    /// USB drives and memory cards: list them, copy one into a sandbox, eject it
+    #[command(subcommand)]
+    Drives(OsDrivesCommand),
+}
+
+#[derive(Subcommand)]
+enum OsNetworkCommand {
+    /// Whether this machine is online, and how: {"connected","kind","name","signal"}
+    Status {
+        /// One line of JSON; every human line goes to stderr
+        #[arg(long)]
+        json: bool,
+    },
+    /// Wi-Fi: the networks in reach, joining and forgetting one, turning it on and off
+    #[command(subcommand)]
+    Wifi(OsWifiCommand),
+}
+
+#[derive(Subcommand)]
+enum OsWifiCommand {
+    /// Scan, then list the networks in reach, strongest first
+    List {
+        /// One line of JSON: {"adapter","enabled","networks":[{"ssid","signal","secured","known","active"}]}
+        #[arg(long)]
+        json: bool,
+    },
+    /// Join a network. A known one rejoins with its saved password; a new one that needs a password takes it from stdin
+    /// with --password-stdin, or a hidden prompt at a terminal, never from the command line. Exit 5 when it needs a
+    /// password it was not given, or refused the one given
+    Connect {
+        /// The network's name
+        ssid: String,
+        /// Read the password from stdin (its first line)
+        #[arg(long = "password-stdin")]
+        password_stdin: bool,
+    },
+    /// Forget a network, so this machine no longer joins it by itself
+    Forget {
+        /// The network's name
+        ssid: String,
+    },
+    /// Turn Wi-Fi on
+    On,
+    /// Turn Wi-Fi off
+    Off,
+}
+
+#[derive(Subcommand)]
+enum OsSoundCommand {
+    /// The volume, whether it is muted, and where sound plays: {"volume","muted","output"}
+    Status {
+        /// One line of JSON; every human line goes to stderr
+        #[arg(long)]
+        json: bool,
+    },
+    /// Set the volume (0-100), mute or unmute what plays now
+    Set {
+        /// The volume, 0 to 100
+        #[arg(long, value_parser = clap::value_parser!(u8).range(0..=100))]
+        volume: Option<u8>,
+        #[arg(long, conflicts_with = "unmute")]
+        mute: bool,
+        #[arg(long)]
+        unmute: bool,
+        /// Answer with the status after, as one line of JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Every speaker, headphone and screen that plays sound: {"outputs":[{"id","name","default"}]}
+    Outputs {
+        /// One line of JSON; every human line goes to stderr
+        #[arg(long)]
+        json: bool,
+    },
+    /// Play on this output from now on (its id from `ic os sound outputs`)
+    Output {
+        /// The output's id
+        id: u32,
+    },
+}
+
+#[derive(Subcommand)]
+enum OsDisplayCommand {
+    /// Every screen: its name, make and model, whether it is on, its mode, the modes it offers, its scale
+    List {
+        /// One line of JSON; every human line goes to stderr
+        #[arg(long)]
+        json: bool,
+    },
+    /// Set a screen's mode and/or scale, now and at every start
+    Set {
+        /// The screen, by its connector name from `ic os display list` (HDMI-A-1, eDP-1)
+        output: String,
+        /// The mode, as WIDTHxHEIGHT@HZ (1920x1080@60); the rate may be left out for the fastest
+        #[arg(long)]
+        mode: Option<String>,
+        /// How much bigger everything is drawn: 1 is actual size, 2 twice as big (0.5 to 4)
+        #[arg(long)]
+        scale: Option<f64>,
+    },
+}
+
+#[derive(Subcommand)]
+enum OsKeyboardCommand {
+    /// The layout in use: {"layout","variant","name"}
+    Status {
+        /// One line of JSON; every human line goes to stderr
+        #[arg(long)]
+        json: bool,
+    },
+    /// Every layout this machine knows, with its variants
+    Layouts {
+        /// One line of JSON: {"layouts":[{"layout","name","variants":[{"variant","name"}]}]}
+        #[arg(long)]
+        json: bool,
+    },
+    /// Use a layout (and variant), now and at every start
+    Set {
+        /// The layout, as xkb names it (us, de, fr, pl)
+        layout: String,
+        /// One of its variants (nodeadkeys, intl, dvorak)
+        #[arg(long)]
+        variant: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum OsDrivesCommand {
+    /// The USB drives and memory cards plugged in (never the machine's own disks)
+    List {
+        /// One line of JSON: {"drives":[{"device","label","size","filesystem","mountedAt","readOnly","model","kind"}]}
+        #[arg(long)]
+        json: bool,
+    },
+    /// Copy what is on a drive into a sandbox's /work/Imports/<label>-<date>/ (or --path), opening it read-only first.
+    /// Exit 6, with nothing copied, when it would not fit
+    Import {
+        /// The drive, as `ic os drives list` names it (/dev/sdb1)
+        device: String,
+        /// The sandbox to copy into, by its slug
+        #[arg(long)]
+        to: String,
+        /// A folder inside the sandbox's /work to copy into instead (Photos/2026)
+        #[arg(long)]
+        path: Option<String>,
+        /// Progress as {"progress":{"bytes","total"}} lines, then the result as the last line of JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Close a drive and power it off, so it can be pulled out
+    Eject {
+        /// The drive, as `ic os drives list` names it (/dev/sdb1)
+        device: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ScreenCommand {
+    /// Serve restricted Wayland sockets for running sandboxes; started inside the sway session
+    Serve,
+    /// Whether the screen service is available, and which sandboxes have a socket
+    Status {
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum LockCommand {
+    Status {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Read a new PIN (4 to 12 digits) from standard input
+    SetPin,
+    /// Turn the screen lock off and lock the local password again
+    Off,
+    /// Lock after this many minutes without activity (1 to 240)
+    Idle { minutes: u16 },
 }
 
 #[derive(Subcommand)]
@@ -469,6 +668,22 @@ enum SandboxCommand {
         /// Skip the confirmation (scripts)
         #[arg(short = 'y', long = "yes")]
         yes: bool,
+    },
+    /// A session for the sandbox's owner, minted by this machine through `docker exec`: how the desktop app opens a
+    /// sandbox here with no network. Refused for a sandbox nobody has signed in to yet
+    Session {
+        /// The sandbox (always named: the answer is its owner's credential)
+        slug: String,
+        /// One line of JSON: slug, sandboxId, platformId, localPort, email, token, expiresAt
+        #[arg(long, required = true)]
+        json: bool,
+    },
+    /// How many conversations need you and how many are working, on every sandbox on this device, asked over each
+    /// one's loopback port (no network)
+    Attention {
+        /// One line of JSON: totals, and one row per sandbox with `reachable`
+        #[arg(long, required = true)]
+        json: bool,
     },
     /// Swap onto the locally-built intentic-sandbox:dev image (the dogfood loop)
     Dev {
@@ -945,6 +1160,8 @@ fn main() {
                 auto,
             } => sandbox::tidy::run(dry_run, json, auto),
             SandboxCommand::ResetOwner { slug, yes } => sandbox::owner::run(slug, yes),
+            SandboxCommand::Session { slug, .. } => sandbox::session::run_json(&slug),
+            SandboxCommand::Attention { .. } => sandbox::attention::run_json(),
             SandboxCommand::Dev {
                 slug,
                 skip_preflight,
@@ -1185,6 +1402,7 @@ fn allowed_during_a_move(command: &Command) -> bool {
                 | SandboxCommand::Logs { .. }
                 | SandboxCommand::Doctor { .. }
                 | SandboxCommand::List { .. }
+                | SandboxCommand::Attention { .. }
         ),
         Command::Engine { command } => matches!(
             command,
@@ -1220,6 +1438,21 @@ fn run_machine(command: DeviceCommand) -> util::Result<()> {
 fn run_os(command: OsCommand) -> util::Result<()> {
     os::gate();
     match command {
+        #[cfg(target_os = "linux")]
+        OsCommand::Screen(ScreenCommand::Serve) => os::screen::serve(),
+        #[cfg(target_os = "linux")]
+        OsCommand::Screen(ScreenCommand::Status { json }) => os::screen::status(json),
+        #[cfg(not(target_os = "linux"))]
+        OsCommand::Screen(_) => Err(util::Fail(
+            "Screen sharing requires Intentic OS on Linux.".to_string(),
+        )),
+        OsCommand::Bar => os::bar::run(),
+        OsCommand::Lock(command) => match command {
+            LockCommand::Status { json } => os::lock::status(json),
+            LockCommand::SetPin => os::lock::set_pin(),
+            LockCommand::Off => os::lock::off(),
+            LockCommand::Idle { minutes } => os::lock::idle(minutes),
+        },
         OsCommand::Status { json } => os::status::run(json),
         OsCommand::Update {
             check,
@@ -1251,6 +1484,80 @@ fn run_os(command: OsCommand) -> util::Result<()> {
             no_lan,
             no_console,
         }),
+        OsCommand::Network(command) => run_os_network(command),
+        OsCommand::Sound(command) => run_os_sound(command),
+        OsCommand::Display(command) => match command {
+            OsDisplayCommand::List { json } => os::display::list(json),
+            OsDisplayCommand::Set {
+                output,
+                mode,
+                scale,
+            } => os::display::set(&output, mode.as_deref(), scale),
+        },
+        OsCommand::Keyboard(command) => match command {
+            OsKeyboardCommand::Status { json } => os::keyboard::status(json),
+            OsKeyboardCommand::Layouts { json } => os::keyboard::list(json),
+            OsKeyboardCommand::Set { layout, variant } => {
+                os::keyboard::set(&layout, variant.as_deref())
+            }
+        },
+        OsCommand::Drives(command) => match command {
+            OsDrivesCommand::List { json } => os::drives::list(json),
+            OsDrivesCommand::Import {
+                device,
+                to,
+                path,
+                json,
+            } => os::drives::import(os::drives::Import {
+                device,
+                to,
+                path,
+                json,
+            }),
+            OsDrivesCommand::Eject { device } => os::drives::eject(&device),
+        },
+    }
+}
+
+/// `ic os network …` (os/network.rs).
+#[cfg(unix)]
+fn run_os_network(command: OsNetworkCommand) -> util::Result<()> {
+    match command {
+        OsNetworkCommand::Status { json } => os::network::status(json),
+        OsNetworkCommand::Wifi(OsWifiCommand::List { json }) => os::network::wifi_list(json),
+        OsNetworkCommand::Wifi(OsWifiCommand::Connect {
+            ssid,
+            password_stdin,
+        }) => os::network::wifi_connect(&ssid, password_stdin),
+        OsNetworkCommand::Wifi(OsWifiCommand::Forget { ssid }) => os::network::wifi_forget(&ssid),
+        OsNetworkCommand::Wifi(OsWifiCommand::On) => os::network::wifi_radio(true),
+        OsNetworkCommand::Wifi(OsWifiCommand::Off) => os::network::wifi_radio(false),
+    }
+}
+
+/// `ic os sound …` (os/sound.rs).
+#[cfg(unix)]
+fn run_os_sound(command: OsSoundCommand) -> util::Result<()> {
+    match command {
+        OsSoundCommand::Status { json } => os::sound::status(json),
+        OsSoundCommand::Set {
+            volume,
+            mute,
+            unmute,
+            json,
+        } => os::sound::set(os::sound::Change {
+            volume,
+            muted: if mute {
+                Some(true)
+            } else if unmute {
+                Some(false)
+            } else {
+                None
+            },
+            json,
+        }),
+        OsSoundCommand::Outputs { json } => os::sound::outputs(json),
+        OsSoundCommand::Output { id } => os::sound::output(id),
     }
 }
 
@@ -1282,6 +1589,24 @@ mod tests {
         // clap's own audit: duplicate flags, conflicting shorts, bad arg definitions. It panics on a defect
         // that would otherwise only appear when a user typed the offending combination.
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn screen_commands_parse_serve_and_json_status() {
+        assert!(matches!(
+            parse(&["os", "screen", "serve"]),
+            Ok(Cli {
+                command: Command::Os(OsCommand::Screen(ScreenCommand::Serve)),
+                ..
+            })
+        ));
+        assert!(matches!(
+            parse(&["os", "screen", "status", "--json"]),
+            Ok(Cli {
+                command: Command::Os(OsCommand::Screen(ScreenCommand::Status { json: true })),
+                ..
+            })
+        ));
     }
 
     fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
@@ -1706,6 +2031,24 @@ mod tests {
             OsCommand::Status { json: true }
         ));
         assert!(matches!(os(&["status"]), OsCommand::Status { json: false }));
+        assert!(matches!(os(&["bar"]), OsCommand::Bar));
+        assert!(matches!(
+            os(&["lock", "status", "--json"]),
+            OsCommand::Lock(LockCommand::Status { json: true })
+        ));
+        assert!(matches!(
+            os(&["lock", "set-pin"]),
+            OsCommand::Lock(LockCommand::SetPin)
+        ));
+        assert!(matches!(
+            os(&["lock", "off"]),
+            OsCommand::Lock(LockCommand::Off)
+        ));
+        assert!(matches!(
+            os(&["lock", "idle", "12"]),
+            OsCommand::Lock(LockCommand::Idle { minutes: 12 })
+        ));
+        assert!(parse(&["os", "lock", "set-pin", "1234"]).is_err());
         assert!(matches!(
             os(&["update", "--check", "--json"]),
             OsCommand::Update {
@@ -1786,6 +2129,139 @@ mod tests {
             &["os", "channel"],
             &["os", "health", "--wait", "soon"],
             &["os", "upgrade"],
+        ] {
+            assert!(parse(refused).is_err(), "{refused:?} must be refused");
+        }
+    }
+
+    /* The settings verbs, as the desktop app's cards and the machine agent's tools spell them (the contract's
+    icOs*Args in _shared/sandbox-contract/src/schemas/intentic-os.ts): a network name after `--` (it may begin with a
+    hyphen), a password never on the command line, and nothing that changes without saying what. */
+    #[test]
+    fn os_settings_verbs_parse_as_their_callers_spell_them() {
+        let os = |args: &[&str]| -> OsCommand {
+            let mut full = vec!["os"];
+            full.extend_from_slice(args);
+            match parse(&full) {
+                Ok(Cli {
+                    command: Command::Os(command),
+                }) => command,
+                Ok(_) => panic!("{args:?} parsed as another group"),
+                Err(err) => panic!("{args:?} did not parse: {err}"),
+            }
+        };
+        assert!(matches!(
+            os(&["network", "status", "--json"]),
+            OsCommand::Network(OsNetworkCommand::Status { json: true })
+        ));
+        assert!(matches!(
+            os(&["network", "wifi", "list", "--json"]),
+            OsCommand::Network(OsNetworkCommand::Wifi(OsWifiCommand::List { json: true }))
+        ));
+        assert!(matches!(
+            os(&["network", "wifi", "connect", "--", "Home Fiber"]),
+            OsCommand::Network(OsNetworkCommand::Wifi(OsWifiCommand::Connect { ssid, password_stdin: false })) if ssid == "Home Fiber"
+        ));
+        assert!(matches!(
+            os(&["network", "wifi", "connect", "--password-stdin", "--", "-guest"]),
+            OsCommand::Network(OsNetworkCommand::Wifi(OsWifiCommand::Connect { ssid, password_stdin: true })) if ssid == "-guest"
+        ));
+        assert!(matches!(
+            os(&["network", "wifi", "forget", "--", "Office"]),
+            OsCommand::Network(OsNetworkCommand::Wifi(OsWifiCommand::Forget { ssid })) if ssid == "Office"
+        ));
+        assert!(matches!(
+            os(&["network", "wifi", "off"]),
+            OsCommand::Network(OsNetworkCommand::Wifi(OsWifiCommand::Off))
+        ));
+        assert!(matches!(
+            os(&["network", "wifi", "on"]),
+            OsCommand::Network(OsNetworkCommand::Wifi(OsWifiCommand::On))
+        ));
+        assert!(matches!(
+            os(&["sound", "status", "--json"]),
+            OsCommand::Sound(OsSoundCommand::Status { json: true })
+        ));
+        assert!(matches!(
+            os(&["sound", "set", "--volume", "40", "--unmute", "--json"]),
+            OsCommand::Sound(OsSoundCommand::Set {
+                volume: Some(40),
+                mute: false,
+                unmute: true,
+                json: true
+            })
+        ));
+        assert!(matches!(
+            os(&["sound", "set", "--mute"]),
+            OsCommand::Sound(OsSoundCommand::Set {
+                volume: None,
+                mute: true,
+                ..
+            })
+        ));
+        assert!(matches!(
+            os(&["sound", "outputs", "--json"]),
+            OsCommand::Sound(OsSoundCommand::Outputs { json: true })
+        ));
+        assert!(matches!(
+            os(&["sound", "output", "58"]),
+            OsCommand::Sound(OsSoundCommand::Output { id: 58 })
+        ));
+        assert!(matches!(
+            os(&["display", "list", "--json"]),
+            OsCommand::Display(OsDisplayCommand::List { json: true })
+        ));
+        assert!(matches!(
+            os(&["display", "set", "DP-2", "--mode", "1920x1080@59.94", "--scale", "1.5"]),
+            OsCommand::Display(OsDisplayCommand::Set { output, mode: Some(mode), scale: Some(scale) })
+                if output == "DP-2" && mode == "1920x1080@59.94" && scale == 1.5
+        ));
+        assert!(matches!(
+            os(&["keyboard", "status", "--json"]),
+            OsCommand::Keyboard(OsKeyboardCommand::Status { json: true })
+        ));
+        assert!(matches!(
+            os(&["keyboard", "layouts", "--json"]),
+            OsCommand::Keyboard(OsKeyboardCommand::Layouts { json: true })
+        ));
+        assert!(matches!(
+            os(&["keyboard", "set", "de", "--variant", "nodeadkeys"]),
+            OsCommand::Keyboard(OsKeyboardCommand::Set { layout, variant: Some(variant) })
+                if layout == "de" && variant == "nodeadkeys"
+        ));
+        assert!(matches!(
+            os(&["drives", "list", "--json"]),
+            OsCommand::Drives(OsDrivesCommand::List { json: true })
+        ));
+        assert!(matches!(
+            os(&["drives", "import", "/dev/sda1", "--to", "work", "--path", "Photos/2026", "--json"]),
+            OsCommand::Drives(OsDrivesCommand::Import { device, to, path: Some(path), json: true })
+                if device == "/dev/sda1" && to == "work" && path == "Photos/2026"
+        ));
+        assert!(matches!(
+            os(&["drives", "eject", "/dev/sdb1"]),
+            OsCommand::Drives(OsDrivesCommand::Eject { device }) if device == "/dev/sdb1"
+        ));
+        for refused in [
+            // A password on the command line is not a flag ic has.
+            &[
+                "os",
+                "network",
+                "wifi",
+                "connect",
+                "Home",
+                "--password",
+                "hunter2",
+            ][..],
+            &["os", "network", "wifi", "connect"],
+            &["os", "network", "wifi"],
+            &["os", "sound", "set", "--volume", "101"],
+            &["os", "sound", "set", "--mute", "--unmute"],
+            &["os", "sound", "output"],
+            &["os", "display", "set"],
+            &["os", "keyboard", "set"],
+            &["os", "drives", "import", "/dev/sda1"],
+            &["os", "drives", "eject"],
         ] {
             assert!(parse(refused).is_err(), "{refused:?} must be refused");
         }
@@ -2242,6 +2718,26 @@ mod tests {
                     json: false,
                     auto: false,
                 })
+            })
+        ));
+    }
+
+    /// A session is a credential: it is always for a named sandbox and always the one JSON line a program reads.
+    #[test]
+    fn a_session_names_its_sandbox_and_both_offline_reads_answer_json() {
+        assert!(parse(&["sandbox", "session", "--json"]).is_err());
+        assert!(parse(&["sandbox", "session", "abc"]).is_err());
+        assert!(matches!(
+            parse(&["sandbox", "session", "abc", "--json"]),
+            Ok(Cli {
+                command: Command::Sandbox(SandboxCommand::Session { ref slug, json: true }),
+            }) if slug == "abc"
+        ));
+        assert!(parse(&["sandbox", "attention"]).is_err());
+        assert!(matches!(
+            parse(&["sandbox", "attention", "--json"]),
+            Ok(Cli {
+                command: Command::Sandbox(SandboxCommand::Attention { json: true }),
             })
         ));
     }

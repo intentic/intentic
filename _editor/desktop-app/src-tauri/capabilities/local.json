@@ -1,7 +1,7 @@
 {
     "$schema": "../gen/schemas/desktop-schema.json",
     "identifier": "local",
-    "description": "The local windows: the main one (`home`, the editor's shell on a folder of this computer) and each folder's or document's (`files-*`), local content served from the app's own bundle. They may call what their shell and its This device view call: this computer's recent places and pointing a window at another, who is signed in and the account's sandboxes as the workspace last told them, and the way to them, the account's own platform calls (its menu and Settings: a short list account.rs checks, sent by the app with the workspace's session, which the page never holds), a sandbox for the window's own folder (project.rs: what its dialog draws, and the window's folder put in line for this computer's own sandbox, never a folder the page names), this computer's own sandbox (machine_sandbox.rs: its state, and trying again, starting it, making a new one, the restart its setup asks for), and the machine's sandboxes, agent, Docker engine (which engine the sandboxes run on, and the move to the other: engine.rs), on Intentic OS the OS itself and the changes to it (os.rs: each one `ic os` verb), setups (a fresh code for one whose own ran out included, minted with the workspace's session as this computer's own sandbox's is) and syncs, the machine agents of this computer's other environments (agents.rs: which WSL distro runs one, read off their files), the keyring on this computer (keyring.rs: each one `intentic-machine keyring` verb, a value for it on stdin), and what this computer's own AI tools say (found.rs: the subscriptions signed in here by who they are for, never a token, and the folders their histories name). The documents they draw can call none of it: the page's policy runs no script but the bundle's own (vite.local.config.ts), frames a document opens are other origins with no capability, and a link from a local window is heard only as `window` or `local` (setup_link.rs). The workspace is remote content and gets nothing at all: its only channel into the app is the intentic:// navigation the window handler intercepts. `set-title` is the main window's, whose title says a setup is running there (src/device/title.ts): the one sign of it outside the process. Every command of the app's own is a permission granted here by name (build.rs).",
+    "description": "The local windows: the main one (`home`, the editor's shell on a folder of this computer) and each folder's or document's (`files-*`), local content served from the app's own bundle. They may call what their shell and its This device view call: this computer's recent places and pointing a window at another, who is signed in and the account's sandboxes as the workspace last told them, and the way to them, the account's own platform calls (its menu and Settings: a short list account.rs checks, sent by the app with the workspace's session, which the page never holds), a sandbox for the window's own folder (project.rs: what its dialog draws, and the window's folder put in line for this computer's own sandbox, never a folder the page names), this computer's own sandbox (machine_sandbox.rs: its state, and trying again, starting it, making a new one, the restart its setup asks for), and the machine's sandboxes, agent, Docker engine (which engine the sandboxes run on, and the move to the other: engine.rs), on Intentic OS the OS itself and the changes to it (os.rs: each one `ic os` verb) and this computer's network, sound, screens, keyboard and drives (os_settings.rs: each one `ic os` verb, a Wi-Fi password on its stdin), setups (a fresh code for one whose own ran out included, minted with the workspace's session as this computer's own sandbox's is) and syncs, the machine agents of this computer's other environments (agents.rs: which WSL distro runs one, read off their files), the keyring on this computer (keyring.rs: each one `intentic-machine keyring` verb, a value for it on stdin), and what this computer's own AI tools say (found.rs: the subscriptions signed in here by who they are for, never a token, and the folders their histories name). The documents they draw can call none of it: the page's policy runs no script but the bundle's own (vite.local.config.ts), frames a document opens are other origins with no capability, and a link from a local window is heard only as `window` or `local` (setup_link.rs). The workspace is remote content and gets nothing at all: its only channel into the app is the intentic:// navigation the window handler intercepts. `set-title` is the main window's, whose title says a setup is running there (src/device/title.ts): the one sign of it outside the process. Every command of the app's own is a permission granted here by name (build.rs).",
     "windows": ["home", "files-*"],
     "permissions": [
         "core:default",
@@ -102,6 +102,29 @@
         "allow-os-update",
         "allow-os-rollback",
         "allow-os-reboot",
-        "allow-os-channel"
+        "allow-os-channel",
+        "allow-os-lock-status",
+        "allow-os-lock-set-pin",
+        "allow-os-lock-off",
+        "allow-os-lock-idle",
+        "allow-os-network-status",
+        "allow-os-wifi-list",
+        "allow-os-wifi-connect",
+        "allow-os-wifi-forget",
+        "allow-os-wifi-radio",
+        "allow-os-sound-status",
+        "allow-os-sound-set",
+        "allow-os-sound-outputs",
+        "allow-os-sound-output",
+        "allow-os-display-list",
+        "allow-os-display-set",
+        "allow-os-keyboard-status",
+        "allow-os-keyboard-layouts",
+        "allow-os-keyboard-set",
+        "allow-os-drives-list",
+        "allow-os-drives-seen",
+        "allow-os-drive-words",
+        "allow-os-drive-import",
+        "allow-os-drive-eject"
     ]
 }
