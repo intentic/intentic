@@ -98,7 +98,7 @@ jest.mock(`../../../lib/useApi`, () => ({
 const mintSyncPairing = jest.fn<() => Promise<{ token: string; mode: `sync` | `mirror` }>>();
 jest.mock(`../../sandbox/devices/sync/useDesktopSync`, () => ({ mintSyncPairing }));
 jest.mock(`../../sandbox/session/sandboxIdFromToken`, () => ({ sandboxIdFromToken: jest.fn().mockResolvedValue(`0f310c3c4db4`) }));
-jest.mock(`../../../app/analytics`, () => ({ track: jest.fn(), replaySessionId: () => undefined }));
+jest.mock(`../../../app/analytics`, () => ({ track: jest.fn(), replaySessionId: () => undefined, noteTurnCompleted: jest.fn() }));
 // The masthead's sign-out; the page's own concern is only what it does before and after the session ends.
 const signOut = jest.fn<() => Promise<void>>();
 jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }), signOut }) }));

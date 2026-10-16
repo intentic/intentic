@@ -122,6 +122,8 @@ test("an Agent tab save is committed on its own, as a settings page's write", as
         logger: unstubbed<Services["logger"]>("logger", { debug: () => undefined, warn: () => undefined }),
         // A save tells the audit trail which audit settings are now in force; nothing here reads the trail.
         audit: unstubbed<Services["audit"]>("audit", { adoptSettings: async () => undefined, record: () => undefined }),
+        // A save is checked against what the sandbox's organisation pinned (compliance/org-pins.ts); this one is bound to none.
+        orgPolicy: unstubbed<Services["orgPolicy"]>("orgPolicy", { current: async () => undefined }),
     });
     const context: OrpcContext = { headers: new Headers(), method: "POST", url: "/settings/set" };
 

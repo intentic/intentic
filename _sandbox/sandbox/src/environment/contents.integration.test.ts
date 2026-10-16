@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { repoRoot } from "@intentic/constants/node";
-import type { Capability } from "@intentic/sandbox-contract";
+import { type Capability, DEFAULT_PRIVACY_SHIELD } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
 import { environmentSourcesOf } from "../environment-composers.js";
@@ -59,6 +59,8 @@ const stubServices = (capabilities: Capability[] = [], environmentHash = ""): Se
         logger: unstubbed<Services["logger"]>("logger", { warn: () => undefined }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => capabilities }),
         authRoot: mkdtempSync(join(tmpdir(), "contents-auth-")),
+        // Composing reads the shield's policy for its readers' pack (privacy-pack.ts): the default, off, so none rides along.
+        privacyShield: unstubbed<Services["privacyShield"]>("privacyShield", { policy: async () => ({ ...DEFAULT_PRIVACY_SHIELD }) }),
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
     });
     return services;

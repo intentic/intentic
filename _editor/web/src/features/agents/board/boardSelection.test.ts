@@ -15,7 +15,7 @@ import AgentsView from "./AgentsView.vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Same import-time globals as startAgent.test.ts; scrollIntoView is jsdom's biggest gap and this file's subject,
-// recorded here for the assertions.
+// recorded here for the assertions. A card is the group named by its title; its focus press is the title button inside.
 const { reveals } = (() => {
     const recorded: { card: string | undefined; block: string | undefined }[] = [];
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(this: Element, options?: boolean | ScrollIntoViewOptions): void {
@@ -126,7 +126,7 @@ it(`scrolls to a card selected off the board: a ring drawn outside the scrollpor
     openFromOutside(`a8`);
     await settle();
 
-    expect(reveals.at(-1)).toEqual({ card: `Focus agent: agent 8`, block: `nearest` });
+    expect(reveals.at(-1)).toEqual({ card: `agent 8`, block: `nearest` });
     expect(board.isConnected).toBe(true);
 });
 
@@ -157,7 +157,7 @@ it(`scrolls again to a card the board once selected itself: the mark is one sele
     openFromOutside(`a0`);
     await settle();
 
-    expect(reveals.at(-1)).toEqual({ card: `Focus agent: agent 0`, block: `nearest` });
+    expect(reveals.at(-1)).toEqual({ card: `agent 0`, block: `nearest` });
 });
 
 // A roster frame update must not insert transient probe nodes into the DOM for an unchanged lane.

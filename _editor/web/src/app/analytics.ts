@@ -266,7 +266,7 @@ export const track = (event: string, properties?: Milestone): void => {
 // person keeps the first moment whichever browser said it first. A browser that has not allowed analytics sends neither
 // and sets no flag, so allowing it later inside the window still counts the sign-up.
 const SIGN_UP_WINDOW_MS = 30 * 60_000;
-// allow(module-state): the account signed in on this page, for the once-per-account flags
+// The account signed in on this page, for the once-per-account flags.
 let account: string | undefined;
 const onceKey = (milestone: string, userId: string): string => deviceKey(`intentic-milestone-${milestone}-${userId}`);
 

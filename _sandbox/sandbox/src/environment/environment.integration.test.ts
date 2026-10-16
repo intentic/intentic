@@ -12,7 +12,7 @@ import { waitFor } from "@intentic/testing/bun";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { AUTO_MARKER } from "./auto-drafts.js";
 import { fileRuntimeInstallsStore } from "./runtime-installs.js";
-import { hasOfficialBase } from "@intentic/sandbox-contract";
+import { DEFAULT_PRIVACY_SHIELD, hasOfficialBase } from "@intentic/sandbox-contract";
 import {
     approveDraft,
     approvedPath,
@@ -88,6 +88,8 @@ const stubServices = (environmentHashApplied = "", capabilities: Capability[] = 
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => capabilities }),
         // Empty auth dir plus no xAI sign-in means compose carries no provider fragments, which these tests assume.
         authRoot: mkdtempSync(join(tmpdir(), "environment-auth-")),
+        // Composing reads the shield's policy for its readers' pack (privacy-pack.ts): the default, off, so none rides along.
+        privacyShield: unstubbed<Services["privacyShield"]>("privacyShield", { policy: async () => ({ ...DEFAULT_PRIVACY_SHIELD }) }),
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
     });
     return services;

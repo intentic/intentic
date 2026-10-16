@@ -87,14 +87,15 @@ it(`opens on the card right-clicked, with that card's rows, and points the chat 
     expect(useChat().activeId.value).toBe(`a2`);
 });
 
-// The header keeps the filing press and one ⋯ (AgentCard's headerActions), not a seat per press: the ⋯ opens this same
-// menu, and what only the card can do, renaming its title in place, is done from there.
+// The header keeps the title's focus press, the filing press and one ⋯ (AgentCard's headerActions), not a seat per press:
+// the ⋯ opens this same menu, and what only the card can do, renaming its title in place, is done from there.
 it(`opens from the card's ⋯ as well, and renames the card in place from it`, async () => {
     setAgents([landed(`a1`)], 100);
     const board = await mountBoard();
-    const card = board.querySelector<HTMLElement>(`[aria-label="Focus agent: agent a1"]`)!;
+    const card = board.querySelector<HTMLElement>(`[aria-label="Focus agent: agent a1"]`)!.closest<HTMLElement>(`.session-card`)!;
     const header = card.firstElementChild!;
     expect([...header.querySelectorAll(`button`)].map((button) => button.getAttribute(`aria-label`))).toEqual([
+        t(`agents.agentCard.focusAgent`, { displayTitle: `agent a1` }),
         t(`agents.agentCard.archiveAgent`),
         t(`ui.action.moreActions`),
     ]);

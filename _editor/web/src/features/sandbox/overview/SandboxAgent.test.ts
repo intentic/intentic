@@ -128,7 +128,14 @@ it(`opens jobs for the category's old name`, async () => {
 it(`sends an old Safety link to Guardrails`, async () => {
     const { router } = await mount({ section: `safety` });
     await waitFor(() => expect(router.currentRoute.value.path).toBe(`/sandbox/guardrails`));
+    expect(router.currentRoute.value.query).toEqual({});
     expect(pill(document.body, `Safety`)).toBeUndefined();
+    expect([...document.body.querySelectorAll(`button[role="tab"]`)].map((button) => button.textContent?.trim())).toEqual([
+        `Jobs`,
+        `Instructions`,
+        `Tools`,
+        `Finishing`,
+    ]);
 });
 
 it(`holds delegation under tools`, async () => {
@@ -138,7 +145,11 @@ it(`holds delegation under tools`, async () => {
 
 it(`says under finished work that deleting is Retention's`, async () => {
     const { el } = await mount({ section: `finishing` });
-    expect(el.querySelector(`a[href="/sandbox/retention"]`)).not.toBeNull();
+    const link = el.querySelector(`a[href="/sandbox/retention"]`);
+    expect(link?.textContent?.trim()).toBe(`Retention`);
+    expect(link?.parentElement?.textContent?.replace(/\s+/g, ` `).trim()).toBe(
+        `Archiving deletes nothing. How long conversations and restore points are kept: Retention`,
+    );
 });
 
 // `?connect=` opened a provider's accounts here when they lived on this tab; a link from then lands on them now.

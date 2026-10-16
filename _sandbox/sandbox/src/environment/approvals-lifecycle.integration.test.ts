@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
-import type { Capability, EnvironmentDrift, Need, NeedTold } from "@intentic/sandbox-contract";
+import { type Capability, DEFAULT_PRIVACY_SHIELD, type EnvironmentDrift, type Need, type NeedTold } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
@@ -102,6 +102,8 @@ const world = (): World => {
         logger: unstubbed<Services["logger"]>("logger", { warn: () => undefined, info: () => undefined }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => capabilities }),
         authRoot: mkdtempSync(join(tmpdir(), "lifecycle-auth-")),
+        // Composing reads the shield's policy for its readers' pack (privacy-pack.ts): the default, off, so none rides along.
+        privacyShield: unstubbed<Services["privacyShield"]>("privacyShield", { policy: async () => ({ ...DEFAULT_PRIVACY_SHIELD }) }),
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
     });
     // Wired exactly as needs-slice.ts wires it.

@@ -17,7 +17,8 @@ beforeEach(() => {
     asked.length = 0;
 });
 
-// Better Auth's own get-session answer, with the fields of its user the editor does not keep.
+// Better Auth's own get-session answer, with a field of its user the editor does not keep (emailVerified) beside one it
+// does (createdAt, which tells analytics a sign-up from a return).
 const SESSION = {
     session: { id: `s1`, userId: `u1`, expiresAt: `2026-10-10T00:00:00.000Z`, token: `never-read` },
     user: { id: `u1`, email: `ada@example.com`, name: `Ada`, image: `https://example.com/ada.png`, emailVerified: true, createdAt: `2026-01-01T00:00:00.000Z` },
@@ -25,7 +26,13 @@ const SESSION = {
 
 describe(`readAccount`, () => {
     it(`is the session's user, as the editor's User and no more`, async () => {
-        const user: User = { id: `u1`, email: `ada@example.com`, name: `Ada`, image: `https://example.com/ada.png` };
+        const user: User = {
+            id: `u1`,
+            email: `ada@example.com`,
+            name: `Ada`,
+            image: `https://example.com/ada.png`,
+            createdAt: `2026-01-01T00:00:00.000Z`,
+        };
         expect(await readAccount(answering(200, JSON.stringify(SESSION)))).toStrictEqual(user);
         expect(asked).toEqual([{ method: `GET`, path: `/api/auth/get-session` }]);
     });
