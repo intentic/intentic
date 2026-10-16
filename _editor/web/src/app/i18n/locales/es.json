@@ -4967,12 +4967,6 @@
             "word": "Palabra de activación",
             "wordNote": "El nombre con el que llamas al agente, el mismo en cada dispositivo. Dos o tres sílabas lo activan con fiabilidad.",
             "wordMaintainer": "La palabra la elige quien mantiene este sandbox.",
-            "howGroup": "Cómo funciona",
-            "where": "Tus palabras siguen en la conversación que tienes en marcha: una con la que hablaste en los últimos minutos, o la que está en pantalla. Cualquier otra cosa empieza una sesión nueva; di «{word}, nueva sesión …» para empezar una directamente. Antes de que salgan, una tarjeta muestra adónde, y Escape cancela.",
-            "heard": "Mientras escucha, solo los primeros segundos de cada cosa dicha cerca de este dispositivo van al modelo de voz de tu sandbox, para oír si empieza por «{word}». No se guarda nada, y nada llega al agente si no empieza así.",
-            "noLanding": "Las sesiones abiertas por voz nunca se integran solas: cualquiera en la habitación puede decir el nombre.",
-            "inApp": "En la app de Intentic sigue escuchando con la ventana cerrada en la bandeja.",
-            "inBrowser": "En un navegador escucha mientras haya una pestaña de este espacio de trabajo abierta, y el navegador muestra su marca de micrófono. La app de Intentic sigue escuchando desde la bandeja.",
             "wordChange": "Cambia la palabra en Sandbox ▸ Agente ▸ Herramientas"
         }
     },

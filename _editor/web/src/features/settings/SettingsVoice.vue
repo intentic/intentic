@@ -4,7 +4,6 @@ import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
-import { desktopApp } from "../../app/environments/desktop";
 import { useRole } from "../../client/sandbox/useRole";
 import { useWakeListener } from "../chat/wake/useWakeListener";
 import { wakeStatus } from "../chat/wake/wakeStatus";
@@ -12,8 +11,7 @@ import { wakeStatus } from "../chat/wake/wakeStatus";
 // Talking to the agent from across the room, on this device: whether this device listens for the wake word (its own
 // microphone, so its own switch, kept in this browser) and where listening stands. The word itself is the sandbox's
 // (SandboxSettings.voice.wake), the same on every device, so it is chosen beside the sandbox's other voice settings
-// (Sandbox ▸ Agent ▸ Tools, AgentVoice.vue) and only named here. The listening is chat/wake's; this only switches it and
-// says what it does with what it hears.
+// (Sandbox ▸ Agent ▸ Tools, AgentVoice.vue) and only named here. The listening is chat/wake's; this only switches it.
 
 const t = useT();
 
@@ -23,7 +21,6 @@ const now = useNow(computed(() => listener.pausedUntil.value !== undefined), 30_
 
 const word = computed(() => listener.word.value);
 const status = computed(() => wakeStatus(listener, now.value));
-const inApp = desktopApp()?.wake === true;
 
 const paused = computed(() => listener.pausedUntil.value !== undefined && listener.pausedUntil.value > now.value);
 const listening = computed(() => listener.enabled.value && !paused.value && (listener.phase.value === `listening` || listener.phase.value === `elsewhere`));
@@ -58,12 +55,5 @@ const wordSettings = `/sandbox/agent?section=tools`;
             <RouterLink :to="wordSettings" class="text-link hover:underline">{{ t(`settings.settingsVoice.wordChange`) }}</RouterLink>
         </RowNote>
         <RowNote v-else icon="info-circle">{{ t(`settings.settingsVoice.wordMaintainer`) }}</RowNote>
-    </RowGroup>
-
-    <RowGroup :label="t(`settings.settingsVoice.howGroup`)">
-        <RowNote icon="comments">{{ t(`settings.settingsVoice.where`, { word }) }}</RowNote>
-        <RowNote icon="lock">{{ t(`settings.settingsVoice.heard`, { word }) }}</RowNote>
-        <RowNote icon="shield">{{ t(`settings.settingsVoice.noLanding`) }}</RowNote>
-        <RowNote icon="info-circle">{{ inApp ? t(`settings.settingsVoice.inApp`) : t(`settings.settingsVoice.inBrowser`) }}</RowNote>
     </RowGroup>
 </template>

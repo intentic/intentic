@@ -9136,12 +9136,6 @@
             "word": "Słowo wywołujące",
             "wordNote": "Imię, którym wołasz agenta, to samo na każdym urządzeniu. Dwie lub trzy sylaby budzą go niezawodnie.",
             "wordMaintainer": "Słowo wybiera opiekun tego sandboxa.",
-            "howGroup": "Jak to działa",
-            "where": "Twoje słowa trafiają do rozmowy, którą właśnie prowadzisz: tej, do której mówiłeś w ostatnich minutach, albo tej na ekranie. W każdym innym razie zaczyna się nowa sesja; powiedz „{word}, nowa sesja …”, aby od razu zacząć nową. Zanim pójdą, karta pokazuje dokąd, a Escape anuluje.",
-            "heard": "Podczas nasłuchiwania do modelu mowy twojego sandboxa trafiają tylko pierwsze sekundy każdej wypowiedzi przy tym urządzeniu, żeby usłyszeć, czy zaczyna się od „{word}”. Nic nie jest zachowywane i nic nie trafia do agenta, jeśli się od tego nie zaczyna.",
-            "noLanding": "Sesje otwarte głosem nigdy nie scalają się same: imię może wypowiedzieć każdy w pokoju.",
-            "inApp": "W aplikacji Intentic słucha dalej, gdy okno jest zamknięte do zasobnika.",
-            "inBrowser": "W przeglądarce słucha, dopóki otwarta jest karta tego obszaru roboczego, a przeglądarka pokazuje znak mikrofonu. Aplikacja Intentic słucha dalej z zasobnika.",
             "wordChange": "Zmień słowo w Sandbox ▸ Agent ▸ Narzędzia"
         },
         "hostedMachine": {

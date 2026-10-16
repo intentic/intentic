@@ -4947,12 +4947,6 @@
             "word": "Weckwort",
             "wordNote": "Der Name, mit dem du den Agenten rufst, auf jedem Gerät derselbe. Zwei oder drei Silben wecken ihn zuverlässig.",
             "wordMaintainer": "Das Wort wählt eine Betreuerin oder ein Betreuer dieser Sandbox.",
-            "howGroup": "So funktioniert es",
-            "where": "Deine Worte gehen in das Gespräch, mitten in dem du bist: eines, mit dem du in den letzten Minuten gesprochen hast, oder das auf dem Bildschirm. Alles andere beginnt eine neue Sitzung; sag „{word}, neue Sitzung …“, um gleich eine zu beginnen. Bevor sie gehen, zeigt eine Karte wohin, und Escape bricht ab.",
-            "heard": "Beim Zuhören gehen nur die ersten Sekunden von allem, was in der Nähe dieses Geräts gesagt wird, an das eigene Sprachmodell deiner Sandbox, um zu hören, ob es mit „{word}“ beginnt. Nichts wird behalten, und nichts erreicht den Agenten, wenn es nicht so beginnt.",
-            "noLanding": "Per Stimme geöffnete Sitzungen werden nie von selbst übernommen: Jeder im Raum kann den Namen sagen.",
-            "inApp": "In der Intentic-App hört es weiter, während das Fenster in den Infobereich geschlossen ist.",
-            "inBrowser": "Im Browser hört es zu, solange ein Tab dieses Arbeitsbereichs offen ist, und der Browser zeigt sein Mikrofonzeichen. Die Intentic-App hört aus dem Infobereich weiter.",
             "wordChange": "Das Wort unter Sandbox ▸ Agent ▸ Werkzeuge ändern"
         }
     },

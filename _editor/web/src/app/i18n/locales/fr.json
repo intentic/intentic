@@ -4925,12 +4925,6 @@
             "word": "Mot d'éveil",
             "wordNote": "Le nom par lequel vous appelez l'agent, le même sur chaque appareil. Deux ou trois syllabes le réveillent de façon fiable.",
             "wordMaintainer": "Le mot est choisi par une personne qui maintient cette sandbox.",
-            "howGroup": "Comment ça marche",
-            "where": "Vos mots continuent dans la conversation en cours : celle à qui vous avez parlé ces dernières minutes, ou celle à l'écran. Tout le reste ouvre une nouvelle session ; dites « {word}, nouvelle session … » pour en ouvrir une directement. Avant leur envoi, une carte montre où ils vont, et Échap annule.",
-            "heard": "Pendant l'écoute, seules les premières secondes de chaque phrase dite près de cet appareil vont au modèle vocal de votre sandbox, pour entendre si elle commence par « {word} ». Rien n'est conservé, et rien n'atteint l'agent si elle ne commence pas ainsi.",
-            "noLanding": "Les sessions ouvertes à la voix ne s'intègrent jamais d'elles-mêmes : n'importe qui dans la pièce peut dire le nom.",
-            "inApp": "Dans l'app Intentic, l'écoute continue quand la fenêtre est fermée dans la zone de notification.",
-            "inBrowser": "Dans un navigateur, l'écoute dure tant qu'un onglet de cet espace de travail est ouvert, et le navigateur affiche son indicateur de micro. L'app Intentic continue d'écouter depuis la zone de notification.",
             "wordChange": "Changer le mot dans Sandbox ▸ Agent ▸ Outils"
         }
     },

@@ -9544,12 +9544,6 @@
             "word": "Wake word",
             "wordNote": "The name you call the agent by, the same on every device. Two or three syllables wake it reliably.",
             "wordMaintainer": "A maintainer of this sandbox chooses the word.",
-            "howGroup": "How it works",
-            "where": "Your words go on in the conversation you are in the middle of: one you talked to in the last few minutes, or the one on screen. Anything else starts a new session; say “{word}, new session …” to start one outright. Before they go, a card shows where, and Escape cancels.",
-            "heard": "While listening, only the first seconds of each thing said near this device go to your sandbox's own speech model, to hear whether it starts with “{word}”. Nothing is kept, and nothing reaches the agent unless it does.",
-            "noLanding": "Sessions opened by voice never land by themselves: anyone in the room can say the name.",
-            "inApp": "In the Intentic app it keeps listening while the window is closed to the tray.",
-            "inBrowser": "In a browser it listens while a tab of this workspace is open, and the browser shows its microphone mark. The Intentic app keeps listening from the tray.",
             "wordChange": "Change the word in Sandbox ▸ Agent ▸ Tools"
         },
         "hostedMachine": {
