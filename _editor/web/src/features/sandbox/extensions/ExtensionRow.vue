@@ -304,8 +304,10 @@ const source = computed<{ words: string; mark?: string }>(() => {
 
                 <ExtensionUpdateOffer v-if="installed" :extension="entry.extension" :anchor="updateAnchor" />
 
-                <!-- The record proper: one section per question, ruled apart, each named in the same left column. -->
-                <div class="divide-y divide-line">
+                <!-- The record proper: one section per question, ruled apart, each named in the same left column. The last part
+                     gives up its bottom padding: the drawer's own closes the row, so a rule always sits midway between parts
+                     and the row ends with the same air whichever part comes last. -->
+                <div class="divide-y divide-line *:last:pb-0">
                     <ExtensionSection v-if="settings.length > 0" :label="t(`shared.settings`)">
                         <ExtensionSettingsForm :extension-id="entry.extension.id" :settings="settings" />
                     </ExtensionSection>
@@ -429,19 +431,19 @@ const source = computed<{ words: string; mark?: string }>(() => {
                             </template>
                         </dl>
                     </ExtensionSection>
-                </div>
 
-                <!-- Apart and last: uninstalling is not the errand a row is opened for. A real, bordered button, since it
-                     is the one thing here nothing undoes; the dialog it raises spells out the consequences. -->
-                <footer v-if="removable" class="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-line pt-3.5">
-                    <div class="min-w-0">
-                        <p class="text-xs font-medium text-content">{{ t(`sandbox.extensionRow.removeTitle`) }}</p>
-                        <p class="mt-0.5 text-2xs text-subtle">{{ removalHint }}</p>
-                    </div>
-                    <Button size="small" tone="danger" :label="t(`sandbox.extensionRow.remove`)" @click="emit(`remove`)">
-                        <template #icon><Icon name="trash" /></template>
-                    </Button>
-                </footer>
+                    <!-- Apart and last: uninstalling is not the errand a row is opened for. A real, bordered button, since it
+                         is the one thing here nothing undoes; the dialog it raises spells out the consequences. -->
+                    <footer v-if="removable" class="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3.5">
+                        <div class="min-w-0">
+                            <p class="text-xs font-medium text-content">{{ t(`sandbox.extensionRow.removeTitle`) }}</p>
+                            <p class="mt-0.5 text-2xs text-subtle">{{ removalHint }}</p>
+                        </div>
+                        <Button size="small" tone="danger" :label="t(`sandbox.extensionRow.remove`)" @click="emit(`remove`)">
+                            <template #icon><Icon name="trash" /></template>
+                        </Button>
+                    </footer>
+                </div>
             </div>
         </template>
     </DisclosureRow>
