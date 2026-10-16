@@ -72,12 +72,16 @@ describe("e-urzad", () => {
         // What a turn could do to the workspace file: mark it running (or approved) itself. The shell still acts on nothing.
         const itemPath = join(approvalsDir(root), `${approvalId}.json`);
         const item = z.record(z.string(), z.unknown()).parse(JSON.parse(await readFile(itemPath, "utf8")));
+        expect([item["kind"], item["status"]]).toEqual(["action", "proposed"]);
         expect(item["performer"]).toEqual({ extension: "intentic.e-urzad", digest: expect.stringMatching(/^[0-9a-f]{64}$/) });
         for (const status of ["running", "approved"]) {
             await writeFile(itemPath, JSON.stringify({ ...item, status }));
             const forged = await run(["approved", approvalId]);
             expect(forged.code).toBe(2);
-            expect(forged.out).toStartWith("error: nothing was done: `e-urzad approved` no longer carries out office acts.");
+            // The whole sentence, since it is all a turn holding an older approval is told: who carries the act out now.
+            expect(forged.out).toBe(
+                `error: nothing was done: \`e-urzad approved\` no longer carries out office acts. Once a person approves ${approvalId} in Approvals, the sandbox carries it out itself and writes the office's answer into the approval's "result". An approval proposed before this change has no performer and is never carried out: propose the act again.\n`,
+            );
         }
         expect(calls).toHaveLength(0);
     });
@@ -90,6 +94,10 @@ describe("e-urzad", () => {
         await writeFile(join(root, STATE_GROUP_DIR.config, "settings.json"), JSON.stringify({ actionRules: { "ezdrp.case.attach-draft": "allow" } }));
         const held = await run(["ezd", "attach", "sprawa-1", draft]);
         expect(HeldSchema.parse(JSON.parse(held.out)).approvalId).toMatch(/^e-urzad-/);
+        // An allowing rule is named in the hold, so the turn reads why it waits anyway.
+        expect(z.object({ message: z.string() }).parse(JSON.parse(held.out)).message).toContain(
+            "The action rules allow this key, but an office act is carried out only on a person's approval.",
+        );
         expect(calls).toHaveLength(0);
     });
 
