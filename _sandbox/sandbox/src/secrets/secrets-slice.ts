@@ -1,16 +1,25 @@
 import { join } from "node:path";
 import type { SecretHostGuard } from "@intentic/sandbox-contract";
+import type { Logger } from "pino";
 import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
 import type { CardDeps } from "../guard/card-offers.js";
 import type { HoldDeps } from "../guard/held-asks.js";
+import type { HostHub } from "../hosts/host-peer.js";
 import type { ConversationGrants } from "../personas/conversation-grants.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
+import { createDeviceSecrets, type DeviceSecretsService } from "./device/device-secrets.js";
+import type { SandboxKeyringKeys } from "./device/keyring-keys.js";
+import type { KeyringLink } from "./device/keyring-link.js";
+import { createKeyringParts } from "./device/keyring-parts.js";
+import type { KeyringSync } from "./device/keyring-sync.js";
+import { createProgramGuardGate, type ProgramGuardGate } from "./gates/program-guard-gate.js";
+import { fileSecretProgramGuards, type ProgramGuard, type SecretProgramGuardsStore, secretProgramGuardsDocument } from "./guards/program-guards.js";
 import { createCredentialGate, type CredentialGate } from "./gates/credential-gate.js";
 import { type ConversationReachOf, type CredentialReachDeps, createConversationReach } from "./credential-reach.js";
 import { type CredentialGatesStore, fileCredentialGates } from "./credential-gates.js";
 import { type CredentialGrants, credentialReleasesDocument, fileCredentialGrants } from "./credential-grants.js";
 import { createHostGuardGate, type HostGuardGate } from "./gates/host-guard-gate.js";
-import { effectiveHostGuards, fileSecretHostGuards, type SecretHostGuardsStore, secretHostGuardsDocument } from "./host-guards.js";
+import { effectiveHostGuards, fileSecretHostGuards, type SecretHostGuardsStore, secretHostGuardsDocument } from "./guards/host-guards.js";
 import { type NamedSecret, secretRegistryOf } from "./secret-registry.js";
 import { fileSandboxSecrets, type SandboxSecrets, sandboxSecretsDocument } from "./sandbox-secrets.js";
 import { fileSecretUses, secretUsesDocument, type SecretUsesStore } from "./secret-uses.js";
@@ -37,6 +46,18 @@ export interface SecretsSlice {
     readonly hostGuards: () => Promise<readonly SecretHostGuard[]>;
     // The check every exit makes before a host-guarded value leaves, sharing the gate's card seams.
     readonly hostGuardGate: HostGuardGate;
+    // The keyrings on the owner's computers (device/): the link that reads the pointers each shares here and asks for a
+    // value one use at a time, the sync mailbox between them, this sandbox's own keyring keys, and the device-held names
+    // as the exits, the gates and the inventory read them.
+    readonly keyringLink: KeyringLink;
+    readonly keyringSync: KeyringSync;
+    readonly sandboxKeyringKeys: SandboxKeyringKeys;
+    readonly deviceSecrets: DeviceSecretsService;
+    // Each sandbox-held secret's program guard, the host guard's counterpart for typing into a window or a phone app:
+    // the owner's settings, the list a typing reads (empty when unset), and the card that widens one.
+    readonly secretProgramGuards: SecretProgramGuardsStore;
+    readonly programGuardFor: (name: string) => Promise<ProgramGuard>;
+    readonly programGuardGate: ProgramGuardGate;
 }
 
 export interface SecretsDeps {
@@ -62,6 +83,11 @@ export interface SecretsDeps {
     readonly conversationEntry: CredentialReachDeps["entry"];
     // Where a release that could not be kept is said; the release itself still holds for this process.
     readonly warn: (message: string, error: unknown) => void;
+    // The owner's computers, for their keyrings: the hub is composed after this slice, so it is read at each call.
+    readonly deviceHub: () => Pick<HostHub, "connected" | "client" | "state">;
+    // This sandbox's public address, which every keyring grant names.
+    readonly publicUrl: () => string;
+    readonly logger: Pick<Logger, "warn">;
 }
 
 // Builds the secrets slice.
@@ -78,6 +104,9 @@ export const createSecretsSlice = ({
     members,
     conversationEntry,
     warn,
+    deviceHub,
+    publicUrl,
+    logger,
 }: SecretsDeps): SecretsSlice => {
     const credentialGates = fileCredentialGates(join(authRoot, "credential-gates.json"));
     const keptReleases = fileCredentialGrants(join(authRoot, credentialReleasesDocument.path), (error) =>
@@ -92,11 +121,33 @@ export const createSecretsSlice = ({
         const [stored, defaults] = await Promise.all([secretHostGuards.list(), connectorHosts()]);
         return effectiveHostGuards(stored, defaults);
     };
+    const keyrings = createKeyringParts({ authRoot, hub: deviceHub, publicUrl, logger });
+    const secretRegistry = secretRegistryOf(secretVault, () => workspace.repos["desired-state"], sandboxSecrets, {
+        copies: () => keyrings.keyringCopies.all(),
+        released: () => keyrings.releasedDeviceValues.all(),
+    });
+    const deviceSecrets = createDeviceSecrets({
+        link: keyrings.keyringLink,
+        sync: keyrings.keyringSync,
+        released: keyrings.releasedDeviceValues,
+        registry: secretRegistry,
+        devices: () => keyrings.devices,
+        logger,
+    });
+    const secretProgramGuards = fileSecretProgramGuards(join(authRoot, secretProgramGuardsDocument.path));
     return {
         secretHostGuards,
         hostGuards,
+        keyringLink: keyrings.keyringLink,
+        keyringSync: keyrings.keyringSync,
+        sandboxKeyringKeys: keyrings.keyringKeys,
+        deviceSecrets,
+        secretProgramGuards,
+        programGuardFor: (name) => secretProgramGuards.guardFor(name),
+        programGuardGate: createProgramGuardGate({ ownerEmail, ...cards, hold }),
         hostGuardGate: createHostGuardGate({
-            guards: hostGuards,
+            // A device-held name's keyring hosts first: the owner's own guards are for what the sandbox holds.
+            guards: async () => [...(await deviceSecrets.guards()), ...(await hostGuards())],
             ownerEmail,
             grants: {
                 of: async (conversationId) => (await conversationGrants.of(conversationId))?.secrets ?? [],
@@ -110,7 +161,7 @@ export const createSecretsSlice = ({
             hold,
         }),
         sandboxSecrets,
-        secretRegistry: secretRegistryOf(secretVault, () => workspace.repos["desired-state"], sandboxSecrets),
+        secretRegistry,
         secretUses: fileSecretUses(join(workspace.root, secretUsesDocument.path)),
         credentialGates,
         credentialGrants,

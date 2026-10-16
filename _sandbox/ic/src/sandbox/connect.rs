@@ -10,8 +10,8 @@ use crate::sandbox::recreate::{self, Restored};
 use crate::sandbox::side::{self, Side};
 use crate::sandbox::trash::GRACE_DAYS;
 use crate::sandbox::{
-    container_status, doctor, list_slugs, lock, mirror, now_ms, project_dir, remove, resume,
-    CONTAINER_PREFIX, PARKED_SUFFIX,
+    at_rest, container_status, doctor, list_slugs, lock, mirror, now_ms, project_dir, remove,
+    resume, CONTAINER_PREFIX, PARKED_SUFFIX,
 };
 use crate::tty;
 use crate::ui;
@@ -66,22 +66,10 @@ fn connect(
     let preview_port = env_or("PREVIEW_PORT", "5173");
     let mut sandbox_dns = env_or("SANDBOX_DNS", "1.1.1.1 1.0.0.1");
     let agent_auth_volume = env("INTENTIC_AGENT_AUTH_VOLUME");
-    let at_rest_key_host_file = env("INTENTIC_AT_REST_KEY_HOST_FILE");
-    let at_rest_previous_key_host_file = env("INTENTIC_AT_REST_PREVIOUS_KEY_HOST_FILE");
+    // The operator's own at-rest keys, checked before anything starts. Without one the sandbox gets ic's (at_rest.rs).
+    let at_rest_key_host_file = at_rest::host_file(at_rest::HOST_FILE_ENV)?;
+    let at_rest_previous_key_host_file = at_rest::host_file(at_rest::PREVIOUS_HOST_FILE_ENV)?;
     let drop_previous_key = env("INTENTIC_AT_REST_DROP_PREVIOUS_KEY").as_deref() == Some("1");
-    for (name, path) in [
-        ("INTENTIC_AT_REST_KEY_HOST_FILE", &at_rest_key_host_file),
-        (
-            "INTENTIC_AT_REST_PREVIOUS_KEY_HOST_FILE",
-            &at_rest_previous_key_host_file,
-        ),
-    ] {
-        let Some(path) = path else { continue };
-        let key = std::path::Path::new(path);
-        if !key.is_absolute() || !key.is_file() {
-            bail!("{name} must name an existing absolute host file");
-        }
-    }
     let sync_dir = env("SYNC_DIR");
     // A project sandbox's folder (a sandbox made for one folder), refused before anything starts when it is not a shape
     // the sync agent accepts: a wrong one would sync the owner's folder somewhere they were not told. SYNC_PROJECTS_HOST
@@ -308,6 +296,26 @@ fn connect(
             }
         }
     }
+
+    /* THE AT-REST KEY, decided before anything is pulled or started: a replace keeps the one its container mounts, an
+    operator's own file wins, and anything else gets ic's own (at_rest.rs). Made just before the container starts. */
+    let auth_source: Option<String> = agent_auth_volume.clone().or_else(|| {
+        replacing
+            .as_ref()
+            .and_then(|replacing| replacing.agent_auth.clone())
+    });
+    let key = at_rest::decide(
+        &slug,
+        replacing
+            .as_ref()
+            .map(|replacing| at_rest::Old {
+                mounted: replacing.at_rest_key.as_deref(),
+                env: &replacing.env,
+            })
+            .as_ref(),
+        auth_source.as_deref(),
+        at_rest_key_host_file.as_deref(),
+    )?;
 
     let log = Log::create("connect")?;
 
@@ -548,17 +556,13 @@ fn connect(
             },
         ),
         (
-            "INTENTIC_AT_REST_KEY_FILE",
-            if at_rest_key_host_file.is_some() {
-                "/run/secrets/intentic-at-rest-key"
-            } else {
-                ""
-            },
+            at_rest::KEY_ENV,
+            if key.is_on() { at_rest::KEY_MOUNT } else { "" },
         ),
         (
-            "INTENTIC_AT_REST_PREVIOUS_KEY_FILE",
+            at_rest::PREVIOUS_KEY_ENV,
             if at_rest_previous_key_host_file.is_some() {
-                "/run/secrets/intentic-at-rest-previous-key"
+                at_rest::PREVIOUS_KEY_MOUNT
             } else {
                 ""
             },
@@ -569,11 +573,9 @@ fn connect(
     let explicit: Vec<&str> = [
         env("WEB_ORIGIN").map(|_| "WEB_ORIGIN"),
         agent_auth_volume.as_ref().map(|_| "AGENT_AUTH_DIR"),
-        at_rest_key_host_file
-            .as_ref()
-            .map(|_| "INTENTIC_AT_REST_KEY_FILE"),
+        at_rest_key_host_file.as_ref().map(|_| at_rest::KEY_ENV),
         (at_rest_previous_key_host_file.is_some() || drop_previous_key)
-            .then_some("INTENTIC_AT_REST_PREVIOUS_KEY_FILE"),
+            .then_some(at_rest::PREVIOUS_KEY_ENV),
     ]
     .into_iter()
     .flatten()
@@ -587,36 +589,27 @@ fn connect(
         let kept: Vec<(&str, &str)> = text
             .split('\0')
             .filter_map(|pair| pair.split_once('='))
-            .filter(|(name, _)| *name != "INTENTIC_AT_REST_PREVIOUS_KEY_FILE")
+            .filter(|(name, _)| *name != at_rest::PREVIOUS_KEY_ENV)
             .collect();
         env_pairs = crate::util::nul_frame(&kept);
     }
-    let mut mounts: Vec<String> = agent_auth_volume
+    let mut mounts: Vec<String> = auth_source
         .as_ref()
-        .or(replacing
-            .as_ref()
-            .and_then(|replacing| replacing.agent_auth.as_ref()))
-        .map(|volume| format!("{volume}:/agent-auth"))
+        .map(|volume| format!("{volume}:{}", at_rest::AUTH_MOUNT))
         .into_iter()
         .collect();
-    if let Some(path) = at_rest_key_host_file
+    // ic's own key is made here, with the run line, so a setup that stopped before it made none.
+    at_rest::prepare(&key, &slug, auth_source.as_deref(), true)?;
+    mounts.extend(key.mount()?);
+    let previous_rest = format!("{}:ro", at_rest::PREVIOUS_KEY_MOUNT);
+    if let Some(path) = &at_rest_previous_key_host_file {
+        mounts.push(docker::bind_spec(path, &previous_rest)?);
+    } else if let Some(source) = replacing
         .as_ref()
-        .or_else(|| replacing.as_ref().and_then(|old| old.at_rest_key.as_ref()))
+        .and_then(|old| old.at_rest_previous_key.as_ref())
+        .filter(|_| !drop_previous_key)
     {
-        mounts.push(format!("{path}:/run/secrets/intentic-at-rest-key:ro"));
-    }
-    if let Some(path) = at_rest_previous_key_host_file.as_ref().or_else(|| {
-        if drop_previous_key {
-            None
-        } else {
-            replacing
-                .as_ref()
-                .and_then(|old| old.at_rest_previous_key.as_ref())
-        }
-    }) {
-        mounts.push(format!(
-            "{path}:/run/secrets/intentic-at-rest-previous-key:ro"
-        ));
+        mounts.push(format!("{source}:{previous_rest}"));
     }
     if let Some(replacing) = &replacing {
         mounts.extend(replacing.dev_mounts.iter().cloned());
@@ -668,14 +661,15 @@ fn connect(
     // What ic adds to the image's run line (labels.rs): its labels, and HOST_ENV. HOST_ENV rides here and not in the
     // pairs above because the run contract replays only the names it lists, and the images already published do not
     // list it (2026-10-05): handed over with the pairs, it would be dropped before the container ever saw it. A replace
-    // keeps the side the old container names, as a recreate does.
-    let stamped_run = match &replacing {
+    // keeps the side the old container names, as a recreate does. An opt-out of encryption at rest rides here too.
+    let mut stamped_run = match &replacing {
         None => stamped_run(&slug, &side::here()),
         Some(replacing) => recreate::stamp_args(
             &slug,
             &recreate::restamp(replacing.side.as_ref(), &side::here()),
         ),
     };
+    stamped_run.extend(at_rest::stamp(&key));
     // On Intentic OS the host policy may run the sandbox in a microVM (os/policy.rs); elsewhere the line stays as is.
     let argv = crate::os::policy::sandbox_run(crate::sandbox::labels::into_run(
         &contract::run_command(&request, &env_pairs, false, &unsupported, &[], &log)?,
@@ -861,8 +855,8 @@ const CARRIED: [&str; 7] = [
     "HOST_PLATFORM",
     "WEB_ORIGIN",
     "AGENT_AUTH_DIR",
-    "INTENTIC_AT_REST_KEY_FILE",
-    "INTENTIC_AT_REST_PREVIOUS_KEY_FILE",
+    at_rest::KEY_ENV,
+    at_rest::PREVIOUS_KEY_ENV,
     "SANDBOX_DEV_ROOT",
 ];
 
@@ -983,12 +977,9 @@ impl Replacing {
             parked: parked.to_string(),
             _held: held,
             record,
-            agent_auth: docker::mount_source(container, "/agent-auth"),
-            at_rest_key: docker::mount_source(container, "/run/secrets/intentic-at-rest-key"),
-            at_rest_previous_key: docker::mount_source(
-                container,
-                "/run/secrets/intentic-at-rest-previous-key",
-            ),
+            agent_auth: docker::mount_source(container, at_rest::AUTH_MOUNT),
+            at_rest_key: docker::mount_source(container, at_rest::KEY_MOUNT),
+            at_rest_previous_key: docker::mount_source(container, at_rest::PREVIOUS_KEY_MOUNT),
             image: value("SANDBOX_IMAGE")
                 .or_else(|| docker::inspect(container, "{{.Config.Image}}")),
             base_image: value("SANDBOX_BASE_IMAGE"),

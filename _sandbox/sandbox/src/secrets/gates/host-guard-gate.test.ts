@@ -6,7 +6,7 @@ import { createHeldCards } from "../../guard/held-cards.js";
 import { opt } from "../../opt.js";
 import { memoryFleet } from "../../testing.js";
 import { createHostGuardGate, type HostGuardCheck, type HostGuardGateDeps, type WidenRequest } from "./host-guard-gate.js";
-import { effectiveHostGuards } from "../host-guards.js";
+import { effectiveHostGuards } from "../guards/host-guards.js";
 import { resolveCommandSecrets, type SecretAccess, type SecretTarget } from "../secret-access.js";
 
 // The host guard end to end over a real parked-card registry. On, a use goes by itself only when every host its text
@@ -423,5 +423,37 @@ describe("a conversation's pass past the guard", () => {
         const second = createHostGuardGate(deps).check(asked(command(both), { names: ["GITHUB_TOKEN", "NPM_TOKEN"] }));
         await answer(frames, "deny", undefined, 1);
         expect(await second).toMatchObject({ allow: false });
+    });
+});
+
+describe("typing into a window or an app on one of the owner's computers", () => {
+    const window: SecretTarget = { kind: "window", machine: "rog", program: "FortiClient.exe", tool: "mcp__devices__type_secret" };
+    const app: SecretTarget = { kind: "app", machine: "rog", serial: "R5CT", tool: "mcp__devices__type_secret" };
+
+    it("asks before a host-guarded secret goes into a window, which names no site, and says which window on which computer", async () => {
+        const { deps, frames } = fake([GITHUB]);
+        const pending = createHostGuardGate(deps).check(asked(window));
+        await answer(frames, "once", OWNER);
+        expect(await pending).toEqual({ allow: true, approvedBy: OWNER.email });
+        expect(frames[0]).toMatchObject({
+            kind: "permission",
+            toolName: "mcp__devices__type_secret",
+            title: "Type GITHUB_TOKEN into FortiClient.exe's window on rog?",
+            explain: `${LISTS}, and this would type it into FortiClient.exe's window on rog, which names no site to check.`,
+        });
+    });
+
+    it("words a phone app the same way, and refuses it with nobody to ask", async () => {
+        const { deps } = fake([GITHUB], { liveRun: () => undefined });
+        expect(await createHostGuardGate(deps).check(asked(app))).toMatchObject({
+            allow: false,
+            reason: expect.stringContaining(`${LISTS}, and this would type it into an app on the phone attached to rog, which names no site to check.`),
+        });
+    });
+
+    it("lets a secret with no guard be typed anywhere, asking nobody", async () => {
+        const { deps, frames } = fake([]);
+        expect(await createHostGuardGate(deps).check(asked(window))).toEqual({ allow: true });
+        expect(frames).toEqual([]);
     });
 });

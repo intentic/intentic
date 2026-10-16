@@ -13,6 +13,9 @@ ureq = { version = "3", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
+# The at-rest keys ic makes for its sandboxes (sandbox/at_rest.rs) are 32 bytes straight from the operating system's random
+# source. tempfile already builds this crate on every platform ic runs on, so naming it adds no crate and no bytes.
+getrandom = "0.4"
 tempfile = "3"
 # The time-limited capture the desktop app shares with this binary (bounded/src/lib.rs says why there is one).
 intentic-bounded = { path = "bounded" }

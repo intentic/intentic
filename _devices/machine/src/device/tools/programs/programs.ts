@@ -9,7 +9,7 @@ import { execBounded } from "@intentic/base/process";
 import type { Desktop, WindowInfo } from "@intentic/desktop-automation";
 import { commandLineOf, type DeviceScopes } from "@intentic/sandbox-contract";
 import { assertPath, assertScope, ScopeError } from "../../policy.js";
-import { assertNoSandboxPower, destructiveClasses, destructiveRefusal } from "../shell.js";
+import { assertNoSandboxPower, destructiveClasses, destructiveRefusal, markedAsAgentCommand } from "../shell.js";
 import { inRuns, listArtifacts, sandboxRunsDir } from "./artifacts.js";
 import { isolatedExit, startScript, stopWindowsSandbox, windowsSandboxExe, windowsSandboxMissing, windowsSandboxRunning, wsbConfig } from "./isolated.js";
 
@@ -313,7 +313,9 @@ export const startApp = async (request: StartRequest, scopes: DeviceScopes, sand
     try {
         child = spawn(program, [...(request.args ?? [])], {
             cwd,
-            env: { ...process.env, ...request.env },
+            // Marked as the agent's (shell.ts, AGENT_COMMAND_ENV), after the request's own variables: a hint for the
+            // keyring's record, which the program can still unset, not a boundary.
+            env: markedAsAgentCommand({ ...process.env, ...request.env }),
             // Its own process group (posix) or no console of ours (Windows): it outlives this agent, and a stop reaches
             // everything it started. Not hidden, since an app is started to be seen.
             detached: true,

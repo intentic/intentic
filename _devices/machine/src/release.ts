@@ -43,6 +43,14 @@ export const launcherAssetName = (): string => `intentic-launch-windows-${archTo
 export const agentAssetUrl = (version: string): string => releaseAssetUrl(version, agentAssetName());
 export const launcherAssetUrl = (version: string): string => releaseAssetUrl(version, launcherAssetName());
 
+// intentic-keyring, the vault beside this agent (keyring/), and intentic-askpass, the same binary under a second name (a
+// hard link). They live in this bin/ but are this agent's to install, never to update: nothing in an upgrade, a sweep or
+// a rollback touches them, and the keyring moves to a new release only through `intentic-machine keyring upgrade`,
+// which the running keyring asks a person about first.
+export const keyringPath = join(binDir, `intentic-keyring${exe}`);
+export const askpassPath = join(binDir, `intentic-askpass${exe}`);
+export const keyringAssetName = (): string => `intentic-keyring-${osToken()}-${archToken()}${exe}`;
+
 // `releases/latest` redirects to `…/tag/vX.Y.Z`; the API answers the same but is rate-limited per IP.
 export const publishedVersion = async (): Promise<string | undefined> => {
     try {
@@ -148,7 +156,8 @@ export const renameIfPresent = async (from: string, to: string): Promise<void> =
 
 // What a finished swap or an extracted tarball leaves in bin/. Versioned part files stay: the next attempt resumes them.
 // So does `.previous`: it is what undoes an update whose agent keeps crashing, and only that agent's trial drops it
-// (agent-trial.ts), once it has run for ten minutes.
+// (agent-trial.ts), once it has run for ten minutes. Each pattern names its program, so the keyring's files
+// (`intentic-keyring*`, `intentic-askpass*`, its own `.previous` among them) never match: they are `keyring upgrade`'s.
 const LEFTOVER = [/^intentic-machine(?:\.exe)?\.old$/, /^intentic-launch\.exe\.(?:old|tmp)$/, /^mutagen(?:\.exe)?\.old$/, /^mutagen\.tar\.gz$/];
 
 export const isLeftover = (name: string): boolean => LEFTOVER.some((pattern) => pattern.test(name));

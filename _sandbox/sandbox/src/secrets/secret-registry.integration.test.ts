@@ -6,6 +6,7 @@ import { ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { capabilitySecretsDocument, fileSecretVault } from "../capabilities/credentials/secret-vault.js";
 import { hasSecretReferences, resolveSecretReferences, secretReference, secretRegistryOf } from "./secret-registry.js";
 import { fileSandboxSecrets } from "./sandbox-secrets.js";
+import { maskTargets } from "../agent/tools/agent-redaction.js";
 
 // Secrets live in four stores (SECRET_STORES: DevOps .env, the sandbox's own, deploy-generated values, capability
 // vault); pins that the registry unions them, each value keeps its reference name, and a store that fails fails the
@@ -109,4 +110,25 @@ test("a secret kept without DevOps resolves by its plain name, and the desired-s
     const byName = new Map((await registry()).map((secret) => [secret.name, secret]));
     expect(byName.get("OPENAI_API_KEY")).toEqual({ name: "OPENAI_API_KEY", value: "sk-sandbox-kept-value-01", source: "sandbox" });
     expect(byName.get("SHARED_NAME")).toEqual({ name: "SHARED_NAME", value: "from-the-env-file", source: "env" });
+});
+
+test("a keyring's copies are listed like a stored secret, and a value a keyring released is listed under its own source, to mask", async () => {
+    const root = mkdtempSync(join(tmpdir(), "secret-registry-"));
+    const vault = fileSecretVault(capabilitySecretsDocument, join(root, "auth", "capability-secrets.json"));
+    const sandbox = fileSandboxSecrets(join(root, "auth", "sandbox-secrets.json"));
+    const released = new Map([["VPN_PASSWORD", "released-vpn-value-123"]]);
+    const registry = secretRegistryOf(vault, () => join(root, "desired-state"), sandbox, {
+        copies: async () => ({ DB_PASSWORD: "copied-db-value-456" }),
+        released: () => Object.fromEntries(released),
+    });
+    expect(await registry()).toEqual([
+        { name: "DB_PASSWORD", value: "copied-db-value-456", source: "copy" },
+        { name: "VPN_PASSWORD", value: "released-vpn-value-123", source: "device" },
+    ]);
+    // What the agent reads of a command that printed it: the reference, as for any stored value.
+    const masked = maskTargets(await registry()).reduce((text, { target, replacement }) => text.split(target).join(replacement), "got released-vpn-value-123 back");
+    expect(masked).toBe(`got ${secretReference("VPN_PASSWORD")} back`);
+    // A sandbox secret of the same name wins, and the released value is no longer listed under it.
+    await sandbox.set("VPN_PASSWORD", "sandbox-held-vpn-789");
+    expect((await registry()).filter((secret) => secret.name === "VPN_PASSWORD")).toEqual([{ name: "VPN_PASSWORD", value: "sandbox-held-vpn-789", source: "sandbox" }]);
 });

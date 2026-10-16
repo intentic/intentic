@@ -1,6 +1,7 @@
 // secrets: user-supplied env-var secrets the daemon writes to desired-state/.env
 import { BrokerRuleSchema } from "@intentic/extension-manifest";
 import { z } from "zod";
+import { KEYRING_PROGRAMS_MAX, KeyringPackageSchema, KeyringProgramSchema, KeyringShareModeSchema, KeyringSourceSchema } from "./keyring.js";
 import { SECRET_HOST_MAX, SECRET_HOST_PATTERN_RE, SECRET_HOSTS_MAX } from "../policy/secret-hosts.js";
 // Straight to the sandbox daemon, never through the platform; `apply` reloads .env with no restart. `list` returns keys
 // only; `reveal` is the one owner-only exception that returns a value.
@@ -61,9 +62,9 @@ export const CredentialGateKindSchema = z
 export type CredentialGateKind = z.infer<typeof CredentialGateKindSchema>;
 
 export const CredentialLaneSchema = z
-    .enum(["shell", "code", "browser", "session", "otp", "gateway", "ssh"])
+    .enum(["shell", "code", "browser", "session", "otp", "gateway", "ssh", "device", "desktop"])
     .describe(
-        "What the credential was about to be used for: a shell command, a script, typing into a page, mounting a connected account, one one-time code, a request the credential gateway attaches it to, or a signature the sandbox's ssh agent makes with a held key.",
+        "What the credential was about to be used for: a shell command, a script, typing into a page, mounting a connected account, one one-time code, a request the credential gateway attaches it to, a signature the sandbox's ssh agent makes with a held key, typing into a window or phone app on one of the owner's computers, or typing into a window on the sandbox's own desktop.",
     );
 export type CredentialLane = z.infer<typeof CredentialLaneSchema>;
 
@@ -121,9 +122,9 @@ export const SecretHostSchema = z
     );
 
 export const SecretHostSourceSchema = z
-    .enum(["owner", "connector"])
+    .enum(["owner", "connector", "keyring"])
     .describe(
-        "Who set it: the owner, or the connector the credential belongs to, whose guard is on with its own service's hosts until the owner changes it.",
+        "Who set it: the owner, the connector the credential belongs to (whose guard is on with its own service's hosts until the owner changes it), or the keyring on the computer that holds the secret, whose list is changed there.",
     );
 export type SecretHostSource = z.infer<typeof SecretHostSourceSchema>;
 
@@ -208,12 +209,84 @@ export const CredentialPolicySetSchema = z.object({
 });
 export type CredentialPolicySet = z.infer<typeof CredentialPolicySetSchema>;
 
+// The program guard: the host guard's counterpart for typing into windows. A sandbox-held secret typed into a window on
+// one of the owner's computers goes unasked only into a program on its list and, unless `anyField`, only into a field the
+// program marks as a password field; anywhere else it waits for a person. A keyring entry carries its own list, kept on
+// that computer (schemas/keyring.ts), which the sandbox can show and never widen.
+export const SecretProgramsSchema = z.object({
+    programs: z.array(KeyringProgramSchema).max(KEYRING_PROGRAMS_MAX).describe("Programs, by executable name or whole path, it may be typed into unasked."),
+    packages: z.array(KeyringPackageSchema).max(KEYRING_PROGRAMS_MAX).describe("Android apps, by package name, it may be typed into unasked."),
+    anyField: z.boolean().describe("Whether it may go into a field not marked as a password field without asking."),
+    source: z.enum(["owner", "keyring"]).describe("Who keeps the list: the owner, here, or the keyring on the computer that holds the secret."),
+});
+export type SecretPrograms = z.infer<typeof SecretProgramsSchema>;
+
+export const SecretProgramGuardSchema = SecretProgramsSchema.omit({ source: true }).extend({
+    subject: z.string().min(1).describe("Which secret, by the name its reference carries."),
+});
+export type SecretProgramGuard = z.infer<typeof SecretProgramGuardSchema>;
+
+export const SecretProgramGuardsSchema = z.object({
+    guards: z.array(SecretProgramGuardSchema).describe("Every sandbox-held secret whose program list has been set. Names and programs only, never a value."),
+});
+
+export const SecretProgramGuardSetSchema = SecretProgramGuardSchema.extend({
+    conversationId: z.string().optional().describe("Which conversation to ask the owner in, when the change needs them. The CLI fills this from the running turn."),
+});
+
+export const SecretProgramGuardSetResultSchema = SecretProgramsSchema.omit({ source: true }).extend({
+    approvedBy: z.string().optional().describe("Who approved the change, when it needed the owner's click. Absent when nobody had to."),
+});
+
+// The owner's Type into…: one secret typed into whatever has focus on one of their computers, after a countdown that
+// leaves time to put the cursor there. Through that computer's keyring, which still asks when its entry's mode says to.
+export const SecretTypeIntoSchema = z.object({
+    key: secretKey.describe("Which secret, by name."),
+    device: z.string().min(1).describe("Which computer, by its device card (`rog`, or `rog::wsl:archlinux` for a distro's own keyring)."),
+    countdownSeconds: z.number().int().min(0).max(10).default(3).describe("How long to wait before typing, for the cursor to be put in place."),
+});
+export const SecretTypeIntoResultSchema = z.object({
+    program: z.string().describe("What it was typed into."),
+    field: z.enum(["password", "text"]).describe("Whether the focused field was a password field."),
+    asked: z.boolean().describe("Whether the person at the computer was asked."),
+});
+
+// The keyrings on the owner's computers this sandbox can reach: where a secret can be kept or typed, and which two can be
+// paired to keep one set of entries.
+export const SandboxKeyringSchema = z.object({
+    machine: z.string().describe("The computer, by its device card."),
+    online: z.boolean().describe("Whether it answers now."),
+    locked: z.boolean().optional().describe("Whether its keyring is locked, as last heard. Absent while offline."),
+    version: z.string().optional().describe("The keyring's release, as last heard."),
+    pendingInbox: z.number().int().nonnegative().optional().describe("Values sent to be kept there that wait for its next unlock."),
+    shared: z.number().int().nonnegative().describe("How many of its entries are shared with this sandbox."),
+    sync: z
+        .object({
+            fingerprint: z.string().describe("Its sync key's fingerprint, to compare with what the other computer shows when pairing."),
+            peers: z.array(z.string()).describe("The computers it is paired with, by device card."),
+        })
+        .optional()
+        .describe("Its pairing with the owner's other keyrings. Absent while offline or before it was heard."),
+});
+export type SandboxKeyring = z.infer<typeof SandboxKeyringSchema>;
+export const SandboxKeyringsSchema = z.object({ keyrings: z.array(SandboxKeyringSchema) });
+
+export const SandboxKeyringPairSchema = z.object({
+    a: z.string().min(1).describe("One computer, by its device card."),
+    b: z.string().min(1).describe("The other."),
+});
+export const SandboxKeyringPairResultSchema = z.object({
+    fingerprints: z.object({ a: z.string(), b: z.string() }).describe("Each keyring's sync-key fingerprint, as both prompts showed them."),
+});
+
 export const SecretInventoryEntrySchema = z.object({
     // Env-var key for env|generated; `<provider>:<accountId>` for provider; capability instance id otherwise.
     key: z.string().describe("What identifies it. Unique across the whole inventory, so several accounts of one provider each get their own entry."),
     kind: z
-        .enum(["env", "generated", "capability", "provider"])
-        .describe("Where it came from: you set it, the sandbox generated it, a connection needs it, or it is a model account's credential."),
+        .enum(["env", "generated", "capability", "provider", "device"])
+        .describe(
+            "Where it came from: you set it, the sandbox generated it, a connection needs it, it is a model account's credential, or it lives in the keyring on one of your computers and this sandbox holds only a pointer to it.",
+        ),
     // e.g. "<ProviderName> · <accountLabel>" for provider entries; absent on env/generated.
     label: z.string().optional().describe("A friendlier name, for entries that have one."),
     status: z.enum(["missing", "set", "connected"]).describe("Whether it exists and, for a connection, whether it is working."),
@@ -237,9 +310,9 @@ export const SecretInventoryEntrySchema = z.object({
         .object({
             at: z.number().describe("When, in milliseconds."),
             lane: z
-                .enum(["shell", "code", "browser", "gateway", "ssh"])
+                .enum(["shell", "code", "browser", "gateway", "ssh", "device", "desktop"])
                 .describe(
-                    "How it was used: a command, a script, typed into a page, attached by the credential gateway to a request the agent sent, or a key the sandbox's ssh agent signed with for the agent.",
+                    "How it was used: a command, a script, typed into a page, attached by the credential gateway to a request the agent sent, a key the sandbox's ssh agent signed with for the agent, typed into a window or app on one of the owner's computers, or typed into a window on the sandbox's desktop.",
                 ),
             detail: z
                 .string()
@@ -272,6 +345,21 @@ export const SecretInventoryEntrySchema = z.object({
         })
         .optional()
         .describe("Its host guard. Absent when none was ever set and no connector sets one: the guard is off."),
+    // Joined from the program guards: which windows and phone apps a use may type it into unasked.
+    programs: SecretProgramsSchema.optional().describe(
+        "Which programs on the owner's computers, and which phone apps, it may be typed into without asking. Absent when none was set: typing it into any window asks first.",
+    ),
+    // A device row only: the keyring entry the pointer names. Everything here is the keyring's to change, on that computer.
+    device: z
+        .object({
+            machine: z.string().describe("Which computer's keyring holds it, by its device card."),
+            mode: KeyringShareModeSchema,
+            online: z.boolean().describe("Whether that computer answers now. Offline, an `each-use` or `while-here` secret cannot be used until it does."),
+            locked: z.boolean().optional().describe("Whether the keyring there is locked, as last heard. Absent while the computer is offline."),
+            source: KeyringSourceSchema,
+        })
+        .optional()
+        .describe("Where a secret held on one of your computers lives and how it is shared. Present on `device` rows only."),
 });
 export type SecretInventoryEntry = z.infer<typeof SecretInventoryEntrySchema>;
 export const SecretInventorySchema = z.object({

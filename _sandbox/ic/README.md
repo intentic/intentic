@@ -18,8 +18,6 @@ flowchart LR
 ```
 
 - Runs on the host: a laptop, a server or a hosted machine, never inside a sandbox, which cannot see its siblings.
-  When `INTENTIC_AT_REST_KEY_HOST_FILE` names an existing absolute file, connect mounts it read-only outside the
-  sandbox volumes and sets `INTENTIC_AT_REST_KEY_FILE`. Recreate keeps that mount through updates and rollbacks.
   The bootstrap shims download a fresh static binary on every run, except one pinned to the release already installed
   (`IC_VERSION` beside `IC_URL`, which the desktop app sets to its own); the desktop app and the machine agent call the
   installed one. An agent reaches it through a connected device's sandbox tools. A download replaces nothing until it
@@ -55,6 +53,41 @@ flowchart LR
   pairings through `intentic-machine sync forget <slug>` when the agent is installed; it no longer deletes
   `~/.intentic/machine`, which holds restore points and the audit log (2026-10-05). A purge keeps the trash entry until
   every volume of the sandbox is gone, and a failed first setup removes the volumes it made.
+- **Stored credentials are encrypted at rest by default** (`at_rest.rs`, 2026-10-16). The daemon encrypts the files
+  that hold credentials (pasted secrets, the capability and extension vaults, the privacy vault, AI-provider accounts)
+  whenever it is given a 32-byte key, and every sandbox ic sets up, replaces or starts as a runner gets one, as does
+  any older sandbox on its next recreate (an update, rollback, rebuild or reshape), whose daemon then encrypts the plain
+  files as it boots. The key is mounted read-only at `/run/secrets/intentic-at-rest-key`, and
+  `INTENTIC_AT_REST_KEY_FILE` tells the daemon where it is.
+  - Unless you bring your own, ic makes the key once, from the operating system's random source, at
+    `~/.intentic/keys/at-rest-<slug>.key` (`%USERPROFILE%\.intentic\keys` on Windows). On Linux and macOS only you
+    can read it; on Windows it has your profile folder's permissions. That folder is never mounted into a sandbox, so
+    the sandbox can read its key but not change it, and a copy of its volume or one of ic's backups does not contain
+    it. A key that exists is never made again: every later update, rollback and reinstall reuses it. Dev sandboxes
+    that share a logins volume (`INTENTIC_AGENT_AUTH_VOLUME`) keep their credentials in that volume, so they share
+    one key for it, `~/.intentic/keys/at-rest-shared/<volume>.key`; when ic makes it, it names the sibling sandboxes
+    that cannot read those credentials until their own next update gives them the same key.
+  - **Losing the key loses the stored credentials.** The files stay on the volume, but nothing can open them, and the
+    sandbox's connections, secrets and AI sign-ins have to be set up again. Keep a copy of the key wherever you keep
+    copies of this machine.
+  - To use your own key, set `INTENTIC_AT_REST_KEY_HOST_FILE` to the absolute path of a file outside every sandbox
+    volume holding 32 random bytes (or 64 hex digits, or base64 of 32 bytes), when you set the sandbox up, or on the
+    next update of a sandbox that has no key yet. It wins over ic's. A sandbox that has a key keeps it: changing it is
+    a rotation, `ic sandbox connect --replace` with the new key in `INTENTIC_AT_REST_KEY_HOST_FILE` and the old one in
+    `INTENTIC_AT_REST_PREVIOUS_KEY_HOST_FILE`, then once more with `INTENTIC_AT_REST_DROP_PREVIOUS_KEY=1` after it has
+    restarted and been backed up ([the self-host guide](../../_tools/selfhost/platform/README.md) has the details).
+  - To opt out, for example because the disk is already encrypted, set `INTENTIC_AT_REST=off` when the sandbox is set
+    up, or on the update that would give it its first key. The container remembers the choice, so later updates keep
+    it, and `INTENTIC_AT_REST=on` on an update turns encryption on. Turning it off never takes away a key a sandbox
+    already has, since its credentials may be encrypted with it.
+  - A removed sandbox's key stays while its data is in the trash, and is deleted with the data when that is deleted
+    for good. If this machine still holds backups of the sandbox, the key stays until tidy deletes them (30 days after
+    the sandbox went). A shared key goes when its logins volume is removed. Your own key file is never deleted.
+  - Going back to a version from before encryption at rest (2026-10-13) is allowed, with a warning: that version
+    cannot read the encrypted credentials until the sandbox is updated again. `backup-restore` of one sandbox's backup
+    into another leaves out the first one's credentials (`/work/.intentic/secrets/auth`), which are encrypted with its
+    key, and the target keeps its own. A container that was given a key it no longer mounts, and not one of ic's, is
+    left as it is, with a stop that asks for the key file in `INTENTIC_AT_REST_KEY_HOST_FILE`.
 - A sandbox for one folder of the owner's (`SYNC_REMOTE_DIR=/work/<name>` with `SYNC_PROJECT=1`, beside `SYNC_DIR`)
   is checked before anything starts (`project_dir.rs`, the contract's name rule), hands the sync installer both, and
   tells the container `SANDBOX_PROJECT_DIR`, which the run contract replays across every later swap.

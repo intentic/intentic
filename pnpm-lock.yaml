@@ -1083,6 +1083,46 @@ importers:
         specifier: 'catalog:'
         version: 7.0.0-dev.20260707.2
 
+  _devices/keyring:
+    dependencies:
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
+      '@intentic/local-agent':
+        specifier: workspace:*
+        version: link:../local-agent
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-contract
+      '@stricli/core':
+        specifier: 'catalog:'
+        version: 1.3.0
+      tslib:
+        specifier: 'catalog:'
+        version: 2.8.1
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@intentic/constants':
+        specifier: workspace:*
+        version: link:../../_tools/constants
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../../_tools/testing
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.2
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.1
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
+
   _devices/local-agent:
     dependencies:
       '@intentic/base':
@@ -1162,6 +1202,9 @@ importers:
       '@intentic/desktop-automation':
         specifier: workspace:*
         version: link:../desktop-automation
+      '@intentic/keyring':
+        specifier: workspace:*
+        version: link:../keyring
       '@intentic/local-agent':
         specifier: workspace:*
         version: link:../local-agent

@@ -147,6 +147,9 @@ export const UNSERVED = {
     "ALL /mcp/{mount}": NOT_THE_EDITORS,
     "POST /system/webext/session": NOT_THE_EDITORS,
     "POST /system/webext/lend": NOT_THE_EDITORS,
+    "POST /system/webext/secret": NOT_THE_EDITORS,
+    // A keyring on the owner's computer fetches this sandbox's public keys here before it shares anything with it.
+    "GET /keyring/keys": NOT_THE_EDITORS,
     "GET /system/runners/git/{repo}/info/refs": NOT_THE_EDITORS,
     "POST /system/runners/git/{repo}/git-upload-pack": NOT_THE_EDITORS,
     "POST /system/runners/git/{repo}/git-receive-pack": NOT_THE_EDITORS,
@@ -263,6 +266,8 @@ export const UNSERVED = {
     "secrets.hosts": UNFILLED_VIEW,
     "secrets.list": UNFILLED_VIEW,
     "secrets.policy": UNFILLED_VIEW,
+    "secrets.programs": UNFILLED_VIEW,
+    "secrets.keyrings": UNFILLED_VIEW,
     "settings.audience": UNFILLED_VIEW,
     "settings.builtinPrompt": UNFILLED_VIEW,
     // The AI notice is off in the demo's settings, so the card never asks for its status or confirmations.
@@ -376,6 +381,10 @@ export const UNSERVED = {
     "secrets.setGate": UNSIMULATED_WRITE,
     "secrets.setHosts": UNSIMULATED_WRITE,
     "secrets.setPolicy": UNSIMULATED_WRITE,
+    "secrets.setPrograms": UNSIMULATED_WRITE,
+    // The demo has no computer with a keyring to type into or pair.
+    "secrets.typeInto": REAL_MACHINE,
+    "secrets.keyringPair": REAL_MACHINE,
     "settings.adoptTimezone": UNSIMULATED_WRITE,
     "settings.confirmAiLiteracy": UNSIMULATED_WRITE,
     "settings.setAudience": UNSIMULATED_WRITE,

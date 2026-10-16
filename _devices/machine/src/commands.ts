@@ -6,6 +6,7 @@ import { runLogPath } from "./config.js";
 import { deviceCommands, deviceUninstall } from "./device/commands.js";
 import { sandboxRoutes } from "./device/sandbox-cli.js";
 import { environmentRoutes, updates } from "./environments/commands.js";
+import { keyringCommands } from "./keyring/commands.js";
 import { type MachineUpgradeEnd, realMachineIo, upgradeMachine } from "./environments/machine-upgrade.js";
 import { runForeground } from "./resident/resident.js";
 import { readResident, restartResident, stopResident } from "./resident/supervision.js";
@@ -18,7 +19,7 @@ import { MACHINE_VERSION } from "./version.js";
 // intentic-machine: the agent on a user's own device. `device` connects a sandbox to this machine; `sync` mirrors
 // folders/ports; both share one resident agent (`run`), `status`, `upgrade`, `updates` and `uninstall`. `sandbox`
 // passes ic's own verbs through, for repairing a sandbox on this machine without a browser; `doctor` is the agent's own
-// upkeep pass on demand (upkeep/).
+// upkeep pass on demand (upkeep/); `keyring` installs and keeps intentic-keyring, a process of its own (keyring/).
 
 interface RunFlags {
     readonly foreground: boolean;
@@ -161,6 +162,12 @@ export const commands = buildRouteMap({
         sync: buildRouteMap({
             routes: syncCommands,
             docs: { brief: "Mirror a sandbox's files and ports onto this device (the Desktop sync card)" },
+        }),
+        // intentic-keyring, the vault beside this agent (keyring/): installed, kept and asked from here, by a person or
+        // the desktop app, never by a sandbox, which reaches it only through the relayed procedures (keyring/relay.ts).
+        keyring: buildRouteMap({
+            routes: keyringCommands,
+            docs: { brief: "The password vault on this computer, which types and hands over secrets for your sandboxes at your word" },
         }),
         sandbox: sandboxRoutes,
         environment: environmentRoutes,

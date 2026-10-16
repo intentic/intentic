@@ -33,7 +33,16 @@ const fingerprint = (key: Buffer): string => createHash("sha256").update(key).di
 const purposeKey = (key: Buffer, purpose: string): Buffer => Buffer.from(hkdfSync("sha256", key, "intentic-at-rest-v1", purpose, 32));
 
 export const atRestActive = (): boolean => Boolean(process.env[AT_REST_KEY_FILE_ENV]);
-export const AT_REST_STORES = ["sandbox-secrets.json", "capability-secrets.json", "extension-secrets.json", "privacy-vault.json"] as const;
+// The keyring files are here so a key rotation re-seals them too: this sandbox's own keyring keys (which a keyring pinned,
+// and a key lost with the old at-rest key would strand every share) and the copies a keyring keeps here.
+export const AT_REST_STORES = [
+    "sandbox-secrets.json",
+    "capability-secrets.json",
+    "extension-secrets.json",
+    "privacy-vault.json",
+    "keyring-keys.json",
+    "keyring-copies.json",
+] as const;
 export const AT_REST_ACCOUNT_STORE = "provider-account-files";
 export const isAtRestEnvelope = (text: string): boolean => text.startsWith(MAGIC);
 const sameKey = (text: string, currentId: string): boolean => isAtRestEnvelope(text) && EnvelopeSchema.parse(JSON.parse(text.slice(MAGIC.length))).keyId === currentId;

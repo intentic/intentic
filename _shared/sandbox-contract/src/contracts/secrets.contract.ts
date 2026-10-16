@@ -15,6 +15,14 @@ import {
     SecretHostGuardSetSchema,
     SecretHostGuardsSchema,
     SecretKeysSchema,
+    SecretProgramGuardSetResultSchema,
+    SecretProgramGuardSetSchema,
+    SecretProgramGuardsSchema,
+    SecretTypeIntoResultSchema,
+    SecretTypeIntoSchema,
+    SandboxKeyringPairResultSchema,
+    SandboxKeyringPairSchema,
+    SandboxKeyringsSchema,
     SecretRevealSchema,
     SecretSetSchema,
 } from "../schemas/secrets.js";
@@ -143,6 +151,62 @@ export const secretsContract = {
         .meta({ agent: true })
         .input(SecretHostGuardSetSchema)
         .output(SecretHostGuardSetResultSchema),
+    // The program guard, the host guard's counterpart for typing into windows on the owner's computers (schemas/secrets.ts
+    // SecretProgramsSchema): read by the agent so a use aims where it may go; narrowing is anybody's, widening the owner's.
+    programs: secretRoute
+        .route({
+            method: "GET",
+            path: "/secrets/programs",
+            summary: "Which programs each secret may be typed into",
+            description:
+                "Every sandbox-held secret whose program list is set: the programs on the owner's computers and the phone apps it goes into unasked. A secret held in a computer's keyring carries its own list, shown on its inventory row. Names and programs only, never values.",
+        })
+        .meta({ agent: true })
+        .output(SecretProgramGuardsSchema),
+    setPrograms: secretRoute
+        .route({
+            method: "PUT",
+            path: "/secrets/programs/{subject}",
+            summary: "Set which programs a secret may be typed into",
+            description:
+                "Replaces one sandbox-held secret's program list. Taking programs away, or turning `anyField` off, is open to anybody who may use secrets; adding one is the owner's: from the agent it raises a card for the owner in the live conversation and waits. Refused for a secret a computer's keyring holds, whose list is changed on that computer.",
+        })
+        .meta({ agent: true })
+        .input(SecretProgramGuardSetSchema)
+        .output(SecretProgramGuardSetResultSchema),
+    // The owner's own Type into…, never the agent's: it types into whatever has focus, which only a person at that
+    // computer can aim.
+    typeInto: secretRoute
+        .route({
+            method: "POST",
+            path: "/secrets/type-into",
+            summary: "Type a secret into the focused window on one of your computers",
+            description:
+                "After a short countdown, types one secret into whatever has focus on the computer named, through its keyring, which checks the window and still asks there when the entry's share says to. Answers what it went into, never the value.",
+        })
+        .meta({ panel: false })
+        .input(SecretTypeIntoSchema)
+        .output(SecretTypeIntoResultSchema),
+    keyrings: secretRoute
+        .route({
+            method: "GET",
+            path: "/secrets/keyrings",
+            summary: "The keyrings on your computers",
+            description:
+                "Every connected computer with a keyring this sandbox can reach: whether it answers and is unlocked, how many of its entries are shared here, and whom it is paired with. Names and counts only, never values.",
+        })
+        .output(SandboxKeyringsSchema),
+    keyringPair: secretRoute
+        .route({
+            method: "POST",
+            path: "/secrets/keyrings/pair",
+            summary: "Pair the keyrings on two of your computers",
+            description:
+                "Asks each computer's keyring to pair with the other: each shows a prompt with both fingerprints, and only a yes on both pairs them. After that each keeps the other's entries in step, sealed between them and carried by this sandbox, which cannot open what it carries.",
+        })
+        .meta({ panel: false })
+        .input(SandboxKeyringPairSchema)
+        .output(SandboxKeyringPairResultSchema),
     // The credential gateway's say over one connection: how its credential reaches the agent, and what it may do there.
     policy: secretRoute
         .route({

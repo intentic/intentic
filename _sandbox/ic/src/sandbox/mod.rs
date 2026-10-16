@@ -1,3 +1,4 @@
+pub mod at_rest;
 pub mod backup;
 pub mod connect;
 pub mod desired;

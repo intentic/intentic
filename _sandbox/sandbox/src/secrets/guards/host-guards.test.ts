@@ -1,7 +1,7 @@
 import { CapabilityContributionSchema } from "@intentic/extension-manifest";
-import { contributionHosts } from "../capabilities/contributions.js";
+import { contributionHosts } from "../../capabilities/contributions.js";
 import { effectiveHostGuards, guardForName, readHosts } from "./host-guards.js";
-import { commandDestination } from "./secret-destinations.js";
+import { commandDestination } from "../secret-destinations.js";
 
 // The guards in force and what one use's destination means against them: the owner's setting over a connector's
 // default, a default the owner turned off staying off, a guard that is off never read, and a use held to every guarded

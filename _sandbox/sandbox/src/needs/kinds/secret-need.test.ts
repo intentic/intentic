@@ -95,4 +95,30 @@ describe("secret need", () => {
         const answer = await kind.resolve({ kind: "secret", name: "OPENAI_API_KEY" }, { conversationId: "conv-1", standing: { ...STANDING, runtime: "codex", secrets: "none" } });
         expect(answer.kind === "met" ? answer.message : "").toContain("does not fill in {{secret:…}} references");
     });
+
+    it("sends a value to be kept on a computer to that computer's keyring, and stores nothing in the sandbox", async () => {
+        const sent: { name: string; value: string; device: string; mode: string }[] = [];
+        const kept: string[] = [];
+        const kind = secretNeed({
+            registry: async () => [],
+            keep: async (name) => void kept.push(name),
+            keepOn: async (name, value, keepOn) => {
+                sent.push({ name, value, ...keepOn });
+                return { pending: true };
+            },
+        });
+        const met = await kind.provide(needOf({ kind: "secret", name: "VPN_PASSWORD" }), "vpn-value-never-shown", { device: "rog", mode: "each-use" });
+        expect(met).toEqual({
+            result:
+                "VPN_PASSWORD was sent to the keyring on rog, where it waits for that computer's next unlock: once a person there unlocks the keyring and says yes, it is kept there and shared with this sandbox. Nothing was stored in the sandbox.",
+            use: ["Write {{secret:VPN_PASSWORD}} where the value goes: each use asks the keyring on rog for it, and a person there says yes every time, so that computer has to be on."],
+        });
+        expect([sent, kept]).toEqual([[{ name: "VPN_PASSWORD", value: "vpn-value-never-shown", device: "rog", mode: "each-use" }], []]);
+        expect(JSON.stringify(met)).not.toContain("vpn-value-never-shown");
+    });
+
+    it("counts a name a computer's keyring shares as stored, so an ask for it is met, not raised", async () => {
+        const kind = secretNeed({ registry: async () => [], keep: async () => {}, deviceHeld: async () => ["VPN_PASSWORD"] });
+        expect(await kind.resolve({ kind: "secret", name: "VPN_PASSWORD" }, context)).toMatchObject({ kind: "met" });
+    });
 });

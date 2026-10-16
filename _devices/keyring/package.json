@@ -1,0 +1,59 @@
+{
+    "name": "@intentic/keyring",
+    "version": "0.0.0",
+    "description": "intentic-keyring: the password vault on a user's own computer, a process of its own beside intentic-machine, that types and releases secrets for a sandbox's agent without the agent ever holding them",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_devices/keyring"
+    },
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "bin": {
+        "intentic-keyring": "./dist/cli.js",
+        "intentic-askpass": "./dist/askpass-cli.js"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "bun check -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "suites",
+        "test:watch": "suites --watch"
+    },
+    "dependencies": {
+        "@intentic/base": "workspace:*",
+        "@intentic/local-agent": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@stricli/core": "catalog:",
+        "tslib": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/constants": "workspace:*",
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:"
+    }
+}

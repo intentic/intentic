@@ -12,8 +12,8 @@ use crate::sandbox::lock::{self, Wait};
 use crate::sandbox::outcome::{self, Kind, Outcome};
 use crate::sandbox::side::{self, Side, Unattended};
 use crate::sandbox::{
-    desired, identity, mirror, now_ms, preparing, probation, resolve_slug, resume, staged, storage,
-    versions, CONTAINER_PREFIX, PARKED_SUFFIX,
+    at_rest, desired, identity, mirror, now_ms, preparing, probation, resolve_slug, resume, staged,
+    storage, versions, CONTAINER_PREFIX, PARKED_SUFFIX,
 };
 use crate::shape::{Ask, Shape, GPUS_TOKEN, PRIVILEGED_TOKEN};
 use crate::ui;
@@ -737,23 +737,52 @@ fn recreate(
             ));
         }
     }
-    let stamped_run = stamp_args(&slug, &stamp);
+    let mut stamped_run = stamp_args(&slug, &stamp);
 
     // The /agent-auth mount is a mount+env pair: replaying AGENT_AUTH_DIR without its volume would point
     // the daemon at an empty container-local dir, stranding the shared credentials.
+    let auth = docker::mount_source(&container, at_rest::AUTH_MOUNT);
     let mut mounts: Vec<String> = Vec::new();
-    if let Some(auth) = docker::mount_source(&container, "/agent-auth") {
-        mounts.push(format!("{auth}:/agent-auth"));
+    if let Some(auth) = &auth {
+        mounts.push(format!("{auth}:{}", at_rest::AUTH_MOUNT));
     }
-    if let Some(key) = docker::mount_source(&container, "/run/secrets/intentic-at-rest-key") {
-        mounts.push(format!("{key}:/run/secrets/intentic-at-rest-key:ro"));
+    /* THE AT-REST KEY FOLLOWS THE SANDBOX (at_rest.rs): the one its container mounts is replayed, and a sandbox with none
+    gets ic's own, made here on the first recreate that applies, unless its owner opted out. An operator's own file is
+    taken only for a sandbox that has no key yet: changing a key is a rotation, which needs the old one beside it. */
+    let mounted_key = docker::mount_source(&container, at_rest::KEY_MOUNT);
+    let given = match &mounted_key {
+        None => at_rest::host_file(at_rest::HOST_FILE_ENV)?,
+        Some(_) => {
+            if reach == Reach::Applied
+                && std::env::var(at_rest::HOST_FILE_ENV).is_ok_and(|value| !value.is_empty())
+            {
+                ui::warn(&format!(
+                    "{} is not used: {slug} has an at-rest key already. Changing it is a rotation (the ic README says how).",
+                    at_rest::HOST_FILE_ENV
+                ));
+            }
+            None
+        }
+    };
+    let key = at_rest::decide(
+        &slug,
+        Some(&at_rest::Old {
+            mounted: mounted_key.as_deref(),
+            env: &env_nul,
+        }),
+        auth.as_deref(),
+        given.as_deref(),
+    )?;
+    at_rest::prepare(&key, &slug, auth.as_deref(), reach == Reach::Applied)?;
+    mounts.extend(key.mount()?);
+    // Whether the daemon being replaced was given a key, read before this run names one for its successor.
+    let key_was_given = at_rest::env_value(&env_nul, at_rest::KEY_ENV).is_some();
+    if key.is_on() {
+        env_nul = at_rest::with_key_env(&env_nul);
     }
-    if let Some(key) =
-        docker::mount_source(&container, "/run/secrets/intentic-at-rest-previous-key")
-    {
-        mounts.push(format!(
-            "{key}:/run/secrets/intentic-at-rest-previous-key:ro"
-        ));
+    stamped_run.extend(at_rest::stamp(&key));
+    if let Some(previous) = docker::mount_source(&container, at_rest::PREVIOUS_KEY_MOUNT) {
+        mounts.push(format!("{previous}:{}:ro", at_rest::PREVIOUS_KEY_MOUNT));
     }
     mounts.extend(dev_mounts());
 
@@ -871,6 +900,13 @@ fn recreate(
     /* A check ends here: the image has answered for this shape, and nothing has been pinned, recorded or stopped. */
     if reach == Reach::Checked {
         return Ok(());
+    }
+    // An image from before encryption at rest (2026-10-13) drops the key from its run line: going back to one is allowed,
+    // as any rollback is, and the person is told what it costs.
+    if key_was_given && !at_rest::passes_key(&argv) {
+        ui::warn(&format!(
+            "{target_image} is from before encryption at rest: until {slug} is updated again it cannot read the credentials it keeps encrypted (its secrets, connections and AI sign-ins). They stay on its volume, encrypted."
+        ));
     }
     // On Intentic OS the host policy may run the sandbox in a microVM (os/policy.rs); elsewhere the line stays as is.
     let argv = crate::os::policy::sandbox_run(argv);

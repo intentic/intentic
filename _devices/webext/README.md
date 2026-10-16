@@ -22,6 +22,10 @@ flowchart LR
   site's read-only or read-and-act mode. The sandbox's own origin is never a target, and the popup's pause stops everything.
 - `connect_site` hands a site's session to the sandbox and `lend_site` borrows one back; both need the sessions
   switch and a confirmation in the page every time.
+- `type_ticket` types a stored secret into the field in focus for the sandbox's own `type_secret`, and the agent's
+  mount of the browser never lists it. The call carries a one-time ticket only; the extension collects the value at
+  `/system/webext/secret` with the page's address, the sandbox's guard judges that host, and the value goes into the
+  field (never submitted) and nowhere else: not the tool's answer, not the activity list.
 - A sandbox's sign-in can finish here without a paste ([`src/background/loopback-catch.ts`](src/background/loopback-catch.ts),
   the device agent's `catchLoopback` answered from the browser): a tab reaching the provider's
   `http://localhost:<port>/…` redirect is handed back to the sandbox, which checks it, and the dead-end tab closes. It

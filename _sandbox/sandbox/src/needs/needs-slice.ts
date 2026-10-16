@@ -28,6 +28,7 @@ import { checkSource } from "../automations/watch/watch-sources.js";
 import { sourceEnv } from "../automations/watch/watch-condition.js";
 import { grantNeed } from "./kinds/grant-need.js";
 import { releaseNeed } from "./kinds/release-need.js";
+import { keepOnDevice } from "./kinds/secret-keep-on.js";
 import { secretNeed } from "./kinds/secret-need.js";
 import { needChannelOf, needChannelText } from "./need-channel.js";
 import { createNeeds, type Needs, type NeedsDeps } from "./needs.js";
@@ -86,6 +87,15 @@ const keepSecret = async (services: Services, name: string, value: string): Prom
     await services.sandboxSecrets.set(name, value);
 };
 
+// A secret need over the finished services: the registry, the stores a value is kept in, and the keyrings.
+const secretNeedOf = (whole: NeedsSliceDeps["whole"]) =>
+    secretNeed({
+        registry: () => whole().secretRegistry(),
+        keep: (name, value) => keepSecret(whole(), name, value),
+        deviceHeld: async () => (await whole().deviceSecrets.listed()).map((entry) => entry.pointer.name),
+        keepOn: (name, value, keepOn) => keepOnDevice(whole(), name, value, keepOn),
+    });
+
 // A settled need's lock-screen ask is replaced on the devices it showed on (push.ts `withdraw`).
 const withdrawNeedPush =
     (whole: NeedsSliceDeps["whole"]): NeedsDeps["withdrawNotification"] =>
@@ -94,10 +104,7 @@ const withdrawNeedPush =
 
 export const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): NeedsSlice => {
     const capabilities = (): Promise<readonly Capability[]> => whole().capabilities.list();
-    const secret = secretNeed({
-        registry: () => whole().secretRegistry(),
-        keep: (name, value) => keepSecret(whole(), name, value),
-    });
+    const secret = secretNeedOf(whole);
     const needs = createNeeds({
         store: fileNeedsStore(join(workspaceRoot, needsDocument.path)),
         kinds: {
@@ -199,7 +206,7 @@ export const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDep
             return receipt.delivered === "queued" ? "queued" : "turn";
         },
         continueWhenMet: async () => (await whole().sandboxSettings.get()).continueWhenNeedMet,
-        provideSecret: (need, value) => secret.provide(need, value),
+        provideSecret: (need, value, keepOn) => secret.provide(need, value, keepOn),
         onTurnEnded: (listener) => whole().events.subscribe("run.settled", ({ conversationId }) => listener(conversationId)),
     });
     return { needs };

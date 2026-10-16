@@ -15,7 +15,7 @@ import {
 import { SANDBOX_CONTAINER_PREFIX } from "@intentic/sandbox-run";
 import { type CollectedOutput, runBounded, stopProcessTree } from "@intentic/base/process";
 import { assertPath, assertScope, rootsOf, ScopeError } from "../policy.js";
-import { crossInterpreter, type Interpreter, POWERSHELL_FLAGS, targetOf } from "../../environments/crossing.js";
+import { crossEnv, crossInterpreter, type Interpreter, POWERSHELL_FLAGS, targetOf } from "../../environments/crossing.js";
 import { thisSide } from "../../environments/wsl.js";
 import { forgetCommand, recordCommand } from "./command-ledger.js";
 
@@ -55,6 +55,14 @@ export const shellFor = (
 };
 
 export type { CollectedOutput };
+
+// Every process the agent starts here (run_command's command, app_start's program) carries INTENTIC_AGENT_COMMAND=1, so
+// the keyring can write in its record that an agent's command was the one asking (askpass, its pipe), and say so in the
+// prompt. A hint for that record and nothing more, never a boundary: the command can unset it, and a program the person
+// started can set it. What keeps the agent from a value is the keyring's own rules (a grant, a person's yes).
+export const AGENT_COMMAND_ENV = "INTENTIC_AGENT_COMMAND";
+
+export const markedAsAgentCommand = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => ({ ...env, [AGENT_COMMAND_ENV]: "1" });
 
 export interface CommandResult {
     readonly exitCode: number | null;
@@ -202,7 +210,12 @@ export const runCommand = async (
         target.kind === "native"
             ? await nativeInterpreter(input.command, input.cwd, scopes)
             : crossInterpreter(target, input.command, input.cwd, await thisSide(), existsSync);
-    return await execute(interpreter, Math.min(input.timeoutMs ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS));
+    // The mark crosses into a distro, or out of one, only by WSLENV.
+    const env =
+        target.kind === "native"
+            ? markedAsAgentCommand(interpreter.env)
+            : crossEnv({ [AGENT_COMMAND_ENV]: "1" }, target.kind === "wsl" ? "u" : "w", interpreter.env);
+    return await execute({ ...interpreter, env }, Math.min(input.timeoutMs ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS));
 };
 
 const cutFrom = (result: CommandResult): string => {

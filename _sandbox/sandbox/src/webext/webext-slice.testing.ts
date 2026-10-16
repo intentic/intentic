@@ -9,4 +9,6 @@ export const webextSliceFake = () =>
         webextReach: async () => undefined,
         // No browser holds a socket, which a sign-in asks before offering the loopback catch (loopback-bridge.ts).
         webextHub: unstubbed<WebextSlice["webextHub"]>("webextHub", { connected: () => [] }),
+        // A suite that types a secret into the owner's browser stubs the half it reaches; anything else says its name.
+        secretTickets: unstubbed<WebextSlice["secretTickets"]>("secretTickets", {}),
     }) satisfies Partial<WebextSlice>;

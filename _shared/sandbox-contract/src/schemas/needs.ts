@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { KeyringShareModeSchema } from "./keyring.js";
 import { AutomationSchema } from "./automations.js";
 
 // A need: something an agent cannot finish its task without that only a person can provide (a connection, a secret's
@@ -257,6 +258,15 @@ export const NeedIdParamSchema = z.object({ id: z.string().min(1).describe("Whic
 export const NeedAnswerInputSchema = NeedIdParamSchema.extend({ answer: NeedAnswerSchema });
 export const NeedSecretInputSchema = NeedIdParamSchema.extend({
     value: z.string().min(1).max(64_000).describe("The secret's value. Stored, never echoed, never written into a transcript."),
+    // "Keep it on my computer": the value is sealed to that computer's keyring inbox (schemas/keyring.ts) and kept there,
+    // and this sandbox holds a pointer to it; nothing is stored here. Absent: stored in the sandbox, as before.
+    keepOn: z
+        .object({
+            device: z.string().min(1).describe("Which computer's keyring keeps it, by its device card."),
+            mode: KeyringShareModeSchema.describe("How that keyring answers this sandbox for it."),
+        })
+        .optional()
+        .describe("Keep it in the keyring on one of your computers instead of in the sandbox."),
 });
 export const NeedsQuerySchema = z.object({
     conversationId: z.string().optional().describe("One conversation's needs. Absent is every conversation's."),

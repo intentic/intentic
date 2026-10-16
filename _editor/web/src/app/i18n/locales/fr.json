@@ -1084,7 +1084,8 @@
             "viaSshAgent": "signé par l'agent SSH de la sandbox pour",
             "usedByAgent": "utilisé par l'agent",
             "value": "Valeur",
-            "whoRelease": "Qui peut le libérer"
+            "whoRelease": "Qui peut le libérer",
+            "typedOnDesktop": "tapé sur le bureau du sandbox"
         },
         "secretField": {
             "as": "en tant que",
@@ -1124,6 +1125,66 @@
             "connect": "Connecter {id}",
             "preparingOneTimeConnection": "Préparation d'un code de connexion à usage unique…",
             "onceConnectedAgentMay": "Une fois connecté, l'agent pourra :"
+        },
+        "keyring": {
+            "modeEachUse": "demande à chaque fois",
+            "modeWhileHere": "tant que tu es devant l'ordinateur",
+            "modeCopy": "copie gardée ici",
+            "modeEachUseExplained": "Chaque usage te demande d'abord sur {machine}, avec Windows Hello ou la phrase secrète du trousseau.",
+            "modeWhileHereExplained": "Utilisé sans demander tant que le trousseau de {machine} est déverrouillé. Verrouillé, chaque usage demande là-bas.",
+            "modeCopyExplained": "Une copie est aussi gardée dans ce sandbox, donc ça marche avec {machine} éteint. Ce sont alors les règles de ce sandbox qui la protègent.",
+            "offline": "hors ligne",
+            "locked": "verrouillé",
+            "unlocked": "déverrouillé"
+        },
+        "secretPrograms": {
+            "title": "Protection des programmes",
+            "explain": "Tapé dans une fenêtre sur un de tes ordinateurs, il va sans demander seulement dans ces programmes et apps, et seulement dans un champ de mot de passe sauf si tout champ est permis. Partout ailleurs, la personne devant cet ordinateur est d'abord sollicitée.",
+            "everyTypingAsks": "Aucun programme n'est indiqué, donc le taper dans une fenêtre demande d'abord.",
+            "everyTypingAsksReadOnly": "Le taper dans une fenêtre demande d'abord. Seul le propriétaire peut changer ça.",
+            "onlyIntoReadOnly": "Tapé sans demander seulement dans {programs}, et partout ailleurs demande d'abord. Seul le propriétaire peut changer ça.",
+            "anyFieldReadOnly": "Il peut aller dans tout champ, pas seulement les champs de mot de passe.",
+            "notAProgram": "Ce n'est pas un programme. Écris le nom de son fichier, comme FortiClient.exe, ou son chemin complet.",
+            "notAPackage": "Ce n'est pas une app Android. Écris son nom de paquet, comme com.fortinet.forticlient.",
+            "couldNotSave": "Impossible d'enregistrer la protection des programmes.",
+            "remove": "Retirer {program}",
+            "programPlaceholder": "FortiClient.exe ou un chemin complet",
+            "addProgram": "Ajouter un programme",
+            "packagePlaceholder": "com.fortinet.forticlient",
+            "addPackage": "Ajouter une app Android",
+            "anyField": "Tout champ",
+            "anyFieldNote": "Aussi les champs qui ne sont pas des champs de mot de passe, qui affichent ce qui est tapé."
+        },
+        "typeInto": {
+            "title": "Taper dans…",
+            "tooltipNote": "Sur un de tes ordinateurs",
+            "noneOnlineShort": "Aucun ordinateur ne répond",
+            "noneOnline": "Aucun ordinateur avec un trousseau ne répond. Lance l'agent Intentic sur l'un d'eux, puis réessaie.",
+            "which": "Quel ordinateur",
+            "wait": "Attendre avant de taper",
+            "seconds": "{seconds} s",
+            "explain": "Appuie sur Taper, puis place le curseur là où ça va sur {machine}. C'est tapé après {seconds} s.",
+            "counting": "Saisie sur {machine} dans {seconds} s. Place le curseur là où ça va.",
+            "typing": "Saisie sur {machine}. S'il demande là-bas, confirme sur cet ordinateur.",
+            "typedPassword": "Tapé dans {program}, champ de mot de passe.",
+            "typedText": "Tapé dans {program}, champ de texte.",
+            "asked": "Confirmé d'abord sur {machine}.",
+            "couldNotType": "Impossible de le taper sur {machine}.",
+            "type": "Taper",
+            "again": "Taper à nouveau"
+        },
+        "secretDevice": {
+            "heading": "Sur ton ordinateur",
+            "keptOn": "Gardé dans le trousseau de {machine}, partagé ici : {mode}. Ce sandbox n'en garde qu'un pointeur.",
+            "standing": "{machine} est {standing} en ce moment.",
+            "readFrom": "Sa valeur est lue depuis {source} à chaque usage.",
+            "typedInto": "Tapé sans demander seulement dans {programs}.",
+            "everyTypingAsks": "Le taper dans une fenêtre demande d'abord sur {machine}.",
+            "anyField": "Il peut aller dans tout champ.",
+            "passwordFieldOnly": "Seulement dans un champ de mot de passe.",
+            "hosts": "Sites où il peut aller : {hosts}.",
+            "changeOn": "Change-les sur {machine} :",
+            "copyCommand": "Copier la commande"
         }
     },
     "chat": {
@@ -3734,7 +3795,8 @@
             "requiredByIntent": "Requis par votre intention",
             "secrets": "Vos secrets",
             "sessionOrSigningKeys": "Clés de session ou de signature",
-            "showMoreAccounts": "Afficher {collapsedCredentialCount} comptes de plus"
+            "showMoreAccounts": "Afficher {collapsedCredentialCount} comptes de plus",
+            "onYourComputers": "Sur tes ordinateurs"
         },
         "sandboxStorageCard": {
             "changedTodayOrInUse": "Modifié aujourd'hui ou utilisé",
@@ -4728,6 +4790,30 @@
             "turnsOffHow": "Réactivez-la pour voir ce qui a réveillé l'agent et comment s'est passé chaque tour :",
             "commandsSettings": "Si le juge fonctionne, et selon quoi il vérifie :",
             "personalSettings": "Ce que cherche le bouclier, et à quels fournisseurs il fait confiance :"
+        },
+        "secretRows": {
+            "offline": "Hors ligne",
+            "locked": "Verrouillé",
+            "ready": "Prêt",
+            "offlineNote": "{machine} est hors ligne : inutilisable tant qu'il ne répond pas",
+            "lockedNote": "{machine} est verrouillé : chaque usage demande là-bas"
+        },
+        "keyrings": {
+            "title": "Trousseaux sur tes ordinateurs",
+            "offline": "Hors ligne",
+            "locked": "Verrouillé",
+            "unlocked": "Déverrouillé",
+            "shared": "Partagés ici : {count}",
+            "pendingInbox": "En attente du prochain déverrouillage : {count}",
+            "pairedWith": "Associé à {peers}",
+            "pair": "Associer",
+            "pairLead": "Associe deux trousseaux pour garder les mêmes mots de passe sur les deux. Chaque ordinateur te demande d'abord, en montrant les deux empreintes.",
+            "pairWhich": "Quels deux ordinateurs",
+            "pairThese": "Associer ces deux",
+            "confirmOnBoth": "Confirme sur les deux ordinateurs. Chaque demande montre deux empreintes.",
+            "paired": "{a} et {b} associés.",
+            "compare": "La demande sur chaque ordinateur montre ces deux empreintes. Dis oui seulement là où elles correspondent.",
+            "couldNotPair": "Impossible d'associer les deux trousseaux."
         }
     },
     "settings": {
@@ -6475,6 +6561,17 @@
     "needs": {
         "release": {
             "approversOnly": "Approbateurs seuls"
+        },
+        "secret": {
+            "keepInSandbox": "Le garder dans le sandbox",
+            "keepOnComputer": "Le garder sur mon ordinateur",
+            "whichComputer": "Quel ordinateur",
+            "modeEachUse": "Demander à chaque fois",
+            "modeWhileHere": "Tant que je suis devant l'ordinateur",
+            "modeCopy": "Garder une copie ici",
+            "lockedThere": "{machine} est verrouillé : la valeur attend là-bas le prochain déverrouillage de son trousseau.",
+            "keptOn": "Gardé dans le trousseau de {machine} sous le nom {name}. L'agent ne voit que son nom, jamais la valeur.",
+            "waitsForUnlock": "Envoyé à {machine}. Il attend là-bas le prochain déverrouillage de son trousseau."
         }
     },
     "local": {

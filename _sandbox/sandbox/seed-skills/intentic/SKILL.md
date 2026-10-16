@@ -65,7 +65,14 @@ What the daemon does around you:
   where it goes — a `curl`, `wget` or `git` command, piped into a reader like `jq` or `head`, or joined to more by `&&`
   or `;` — while a script, an interpreter, a subshell, `curl -L` or a host from a variable filled in as it runs (not one set to a plain value earlier in the line) waits for a person's
   click, whatever the safety judge thinks. `secrets gates` shows both on one line per secret; `secrets hosts` shows and
-  edits the guard.
+  edits the guard. Some secrets live in a **keyring on one of the owner's computers** (`intentic-keyring`, beside
+  intentic-machine) and the sandbox holds only a pointer: the Secrets view lists them under "On your computers". You
+  spend one exactly like any other, a reference in a command, or `mcp__secrets__type_secret` aimed (`where`) at a window
+  on a connected computer, a phone attached to it, the sandbox's desktop or a page in the owner's browser; each use is
+  asked of that computer, which may ask the person there, so an offline or locked computer is a refusal to report, not
+  to work around. Typing into a window goes unasked only into a program on the secret's list (`secrets programs` reads
+  and narrows it; widening is the owner's). For a secret the task needs on the owner's machine, `secrets ask` lets the
+  owner keep it there ("Keep it on my computer").
 - **Needs** are what a conversation has asked people for: a connection, a secret, a grant, a release, a tool
   for the image. Each is a card in its chat, pinned above the composer and listed under **Needs you**; it
   outlives the turn that raised it, and its answer continues the conversation by itself. `needs` lists this

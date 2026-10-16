@@ -7,10 +7,10 @@ import {
     type SecretInventoryEntry,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { defineDocument } from "../store/evolution/documents.js";
-import { openDocument } from "../store/open-document.js";
-import { gateTargetOf } from "./credential-gates.js";
-import type { Destination } from "./secret-destinations.js";
+import { defineDocument } from "../../store/evolution/documents.js";
+import { openDocument } from "../../store/open-document.js";
+import { gateTargetOf } from "../credential-gates.js";
+import type { Destination } from "../secret-destinations.js";
 
 // The host guard, each secret's second approval setting beside its named approvers: on, a use goes unasked only to the
 // hosts on its list and anything else waits for a person; off, it never asks. The owner's settings are stored off the
@@ -118,10 +118,11 @@ export const guardForName = (guards: readonly SecretHostGuard[], name: string): 
     return guards.find((guard) => guard.kind === kind && guard.subject === subject);
 };
 
-// The guard for one inventory row, by the same subject rule as its gate; a model account's row has none.
+// The guard for one inventory row, by the same subject rule as its gate; a model account's row has none, and a keyring's
+// row carries its keyring's own list rather than any the owner wrote here.
 export const guardForEntry = (guards: readonly SecretHostGuard[], entry: Pick<SecretInventoryEntry, "key" | "kind">): SecretHostGuard | undefined => {
     const kind = entry.kind === "capability" ? "capability" : "secret";
-    return entry.kind === "provider" ? undefined : guards.find((guard) => guard.kind === kind && guard.subject === entry.key);
+    return entry.kind === "provider" || entry.kind === "device" ? undefined : guards.find((guard) => guard.kind === kind && guard.subject === entry.key);
 };
 
 // One secret a use spends whose guard is on, and the hosts it may go to unasked; empty, it may go nowhere unasked.

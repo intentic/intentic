@@ -121,6 +121,9 @@ pub fn up(args: Up) -> Result<()> {
             )
         );
     }
+    // A runner's stores are encrypted at rest like any sandbox's (sandbox/at_rest.rs): the operator's key, else ic's own.
+    let given = sandbox::at_rest::host_file(sandbox::at_rest::HOST_FILE_ENV)?;
+    let key = sandbox::at_rest::decide(&slug, None, None, given.as_deref())?;
     let image = env_or("SANDBOX_IMAGE", "ghcr.io/intentic/sandbox:stable");
     let log = Log::create("runner-up")?;
 
@@ -193,10 +196,16 @@ pub fn up(args: Up) -> Result<()> {
 
     // The whole difference from a person's sandbox is these two values — and the absences around them: no
     // setup code, no tunnel grant, no Google client, so the daemon boots loopback and only ever dials OUT.
-    let env_pairs = nul_frame(&[
+    let mut pairs = vec![
         ("RUNNER_PARENT_URL", parent_url.as_str()),
         ("RUNNER_PAIR_TOKEN", pair_token.as_str()),
-    ]);
+    ];
+    if key.is_on() {
+        pairs.push((sandbox::at_rest::KEY_ENV, sandbox::at_rest::KEY_MOUNT));
+    }
+    let env_pairs = nul_frame(&pairs);
+    sandbox::at_rest::prepare(&key, &slug, None, true)?;
+    let mounts = key.mount()?;
     let definition_b64 = definition
         .as_deref()
         .map(|content| base64(content.as_bytes()));
@@ -208,7 +217,7 @@ pub fn up(args: Up) -> Result<()> {
         previous_image: None,
         environment_hash: env_hash.as_deref(),
         runtime: (!runtime_lines.is_empty()).then_some(runtime_lines.as_str()),
-        mounts: None,
+        mounts: mounts.as_deref(),
         dns: None,
         definition_b64: definition_b64.as_deref(),
     };
@@ -216,9 +225,11 @@ pub fn up(args: Up) -> Result<()> {
     // nobody browses to a runner — claiming a port here could only collide with the sandbox someone uses.
     // ic's labels on the runner too (labels.rs): what made it, for which parent, from which side of this computer.
     // A runner is a sandbox container too: on Intentic OS the host policy may put it in a microVM (os/policy.rs).
+    let mut stamped = sandbox::labels::here(&slug, sandbox::labels::Kind::Runner);
+    stamped.extend(sandbox::at_rest::stamp(&key));
     let argv = crate::os::policy::sandbox_run(sandbox::labels::into_run(
         &contract::run_command(&request, &env_pairs, true, &unsupported, &[], &log)?,
-        &sandbox::labels::here(&slug, sandbox::labels::Kind::Runner),
+        &stamped,
     ));
     // Nothing else creates it on this machine: a runner's slug never goes through the connect flow.
     sandbox::ensure_network(&slug)?;

@@ -10,8 +10,9 @@ import type { SandboxSecrets } from "./sandbox-secrets.js";
 
 // Every credential value under a stable name (a `{{secret:name}}` token): masking replaces a value with its reference,
 // resolution replaces it back only where it leaves. Unions the stores the terminal filter reads (SECRET_STORES: env, the
-// sandbox's own, deploy-generated, capability vault) in that list's order, so env wins a name collision. Read fresh each
-// call, never cached, so a mid-turn credential masks from the very next tool result.
+// sandbox's own, deploy-generated, capability vault, keyring copies, values a keyring released) in that list's order, so
+// env wins a name collision. Read fresh each call, never cached, so a mid-turn credential masks from the very next tool
+// result. A `device` value is listed to mask and never to resolve (secret-access.ts): each use asks its computer again.
 
 export interface NamedSecret {
     // The reference name: an env key (`CLOUDFLARE_API_TOKEN`) or `<capability>/<field>` (`reddit/password`).
@@ -58,6 +59,9 @@ export const resolveSecretReferences = (text: string, secrets: readonly NamedSec
     return { text: resolved, used, unknown };
 };
 
+// Every name a reference in `text` carries, in order of first appearance, whatever holds it.
+export const referencedNames = (text: string): readonly string[] => [...new Set(Array.from(text.matchAll(REFERENCES), (match) => match[1] ?? ""))].filter((name) => name !== "");
+
 // Cheap pre-check for any reference-shaped token, so callers skip the registry read on the common case of no secret.
 export const hasSecretReferences = (text: string): boolean => SECRET_REFERENCE.test(text);
 
@@ -101,7 +105,21 @@ const readEnv = async (path: string): Promise<Entries> => {
 const vaultEntries = (vaulted: SecretVaultContents): Entries =>
     Object.entries(vaulted).flatMap(([id, fields]) => Object.entries(fields).map(([field, value]) => [`${id}/${field}`, value] as const));
 
-export const secretRegistryOf = (vault: SecretVault, desiredStateRepo: () => string, sandbox: Pick<SandboxSecrets, "all">) => {
+// What the keyrings on the owner's computers left here (secrets/device/): the `copy` entries kept as ordinary secrets,
+// and the values released for one use each, which the registry lists only so they mask.
+export interface KeptFromKeyrings {
+    readonly copies: () => Promise<Readonly<Record<string, string>>>;
+    readonly released: () => Readonly<Record<string, string>>;
+}
+
+const NOTHING_FROM_KEYRINGS: KeptFromKeyrings = { copies: async () => ({}), released: () => ({}) };
+
+export const secretRegistryOf = (
+    vault: SecretVault,
+    desiredStateRepo: () => string,
+    sandbox: Pick<SandboxSecrets, "all">,
+    keyrings: KeptFromKeyrings = NOTHING_FROM_KEYRINGS,
+) => {
     // One reader per store the list names. The auth-root stores are read through their own documents (schema, mode,
     // refusal of an unreadable file), the seams the daemon already holds; the desired-state files are read raw, as the
     // terminal filter reads every store. Exhaustive over `source`, so a store added to the list cannot go unread here.
@@ -115,6 +133,10 @@ export const secretRegistryOf = (vault: SecretVault, desiredStateRepo: () => str
                 return readJson(join(desiredStateRepo(), store.path));
             case "capability":
                 return vaultEntries(await vault.all());
+            case "copy":
+                return Object.entries(await keyrings.copies());
+            case "device":
+                return Object.entries(keyrings.released());
         }
     };
     return async (): Promise<readonly NamedSecret[]> => {

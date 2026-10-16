@@ -1,4 +1,11 @@
-import type { CredentialGate, CredentialGateKind, SecretInventoryEntry, CredentialPolicySet } from "@intentic/sandbox-contract";
+import type {
+    CredentialGate,
+    CredentialGateKind,
+    SecretInventoryEntry,
+    CredentialPolicySet,
+    SecretProgramGuard,
+    SecretPrograms,
+} from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { devFillSet } from "../../../setup/devFill";
@@ -122,6 +129,27 @@ export function useSecretHosts() {
         onSuccess: () => void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.inventory`) }),
     });
     return { setHosts };
+}
+
+// Each sandbox-held secret's program guard: which windows on the owner's computers, and which phone apps, it is typed
+// into unasked. Read from its own route, since a secret whose list was never set is simply absent there; an edit writes
+// and refreshes that and the inventory, whose rows carry the same list. A keyring's own entries are not here: their list
+// is the keyring's, on its row.
+export function useSecretPrograms() {
+    const queryClient = useQueryClient();
+    const { query } = useSandboxQuery(rpcQuery(`secrets.programs`));
+    const setPrograms = useMutation({
+        mutationFn: (input: SecretProgramGuard) => sandboxRpc.secrets.setPrograms(input),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.programs`) });
+            void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.inventory`) });
+        },
+    });
+    return {
+        programsFor: (subject: string): Omit<SecretPrograms, `source`> | undefined =>
+            (query.data.value?.guards ?? []).find((guard) => guard.subject === subject),
+        setPrograms,
+    };
 }
 
 // How a connection's credential reaches the agent, and the rules the credential gateway enforces on it. The owner's alone

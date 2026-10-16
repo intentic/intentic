@@ -1,4 +1,5 @@
 import { oneLine } from "@intentic/base/one-line";
+import { WEBEXT_TICKET_TOOL } from "@intentic/sandbox-contract/webext-links";
 import { siteOf } from "./policy.js";
 
 // Tool calls as sentences a person reads in the popup's activity list. Its own module, apart from audit.ts, because
@@ -17,20 +18,29 @@ const place = (url: string): string => {
     }
 };
 
+// The calls whose sentence takes nothing from their arguments.
+const FIXED = new Map([
+    ["describe", "Checked what it may do here"],
+    ["snapshot", "Looked over the page"],
+    ["read", "Read the page"],
+    ["screenshot", "Took a screenshot"],
+    // Its one argument is a ticket, spent by then and meaningless to a person: what they want to know is that a secret
+    // went in.
+    [WEBEXT_TICKET_TOOL, "Typed a stored secret into the field in focus"],
+]);
+
 // One tool call as a sentence ("Typed 86 characters and submitted"), so the popup's list reads as what happened, not
 // as the call's arguments. Nothing typed into a page is kept: `fill` is recorded by length only.
 export const describeCall = (tool: string, args: Record<string, unknown>): string => {
+    const fixed = FIXED.get(tool);
+    if (fixed !== undefined) {
+        return fixed;
+    }
     switch (tool) {
-        case "describe":
-            return "Checked what it may do here";
         case "tabs":
             return args["select"] === undefined ? "Listed your tabs" : `Switched to tab ${String(args["select"])}`;
         case "open":
             return `Opened ${place(text(args["url"]))}${args["tab"] === "new" ? " in a new tab" : ""}`;
-        case "snapshot":
-            return "Looked over the page";
-        case "read":
-            return "Read the page";
         case "click":
             return `Clicked ${text(args["ref"])}`;
         case "fill":
@@ -45,8 +55,6 @@ export const describeCall = (tool: string, args: Record<string, unknown>): strin
             return args["text"] === undefined
                 ? `Waited for “${oneLine(text(args["textGone"]), 40)}” to go`
                 : `Waited for “${oneLine(text(args["text"]), 40)}”`;
-        case "screenshot":
-            return "Took a screenshot";
         case "ask_access":
             return `Asked for ${siteOf(text(args["origin"]))}`;
         case "connect_site":

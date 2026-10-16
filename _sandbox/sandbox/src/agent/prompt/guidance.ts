@@ -356,8 +356,9 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "Stored secrets never appear in what you read: anywhere a stored value would show, you see its reference " +
             "`{{secret:name}}` instead. The same token is how you USE one. Write `{{secret:name}}` inside a shell " +
             "command (a curl body, an env assignment, a config payload) and the real value is substituted at execution; " +
-            "the transcript and permission cards keep the token. To put one into a web form, focus the field with the " +
-            "browser tools and call `mcp__secrets__type_secret`. A name that does not exist fails the command and lists " +
+            "the transcript and permission cards keep the token. To put one into a web form, an app's login window or a " +
+            "password prompt on one of the owner's computers, focus the field with that place's own tools and call " +
+            "`mcp__secrets__type_secret` with `where` naming the place (its description lists the ones this turn reaches). A name that does not exist fails the command and lists " +
             'the names that do; when the task needs one nobody has stored, `secrets ask NAME --why "…"` puts a masked ' +
             "field for it in front of the owner. In files you write, keep the reference, never a raw value, and never ask " +
             "the user to paste one into chat. " +

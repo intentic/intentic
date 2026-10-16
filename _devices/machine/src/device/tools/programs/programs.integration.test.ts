@@ -106,6 +106,15 @@ test("a program that falls over at once is answered with how it ended and what i
     expect(said).toContain("missing config");
 });
 
+// A hint for the keyring's record that an agent's program is the one asking (shell.ts, AGENT_COMMAND_ENV), set after the
+// request's own variables so a request cannot drop it, though the program itself still can.
+test("a started program carries INTENTIC_AGENT_COMMAND=1, whatever env the request gave", async () => {
+    const path = await push(Buffer.from('#!/bin/sh\necho "mark=$INTENTIC_AGENT_COMMAND extra=$EXTRA"\nexit 0\n'), "marked", "marked.sh");
+    Bun.spawnSync(["chmod", "+x", path ?? ""]);
+    const said = await startApp({ program: path ?? "", env: { EXTRA: "yes", INTENTIC_AGENT_COMMAND: "0" } }, programs, SANDBOX);
+    expect(said).toContain("mark=1 extra=yes");
+});
+
 test("a program the sandbox did not push needs Run commands, and a folder points at what is inside it", async () => {
     await expect(startApp({ program: "/bin/true" }, programs, SANDBOX)).rejects.toBeInstanceOf(ScopeError);
     const folder = join(sandboxRunsDir(SANDBOX), "folder");

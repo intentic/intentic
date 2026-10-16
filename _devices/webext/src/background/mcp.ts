@@ -1,5 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
 import { createMcpServer, type McpTool, textResult, tool } from "@intentic/sandbox-contract/peer-mcp-server";
+import { WEBEXT_TICKET_TOOL } from "@intentic/sandbox-contract/webext";
 // Named imports rather than the `z` namespace: the namespace keeps zod's 60 locales (~250 kB) in this store-shipped
 // bundle, which esbuild can otherwise drop. _devices/webext/scripts/size-budget.mjs holds the ceiling.
 import { array, boolean, enum as zEnum, number, object, string } from "zod";
@@ -10,6 +11,7 @@ import { click, fill, openUrl, pressKey, readable, screenshot, scroll, selectOpt
 import { lendSite } from "./tools/lend.js";
 import { connectSite } from "./tools/session.js";
 import { listTabs, selectTab } from "./tools/tabs.js";
+import { typeTicket } from "./tools/ticket.js";
 
 /* The peer MCP server dispatches the connected browser's tool surface. */
 
@@ -175,6 +177,19 @@ const TOOLS: readonly McpTool<undefined>[] = [
             tab,
         }),
         run: async ({ account, tab: id }) => textResult(await lendSite(account, id)),
+    }),
+    tool({
+        name: WEBEXT_TICKET_TOOL,
+        description:
+            "Type a stored secret the sandbox holds into the field in focus in the tab in front, for a ticket only the sandbox issues: the sandbox's own type_secret calls this, and an agent's mount of this browser never lists it. Answers where it typed, never the value.",
+        // A typed secret reaches the page, and nothing takes it back.
+        effect: "destructive",
+        // The ticket and nothing else: the arguments are what the activity list records.
+        input: object({ ticket: required }),
+        run: async ({ ticket }) => {
+            const typed = await typeTicket(ticket);
+            return { ...textResult(`Typed the secret into the focused ${typed.field} field on ${typed.host}.`), structuredContent: { host: typed.host, field: typed.field } };
+        },
     }),
 ];
 

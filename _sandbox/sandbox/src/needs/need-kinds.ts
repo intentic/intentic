@@ -1,4 +1,5 @@
-import type { Need, NeedAnswer, NeedAsk, NeedKind, NeedSubject } from "@intentic/sandbox-contract";
+import type { Need, NeedAnswer, NeedAsk, NeedKind, NeedSecretInputSchema, NeedSubject } from "@intentic/sandbox-contract";
+import type { z } from "zod";
 import type { TurnStanding } from "../conversations/actor/turn-standing.js";
 
 // What each kind of need knows how to do (kinds/*.ts), so needs.ts stays one lifecycle for all of them: turn an
@@ -17,6 +18,10 @@ export type Resolved =
     | { readonly kind: "met"; readonly message: string }
     | { readonly kind: "refused"; readonly code: string; readonly message: string }
     | { readonly kind: "raise"; readonly subject: NeedSubject; readonly title: string };
+
+// "Keep it on my computer" on a secret need's card (NeedSecretInputSchema `keepOn`): which computer's keyring keeps the
+// value, and how that keyring answers this sandbox for it.
+export type SecretKeepOn = NonNullable<z.infer<typeof NeedSecretInputSchema>["keepOn"]>;
 
 // A need met: the daemon's sentence on how, and what the agent can do with it now and next turn.
 export interface Met {

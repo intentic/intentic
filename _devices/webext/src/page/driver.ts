@@ -34,6 +34,21 @@ export interface ActionResult {
     readonly message: string;
 }
 
+// The slot pinFocusedField holds a field in, on the isolated world's window, where the page's own scripts never see it.
+declare global {
+    interface Window {
+        intenticFocusPin?: { readonly pin: string; readonly el: HTMLElement } | undefined;
+    }
+}
+
+// The field in focus, before a stored secret is typed into it: whether there is one to type into, and whether it is a
+// password input, which the sandbox's guard and its approval card name.
+export interface FocusedField {
+    readonly ok: boolean;
+    readonly field: "password" | "text";
+    readonly message: string;
+}
+
 /* ---- the injected functions ---- */
 
 // Walks the page (piercing shadow roots), parks the ref table, and caps at 150 elements — matching the CDP
@@ -319,8 +334,72 @@ export const fillRef = (ref: string, text: string, submit: boolean, pin?: string
     return { ok: true, message: submit ? `typed and submitted` : `typed` };
 };
 
+// The field a stored secret is about to be typed into: the one in focus, held by `pin` for typeSecretInto, since the
+// sandbox's release of the value can wait minutes on a person and focus can wander meanwhile. Its own slot, apart
+// from describeRef's, so a click while the secret is released cannot repoint it. Only the page's own document: a
+// field inside a frame is refused by name, since the page tools never reach into frames either.
+export const pinFocusedField = (pin: string): FocusedField => {
+    window.intenticFocusPin = undefined;
+    // Focus inside a shadow root shows on the document as its host; the field itself is further down.
+    let el: Element | null = document.activeElement;
+    while (el?.shadowRoot?.activeElement !== undefined && el.shadowRoot.activeElement !== null) {
+        el = el.shadowRoot.activeElement;
+    }
+    if (el instanceof HTMLIFrameElement) {
+        return { ok: false, field: "text", message: `The focused field is inside a frame of this page, where a secret cannot be typed.` };
+    }
+    // Text-like inputs only: a number or date input would mangle a secret, and a checkbox has nowhere to put one.
+    const typeable = new Set(["text", "password", "email", "search", "tel", "url"]);
+    const editable = (field: HTMLElement): boolean =>
+        field instanceof HTMLInputElement
+            ? typeable.has(field.type) && !field.disabled && !field.readOnly
+            : field instanceof HTMLTextAreaElement
+              ? !field.disabled && !field.readOnly
+              : field.isContentEditable;
+    if (!(el instanceof HTMLElement) || !editable(el)) {
+        return { ok: false, field: "text", message: `No text field is focused on this page: click the field first, then type the secret again.` };
+    }
+    window.intenticFocusPin = { pin, el };
+    return { ok: true, field: el instanceof HTMLInputElement && el.type === "password" ? "password" : "text", message: "" };
+};
+
+// Types a released secret into the field pinFocusedField held, as fillRef types (the native setter, then the events a
+// framework listens for), and never submits: what happens to the form next is the agent's own, visible step. Refused
+// when the page left the site the secret was released for, or the field left the page; the slot is emptied either way,
+// so a pin is good for one value.
+export const typeSecretInto = (pin: string, value: string, origin: string): ActionResult => {
+    const pinned = window.intenticFocusPin;
+    window.intenticFocusPin = undefined;
+    if (location.origin !== origin) {
+        return { ok: false, message: `The page moved to another site while the secret was being released, so nothing was typed.` };
+    }
+    if (pinned?.pin !== pin || !pinned.el.isConnected) {
+        return {
+            ok: false,
+            gone: true,
+            message: `The field that was focused left the page while the secret was being released, so nothing was typed. Click the field again, then type the secret again.`,
+        };
+    }
+    const target = pinned.el;
+    target.focus();
+    if (target.isContentEditable) {
+        target.textContent = value;
+        target.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
+        return { ok: true, message: `typed` };
+    }
+    const proto = target instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+    if (setter === undefined) {
+        return { ok: false, message: `That field cannot be typed into, so nothing was typed.` };
+    }
+    setter.call(target, value);
+    target.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
+    target.dispatchEvent(new Event("change", { bubbles: true }));
+    return { ok: true, message: `typed` };
+};
+
 // Selects by value or by visible label, since a model reading a snapshot usually has the label, not the value.
-export const selectRef = (ref: string, values: string[]): { ok: boolean; message: string } => {
+export const selectRef =(ref: string, values: string[]): { ok: boolean; message: string } => {
     const refs = (window as unknown as { intenticPageRefs?: Element[] }).intenticPageRefs ?? [];
     const index = /^e(\d+)$/.exec(ref.trim());
     const el = index?.[1] === undefined ? undefined : refs[Number(index[1])];

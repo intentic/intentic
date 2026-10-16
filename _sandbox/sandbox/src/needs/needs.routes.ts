@@ -71,7 +71,7 @@ export const createNeedsRoutes = ({ needs, grants, visible }: NeedsRoutesDeps) =
         }),
         provideSecret: i.provideSecret.handler(async ({ input, context }) => {
             await seen(input.id, context);
-            return answered(needs.provide(input.id, input.value, { email: context.identity?.email }));
+            return answered(needs.provide(input.id, input.value, { email: context.identity?.email }, input.keepOn));
         }),
         // As visible as the conversations they widened, like the needs that made them.
         grants: i.grants.handler(async ({ context }) => {

@@ -1,6 +1,15 @@
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { ScopeError } from "../policy.js";
-import { assertNoSandboxPower, type CommandResult, describeResult, destructiveClasses, runCommand, sandboxPowerIn } from "./shell.js";
+import {
+    AGENT_COMMAND_ENV,
+    assertNoSandboxPower,
+    type CommandResult,
+    describeResult,
+    destructiveClasses,
+    markedAsAgentCommand,
+    runCommand,
+    sandboxPowerIn,
+} from "./shell.js";
 
 // `shell` used to check only WHERE a command would start (cwd, against the roots), never WHAT it would do, so
 // an agent could run `rm -rf ~/projects` and the sandbox's command gate never saw it (it hooks Bash and the JS
@@ -237,4 +246,8 @@ test("names the commands a shell would run, however many", () => {
         ["ic", "restart"],
         ["docker", "stop"],
     ]);
+});
+
+test("the agent's commands are marked for the keyring's record, over whatever the environment held", () => {
+    expect(markedAsAgentCommand({ PATH: "/bin", [AGENT_COMMAND_ENV]: "0" })).toEqual({ PATH: "/bin", INTENTIC_AGENT_COMMAND: "1" });
 });

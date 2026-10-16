@@ -1,7 +1,10 @@
 import type { Capability } from "@intentic/sandbox-contract";
+import { unstubbed } from "@intentic/testing";
+import type { RpcMessage } from "../agent/tools/turn-mounts.js";
+import type { Services } from "../composition.js";
 import { createPeerHub } from "../peers/peer-hub.js";
 import { memoryPeerTools } from "../peers/peer-tool-memory.js";
-import { ownBrowserReach, sealAnswer, type WebExtHub } from "./webext-peer.js";
+import { ownBrowserReach, sealAnswer, type WebExtHub, webextPeerRoutes, withoutDaemonTools } from "./webext-peer.js";
 
 /* THE SEAL. */
 
@@ -75,4 +78,59 @@ test("an offline browser whose tools are remembered stays named, and an empty re
 
 test("no browser card granted answers nothing, so no sentence is composed", async () => {
     expect(await ownBrowserReach({ webextHub: hubWith({}) }, [])).toBeUndefined();
+});
+
+/* WHAT THE AGENT'S OWN MOUNT OF A BROWSER OFFERS: everything the browser serves but `type_ticket`, which takes a ticket
+   only the daemon mints (secret-tickets.ts) and is called by the daemon alone. */
+
+const TOOLS = [
+    { name: "describe", inputSchema: { type: "object" } },
+    { name: "type_ticket", inputSchema: { type: "object", properties: { ticket: { type: "string" } } } },
+    { name: "fill", inputSchema: { type: "object" } },
+];
+const turn = { name: "chrome", conversationId: "c1", signal: new AbortController().signal };
+
+// The browser's mount as a turn reaches it, over an asleep browser whose tool table was remembered from its last connect.
+const mountOfAsleepBrowser = () => {
+    const hub = hubWith({ chrome: { tools: TOOLS } });
+    const services = unstubbed<Services>("services", {
+        webexts: unstubbed<Services["webexts"]>("webexts", { enrolled: async () => true }),
+        webextHub: hub,
+        logger: unstubbed<Services["logger"]>("logger", {}),
+    });
+    return webextPeerRoutes(services).mcp;
+};
+
+test("an agent listing a browser's tools is not shown the one only the daemon calls, live or remembered", async () => {
+    const listed = await mountOfAsleepBrowser()({ id: "chrome" }, { jsonrpc: "2.0", id: 1, method: "tools/list" }, turn);
+    expect(listed).toEqual({ jsonrpc: "2.0", id: 1, result: { tools: [TOOLS[0], TOOLS[2]] } });
+
+    const live = withoutDaemonTools(async (_target, message) => ({ jsonrpc: "2.0", id: message.id ?? null, result: { tools: TOOLS, nextCursor: "x" } }));
+    expect(await live({ id: "chrome" }, { jsonrpc: "2.0", id: 2, method: "tools/list" }, turn)).toEqual({
+        jsonrpc: "2.0",
+        id: 2,
+        result: { tools: [TOOLS[0], TOOLS[2]], nextCursor: "x" },
+    });
+});
+
+test("an agent calling it is answered as for a tool the browser does not have, and the browser never hears of it", async () => {
+    const reached: RpcMessage[] = [];
+    const mount = withoutDaemonTools(async (_target, message) => {
+        reached.push(message);
+        return { jsonrpc: "2.0", id: message.id ?? null, result: { content: [{ type: "text", text: "done" }], isError: false } };
+    });
+    const called = await mount({ id: "chrome" }, { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "type_ticket", arguments: { ticket: "guessed" } } }, turn);
+    expect(called).toEqual({ jsonrpc: "2.0", id: 3, result: { content: [{ type: "text", text: `This browser has no tool called "type_ticket".` }], isError: true } });
+    expect(reached).toEqual([]);
+    // The same refusal through the browser's real mount, asleep or not.
+    expect(await mountOfAsleepBrowser()({ id: "chrome" }, { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "type_ticket", arguments: {} } }, turn)).toEqual({
+        jsonrpc: "2.0",
+        id: 4,
+        result: { content: [{ type: "text", text: `This browser has no tool called "type_ticket".` }], isError: true },
+    });
+
+    // Every other call goes through as it was.
+    const fill: RpcMessage = { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "fill", arguments: { ref: "e1", text: "hi" } } };
+    expect(await mount({ id: "chrome" }, fill, turn)).toEqual({ jsonrpc: "2.0", id: 5, result: { content: [{ type: "text", text: "done" }], isError: false } });
+    expect(reached).toEqual([fill]);
 });

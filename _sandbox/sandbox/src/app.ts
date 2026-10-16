@@ -69,10 +69,11 @@ import { cardDeps } from "./conversations/actor/card-deps.js";
 import { turnRunOf } from "./conversations/actor/conversation-holdings.js";
 import { mountPeerRoutes } from "./peers/peer-routes.js";
 import { createRedeemRoute } from "./peers/redeem-codes.js";
+import { createKeyringKeysRoute } from "./secrets/device/keyring-keys.js";
 import { RUNNER_PEER, runnerPeerRoutes } from "./runners/runner-peer.js";
 import { WEBEXT_PEER, webextPeerRoutes } from "./webext/webext-peer.js";
 import { createPhoneWakeRoute, PHONE_PEER, phonePeerRoutes } from "./phones/phone-peer.js";
-import { createWebExtLendRoute, createWebExtSessionRoute } from "./webext/webext.routes.js";
+import { createWebExtLendRoute, createWebExtSecretRoute, createWebExtSessionRoute } from "./webext/webext.routes.js";
 import { createRunnerDefinitionSyncRoute } from "./runners/runner.routes.js";
 import {
     createRunnerCredentialRefreshRoute,
@@ -602,9 +603,14 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             extension: createExtensionMcpEndpoint(services),
         }),
     );
-    // A browser's two credential doors: `session` moves a site sign-in in, `lend` moves one back out.
+    // A browser's credential doors: `session` moves a site sign-in in, `lend` moves one back out, `secret` hands it one
+    // stored secret to type for a ticket the daemon gave it (webext/secret-tickets.ts).
     serve("POST /system/webext/session", createWebExtSessionRoute(services));
     serve("POST /system/webext/lend", createWebExtLendRoute(services));
+    serve("POST /system/webext/secret", createWebExtSecretRoute(services));
+    // This sandbox's keyring keys, public halves only: a keyring fetches them here, from the sandbox's own address, before
+    // it shares anything with it (secrets/device/keyring-keys.ts).
+    serve("GET /keyring/keys", createKeyringKeysRoute(services.sandboxKeyringKeys));
     // A runner's settings push, then its git door and its credential doors.
     serve("POST /system/runners/{id}/definition/sync", createRunnerDefinitionSyncRoute(services));
     // The git door runners fetch and push through: stock smart HTTP off the real git dirs, per-request, own token.

@@ -42,6 +42,21 @@ describe("isLeftover", () => {
             expect(isLeftover(name), name).toBe(false);
         }
     });
+
+    // The keyring is `keyring upgrade`'s alone, at a person's word: nothing of it is the agent's to sweep.
+    it("never names the keyring's files, its own .old and .previous included", () => {
+        for (const name of [
+            "intentic-keyring",
+            "intentic-keyring.exe",
+            "intentic-askpass.exe",
+            "intentic-keyring.exe.old",
+            "intentic-keyring.previous",
+            "intentic-keyring.exe.new-1.400.0",
+            "intentic-askpass.exe.old",
+        ]) {
+            expect(isLeftover(name), name).toBe(false);
+        }
+    });
 });
 
 describe.skipIf(process.platform === "win32")("versionOf", () => {

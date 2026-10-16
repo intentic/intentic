@@ -406,6 +406,10 @@ jobs:
       # The one machine-side agent (computer links + desktop sync), for every platform either capability's card
       # can land on: the sync half has always covered macOS, the computer half rides along there.
       - run: bash _tools/scripts/build/build-agent-binaries.sh _devices/machine intentic-machine linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64
+      # intentic-keyring, the vault beside it, for the same platforms: `intentic-machine keyring setup` downloads it from
+      # the release the machine itself came from, and checks it against the same signed SHA256SUMS. Built by the closure
+      # step above like the machine (it is in packages.sh's PUB), so its dist/cli.js is there to compile.
+      - run: bash _tools/scripts/build/build-agent-binaries.sh _devices/keyring intentic-keyring linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64
       # The ic host-side CLI, all five platforms, as ic-build made them: the Linux bundles below carry ic-linux-amd64
       # beside the app (stage-desktop-ic.sh --release), and the upload at the end carries the directory to publish.
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -429,6 +433,7 @@ jobs:
           name: linux-release-artifacts
           path: |
             _devices/machine/dist-bin
+            _devices/keyring/dist-bin
             _devices/win-launcher/dist-bin
             _sandbox/ic/dist-bin
             _editor/desktop-app/dist-bin
@@ -620,6 +625,7 @@ jobs:
           # project asks anyone to run.
           subject-path: |
             _devices/machine/dist-bin/*
+            _devices/keyring/dist-bin/*
             _devices/win-launcher/dist-bin/*
             _sandbox/ic/dist-bin/*
             _editor/desktop-app/dist-bin/*

@@ -12,6 +12,7 @@ mod engine_keeper;
 mod first_task;
 mod fix;
 mod found;
+mod keyring;
 mod launch;
 mod local;
 mod machine_sandbox;
@@ -215,6 +216,18 @@ pub fn run() {
             commands::sandbox_logs,
             commands::machine_report,
             commands::machine_restart,
+            // The keyring on this computer, This device's Passwords group (keyring.rs).
+            keyring::keyring_status,
+            keyring::keyring_list,
+            keyring::keyring_setup,
+            keyring::keyring_add,
+            keyring::keyring_remove,
+            keyring::keyring_share,
+            keyring::keyring_unshare,
+            keyring::keyring_unlock,
+            keyring::keyring_lock,
+            keyring::keyring_askpass,
+            keyring::keyring_harden,
             commands::workspace_open,
             commands::home_facts,
             commands::setup_alert,

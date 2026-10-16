@@ -5,9 +5,9 @@
 //   node _tools/scripts/release/release-checksums.mjs <version>
 //
 // build-desktop.sh's own SHA256SUMS covered its directory alone, the installers. The binaries the install one-liners and
-// the machine agent download (ic-*, intentic-machine-*, the Windows launcher) were in no checksum at all, so nothing
-// could tell a substituted or truncated one from the real thing. This file is the release's: one line per asset across
-// the four directories publish-github.sh attaches, by the name the Release shows.
+// the machine agent download (ic-*, intentic-machine-*, intentic-keyring-*, the Windows launcher) were in no checksum at
+// all, so nothing could tell a substituted or truncated one from the real thing. This file is the release's: one line per
+// asset across the directories publish-github.sh attaches, by the name the Release shows.
 //
 // SIGNED WITH THE UPDATER KEY, by the same signer that signs the installers (`tauri signer sign`), with the version bound
 // into the trusted comment. Agents check SHA256SUMS.sig against the public half built into them
@@ -23,7 +23,7 @@ import { pathToFileURL } from "node:url";
 import { repoRoot } from "../../constants/src/node.mjs";
 
 /** What publish-github.sh attaches to the Release (and the attestation covers), one flat namespace of asset names. */
-export const RELEASE_DIRS = ["_devices/machine/dist-bin", "_devices/win-launcher/dist-bin", "_sandbox/ic/dist-bin", "_editor/desktop-app/dist-bin"];
+export const RELEASE_DIRS = ["_devices/machine/dist-bin", "_devices/keyring/dist-bin", "_devices/win-launcher/dist-bin", "_sandbox/ic/dist-bin", "_editor/desktop-app/dist-bin"];
 export const SUMS = "SHA256SUMS";
 export const SIGNATURE = "SHA256SUMS.sig";
 const DESKTOP_APP = "_editor/desktop-app";

@@ -1,7 +1,7 @@
 // webext: the user's own browser (the `webext` capability's live half)
 // Named imports rather than the `z` namespace: this module is bundled into the browser extension, where the
 // namespace keeps zod's 60 locales (~250 kB) that esbuild can otherwise drop. _devices/webext/scripts/size-budget.mjs holds the ceiling.
-import { array, boolean, enum as zEnum, number, object, string } from "zod";
+import { array, boolean, enum as zEnum, literal, number, object, string, union } from "zod";
 import type * as z from "zod";
 // The card's switches, here rather than in capabilities.ts because the extension bundles this module and would
 // otherwise ship every other capability's schema to the store.
@@ -105,3 +105,18 @@ export const WebExtSessionExportResultSchema = object({
     cookies: array(WebExtCookieSchema).optional(),
 });
 export type WebExtSessionExportResult = z.infer<typeof WebExtSessionExportResultSchema>;
+
+// The extension collecting a secret it was handed a ticket to type (webextSecretUrl): the ticket, and the page it is
+// about to type into, which the daemon's host guard judges. The value never rides a request, only the answer.
+export const WebExtSecretRequestSchema = object({
+    ticket: string().min(1),
+    url: string().min(1),
+    // A password input or any other text field, which an approval card names.
+    field: zEnum(["password", "text"]),
+});
+export type WebExtSecretRequest = z.infer<typeof WebExtSecretRequestSchema>;
+
+// The value for that one field, read only by the extension and written straight into the page; or the sentence why
+// not, which reaches the agent as the tool's refusal.
+export const WebExtSecretAnswerSchema = union([object({ ok: literal(true), value: string() }), object({ ok: literal(false), message: string() })]);
+export type WebExtSecretAnswer = z.infer<typeof WebExtSecretAnswerSchema>;

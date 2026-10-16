@@ -110,6 +110,7 @@ test("the tool list says which tools only read and which can lose something", as
         "key",
         "connect_site",
         "lend_site",
+        "type_ticket",
     ]);
 });
 

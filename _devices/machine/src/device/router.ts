@@ -19,6 +19,17 @@ import { stageArtifact } from "./tools/programs/artifacts.js";
 import { dialLoopback } from "./tools/programs/device-tunnel.js";
 import { hostFacts } from "./tools/describe.js";
 import { DeliveryRefused, deliverProject } from "../sync/project/project-delivery.js";
+import {
+    keyringCopies,
+    keyringInbox,
+    keyringRelease,
+    keyringShares,
+    keyringSyncDeliver,
+    keyringSyncOutbox,
+    keyringSyncPair,
+    keyringSyncState,
+    keyringType,
+} from "../keyring/relay.js";
 import { machineReport } from "../sync/report.js";
 import { runAgentOp } from "./tools/agent.js";
 import {
@@ -48,6 +59,8 @@ export interface HostRuntime {
     // The daemon address this link dialled (its loopback shortcut, or the public one), for a connection the sandbox asks
     // this machine to open back to it (a `devices reach` tunnel). Undefined while it is not connected.
     readonly linkBase?: () => string | undefined;
+    // Where this computer's keyring answers; absent, its own pipe (keyring/relay.ts). A test's socket otherwise.
+    readonly keyringAddress?: string;
 }
 
 // A flow's callback-reported lines as the stream the browser reads (@intentic/base's `narrate`); this is only
@@ -189,6 +202,8 @@ export const createHostRouter = (runtime: HostRuntime) => {
     const os = implement(tolerantDeviceContract);
     // Switches a grant carried that this agent does not know, each said once per link rather than on every reconnect.
     const unknownSaid = new Set<string>();
+    // The keyring is asked for the sandbox on this link's other end, never one a call names.
+    const keyring = { sandboxUrl: runtime.sandboxUrl, address: runtime.keyringAddress };
     return os.router({
         describe: os.describe.handler(async () => await hostFacts(runtime.scopes())),
         // Behind "Run commands" like `status`; FORBIDDEN is the one refusal the sandbox reads as that switch.
@@ -247,6 +262,18 @@ export const createHostRouter = (runtime: HostRuntime) => {
                 throw new ORPCError(error instanceof ScopeError ? "FORBIDDEN" : "BAD_REQUEST", { message: errorMessage(error) });
             }
         }),
+        // The keyring on this computer, relayed (keyring/relay.ts). Behind no switch of the grant: the keyring answers to its
+        // own (a grant the sandbox signed, a person's yes), and this link names which sandbox asks. Not tools, so no agent
+        // can call them; only the daemon does, and only on an agent advertising `keyring`.
+        keyringShares: os.keyringShares.handler(async () => await keyringShares(keyring)),
+        keyringRelease: os.keyringRelease.handler(async ({ input }) => await keyringRelease(keyring, input)),
+        keyringType: os.keyringType.handler(async ({ input }) => await keyringType(keyring, input)),
+        keyringInbox: os.keyringInbox.handler(async ({ input }) => await keyringInbox(keyring, input)),
+        keyringCopies: os.keyringCopies.handler(async () => await keyringCopies(keyring)),
+        keyringSyncState: os.keyringSyncState.handler(async () => await keyringSyncState(keyring)),
+        keyringSyncPair: os.keyringSyncPair.handler(async ({ input }) => await keyringSyncPair(keyring, input)),
+        keyringSyncOutbox: os.keyringSyncOutbox.handler(async () => await keyringSyncOutbox(keyring)),
+        keyringSyncDeliver: os.keyringSyncDeliver.handler(async ({ input }) => await keyringSyncDeliver(keyring, input)),
         stageArtifact: os.stageArtifact.handler(async ({ input }) => {
             try {
                 const result = await stageArtifact(input, runtime.scopes(), runtime.sandboxUrl);

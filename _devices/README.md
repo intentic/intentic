@@ -7,6 +7,7 @@ flowchart LR
     subgraph device["User's device"]
         launch["win-launcher<br/>starts it at logon"] --> machine["machine<br/>intentic-machine"]
         machine --> libs["browser<br/>desktop-automation<br/>local-agent"]
+        machine -->|"local pipe<br/>relays, reads nothing"| keyring["keyring<br/>intentic-keyring"]
         acp["acp-bridge<br/>in Zed · JetBrains"] --> libs
         webext["webext<br/>in the user's Chrome"]
         android["android<br/>Intentic Device on the user's phone"]
@@ -21,6 +22,7 @@ flowchart LR
 | Package | Role |
 | --- | --- |
 | [machine](machine) | The device agent: sandbox tools, folder sync and port mirroring. |
+| [keyring](keyring) | `intentic-keyring`: the password vault beside the machine, typing and releasing secrets for a sandbox without its agent holding them. |
 | [acp-bridge](acp-bridge) | `intentic-acp`: drive sandbox agents from Zed, JetBrains or any ACP editor. |
 | [webext](webext) | Chrome extension letting the agent work in the user's signed-in browser. |
 | [android](android) | Intentic Device: the Android app letting the agent work on the user's phone. A Gradle project, outside the pnpm workspace. |

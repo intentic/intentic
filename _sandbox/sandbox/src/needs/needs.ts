@@ -13,7 +13,7 @@ import {
 } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { TurnStanding } from "../conversations/actor/turn-standing.js";
-import { type Answerer, isGone, type Met, type NeedKinds } from "./need-kinds.js";
+import { type Answerer, isGone, type Met, type NeedKinds, type SecretKeepOn } from "./need-kinds.js";
 import type { NeedsStore } from "./needs-store.js";
 
 // One lifecycle for every need (docs/architecture/needs.md): raise it from an agent's ask, hold the asking call while
@@ -49,8 +49,9 @@ export interface NeedsDeps {
     readonly wake: (conversationId: string, prompt: string) => Promise<NeedTold | undefined>;
     // Whether a met need continues its conversation by itself (Sandbox ▸ Agent ▸ needs).
     readonly continueWhenMet: () => Promise<boolean>;
-    // Stores a secret need's value where its reference resolves (kinds/secret-need.ts `provide`).
-    readonly provideSecret: (need: Need, value: string) => Promise<Met>;
+    // Stores a secret need's value where its reference resolves (kinds/secret-need.ts `provide`), or with `keepOn` sends
+    // it to the keyring on one of the owner's computers and stores nothing here.
+    readonly provideSecret: (need: Need, value: string, keepOn?: SecretKeepOn) => Promise<Met>;
     // Subscribes to a conversation's turn ending; answers the unsubscribe.
     readonly onTurnEnded: (listener: (conversationId: string) => void) => () => void;
     readonly now?: () => number;
@@ -83,8 +84,9 @@ export interface Needs {
     readonly list: (query: { readonly conversationId?: string | undefined; readonly open?: boolean | undefined }) => Promise<readonly Need[]>;
     readonly get: (id: string) => Promise<Need | undefined>;
     readonly answer: (id: string, answer: NeedAnswer, by: Answerer) => Promise<Need>;
-    // A secret's value for a secret need: stored by its kind where the reference resolves it, and the need met.
-    readonly provide: (id: string, value: string, by: Answerer) => Promise<Need>;
+    // A secret's value for a secret need: stored by its kind where the reference resolves it, or kept on the computer
+    // `keepOn` names, and the need met.
+    readonly provide: (id: string, value: string, by: Answerer, keepOn?: SecretKeepOn) => Promise<Need>;
     // Something outside changed (a capability saved, a secret added): check open needs now rather than at the next tick.
     // Answers once a check that began after the call has finished.
     readonly recheck: () => Promise<void>;
@@ -418,7 +420,7 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
             ),
         get: (id) => deps.store.get(id),
         answer,
-        provide: async (id, value, by) => {
+        provide: async (id, value, by, keepOn) => {
             const need = await deps.store.get(id);
             if (need === undefined) {
                 throw new NeedRefusal("not_found", `No need is named "${id}".`);
@@ -429,7 +431,7 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
             if (need.subject.kind !== "secret") {
                 throw new NeedRefusal("invalid", "Only a secret need takes a value.");
             }
-            const met = await deps.provideSecret(need, value);
+            const met = await deps.provideSecret(need, value, keepOn);
             return settle(id, "met", met.result, by, met);
         },
         recheck: checkOpen,

@@ -1,17 +1,17 @@
 import { errorMessage } from "@intentic/base/errors";
 import { type CredentialGateKind, type HostGuardSetting, type SecretHostGuard, secretsContract, tightensHostGuard } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import type { OrpcContext } from "../app-env.js";
-import { isOwnerBearer } from "../auth/owner-gates.js";
-import type { Services } from "../composition.js";
-import { opt } from "../opt.js";
+import type { OrpcContext } from "../../app-env.js";
+import { isOwnerBearer } from "../../auth/owner-gates.js";
+import type { Services } from "../../composition.js";
+import { opt } from "../../opt.js";
 
 // Each secret's host guard: the read every exit's check answers from, and the one edit. Who may make an edit turns on
 // what it does rather than on a role: anybody this route admits (a maintainer, the agent's CLI) may turn a guard on or
 // take hosts off it, since that only asks more often; turning one off or adding a host is the owner's, asked on a card
 // when the agent's CLI wants it and refused to everybody else.
 
-export type SecretHostRoutesDeps = Pick<Services, "auth" | "capabilities" | "hostGuardGate" | "hostGuards" | "secretHostGuards" | "secretRegistry">;
+export type SecretHostRoutesDeps = Pick<Services, "auth" | "capabilities" | "deviceSecrets" | "hostGuardGate" | "hostGuards" | "secretHostGuards" | "secretRegistry">;
 
 interface HostSubject {
     readonly subject: string;
@@ -27,11 +27,19 @@ export const createSecretHostRoutes = (services: SecretHostRoutesDeps) => {
     const i = implement(secretsContract).$context<OrpcContext>();
     // What an edit is about, by the gate's own rule: a name with a `/` is a capability's vault entry and answers to the
     // capability; otherwise a stored secret by that name, else a connected capability by that id.
+    // A name only a computer's keyring holds keeps its hosts on that computer: its keyring's list is the one in force.
     const subjectOf = async (subject: string, kind: CredentialGateKind | undefined): Promise<HostSubject> => {
         const id = subject.split("/")[0] ?? subject;
-        const named = kind !== "capability" && !subject.includes("/") && (await services.secretRegistry()).some((secret) => secret.name === subject);
+        const asSecret = kind !== "capability" && !subject.includes("/");
+        const named = asSecret && (await services.secretRegistry()).some((secret) => secret.name === subject && secret.source !== "device");
         if (named) {
             return { subject, kind: "secret" };
+        }
+        const kept = asSecret ? (await services.deviceSecrets.held()).find((entry) => entry.pointer.name === subject) : undefined;
+        if (kept !== undefined) {
+            throw new ORPCError("FORBIDDEN", {
+                message: `${subject} is kept in the keyring on ${kept.machine}, which keeps its host list: change it on ${kept.machine}: intentic-machine keyring edit ${subject}`,
+            });
         }
         if (kind !== "secret" && (await services.capabilities.get(id)) !== undefined) {
             return { subject: id, kind: "capability" };

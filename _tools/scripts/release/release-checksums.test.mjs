@@ -1,4 +1,4 @@
-// Pins what release-checksums.mjs lists in the release's SHA256SUMS: every asset of the four directories the Release
+// Pins what release-checksums.mjs lists in the release's SHA256SUMS: every asset of the directories the Release
 // attaches, by its asset name, never the sums or their signature, and never two assets under one name.
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -17,9 +17,10 @@ const tree = (files) => {
     return root;
 };
 
-test("lists the agents, ic and the launcher beside the installers, by the names the Release shows", () => {
+test("lists the agents, the keyring, ic and the launcher beside the installers, by the names the Release shows", () => {
     const root = tree({
         "_devices/machine/dist-bin/intentic-machine-linux-amd64": "agent",
+        "_devices/keyring/dist-bin/intentic-keyring-linux-amd64": "keyring",
         "_devices/win-launcher/dist-bin/intentic-launch-windows-amd64.exe": "launcher",
         "_sandbox/ic/dist-bin/ic-linux-amd64": "ic",
         "_editor/desktop-app/dist-bin/Intentic-1.338.0-x64-setup.exe": "installer",
@@ -27,7 +28,7 @@ test("lists the agents, ic and the launcher beside the installers, by the names 
     });
     assert.deepEqual(
         releaseAssets(root).map((asset) => asset.name),
-        ["Intentic-1.338.0-x64-setup.exe", "ic-linux-amd64", "intentic-launch-windows-amd64.exe", "intentic-machine-linux-amd64", "latest.json"],
+        ["Intentic-1.338.0-x64-setup.exe", "ic-linux-amd64", "intentic-keyring-linux-amd64", "intentic-launch-windows-amd64.exe", "intentic-machine-linux-amd64", "latest.json"],
     );
 });
 

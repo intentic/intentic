@@ -12,6 +12,10 @@ import ToggleSwitch from "primevue/toggleswitch";
 import SecretField from "./SecretField.vue";
 import SecretHostsEditor from "./SecretHostsEditor.vue";
 import SecretCredentialPolicy from "./SecretCredentialPolicy.vue";
+import SecretDevicePanel from "./SecretDevicePanel.vue";
+import SecretProgramsEditor from "./SecretProgramsEditor.vue";
+import SecretTypeInto from "./SecretTypeInto.vue";
+import { useKeyrings } from "./useKeyrings";
 import { useT } from "@intentic/ui/i18n";
 
 // One secret, one line, until asked otherwise: a mark, a name, what tells it apart, and (only when owed) a due
@@ -123,18 +127,34 @@ const SCOPE_OPTIONS = computed(() => [
 ]);
 
 const editing = ref(false);
+// The Type into… panel, the third thing an open row can show beside its value and its editor.
+const typing = ref(false);
 const multiline = ref(false);
 const revealedValue = ref<string | undefined>(undefined);
 const confirming = ref(false);
 const error = ref<NoticeModel | undefined>(undefined);
 
 const entry = computed(() => row.entry);
+// A pointer to a keyring entry on one of the owner's computers: its value never comes here, so nothing shows, copies or
+// sets it, and its rules are changed on that computer.
+const onComputer = computed(() => row.group === `device`);
+// Type into… needs a computer with a keyring; a sandbox with none never sees the button.
+const { keyrings, online } = useKeyrings();
+const canType = computed(() => row.typeable && keyrings.value.length > 0);
 // The daemon reveals a value to the owner and maintainers (secrets.routes.ts `reveal`, ensureMaintainer).
 const { canShip } = useRole();
 // A value exists and this viewer is allowed to read it: gates both Reveal and Copy.
 const canReveal = computed(() => entry.value.status !== `missing` && entry.value.revealable && canShip.value);
-// What the open panel shows: provenance only, the revealed value, or the editor (reveal ⊕ edit).
-const panelMode = computed<`info` | `reveal` | `edit`>(() => (editing.value ? `edit` : revealedValue.value !== undefined ? `reveal` : `info`));
+// What the open panel shows: provenance only, the revealed value, the editor, or Type into… (one at a time).
+const panelMode = computed<`info` | `reveal` | `edit` | `type`>(() => {
+    if (typing.value) {
+        return `type`;
+    }
+    if (editing.value) {
+        return `edit`;
+    }
+    return revealedValue.value === undefined ? `info` : `reveal`;
+});
 // Nominal is silent: a connection that is simply working says so by carrying nothing.
 const state = computed(() => (row.state !== undefined && row.state.rank < 3 ? row.state : undefined));
 
@@ -145,6 +165,7 @@ watch(
             return;
         }
         editing.value = false;
+        typing.value = false;
         revealedValue.value = undefined;
         confirming.value = false;
         error.value = undefined;
@@ -160,6 +181,7 @@ const toggleReveal = async (): Promise<void> => {
         return;
     }
     editing.value = false;
+    typing.value = false;
     open();
     try {
         revealedValue.value = await reveal(entry.value.key);
@@ -171,7 +193,16 @@ const toggleReveal = async (): Promise<void> => {
 const startEdit = (): void => {
     error.value = undefined;
     revealedValue.value = undefined;
+    typing.value = false;
     editing.value = true;
+    open();
+};
+
+const startType = (): void => {
+    error.value = undefined;
+    revealedValue.value = undefined;
+    editing.value = false;
+    typing.value = !typing.value;
     open();
 };
 
@@ -229,7 +260,21 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
                     :class="expanded || confirming ? `opacity-100` : `opacity-0`"
                 >
                     <button
-                        v-if="row.entry.status !== `missing`"
+                        v-if="canType"
+                        v-tooltip.top="{
+                            title: t(`capabilities.typeInto.title`),
+                            note: online.length > 0 ? t(`capabilities.typeInto.tooltipNote`) : t(`capabilities.typeInto.noneOnlineShort`),
+                        }"
+                        type="button"
+                        :class="ACTION"
+                        :aria-label="t(`capabilities.typeInto.title`)"
+                        :aria-pressed="typing"
+                        @click="startType"
+                    >
+                        <Icon name="keyboard-tab" class="text-xs" />
+                    </button>
+                    <button
+                        v-if="row.entry.status !== `missing` && !onComputer"
                         v-tooltip.top="
                             revealedValue !== undefined
                                 ? t(`capabilities.secretEntryRow.hide`)
@@ -248,7 +293,7 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
                         <Icon :name="revealedValue !== undefined ? `eye-slash` : `eye`" class="text-xs" />
                     </button>
                     <CopyButton
-                        v-if="canReveal"
+                        v-if="canReveal && !onComputer"
                         v-tooltip.top="t(`capabilities.secretEntryRow.copyValue`)"
                         :text="() => revealedValue ?? reveal(row.entry.key)"
                     />
@@ -300,7 +345,8 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
 
         <!-- The full record, one click away: where it lives, what uses it, and either the value or the editor. -->
         <template #below>
-            <p class="text-2xs text-muted">
+            <!-- Where it lives, except for a keyring's entry, whose panel below says so with how it is shared. -->
+            <p v-if="!onComputer" class="text-2xs text-muted">
                 <template v-if="row.detail">
                     <span class="@xl:hidden">{{ row.detail }} · </span>
                 </template>
@@ -316,11 +362,22 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
             <!-- Use ledger's newest row: when the agent last spent this and where; absent for a secret never yet used. -->
             <p v-if="row.entry.lastUse" class="pt-0.5 text-2xs text-muted">
                 {{ t(`capabilities.secretEntryRow.usedByAgent`) }} {{ timeAgo(row.entry.lastUse.at, { days: true }) }}
+                <template v-if="!row.entry.lastUse.detail && row.entry.lastUse.lane === `desktop`">
+                    · {{ t(`capabilities.secretEntryRow.typedOnDesktop`) }}</template
+                >
                 <template v-if="row.entry.lastUse.detail">
                     ·
                     <span v-if="row.entry.lastUse.lane === `browser`">{{
                         t(`capabilities.secretEntryRow.typedOn`, { detail: row.entry.lastUse.detail })
                     }}</span>
+                    <!-- Typed into a window or a phone app on one of the owner's computers: "rog · FortiClient.exe". -->
+                    <span v-else-if="row.entry.lastUse.lane === `device`">{{
+                        t(`capabilities.secretEntryRow.typedOn`, { detail: row.entry.lastUse.detail })
+                    }}</span>
+                    <span v-else-if="row.entry.lastUse.lane === `desktop`"
+                        >{{ t(`capabilities.secretEntryRow.typedOnDesktop`) }}
+                        <span class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span></span
+                    >
                     <!-- Attached by the credential gateway: the agent sent the request, never held the value. -->
                     <span v-else-if="row.entry.lastUse.lane === `gateway`"
                         >{{ t(`capabilities.secretEntryRow.viaGateway`) }}
@@ -334,6 +391,8 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
                     <span v-else class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span>
                 </template>
             </p>
+            <!-- A keyring's own entry: where it lives, how it is shared, and its rules, read-only, with the command that changes them. -->
+            <SecretDevicePanel v-if="onComputer" :row="row" />
             <!-- The two ways a secret needs a person, as one section: who has to release it, and (below) where it may go before
                  anybody is asked. Both off for nearly everything by design: they are for the few credentials where one wrong use
                  is the incident. -->
@@ -424,7 +483,9 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
                 <Notice v-if="gateError" :of="gateError" class="mt-2" />
 
                 <!-- The host guard: a stored value's, or a connector's credential's, never a mounted account's, which no command carries. -->
-                <SecretHostsEditor v-if="!row.sessionShaped" :row="row" :expanded="expanded" />
+                <SecretHostsEditor v-if="!row.sessionShaped && !onComputer" :row="row" :expanded="expanded" />
+                <!-- Which windows and phone apps it may be typed into unasked: a sandbox-held value's; a keyring's own list is above. -->
+                <SecretProgramsEditor v-if="row.programsHere" :row="row" :expanded="expanded" />
                 <!-- How a connection's credential reaches the agent, and the credential gateway's rules on it. -->
                 <SecretCredentialPolicy :row="row" :expanded="expanded" />
             </div>
@@ -441,6 +502,8 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
                     >{{ revealedValue }}</code
                 >
             </div>
+
+            <SecretTypeInto v-else-if="panelMode === `type`" :row="row" @close="typing = false" />
 
             <div v-else-if="panelMode === `edit`" class="mt-2 flex flex-col gap-1">
                 <SecretField

@@ -1,15 +1,16 @@
-import type { ExtensionSummary, SecretInventoryEntry, CapabilitySummary } from "@intentic/sandbox-contract";
+import { type ExtensionSummary, type SecretInventoryEntry, type CapabilitySummary, SECRET_KEY_RE } from "@intentic/sandbox-contract";
 import { capabilityTile } from "../../capabilities/model/tiles";
 import { type ConnectionState, connectionFacts, connectionState } from "../../capabilities/model/connections";
 import { t } from "@intentic/ui/i18n";
+import { keyringModeWords } from "../../capabilities/connect/secrets/keyringWords";
 
 // A secret row: an inventory entry plus what the daemon can't supply (a label, a distinguishing detail, whether
 // anything is owed). `group` splits owner-set values (editable here) from connection or subscription credentials
 // (managed elsewhere, named via `capabilityTile`). `attention` is only ever a secrets-tab fix, never a connection's own
 // health.
 
-/** Where a row belongs; the first three cases are the owner's to set. */
-export type SecretGroup = `required` | `yours` | `generated` | `credential` | `provider`;
+/** Where a row belongs; the first three cases are the owner's to set. `device` lives in a keyring on one of the owner's computers. */
+export type SecretGroup = `required` | `yours` | `generated` | `credential` | `provider` | `device`;
 
 export interface SecretRow {
     readonly entry: SecretInventoryEntry;
@@ -37,6 +38,10 @@ export interface SecretRow {
     readonly gateSubject?: string | undefined;
     /** True for a mounted credential (browser, identity, MCP); the daemon always scopes those to the conversation. */
     readonly sessionShaped: boolean;
+    /** Can be typed into a window on one of the owner's computers by the owner's Type into…: a stored value with a name the route takes. */
+    readonly typeable: boolean;
+    /** Its program list is the sandbox's to keep (set here), rather than a keyring's on the computer that holds it. */
+    readonly programsHere: boolean;
     /** Everything the filter box matches, already folded. */
     readonly haystack: string;
 }
@@ -53,6 +58,7 @@ const GROUPS: Readonly<Record<SecretInventoryEntry[`kind`], SecretGroup | undefi
     generated: `generated`,
     capability: `credential`,
     provider: `provider`,
+    device: `device`,
 };
 
 const groupOf = (entry: SecretInventoryEntry): SecretGroup => GROUPS[entry.kind] ?? (entry.requiredBy.length > 0 ? `required` : `yours`);
@@ -109,7 +115,70 @@ const credentialRow = (entry: SecretInventoryEntry, sources: SecretSources): Sec
         removable: false,
         gateSubject: instance.id,
         sessionShaped: instance.kind === `browser` || instance.kind === `identity` || instance.kind === `mcp`,
+        // A connection's credential is spent by its connection, never typed by hand.
+        typeable: false,
+        programsHere: false,
         haystack: `${instance.id} ${tile?.name ?? ``} ${instance.kind} ${facts}${gateHaystack(entry)}`.toLowerCase(),
+    };
+};
+
+// The Type into… route takes an env-var name, so a value is typeable only once it is stored under one. A provider
+// account's credential and a connection's are never typed by hand.
+const typeableHere = (entry: SecretInventoryEntry, group: SecretGroup): boolean =>
+    (group === `required` || group === `yours` || group === `generated`) && entry.status !== `missing` && SECRET_KEY_RE.test(entry.key);
+
+const DEVICE_GLYPH = `desktop`;
+
+// How a device row stands, in the words its mode makes true: offline, an `each-use` or `while-here` share cannot be
+// used at all; locked, a `while-here` one asks there like `each-use`. A `copy` lives here too, so neither matters to it.
+const deviceState = (device: NonNullable<SecretInventoryEntry[`device`]>): ConnectionState | undefined => {
+    if (device.mode === `copy`) {
+        return undefined;
+    }
+    if (!device.online) {
+        return { label: t(`sandbox.secretRows.offline`), tone: `warning`, rank: 1 };
+    }
+    if (device.locked === true) {
+        return { label: t(`sandbox.secretRows.locked`), tone: `neutral`, rank: 2 };
+    }
+    return { label: t(`sandbox.secretRows.ready`), tone: `success`, rank: 3 };
+};
+
+const deviceNote = (device: NonNullable<SecretInventoryEntry[`device`]>): string | undefined => {
+    if (device.mode === `copy`) {
+        return undefined;
+    }
+    if (!device.online) {
+        return t(`sandbox.secretRows.offlineNote`, { machine: device.machine });
+    }
+    return device.mode === `while-here` && device.locked === true ? t(`sandbox.secretRows.lockedNote`, { machine: device.machine }) : undefined;
+};
+
+// A pointer to a keyring entry on one of the owner's computers: nothing here can show, copy or change its value, and
+// its rules are the keyring's. The sandbox's own named approver still runs first, so it keeps its gate.
+const deviceRow = (entry: SecretInventoryEntry): SecretRow => {
+    const device = entry.device;
+    const machine = device?.machine ?? ``;
+    const detail = device === undefined ? `` : `${machine} · ${keyringModeWords(device.mode)}`;
+    const state = device === undefined ? undefined : deviceState(device);
+    const note = device === undefined ? undefined : deviceNote(device);
+    return {
+        entry,
+        group: `device`,
+        title: entry.label ?? entry.key,
+        mono: entry.label === undefined,
+        detail,
+        icon: DEVICE_GLYPH,
+        attention: false,
+        note: note ?? (entry.gate === undefined ? undefined : needsApproval(entry.gate.approvers)),
+        state,
+        editable: false,
+        removable: false,
+        gateSubject: entry.status === `missing` ? undefined : entry.key,
+        sessionShaped: false,
+        typeable: entry.status !== `missing` && SECRET_KEY_RE.test(entry.key),
+        programsHere: false,
+        haystack: `${entry.key} ${entry.label ?? ``} ${detail} ${entry.storedAt}${gateHaystack(entry)}`.toLowerCase(),
     };
 };
 
@@ -133,12 +202,17 @@ const bareRow = (entry: SecretInventoryEntry, group: SecretGroup): SecretRow => 
         ...(entry.status !== `missing` && group !== `provider` ? { gateSubject: entry.key } : {}),
         // A stored value is spent at an exit, released one use at a time, unlike rows in `credentialRow`.
         sessionShaped: false,
+        typeable: typeableHere(entry, group),
+        programsHere: typeableHere(entry, group),
         haystack: `${entry.key} ${entry.label ?? ``} ${detail} ${entry.storedAt}${gateHaystack(entry)}`.toLowerCase(),
     };
 };
 
 export const secretRow = (entry: SecretInventoryEntry, sources: SecretSources): SecretRow => {
     const group = groupOf(entry);
+    if (group === `device`) {
+        return deviceRow(entry);
+    }
     if (group === `credential`) {
         return credentialRow(entry, sources) ?? bareRow(entry, group);
     }

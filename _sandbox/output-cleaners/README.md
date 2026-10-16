@@ -24,8 +24,10 @@ flowchart LR
 - `filter-stats.mjs` is the only reading of the ledger: the daemon's savings route and the plugin's stats command
   both call `summarizeStats`, so the two reports cannot disagree.
 - Secret values come from the sandbox's own stores (`secretValues`), the ones `SECRET_STORES` lists: the desired-state
-  `.env` (read with `util.parseEnv`) and `.secrets.json`, and the auth root's `sandbox-secrets.json` and capability
-  vault. Outside a sandbox that list is empty and only the credential-shaped patterns redact. The daemon's tool-result
+  `.env` (read with `util.parseEnv`) and `.secrets.json`, and the auth root's `sandbox-secrets.json`, capability
+  vault, `keyring-copies.json` (entries a keyring on the owner's computer shares in `copy` mode) and
+  `keyring-released.json` (values a keyring released for one use, which the daemon writes only so they mask here and
+  empties when it starts). Outside a sandbox that list is empty and only the credential-shaped patterns redact. The daemon's tool-result
   masking imports `SECRET_STORES`, `surfaceForms`, `secretReference` and `SECRET_VALUE_MIN` from here, so the two lanes
   read the same stores and mask the same forms of a value to the same reference.
 - Being builtins-only, it keeps its own copies of two contract tables: `SECRET_REFERENCE` (the `{{secret:name}}`

@@ -7,11 +7,12 @@
         "skipLibCheck": true
     },
     "include": ["./src/**/*"],
-    "exclude": ["./src/**/*.test.ts", "./src/testing.ts", "./src/device/device-testing.ts"],
+    "exclude": ["./src/**/*.test.ts", "./src/testing.ts", "./src/device/device-testing.ts", "./src/keyring/keyring-testing.ts"],
     "references": [
         { "path": "../../_tools/base" },
         { "path": "../../_devices/browser" },
         { "path": "../../_devices/desktop-automation" },
+        { "path": "../../_devices/keyring" },
         { "path": "../../_devices/local-agent" },
         { "path": "../../_shared/sandbox-contract" }
     ],

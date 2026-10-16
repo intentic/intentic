@@ -672,6 +672,8 @@ fn remove_agent_auth(volume: &str) {
         "Removing the shared dev agent-auth volume {volume}"
     ));
     if docker::ok(&["volume", "rm", volume]) {
+        // The key its stores were encrypted with goes with them (at_rest.rs).
+        crate::sandbox::at_rest::forget(&crate::sandbox::at_rest::shared_key(volume));
         ui::done("The AI logins of every dev sandbox are removed.");
     } else {
         ui::warn(&format!(

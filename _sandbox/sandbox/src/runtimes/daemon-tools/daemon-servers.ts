@@ -45,8 +45,9 @@ export interface DaemonServersTurn {
     readonly granted: readonly Capability[];
     // The owner's settings: `chatPages` offers the page tools, the rules give the turn's end-of-turn checks.
     readonly settings: SandboxSettings;
-    // What turnToolsOf mounted: the browsers (the secret typist rides only with one) and the lease every server joins.
-    readonly mounted: Pick<TurnRemoteTools, "browser" | "lease">;
+    // What turnToolsOf mounted: the browsers and the desktop (places the secret typist may type into) and the lease every
+    // server joins.
+    readonly mounted: Pick<TurnRemoteTools, "browser" | "desktop" | "lease">;
     // Mount the policy gate server (runtimes/daemon-tools/policy-gate-server.ts) for a runtime whose own hooks call it. Off by default:
     // a runtime that consults the gate in-process gains nothing from offering its model three more tools.
     readonly gate?: boolean;
@@ -143,7 +144,14 @@ export const daemonServersFor = (deps: DaemonServersDeps, turn: DaemonServersTur
     const servers = {
         ui: doorUiServer(turn, relay),
         accounts: accounts?.(relay.push, signal),
-        secrets: secretsServerFor(turn.mounted.browser, secrets),
+        secrets: secretsServerFor(deps, {
+            browser: turn.mounted.browser,
+            desktop: turn.mounted.desktop,
+            granted,
+            secrets,
+            conversationId: input.conversationId,
+            signal,
+        }),
         subagents: subagentsServerFor(deps, turn),
         watch: watchServerFor(deps, turn),
         deps: depsServerFor(deps, turn),

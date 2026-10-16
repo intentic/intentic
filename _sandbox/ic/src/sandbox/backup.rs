@@ -750,9 +750,18 @@ fn restore_into(from: &str, snapshot: &str, into: &str, yes: bool, log: &Log) ->
             )
         );
     };
+    // Another sandbox's snapshot holds its credential stores encrypted with ITS at-rest key (at_rest.rs). Written over
+    // this one's they could not be read here, and the daemon refuses to boot over stores it cannot authenticate, so they
+    // stay out and this sandbox keeps its own.
+    let credentials = (from != into).then(|| {
+        format!(" {from}'s stored credentials are left out: they are encrypted with {from}'s own key, and {into} keeps its own.")
+    });
     if !crate::ui::confirm(
         &format!("Restore {from}'s snapshot {snapshot} into {into}?"),
-        &format!("{into} is stopped, the files the backup holds are written over its own, and it starts again."),
+        &format!(
+            "{into} is stopped, the files the backup holds are written over its own, and it starts again.{}",
+            credentials.as_deref().unwrap_or_default()
+        ),
         yes,
     )? {
         crate::ui::cancelled();
@@ -766,9 +775,14 @@ fn restore_into(from: &str, snapshot: &str, into: &str, yes: bool, log: &Log) ->
         format!("{work}:/src/work"),
         format!("{history}:/src/history"),
     ];
+    let exclude = if credentials.is_some() {
+        format!(" --exclude {}", quoted(AUTH_SRC))
+    } else {
+        String::new()
+    };
     // The consistent database copy the backup holds becomes the database, and a log from another moment goes.
     let script = format!(
-        "restic restore {} --target / && if [ -f {STAGED_DB_SRC} ]; then rm -f /src/history/conversations.db-wal /src/history/conversations.db-shm && mv {STAGED_DB_SRC} /src/history/conversations.db; fi",
+        "restic restore {}{exclude} --target / && if [ -f {STAGED_DB_SRC} ]; then rm -f /src/history/conversations.db-wal /src/history/conversations.db-shm && mv {STAGED_DB_SRC} /src/history/conversations.db; fi",
         quoted(snapshot),
     );
     let ran = restic(from, &mounts, &script, log);
@@ -788,13 +802,18 @@ fn restore_into(from: &str, snapshot: &str, into: &str, yes: bool, log: &Log) ->
         );
     }
     crate::ui::done(&format!(
-        "{from}'s snapshot {snapshot} is restored into {into}, which is starting again."
+        "{from}'s snapshot {snapshot} is restored into {into}, which is starting again.{}",
+        credentials.as_deref().unwrap_or_default()
     ));
     Ok(())
 }
 
 /// Where the staged database copy sits in a restored tree.
 const STAGED_DB_SRC: &str = "/src/history/.ic/backup/conversations.db";
+
+/// The daemon's auth root under /work as a restored tree holds it (authRootOf, _sandbox/sandbox/src/state-paths.ts):
+/// where the stores encrypted with the sandbox's own at-rest key are.
+const AUTH_SRC: &str = "/src/work/.intentic/secrets/auth";
 
 #[cfg(test)]
 mod tests {

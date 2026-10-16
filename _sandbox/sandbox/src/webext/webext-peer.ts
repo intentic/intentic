@@ -1,6 +1,9 @@
 import { wrapOutsideContent } from "@intentic/base/outside-text";
-import { type Capability,grantSite,type webextContract,WEBEXT_HEARTBEAT_MS,type WebExtFacts,type WebExtHello,WebExtHelloSchema,type WebExtScopes,type WebExtSummary } from "@intentic/sandbox-contract";
+import { type Capability,grantSite,type webextContract,WEBEXT_HEARTBEAT_MS,WEBEXT_TICKET_TOOL,type WebExtFacts,type WebExtHello,WebExtHelloSchema,type WebExtScopes,type WebExtSummary } from "@intentic/sandbox-contract";
 import type { ContractRouterClient } from "@orpc/contract";
+import { z } from "zod";
+import type { MountCall } from "../agent/tools/turn-mounts.routes.js";
+import type { RpcMessage } from "../agent/tools/turn-mounts.js";
 import type { Services } from "../composition.js";
 import { PEER_BRIDGES, type PeerDoor } from "../peers/peer.js";
 import type { PeerHub } from "../peers/peer-hub.js";
@@ -148,8 +151,40 @@ export const accessAsked = (payload: unknown): { readonly origin: string; readon
     return { origin: args["origin"], reason: typeof args["reason"] === "string" ? args["reason"] : "" };
 };
 
-export const webextPeerRoutes = (services: Services) =>
-    createPeerRoutes(services, WEBEXT_PEER, {
+// Tools a browser serves to this daemon alone, never to the agent's own mount of it: `type_ticket` takes a ticket only
+// the daemon mints, for a secret the agent must not hold (secret-tickets.ts). A guessed ticket would type nothing, but a
+// tool the model cannot use is one it should not be shown.
+const DAEMON_ONLY = new Set<string>([WEBEXT_TICKET_TOOL]);
+
+// The one field of a tools/call this reads, and the listing it trims; everything else passes as the browser said it.
+const CalledSchema = z.looseObject({ name: z.string() });
+const ListingSchema = z.looseObject({ result: z.looseObject({ tools: z.array(z.looseObject({ name: z.string() })) }) });
+
+type MountEndpoint = (target: { readonly id: string }, message: RpcMessage, call: MountCall) => Promise<RpcMessage | undefined>;
+
+// The agent's mount of a browser, minus the daemon's own tools: left out of every listing (a live one, and the one
+// remembered for a browser that is asleep), and answered as the browser answers a tool it does not have.
+export const withoutDaemonTools =
+    (mcp: MountEndpoint): MountEndpoint =>
+    async (target, message, call) => {
+        const called = message.method === "tools/call" ? CalledSchema.safeParse(message.params) : undefined;
+        if (called?.success === true && DAEMON_ONLY.has(called.data.name)) {
+            return message.id === undefined
+                ? undefined
+                : { jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text: `This browser has no tool called "${called.data.name}".` }], isError: true } };
+        }
+        const answer = await mcp(target, message, call);
+        if (message.method !== "tools/list" || answer === undefined) {
+            return answer;
+        }
+        const listing = ListingSchema.safeParse(answer);
+        return listing.success
+            ? { ...answer, result: { ...listing.data.result, tools: listing.data.result.tools.filter((tool) => !DAEMON_ONLY.has(tool.name)) } }
+            : answer;
+    };
+
+export const webextPeerRoutes = (services: Services) => {
+    const routes = createPeerRoutes(services, WEBEXT_PEER, {
         store: services.webexts,
         hub: services.webextHub,
         summaries: () => webextSummaries(services),
@@ -167,3 +202,5 @@ export const webextPeerRoutes = (services: Services) =>
             return undefined;
         },
     });
+    return { ...routes, mcp: withoutDaemonTools(routes.mcp) };
+};

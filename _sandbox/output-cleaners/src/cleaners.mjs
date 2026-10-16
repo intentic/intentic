@@ -2,9 +2,9 @@
 // the INTENTIC_OUTPUT_CLEANERS spec (allow-list / default-minus). Dependency-free (node builtins only) so the filter
 // never breaks; imported by agent-output-filter and its tests.
 
-import { createHash } from "node:crypto";
+import { createDecipheriv, createHash, hkdfSync } from "node:crypto";
 import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import * as util from "node:util";
 
 // CSI sequences, OSC sequences (title sets, hyperlinks), and lone two-byte escapes; always stripped as noise.
@@ -487,11 +487,78 @@ export const SECRET_STORES = [
     { root: "auth", path: "sandbox-secrets.json", layout: "flat", source: "sandbox" },
     { root: "desiredState", path: ".secrets.json", layout: "flat", source: "generated" },
     { root: "auth", path: "capability-secrets.json", layout: "vault", source: "capability" },
+    // A keyring entry shared in `copy` mode, kept here as an ordinary secret (src/secrets/device/keyring-copies.ts).
+    { root: "auth", path: "keyring-copies.json", layout: "flat", source: "copy" },
+    // Values a keyring on the owner's computer released for one use each, kept only so they mask: never resolved from
+    // here, and emptied when the daemon starts (src/secrets/device/released-values.ts).
+    { root: "auth", path: "keyring-released.json", layout: "flat", source: "device" },
 ];
 
 const secretValueCache = new Map();
 
-const readIfChanged = (path, layout) => {
+// A store the daemon encrypts at rest (src/store/encryption/at-rest.ts: AES-256-GCM under a key HKDF derives from the
+// at-rest key for the store's file name) is opened here the same way, when this process can read the key: ic mounts it
+// at one fixed path. A process that cannot read the key (a fenced turn) cannot read the stores either, and masks by name
+// patterns alone, as before; one that can read the key could open the stores itself, so reading them here gives it
+// nothing new.
+const AT_REST_MAGIC = "INTENTIC-ENC-v1:";
+const AT_REST_KEY_PATH = "/run/secrets/intentic-at-rest-key";
+
+const atRestKeyAt = (path) => {
+    const bytes = readFileSync(path);
+    if (bytes.length === 32) {
+        return bytes;
+    }
+    const encoded = bytes.toString("utf8").trim();
+    if (/^[0-9a-fA-F]{64}$/u.test(encoded)) {
+        return Buffer.from(encoded, "hex");
+    }
+    const decoded = Buffer.from(encoded, "base64");
+    return decoded.length === 32 ? decoded : undefined;
+};
+
+const atRestKeys = (env) =>
+    [env.INTENTIC_AT_REST_KEY_FILE, env.INTENTIC_AT_REST_PREVIOUS_KEY_FILE, AT_REST_KEY_PATH]
+        .filter((path) => path !== undefined && path !== "")
+        .flatMap((path) => {
+            try {
+                const key = atRestKeyAt(path);
+                return key === undefined ? [] : [key];
+            } catch {
+                // allow(silent-catch): a key this process cannot read is the fenced case, which masks by names alone
+                return [];
+            }
+        });
+
+// The store's plain text: itself when it is not encrypted, opened when a readable key fits, undefined otherwise.
+export const openAtRest = (text, purpose, env = process.env) => {
+    if (!text.startsWith(AT_REST_MAGIC)) {
+        return text;
+    }
+    let envelope;
+    try {
+        envelope = JSON.parse(text.slice(AT_REST_MAGIC.length));
+    } catch {
+        // allow(silent-catch): a torn envelope holds no value to mask, and a command never fails over masking
+        return undefined;
+    }
+    for (const key of atRestKeys(env)) {
+        if (createHash("sha256").update(key).digest("hex").slice(0, 16) !== envelope.keyId) {
+            continue;
+        }
+        try {
+            const decipher = createDecipheriv("aes-256-gcm", Buffer.from(hkdfSync("sha256", key, "intentic-at-rest-v1", purpose, 32)), Buffer.from(envelope.iv, "base64"));
+            decipher.setAuthTag(Buffer.from(envelope.tag, "base64"));
+            return Buffer.concat([decipher.update(Buffer.from(envelope.data, "base64")), decipher.final()]).toString("utf8");
+        } catch {
+            // allow(silent-catch): a key with the right fingerprint that does not open the store means a changed file, masked by names
+            return undefined;
+        }
+    }
+    return undefined;
+};
+
+const readIfChanged = (path, layout, env = process.env) => {
     try {
         // Opens once, then stats and reads that descriptor: a path-level stat then read would let a symlink swap
         // redirect the reader in between.
@@ -503,7 +570,8 @@ const readIfChanged = (path, layout) => {
             if (cached?.stamp === stamp) {
                 return cached.values;
             }
-            const values = harvest(readFileSync(descriptor, "utf8"), layout);
+            const text = openAtRest(readFileSync(descriptor, "utf8"), basename(path), env);
+            const values = text === undefined ? [] : harvest(text, layout);
             secretValueCache.set(path, { stamp, values });
             return values;
         } finally {
@@ -588,7 +656,7 @@ export const secretValues = (env = process.env) => {
         auth: env.AGENT_AUTH_DIR !== undefined && env.AGENT_AUTH_DIR !== "" ? env.AGENT_AUTH_DIR : join(env.WORKSPACE_ROOT ?? "/work", ".intentic/secrets/auth"),
         desiredState: join(env.WORKSPACE_ROOT ?? "/work", "desired-state"),
     };
-    return SECRET_STORES.flatMap(({ root, path, layout }) => readIfChanged(join(roots[root], path), layout)).toSorted(
+    return SECRET_STORES.flatMap(({ root, path, layout }) => readIfChanged(join(roots[root], path), layout, env)).toSorted(
         (a, b) => b.target.length - a.target.length,
     );
 };

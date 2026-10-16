@@ -6,7 +6,7 @@
 import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { computed, createApp, h, nextTick, ref } from "vue";
-import type { CredentialGate } from "@intentic/sandbox-contract";
+import type { CredentialGate, SandboxKeyring } from "@intentic/sandbox-contract";
 import type { SecretRow } from "../../../sandbox/secrets/secretRows";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -23,6 +23,7 @@ jest.mock(`./useSecrets`, () => ({
     reveal: jest.fn(),
     useSecrets: () => ({ remove: { mutateAsync: jest.fn() } }),
     useSecretHosts: () => ({ setHosts: { mutateAsync: jest.fn() } }),
+    useSecretPrograms: () => ({ programsFor: () => undefined, setPrograms: { mutateAsync: jest.fn() } }),
     useCredentialPolicy: () => ({ setPolicy: { mutateAsync: jest.fn() } }),
     useCredentialGates: () => ({
         gates: ref([]),
@@ -32,6 +33,13 @@ jest.mock(`./useSecrets`, () => ({
         setGate,
         removeGate,
     }),
+}));
+
+// The keyrings this sandbox reaches: none unless a case gives it some, which is a sandbox with no Type into… at all.
+const keyrings = ref<SandboxKeyring[]>([]);
+jest.mock(`./useKeyrings`, () => ({
+    useKeyrings: () => ({ keyrings, online: computed(() => keyrings.value.filter((keyring) => keyring.online)) }),
+    useTypeInto: () => ({ typeInto: { mutateAsync: jest.fn() } }),
 }));
 
 jest.mock(`../../../../client/sandbox/useRole`, () => ({
@@ -52,13 +60,15 @@ const ROW: SecretRow = {
     removable: true,
     gateSubject: `DATABASE_URL`,
     sessionShaped: false,
+    typeable: true,
+    programsHere: true,
     haystack: `database_url`,
 };
 
-const mount = () => {
+const mount = (row: SecretRow = ROW) => {
     const el = document.createElement(`div`);
     document.body.append(el);
-    const app = createApp({ render: () => h(SecretEntryRow, { row: ROW, expanded: true }) });
+    const app = createApp({ render: () => h(SecretEntryRow, { row, expanded: true }) });
     app.use(PrimeVue);
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
@@ -133,16 +143,21 @@ it("flipping off a stored gate asks the daemon to remove it", async () => {
     done();
 });
 
-// Who must release it and where it may go are one section to the owner, not two features: both switches sit under the one
-// "Needs approval" heading, the approver first.
-it("puts the host guard under the same approval heading as the named approver", () => {
+// Who must release it, where it may go and which windows it may be typed into are one section to the owner, not three
+// features: every switch sits under the one "Needs approval" heading, the approver first.
+it("puts the host and program guards under the same approval heading as the named approver", () => {
     approverChoices.value = [`owner@x.com`];
     stored.value = undefined;
     const { el, done } = mount();
     const text = el.textContent ?? ``;
     expect(text.indexOf(`Needs approval`)).toBeLessThan(text.indexOf(`From a named person`));
     expect(text.indexOf(`From a named person`)).toBeLessThan(text.indexOf(`Host guard`));
-    expect([...el.querySelectorAll(`input[role="switch"]`)].map((input) => input.getAttribute(`aria-label`))).toEqual([`From a named person`, `Host guard`]);
+    expect(text.indexOf(`Host guard`)).toBeLessThan(text.indexOf(`Program guard`));
+    expect([...el.querySelectorAll(`input[role="switch"]`)].map((input) => input.getAttribute(`aria-label`))).toEqual([
+        `From a named person`,
+        `Host guard`,
+        `Any field`,
+    ]);
     expect(text).toContain(`Off: it is never held for where it goes, and the safety judge alone decides.`);
     done();
 });
@@ -178,4 +193,88 @@ it("keeps Reveal shut for a collaborator, whom the daemon would refuse", () => {
     expect(revealButton(el)?.disabled).toBe(true);
     done();
     role.value = `owner`;
+});
+
+// A KEYRING'S OWN ENTRY, kept on one of the owner's computers: this sandbox holds a pointer, so its row offers nothing
+// that would read, copy or set a value, and its rules are the keyring's, read here with the command that changes them.
+const DEVICE_ROW: SecretRow = {
+    entry: {
+        key: `VPN_PASSWORD`,
+        kind: `device`,
+        status: `set`,
+        requiredBy: [],
+        storedAt: `the keyring on rog`,
+        revealable: false,
+        device: { machine: `rog`, mode: `each-use`, online: true, locked: false, source: `keyring` },
+        programs: { programs: [`FortiClient.exe`], packages: [], anyField: false, source: `keyring` },
+        hosts: { guard: true, list: [`vpn.example.com`], source: `owner` },
+        lastUse: { at: Date.now() - 60_000, lane: `device`, detail: `rog · FortiClient.exe` },
+    },
+    group: `device`,
+    title: `VPN_PASSWORD`,
+    mono: true,
+    detail: `rog · asks each time`,
+    icon: `desktop`,
+    attention: false,
+    editable: false,
+    removable: false,
+    gateSubject: `VPN_PASSWORD`,
+    sessionShaped: false,
+    typeable: true,
+    programsHere: false,
+    haystack: `vpn_password`,
+};
+
+const ROG: SandboxKeyring = { machine: `rog`, online: true, locked: false, shared: 1 };
+
+it("offers nothing that reads, copies or sets a value kept on one of the owner's computers", () => {
+    const { el, done } = mount(DEVICE_ROW);
+    expect(revealButton(el)).toBeNull();
+    expect(el.querySelector(`button[aria-label="Set / update value"]`)).toBeNull();
+    expect(el.querySelector(`button[aria-label="Remove"]`)).toBeNull();
+    expect(el.textContent).not.toContain(`Copy value`);
+    done();
+});
+
+it("reads a keyring entry's share and rules, and names the command that changes them on that computer", () => {
+    const { el, done } = mount(DEVICE_ROW);
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`Kept in the keyring on rog, shared here: asks each time.`);
+    expect(text).toContain(`rog is unlocked now.`);
+    expect(text).toContain(`Typed unasked only into FortiClient.exe. Only into a password field.`);
+    expect(text).toContain(`Sites it may go to: vpn.example.com.`);
+    expect(text).toContain(`Change these on rog:`);
+    expect(el.querySelector(`[data-device-panel] code`)?.textContent).toBe(`intentic-machine keyring edit VPN_PASSWORD`);
+    // Its lists are the keyring's: no editor for either, only the sandbox's own named approver.
+    expect(text).not.toContain(`Host guard`);
+    expect(text).not.toContain(`Program guard`);
+    expect([...el.querySelectorAll(`input[role="switch"]`)].map((input) => input.getAttribute(`aria-label`))).toEqual([`From a named person`]);
+    done();
+});
+
+it("says where a value kept on a computer was last typed", () => {
+    const { el, done } = mount(DEVICE_ROW);
+    expect(el.textContent).toContain(`typed on rog · FortiClient.exe`);
+    done();
+    const desktop = mount({ ...ROW, entry: { ...ROW.entry, lastUse: { at: Date.now() - 60_000, lane: `desktop`, detail: `xfce4-terminal` } } });
+    expect(desktop.el.textContent).toContain(`typed on the sandbox's desktop xfce4-terminal`);
+    desktop.done();
+});
+
+it("offers Type into… only where a computer has a keyring, and opens it in the row", async () => {
+    keyrings.value = [];
+    const none = mount();
+    expect(none.el.querySelector(`button[aria-label="Type into…"]`)).toBeNull();
+    none.done();
+
+    keyrings.value = [ROG];
+    const { el, done } = mount(DEVICE_ROW);
+    const button = el.querySelector<HTMLButtonElement>(`button[aria-label="Type into…"]`);
+    expect(button).not.toBeNull();
+    button?.click();
+    await nextTick();
+    expect(el.querySelector(`section[aria-label="Type into…"]`)).not.toBeNull();
+    expect(el.textContent).toContain(`Press Type, then put the cursor where it goes on rog. It is typed after 3 s.`);
+    done();
+    keyrings.value = [];
 });

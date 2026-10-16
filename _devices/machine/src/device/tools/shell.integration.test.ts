@@ -64,3 +64,10 @@ test("a character split across two writes arrives whole", async () => {
     const result = await runCommand({ command: String.raw`printf '\303'; sleep 0.3; printf '\251\n'` }, grant);
     expect(result.stdout.text).toBe("é\n");
 });
+
+// What the keyring's record reads to say an agent's command asked (shell.ts, AGENT_COMMAND_ENV): a hint, which the
+// command could unset, never a boundary.
+test("a command runs with INTENTIC_AGENT_COMMAND=1 in its environment", async () => {
+    const result = await runCommand({ command: 'printf "%s" "$INTENTIC_AGENT_COMMAND"' }, grant);
+    expect(result.stdout.text).toBe("1");
+});

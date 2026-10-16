@@ -261,7 +261,7 @@ export const validateContributionConfig = (spec: CapabilityContribution, config:
 
 // The hosts each connected capability's connector declares for its credential, expanded over that capability's own
 // settings (a self-hosted instance's URL). A capability whose connector declares none, or whose templates come out empty,
-// has no default. The secrets slice reads it through its `connectorHosts` dep (secrets/host-guards.ts), which
+// has no default. The secrets slice reads it through its `connectorHosts` dep (secrets/guards/host-guards.ts), which
 // composition.ts fills with this.
 export const connectorHostDefaults = async (host: ExtensionHost): Promise<ReadonlyMap<string, readonly string[]>> => {
     const registry = await contributionRegistry(host);

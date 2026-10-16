@@ -238,6 +238,17 @@
                 "default": "./dist/policy/identity-assertion.js"
             }
         },
+        "./keyring-seal": {
+            "types": "./dist/policy/keyring-seal.d.ts",
+            "import": {
+                "@intentic/src": "./src/policy/keyring-seal.ts",
+                "default": "./dist/policy/keyring-seal.js"
+            },
+            "require": {
+                "@intentic/src": "./src/policy/keyring-seal.ts",
+                "default": "./dist/policy/keyring-seal.js"
+            }
+        },
         "./owner-ticket": {
             "types": "./dist/policy/owner-ticket.d.ts",
             "import": {

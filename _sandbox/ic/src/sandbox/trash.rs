@@ -456,6 +456,8 @@ fn discard(slug: &str) -> std::result::Result<(), String> {
     for marker in markers_for(slug) {
         docker::quiet(&["volume", "rm", &marker]);
     }
+    // Its at-rest key goes with the data it encrypted, once none of it is left on this side (at_rest.rs).
+    crate::sandbox::at_rest::forget_with_data(slug);
     Ok(())
 }
 

@@ -1091,7 +1091,8 @@
             "viaSshAgent": "firmado por el agente SSH del sandbox para",
             "usedByAgent": "usado por el agente",
             "value": "Valor",
-            "whoRelease": "Quién puede liberarlo"
+            "whoRelease": "Quién puede liberarlo",
+            "typedOnDesktop": "escrito en el escritorio del sandbox"
         },
         "secretField": {
             "as": "como",
@@ -1131,6 +1132,66 @@
             "connect": "Conectar {id}",
             "preparingOneTimeConnection": "Preparando un código de conexión de un solo uso…",
             "onceConnectedAgentMay": "Una vez conectado, el agente podrá:"
+        },
+        "keyring": {
+            "modeEachUse": "pregunta cada vez",
+            "modeWhileHere": "mientras estás en el ordenador",
+            "modeCopy": "copia guardada aquí",
+            "modeEachUseExplained": "Cada uso te pregunta antes en {machine}, con Windows Hello o la frase de paso del llavero.",
+            "modeWhileHereExplained": "Se usa sin preguntar mientras el llavero de {machine} está desbloqueado. Bloqueado, cada uso pregunta allí.",
+            "modeCopyExplained": "También se guarda una copia en este sandbox, así funciona con {machine} apagado. Entonces la protegen las reglas de este sandbox.",
+            "offline": "sin conexión",
+            "locked": "bloqueado",
+            "unlocked": "desbloqueado"
+        },
+        "secretPrograms": {
+            "title": "Protección de programas",
+            "explain": "Escrito en una ventana de uno de tus ordenadores, va sin preguntar solo a estos programas y apps, y solo a un campo de contraseña salvo que se permita cualquier campo. En cualquier otro sitio pregunta antes a la persona en ese ordenador.",
+            "everyTypingAsks": "No hay ningún programa, así que escribirlo en cualquier ventana pregunta antes.",
+            "everyTypingAsksReadOnly": "Escribirlo en cualquier ventana pregunta antes. Solo el propietario puede cambiarlo.",
+            "onlyIntoReadOnly": "Se escribe sin preguntar solo en {programs}, y en cualquier otro sitio pregunta antes. Solo el propietario puede cambiarlo.",
+            "anyFieldReadOnly": "Puede ir a cualquier campo, no solo a campos de contraseña.",
+            "notAProgram": "Eso no es un programa. Escribe el nombre de su archivo, como FortiClient.exe, o su ruta completa.",
+            "notAPackage": "Eso no es una app de Android. Escribe su nombre de paquete, como com.fortinet.forticlient.",
+            "couldNotSave": "No se pudo guardar la protección de programas.",
+            "remove": "Quitar {program}",
+            "programPlaceholder": "FortiClient.exe o una ruta completa",
+            "addProgram": "Añadir programa",
+            "packagePlaceholder": "com.fortinet.forticlient",
+            "addPackage": "Añadir app de Android",
+            "anyField": "Cualquier campo",
+            "anyFieldNote": "También campos que no son de contraseña, que muestran en pantalla lo que se escribe."
+        },
+        "typeInto": {
+            "title": "Escribir en…",
+            "tooltipNote": "En uno de tus ordenadores",
+            "noneOnlineShort": "Ningún ordenador responde",
+            "noneOnline": "Ningún ordenador con llavero responde ahora. Inicia el agente de Intentic en uno y vuelve a intentarlo.",
+            "which": "Qué ordenador",
+            "wait": "Esperar antes de escribir",
+            "seconds": "{seconds} s",
+            "explain": "Pulsa Escribir y pon el cursor donde va en {machine}. Se escribe tras {seconds} s.",
+            "counting": "Escribiendo en {machine} en {seconds} s. Pon el cursor donde va.",
+            "typing": "Escribiendo en {machine}. Si pregunta allí, confírmalo en ese ordenador.",
+            "typedPassword": "Escrito en {program}, campo de contraseña.",
+            "typedText": "Escrito en {program}, campo de texto.",
+            "asked": "Confirmado antes en {machine}.",
+            "couldNotType": "No se pudo escribir en {machine}.",
+            "type": "Escribir",
+            "again": "Escribir otra vez"
+        },
+        "secretDevice": {
+            "heading": "En tu ordenador",
+            "keptOn": "Guardado en el llavero de {machine}, compartido aquí: {mode}. Este sandbox solo tiene un puntero a él.",
+            "standing": "{machine} está {standing} ahora.",
+            "readFrom": "Su valor se lee de {source} en cada uso.",
+            "typedInto": "Se escribe sin preguntar solo en {programs}.",
+            "everyTypingAsks": "Escribirlo en cualquier ventana pregunta antes en {machine}.",
+            "anyField": "Puede ir a cualquier campo.",
+            "passwordFieldOnly": "Solo en un campo de contraseña.",
+            "hosts": "Sitios a los que puede ir: {hosts}.",
+            "changeOn": "Cámbialo en {machine}:",
+            "copyCommand": "Copiar el comando"
         }
     },
     "chat": {
@@ -3749,7 +3810,8 @@
             "requiredByIntent": "Requerido por tu intención",
             "secrets": "Tus secretos",
             "sessionOrSigningKeys": "Claves de sesión o firma",
-            "showMoreAccounts": "Mostrar {collapsedCredentialCount} cuentas más"
+            "showMoreAccounts": "Mostrar {collapsedCredentialCount} cuentas más",
+            "onYourComputers": "En tus ordenadores"
         },
         "sandboxStorageCard": {
             "changedTodayOrInUse": "Cambiado hoy o en uso",
@@ -4748,6 +4810,30 @@
             "turnsOffHow": "Vuelve a activarla para ver qué despertó al agente y cómo fue cada turno:",
             "commandsSettings": "Si el juez funciona, y con qué revisa:",
             "personalSettings": "Qué busca el escudo, y en qué proveedores confía:"
+        },
+        "secretRows": {
+            "offline": "Sin conexión",
+            "locked": "Bloqueado",
+            "ready": "Listo",
+            "offlineNote": "{machine} está sin conexión: no se puede usar hasta que responda",
+            "lockedNote": "{machine} está bloqueado: cada uso pregunta allí"
+        },
+        "keyrings": {
+            "title": "Llaveros en tus ordenadores",
+            "offline": "Sin conexión",
+            "locked": "Bloqueado",
+            "unlocked": "Desbloqueado",
+            "shared": "Compartidos aquí: {count}",
+            "pendingInbox": "Esperan al próximo desbloqueo: {count}",
+            "pairedWith": "Emparejado con {peers}",
+            "pair": "Emparejar",
+            "pairLead": "Empareja dos llaveros para tener las mismas contraseñas en ambos. Cada ordenador te pregunta antes y muestra las dos huellas.",
+            "pairWhich": "Qué dos ordenadores",
+            "pairThese": "Emparejar estos dos",
+            "confirmOnBoth": "Confirma en los dos ordenadores. Cada aviso muestra dos huellas.",
+            "paired": "{a} y {b} emparejados.",
+            "compare": "El aviso de cada ordenador muestra estas dos huellas. Di que sí solo donde coincidan.",
+            "couldNotPair": "No se pudieron emparejar los dos llaveros."
         }
     },
     "settings": {
@@ -6556,6 +6642,17 @@
     "needs": {
         "release": {
             "approversOnly": "Solo aprobadores"
+        },
+        "secret": {
+            "keepInSandbox": "Guardarlo en el sandbox",
+            "keepOnComputer": "Guardarlo en mi ordenador",
+            "whichComputer": "Qué ordenador",
+            "modeEachUse": "Preguntar cada vez",
+            "modeWhileHere": "Mientras esté en el ordenador",
+            "modeCopy": "Guardar una copia aquí",
+            "lockedThere": "{machine} está bloqueado: el valor espera allí hasta el próximo desbloqueo de su llavero.",
+            "keptOn": "Guardado en el llavero de {machine} como {name}. El agente solo ve su nombre, nunca el valor.",
+            "waitsForUnlock": "Enviado a {machine}. Espera allí hasta el próximo desbloqueo de su llavero."
         }
     },
     "local": {

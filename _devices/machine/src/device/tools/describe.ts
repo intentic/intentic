@@ -1,7 +1,14 @@
 import { arch, hostname, platform, release, type } from "node:os";
 import { execBounded } from "@intentic/base/process";
 import { homeDir } from "@intentic/local-agent";
-import { DEVICE_FEATURE_LOOPBACK_CATCH, DEVICE_FEATURE_PROGRAMS, DEVICE_FEATURE_PROJECT_DELIVERY, type DeviceFacts, type DeviceScopes } from "@intentic/sandbox-contract";
+import {
+    DEVICE_FEATURE_KEYRING,
+    DEVICE_FEATURE_LOOPBACK_CATCH,
+    DEVICE_FEATURE_PROGRAMS,
+    DEVICE_FEATURE_PROJECT_DELIVERY,
+    type DeviceFacts,
+    type DeviceScopes,
+} from "@intentic/sandbox-contract";
 import { type LinkReading, readLinkStates, unreachableIn } from "../config.js";
 import { rootsOf, rootsText } from "../policy.js";
 import { shellFor } from "./shell.js";
@@ -13,6 +20,7 @@ import { MACHINE_VERSION } from "../../version.js";
 import { readUpkeepSummary } from "../../upkeep/reconcile.js";
 import { readIntenticOs } from "./os/os.js";
 import { NO_DESKTOP_YET, runningBeforeSignIn } from "../session.js";
+import { keyringAdvertised } from "../../keyring/feature.js";
 
 // What this device IS: without it an agent guesses (apt-get on Fedora, bash on Windows, paths outside its own
 // boundary) and reports the refusal as a bug. Sent unprompted in the hello frame and on the sandbox's
@@ -72,7 +80,7 @@ export const linkFacts = (stamped: Readonly<Record<string, LinkReading>> | undef
 };
 
 export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
-    const [os, engine, wsl, distros, stamped, features, upkeep, ic, intenticOs] = await Promise.all([
+    const [os, engine, wsl, distros, stamped, features, upkeep, ic, intenticOs, keyring] = await Promise.all([
         osName(),
         engineFacts(),
         wslEnvironment(),
@@ -82,6 +90,7 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
         readUpkeepSummary(),
         installedIc(),
         readIntenticOs(),
+        keyringAdvertised(),
     ]);
     const links = linkFacts(stamped);
     // Read after deviceFeatures, which fetched (or failed to fetch) the current ic first.
@@ -100,8 +109,14 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
         ...(links === undefined ? {} : { links }),
         // What this agent and the ic under it implement: the ic's asked of that ic rather than written down here, and
         // the agent's own (the loopback catch, landed work delivered into an attached folder) always, since this build
-        // answers both.
-        features: [...features, DEVICE_FEATURE_LOOPBACK_CATCH, DEVICE_FEATURE_PROJECT_DELIVERY, DEVICE_FEATURE_PROGRAMS],
+        // answers both. The keyring only while one is installed here and answers (keyring/feature.ts).
+        features: [
+            ...features,
+            DEVICE_FEATURE_LOOPBACK_CATCH,
+            DEVICE_FEATURE_PROJECT_DELIVERY,
+            DEVICE_FEATURE_PROGRAMS,
+            ...(keyring ? [DEVICE_FEATURE_KEYRING] : []),
+        ],
     };
     // Why that list is short, when the ic under it could not be brought up to date.
     if (stale !== undefined) {

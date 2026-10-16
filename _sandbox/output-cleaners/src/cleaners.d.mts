@@ -49,7 +49,7 @@ export interface SecretStore {
     readonly root: "auth" | "desiredState";
     readonly path: string;
     readonly layout: "env" | "flat" | "vault";
-    readonly source: "env" | "sandbox" | "generated" | "capability";
+    readonly source: "env" | "sandbox" | "generated" | "capability" | "copy" | "device";
 }
 
 // Every store, in the order a name two of them hold resolves.
@@ -60,6 +60,8 @@ export const surfaceForms: (value: string) => string[];
 
 // The sandbox's stored secret values, longest first; empty anywhere those stores do not exist.
 export const secretValues: (env?: Record<string, string | undefined>) => SecretValue[];
+/** A store the daemon encrypts at rest, opened when a readable at-rest key fits; plain text passes through. */
+export const openAtRest: (text: string, purpose: string, env?: Record<string, string | undefined>) => string | undefined;
 
 // Masks known values and credential-shaped assignments in a whole body.
 export const redactText: (text: string, values?: readonly SecretValue[]) => string;

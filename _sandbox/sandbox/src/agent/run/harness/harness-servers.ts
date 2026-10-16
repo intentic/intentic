@@ -5,6 +5,7 @@ import { type AccountsServerFactory, accountsServer } from "../../../browser/too
 import { ANONYMOUS_BROWSER_SERVER, type BrowserTurnTools } from "../../../browser/tools/browser-tools.js";
 import { fetchEmailCode } from "../../../browser/tools/email-codes.js";
 import { secretsServer } from "../../../browser/tools/secrets-tools.js";
+import { sandboxDesktopTypist } from "../../../desktop/desktop-secret-typing.js";
 import type { Services } from "../../../composition.js";
 import { createHashlineServer } from "../../../hashline/hashline-tools.js";
 import { createDiagnosticsServer } from "../../../logs/diagnostics-tools.js";
@@ -14,7 +15,7 @@ import { createDepsServer } from "../../../workspace/deps/deps-tools.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import type { TurnTools } from "../../providers/agent-request.js";
 import { subagentWaitServer } from "../../subagents/subagent-wait.js";
-import type { SecretAccess } from "../../../secrets/secret-access.js";
+import type { SecretAccess, SecretLane } from "../../../secrets/secret-access.js";
 import { watchServer } from "../../verification/watch-server.js";
 import type { WatchPlacement } from "../../verification/watchers.js";
 import { opt } from "../../../opt.js";
@@ -32,8 +33,12 @@ export type HarnessServersDeps = Pick<
     | "config"
     | "conversations"
     | "credentialGate"
+    | "deviceSecrets"
     | "gatewayHeld"
     | "hostGuardGate"
+    | "keyringLink"
+    | "programGuardFor"
+    | "secretTickets"
     | "dependencies"
     | "logger"
     | "openBrowserAccount"
@@ -59,11 +64,19 @@ const subjectsOf = (names: readonly string[]): Map<string, { readonly kind: Cred
     return bySubject;
 };
 
+// Where a lane puts a value, in the words a refusal uses.
+const LANE_PLACE = { shell: "command", code: "script", browser: "page", device: "window", desktop: "window" } as const satisfies Readonly<Record<SecretLane, string>>;
+
 // The one object behind every secret seam this turn gets: the named registry, the use ledger its exits feed (a write
 // that must never fail or slow the tool call that spent the secret), and the two gates bound to this turn: where the
-// values may go, asked first since a use sent nowhere needs nobody's release, then who must release them.
+// values may go, asked first since a use sent nowhere needs nobody's release, then who must release them. A name only a
+// keyring on the owner's computers holds is fetched from there, for this turn's conversation, once both gates said yes.
 export const turnSecretAccess = (deps: HarnessServersDeps, input: AgentTurn, signal: AbortSignal): SecretAccess => ({
     list: deps.secretRegistry,
+    device: {
+        held: async () => (await deps.deviceSecrets.held()).map(({ machine, pointer }) => ({ name: pointer.name, machine })),
+        fetch: (name, lane, detail) => deps.deviceSecrets.fetch({ name, lane, detail, conversationId: input.conversationId, signal }),
+    },
     used: (use) => {
         void deps.secretUses
             .record({ ...use, at: Date.now() })
@@ -80,7 +93,7 @@ export const turnSecretAccess = (deps: HarnessServersDeps, input: AgentTurn, sig
                 const vars = held.vars.map((variable) => `\`$${variable}\``).join(", ");
                 return {
                     refusal:
-                        `"${name}" is held by the sandbox's credential gateway, so it is never put into a ${lane === "browser" ? "page" : "command"}. ` +
+                        `"${name}" is held by the sandbox's credential gateway, so it is never put into a ${LANE_PLACE[lane]}. ` +
                         `Send the request to ${vars.length > 0 ? vars : `the variables its skill names`} instead, with its token variable as it is: the gateway attaches the credential.`,
                 };
             }
@@ -123,13 +136,40 @@ export const turnSecretAccess = (deps: HarnessServersDeps, input: AgentTurn, sig
     },
 });
 
-// The browser exit for stored secrets: types a named value into a live page's focused field, scoped to exactly the
-// turn's own browser list.
-const browserSecretsServer = (browser: BrowserTurnTools, secrets: SecretAccess): McpSdkServerConfigWithInstance =>
-    secretsServer({
-        secrets,
-        accounts: { ...browser.accounts, ...(browser.servers.some((server) => server.name === ANONYMOUS_BROWSER_SERVER) ? { web: "web" } : {}) },
+// What the secret typist reads of the turn: the places it may type into are exactly the ones the turn mounted.
+export interface TypistTurn {
+    readonly browser: BrowserTurnTools;
+    // Whether the sandbox's own desktop is mounted (TurnRemoteTools.desktop).
+    readonly desktop: boolean;
+    // The persona's narrowed capability manifest: its device and webext cards are the computers and owner's browsers
+    // the turn mounted (peerToolsOf), so the typist reaches no other.
+    readonly granted: readonly Capability[];
+    readonly secrets: SecretAccess;
+    readonly conversationId: string | undefined;
+    readonly signal: AbortSignal;
+}
+
+const cardsOf = (granted: readonly Capability[], kind: "device" | "webext"): readonly string[] =>
+    granted.filter((capability) => capability.kind === kind).map((capability) => capability.id);
+
+// The exit for stored secrets into a focused field or window: a sandbox browser's page (scoped to exactly the turn's
+// own browser list), the sandbox's desktop, the owner's computers and their own browsers, each only where mounted.
+const typistServer = (deps: HarnessServersDeps, turn: TypistTurn): McpSdkServerConfigWithInstance => {
+    const { browser } = turn;
+    const anonymous = browser.servers.some((server) => server.name === ANONYMOUS_BROWSER_SERVER);
+    const accounts = anonymous ? { ...browser.accounts, web: "web" } : browser.accounts;
+    return secretsServer({
+        secrets: turn.secrets,
+        accounts,
+        devices: cardsOf(turn.granted, "device"),
+        keyrings: { link: deps.keyringLink, listed: () => deps.deviceSecrets.listed(), programGuardFor: deps.programGuardFor },
+        ...opt("desktop", turn.desktop ? sandboxDesktopTypist() : undefined),
+        ownBrowsers: cardsOf(turn.granted, "webext"),
+        tickets: deps.secretTickets,
+        ...opt("conversationId", turn.conversationId),
+        signal: turn.signal,
     });
+};
 
 const watchPlacementOf = (isolation: TurnPlacement | undefined): { readonly placement?: WatchPlacement } =>
     !ownWorktree(isolation)
@@ -179,9 +219,12 @@ export interface DaemonServerTurn {
     readonly persona: TurnPersona;
 }
 
-// The secret typist: only when this turn drives a browser at all; the browsers themselves ride the turn's remote mounts.
-export const secretsServerFor = (browser: BrowserTurnTools, secrets: SecretAccess): McpSdkServerConfigWithInstance | undefined =>
-    browser.servers.length > 0 ? browserSecretsServer(browser, secrets) : undefined;
+// The secret typist: only when this turn has somewhere to type (a browser, the desktop, a computer or the owner's own
+// browser); those places themselves ride the turn's remote mounts.
+export const secretsServerFor = (deps: HarnessServersDeps, turn: TypistTurn): McpSdkServerConfigWithInstance | undefined =>
+    turn.browser.servers.length > 0 || turn.desktop || turn.granted.some((capability) => capability.kind === "device" || capability.kind === "webext")
+        ? typistServer(deps, turn)
+        : undefined;
 
 // `wait` parks until a child of this turn settles, `keep` leaves a background command running for the person, and
 // `spawn` (same server) starts a full agent on any connected provider; `wait` and `keep` are always offered, the rest
@@ -214,11 +257,13 @@ export const harnessServers = (
         readonly context: TurnContext;
         readonly persona: TurnPersona;
         readonly browser: BrowserTurnTools;
+        readonly desktop: boolean;
+        readonly granted: readonly Capability[];
         readonly secrets: SecretAccess;
         readonly hashlineEdits: boolean;
     },
 ): Record<string, McpServerConfig> => {
-    const typist = secretsServerFor(turn.browser, turn.secrets);
+    const typist = secretsServerFor(deps, { ...turn, conversationId: turn.input.conversationId, signal: turn.context.base.signal });
     const watcher = watchServerFor(deps, turn);
     const records = diagnosticsServerFor(deps, turn);
     return {

@@ -1,6 +1,6 @@
 import type { Need, NeedAsk, NeedSubject, SecretNeed } from "@intentic/sandbox-contract";
 import type { NamedSecret } from "../../secrets/secret-registry.js";
-import type { AskContext, Met, NeedKindHandler, Resolved } from "../need-kinds.js";
+import type { AskContext, Met, NeedKindHandler, Resolved, SecretKeepOn } from "../need-kinds.js";
 
 // A secret's value the agent needs (docs/architecture/needs.md). The agent names it and says where it will go; a person
 // pastes the value into the card, and it goes straight to the store the reference resolves from. The value never
@@ -11,6 +11,11 @@ export interface SecretNeedDeps {
     // Stores a value under a name where `{{secret:NAME}}` resolves it: where that name already lives, else the sandbox's
     // own store.
     readonly keep: (name: string, value: string) => Promise<void>;
+    // The names a keyring on one of the owner's computers shares here: a name one holds is stored as far as an ask goes.
+    readonly deviceHeld?: () => Promise<readonly string[]>;
+    // Sends a value to the keyring on one of the owner's computers to keep, storing nothing here: answers whether it
+    // waits there for that computer's next unlock, or throws with why it could not go.
+    readonly keepOn?: (name: string, value: string, keepOn: SecretKeepOn) => Promise<{ readonly pending: boolean }>;
 }
 
 // How the agent spends it, honestly per runtime: a loop whose shell fills a reference in at execution (the Claude Code
@@ -22,8 +27,19 @@ const useOf = (name: string, context: Pick<AskContext, "standing"> | undefined):
 
 const titleOf = (subject: SecretNeed): string => (subject.replace === true ? `A new value for ${subject.name}` : `The ${subject.name} secret`);
 
-export const secretNeed = (deps: SecretNeedDeps): NeedKindHandler & { readonly provide: (need: Need, value: string) => Promise<Met> } => {
-    const stored = async (name: string): Promise<boolean> => (await deps.registry()).some((secret) => secret.name === name);
+// What a value sent to a computer's keyring comes to, for the agent: kept there, and usable from here once taken in.
+const keptOnWords = (subject: SecretNeed, keepOn: SecretKeepOn, pending: boolean): Met => ({
+    result: pending
+        ? `${subject.name} was sent to the keyring on ${keepOn.device}, where it waits for that computer's next unlock: once a person there unlocks the keyring and says yes, it is kept there and shared with this sandbox. Nothing was stored in the sandbox.`
+        : `${subject.name} is kept in the keyring on ${keepOn.device}, shared with this sandbox; nothing was stored in the sandbox.`,
+    use: [
+        `Write {{secret:${subject.name}}} where the value goes: each use asks the keyring on ${keepOn.device} for it${keepOn.mode === "each-use" ? ", and a person there says yes every time" : ""}, so that computer has to be on.`,
+    ],
+});
+
+export const secretNeed = (deps: SecretNeedDeps): NeedKindHandler & { readonly provide: (need: Need, value: string, keepOn?: SecretKeepOn) => Promise<Met> } => {
+    const stored = async (name: string): Promise<boolean> =>
+        (await deps.registry()).some((secret) => secret.name === name && secret.source !== "device") || ((await deps.deviceHeld?.()) ?? []).includes(name);
 
     const resolve = async (ask: NeedAsk, context: AskContext): Promise<Resolved> => {
         if (ask.kind !== "secret") {
@@ -76,10 +92,16 @@ export const secretNeed = (deps: SecretNeedDeps): NeedKindHandler & { readonly p
             }
             return { refused: `${subject.name} is not stored yet: paste its value into the card, or add it on the Secrets view.` };
         },
-        provide: async (need, value) => {
+        provide: async (need, value, keepOn) => {
             const subject = subjectOf(need);
             if (subject === undefined) {
                 throw new Error("Not a secret need.");
+            }
+            if (keepOn !== undefined) {
+                if (deps.keepOn === undefined) {
+                    throw new Error("This sandbox cannot send a value to a computer's keyring.");
+                }
+                return keptOnWords(subject, keepOn, (await deps.keepOn(subject.name, value, keepOn)).pending);
             }
             await deps.keep(subject.name, value);
             return { result: `${subject.name} is stored${subject.replace === true ? ", in place of the value that was refused" : ""}.`, use: useOf(subject.name, undefined) };

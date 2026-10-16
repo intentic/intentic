@@ -2,6 +2,7 @@ import * as terminal from "@intentic/output-cleaners/cleaners";
 import { CREDENTIAL_ISSUER_PREFIXES, CREDENTIAL_ISSUERS, maskCredentialMaterial, SECRET_REFERENCE } from "@intentic/sandbox-contract";
 import { ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { capabilitySecretsDocument } from "../capabilities/credentials/secret-vault.js";
+import { keyringCopiesDocument, RELEASED_VALUES_FILE } from "./device/keyring-stores.js";
 import { sandboxSecretsDocument } from "./sandbox-secrets.js";
 
 // The terminal filter (@intentic/output-cleaners) imports only node builtins, so it keeps its own copies of what the
@@ -29,7 +30,11 @@ test("the terminal reads every store the registry resolves, at the paths the dae
         `auth:${sandboxSecretsDocument.path}`,
         `desiredState:${SECRETS_FILE}`,
         `auth:${capabilitySecretsDocument.path}`,
+        `auth:${keyringCopiesDocument.path}`,
+        `auth:${RELEASED_VALUES_FILE}`,
     ]);
+    // Read as the daemon writes them: a keyring's copies and its released values are both flat name -> value files.
+    expect(terminal.SECRET_STORES.slice(-2).map(({ layout, source }) => `${layout}:${source}`)).toEqual(["flat:copy", "flat:device"]);
 });
 
 test.each([

@@ -5,7 +5,7 @@ import { guard } from "../../guard/guard.js";
 import { type HeldAnswer, type HeldAsks, type HoldDeps, createHeldAsks } from "../../guard/held-asks.js";
 import { wakeWords } from "../../guard/held-cards.js";
 import { opt } from "../../opt.js";
-import { type HostReading, type GuardedName, readHosts } from "../host-guards.js";
+import { type HostReading, type GuardedName, readHosts } from "../guards/host-guards.js";
 import type { SecretTarget } from "../secret-access.js";
 import { commandDestination, type Destination, pageDestination, SCRIPT_DESTINATION } from "../secret-destinations.js";
 
@@ -66,14 +66,55 @@ export interface HostGuardGate {
 // How much of the program the card shows, the command gate's own measure.
 const SHOWN = 400;
 
-const destinationOf = (target: SecretTarget): Destination => {
-    if (target.kind === "page") {
-        return pageDestination(target.url);
+// A window or a phone app on one of the owner's computers, or a window on the sandbox's own desktop (the typist files
+// that one under the machine "desktop"), in words: where a typed value lands.
+const placeOf = (target: Extract<SecretTarget, { readonly kind: "window" | "app" }>): string => {
+    if (target.kind === "app") {
+        return `an app on the phone attached to ${target.machine}`;
     }
-    return target.language === "bash" ? commandDestination(target.text) : SCRIPT_DESTINATION;
+    const where = target.machine === "desktop" ? "the sandbox's desktop" : target.machine;
+    return `${target.program === undefined ? "a window" : `${target.program}'s window`} on ${where}`;
 };
 
-const nounOf = (target: SecretTarget): string => (target.kind === "page" ? "page" : target.language === "bash" ? "command" : "script");
+// A window and an app name no site, so a value typed into one goes where no host guard can follow: it reads like a
+// script, whose destination cannot be read either, and a host-guarded secret asks.
+const destinationOf = (target: SecretTarget): Destination => {
+    switch (target.kind) {
+        case "page":
+            return pageDestination(target.url);
+        case "program":
+            return target.language === "bash" ? commandDestination(target.text) : SCRIPT_DESTINATION;
+        case "window":
+        case "app":
+            return { certain: false, why: `it is typed into ${placeOf(target)}, which names no site its host guard could check` };
+    }
+};
+
+const nounOf = (target: SecretTarget): string => {
+    switch (target.kind) {
+        case "page":
+            return "page";
+        case "program":
+            return target.language === "bash" ? "command" : "script";
+        case "window":
+        case "app":
+            return "typing";
+    }
+};
+
+// What tells one use apart from another to the same names: the page, the program's text, or the window or app.
+const whereOf = (target: SecretTarget): string => {
+    switch (target.kind) {
+        case "page":
+            return target.url;
+        case "program":
+            return target.text;
+        case "window":
+            return `${target.machine}\u0000${target.program ?? ""}`;
+        case "app":
+            return `${target.machine}\u0000${target.serial}`;
+    }
+};
 
 // "a", "a or b", "a, b or c": every host written out, since "one of 3 hosts" gives nobody anything to check.
 const either = (items: readonly string[]): string =>
@@ -94,6 +135,9 @@ type Asked = Exclude<HostReading, { readonly destination: "none" | "inside" }>;
 const sentenceOf = (reading: Asked, target: SecretTarget): string => {
     const noun = nounOf(target);
     const them = reading.guarded.length === 1 ? "it" : "them";
+    if (target.kind === "window" || target.kind === "app") {
+        return `${listsOf(reading.guarded)}, and this would type ${them} into ${placeOf(target)}, which names no site to check.`;
+    }
     if (reading.destination === "outside") {
         return target.kind === "page"
             ? `${listsOf(reading.guarded)}, and this page is on ${both(reading.hosts)}.`
@@ -104,6 +148,9 @@ const sentenceOf = (reading: Asked, target: SecretTarget): string => {
 
 const titleOf = (reading: Asked, target: SecretTarget): string => {
     const names = both(reading.guarded.map((entry) => entry.name));
+    if (target.kind === "window" || target.kind === "app") {
+        return `Type ${names} into ${placeOf(target)}?`;
+    }
     if (reading.destination === "outside") {
         return target.kind === "page" ? `Type ${names} into a page on ${both(reading.hosts)}?` : `Send ${names} to ${both(reading.hosts)}?`;
     }
@@ -121,7 +168,7 @@ const occurrences = (text: string, token: string): { readonly start: number; rea
 
 // The program the card holds, with every guarded reference marked: the part the card is about.
 const programAskOf = (target: SecretTarget, guarded: readonly GuardedName[]): ProgramAsk | undefined => {
-    if (target.kind === "page") {
+    if (target.kind !== "program") {
         return undefined;
     }
     const text = target.text.slice(0, SHOWN);
@@ -302,7 +349,7 @@ const askToSend = async (
 
 // The exact use within its conversation: the same names to the same place by the same text.
 const sendKey = (input: HostGuardCheck): string =>
-    [input.target.tool, ...input.names, input.target.kind === "page" ? input.target.url : input.target.text].join("\u0000");
+    [input.target.tool, ...input.names, whereOf(input.target)].join("\u0000");
 
 export const createHostGuardGate = (deps: HostGuardGateDeps): HostGuardGate => {
     // One registry per kind of card, so a widening never answers a send.
@@ -355,7 +402,7 @@ export const createHostGuardGate = (deps: HostGuardGateDeps): HostGuardGate => {
                     told: wakeWords({
                         who: "A person",
                         doing: `sending ${both(names)} past its host guard`,
-                        ...opt("call", input.target.kind === "page" ? input.target.url : input.target.text),
+                        ...opt("call", input.target.kind === "window" || input.target.kind === "app" ? undefined : whereOf(input.target)),
                         notYet: "It has not been used yet",
                         again: "Make it now with exactly the same call: the same tool and exactly the same text.",
                         declinedSo: "it was not used",

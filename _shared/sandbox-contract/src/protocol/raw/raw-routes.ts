@@ -213,6 +213,12 @@ export const RAW_ROUTES = {
     // A connected browser's credential doors, on its durable token: a sign-in moves in (`session`) or out (`lend`).
     "POST /system/webext/session": { auth: "door", control: "never" },
     "POST /system/webext/lend": { auth: "door", control: "never" },
+    // A secret the browser types for the agent (`type_secret` aimed at it): one value for one ticket the daemon minted
+    // for this browser and one host, handed back on the browser's own request rather than over the tool socket.
+    "POST /system/webext/secret": { auth: "door", control: "never" },
+    // This sandbox's keyring keys (schemas/keyring.ts), public halves only: a keyring fetches them here over TLS, from the
+    // sandbox's own address, before it shares anything with it, rather than take them from whoever relays the share.
+    "GET /keyring/keys": { auth: "door", control: "never" },
     "POST /system/runners/{id}/definition/sync": { control: "never" },
     // A runner's git door and credential doors, each on the runner's own bearer.
     "GET /system/runners/git/{repo}/info/refs": { auth: "door", control: "never", lane: "bulk" },

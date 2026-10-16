@@ -1,6 +1,7 @@
 import type { CommandContext } from "@stricli/core";
 import { explain, type Item } from "@intentic/local-agent";
 import { answeringUi, buildCommand, markFailed } from "../cli-ui.js";
+import { keyringLine, keyringStatusLine, readKeyringSummary } from "../keyring/keyring-status.js";
 import { readResident } from "../resident/supervision.js";
 import { MANIFEST } from "./manifest.js";
 import { runUpkeep, summaryLine, type UpkeepItem } from "./reconcile.js";
@@ -79,11 +80,14 @@ export const doctor = buildCommand<DoctorFlags>({
             markFailed(this);
             return;
         }
+        // The keyring is a process of its own, which no upkeep pass touches: said beside what the pass found, never fixed.
+        const keyring = keyringStatusLine(await readKeyringSummary());
         if (flags.json) {
             // allow(terminal-output): the --json document
-            this.process.stdout.write(`${JSON.stringify({ ok: true, fix: flags.fix, ...run.report, items: run.items })}\n`);
+            this.process.stdout.write(`${JSON.stringify({ ok: true, fix: flags.fix, ...run.report, items: run.items, keyring })}\n`);
             return;
         }
+        ui.items([keyringLine(keyring)]);
         const summary = summaryLine(run.report, flags.fix);
         if (run.items.length === 0) {
             ui.quiet("Nothing is left over from older releases, and every store is within its bounds.");

@@ -24,16 +24,21 @@ flowchart LR
 
 Encrypt the host disks that hold `/work`, `/history`, the auth volume, and backups: use LUKS/dm-crypt on Linux or
 BitLocker on a Windows host running WSL/Docker. Store the disk recovery key separately and test restoring a backup.
-The sandbox's optional store encryption covers four auth-root JSON files containing pasted secrets, capability and
-extension credentials, and privacy-shield values, plus provider account JSON files, in copied volumes and backups. It does not encrypt `/work`,
-`/history`, runtime-owned native CLI login files, or arbitrary application data. A root process in a running sandbox can still read
-decrypted values; this is not a barrier against the agent.
+The sandbox's store encryption, on by default for every sandbox `ic` sets up or updates, covers four auth-root JSON
+files containing pasted secrets, capability and extension credentials, and privacy-shield values, plus provider account
+JSON files, in copied volumes and backups. It does not encrypt `/work`, `/history`, runtime-owned native CLI login files,
+or arbitrary application data. A root process in a running sandbox can still read decrypted values; this is not a
+barrier against the agent.
 
-For an `ic` sandbox, put a 32-byte random key in the office's key store, expose it as a host file **outside all sandbox
-volumes**, and set `INTENTIC_AT_REST_KEY_HOST_FILE` to its absolute path when connecting the sandbox. `ic` mounts it
-read-only at `/run/secrets/intentic-at-rest-key` and sets `INTENTIC_AT_REST_KEY_FILE` in the container. The file may
-contain 32 raw bytes, 64 hex digits, or base64 of 32 bytes. Keep a recoverable copy of each key with the backup:
-without it, encrypted stores cannot be opened. To rotate, mount the new key as the active file, mount the old key
+An `ic` sandbox gets its key when it is set up, or on its first update if it is older: `ic` makes 32 random bytes once
+at `~/.intentic/keys/at-rest-<slug>.key` on the host (readable by that user alone), mounts the file read-only at
+`/run/secrets/intentic-at-rest-key`, and sets `INTENTIC_AT_REST_KEY_FILE` in the container. That folder is outside all
+sandbox volumes, and `ic`'s own backups do not contain it, so **copy the key into the office's key store**: without it,
+encrypted stores cannot be opened. To keep the key in the key store instead, expose it as a host file **outside all
+sandbox volumes** and set `INTENTIC_AT_REST_KEY_HOST_FILE` to its absolute path when connecting the sandbox; it wins over
+the one `ic` would make. The file may contain 32 raw bytes, 64 hex digits, or base64 of 32 bytes. If the disks are
+already encrypted and you want no second key, set `INTENTIC_AT_REST=off` when connecting; the sandbox keeps that choice
+across updates, but a sandbox that already has a key keeps it. To rotate, mount the new key as the active file, mount the old key
 separately with `INTENTIC_AT_REST_PREVIOUS_KEY_HOST_FILE` when reconnecting; `ic` sets
 `INTENTIC_AT_REST_PREVIOUS_KEY_FILE` to its read-only mount. Restart the sandbox. Boot re-encrypts the covered stores
 under the new key; reconnect with `INTENTIC_AT_REST_DROP_PREVIOUS_KEY=1` after confirming the restart and backup to

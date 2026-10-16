@@ -90,6 +90,15 @@ const startLinks = ({ role, services, logger, shutdown }: Pick<BootPhase, "role"
     }
 };
 
+// The keyrings on the owner's computers (secrets/device/): each read when its computer connects and every minute after,
+// and the sync mailbox between them carried every five. Only the daemon that owns the roots reads them, since what they
+// say is kept under the auth root it owns.
+const startKeyrings = ({ role, services, shutdown }: Pick<BootPhase, "role" | "services" | "shutdown">): void => {
+    if (role.roots) {
+        shutdown.push(services.deviceSecrets.start());
+    }
+};
+
 // Each scheduler registers its stop whether or not this role starts it, so every role unwinds cleanly.
 export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPhase): void => {
     const scheduler = createAutomationsScheduler(services);
@@ -118,6 +127,7 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     shutdown.push(services.events.subscribe("run.started", (started) => adoptChildTurn(services, started)));
     startProjectDelivery({ role, services, shutdown });
     startLinks({ role, services, logger, shutdown });
+    startKeyrings({ role, services, shutdown });
 
     // A settled turn a person asked for arms a hold on its prompt cache where the setting says so; each hold sets its
     // own deadline, so there is nothing to start, only timers to clear.

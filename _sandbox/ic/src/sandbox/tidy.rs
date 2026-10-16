@@ -655,7 +655,13 @@ fn backups(dry_run: bool, known: &dyn Fn(&str) -> bool, tally: &mut Tally) {
             continue;
         };
         match backup::discard(&slug) {
-            Ok(bytes) => tally.backups.push((slug.clone(), why, bytes)),
+            Ok(bytes) => {
+                // The last copy of a sandbox gone for good takes its at-rest key with it (at_rest.rs). A live one keeps it.
+                if standing == Standing::Gone {
+                    crate::sandbox::at_rest::forget(&crate::sandbox::at_rest::sandbox_key(&slug));
+                }
+                tally.backups.push((slug.clone(), why, bytes))
+            }
             Err(failed) => note(&format!("backups of {slug}: could not remove — {failed}")),
         }
     }

@@ -244,6 +244,7 @@ export * from "./schemas/git/git-history.js";
 export * from "./schemas/history.js";
 export * from "./schemas/hosts.js";
 export * from "./schemas/loopback-catch.js";
+export * from "./schemas/keyring.js";
 export * from "./schemas/peer-enrollment.js";
 export * from "./schemas/intentic.js";
 export * from "./schemas/inventory.js";

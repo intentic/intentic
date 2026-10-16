@@ -1498,7 +1498,8 @@
             "couldNotStopApproval": "Could not stop requiring approval.",
             "couldNotReveal": "Could not reveal the value.",
             "couldNotRemove": "Could not remove the secret.",
-            "approverSeparator": " or "
+            "approverSeparator": " or ",
+            "typedOnDesktop": "typed on the sandbox's desktop"
         },
         "secretField": {
             "as": "as",
@@ -2573,6 +2574,66 @@
                     }
                 }
             }
+        },
+        "keyring": {
+            "modeEachUse": "asks each time",
+            "modeWhileHere": "while you're at the computer",
+            "modeCopy": "copy kept here",
+            "modeEachUseExplained": "Each use asks you on {machine} first, with Windows Hello or the keyring's passphrase.",
+            "modeWhileHereExplained": "Used without asking while {machine}'s keyring is unlocked. Locked, each use asks there.",
+            "modeCopyExplained": "A copy is kept in this sandbox too, so it works with {machine} off. Its guards are then this sandbox's.",
+            "offline": "offline",
+            "locked": "locked",
+            "unlocked": "unlocked"
+        },
+        "secretPrograms": {
+            "title": "Program guard",
+            "explain": "Typed into a window on one of your computers, it goes unasked only into these programs and apps, and only into a password field unless any field is allowed. Anywhere else asks the person at that computer first.",
+            "everyTypingAsks": "No program is listed, so typing it into any window asks first.",
+            "everyTypingAsksReadOnly": "Typing it into any window asks first. Only the owner can change that.",
+            "onlyIntoReadOnly": "Typed unasked only into {programs}, and anywhere else asks first. Only the owner can change that.",
+            "anyFieldReadOnly": "It may go into any field, not only password fields.",
+            "notAProgram": "That is not a program. Write its file name, like FortiClient.exe, or its whole path.",
+            "notAPackage": "That is not an Android app. Write its package name, like com.fortinet.forticlient.",
+            "couldNotSave": "Could not save the program guard.",
+            "remove": "Remove {program}",
+            "programPlaceholder": "FortiClient.exe or a whole path",
+            "addProgram": "Add program",
+            "packagePlaceholder": "com.fortinet.forticlient",
+            "addPackage": "Add Android app",
+            "anyField": "Any field",
+            "anyFieldNote": "Also into fields not marked as password fields, which show what is typed on screen."
+        },
+        "typeInto": {
+            "title": "Type into…",
+            "tooltipNote": "On one of your computers",
+            "noneOnlineShort": "No computer answers now",
+            "noneOnline": "No computer with a keyring answers now. Start the Intentic agent on one, then try again.",
+            "which": "Which computer",
+            "wait": "Wait before typing",
+            "seconds": "{seconds} s",
+            "explain": "Press Type, then put the cursor where it goes on {machine}. It is typed after {seconds} s.",
+            "counting": "Typing on {machine} in {seconds} s. Put the cursor where it goes.",
+            "typing": "Typing on {machine}. If it asks there, confirm on that computer.",
+            "typedPassword": "Typed into {program}, password field.",
+            "typedText": "Typed into {program}, text field.",
+            "asked": "Confirmed on {machine} first.",
+            "couldNotType": "Could not type it on {machine}.",
+            "type": "Type",
+            "again": "Type again"
+        },
+        "secretDevice": {
+            "heading": "On your computer",
+            "keptOn": "Kept in the keyring on {machine}, shared here: {mode}. This sandbox holds only a pointer to it.",
+            "standing": "{machine} is {standing} now.",
+            "readFrom": "Its value is read from {source} at each use.",
+            "typedInto": "Typed unasked only into {programs}.",
+            "everyTypingAsks": "Typing it into any window asks on {machine} first.",
+            "anyField": "It may go into any field.",
+            "passwordFieldOnly": "Only into a password field.",
+            "hosts": "Sites it may go to: {hosts}.",
+            "changeOn": "Change these on {machine}:",
+            "copyCommand": "Copy the command"
         }
     },
     "chat": {
@@ -4931,7 +4992,16 @@
             "save": "Save",
             "addedElsewhere": "I added it elsewhere",
             "couldNotSave": "Could not store the secret.",
-            "notStoredYet": "It is not stored yet: paste it here, or add it on the Secrets view."
+            "notStoredYet": "It is not stored yet: paste it here, or add it on the Secrets view.",
+            "keepInSandbox": "Keep it in the sandbox",
+            "keepOnComputer": "Keep it on my computer",
+            "whichComputer": "Which computer",
+            "modeEachUse": "Ask each time",
+            "modeWhileHere": "While I'm at the computer",
+            "modeCopy": "Keep a copy here",
+            "lockedThere": "{machine} is locked: the value waits there until its keyring is next unlocked.",
+            "keptOn": "Kept in the keyring on {machine} as {name}. The agent only ever sees its name, never the value.",
+            "waitsForUnlock": "Sent to {machine}. It waits there until its keyring is next unlocked."
         },
         "grant": {
             "withheld": "This conversation cannot reach {label}.",
@@ -7301,7 +7371,8 @@
             "nameTooLong": "A name stops at {max} characters; this one is {length}.",
             "nameCharacters": "Letters, digits and underscores; must not start with a digit.",
             "nameTaken": "{name} already exists here. Saving replaces its value.",
-            "couldntPushToCi": "Could not push secrets to CI."
+            "couldntPushToCi": "Could not push secrets to CI.",
+            "onYourComputers": "On your computers"
         },
         "sandboxSwitcher": {
             "alsoDelete": "Also delete it from",
@@ -8400,7 +8471,12 @@
             "needsApprovalFrom": "needs approval from {approvers}",
             "notSet": "not set",
             "or": "or",
-            "usedBy": "used by {users}"
+            "usedBy": "used by {users}",
+            "offline": "Offline",
+            "locked": "Locked",
+            "ready": "Ready",
+            "offlineNote": "{machine} is offline: this cannot be used until it answers",
+            "lockedNote": "{machine} is locked: each use asks there"
         },
         "useDevices": {
             "agentUpdateRefused": "That device wouldn't update its agent.",
@@ -9260,6 +9336,23 @@
             "turnsOffHow": "Switch it back on to see what woke the agent and how each turn went:",
             "commandsSettings": "Whether the judge runs, and what it checks against:",
             "personalSettings": "What the shield looks for, and which providers it trusts:"
+        },
+        "keyrings": {
+            "title": "Keyrings on your computers",
+            "offline": "Offline",
+            "locked": "Locked",
+            "unlocked": "Unlocked",
+            "shared": "Shared here: {count}",
+            "pendingInbox": "Waiting for its next unlock: {count}",
+            "pairedWith": "Paired with {peers}",
+            "pair": "Pair",
+            "pairLead": "Pair two keyrings to keep one set of passwords on both. Each computer asks you first, showing both fingerprints.",
+            "pairWhich": "Which two computers",
+            "pairThese": "Pair these two",
+            "confirmOnBoth": "Confirm on both computers. Each prompt shows two fingerprints.",
+            "paired": "Paired {a} and {b}.",
+            "compare": "Each computer's prompt shows these two fingerprints. Say yes only where they match.",
+            "couldNotPair": "Could not pair the two keyrings."
         }
     },
     "settings": {

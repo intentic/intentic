@@ -69,7 +69,11 @@ import { safetyLogDocument } from "../safety/safety-log.js";
 import { autostartDocument } from "../scaffold/autostart.js";
 import { credentialGatesDocument } from "../secrets/credential-gates.js";
 import { credentialReleasesDocument } from "../secrets/credential-grants.js";
-import { secretHostGuardsDocument } from "../secrets/host-guards.js";
+import { sandboxKeyringKeysDocument } from "../secrets/device/keyring-keys.js";
+import { keyringCopiesDocument, keyringDevicesDocument } from "../secrets/device/keyring-stores.js";
+import { keyringSyncMailboxDocument } from "../secrets/device/keyring-sync.js";
+import { secretHostGuardsDocument } from "../secrets/guards/host-guards.js";
+import { secretProgramGuardsDocument } from "../secrets/guards/program-guards.js";
 import { sandboxSecretsDocument } from "../secrets/sandbox-secrets.js";
 import { secretUsesDocument } from "../secrets/secret-uses.js";
 import { threadSessionsDocument } from "../sessions/thread-sessions.js";
@@ -187,7 +191,12 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     autostartDocument,
     credentialGatesDocument,
     credentialReleasesDocument,
+    sandboxKeyringKeysDocument,
+    keyringCopiesDocument,
+    keyringDevicesDocument,
+    keyringSyncMailboxDocument,
     secretHostGuardsDocument,
+    secretProgramGuardsDocument,
     sandboxSecretsDocument,
     secretUsesDocument,
     threadSessionsDocument,

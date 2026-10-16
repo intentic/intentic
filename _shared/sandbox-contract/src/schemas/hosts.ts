@@ -110,7 +110,19 @@ export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 //   run under the agent's supervision (device-artifacts.ts); an agent without it is told to update rather than sent one.
 // - `project-delivery`: the `deliverProject` procedure, landed work written into a folder attached to this computer's
 //   sandbox (project-delivery.ts); an agent without it is never sent one, and the land waits for Bring back.
-export const DeviceFeatureSchema = z.enum(["reshape-later", "set-shape", "rollback-to", "loopback-catch", "background-prepare", "project-delivery", "programs"]);
+// - `keyring`: the keyring* procedures, intentic-keyring on this computer reached through the machine (keyring.ts);
+//   advertised only while a keyring is installed, so a sandbox never offers a computer without one as a place to keep or
+//   type a secret.
+export const DeviceFeatureSchema = z.enum([
+    "reshape-later",
+    "set-shape",
+    "rollback-to",
+    "loopback-catch",
+    "background-prepare",
+    "project-delivery",
+    "programs",
+    "keyring",
+]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
 export const DEVICE_FEATURE_SET_SHAPE: DeviceFeature = "set-shape";
@@ -119,6 +131,7 @@ export const DEVICE_FEATURE_LOOPBACK_CATCH: DeviceFeature = "loopback-catch";
 export const DEVICE_FEATURE_BACKGROUND_PREPARE: DeviceFeature = "background-prepare";
 export const DEVICE_FEATURE_PROJECT_DELIVERY: DeviceFeature = "project-delivery";
 export const DEVICE_FEATURE_PROGRAMS: DeviceFeature = "programs";
+export const DEVICE_FEATURE_KEYRING: DeviceFeature = "keyring";
 // The features an agent advertised that this build knows; an unknown one is a newer agent's and means nothing here.
 export const deviceFeatures = (facts: Pick<DeviceFacts, "features"> | undefined): DeviceFeature[] =>
     (facts?.features ?? []).flatMap((feature) => {

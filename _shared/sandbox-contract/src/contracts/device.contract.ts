@@ -8,6 +8,22 @@ import { LoopbackCatchEventSchema, LoopbackCatchSchema } from "../schemas/loopba
 import { OkSchema } from "../schemas/shared.js";
 import { ProjectDeliveryResultSchema, ProjectDeliverySchema } from "../schemas/project-delivery.js";
 import { DialLoopbackSchema, StageArtifactResultSchema, StageArtifactSchema } from "../schemas/device-artifacts.js";
+import {
+    KeyringCopiesSchema,
+    KeyringInboxItemSchema,
+    KeyringInboxResultSchema,
+    KeyringReleaseResultSchema,
+    KeyringSharesSchema,
+    KeyringSyncDeliverResultSchema,
+    KeyringSyncDeliverSchema,
+    KeyringSyncOutboxSchema,
+    KeyringSyncPairResultSchema,
+    KeyringSyncPairSchema,
+    KeyringSyncStateSchema,
+    KeyringTypeInputSchema,
+    KeyringTypeResultSchema,
+    SignedKeyringGrantSchema,
+} from "../schemas/keyring.js";
 
 // What a connected device can be asked, over the socket it opened; the machine is the oRPC server, the daemon the
 // client. No `.route()`: the procedure path is the address, not HTTP. Every input is strict (devices.ts says why). `mcp` stays opaque (`z.unknown()`) so a machine
@@ -46,4 +62,18 @@ export const deviceContract = {
     // the connection, or throws (nothing listening there, the switch is off). Advertised with `programs`; the machine
     // allows it when "Run commands" or "Run programs this sandbox sends" is on, either of which already reaches it.
     dialLoopback: oc.input(DialLoopbackSchema).output(z.object({ ok: z.literal(true) })),
+    // The keyring on this computer (schemas/keyring.ts), relayed: the machine passes each call to intentic-keyring over its
+    // local pipe and carries the answer back, ciphertext both ways where a value rides. Only the daemon calls these,
+    // never a tool, so no turn can reach the keyring by naming a procedure; sent only to an agent advertising `keyring`.
+    // `keyringShares` answers for the asking sandbox alone: the machine names it from the link the call came in on.
+    keyringShares: oc.output(KeyringSharesSchema),
+    keyringRelease: oc.input(SignedKeyringGrantSchema).output(KeyringReleaseResultSchema),
+    keyringType: oc.input(KeyringTypeInputSchema).output(KeyringTypeResultSchema),
+    keyringInbox: oc.input(KeyringInboxItemSchema).output(KeyringInboxResultSchema),
+    keyringCopies: oc.output(KeyringCopiesSchema),
+    // Keeping two of the owner's keyrings in step through this sandbox, which carries only what is sealed between them.
+    keyringSyncState: oc.output(KeyringSyncStateSchema),
+    keyringSyncPair: oc.input(KeyringSyncPairSchema).output(KeyringSyncPairResultSchema),
+    keyringSyncOutbox: oc.output(KeyringSyncOutboxSchema),
+    keyringSyncDeliver: oc.input(KeyringSyncDeliverSchema).output(KeyringSyncDeliverResultSchema),
 };

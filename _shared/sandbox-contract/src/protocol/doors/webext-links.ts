@@ -18,6 +18,19 @@ export const webextSessionUrl = (sandboxUrl: string): string => `${sandboxUrl.re
 // an MCP result.
 export const webextLendUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/\/$/, "")}/system/webext/lend`;
 
+// Where the extension collects a stored secret it was handed a ticket to type. Its own door for the reason the two above
+// are: a tool answer over the socket lands in the model's context, and this value must never reach one.
+export const webextSecretUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/\/$/, "")}/system/webext/secret`;
+
+// The tool the daemon calls on a browser to type a secret into its focused field, taking only a ticket the daemon
+// minted for that one call. The agent's own mount of the browser never lists it (webext-peer.ts): a model holding the
+// tool would hold nothing it could use, so it is not offered.
+export const WEBEXT_TICKET_TOOL = "type_ticket";
+
+// How long a ticket waits for its browser to collect it. Both sides read it: the extension's own question to the person
+// has to be answered inside it, or the ticket it then presents has already lapsed.
+export const WEBEXT_TICKET_TTL_MS = 60_000;
+
 // One pasteable code, not two fields: base64url of {url, token}, since a popup gets one paste, not two boxes. `token`
 // is single-use and expires in ten minutes; the prefix versions the format.
 const PAIRING_PREFIX = "ixb1_";

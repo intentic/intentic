@@ -1,8 +1,8 @@
 // needs jsdom: renders the real page. Pins that the list stays short as accounts grow, what's owed rises to the
 // top, and a truncated or filtered account stays reachable, never silently dropped.
 import "@intentic/testing/dom";
-import type { ExtensionSummary, SecretInventoryEntry, CapabilitySummary } from "@intentic/sandbox-contract";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import type { ExtensionSummary, SecretInventoryEntry, CapabilitySummary, SandboxKeyring } from "@intentic/sandbox-contract";
+import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
@@ -20,6 +20,7 @@ jest.mock(`../../capabilities/connect/secrets/useSecrets`, () => ({
     }),
     useSecrets: () => ({ set: { mutateAsync: jest.fn() }, remove: { mutateAsync: jest.fn() } }),
     useSecretHosts: () => ({ setHosts: { mutateAsync: jest.fn() } }),
+    useSecretPrograms: () => ({ programsFor: () => undefined, setPrograms: { mutateAsync: jest.fn() } }),
     useCredentialPolicy: () => ({ setPolicy: { mutateAsync: jest.fn() } }),
     // Nothing gated, not the owner: keeps these cases about which rows show and how they're named. Gate behavior
     // itself is asserted in secretRows.test.ts.
@@ -32,6 +33,17 @@ jest.mock(`../../capabilities/connect/secrets/useSecrets`, () => ({
         removeGate: { mutateAsync: jest.fn() },
     }),
     reveal: jest.fn(),
+}));
+
+// No keyring anywhere unless a case gives the sandbox some: the view most sandboxes have.
+const keyrings = ref<SandboxKeyring[]>([]);
+jest.mock(`../../capabilities/connect/secrets/useKeyrings`, () => ({
+    useKeyrings: () => ({
+        keyrings,
+        online: computed(() => keyrings.value.filter((keyring) => keyring.online)),
+        pair: { mutateAsync: jest.fn() },
+    }),
+    useTypeInto: () => ({ typeInto: { mutateAsync: jest.fn() } }),
 }));
 
 const capabilities = ref<CapabilitySummary[]>([]);
@@ -132,6 +144,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    keyrings.value = [];
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -241,4 +254,40 @@ it(`keeps one row open at a time, so a list being scanned cannot grow under the 
     rows[1]?.click();
     await nextTick();
     expect(disclosures(el).filter((row) => row.getAttribute(`aria-expanded`) === `true`)).toHaveLength(1);
+});
+
+// A secret kept in a keyring on one of the owner's computers is neither the sandbox's nor a connection's: a group of its own,
+// named by the computer and the share, beside the keyrings themselves.
+it(`gathers secrets kept on the owner's computers in a group of their own, beside their keyrings`, () => {
+    inventory.value = [
+        ...inventory.value,
+        entry({
+            key: `VPN_PASSWORD`,
+            kind: `device`,
+            storedAt: `the keyring on rog`,
+            revealable: false,
+            device: { machine: `rog`, mode: `while-here`, online: true, locked: false, source: `keyring` },
+        }),
+    ];
+    keyrings.value = [
+        { machine: `rog`, online: true, locked: false, shared: 1, sync: { fingerprint: `AB12 CD34`, peers: [`omen`] } },
+        { machine: `omen`, online: false, shared: 0 },
+    ];
+    const el = mount();
+    const all = text(el);
+    expect(all).toContain(`On your computers`);
+    expect(all).toContain(`VPN_PASSWORD`);
+    expect(all).toContain(`rog · while you're at the computer`);
+    expect(all.indexOf(`On your computers`)).toBeLessThan(all.indexOf(`VPN_PASSWORD`));
+    expect(all).toContain(`Keyrings on your computers`);
+    expect(all).toContain(`Shared here: 1 · Paired with omen`);
+    expect(all).toContain(`Offline`);
+    // One answers now, and pairing needs two that do.
+    expect([...el.querySelectorAll(`button`)].some((button) => button.textContent?.trim() === `Pair`)).toBe(false);
+});
+
+it(`draws no keyring group in a sandbox no computer keeps anything for`, () => {
+    const el = mount();
+    expect(text(el)).not.toContain(`On your computers`);
+    expect(text(el)).not.toContain(`Keyrings on your computers`);
 });

@@ -1,4 +1,4 @@
-import { isOpenNeed, type Need, type NeedAnswer } from "@intentic/sandbox-contract";
+import { isOpenNeed, type KeyringShareMode, type Need, type NeedAnswer } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { rpcKey, rpcPrefix } from "../../lib/queryKeys";
@@ -24,9 +24,11 @@ export function useNeeds() {
         mutationFn: ({ id, answer: reply }: { id: string; answer: NeedAnswer }) => sandboxRpc.needs.answer({ id, answer: reply }),
         onSuccess: settled,
     });
-    // The value goes to the daemon's secret store through its own route and is never kept here past the call.
+    // The value goes to the daemon's secret store through its own route and is never kept here past the call. With
+    // `keepOn` it is kept in the keyring on one of the owner's computers instead, and the sandbox holds a pointer.
     const provideSecret = useMutation({
-        mutationFn: ({ id, value }: { id: string; value: string }) => sandboxRpc.needs.provideSecret({ id, value }),
+        mutationFn: ({ id, value, keepOn }: { id: string; value: string; keepOn?: { device: string; mode: KeyringShareMode } | undefined }) =>
+            sandboxRpc.needs.provideSecret(keepOn === undefined ? { id, value } : { id, value, keepOn }),
         onSuccess: settled,
     });
 

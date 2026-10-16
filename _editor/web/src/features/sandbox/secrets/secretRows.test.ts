@@ -168,3 +168,48 @@ it(`offers a gate only where there is something to release, and forces conversat
     })[0];
     expect([connector?.gateSubject, connector?.sessionShaped]).toEqual([`github`, false]);
 });
+
+// A pointer to a keyring entry on one of the owner's computers: its own group, named by the computer and the share, never
+// editable or removable here, and said to be unusable only where its share makes that true.
+const kept = (device: NonNullable<SecretInventoryEntry[`device`]>, over: Partial<SecretInventoryEntry> = {}): SecretInventoryEntry =>
+    entry({ key: `VPN_PASSWORD`, kind: `device`, storedAt: `the keyring on rog`, revealable: false, device, ...over });
+
+it(`puts a secret kept on one of the owner's computers in a group of its own, named by the computer and its share`, () => {
+    const row = secretRow(kept({ machine: `rog`, mode: `each-use`, online: true, locked: false, source: `keyring` }), sources());
+    expect(row.group).toBe(`device`);
+    expect(row.detail).toBe(`rog · asks each time`);
+    expect([row.editable, row.removable, row.programsHere]).toEqual([false, false, false]);
+    // The sandbox's own named approver still runs first, and the owner can still type it into a window.
+    expect([row.gateSubject, row.typeable]).toEqual([`VPN_PASSWORD`, true]);
+    expect(row.attention).toBe(false);
+    expect(matchesSecret(row, `rog`, false)).toBe(true);
+});
+
+it(`says a kept secret cannot be used only where its share makes that true`, () => {
+    const offline = secretRow(kept({ machine: `rog`, mode: `while-here`, online: false, source: `keyring` }), sources());
+    expect(offline.state?.label).toBe(`Offline`);
+    expect(offline.note).toBe(`rog is offline: this cannot be used until it answers`);
+    const locked = secretRow(kept({ machine: `rog`, mode: `while-here`, online: true, locked: true, source: `keyring` }), sources());
+    expect([locked.state?.label, locked.note]).toEqual([`Locked`, `rog is locked: each use asks there`]);
+    // Asking each time asks whether locked or not; a copy lives here and works with the computer off.
+    const eachUse = secretRow(kept({ machine: `rog`, mode: `each-use`, online: true, locked: true, source: `keyring` }), sources());
+    expect(eachUse.note).toBeUndefined();
+    const copy = secretRow(kept({ machine: `rog`, mode: `copy`, online: false, source: `keyring` }), sources());
+    expect([copy.state, copy.note, copy.detail]).toEqual([undefined, undefined, `rog · copy kept here`]);
+    // Sorted with what needs a look first, inside its group.
+    const rows = secretRows([kept({ machine: `rog`, mode: `copy`, online: true, source: `keyring` }, { key: `A_FIRST` }), kept({ machine: `rog`, mode: `while-here`, online: false, source: `keyring` }, { key: `Z_LAST` })], sources());
+    expect(rows.map((one) => one.entry.key)).toEqual([`Z_LAST`, `A_FIRST`]);
+});
+
+it(`offers Type into… and a program list only for a value stored under a name the route takes`, () => {
+    const stored = secretRow(entry({ key: `DATABASE_URL`, kind: `env` }), sources());
+    expect([stored.typeable, stored.programsHere]).toEqual([true, true]);
+    const generated = secretRow(entry({ key: `SESSION_KEY`, kind: `generated` }), sources());
+    expect(generated.typeable).toBe(true);
+    // Nothing to type yet, a model account's credential, a connection's: none of them.
+    expect(secretRow(entry({ key: `SPARE`, kind: `env`, status: `missing` }), sources()).typeable).toBe(false);
+    expect(secretRow(entry({ key: `claude:acc`, kind: `provider`, revealable: false }), sources()).typeable).toBe(false);
+    expect(secretRow(entry({ key: `github`, kind: `capability`, status: `connected` }), sources()).typeable).toBe(false);
+    // A keyring name may carry a dot, which the Type into… route's name rule refuses.
+    expect(secretRow(kept({ machine: `rog`, mode: `each-use`, online: true, source: `keyring` }, { key: `vpn.password` }), sources()).typeable).toBe(false);
+});

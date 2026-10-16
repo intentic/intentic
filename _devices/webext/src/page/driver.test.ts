@@ -1,6 +1,6 @@
 import "@intentic/testing/dom";
 import { renderPage, toPageState } from "@intentic/browser/page";
-import { askConfirm, clickRef, collectPage, describeRef, fillRef, readPageText, selectRef, waitForText } from "./driver.js";
+import { askConfirm, clickRef, collectPage, describeRef, fillRef, pinFocusedField, readPageText, selectRef, typeSecretInto, waitForText } from "./driver.js";
 
 // Tests the page walk against real DOM via jsdom, which is enough for the judgements that matter (what's clickable,
 // what to call it, sensitivity) but cannot lay out elements or run a page's own JavaScript.
@@ -278,4 +278,92 @@ test("the person's click on No is a no", async () => {
     const { answer, send } = askCaught();
     send(press("click", 130));
     expect(await answer).toBe(false);
+});
+
+/* A STORED SECRET, TYPED INTO THE FIELD IN FOCUS: the field is read and held first, and typed into only after the sandbox
+   has released the value, which may be minutes later. */
+
+const HERE = "http://localhost:3000";
+
+// One element of the page by selector, of the kind the test needs it to be, or the test stops there.
+const one = <T extends Element>(selector: string, kind: new () => T, root: ParentNode = document): T => {
+    const found = root.querySelector(selector);
+    if (!(found instanceof kind)) {
+        throw new Error(`the page has no ${kind.name} at ${selector}`);
+    }
+    return found;
+};
+
+test("the focused field is held and named, a password input as a password field", () => {
+    document.body.innerHTML = `<form><input id="user" /><input id="pw" type="password" /></form>`;
+    one("#pw", HTMLInputElement).focus();
+    expect(pinFocusedField("pin-1")).toEqual({ ok: true, field: "password", message: "" });
+    one("#user", HTMLInputElement).focus();
+    expect(pinFocusedField("pin-2")).toEqual({ ok: true, field: "text", message: "" });
+});
+
+test("nothing typeable in focus is refused, saying to click the field first", () => {
+    document.body.innerHTML = `<button id="go">Go</button><input id="when" type="date" /><input id="off" disabled />`;
+    for (const focused of [undefined, "go", "when"]) {
+        if (focused !== undefined) {
+            one(`#${focused}`, HTMLElement).focus();
+        }
+        const read = pinFocusedField("pin");
+        expect(read.ok).toBe(false);
+        expect(read.message).toBe(`No text field is focused on this page: click the field first, then type the secret again.`);
+    }
+    // Nothing was held, so nothing can be typed.
+    expect(typeSecretInto("pin", "s3cret", HERE)).toMatchObject({ ok: false, gone: true });
+});
+
+test("a field inside a shadow root is the one held, not its host", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    host.attachShadow({ mode: "open" }).innerHTML = `<input type="password" />`;
+    host.shadowRoot?.querySelector("input")?.focus();
+    expect(pinFocusedField("pin").field).toBe("password");
+    expect(typeSecretInto("pin", "s3cret", HERE).ok).toBe(true);
+    expect(host.shadowRoot?.querySelector("input")?.value).toBe("s3cret");
+});
+
+test("the secret goes into the held field the way a framework reads it, without submitting the form", () => {
+    document.body.innerHTML = `<form><input id="pw" type="password" /><button>Sign in</button></form>`;
+    const field = one("#pw", HTMLInputElement);
+    const events: string[] = [];
+    for (const name of ["input", "change", "keydown", "submit"]) {
+        (name === "submit" ? one("form", HTMLFormElement) : field).addEventListener(name, (event) => {
+            events.push(name);
+            event.preventDefault();
+        });
+    }
+    field.focus();
+    pinFocusedField("pin");
+    // Focus wandered while the person decided; the secret still goes where it was asked for.
+    one("button", HTMLButtonElement).focus();
+    expect(typeSecretInto("pin", "s3cret", HERE)).toEqual({ ok: true, message: "typed" });
+    expect(field.value).toBe("s3cret");
+    expect(events).toEqual(["input", "change"]);
+});
+
+test("a pin is good for one value, on the site it was taken on, for the field it held", () => {
+    document.body.innerHTML = `<input id="pw" type="password" />`;
+    const field = one("#pw", HTMLInputElement);
+    field.focus();
+    pinFocusedField("pin");
+    const elsewhere = typeSecretInto("pin", "s3cret", "https://evil.example");
+    expect(elsewhere).toEqual({ ok: false, message: `The page moved to another site while the secret was being released, so nothing was typed.` });
+    // The refusal spent the pin too.
+    expect(typeSecretInto("pin", "s3cret", HERE)).toMatchObject({ ok: false, gone: true });
+
+    field.focus();
+    pinFocusedField("pin-2");
+    expect(typeSecretInto("someone-else", "s3cret", HERE)).toMatchObject({ ok: false, gone: true });
+
+    field.focus();
+    pinFocusedField("pin-3");
+    field.remove();
+    const gone = typeSecretInto("pin-3", "s3cret", HERE);
+    expect(gone).toMatchObject({ ok: false, gone: true });
+    expect(gone.message).toContain("Click the field again");
+    expect(field.value).toBe("");
 });

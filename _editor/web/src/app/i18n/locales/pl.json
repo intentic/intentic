@@ -1495,7 +1495,8 @@
             "couldNotStopApproval": "Nie udało się wyłączyć wymogu zatwierdzania.",
             "couldNotReveal": "Nie udało się pokazać wartości.",
             "couldNotRemove": "Nie udało się usunąć sekretu.",
-            "approverSeparator": " lub "
+            "approverSeparator": " lub ",
+            "typedOnDesktop": "wpisany na pulpicie sandboxa"
         },
         "secretField": {
             "as": "jako",
@@ -2573,6 +2574,66 @@
                     }
                 }
             }
+        },
+        "keyring": {
+            "modeEachUse": "pyta za każdym razem",
+            "modeWhileHere": "gdy jesteś przy komputerze",
+            "modeCopy": "kopia trzymana tutaj",
+            "modeEachUseExplained": "Każde użycie najpierw pyta cię na {machine}, przez Windows Hello albo hasło pęku kluczy.",
+            "modeWhileHereExplained": "Używane bez pytania, póki pęk kluczy na {machine} jest odblokowany. Zablokowany pyta przy każdym użyciu.",
+            "modeCopyExplained": "Kopia jest trzymana także w tym sandboxie, więc działa przy wyłączonym {machine}. Chronią ją wtedy zabezpieczenia tego sandboxa.",
+            "offline": "offline",
+            "locked": "zablokowany",
+            "unlocked": "odblokowany"
+        },
+        "secretPrograms": {
+            "title": "Ochrona programów",
+            "explain": "Wpisywany w okno na jednym z twoich komputerów trafia bez pytania tylko do tych programów i aplikacji, i tylko w pole hasła, chyba że dozwolone jest każde pole. Gdziekolwiek indziej najpierw pyta osobę przy tym komputerze.",
+            "everyTypingAsks": "Nie podano żadnego programu, więc wpisanie go w dowolne okno najpierw pyta.",
+            "everyTypingAsksReadOnly": "Wpisanie go w dowolne okno najpierw pyta. Zmienić to może tylko właściciel.",
+            "onlyIntoReadOnly": "Bez pytania wpisywany tylko do: {programs}, a gdziekolwiek indziej najpierw pyta. Zmienić to może tylko właściciel.",
+            "anyFieldReadOnly": "Może trafić w każde pole, nie tylko w pola haseł.",
+            "notAProgram": "To nie jest program. Wpisz nazwę jego pliku, na przykład FortiClient.exe, albo całą ścieżkę.",
+            "notAPackage": "To nie jest aplikacja na Androida. Wpisz nazwę jej pakietu, na przykład com.fortinet.forticlient.",
+            "couldNotSave": "Nie udało się zapisać ochrony programów.",
+            "remove": "Usuń {program}",
+            "programPlaceholder": "FortiClient.exe albo cała ścieżka",
+            "addProgram": "Dodaj program",
+            "packagePlaceholder": "com.fortinet.forticlient",
+            "addPackage": "Dodaj aplikację na Androida",
+            "anyField": "Każde pole",
+            "anyFieldNote": "Także pola nieoznaczone jako pola haseł, które pokazują wpisany tekst na ekranie."
+        },
+        "typeInto": {
+            "title": "Wpisz w…",
+            "tooltipNote": "Na jednym z twoich komputerów",
+            "noneOnlineShort": "Żaden komputer nie odpowiada",
+            "noneOnline": "Żaden komputer z pękiem kluczy teraz nie odpowiada. Uruchom na nim agenta Intentic i spróbuj ponownie.",
+            "which": "Który komputer",
+            "wait": "Odczekaj przed wpisaniem",
+            "seconds": "{seconds} s",
+            "explain": "Naciśnij Wpisz, potem ustaw kursor tam, gdzie ma trafić na {machine}. Zostanie wpisany po {seconds} s.",
+            "counting": "Wpisywanie na {machine} za {seconds} s. Ustaw kursor tam, gdzie ma trafić.",
+            "typing": "Wpisywanie na {machine}. Jeśli tam zapyta, potwierdź na tym komputerze.",
+            "typedPassword": "Wpisano w {program}, w pole hasła.",
+            "typedText": "Wpisano w {program}, w pole tekstowe.",
+            "asked": "Najpierw potwierdzono na {machine}.",
+            "couldNotType": "Nie udało się tego wpisać na {machine}.",
+            "type": "Wpisz",
+            "again": "Wpisz ponownie"
+        },
+        "secretDevice": {
+            "heading": "Na twoim komputerze",
+            "keptOn": "Trzymany w pęku kluczy na {machine}, udostępniony tutaj: {mode}. Ten sandbox ma tylko wskaźnik do niego.",
+            "standing": "{machine} jest teraz {standing}.",
+            "readFrom": "Jego wartość jest czytana z {source} przy każdym użyciu.",
+            "typedInto": "Bez pytania wpisywany tylko do: {programs}.",
+            "everyTypingAsks": "Wpisanie go w dowolne okno najpierw pyta na {machine}.",
+            "anyField": "Może trafić w każde pole.",
+            "passwordFieldOnly": "Tylko w pole hasła.",
+            "hosts": "Strony, do których może trafić: {hosts}.",
+            "changeOn": "Zmień to na {machine}:",
+            "copyCommand": "Kopiuj polecenie"
         }
     },
     "chat": {
@@ -6943,7 +7004,8 @@
             "nameTooLong": "Limit znaków dla nazwy to {max}, a ta ma {length}.",
             "nameCharacters": "Litery, cyfry i podkreślenia; nie może zaczynać się od cyfry.",
             "nameTaken": "{name} już tu istnieje. Zapisanie zastąpi jego wartość.",
-            "couldntPushToCi": "Nie udało się wypchnąć sekretów do CI."
+            "couldntPushToCi": "Nie udało się wypchnąć sekretów do CI.",
+            "onYourComputers": "Na twoich komputerach"
         },
         "sandboxStorageCard": {
             "changedTodayOrInUse": "Zmienione dziś lub w użyciu",
@@ -7992,7 +8054,12 @@
             "needsApprovalFrom": "wymaga zgody: {approvers}",
             "notSet": "nie ustawiono",
             "or": "lub",
-            "usedBy": "używane przez {users}"
+            "usedBy": "używane przez {users}",
+            "offline": "Offline",
+            "locked": "Zablokowany",
+            "ready": "Gotowy",
+            "offlineNote": "{machine} jest offline: nie da się tego użyć, dopóki nie odpowie",
+            "lockedNote": "{machine} jest zablokowany: każde użycie pyta tam"
         },
         "useDevices": {
             "agentUpdateRefused": "Tamto urządzenie nie chciało zaktualizować swojego agenta.",
@@ -8852,6 +8919,23 @@
             "turnsOffHow": "Włącz je ponownie, aby widzieć, co obudziło agenta i jak poszła każda tura:",
             "commandsSettings": "Czy sędzia działa i według czego sprawdza:",
             "personalSettings": "Czego szuka osłona i którym dostawcom ufa:"
+        },
+        "keyrings": {
+            "title": "Pęki kluczy na twoich komputerach",
+            "offline": "Offline",
+            "locked": "Zablokowany",
+            "unlocked": "Odblokowany",
+            "shared": "Udostępnione tutaj: {count}",
+            "pendingInbox": "Czeka na następne odblokowanie: {count}",
+            "pairedWith": "Sparowany z {peers}",
+            "pair": "Sparuj",
+            "pairLead": "Sparuj dwa pęki kluczy, żeby oba trzymały ten sam zestaw haseł. Każdy komputer najpierw cię zapyta i pokaże oba odciski.",
+            "pairWhich": "Które dwa komputery",
+            "pairThese": "Sparuj te dwa",
+            "confirmOnBoth": "Potwierdź na obu komputerach. Każde pytanie pokazuje dwa odciski.",
+            "paired": "Sparowano {a} i {b}.",
+            "compare": "Pytanie na każdym komputerze pokazuje te dwa odciski. Zgódź się tylko tam, gdzie się zgadzają.",
+            "couldNotPair": "Nie udało się sparować tych pęków kluczy."
         }
     },
     "settings": {
@@ -11425,7 +11509,16 @@
             "save": "Zapisz",
             "addedElsewhere": "Dodałem go gdzie indziej",
             "couldNotSave": "Nie udało się zapisać sekretu.",
-            "notStoredYet": "Jeszcze nie jest zapisany: wklej go tutaj albo dodaj w widoku Sekrety."
+            "notStoredYet": "Jeszcze nie jest zapisany: wklej go tutaj albo dodaj w widoku Sekrety.",
+            "keepInSandbox": "Trzymaj w sandboxie",
+            "keepOnComputer": "Trzymaj na moim komputerze",
+            "whichComputer": "Który komputer",
+            "modeEachUse": "Pytaj za każdym razem",
+            "modeWhileHere": "Gdy jestem przy komputerze",
+            "modeCopy": "Trzymaj kopię tutaj",
+            "lockedThere": "{machine} jest zablokowany: wartość czeka tam do następnego odblokowania pęku kluczy.",
+            "keptOn": "Trzymany w pęku kluczy na {machine} jako {name}. Agent widzi tylko jego nazwę, nigdy wartość.",
+            "waitsForUnlock": "Wysłano na {machine}. Czeka tam do następnego odblokowania pęku kluczy."
         },
         "grant": {
             "withheld": "Ta rozmowa nie ma dostępu do {label}.",

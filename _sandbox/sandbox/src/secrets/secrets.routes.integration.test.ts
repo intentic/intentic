@@ -12,6 +12,8 @@ import { createApp } from "../app.js";
 import { clientFor, errorCode, proven, rejectForbidden } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.testing.js";
+import { fakeDevices, fakeKeyring, pointerOf } from "./device/keyring.testing.js";
+import { secretsSliceFake } from "./secrets-slice.testing.js";
 
 // Drives the secrets routes over the daemon's HTTP surface the way the browser does; fakes and the client are shared
 // from route-services.testing.ts and its siblings.
@@ -158,6 +160,41 @@ test("secrets.setHosts takes the body the secrets CLI sends, and hosts answers t
     expect(await clientFor(app).secrets.hosts()).toEqual({
         guards: [{ subject: "GITHUB_TOKEN", kind: "secret", guard: true, hosts: ["api.github.com"], source: "owner" }],
     });
+});
+
+test("secrets.inventory lists what a computer's keyring shares as device rows, and joins each sandbox secret's program list", async () => {
+    const rog = fakeKeyring([
+        pointerOf("VPN_PASSWORD", { mode: "each-use", programs: ["FortiClient.exe"], packages: ["com.fortinet.forticlient"], hosts: ["vpn.example.com"] }),
+        pointerOf("KEPT_HERE"),
+    ]);
+    const slice = secretsSliceFake(fakeDevices({ rog }));
+    await slice.keyringLink.refresh();
+    const svc = services({ ...slice });
+    const client = clientFor(createApp(svc));
+    // A sandbox secret of the same name as a keyring's entry is the sandbox's: one row, its own.
+    await client.secrets.set({ key: "KEPT_HERE", value: "kept-in-the-sandbox" });
+    await svc.secretProgramGuards.set("KEPT_HERE", { programs: ["mstsc.exe"], packages: [], anyField: false });
+    await svc.secretUses.record({ name: "VPN_PASSWORD", lane: "device", detail: "rog · FortiClient.exe", at: 30 });
+    const { entries } = await client.secrets.inventory();
+    const byKey = new Map(entries.map((entry) => [entry.key, entry]));
+    expect(byKey.get("VPN_PASSWORD")).toEqual({
+        key: "VPN_PASSWORD",
+        kind: "device",
+        status: "set",
+        requiredBy: [],
+        storedAt: "in the keyring on rog",
+        revealable: false,
+        device: { machine: "rog", mode: "each-use", online: true, locked: false, source: "keyring" },
+        hosts: { guard: true, list: ["vpn.example.com"], source: "keyring" },
+        programs: { programs: ["FortiClient.exe"], packages: ["com.fortinet.forticlient"], anyField: false, source: "keyring" },
+        lastUse: { at: 30, lane: "device", detail: "rog · FortiClient.exe" },
+    });
+    expect([byKey.get("KEPT_HERE")?.kind, byKey.get("KEPT_HERE")?.programs]).toEqual(["env", { programs: ["mstsc.exe"], packages: [], anyField: false, source: "owner" }]);
+    expect(entries.filter((entry) => entry.key === "KEPT_HERE")).toHaveLength(1);
+    // Nothing of it is here to show, and the refusal says where it lives.
+    await expect(client.secrets.reveal({ key: "VPN_PASSWORD" })).rejects.toThrow('"VPN_PASSWORD" is kept in the keyring on rog');
+    expect(await errorCode(client.secrets.reveal({ key: "VPN_PASSWORD" }))).toBe("FORBIDDEN");
+    expect(await errorCode(client.secrets.generate({ key: "VPN_PASSWORD" }))).toBe("CONFLICT");
 });
 
 test("secrets.inventory answers pre-scaffold with capability/provider entries only", async () => {

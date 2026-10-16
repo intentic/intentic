@@ -11,10 +11,12 @@
 # extension-manifest → registry → sandbox-contract → extension-api, where extension-api used to come first.
 # base leads the list: it depends on no workspace package, and moving the when-expressions into it made it a
 # runtime dependency of extension-manifest — publishing that one without this one ships a dead specifier.
+# keyring sits just before machine, which depends on it (machine installs and relays to intentic-keyring); its own deps
+# (base, local-agent, sandbox-contract) all come earlier.
 # webq, fileq and the Claude Code plugin close it: fileq depends on webq and on workspace-ignore, and the plugin
 # bundles what it runs, so nothing here depends on them. The three were bootstrapped at 1.317.0 by hand.
 PUB=(_tools/base _tools/constants _tools/agent-cli _shared/sandbox-run _deploy/graph _deploy/resources _deploy/engine _deploy/providers \
-     _shared/extension-manifest _shared/registry _shared/sandbox-contract _shared/extension-api _shared/extension-ui _devices/local-agent _devices/desktop-automation _devices/browser _devices/machine _devices/acp-bridge _sandbox/gate _sandbox/scaffold _deploy/state-resolver _deploy/cli \
+     _shared/extension-manifest _shared/registry _shared/sandbox-contract _shared/extension-api _shared/extension-ui _devices/local-agent _devices/desktop-automation _devices/browser _devices/keyring _devices/machine _devices/acp-bridge _sandbox/gate _sandbox/scaffold _deploy/state-resolver _deploy/cli \
      _shared/workspace-ignore _search/iq-engine _search/iq _deploy/sdk _tools/registry-scan \
      _sandbox/webq _sandbox/fileq _sandbox/claude-plugin)
 

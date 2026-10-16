@@ -1,6 +1,7 @@
 import type { Capability, WebExtFacts, WebExtScopes } from "@intentic/sandbox-contract";
 import { createPeerHub, type PeerDoorDeps } from "../peers/peer-hub.js";
 import { filePeerStore } from "../peers/peer-store.js";
+import { createSecretTickets, type SecretTicketDesk } from "./secret-tickets.js";
 import {
     ownBrowserReach,
     type OwnBrowserReach,
@@ -18,6 +19,9 @@ export interface WebextSlice {
     // Which of the owner's own browsers a turn may work in, and what each of them is, for the same reason hostReach
     // exists: the prompt names the browser in front of the person without the agent importing the webext subsystem.
     readonly webextReach: (granted: readonly Capability[]) => Promise<OwnBrowserReach | undefined>;
+    // A stored secret typed into one of those browsers without the agent seeing it: `typeIn` for the turn's tool, and
+    // the half the browser's own door redeems its ticket through (secret-tickets.ts).
+    readonly secretTickets: SecretTicketDesk;
 }
 
 // Builds the webext slice; its reach reads only the hub it builds, so nothing here waits on the rest of the daemon.
@@ -28,5 +32,7 @@ export const createWebextSlice = ({ historyRoot, logger, peerTools }: PeerDoorDe
         webextHub,
         // Held readings only (webext/webext-peer.ts), like hostReach: a browser that is closed costs the turn nothing.
         webextReach: (granted) => ownBrowserReach({ webextHub }, granted),
+        // Approval cards included, a typing waits as long as any other call to the browser may.
+        secretTickets: createSecretTickets({ hub: webextHub, callTimeoutMs: WEBEXT_PEER.hub.callTimeoutMs }),
     };
 };

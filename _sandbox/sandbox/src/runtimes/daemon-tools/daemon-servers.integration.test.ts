@@ -80,7 +80,7 @@ const NO_BROWSER: BrowserTurnTools = { servers: [], accounts: {}, ports: {}, pas
 const doorFor = (turn: Omit<DaemonServersTurn, "mounted">) => {
     const mounts = createTurnMounts({ baseUrl: () => "http://127.0.0.1:8787/mcp" });
     const lease = mounts.lease("conv-1");
-    const built = daemonServersFor(deps, { ...turn, mounted: { browser: NO_BROWSER, lease } });
+    const built = daemonServersFor(deps, { ...turn, mounted: { browser: NO_BROWSER, desktop: false, lease } });
     const app = new Hono<AppEnv>().all("/mcp/:mount", createTurnMountRoute(mounts, unstubbed<MountEndpoints>("endpoints", { daemon: daemonEndpoint })));
     const token = built.tools[0]?.token ?? "";
     let id = 0;
@@ -129,7 +129,7 @@ test("a persona's powers withhold exactly what they withhold from the Claude loo
     for (const persona of personas) {
         const context = contextOf(cardsAnswering().cards, children);
         const claude = Object.keys(
-            harnessServers(deps, { input, context, persona, browser: NO_BROWSER, secrets: turnSecretAccess(deps, input, context.base.signal), hashlineEdits: false }),
+            harnessServers(deps, { input, context, persona, browser: NO_BROWSER, desktop: false, granted: [], secrets: turnSecretAccess(deps, input, context.base.signal), hashlineEdits: false }),
         );
         const door = doorFor({ input, context, persona, granted: [], settings: SETTINGS });
         // The door adds only what the Claude loop mounts in agent.ts itself (`ui`), never a server the persona was denied.

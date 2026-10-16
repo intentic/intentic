@@ -17,6 +17,7 @@ import { pairingKey, readState } from "./sync/config.js";
 import { existingSyncSessions, runMutagen, syncSessionNames } from "./sync/mutagen.js";
 import { deviceReport, pairedMutagen } from "./sync/report.js";
 import { MACHINE_VERSION } from "./version.js";
+import { keyringLine, keyringStatusLine, type KeyringStatusLine, readKeyringSummary } from "./keyring/keyring-status.js";
 
 // What this machine's agent is doing, both halves in one answer: "is my machine connected" and "is my folder
 // syncing" are one question to the person asking. `--json` emits what the desktop app's tray and its "This
@@ -35,6 +36,8 @@ export interface DeviceStatus {
         readonly pausedAt?: string;
     };
     readonly sync: DeviceReport;
+    // intentic-keyring beside this agent (keyring/keyring-status.ts): installed, running, set up, locked. Never its keys.
+    readonly keyring: KeyringStatusLine;
 }
 
 // One link, as every surface reads it. `state` is what the resident agent last stamped (device/config.ts) and is
@@ -90,12 +93,13 @@ export const statusSummary = (running: number | undefined, links: number, sync: 
 };
 
 export const deviceStatus = async (mutagen: string | undefined): Promise<DeviceStatus> => {
-    const [pid, links, sync, stamped, pausedAt] = await Promise.all([
+    const [pid, links, sync, stamped, pausedAt, keyring] = await Promise.all([
         readResidentPid(),
         readLinks(),
         deviceReport(mutagen),
         readLinkStates(),
         readPausedAt(),
+        readKeyringSummary(),
     ]);
     /* A agent that is not running holds no sockets, so every link is closed and that needs no stamp to know;. */
     const states: readonly (PeerLinkState | undefined)[] = links.map((link) => (pid === undefined ? "closed" : stamped?.[link.sandboxUrl]?.state));
@@ -113,6 +117,7 @@ export const deviceStatus = async (mutagen: string | undefined): Promise<DeviceS
             ...(pausedAt === undefined ? {} : { pausedAt: pausedAt.toISOString() }),
         },
         sync,
+        keyring: keyringStatusLine(keyring),
     };
 };
 
@@ -400,6 +405,10 @@ export const status = buildCommand<StatusFlags>({
         if (report.device.links.length === 0 && report.sync.pairings.length === 0) {
             // Both halves arrive from a card in a sandbox's chat, which is the only thing to do next.
             ui.quiet("Nothing is connected. Connect this device from a card in a sandbox's chat.");
+            // A keyring set up before anything was linked is still this device's to report.
+            if (report.keyring.installed) {
+                ui.items([keyringLine(report.keyring)]);
+            }
             return;
         }
         // A log has no header, so the summary and the version lead it there.
@@ -411,6 +420,8 @@ export const status = buildCommand<StatusFlags>({
         const agent = agentItem(report.sync.agent, Date.now());
         const skew = buildSkewItem(report.sync);
         ui.items(skew === undefined ? [agent] : [agent, skew]);
+        // The keyring's one row, beside the agent's: a process of its own, alive or not on its own.
+        ui.items([keyringLine(report.keyring)]);
         const why = agentNote(report.sync.agent, Date.now());
         if (why !== undefined) {
             ui.note(why);

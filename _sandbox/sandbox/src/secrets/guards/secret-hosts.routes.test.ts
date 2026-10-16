@@ -1,13 +1,14 @@
 import type { Capability } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
-import type { OrpcContext } from "../app-env.js";
-import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.testing.js";
-import { errorCode, rejectForbidden } from "../harness/route-client.testing.js";
-import type { WidenRequest, WidenVerdict } from "./gates/host-guard-gate.js";
+import type { OrpcContext } from "../../app-env.js";
+import { memoryCapabilitiesStore } from "../../capabilities/capabilities-slice.testing.js";
+import { errorCode, rejectForbidden } from "../../harness/route-client.testing.js";
+import type { WidenRequest, WidenVerdict } from "../gates/host-guard-gate.js";
 import { effectiveHostGuards } from "./host-guards.js";
 import { createSecretHostRoutes, type SecretHostRoutesDeps } from "./secret-hosts.routes.js";
-import { secretsSliceFake } from "./secrets-slice.testing.js";
+import { fakeDevices, fakeKeyring, type FakeKeyring, pointerOf } from "../device/keyring.testing.js";
+import { secretsSliceFake } from "../secrets-slice.testing.js";
 
 // Who may change a secret's host guard turns on the change, not a role: turning it on or taking hosts off it is open to
 // every caller the route admits; turning it off or adding a host is the owner's, asked for on a card when the agent's
@@ -26,14 +27,16 @@ const setup = (options: {
     readonly owner: boolean;
     readonly defaults?: ReadonlyMap<string, readonly string[]>;
     readonly widen?: WidenVerdict;
+    readonly keyrings?: Readonly<Record<string, FakeKeyring>>;
 }): Setup => {
-    const slice = secretsSliceFake();
+    const slice = secretsSliceFake(fakeDevices(options.keyrings ?? {}));
     const widened: WidenRequest[] = [];
     const deps: SecretHostRoutesDeps = {
         auth: options.owner ? undefined : unstubbed<NonNullable<SecretHostRoutesDeps["auth"]>>("auth", { authorizeOwner: rejectForbidden }),
         capabilities: memoryCapabilitiesStore([github]),
         secretRegistry: async () => [{ name: "GITHUB_TOKEN", value: "ghp_value", source: "sandbox" }],
         secretHostGuards: slice.secretHostGuards,
+        deviceSecrets: slice.deviceSecrets,
         hostGuards: async () => effectiveHostGuards(await slice.secretHostGuards.list(), options.defaults ?? new Map()),
         hostGuardGate: unstubbed<SecretHostRoutesDeps["hostGuardGate"]>("hostGuardGate", {
             widen: async (request) => {
@@ -159,4 +162,13 @@ test("a name that is neither a stored secret nor a connected account is not foun
             call(routes.setHosts, { subject: "GITHUB_TOKEN", kind: "capability", guard: true, hosts: ["api.example.com"] }, { context: signedIn }),
         ),
     ).toBe("NOT_FOUND");
+});
+
+test("a name only a computer's keyring holds keeps its hosts there, and is refused here with where to change them", async () => {
+    const { routes, slice } = setup({ owner: true, keyrings: { rog: fakeKeyring([pointerOf("VPN_PASSWORD", { hosts: ["vpn.example.com"] })]) } });
+    await slice.keyringLink.refresh();
+    await expect(call(routes.setHosts, { subject: "VPN_PASSWORD", guard: false, hosts: [] }, { context: signedIn })).rejects.toThrow(
+        "VPN_PASSWORD is kept in the keyring on rog, which keeps its host list: change it on rog: intentic-machine keyring edit VPN_PASSWORD",
+    );
+    expect(await slice.secretHostGuards.list()).toEqual([]);
 });

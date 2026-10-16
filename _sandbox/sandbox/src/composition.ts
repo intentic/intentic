@@ -586,6 +586,13 @@ const codexRolloutRemover =
     (threadId: string): Promise<void> =>
         removeCodexRollout(join(authRoot, "codex"), threadId);
 
+// What the keyrings on the owner's computers are reached through: the device hub, composed after the secrets slice and so
+// read at each call, and the address the computers paired with, which every grant the sandbox signs names.
+const keyringReach = (whole: () => Services, config: Config) => ({
+    deviceHub: () => whole().hostHub,
+    publicUrl: () => config.sandbox.publicUrl,
+});
+
 export const createServices = (config: Config, logger: Logger): Services => {
     // The one late binding left. A few services do work that reaches back into most of the daemon (a turn, a land's
     // breakage route, the provider catalogs, the safety judge, filing a browser account, a host's reach); they read the
@@ -664,6 +671,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         members: authSlice.members,
         conversationEntry: agents.entry,
         warn: (message, error) => logger.warn({ err: error }, message),
+        ...keyringReach(whole, config),
+        logger,
     });
     // The credential gateway's signing key, the owner's per-card policy, and the passes its `ask` rules leave.
     const brokerSlice = createBrokerSlice({

@@ -9,7 +9,7 @@ import { collectSecretInventory, ENV_FILE, SECRETS_FILE } from "@intentic/scaffo
 import { secretField } from "../capabilities/summary.js";
 import { lastUseByName, type SecretUse } from "./secret-uses.js";
 import { contributionRegistry } from "../capabilities/contributions.js";
-import type { CredentialGate, CredentialPolicy, SecretInventoryEntry } from "@intentic/sandbox-contract";
+import type { CredentialGate, CredentialPolicy, SecretInventoryEntry, SecretProgramGuard } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Caller } from "../auth/auth.js";
 import { ensureMaintainer, ensureOwner } from "../auth/owner-gates.js";
@@ -20,8 +20,12 @@ import { stateRelPath } from "../state-paths.js";
 import { envKeys, removeEnv, upsertEnv } from "./env-text.js";
 import { sandboxSecretsDocument } from "./sandbox-secrets.js";
 import { randomSecret } from "./random-secret.js";
-import { guardForEntry } from "./host-guards.js";
-import { createSecretHostRoutes } from "./secret-hosts.routes.js";
+import { guardForEntry } from "./guards/host-guards.js";
+import { createSecretHostRoutes } from "./guards/secret-hosts.routes.js";
+import { createSecretProgramRoutes } from "./guards/secret-programs.routes.js";
+import { createDeviceSecretRoutes } from "./device/device-secrets.routes.js";
+import { deviceInventoryEntry } from "./device/device-secrets.js";
+import type { DevicePointer } from "./device/keyring-link.js";
 import { createCredentialPolicyRoutes, credentialPolicies } from "../capabilities/broker/broker-policy.routes.js";
 import { type TextFile, textFile } from "../store/plain-files/text-file.js";
 
@@ -46,6 +50,35 @@ const lastUseFor = (entry: Pick<SecretInventoryEntry, "key" | "kind">, lastByNam
     }
     return newest;
 };
+
+// A name nothing here holds, and the computer whose keyring holds it, if one does.
+const keptOnDevice = async (services: Pick<SecretsRoutesDeps, "deviceSecrets">, key: string): Promise<string | undefined> =>
+    // allow(silent-catch): an unreadable list of keyring entries only loses the hint of where the name lives; it is not found here either way.
+    (await services.deviceSecrets.listed().catch(() => [])).find((entry) => entry.pointer.name === key)?.machine;
+
+// Refused with where it lives when a computer's keyring holds it, since there is no value in this sandbox to show.
+const notFound = async (services: Pick<SecretsRoutesDeps, "deviceSecrets">, key: string): Promise<ORPCError<string, unknown>> => {
+    const machine = await keptOnDevice(services, key);
+    return machine === undefined
+        ? new ORPCError("NOT_FOUND", { message: `no secret named "${key}"` })
+        : new ORPCError("FORBIDDEN", {
+              message: `"${key}" is kept in the keyring on ${machine}: this sandbox holds only a pointer to it, so there is no value here to show. See it on that computer: intentic-machine keyring list.`,
+          });
+};
+
+// A display surface, like the rest of the inventory: keyrings that cannot be listed cost their rows, said in the log.
+const deviceRowsOf = async (services: Pick<SecretsRoutesDeps, "deviceSecrets" | "logger">): Promise<readonly DevicePointer[]> =>
+    services.deviceSecrets.listed().catch((error: Error) => {
+        services.logger.warn({ err: error }, "secrets inventory: the keyrings' entries could not be listed");
+        return [];
+    });
+
+// A sandbox-held secret's program guard, where the owner set one; a keyring's row carries its keyring's own list.
+const withPrograms = (entries: readonly SecretInventoryEntry[], guards: readonly SecretProgramGuard[]): SecretInventoryEntry[] =>
+    entries.map((entry) => {
+        const guard = entry.kind === "env" || entry.kind === "generated" ? guards.find((candidate) => candidate.subject === entry.key) : undefined;
+        return guard === undefined ? entry : { ...entry, programs: { programs: guard.programs, packages: guard.packages, anyField: guard.anyField, source: "owner" } };
+    });
 
 // User-supplied secrets go to desired-state/.env (mode 0600) once DevOps has scaffolded that repo, and to the sandbox's
 // own store (sandbox-secrets.ts) before it; reveal reads both, and inventory always answers. Every set/remove fires a best-effort `deploy secrets push` for the CI
@@ -117,6 +150,10 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
     return {
         // Where each secret may be sent: its own module, since who may change a list turns on more than a role.
         ...createSecretHostRoutes(services),
+        // Which programs each may be typed into, the host guard's counterpart for windows (secret-programs.routes.ts).
+        ...createSecretProgramRoutes(services),
+        // The owner's own doors to the keyrings on their computers: Type into…, the keyrings, and pairing two of them.
+        ...createDeviceSecretRoutes(services),
         // How each connection's credential reaches the agent and what it may do there (broker/broker-policy.routes.ts).
         ...createCredentialPolicyRoutes(services),
         // With DevOps, into desired-state/.env, which deploys and the CI copy read; without it, into the sandbox's own
@@ -138,6 +175,12 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             if ((await services.secretRegistry()).some((secret) => secret.name === input.key)) {
                 throw new ORPCError("CONFLICT", {
                     message: `"${input.key}" is already stored: use it as it is, or pick a name nothing here holds. A new value would break whatever reads the old one.`,
+                });
+            }
+            const machine = await keptOnDevice(services, input.key);
+            if (machine !== undefined) {
+                throw new ORPCError("CONFLICT", {
+                    message: `"${input.key}" is kept in the keyring on ${machine}: use it as it is, or pick another name. One stored here would be used in its place.`,
                 });
             }
             const value = randomSecret(input.bytes, input.format);
@@ -166,7 +209,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             return { ok: true } as const;
         }),
         inventory: i.inventory.handler(async ({ context }) => {
-            const [repoEntries, capabilities, connectors, providerEntries, uses, gates, kept, hostGuards, policies] = await Promise.all([
+            const [repoEntries, capabilities, connectors, providerEntries, uses, gates, kept, hostGuards, policies, onDevices, programGuards] = await Promise.all([
                 // A display surface: one unparseable repo file costs its own rows, said in the log, not the whole panel.
                 existsSync(desiredState())
                     ? collectSecretInventory(desiredState()).catch((error: unknown) => {
@@ -191,6 +234,10 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                 services.hostGuards().catch(() => [] as const),
                 // How each connection's credential reaches the agent; display only, the gateway reads its own.
                 credentialPolicies(services, services.credentialPolicy).catch((): ReadonlyMap<string, CredentialPolicy> => new Map()),
+                // What the keyrings on the owner's computers share here, from memory; an offline computer's rows stay.
+                deviceRowsOf(services),
+                // Display only, like the host guards: an unreadable file shows no lists, while every typing still asks.
+                services.secretProgramGuards.list().catch(() => [] as const),
             ]);
             const capabilityEntries: SecretInventoryEntry[] = capabilities
                 .filter((capability) => secretField(capability, connectors) !== undefined)
@@ -251,7 +298,11 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                     storedAt: stateRelPath(".intentic/secrets/auth/", sandboxSecretsDocument.path),
                     revealable: true,
                 }));
-            return { entries: [...repoEntries, ...keptEntries, ...capabilityEntries, ...providerEntries].map(withUse) };
+            const ownRows = [...repoEntries, ...keptEntries, ...capabilityEntries, ...providerEntries];
+            // One row per key: a name a row above already lists is the sandbox's, whatever a keyring shares under it.
+            const listedKeys = new Set(ownRows.map((entry) => entry.key));
+            const deviceRows = onDevices.filter((entry) => !listedKeys.has(entry.pointer.name)).map(deviceInventoryEntry);
+            return { entries: [...withPrograms(ownRows, programGuards), ...deviceRows].map(withUse) };
         }),
         reveal: i.reveal.handler(async ({ input, context }) => {
             noteAudit({ target: input.key });
@@ -273,7 +324,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                 return { value: keptValue };
             }
             if (!devopsActive()) {
-                throw new ORPCError("NOT_FOUND", { message: `no secret named "${input.key}"` });
+                throw await notFound(services, input.key);
             }
             const envValue = parseEnv(await read())[input.key];
             if (typeof envValue === "string") {
@@ -285,7 +336,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             if (typeof generatedValue === "string") {
                 return { value: generatedValue };
             }
-            throw new ORPCError("NOT_FOUND", { message: `no secret named "${input.key}"` });
+            throw await notFound(services, input.key);
         }),
         // Subjects and approvers only, never a value; the agent's own token can reach this so it can tell "not
         // connected" from "needs Bob". Unreadable is an error here, not an empty list, unlike the inventory join.
@@ -316,8 +367,9 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                 await services.credentialGates.set(gate);
                 return { ok: true } as const;
             }
+            // A keyring's entry is gated like a stored secret: the gate runs before its computer is ever asked.
             const registry = await services.secretRegistry();
-            if (!registry.some((secret) => secret.name === input.subject)) {
+            if (!registry.some((secret) => secret.name === input.subject) && (await keptOnDevice(services, input.subject)) === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: `no stored secret named "${input.subject}"` });
             }
             await guardApprovers(input.approvers);
@@ -335,7 +387,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
         request: i.request.handler(async ({ input, context, signal }) => {
             const gate = await services.credentialGates.list().then(
                 (gates) => gates.find((entry) => entry.subject === input.subject),
-                (error: unknown) => {
+                (error: Error) => {
                     throw new ORPCError("INTERNAL_SERVER_ERROR", { message: errorMessage(error), cause: error });
                 },
             );

@@ -1081,7 +1081,8 @@
             "viaSshAgent": "vom SSH-Agenten der Sandbox signiert für",
             "usedByAgent": "vom Agenten benutzt",
             "value": "Wert",
-            "whoRelease": "Wer es freigeben kann"
+            "whoRelease": "Wer es freigeben kann",
+            "typedOnDesktop": "auf dem Desktop der Sandbox getippt"
         },
         "secretField": {
             "as": "als",
@@ -1121,6 +1122,66 @@
             "connect": "{id} verbinden",
             "preparingOneTimeConnection": "Ein Einmal-Verbindungscode wird vorbereitet…",
             "onceConnectedAgentMay": "Einmal verbunden, darf der Agent:"
+        },
+        "keyring": {
+            "modeEachUse": "fragt jedes Mal",
+            "modeWhileHere": "solange du am Computer bist",
+            "modeCopy": "Kopie liegt hier",
+            "modeEachUseExplained": "Jede Verwendung fragt dich zuerst auf {machine}, mit Windows Hello oder der Passphrase des Schlüsselbunds.",
+            "modeWhileHereExplained": "Wird ohne Nachfrage verwendet, solange der Schlüsselbund auf {machine} entsperrt ist. Gesperrt fragt jede Verwendung dort.",
+            "modeCopyExplained": "Eine Kopie liegt auch in dieser Sandbox, also klappt es, wenn {machine} aus ist. Dann gelten die Schutzregeln dieser Sandbox.",
+            "offline": "offline",
+            "locked": "gesperrt",
+            "unlocked": "entsperrt"
+        },
+        "secretPrograms": {
+            "title": "Programmschutz",
+            "explain": "In ein Fenster auf einem deiner Computer getippt, geht es ohne Nachfrage nur in diese Programme und Apps, und nur in ein Passwortfeld, außer jedes Feld ist erlaubt. Überall sonst wird zuerst die Person an diesem Computer gefragt.",
+            "everyTypingAsks": "Kein Programm ist eingetragen, also fragt jedes Tippen in ein Fenster zuerst.",
+            "everyTypingAsksReadOnly": "Jedes Tippen in ein Fenster fragt zuerst. Nur der Eigentümer kann das ändern.",
+            "onlyIntoReadOnly": "Ohne Nachfrage nur in {programs} getippt, überall sonst wird zuerst gefragt. Nur der Eigentümer kann das ändern.",
+            "anyFieldReadOnly": "Es darf in jedes Feld, nicht nur in Passwortfelder.",
+            "notAProgram": "Das ist kein Programm. Schreib seinen Dateinamen, etwa FortiClient.exe, oder seinen ganzen Pfad.",
+            "notAPackage": "Das ist keine Android-App. Schreib ihren Paketnamen, etwa com.fortinet.forticlient.",
+            "couldNotSave": "Der Programmschutz konnte nicht gespeichert werden.",
+            "remove": "{program} entfernen",
+            "programPlaceholder": "FortiClient.exe oder ein ganzer Pfad",
+            "addProgram": "Programm hinzufügen",
+            "packagePlaceholder": "com.fortinet.forticlient",
+            "addPackage": "Android-App hinzufügen",
+            "anyField": "Jedes Feld",
+            "anyFieldNote": "Auch in Felder, die nicht als Passwortfeld markiert sind und das Getippte auf dem Bildschirm zeigen."
+        },
+        "typeInto": {
+            "title": "Tippen in…",
+            "tooltipNote": "Auf einem deiner Computer",
+            "noneOnlineShort": "Kein Computer antwortet",
+            "noneOnline": "Gerade antwortet kein Computer mit Schlüsselbund. Starte dort den Intentic-Agenten und versuch es noch einmal.",
+            "which": "Welcher Computer",
+            "wait": "Warten vor dem Tippen",
+            "seconds": "{seconds} s",
+            "explain": "Drück Tippen und setz dann den Cursor auf {machine} dorthin, wo es hingehört. Es wird nach {seconds} s getippt.",
+            "counting": "Tippe auf {machine} in {seconds} s. Setz den Cursor dorthin, wo es hingehört.",
+            "typing": "Tippe auf {machine}. Fragt es dort, bestätige an diesem Computer.",
+            "typedPassword": "In {program} getippt, Passwortfeld.",
+            "typedText": "In {program} getippt, Textfeld.",
+            "asked": "Zuerst auf {machine} bestätigt.",
+            "couldNotType": "Konnte es auf {machine} nicht tippen.",
+            "type": "Tippen",
+            "again": "Noch einmal tippen"
+        },
+        "secretDevice": {
+            "heading": "Auf deinem Computer",
+            "keptOn": "Liegt im Schlüsselbund auf {machine}, hier geteilt: {mode}. Diese Sandbox hält nur einen Verweis darauf.",
+            "standing": "{machine} ist gerade {standing}.",
+            "readFrom": "Sein Wert wird bei jeder Verwendung aus {source} gelesen.",
+            "typedInto": "Ohne Nachfrage nur in {programs} getippt.",
+            "everyTypingAsks": "Jedes Tippen in ein Fenster fragt zuerst auf {machine}.",
+            "anyField": "Es darf in jedes Feld.",
+            "passwordFieldOnly": "Nur in ein Passwortfeld.",
+            "hosts": "Seiten, zu denen es darf: {hosts}.",
+            "changeOn": "Ändern auf {machine}:",
+            "copyCommand": "Befehl kopieren"
         }
     },
     "chat": {
@@ -3735,7 +3796,8 @@
             "requiredByIntent": "Von Ihrer Absicht verlangt",
             "secrets": "Ihre Geheimnisse",
             "sessionOrSigningKeys": "Sitzungs- oder Signaturschlüssel",
-            "showMoreAccounts": "{collapsedCredentialCount} weitere Konten zeigen"
+            "showMoreAccounts": "{collapsedCredentialCount} weitere Konten zeigen",
+            "onYourComputers": "Auf deinen Computern"
         },
         "sandboxStorageCard": {
             "changedTodayOrInUse": "Heute geändert oder in Gebrauch",
@@ -4732,6 +4794,30 @@
             "turnsOffHow": "Schalte sie wieder ein, um zu sehen, was den Agenten geweckt hat und wie jeder Durchlauf lief:",
             "commandsSettings": "Ob der Richter läuft, und woran er prüft:",
             "personalSettings": "Wonach der Schild sucht, und welchen Anbietern er vertraut:"
+        },
+        "secretRows": {
+            "offline": "Offline",
+            "locked": "Gesperrt",
+            "ready": "Bereit",
+            "offlineNote": "{machine} ist offline: nicht nutzbar, bis er antwortet",
+            "lockedNote": "{machine} ist gesperrt: jede Verwendung fragt dort"
+        },
+        "keyrings": {
+            "title": "Schlüsselbunde auf deinen Computern",
+            "offline": "Offline",
+            "locked": "Gesperrt",
+            "unlocked": "Entsperrt",
+            "shared": "Hier geteilt: {count}",
+            "pendingInbox": "Wartet auf die nächste Entsperrung: {count}",
+            "pairedWith": "Gekoppelt mit {peers}",
+            "pair": "Koppeln",
+            "pairLead": "Koppel zwei Schlüsselbunde, damit beide dieselben Passwörter halten. Jeder Computer fragt dich zuerst und zeigt beide Fingerabdrücke.",
+            "pairWhich": "Welche zwei Computer",
+            "pairThese": "Diese zwei koppeln",
+            "confirmOnBoth": "Bestätige auf beiden Computern. Jede Abfrage zeigt zwei Fingerabdrücke.",
+            "paired": "{a} und {b} gekoppelt.",
+            "compare": "Die Abfrage auf jedem Computer zeigt diese zwei Fingerabdrücke. Sag nur dort ja, wo sie übereinstimmen.",
+            "couldNotPair": "Die zwei Schlüsselbunde konnten nicht gekoppelt werden."
         }
     },
     "settings": {
@@ -6521,6 +6607,17 @@
     "needs": {
         "release": {
             "approversOnly": "Nur Freigebende"
+        },
+        "secret": {
+            "keepInSandbox": "In der Sandbox aufbewahren",
+            "keepOnComputer": "Auf meinem Computer aufbewahren",
+            "whichComputer": "Welcher Computer",
+            "modeEachUse": "Jedes Mal fragen",
+            "modeWhileHere": "Solange ich am Computer bin",
+            "modeCopy": "Kopie hier aufbewahren",
+            "lockedThere": "{machine} ist gesperrt: der Wert wartet dort, bis sein Schlüsselbund das nächste Mal entsperrt wird.",
+            "keptOn": "Liegt im Schlüsselbund auf {machine} als {name}. Der Agent sieht nur den Namen, nie den Wert.",
+            "waitsForUnlock": "An {machine} geschickt. Er wartet dort, bis der Schlüsselbund das nächste Mal entsperrt wird."
         }
     },
     "local": {

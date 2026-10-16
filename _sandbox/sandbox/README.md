@@ -21,10 +21,22 @@ flowchart LR
 - Two roots: `/work` is what agents edit; `/history` is the daemon's own (git dirs, worktrees, the conversation
   database, snapshots, logs) and sits outside `/work`.
   It is not out of an agent's reach: an unfenced agent runs as root in the default agent domain and can write it.
-- The auth-root JSON stores for sandbox secrets, capability credentials, extension credentials, and privacy tokens can
-  be encrypted at rest by setting `INTENTIC_AT_REST_KEY_FILE` to a mounted key file. `/health.atRestEncryption`
-  reports whether this is active and names those four stores and provider account files. Existing plain files are encrypted at boot; every write
-  uses a fresh AES-256-GCM nonce. With no key configured, these files keep their original plain format.
+- The auth-root JSON stores for sandbox secrets, capability credentials, extension credentials, and privacy tokens are
+  encrypted at rest when `INTENTIC_AT_REST_KEY_FILE` names a mounted key file, which `ic` mounts for every sandbox it
+  sets up or recreates (one key per sandbox, kept in `~/.intentic/keys/` on the host; `INTENTIC_AT_REST=off` opts out).
+  `/health.atRestEncryption` reports whether this is active and names those four stores and provider account files.
+  Existing plain files are encrypted at boot; every write uses a fresh AES-256-GCM nonce. With no key configured, these
+  files keep their original plain format.
+- A secret can live in a keyring on the owner's own computer (`intentic-keyring`, [../../_devices/keyring](../../_devices/keyring))
+  instead: the sandbox holds a pointer to each entry shared with it (`secrets/device/`), resolves a `{{secret:NAME}}`
+  reference to it like any stored name, and asks that computer for a value one use at a time, after the gates and the
+  host guard, with a grant signed by its own keyring keys (public halves served at `GET /keyring/keys`). A released
+  value is kept only to mask, so every use asks again; an entry shared in `copy` mode is kept here as an ordinary secret.
+- `mcp__secrets__type_secret` (`browser/tools/secrets-tools.ts`, `secret-typing.ts`) types a secret without the agent
+  seeing it into whichever of these the turn mounted: a sandbox browser's page, the sandbox's desktop (xdotool reading
+  the value on stdin, only into a program on the secret's list), the focused window on one of the owner's computers or
+  an app on a phone attached to one (typed by that computer's keyring, which checks the window), and a page in the
+  owner's own browser (a one-time ticket the extension redeems at `POST /system/webext/secret`).
 - The audit trail (`audit/`, `/history/audit/`): who changed a setting, a member, an area, a secret's gate or a policy,
   who signed in, what was exported or deleted, and with `settings.audit.recordReads` who opened what. One middleware
   records by contract route name (`audit/audit-http.ts`); another module calls `services.audit.record({ actor, action,

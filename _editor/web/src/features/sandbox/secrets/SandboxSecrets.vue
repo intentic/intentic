@@ -25,6 +25,8 @@ import { untilResult } from "../../../lib/intenticStream";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSecretInventory } from "../../capabilities/connect/secrets/useSecrets";
+import { useKeyrings } from "../../capabilities/connect/secrets/useKeyrings";
+import SecretKeyrings from "./SecretKeyrings.vue";
 import { useOperation } from "../../../workbench/operations/operations";
 import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./secretRows";
 import { useT } from "@intentic/ui/i18n";
@@ -80,6 +82,10 @@ const required = computed(() => held(`required`));
 const yours = computed(() => held(`yours`));
 const generated = computed(() => held(`generated`));
 const credentials = computed(() => held(`credential`));
+// Kept in a keyring on one of the owner's computers: this sandbox holds a pointer, so they are a group of their own.
+const onComputers = computed(() => held(`device`));
+// The keyrings themselves, beside the secrets they hold: not secrets, so a filter folds them away.
+const { keyrings } = useKeyrings();
 
 // Empty groups keep their informative note at rest, but drop out entirely while filtering.
 const groupVisible = (list: readonly SecretRow[]): boolean => !filtering.value || list.length > 0;
@@ -314,6 +320,17 @@ const pushToCi = async (): Promise<void> => {
                         </div>
                     </RowNote>
                 </RowGroup>
+
+                <RowGroup v-if="onComputers.length > 0 && groupVisible(onComputers)" :label="t(`sandbox.sandboxSecrets.onYourComputers`)">
+                    <SecretEntryRow
+                        v-for="row in onComputers"
+                        :key="row.entry.key"
+                        :row="row"
+                        :expanded="opened === row.entry.key"
+                        @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
+                    />
+                </RowGroup>
+                <SecretKeyrings v-if="keyrings.length > 0 && !filtering" />
 
                 <RowGroup
                     v-if="devopsActive && groupVisible(generated)"
