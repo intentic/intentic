@@ -32,6 +32,9 @@ const POSTGRES_IMAGE = `postgres:18.6-alpine3.24@sha256:77f585114c32fbca283dc835
 
 // Not secrets: this database exists for the length of one run, on a network of its own.
 const DB = { user: `app`, password: `app`, name: `app` } as const;
+// The same database is why the api migrates it without its pre-migration dump: nothing to keep one of, and no /backups
+// volume to write it to, where the image's boot refuses to migrate unless told.
+const MIGRATE_WITHOUT_BACKUP = `1`;
 
 // Trial switch: any non-empty value turns it on; off by default, so without this every model list is empty.
 const TRIAL_KEY = `onboarding-trial-key`;
@@ -205,13 +208,13 @@ export const startWorld = async (): Promise<World> => {
                 TRIAL_KEYS: TRIAL_KEY,
                 TRIAL_BASE_URL: `http://upstream:8099/v1beta/openai`,
                 TRIAL_MODELS: TRIAL_MODEL,
-                // Reachability: lets the wizard mint a setup code. Platform signs, box carries the grant, nothing is
-                // called.
+                // Reachability: lets the wizard mint a setup code; the platform signs, the box carries the grant.
                 INGRESS_SIGNING_KEY,
                 INGRESS_URL,
                 INGRESS_ZONE: SANDBOX_ZONE,
                 // SECRETS_KEY stays unset, so a sandbox's connect token is stored in plain text and read back directly.
                 LOG_PRETTY: `false`,
+                MIGRATE_WITHOUT_BACKUP,
                 // Api serves its own TLS, as a dev run does; nothing verifies this pair.
                 API_HTTPS_KEY: `/tls/key.pem`,
                 API_HTTPS_CERT: `/tls/cert.pem`,

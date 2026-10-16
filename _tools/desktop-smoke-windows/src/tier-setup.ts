@@ -22,6 +22,10 @@ export interface SetupTierOptions {
 // Before ic's first release, CI cross-builds it from this checkout, passed in via IC_BIN, the shim's override.
 const SETUP_TIMEOUT_MS = 30 * 60 * 1_000;
 
+// This tier is the Docker Desktop PC: a new setup on Windows goes onto Intentic's engine (ic's engine/choice.rs), which
+// the engine tier covers, so every ic run here, connect.ps1's included, is pointed at Docker Desktop the one way ic takes.
+const ON_DOCKER_DESKTOP = { IC_ENGINE: `docker-desktop` } as const;
+
 export const runSetupTier = async (harness: Harness, options: SetupTierOptions): Promise<string | undefined> => {
     const installed = await findInstalledApp(PRODUCT_NAME);
     if (installed === undefined) {
@@ -60,11 +64,10 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
     }
     harness.pass(`the daemon runs linux containers`);
 
-    // `ic docker prepare` reads Windows-only facts (WMI, services, registry, wsl --status) nothing before this line has
-    // run, since the binary is cross-built on Linux. --dry-run here should find nothing wrong.
+    // ic is cross-built on Linux, so this is the first run of its Windows probes (WMI, registry, wsl): expect no findings.
     if (options.icBin !== undefined) {
         harness.section(`ic docker prepare (read-only)`);
-        const prepared = await run(options.icBin, [`docker`, `prepare`, `--dry-run`], { timeoutMs: 120_000 });
+        const prepared = await run(options.icBin, [`docker`, `prepare`, `--dry-run`], { timeoutMs: 120_000, env: ON_DOCKER_DESKTOP });
         if (prepared.code === 0) {
             harness.pass(`it finds this PC ready`);
         } else {
@@ -81,7 +84,7 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
         const NEEDS_CONSENT = 3;
         const asked = await run(options.icBin, [`docker`, `prepare`], {
             timeoutMs: 120_000,
-            env: { INTENTIC_NO_PROMPT: `1` },
+            env: { ...ON_DOCKER_DESKTOP, INTENTIC_NO_PROMPT: `1` },
         });
         if (asked.code === 0 || asked.code === NEEDS_CONSENT) {
             harness.pass(`it answers rather than waiting for a question nobody can hear (exit ${asked.code})`);
@@ -97,6 +100,7 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
     // run the setup the app would run
     harness.section(`the shipped connect.ps1 (image: ${options.sandboxImage})`);
     const env: Record<string, string> = {
+        ...ON_DOCKER_DESKTOP,
         CONNECT_TOKEN,
         SANDBOX_GRANT,
         INGRESS_URL,
