@@ -116,6 +116,49 @@ export const allowShown = (allow: readonly string[], query: string): string[] =>
     return allow.filter((value) => wanted === `` || allowKey(value).includes(wanted)).toReversed();
 };
 
+export interface MarkedPart {
+    readonly text: string;
+    readonly hit: boolean;
+}
+
+// A value cut where the query falls in it, read as allowShown reads both (case aside, a run of whitespace as one
+// space), so the part that made it match can be drawn lit. Each folded character remembers the span of the value it
+// came from, which is what lets "ACME l" light "Acme  l" across the doubled space. A value whose spelling cannot be
+// lined up with its folded form (a decomposed accent) is drawn unlit rather than lit in the wrong place.
+export const allowMarked = (value: string, query: string): MarkedPart[] => {
+    const wanted = allowKey(query);
+    let folded = ``;
+    const spans: (readonly [number, number])[] = [];
+    let index = 0;
+    for (const char of value) {
+        const end = index + char.length;
+        if (/\s/u.test(char)) {
+            if (!folded.endsWith(` `)) {
+                folded += ` `;
+                spans.push([index, end]);
+            }
+        } else {
+            const lower = char.toLowerCase();
+            folded += lower;
+            for (let unit = 0; unit < lower.length; unit++) {
+                spans.push([index, end]);
+            }
+        }
+        index = end;
+    }
+    const at = wanted === `` ? -1 : folded.indexOf(wanted);
+    const first = spans[at];
+    const last = spans[at + wanted.length - 1];
+    if (first === undefined || last === undefined) {
+        return [{ text: value, hit: false }];
+    }
+    return [
+        { text: value.slice(0, first[0]), hit: false },
+        { text: value.slice(first[0], last[1]), hit: true },
+        { text: value.slice(last[1]), hit: false },
+    ].filter((part) => part.text !== ``);
+};
+
 export interface FoundPart {
     readonly kind: PersonalDataClass;
     readonly count: number;

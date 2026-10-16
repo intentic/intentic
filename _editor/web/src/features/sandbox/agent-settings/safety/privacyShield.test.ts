@@ -15,6 +15,7 @@ import {
     allowEdited,
     allowKey,
     allowListProblem,
+    allowMarked,
     allowRemoving,
     allowShown,
     allowValuesFrom,
@@ -119,6 +120,25 @@ describe(`the allow list`, () => {
     it(`draws the newest first, narrowed by a query read as the shield reads values`, () => {
         expect(allowShown([`Acme`, `Intentic`, `acme labs`], ``)).toEqual([`acme labs`, `Intentic`, `Acme`]);
         expect(allowShown([`Acme`, `Intentic`, `acme  labs`], `ACME l`)).toEqual([`acme  labs`]);
+    });
+
+    it(`lights the part of a value the query matched, read the way the list is narrowed`, () => {
+        expect(allowMarked(`build.Acme-Labs.dev`, `ACME-LABS`)).toEqual([
+            { text: `build.`, hit: false },
+            { text: `Acme-Labs`, hit: true },
+            { text: `.dev`, hit: false },
+        ]);
+        expect(allowMarked(`Acme  Labs`, ` acme l `)).toEqual([
+            { text: `Acme  L`, hit: true },
+            { text: `abs`, hit: false },
+        ]);
+        expect(allowMarked(`Acme`, `acme`)).toEqual([{ text: `Acme`, hit: true }]);
+    });
+
+    it(`draws a value whole and unlit when there is no query, no match, or no way to line the match up`, () => {
+        expect(allowMarked(`Acme`, `  `)).toEqual([{ text: `Acme`, hit: false }]);
+        expect(allowMarked(`Acme`, `zeta`)).toEqual([{ text: `Acme`, hit: false }]);
+        expect(allowMarked(`Jose\u0301`, `jos\u00e9`)).toEqual([{ text: `Jose\u0301`, hit: false }]);
     });
 
     it(`names a value too long for the contract, and a list too long for it`, () => {
