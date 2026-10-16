@@ -412,11 +412,12 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                         </template>
                         <template #actions>
                             <template v-if="lane.key === 'finished' && !view.archive">
-                                <!-- The expanded lane's fold, pinned with the header: the tail row's twin sits a long scroll down. -->
+                                <!-- The expanded lane's fold, pinned with the header: the tail row's twin sits a long scroll down. Sized as the
+                                     archive counter beside it (20px), so the header's chips read as one set. -->
                                 <button
                                     v-if="view.all && !filtering && hiddenFinished > 0"
                                     type="button"
-                                    class="ui-chip shrink-0 gap-1"
+                                    :class="ui.chip({}, `shrink-0 gap-1 px-2 py-px`)"
                                     :aria-label="t(`ui.action.showFewer`)"
                                     @click="toggleFinished"
                                 >
