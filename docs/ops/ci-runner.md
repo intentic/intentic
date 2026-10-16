@@ -45,7 +45,7 @@ Runners are not ephemeral. Fleet checkouts use `clean: false` to keep `node_modu
 | `actions-work-N/.pnpm-store` | the janitor, above 6 GB |
 | `/ci-cache/turbo` | age sweep in the `pnpm-setup` action; the janitor above 10 GB |
 | `/ci-cache/turbo-sandbox` | the [turbo-cache](../../_tools/turbo-cache) server's own 14-day sweep; the janitor above 15 GB |
-| `/ci-cache/*-target` | the janitor, above 20 GB or after 14 days without a build |
+| `/ci-cache/*-target` | the janitor, above 20 GB each or after 14 days without a build, and the least recently built first once they add up to 60 GB |
 | `/ci-cache/onboarding-docker` | the janitor, above 30 GB |
 | `/ci-cache/pnpm-store`, `/ci-cache/cargo` | the janitor, above 20 GB |
 | any other `/ci-cache` entry (`xwin`, `ms-playwright`, ...) | the janitor, above 15 GB |
@@ -56,7 +56,24 @@ Runners are not ephemeral. Fleet checkouts use `clean: false` to keep `node_modu
 
 The janitor is [`fleet-janitor.sh`](../../_tools/scripts/ci/fleet-janitor.sh), which `setup-wsl-fleet.ps1` installs in the distro with the hourly `intentic-ci-janitor.timer`. It runs as root because job containers write as root, and the runner, which runs as the distro user, cannot empty `_temp` after them. It removes a runner's leftovers only while that runner has no job, and shared `/ci-cache` directories only while no runner has one. `journalctl -u intentic-ci-janitor` in the distro has every pass, and `JANITOR_DRY_RUN=1` reports without removing anything.
 
-Space freed inside the distro stays in its VHDX until a compaction. When one pass frees 40 GB or more, the janitor writes `/var/lib/intentic-ci/compact-requested`, and omen's maintenance task compacts on its next idle hourly pass if C: is below 250 GB free.
+What the janitor frees goes back to Windows through the host's maintenance task (below). When one pass frees 40 GB or more it also writes `/var/lib/intentic-ci/compact-requested`, which matters only while a disk is not sparse.
+
+## Keeping the WSL disks small
+
+A VHDX grows when the guest writes and does not shrink when it deletes, so on a host that is not looked after the CI distro's `ext4.vhdx` and Docker Desktop's `docker_data.vhdx` end up at the high-water mark of everything CI ever held, and C: fills. On omen that has run C: down to 48 GB free three times since September. [`wsl-maintenance.ps1`](../../_tools/scripts/ci/wsl-maintenance.ps1) keeps both disks at what they hold:
+
+- **Sparse disks.** Both VHDX files are NTFS sparse files, so a TRIM from the guest punches a hole in the file and the space is back on C: at once, with no downtime. The distro's root is mounted with `discard`, and the task runs `fstrim` in the distro and, through a privileged `alpine:3` container, on Docker's data disk every hour. WSL 3.0.2 made sparse VHDs available again, labelled experimental (2.5.6 to 3.0.1 hid them behind `--allow-unsafe` after ext4 corruption reports). A disk that is not sparse, a new distro or a Docker disk recreated by a reset, is converted in its next compaction window.
+- **Compaction only as a fallback.** Stopping Docker Desktop, `wsl --shutdown` and diskpart's `compact vdisk` take WSL down for about 10 minutes and fail every job in flight. The task does it only for a disk that is not sparse and holds 50 GB of freed space, only while no runner has a job, between 01:00 and 07:00, and at most once in 20 hours. Below 80 GB free on C: the hours rule is lifted.
+- **Docker pruned by age and by size.** Daily: stopped containers older than a day, unused images older than 48 hours, build cache above 20 GB per builder, unused volumes. Hourly once Docker's disk holds more than 120 GB: unused images older than a day. Below 50 GB free on C:, everything unused. Intentic sandboxes are never touched: no container labelled `dev.intentic.kind=sandbox`, and no `intentic-*` volume outside `-Mode panic`.
+
+Two scheduled tasks run it elevated as the user who owns the distros: "WSL Docker Space Guard" hourly at :20 (`-Mode guard`) and "WSL Docker Maintenance" daily at 05:30 (`-Mode routine`). Every pass logs to `C:\ProgramData\wsl-maintenance\maintenance.log`, including a line per disk with its size on C: and what it holds inside. That folder is admin-only, so a new version is installed from an elevated PowerShell, keeping the old one beside it:
+
+```powershell
+Copy-Item C:\ProgramData\wsl-maintenance\wsl-maintenance.ps1 C:\ProgramData\wsl-maintenance\wsl-maintenance.ps1.bak-$(Get-Date -Format yyyyMMdd)
+Copy-Item <checkout>\_tools\scripts\ci\wsl-maintenance.ps1 C:\ProgramData\wsl-maintenance\
+```
+
+`fsutil sparse queryflag <file>` says whether a disk is sparse. `-NoSparse` stops the task converting disks; `wsl --manage <distro> --set-sparse false` and `fsutil sparse setflag <file> 0`, with WSL shut down, turn a disk back.
 
 ## Registering a runner
 
@@ -79,7 +96,7 @@ Docker Desktop's WSL integration puts `/var/run/docker.sock` into the distro. Af
 
 ## While the disks are being compacted
 
-A WSL maintenance run (`C:\ProgramData\wsl-maintenance\wsl-maintenance.ps1` on omen) stops Docker Desktop, runs `wsl --shutdown` and compacts every VHDX, and diskpart can compact a file only while nothing has it open.
+A compaction (see [Keeping the WSL disks small](#keeping-the-wsl-disks-small)) stops Docker Desktop, runs `wsl --shutdown` and compacts each VHDX that is not sparse, and diskpart can compact a file only while nothing has it open.
 
 - The fleet task skips its whole pass while that run's lock (`C:\ProgramData\wsl-maintenance\.lock`) exists, and logs one line saying so. Each pass would otherwise boot the distro or restart Docker Desktop under the compaction. It ignores a lock older than 3 hours, or one whose PowerShell is gone. `-MaintenanceLock ''` turns the skip off.
 - The intentic device agent does not boot a distro that WSL stopped. Its session starts again once something else starts the distro, or after 5 minutes.

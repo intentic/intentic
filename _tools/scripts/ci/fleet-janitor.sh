@@ -32,6 +32,9 @@ WORKSPACE_STORE_CAP_GB=${JANITOR_WORKSPACE_STORE_CAP_GB:-6}
 # /ci-cache/*-target: removed above this size, or when nothing in it was written for TARGET_STALE_DAYS.
 TARGET_CAP_GB=${JANITOR_TARGET_CAP_GB:-20}
 TARGET_STALE_DAYS=${JANITOR_TARGET_STALE_DAYS:-14}
+# All /ci-cache/*-target dirs together: above this, the least recently built go first. Eleven dirs
+# under a 20 GB cap each could otherwise reach 220 GB.
+TARGETS_TOTAL_CAP_GB=${JANITOR_TARGETS_TOTAL_CAP_GB:-60}
 # Every other /ci-cache entry: its own cap below, or this one.
 CACHE_CAP_GB=${JANITOR_CACHE_CAP_GB:-15}
 declare -A CACHE_CAPS=(
@@ -45,8 +48,9 @@ TURBO_CAP_GB=${JANITOR_TURBO_CAP_GB:-10}
 BUILDKIT_CONTAINER=${JANITOR_BUILDKIT_CONTAINER:-buildx_buildkit_intentic-cache0}
 BUILDKIT_KEEP_GB=${JANITOR_BUILDKIT_KEEP_GB:-25}
 # A run that frees at least this much, in the distro's disk and docker's together, leaves
-# $STATE_DIR/compact-requested. Freed blocks go back to Windows only when a VHDX is compacted, which needs WSL
-# shut down, so only the Windows-side maintenance task does it (wsl-maintenance.ps1 on omen reads this file).
+# $STATE_DIR/compact-requested for the Windows-side maintenance task (wsl-maintenance.ps1, which omen runs). On a
+# sparse VHDX the space is back on Windows as soon as it is trimmed, and the task only drops the request; on one
+# that is not sparse, freed blocks come back only with a compaction, which needs WSL shut down.
 COMPACT_REQUEST_GB=${JANITOR_COMPACT_REQUEST_GB:-40}
 
 GB=$((1024 * 1024 * 1024))
@@ -188,6 +192,26 @@ else
                 ;;
         esac
     done
+
+    # The target dirs that are left, oldest build first, until they fit their joint cap.
+    total=0
+    rows=()
+    for dir in "$CACHE_ROOT"/*-target; do
+        [ -d "$dir" ] || continue
+        size=$(bytes_of "$dir")
+        newest=$(find "$dir" -maxdepth 3 -printf '%T@\n' 2>/dev/null | sort -n | tail -n1)
+        newest=${newest%.*}
+        rows+=("${newest:-0} ${size:-0} $dir")
+        total=$((total + ${size:-0}))
+    done
+    if [ "$total" -gt $((TARGETS_TOTAL_CAP_GB * GB)) ]; then
+        while read -r _ _ dir; do
+            [ "$total" -le $((TARGETS_TOTAL_CAP_GB * GB)) ] && break
+            fleet_busy && { log "target dirs: a job started; stopping here"; break; }
+            remove "$dir" "the target dirs add up to $(gb "$total") GB, over their joint ${TARGETS_TOTAL_CAP_GB} GB cap; built least recently"
+            total=$((total - removed))
+        done < <(printf '%s\n' "${rows[@]}" | sort -n)
+    fi
 fi
 
 # -- the intentic-cache buildkit state (a docker volume) ------------------------------------------------------------
