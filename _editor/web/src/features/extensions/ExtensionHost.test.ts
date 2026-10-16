@@ -15,7 +15,7 @@ jest.mock(`vue-router`, () => ({
     // SAFETY: ExtensionHost reads only `params` off the route; nothing else of a resolved location is touched.
     useRoute: () => ({ params: { ext: `deployments`, key: `komodo` }, query: {} }) as never,
 }));
-jest.mock(`./extensionStatuses`, () => ({ extensionsLoaded: loaded, extensionStatuses: shallowRef([]) }));
+jest.mock(`../../workbench/views/extensionStatuses`, () => ({ extensionsLoaded: loaded, extensionStatuses: shallowRef([]) }));
 jest.mock(`./usePanels`, () => ({ usePanels: () => ({ panels: ref([]), settled: panelsSettled }) }));
 jest.mock(`../capabilities/connect/useCapabilities`, () => ({
     useCapabilities: () => ({ capabilities: ref([]), settled: capabilitiesSettled }),

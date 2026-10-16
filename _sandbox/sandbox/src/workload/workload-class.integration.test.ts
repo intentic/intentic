@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { getPriority } from "node:os";
 import { type ChildProcess, spawn } from "node:child_process";
 import { requires } from "@intentic/testing/requires";
-import { applyToStampedChild, OOM_SCORE, SPAWN_STAMP_ENV, spawnAs } from "./workload-class.js";
+import { applyToStampedChild, applyWorkload, OOM_SCORE, SPAWN_STAMP_ENV, spawnAs } from "./workload-class.js";
 
 /* The half the unit tests cannot reach: real children of this process, classed through procfs. A score that parses and
    never lands on a process looks exactly like one that did, so only the kernel's own file proves it. */
@@ -78,8 +78,13 @@ describe.skipIf(!kernel.runs)(kernel.title("spawnAs puts a child in its class as
     test("a child already ranked above its class keeps its own", async () => {
         const high = OOM_SCORE.heavy + 100;
         // choom execs sleep in place, so the pid is the sleeper's; a lower score written over it would read the class's.
-        const ranked = kept(spawnAs({ class: "agentRuntime", spawnDepth: 0 }, "choom", ["-n", String(high), "--", "sleep", "33"], { stdio: "ignore" }));
-        expect(await settledScore(ranked.pid ?? 0, high)).toBe(high);
+        // Ranked before its class is put on it, through the write spawnAs makes: spawned through spawnAs, choom's own
+        // write could land between that write's read and its write, and a loaded runner read the class's 100 for it.
+        const ranked = kept(spawn("choom", ["-n", String(high), "--", "sleep", "33"], { stdio: "ignore" }));
+        const pid = ranked.pid ?? 0;
+        expect(await settledScore(pid, high)).toBe(high);
+        await applyWorkload(pid, { class: "agentRuntime", spawnDepth: 0 });
+        expect(await scoreOf(pid)).toBe(high);
     });
 
     // A library that spawns with no hook (the OpenCode SDK) hands back no pid; the stamp set across its spawn finds it.
