@@ -7864,7 +7864,7 @@
             "machineNeedsYouTitle": "{name} potrzebuje twojej pomocy na {machine}",
             "machineNeedsYouBody": "Znalazł coś, czego nie naprawi sam.",
             "asleepTitle": "Wybudzamy {name}",
-            "asleepBody": "{machine} uśpił go, gdy nikt z niego nie korzystał. Właśnie się uruchamia, co zajmuje około minuty.",
+            "asleepBody": "{machine} uśpił go, gdy nikt z niego nie korzystał. Właśnie się budzi, co zajmuje około minuty. Twoje pliki i rozmowy są na swoim miejscu.",
             "asleepStuckTitle": "{name} wciąż śpi",
             "asleepStuckBody": "{machine} jeszcze go nie wybudził. Sam komputer może być wyłączony lub uśpiony; wybudzi {name}, gdy wróci. Twoje pliki są tam zachowane.",
             "redialTitle": "Czekamy, aż {name} połączy się ponownie",

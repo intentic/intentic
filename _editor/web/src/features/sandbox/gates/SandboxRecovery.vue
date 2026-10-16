@@ -128,9 +128,15 @@ const restartHosted = async (): Promise<void> => {
 
 const primary = computed(() => notice.value?.action);
 const others = computed<readonly DiagnosisAction[]>(() => notice.value?.otherActions ?? []);
+// A WAIT IS NOT A FAULT. While the diagnosis still expects the sandbox back by itself (asleep and waking, its machine
+// mending it, a redial) and offers nothing to press, the panel shows only the chain and the machine's own findings:
+// a Repair button or a restart offered beside "it's waking up, about a minute" read as "something broke", which it
+// has not. The way back appears once the diagnosis's patience runs out and it names something to do.
+const calm = computed(() => notice.value?.waiting === true && primary.value === undefined);
 // Behind "other options": the other presses the diagnosis offers, and for a machine of the owner's the restart and the
-// rollback, as presses where a sibling reaches that machine and as commands where none does.
-const hasOthers = computed(() => owner.value && (others.value.length > 0 || !hosted.value));
+// rollback, as presses where a sibling reaches that machine and as commands where none does — the latter only once
+// this is no longer a wait.
+const hasOthers = computed(() => owner.value && (others.value.length > 0 || (!hosted.value && !calm.value)));
 const desktop = desktopVersion() !== undefined;
 const repairReason = computed(() => notice.value?.findings.map((check) => check.problem ?? check.label).join(`; `) || undefined);
 const askRepair = (): void => {
@@ -172,7 +178,7 @@ const askRepair = (): void => {
             </Button>
         </div>
         <FixCommand v-else-if="primary === `fix`" :machine="machine" />
-        <div v-if="desktop && !hosted && owner" class="flex flex-wrap items-center gap-2">
+        <div v-if="desktop && !hosted && owner && !calm" class="flex flex-wrap items-center gap-2">
             <Button size="small" :label="t(`local.repair.title`)" @click="askRepair">
                 <template #icon><Icon name="wrench" /></template>
             </Button>

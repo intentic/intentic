@@ -17,8 +17,12 @@ const lab = sandboxSummary({ id: `lab`, name: `Lab`, role: `owner` });
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active, sandboxes: computed(() => [active.value, lab]), select: jest.fn() }) }));
 jest.mock(`../environment/servingSlug`, () => ({ useServingSlug: () => computed(() => SLUG) }));
 // A diagnosis with nothing pressed first: only the other options are under test here.
-const notice: DiagnosisNotice = { title: `Quiet isn't answering`, body: ``, waiting: false, tone: `warning`, chain: [], action: undefined, otherActions: [], findings: [], sayAtOnce: false };
-jest.mock(`./useVisibleOutage`, () => ({ useDiagnosisNotice: () => computed(() => notice), useVisibleOutage: () => ({}) }));
+const stuck: DiagnosisNotice = { title: `Quiet isn't answering`, body: ``, waiting: false, tone: `warning`, chain: [], action: undefined, otherActions: [], findings: [], sayAtOnce: false };
+const notice = ref<DiagnosisNotice>(stuck);
+jest.mock(`./useVisibleOutage`, () => ({ useDiagnosisNotice: () => computed(() => notice.value), useVisibleOutage: () => ({}) }));
+// Inside the desktop app, where the Repair button can be offered.
+const desktopActual = await import(`../../../app/environments/desktop`);
+jest.mock(`../../../app/environments/desktop`, () => ({ ...desktopActual, desktopVersion: () => `1.0.0` }));
 const relays = ref<{ sandboxId: string; devices: Device[] }[]>([]);
 const looking = ref(false);
 jest.mock(`../live/useDeviceRelays`, () => ({ useDeviceRelays: () => ({ relays: computed(() => relays.value), looking, look: async () => {} }) }));
@@ -61,6 +65,7 @@ afterEach(() => {
     app = undefined;
     relays.value = [];
     looking.value = false;
+    notice.value = stuck;
     manageDeviceSandbox.mockClear();
     document.body.innerHTML = ``;
 });
@@ -99,4 +104,26 @@ it(`prints the two commands when no sandbox of the owner's reaches that machine`
         `curl -fsSL https://intentic.dev/restart/${SLUG} | sh`,
         `curl -fsSL https://intentic.dev/rollback/${SLUG} | sh`,
     ]);
+});
+
+// A sandbox asleep and waking (or a machine mending it) is a wait, not a fault: nothing beside it says "repair".
+it(`offers no Repair and no other options while the diagnosis is still a wait`, async () => {
+    notice.value = { ...stuck, title: `Waking Quiet`, waiting: true, tone: `info` };
+    const el = await mount();
+    expect(el.textContent).not.toContain(`Repair`);
+    expect(el.querySelector(`details`)).toBeNull();
+});
+
+it(`offers Repair and the other options once the wait has run out`, async () => {
+    const el = await mount();
+    expect(el.textContent).toContain(`Repair`);
+    expect(el.querySelector(`details`)).not.toBeNull();
+});
+
+// A wait the diagnosis itself attached an offer to (busy for long) keeps that offer.
+it(`keeps an offer the diagnosis attached to a wait`, async () => {
+    notice.value = { ...stuck, waiting: true, tone: `info`, otherActions: [`restart-hosted`] };
+    const el = await mount();
+    expect(el.querySelector(`details`)).not.toBeNull();
+    expect(el.textContent).not.toContain(`Repair`);
 });
