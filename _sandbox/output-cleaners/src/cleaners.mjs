@@ -487,10 +487,10 @@ export const SECRET_STORES = [
     { root: "auth", path: "sandbox-secrets.json", layout: "flat", source: "sandbox" },
     { root: "desiredState", path: ".secrets.json", layout: "flat", source: "generated" },
     { root: "auth", path: "capability-secrets.json", layout: "vault", source: "capability" },
-    // A keyring entry shared in `copy` mode, kept here as an ordinary secret (src/secrets/device/keyring-copies.ts).
+    // A keyring entry shared in `copy` mode, kept here as an ordinary secret (src/secrets/device/keyring-stores.ts).
     { root: "auth", path: "keyring-copies.json", layout: "flat", source: "copy" },
     // Values a keyring on the owner's computer released for one use each, kept only so they mask: never resolved from
-    // here, and emptied when the daemon starts (src/secrets/device/released-values.ts).
+    // here, and emptied when the daemon starts (src/secrets/device/keyring-stores.ts).
     { root: "auth", path: "keyring-released.json", layout: "flat", source: "device" },
 ];
 

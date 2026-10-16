@@ -44,6 +44,9 @@ const HAND_KEPT = [
     // The organisation policy the platform hands over, kept in the auth root beside the other trust files so a restart
     // while the platform is unreachable still enforces it; replaced whole by each newer edition the platform resends.
     "org/org-policy.ts",
+    // The values a computer's keyring released for one use each, written whole from the daemon's memory for the
+    // terminal's output filter to mask with; the daemon never reads it back, so there is nothing to convert or check.
+    "secrets/device/keyring-stores.ts",
     // Boot's own marker of what a prewarm left behind, read once by the next boot.
     "system/boot/prewarm.ts",
 ];
