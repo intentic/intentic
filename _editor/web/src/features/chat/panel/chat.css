@@ -1046,11 +1046,6 @@
     background: none;
     cursor: pointer;
 }
-/* Each press has its own 24px target; the narrow bars remain the meter's visual marks. */
-button.composer-effort-seg {
-    min-width: 1.5rem;
-    justify-content: center;
-}
 .composer-effort-seg::before {
     content: "";
     height: 0.75rem;
