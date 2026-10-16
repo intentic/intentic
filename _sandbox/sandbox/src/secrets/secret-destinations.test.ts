@@ -283,8 +283,7 @@ describe("a command whose destination cannot be read", () => {
 });
 
 describe("shell words and utility arguments", () => {
-    // These shapes were checked against bash argv, real utility outputs/helpers in a temporary directory, and
-    // wget requests to a loopback redirect fixture. The reader must preserve those programs' argument boundaries.
+    // The reader must split words where bash does and read each program's options the way that program does.
     it.each([
         "cu\\\nrl https://api.github.com",
         "curl https://api.\\\ngithub.com",
@@ -430,6 +429,9 @@ describe("shell words and utility arguments", () => {
             certain: true,
             hosts: ["api.github.com"],
         });
+    });
+
+    it("reads the write-out check as curl's alone: wget's -w is its wait", () => {
         expect(hostsOf(`wget -w "$WAIT" --max-redirect=0 https://api.github.com`)).toEqual({ certain: true, hosts: ["api.github.com"] });
     });
 });

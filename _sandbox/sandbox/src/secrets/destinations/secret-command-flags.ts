@@ -1,10 +1,11 @@
-import { STAND_IN, type Unreadable, type Word } from "./secret-command-lex.js";
+import { STAND_IN, type Unreadable, type Word } from "./secret-command-words.js";
 
-// An argument grammar shared by network clients and utilities: value-taking options, known switches, and options
-// whose effects make the command unreadable. Anything not declared here asks rather than guessing its arity.
+// An argument grammar shared by network clients and utilities: value-taking options, known switches, and the options
+// whose effect leaves the command unreadable, each with why. Anything not declared here asks rather than guessing its
+// arity.
 export interface Flags {
     readonly values: ReadonlySet<string>;
-    readonly steers: ReadonlyMap<string, string>;
+    readonly refuses: ReadonlyMap<string, string>;
     readonly plain: ReadonlySet<string>;
 }
 
@@ -13,7 +14,7 @@ const takesValue = (flags: Flags, name: string): boolean => flags.values.has(nam
 // Why a flag rules the command out, or undefined for one the table knows to be harmless. `shown` is how the command
 // spelled it.
 const flagReason = (flags: Flags, name: string, shown: string): string | undefined =>
-    flags.steers.get(name) ??
+    flags.refuses.get(name) ??
     (takesValue(flags, name) || flags.plain.has(name) ? undefined : `it uses an option (${shown}) this check does not read`);
 
 // What one flag word took: how many following words it used as its value, and that value.
@@ -100,3 +101,7 @@ export const parseFlags = (args: readonly Word[], flags: Flags): Parsed | Unread
     }
     return { positionals, values };
 };
+
+// Every value given to the named options, in the order written; where a program keeps the last, `.at(-1)` is in force.
+export const valuesOf = (parsed: Parsed, ...names: readonly string[]): readonly Word[] =>
+    parsed.values.filter((value) => names.includes(value.name)).map((value) => value.word);

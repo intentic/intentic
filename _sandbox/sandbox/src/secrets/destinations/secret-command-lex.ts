@@ -1,19 +1,4 @@
-export interface Unreadable {
-    readonly why: string;
-}
-
-// A reference stands in as a character no host, flag or operator contains, so a secret spelled into a host or a program
-// name fails every test below instead of passing as whatever its value happens to be.
-export const STAND_IN = "\u0001";
-
-// One shell word with its quoting taken off; `dynamic` when a `$` expansion inside double quotes fills part of it, whose
-// value exists only when the command runs. `assignment` when the word as written opens with an unquoted `NAME=`, the
-// only spelling a shell takes as setting a variable (`"A=x"` is a program named `A=x`).
-export interface Word {
-    readonly text: string;
-    readonly dynamic: boolean;
-    readonly assignment?: boolean;
-}
+import type { Unreadable, Word } from "./secret-command-words.js";
 
 // Characters that break a line into separate stages, outside quotes: a pipe, a background `&`, a `;`, a newline. Each
 // run of them (so `&&`, `||`, `|&` too) ends the current stage and starts the next; each stage is read on its own. A
@@ -31,49 +16,6 @@ const OPERATORS: ReadonlyMap<string, string> = new Map([
     ["{", "it uses brace expansion"],
     ["}", "it uses brace expansion"],
 ]);
-
-const REDIRECTS = "it redirects input or output";
-
-// Read the operator and its complete shell word separately. Prefix matching a target such as /dev/null.extra would
-// discard a file write; quoting a numeric argument does not make it a leading file descriptor either.
-const REDIRECT_OPERATOR = /^(?:&>>?|[<>]&|>>?|<>?)/;
-const WORD_BOUNDARY = /[ \t\n|&;<>]/;
-
-// Reads a redirection at the cursor. A digit being built as a word is the file descriptor it applies to (`2` in `2>&1`),
-// not an argument, so it is dropped; any other word already built is a real argument and is kept. Returns undefined when
-// the redirection sends nothing anywhere new (the cursor has moved past it), else why it cannot be read.
-const readRedirect = (state: LexState): string | undefined => {
-    const prefix = state.source.slice(state.wordStart, state.index).replaceAll("\\\n", "");
-    if (state.source.charAt(state.index) !== "&" && state.started && /^\d+$/.test(prefix)) {
-        resetWord(state);
-    } else {
-        finishWord(state);
-    }
-    const rest = state.source.slice(state.index);
-    if (rest.startsWith("<<")) {
-        return REDIRECTS;
-    }
-    const operator = REDIRECT_OPERATOR.exec(rest)?.[0];
-    if (operator === undefined) {
-        return REDIRECTS;
-    }
-    state.index += operator.length;
-    while (/[ \t]/.test(state.source.charAt(state.index)) && state.index < state.source.length) {
-        state.index += 1;
-    }
-    if (state.source.charAt(state.index) === "#") {
-        return REDIRECTS;
-    }
-    while (state.index < state.source.length && !WORD_BOUNDARY.test(state.source.charAt(state.index))) {
-        const why = readWordChar(state);
-        if (why !== undefined) {
-            return why;
-        }
-    }
-    const safe = state.started && !state.dynamic && (operator.endsWith("&") ? /^(?:\d+|-)$/.test(state.text) : state.text === "/dev/null");
-    resetWord(state);
-    return safe ? undefined : REDIRECTS;
-};
 
 const SUBSTITUTES = "it runs a command inside the command";
 const EXPANDS = "a shell variable or expansion in it is only filled in when it runs";
@@ -101,6 +43,10 @@ interface LexState {
 
 const ASSIGNMENT_PREFIX = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
+// The word built so far as the command spelled it, line continuations taken out: what says whether it opens with an
+// assignment or is a file descriptor's number.
+const writtenWord = (state: LexState): string => state.source.slice(state.wordStart, state.index).replaceAll("\\\n", "");
+
 const startWord = (state: LexState): void => {
     if (!state.started) {
         state.started = true;
@@ -110,8 +56,7 @@ const startWord = (state: LexState): void => {
 
 const finishWord = (state: LexState): void => {
     if (state.started) {
-        const assignment = ASSIGNMENT_PREFIX.test(state.source.slice(state.wordStart, state.index).replaceAll("\\\n", ""));
-        state.words.push({ text: state.text, dynamic: state.dynamic, assignment });
+        state.words.push({ text: state.text, dynamic: state.dynamic, assignment: ASSIGNMENT_PREFIX.test(writtenWord(state)) });
     }
     resetWord(state);
 };
@@ -293,6 +238,48 @@ const readWordChar = (state: LexState): string | undefined => {
     }
     startWord(state);
     return (READERS.get(char) ?? plainChar)(state);
+};
+
+const REDIRECTS = "it redirects input or output";
+
+// Read the operator and its complete shell word separately. Prefix matching a target such as /dev/null.extra would
+// discard a file write; quoting a numeric argument does not make it a leading file descriptor either.
+const REDIRECT_OPERATOR = /^(?:&>>?|[<>]&|>>?|<>?)/;
+const WORD_BOUNDARY = /[ \t\n|&;<>]/;
+
+// Reads a redirection at the cursor. A digit being built as a word is the file descriptor it applies to (`2` in `2>&1`),
+// not an argument, so it is dropped; any other word already built is a real argument and is kept. Returns undefined when
+// the redirection sends nothing anywhere new (the cursor has moved past it), else why it cannot be read.
+const readRedirect = (state: LexState): string | undefined => {
+    if (state.source.charAt(state.index) !== "&" && state.started && /^\d+$/.test(writtenWord(state))) {
+        resetWord(state);
+    } else {
+        finishWord(state);
+    }
+    const rest = state.source.slice(state.index);
+    if (rest.startsWith("<<")) {
+        return REDIRECTS;
+    }
+    const operator = REDIRECT_OPERATOR.exec(rest)?.[0];
+    if (operator === undefined) {
+        return REDIRECTS;
+    }
+    state.index += operator.length;
+    while (/[ \t]/.test(state.source.charAt(state.index)) && state.index < state.source.length) {
+        state.index += 1;
+    }
+    if (state.source.charAt(state.index) === "#") {
+        return REDIRECTS;
+    }
+    while (state.index < state.source.length && !WORD_BOUNDARY.test(state.source.charAt(state.index))) {
+        const why = readWordChar(state);
+        if (why !== undefined) {
+            return why;
+        }
+    }
+    const safe = state.started && !state.dynamic && (operator.endsWith("&") ? /^(?:\d+|-)$/.test(state.text) : state.text === "/dev/null");
+    resetWord(state);
+    return safe ? undefined : REDIRECTS;
 };
 
 // One step of reading: undefined to go on, else why the command cannot be read.

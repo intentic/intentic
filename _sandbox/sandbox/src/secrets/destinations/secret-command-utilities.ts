@@ -1,7 +1,48 @@
-import { type Flags, parseFlags } from "./secret-command-flags.js";
-import { STAND_IN, type Unreadable, type Word } from "./secret-command-lex.js";
+import { type Flags, type Parsed, parseFlags } from "./secret-command-flags.js";
+import { type ProgramReader, STAND_IN, type Unreadable } from "./secret-command-words.js";
 
-type UtilityReach = { readonly hosts: readonly string[] } | Unreadable;
+// Programs a stage may run and still send the value nowhere: they open no socket, run no other program, and change no
+// setting (a proxy, a config file, an alias, a PATH) a later stage's curl, wget or git would read. A stage of one of
+// these adds no host and hides none, so it neither carries the value out nor sets up a later stage to. What is left out
+// is deliberate: an interpreter (`python`, `node`, `perl`, `ruby`), a shell (`sh`, `bash`, `eval`, `source`), `awk` and
+// `sed` (each runs a command or opens a socket in some form), `xargs`, `find`, `env`, `tee`, `nc`, `ssh`, `docker` and
+// `gh` all stay unread, so a line that uses one still asks. rg, sort, uniq and printf below are inert only in the forms
+// their argument readers accept; a name in neither list is unknown, and leaves the line unreadable.
+const INERT_PROGRAMS = [
+    "cd",
+    "pwd",
+    "echo",
+    "true",
+    "false",
+    ":",
+    "test",
+    "[",
+    "sleep",
+    "date",
+    "mkdir",
+    "ls",
+    "dirname",
+    "basename",
+    "cat",
+    "head",
+    "tail",
+    "wc",
+    "cut",
+    "tr",
+    "nl",
+    "rev",
+    "tac",
+    "fold",
+    "column",
+    "base64",
+    "grep",
+    "egrep",
+    "fgrep",
+    "jq",
+    "comm",
+];
+
+const inert: ProgramReader = () => ({ hosts: [] });
 
 const RUNS_PROGRAM = "it runs another program";
 const WRITES_FILE = "it writes a file, which can change what a later command does";
@@ -9,10 +50,10 @@ const SETS_VARIABLE = "it changes shell variables, which can change what a later
 
 // A utility is inert only in a form whose arguments we understand. Use the same option grammar as the network
 // readers: attached values, short clusters and -- must mean the same thing everywhere, and unknown options ask.
-const utilityFlags = (values: readonly string[], plain: readonly string[], steers: readonly (readonly [string, string])[]): Flags => ({
+const utilityFlags = (values: readonly string[], plain: readonly string[], refuses: readonly (readonly [string, string])[]): Flags => ({
     values: new Set(values),
     plain: new Set(plain),
-    steers: new Map(steers),
+    refuses: new Map(refuses),
 });
 
 const SORT = utilityFlags(
@@ -166,16 +207,21 @@ const RG = utilityFlags(
     ],
 );
 
-const readUtility = (args: readonly Word[], flags: Flags, maxInputs = Infinity): UtilityReach => {
-    const parsed = parseFlags(args, flags);
-    if ("why" in parsed) {
-        return parsed;
-    }
-    // uniq's second operand is an output file, after its options (including their values) have been consumed.
-    return parsed.positionals.length > maxInputs ? { why: WRITES_FILE } : { hosts: [] };
-};
+// A utility whose arguments its table reads, and, where its operands mean more than input, what they do.
+const readUtility =
+    (flags: Flags, check?: (parsed: Parsed) => Unreadable | undefined): ProgramReader =>
+    (args) => {
+        const parsed = parseFlags(args, flags);
+        if ("why" in parsed) {
+            return parsed;
+        }
+        return check?.(parsed) ?? { hosts: [] };
+    };
 
-const printfReach = (args: readonly Word[]): UtilityReach => {
+// uniq's second operand, once its options and their values are read, is the file it writes.
+const uniqOutput = (parsed: Parsed): Unreadable | undefined => (parsed.positionals.length > 1 ? { why: WRITES_FILE } : undefined);
+
+const printfReach: ProgramReader = (args) => {
     const [first] = args;
     if (first?.text.startsWith("-v")) {
         return { why: SETS_VARIABLE };
@@ -192,9 +238,10 @@ const printfReach = (args: readonly Word[]): UtilityReach => {
     return [...conversions].some((match) => match[0] !== "%%") ? { why: SETS_VARIABLE } : { hosts: [] };
 };
 
-export const UTILITY_READERS: ReadonlyMap<string, (args: readonly Word[]) => UtilityReach> = new Map([
-    ["rg", (args) => readUtility(args, RG)],
-    ["sort", (args) => readUtility(args, SORT)],
-    ["uniq", (args) => readUtility(args, UNIQ, 1)],
+export const UTILITY_READERS: ReadonlyMap<string, ProgramReader> = new Map([
+    ...INERT_PROGRAMS.map((name) => [name, inert] as const),
+    ["rg", readUtility(RG)],
+    ["sort", readUtility(SORT)],
+    ["uniq", readUtility(UNIQ, uniqOutput)],
     ["printf", printfReach],
 ]);
