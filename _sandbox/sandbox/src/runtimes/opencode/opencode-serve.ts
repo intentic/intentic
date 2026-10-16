@@ -150,7 +150,11 @@ export const processAlive = (pid: number): boolean => {
 };
 
 /** Waits for a stopped server to be gone, killing it once the grace runs out; rejects if even that does not end it. */
-export const waitForExit = async ({ pid, stamp }: ServedProcess, alive: (pid: number) => boolean): Promise<void> => {
+export const waitForExit = async (
+    { pid, stamp }: ServedProcess,
+    alive: (pid: number) => boolean,
+    carries: (pid: number, stamp: string) => boolean = carriesStamp,
+): Promise<void> => {
     const started = Date.now();
     let killed = false;
     while (alive(pid)) {
@@ -158,14 +162,16 @@ export const waitForExit = async ({ pid, stamp }: ServedProcess, alive: (pid: nu
         if (waited >= STOP_TIMEOUT_MS) {
             throw new Error("OpenCode's previous runtime has not finished stopping. Retry once it exits.");
         }
-        if (!killed && waited >= STOP_GRACE_MS) {
+        // The stamp is looked for on every poll past the grace, not once: a process in the middle of an exec reads an
+        // empty environ for a moment (the kernel swaps in the new image before it sets that image's environment), and a
+        // single look landing there left the server to sleep out its own timeout. A pid that never carries the stamp is
+        // still never killed.
+        if (!killed && waited >= STOP_GRACE_MS && carries(pid, stamp)) {
             killed = true;
-            if (carriesStamp(pid, stamp)) {
-                try {
-                    process.kill(pid, "SIGKILL");
-                } catch {
-                    // allow(silent-catch): it exited between the look and the kill, which is what the kill was for
-                }
+            try {
+                process.kill(pid, "SIGKILL");
+            } catch {
+                // allow(silent-catch): it exited between the look and the kill, which is what the kill was for
             }
         }
         await delay(20);

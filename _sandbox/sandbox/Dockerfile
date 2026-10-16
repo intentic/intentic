@@ -560,14 +560,15 @@ COPY _sandbox/sandbox/seed-skills /root/.claude/skills
 # command through it, and the daemon's terminal runner (src/terminal/terminal-run.ts) executes user-triggered
 # flows through it, so commands run live-visible in tmux sessions — and the agent's output filter, which
 # strips noise from what the model sees.
-COPY --chmod=755 _sandbox/sandbox/bin/tmux-run /usr/local/bin/tmux-run
 # The heavy-command queue a heavy program becomes as it starts (heavy-turn.cjs in @intentic/constants, matched by the
 # program that really runs against the shared table plus .intentic/config/heavy-commands.json), so several sessions'
 # test/typecheck fan-outs take turns instead of pinning the cgroup together. It holds an flock, so `flock`
 # (util-linux) and, for the ceiling that takes a slot back from a command that hangs, `timeout` (coreutils) are its
 # dependencies; both are already in the base, and a missing one degrades to running the command plainly — unqueued,
 # or unbounded. Not on PATH ⇒ nothing queues, and heavy programs are still ranked (terminal-run.ts queueRunEnabled).
-COPY --chmod=755 _sandbox/sandbox/bin/queue-run /usr/local/bin/queue-run
+# Both runners above in one COPY: each instruction is a layer, and Docker refuses an image deeper than 125 (see the
+# command block below).
+COPY --chmod=755 _sandbox/sandbox/bin/tmux-run _sandbox/sandbox/bin/queue-run /usr/local/bin/
 # The thin wrappers for heavy programs that are not node scripts (pnpm's own binary, bun, cargo), first on an agent
 # command's PATH (src/workload/heavy-commands.ts heavyEnvPrefix); node programs are judged by the hook
 # node loads for them instead. Each name is a link to the one wrapper.
@@ -584,77 +585,82 @@ COPY --chmod=755 _sandbox/output-cleaners/src/retrieve-output.mjs /usr/local/bin
 # routes (never a VPN client directly), so agent-initiated and UI-initiated connects are the same operation.
 # The clients themselves are NOT baked — they ride the vpn capability's environment fragment, like WireGuard
 # always has, so a sandbox with no VPN carries neither the tooling nor the privileges.
-COPY --chmod=755 _sandbox/sandbox/bin/vpn /usr/local/bin/vpn
 # The geo-exit command the agent's geo skill teaches. Same shape as vpn: it calls the daemon's /exit routes,
 # never tor or openvpn directly, so an exit the agent moves and one the owner moves are the same operation.
 # The clients are NOT baked either — tor rides the exit capability's fragment (and only tor's, which is why a
 # tor-only exit costs no container privileges at all).
 # NAMED `geo` BECAUSE `exit` IS A SHELL BUILTIN: a binary called exit is unreachable from any command line
 # (`exit list` exits the shell instead of running it). The capability and the routes keep the word.
-COPY --chmod=755 _sandbox/sandbox/bin/geo /usr/local/bin/geo
 # The network-disk command the agent's netdisk skill teaches. Same shape as vpn: it calls the daemon's /netdisk
 # routes, never mount.cifs directly, so a disk the agent mounts and one the owner mounts are the same operation.
 # cifs-utils is NOT baked — it rides the netdisk capability's fragment; a sandbox with no disk carries no client.
-COPY --chmod=755 _sandbox/sandbox/bin/netdisk /usr/local/bin/netdisk
 # The extension command: run an installed extension from a checkout of its source (dev mode) and go back. Same shape
 # as netdisk: it calls the daemon's /extensions/dev routes, the ones the Extensions tab's way back calls too, so an
 # install the agent points at a checkout and one the owner points back are the same operation.
-COPY --chmod=755 _sandbox/sandbox/bin/extension /usr/local/bin/extension
 # The one-time-code command connector skills teach for services whose write path asks for a 2FA code (npm
 # publish --otp). Same shape as vpn: it calls the daemon's code mint and owns no totp logic, so the stored seed
 # never reaches a shell — only codes that die within their period do.
-COPY --chmod=755 _sandbox/sandbox/bin/otp /usr/local/bin/otp
 # The capability-ask command the capabilities skill teaches: list what this sandbox can be connected to, and
 # ask the owner in chat to connect one. Same shape as vpn/otp — it relays through the daemon, which owns the
 # consent card and the setup watch; the CLI connects nothing and reads no credential.
-COPY --chmod=755 _sandbox/sandbox/bin/capabilities /usr/local/bin/capabilities
 # The one module every asking command shares (bin/needs-cli.mjs): how an ask reaches the needs door and what its exit
 # codes mean, so capabilities, secrets, grants, environment and needs answer alike (docs/architecture/needs.md). Beside
 # them, since each imports it by its relative path.
 COPY --chmod=644 _sandbox/sandbox/bin/needs-cli.mjs /usr/local/bin/needs-cli.mjs
 # The asks for reach a persona withholds, for a tool in the image, and the list of what a conversation still waits on.
 # Same shape as capabilities: they relay through the daemon, which owns every card; none reads a credential.
-COPY --chmod=755 _sandbox/sandbox/bin/grants /usr/local/bin/grants
-COPY --chmod=755 _sandbox/sandbox/bin/environment /usr/local/bin/environment
-COPY --chmod=755 _sandbox/sandbox/bin/needs /usr/local/bin/needs
 # The automations command the intentic skill teaches: list what runs on its own, try a watch's check once, and propose a
 # new watch on a card the owner approves. Same shape as environment: it relays through the daemon, which owns the card
 # and the save; an agent never arms unattended work by itself.
-COPY --chmod=755 _sandbox/sandbox/bin/automations /usr/local/bin/automations
 # The wallet command the wallet skill teaches: check the sandbox's USDC balance and pay x402-payable
 # endpoints under the owner's policy. Same shape as services — it relays through the daemon, which owns the
 # consent card and the ledger; the signing key lives with the platform and never enters this container.
-COPY --chmod=755 _sandbox/sandbox/bin/wallet /usr/local/bin/wallet
 # The credential-approval command: which stored secrets and connected accounts the owner put behind a named
 # person, and the in-chat ask to release one (src/secrets/credential-gate.ts). Same shape as capabilities —
 # it relays through the daemon, which owns the policy, the card and the identity check. It reads NAMES and
 # approver addresses only; no route it can reach returns a credential.
-COPY --chmod=755 _sandbox/sandbox/bin/secrets /usr/local/bin/secrets
 # The privacy command: whether the privacy shield is on, and the one change an agent may make to it, teaching a
 # dataset's values so each is masked wherever it appears (src/privacy/). Same shape as secrets: it relays through the
 # daemon, which owns the policy; the values it reads from a file go to the daemon and are never printed.
-COPY --chmod=755 _sandbox/sandbox/bin/privacy /usr/local/bin/privacy
 # The child-agent command the spawn note teaches (src/agent/subagents/spawn-note.ts): start a full agent on any
 # connected provider from any runtime's shell, wait on it, list this conversation's children. Same shape as
 # services — it relays through the daemon, which owns the engine, the budgets and the persona gate; the CLI
 # spawns nothing itself and reads no credential.
-COPY --chmod=755 _sandbox/sandbox/bin/agents /usr/local/bin/agents
 # The devices command the device skills teach: carry a program built here to one of the owner's connected computers,
 # for that computer's app_start to run. Same shape as wallet: it relays through the daemon, which holds it to the
 # computers the turn reaches; the computer decides whether it may run anything at all.
-COPY --chmod=755 _sandbox/sandbox/bin/devices /usr/local/bin/devices
 # The offloaded-command wrapper (src/offload/): put in front of a heavy line whose kind the owner sends to a runner on
 # one of their machines, by the Bash hook and the check after landing. It snapshots the tree, relays the run through the
 # daemon, brings back what the command changed, and runs the line here when the runner cannot take it.
-COPY --chmod=755 _sandbox/sandbox/bin/offload-run /usr/local/bin/offload-run
 # The sandbox-fleet command the fleet skill teaches: the owner's other sandboxes, and the one door a new one
 # is created through (src/sandboxes/). Same shape as wallet — it relays through the daemon, which owns the
 # provisioning token, the consent card and the machine that builds it; the CLI holds no credential, and a
 # create that was not approved in chat mints nothing.
-COPY --chmod=755 _sandbox/sandbox/bin/sandboxes /usr/local/bin/sandboxes
+# EVERY COMMAND ABOVE IS ONE COPY, not one each: an instruction is a layer, Docker's classic layer store refuses an image
+# deeper than 125 (`failed to register layer: max depth exceeded` on pull), and the environment overlay a rebuild
+# composes stacks its own layers on top of this image. One COPY per command took the standard image to 127 at
+# 1.338.0; src/image/image-layers.integration.test.ts holds the budget. A new command joins this list.
+COPY --chmod=755 \
+    _sandbox/sandbox/bin/vpn \
+    _sandbox/sandbox/bin/geo \
+    _sandbox/sandbox/bin/netdisk \
+    _sandbox/sandbox/bin/extension \
+    _sandbox/sandbox/bin/otp \
+    _sandbox/sandbox/bin/capabilities \
+    _sandbox/sandbox/bin/grants \
+    _sandbox/sandbox/bin/environment \
+    _sandbox/sandbox/bin/needs \
+    _sandbox/sandbox/bin/automations \
+    _sandbox/sandbox/bin/wallet \
+    _sandbox/sandbox/bin/secrets \
+    _sandbox/sandbox/bin/privacy \
+    _sandbox/sandbox/bin/agents \
+    _sandbox/sandbox/bin/devices \
+    _sandbox/sandbox/bin/offload-run \
+    _sandbox/sandbox/bin/sandboxes \
+    /usr/local/bin/
 # Entrypoint starts sshd (for Mutagen sync) then execs the daemon as PID 1.
-COPY _sandbox/sandbox/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+COPY --chmod=755 _sandbox/sandbox/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 WORKDIR /work
 # LANG: without a UTF-8 locale zsh's line editor counts BYTES as columns, so bira's multibyte prompt glyphs
 # (╰─, ↵) desync the cursor and corrupt the prompt after any non-zero exit status. C.utf8 is glibc-built-in.

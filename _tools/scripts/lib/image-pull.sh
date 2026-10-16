@@ -59,6 +59,15 @@ image_pull_unpack_fault() {
         -- "$1"
 }
 
+# THE FAULT THAT IS THE IMAGE'S OWN: a layer chain deeper than Docker's classic layer store registers (125), which every
+# pull of that image on such a store fails the same way, at the first layer past the limit. 1.338.0's standard image was
+# 127 layers deep and its arm64 smoke printed the registry verdict below over it; amd64, on the containerd store,
+# pulled the same image. Neither a retry nor a fresh store clears it: the image has to lose layers
+# (_sandbox/sandbox/src/image/image-layers.integration.test.ts holds the budget).
+image_pull_image_fault() {
+    grep -Eqi -- 'max depth exceeded' "$1"
+}
+
 # Run the pull, streaming it (a 5 GB pull must not go quiet for the sake of being judged) while keeping a copy
 # to judge a failure by. The registry's own transient set is handled inside `registry_retry`; what comes back
 # failed is either an unpack this function can clear or a verdict worth printing.
@@ -71,6 +80,11 @@ image_pull() { # <image-ref>
         if [ "$status" -eq 0 ]; then
             rm -f "$log"
             return 0
+        fi
+        if image_pull_image_fault "$log"; then
+            rm -f "$log"
+            echo "  ✗ could not pull $image — the IMAGE is deeper than Docker's layer store takes (125 layers: max depth exceeded), which no retry, registry or runner clears: the image needs fewer layers" >&2
+            return "$status"
         fi
         if ! image_pull_unpack_fault "$log"; then
             rm -f "$log"

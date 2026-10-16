@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { advanceTimersByTimeAsync, SETTLES, waitFor } from "@intentic/testing/bun";
 import { requires } from "@intentic/testing/requires";
-import { SPAWN_STAMP_ENV } from "../../workload/workload-class.js";
+import { carriesStamp, SPAWN_STAMP_ENV } from "../../workload/workload-class.js";
 import { processAlive, type ServedServer, spawnOpencodeServe, waitForExit } from "./opencode-serve.js";
 
 // `spawnOpencodeServe` against a stand-in `opencode`: a shell script in a temp dir that records what it was started with,
@@ -213,6 +213,37 @@ test.skipIf(!linuxProc.runs)(linuxProc.title("waitForExit kills a server that ou
 
     expect(await exited).toBe(`OpenCode's server exited (SIGKILL). It said: ${LISTENING}`);
     // The wait looks again on its next poll and finds it gone.
+    await advanceTimersByTimeAsync(20);
+    await waiting;
+});
+
+// A look at /proc/<pid>/environ taken while the process is mid-exec reads it empty, with no stamp, and the stand-in's own
+// `exec sleep` is such an exec: one look latched for good let it sleep out its minute (run 38916025727, Pacific/Niue).
+test.skipIf(!linuxProc.runs)(linuxProc.title("waitForExit looks for the stamp again when a look past the grace misses it"), async () => {
+    const binary = await standIn(`trap '' TERM\necho '${LISTENING}'\nexec sleep 60`);
+    const served = await serve(binary);
+    const exited = exitOf(served);
+    // The first look past the grace misses, as one landing inside an exec does; every later one reads the real environ.
+    const looks: boolean[] = [];
+    const carries = (pid: number, stamp: string): boolean => {
+        const seen = looks.length > 0 && carriesStamp(pid, stamp);
+        looks.push(seen);
+        return seen;
+    };
+    jest.useFakeTimers();
+
+    served.close();
+    const waiting = waitForExit(served.process ?? { pid: 0, stamp: "" }, processAlive, carries);
+    await advanceTimersByTimeAsync(2_999);
+    expect(looks).toEqual([]);
+    const heard = tracked(exited);
+    for (let step = 0; step < 50 && !heard(); step += 1) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- each step must land before the next is taken
+        await advanceTimersByTimeAsync(20);
+    }
+
+    expect(await exited).toBe(`OpenCode's server exited (SIGKILL). It said: ${LISTENING}`);
+    expect(looks).toEqual([false, true]);
     await advanceTimersByTimeAsync(20);
     await waiting;
 });

@@ -171,8 +171,13 @@ test(`today's editor opens its main pages on the released sandbox with nothing f
             // heartbeats, the editor reads its whole roster again every two seconds (daemon-floor.ts says so).
             const tooOld = page.locator(`[data-too-old]`);
             const outcome = async (): Promise<string> => ((await tooOld.count()) > 0 ? `too old` : seen.settled() ? `settled` : `busy`);
-            await expect.poll(outcome, { message: `the daemon's traffic never went quiet on ${path}`, timeout: 60_000 }).not.toBe(`busy`);
-            expect(await outcome(), `the editor calls ${daemon.version} too old for it`).toBe(`settled`);
+            // The sample that ended the wait is the one judged: a second look reads another moment, and a page's next
+            // refetch landing right after the quiet window read as `busy` and failed as "too old" (run 38919885439).
+            let ended = `busy`;
+            await expect
+                .poll(async () => (ended = await outcome()), { message: `the daemon's traffic never went quiet on ${path}`, timeout: 60_000 })
+                .not.toBe(`busy`);
+            expect(ended, `the editor calls ${daemon.version} too old for it`).toBe(`settled`);
             // Nor any other gate (connecting, warming, refused): the page itself, drawn.
             await expect(page.locator(`[data-sandbox-gate]`)).toHaveCount(0);
             await drawn(page);

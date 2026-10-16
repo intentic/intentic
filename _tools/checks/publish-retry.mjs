@@ -177,6 +177,8 @@ rm -f "$landed"
         // every verdict the registry reaches is registry-retry.sh's to judge one layer in.
         failAtOnce: [
             ["a full disk", "failed to register layer: write /var/lib/docker/overlay2/2f0c/merged/opt/sandbox/node_modules/a: no space left on device"],
+            // The image's own fault, which 1.338.0's arm64 smoke printed: no fresh unpack registers a 126th layer.
+            ["an image deeper than the layer store takes", "failed to register layer: max depth exceeded"],
             [
                 "a tag that is not there",
                 'Error response from daemon: failed to resolve reference "ghcr.io/intentic/sandbox:no-such-tag": ghcr.io/intentic/sandbox:no-such-tag: not found',
@@ -193,6 +195,7 @@ rm -f "$landed"
 export REGISTRY_RETRY_ATTEMPTS=1 IMAGE_PULL_ATTEMPTS=3 IMAGE_PULL_DELAY=0
 LOST='failed to prepare extraction snapshot "extract-867389931-0Kfz sha256:278bf3cda023": NotFound: parent snapshot sha256:ceeb23b44c46 does not exist: not found'
 MISSING='Error response from daemon: failed to resolve reference "ghcr.io/intentic/sandbox:no-such-tag": ghcr.io/intentic/sandbox:no-such-tag: not found'
+DEEP='failed to register layer: max depth exceeded'
 
 # The stub docker: "pull" prints the failure under test and counts the attempt, "image rm" is the drop between
 # attempts, which always succeeds because there may be nothing left to drop.
@@ -210,8 +213,9 @@ docker() {
 FLAKY=yes OUTPUT="$LOST"    run cleared     image_pull ghcr.io/intentic/sandbox:1.285.0-amd64
 FLAKY=no  OUTPUT="$LOST"    run store-gone  image_pull ghcr.io/intentic/sandbox:1.285.0-amd64
 FLAKY=no  OUTPUT="$MISSING" run missing-tag image_pull ghcr.io/intentic/sandbox:no-such-tag
+FLAKY=no  OUTPUT="$DEEP"    run too-deep    image_pull ghcr.io/intentic/sandbox:1.338.0-arm64
 `,
-        expect: { cleared: [2, 0], "store-gone": [3, 1], "missing-tag": [1, 1] },
+        expect: { cleared: [2, 0], "store-gone": [3, 1], "missing-tag": [1, 1], "too-deep": [1, 1] },
     },
     {
         id: "github-upload",
