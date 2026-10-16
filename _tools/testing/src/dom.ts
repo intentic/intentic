@@ -142,12 +142,38 @@ const patchAddEventListener = (win: Global): void => {
     };
 };
 
+// A failed matcher prints what it received through this hook, and a jsdom node without it prints its whole object graph,
+// window and document included: one `toBeNull()` on a found element was 1.27M log lines on 2026-10-16, and relaying them
+// held the run long enough to time out a test in another file. The node's markup is what the failure needs. A `toEqual`
+// diff does not consult the hook, so compare markup or a boolean there rather than a node.
+const MARKUP_SHOWN = 2000;
+const inspectNodesAsMarkup = (win: Global): void => {
+    // SAFETY: the window's own DOM classes, read by name off a jsdom window, which defines both.
+    const NodeClass = win[`Node`] as typeof Node;
+    // SAFETY: as above.
+    const ElementClass = win[`Element`] as typeof Element;
+    Object.defineProperty(NodeClass.prototype, Symbol.for(`nodejs.util.inspect.custom`), {
+        value(this: Node): string {
+            // The prototype itself, inspected directly, has no node behind its getters.
+            if (!(this instanceof NodeClass)) {
+                return `[${NodeClass.name} prototype]`;
+            }
+            const markup = this instanceof ElementClass ? this.outerHTML : (this.textContent ?? ``);
+            const clipped =
+                markup.length > MARKUP_SHOWN ? `${markup.slice(0, MARKUP_SHOWN)}… (${String(markup.length - MARKUP_SHOWN)} more characters)` : markup;
+            return `${this.nodeName} ${clipped}`;
+        },
+        configurable: true,
+    });
+};
+
 const dom = new JSDOM(`<!DOCTYPE html>`, { pretendToBeVisual: true, url: `http://localhost:3000`, runScripts: `dangerously` });
 const win = dom.window as unknown as Global;
 const global = globalThis as unknown as Global;
 
 // Before the runtime's signal classes replace jsdom's on the window: the bridge below keys on jsdom's own.
 patchAddEventListener(win);
+inspectNodesAsMarkup(win);
 
 // jsdom lacks structuredClone and the encoders; the fetch family is always the runtime's, so a Response is its fetch's own.
 for (const name of [`structuredClone`, `TextEncoder`, `TextDecoder`]) {
