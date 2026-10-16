@@ -1,4 +1,7 @@
 import { normalizeHost, SECRET_REFERENCE } from "@intentic/sandbox-contract";
+import { type Flags, parseFlags } from "./destinations/secret-command-flags.js";
+import { lex, STAND_IN, type Unreadable, type Word } from "./destinations/secret-command-lex.js";
+import { UTILITY_READERS } from "./destinations/secret-command-utilities.js";
 
 // Where one use of a secret would send it, read from the reference-form text before anything runs, for the host limit
 // (host-guard-gate.ts). Heuristic by nature, so it reads the other way round from a classifier: it proves nothing, and
@@ -17,326 +20,9 @@ export type Destination =
     // Why it cannot be read, as a clause that finishes "…because ": the card and the refusal both say it.
     | { readonly certain: false; readonly why: string };
 
-// Why a part of the command cannot be read; every reader below answers either its finding or one of these.
-interface Unreadable {
-    readonly why: string;
-}
-
 const unreadable = (why: string): Destination => ({ certain: false, why });
 
-// A reference stands in as a character no host, flag or operator contains, so a secret spelled into a host or a program
-// name fails every test below instead of passing as whatever its value happens to be.
-// Its own /g copy: replace needs one, and the shared pattern stays free of `lastIndex` state.
 const REFERENCE = new RegExp(SECRET_REFERENCE.source, "g");
-const STAND_IN = "\u0001";
-
-// One shell word with its quoting taken off; `dynamic` when a `$` expansion inside double quotes fills part of it, whose
-// value exists only when the command runs. `assignment` when the word as written opens with an unquoted `NAME=`, the
-// only spelling a shell takes as setting a variable (`"A=x"` is a program named `A=x`).
-interface Word {
-    readonly text: string;
-    readonly dynamic: boolean;
-    readonly assignment?: boolean;
-}
-
-// Characters that break a line into separate stages, outside quotes: a pipe, a background `&`, a `;`, a newline. Each
-// run of them (so `&&`, `||`, `|&` too) ends the current stage and starts the next; each stage is read on its own. A
-// stage that names no host it would connect to cannot send the value anywhere, so a pipe into `jq` or a `cd` before a
-// `curl` no longer makes the destination unreadable — the stage itself is read, and only an unreadable stage refuses.
-const SEPARATORS: ReadonlySet<string> = new Set(["|", "&", ";", "\n"]);
-
-// Characters that run a command inside the command or open a scope its text no longer follows: each leaves the
-// destination unreadable, since what crosses them cannot be read from the words. A redirection (`<`, `>`) is read on its
-// own (readRedirect), since the common ones send nothing anywhere new.
-const OPERATORS: ReadonlyMap<string, string> = new Map([
-    ["(", "it opens a subshell"],
-    [")", "it opens a subshell"],
-    ["`", "it runs a command inside the command"],
-    ["{", "it uses brace expansion"],
-    ["}", "it uses brace expansion"],
-]);
-
-const REDIRECTS = "it redirects input or output";
-
-// A redirection that sends nothing anywhere new: output or input joined to /dev/null (discarded), or one of the process's
-// own streams duplicated onto another (`2>&1`, `>&2`, `<&0`, `>&-`). Any other target — a file, `/dev/tcp/host/port`, a
-// heredoc (`<<`), a process substitution — is left unread, since what it writes there cannot be followed. The optional
-// leading `&` covers `&>`/`&>>` (both streams); a numeric file descriptor before the operator (`2>`) is stripped by the
-// caller, since it is not a word.
-const SAFE_REDIRECT = /^(?:(?:&?>>?|<>?)[ \t]*\/dev\/null(?![\w/])|[<>]&(?:\d+|-))/;
-
-// Reads a redirection at the cursor. A digit being built as a word is the file descriptor it applies to (`2` in `2>&1`),
-// not an argument, so it is dropped; any other word already built is a real argument and is kept. Returns undefined when
-// the redirection sends nothing anywhere new (the cursor has moved past it), else why it cannot be read.
-const readRedirect = (state: LexState): string | undefined => {
-    if (state.source.charAt(state.index) !== "&" && state.started && /^\d+$/.test(state.text)) {
-        state.text = "";
-        state.started = false;
-    } else {
-        finishWord(state);
-    }
-    const match = SAFE_REDIRECT.exec(state.source.slice(state.index));
-    if (match === null) {
-        return REDIRECTS;
-    }
-    state.index += match[0].length;
-    return undefined;
-};
-
-const SUBSTITUTES = "it runs a command inside the command";
-const EXPANDS = "a shell variable or expansion in it is only filled in when it runs";
-const UNCLOSED = "a quote in it never closes";
-
-// A `$` that starts an expansion: a name, a positional or special parameter, `${`, `$(` or `$'`.
-const EXPANSION_START = /[A-Za-z_0-9{(@*#?$!'-]/;
-
-// The lexer's position, the word it is building, the stage's words so far, and every stage a separator has closed.
-// `bindings` are the shell variables an earlier stage of this line set to a plain value the reader saw, in force where
-// they are read; `before` is the separator run the stage being built follows ("" at the start of the line).
-interface LexState {
-    readonly source: string;
-    readonly segments: Word[][];
-    readonly bindings: Map<string, string>;
-    words: Word[];
-    index: number;
-    text: string;
-    dynamic: boolean;
-    started: boolean;
-    wordStart: number;
-    before: string;
-    ifsChanged: boolean;
-}
-
-const ASSIGNMENT_PREFIX = /^[A-Za-z_][A-Za-z0-9_]*=/;
-
-const startWord = (state: LexState): void => {
-    if (!state.started) {
-        state.started = true;
-        state.wordStart = state.index;
-    }
-};
-
-const finishWord = (state: LexState): void => {
-    if (state.started) {
-        const assignment = ASSIGNMENT_PREFIX.test(state.source.slice(state.wordStart));
-        state.words.push({ text: state.text, dynamic: state.dynamic, assignment });
-    }
-    state.text = "";
-    state.dynamic = false;
-    state.started = false;
-};
-
-// How a separator run joins two stages. A stage after `&&` or `||` may never run; one after a single `|`, or before a
-// `|` or a background `&`, runs in a subshell whose variables die with it.
-const conditional = (run: string): boolean => run.includes("&&") || run.includes("||");
-const pipedInto = (run: string): boolean => run.replaceAll("||", "").includes("|");
-const leavesShell = (run: string | undefined): boolean => run !== undefined && /^[ \t]*(?:\|(?!\|)|&(?!&))/.test(run);
-
-// What a finished stage does to the variables later stages read. Only a stage of nothing but assignments sets them in
-// the shell itself (with a program after them they go to that program's environment alone), and only when it surely runs
-// there: a stage that runs in a subshell changes nothing, and one that may not run at all (after `&&` or `||`) leaves
-// its names unknown, as does a value filled in at run time or one with a `~` the shell would expand. `printf -v` is the
-// one inert program that sets a variable, so it forgets them all, and a changed IFS stops unquoted reads.
-const settleStage = (state: LexState, words: readonly Word[], after: string | undefined): void => {
-    if (words.find((word) => word.assignment !== true)?.text === "printf" && words.some((word) => word.text.startsWith("-v"))) {
-        state.bindings.clear();
-        return;
-    }
-    if (!words.every((word) => word.assignment === true) || pipedInto(state.before) || leavesShell(after)) {
-        return;
-    }
-    const surely = !conditional(state.before);
-    for (const word of words) {
-        const split = word.text.indexOf("=");
-        const name = word.text.slice(0, split);
-        const value = word.text.slice(split + 1);
-        state.ifsChanged ||= name === "IFS";
-        if (surely && !word.dynamic && !value.includes("~")) {
-            state.bindings.set(name, value);
-        } else {
-            state.bindings.delete(name);
-        }
-    }
-};
-
-// Closes the current stage at a separator run (undefined at the end of the line); a run with no stage before it (a
-// leading `;`, `&&` then a newline) adds no stage and joins the run the next stage follows.
-const finishSegment = (state: LexState, after?: string): void => {
-    finishWord(state);
-    if (state.words.length > 0) {
-        settleStage(state, state.words, after);
-        state.segments.push(state.words);
-        state.words = [];
-        state.before = after ?? "";
-    } else {
-        state.before += after ?? "";
-    }
-};
-
-// A run of separators, and the blanks between them, taken whole so `&&` reads as one join rather than two `&`. A `&`
-// that opens `&>` is a redirect, not a separator.
-const SEPARATOR_RUN = /^(?:[|;\n \t]|&(?!>))+/;
-const readSeparators = (state: LexState): undefined => {
-    const run = SEPARATOR_RUN.exec(state.source.slice(state.index))?.[0] ?? state.source.charAt(state.index);
-    finishSegment(state, run);
-    state.index += run.length;
-    return undefined;
-};
-
-// `$NAME` or `${NAME}` naming a variable an earlier stage set to a plain value: that value, and how much text it spans.
-const VARIABLE = /^\$(?:([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z_][A-Za-z0-9_]*)\})/;
-const boundValue = (state: LexState, at: number): { readonly value: string; readonly length: number } | undefined => {
-    const match = VARIABLE.exec(state.source.slice(at));
-    const name = match?.[1] ?? match?.[2];
-    const value = name === undefined ? undefined : state.bindings.get(name);
-    return match === null || value === undefined ? undefined : { value, length: match[0].length };
-};
-
-// Outside quotes the shell splits an expansion into words and globs it; a value that stays one word as written is read
-// in place, anything else is left to the run.
-const UNSPLIT = /^[^\s*?[\]\\]+$/;
-
-// A single-quoted run: no escapes, no expansions.
-const singleQuoted = (state: LexState): string | undefined => {
-    const close = state.source.indexOf("'", state.index + 1);
-    if (close === -1) {
-        return UNCLOSED;
-    }
-    state.text += state.source.slice(state.index + 1, close);
-    state.index = close + 1;
-    return undefined;
-};
-
-// One character inside double quotes: `$name` marks the word dynamic, `$(` and backticks run a command.
-const quotedChar = (state: LexState, at: number): { readonly next: number } | Unreadable => {
-    const char = state.source.charAt(at);
-    const following = state.source.charAt(at + 1);
-    if (char === "\\" && following !== "") {
-        state.text += following;
-        return { next: at + 2 };
-    }
-    if (char === "`" || (char === "$" && following === "(")) {
-        return { why: SUBSTITUTES };
-    }
-    const bound = char === "$" ? boundValue(state, at) : undefined;
-    if (bound !== undefined) {
-        state.text += bound.value;
-        return { next: at + bound.length };
-    }
-    state.dynamic ||= char === "$" && EXPANSION_START.test(following);
-    state.text += char;
-    return { next: at + 1 };
-};
-
-const doubleQuoted = (state: LexState): string | undefined => {
-    let at = state.index + 1;
-    while (at < state.source.length) {
-        if (state.source.charAt(at) === `"`) {
-            state.index = at + 1;
-            return undefined;
-        }
-        const read = quotedChar(state, at);
-        if ("why" in read) {
-            return read.why;
-        }
-        at = read.next;
-    }
-    return UNCLOSED;
-};
-
-// A backslash outside quotes: the next character as itself, or, before a newline, a line continuation.
-const escaped = (state: LexState): undefined => {
-    const next = state.source.charAt(state.index + 1);
-    state.index += 2;
-    if (next === "\n") {
-        finishWord(state);
-        return undefined;
-    }
-    state.text += next;
-    return undefined;
-};
-
-const plainChar = (state: LexState): undefined => {
-    state.text += state.source.charAt(state.index);
-    state.index += 1;
-    return undefined;
-};
-
-const READERS: ReadonlyMap<string, (state: LexState) => string | undefined> = new Map([
-    ["'", singleQuoted],
-    [`"`, doubleQuoted],
-    ["\\", escaped],
-]);
-
-// A `$` outside quotes: a variable set earlier in the line to a value that stays one word, read in place; anything else
-// is filled in only when the command runs.
-const unquotedExpansion = (state: LexState): string | undefined => {
-    const bound = boundValue(state, state.index);
-    if (bound === undefined || state.ifsChanged || !UNSPLIT.test(bound.value)) {
-        return EXPANDS;
-    }
-    startWord(state);
-    state.text += bound.value;
-    state.index += bound.length;
-    return undefined;
-};
-
-// One step of reading: undefined to go on, else why the command cannot be read.
-const lexStep = (state: LexState): string | undefined => {
-    const char = state.source.charAt(state.index);
-    if (char === " " || char === "\t") {
-        finishWord(state);
-        state.index += 1;
-        return undefined;
-    }
-    if (char === "#" && !state.started) {
-        // A comment runs to the end of its own line, not the command's: what follows the newline still runs.
-        const end = state.source.indexOf("\n", state.index);
-        state.index = end === -1 ? state.source.length : end;
-        return undefined;
-    }
-    if (char === "<" || char === ">" || (char === "&" && state.source.charAt(state.index + 1) === ">")) {
-        return readRedirect(state);
-    }
-    if (SEPARATORS.has(char)) {
-        return readSeparators(state);
-    }
-    const operator = OPERATORS.get(char);
-    if (operator !== undefined) {
-        return operator;
-    }
-    if (char === "$" && EXPANSION_START.test(state.source.charAt(state.index + 1))) {
-        return unquotedExpansion(state);
-    }
-    startWord(state);
-    return (READERS.get(char) ?? plainChar)(state);
-};
-
-// Splits one line into its stages, each a list of words the way a shell would, or says which shell feature makes that
-// impossible to trust. Deliberately narrower than a shell: anything this does not model is a reason, not a guess.
-const lex = (source: string): { readonly segments: readonly (readonly Word[])[] } | Unreadable => {
-    const state: LexState = {
-        source,
-        segments: [],
-        bindings: new Map(),
-        words: [],
-        index: 0,
-        text: "",
-        dynamic: false,
-        started: false,
-        wordStart: 0,
-        before: "",
-        ifsChanged: false,
-    };
-    while (state.index < source.length) {
-        const step = lexStep(state);
-        if (step !== undefined) {
-            return { why: step };
-        }
-    }
-    finishSegment(state);
-    return { segments: state.segments };
-};
 
 // The host a URL names, past the scheme and any userinfo (a token spelled before an `@` is not the host), before the port
 // and the path. Undefined when it is not a plain host a list could name.
@@ -371,18 +57,12 @@ const urlDestination = (word: Word, schemes: ReadonlySet<string>): { readonly ho
     return { host };
 };
 
-// A flag table for one program: which flags take a value (read past, never as a destination), which name the
-// destination, which change where it connects or keep the secret somewhere (each one a reason), and which are known to do
-// none of that. A flag in none of them is a reason too: a table this narrow cannot vouch for what it has not read.
-interface Flags {
-    readonly values: ReadonlySet<string>;
+interface FetcherFlags extends Flags {
     readonly destinations: ReadonlySet<string>;
-    readonly steers: ReadonlyMap<string, string>;
-    readonly plain: ReadonlySet<string>;
-    // Whether it follows redirects unless told not to: wget does, and resends the headers it was given wherever they lead.
+    // wget follows redirects unless told not to, resending the headers it was given wherever they lead.
     readonly redirects: boolean;
+    readonly writeOut: ReadonlySet<string>;
 }
-
 const STEERS_PROXY = "it sends through a proxy or a changed address";
 const STEERS_CONFIG = "it reads more options from a file";
 const STEERS_REDIRECT = "it follows redirects, which can lead to any host";
@@ -390,7 +70,7 @@ const STEERS_TRUST = "it skips checking the server's certificate, so the host it
 const STEERS_KEEPS = "it writes the request, secret included, somewhere a later command can read it";
 const STEERS_VARIABLES = "it fills in parts of the command from variables when it runs";
 
-const CURL: Flags = {
+const CURL: FetcherFlags = {
     values: new Set([
         ..."AbcCdDeEFHmoPQrtTuUwXyYz",
         "header",
@@ -451,6 +131,7 @@ const CURL: Flags = {
         "create-file-mode",
         "service-name",
         "netrc-file",
+        "url",
     ]),
     destinations: new Set(["url"]),
     steers: new Map([
@@ -517,9 +198,10 @@ const CURL: Flags = {
         "append",
     ]),
     redirects: false,
+    writeOut: new Set(["w", "write-out"]),
 };
 
-const WGET: Flags = {
+const WGET: FetcherFlags = {
     values: new Set([
         ..."OoaUPtTwQ",
         "output-document",
@@ -576,91 +258,7 @@ const WGET: Flags = {
         "inet6-only",
     ]),
     redirects: true,
-};
-
-const takesValue = (flags: Flags, name: string): boolean => flags.values.has(name) || flags.destinations.has(name);
-
-// Why a flag rules the command out, or undefined for one the table knows to be harmless. `shown` is how the command
-// spelled it.
-const flagReason = (flags: Flags, name: string, shown: string): string | undefined =>
-    flags.steers.get(name) ??
-    (takesValue(flags, name) || flags.plain.has(name) ? undefined : `it uses an option (${shown}) this check does not read`);
-
-// What one flag word took: how many following words it used as its value, and that value.
-interface FlagRead {
-    readonly skip: number;
-    readonly value?: { readonly name: string; readonly word: Word };
-}
-
-const valueRead = (name: string, shown: string, attached: Word | undefined, next: Word | undefined): FlagRead | Unreadable => {
-    const word = attached ?? next;
-    return word === undefined ? { why: `${shown} is missing its value` } : { skip: attached === undefined ? 1 : 0, value: { name, word } };
-};
-
-// `--name value` or `--name=value`.
-const readLong = (flags: Flags, word: Word, next: Word | undefined): FlagRead | Unreadable => {
-    const [name = "", attached] = word.text.slice(2).split(/=(.*)/s);
-    const why = flagReason(flags, name, `--${name}`);
-    if (why !== undefined) {
-        return { why };
-    }
-    if (!takesValue(flags, name)) {
-        return { skip: 0 };
-    }
-    return valueRead(name, `--${name}`, attached === undefined ? undefined : { text: attached, dynamic: word.dynamic }, next);
-};
-
-// A short cluster, `-sSo out.json`: switches, then at most one value-taking letter, whose value is the rest of the word
-// or the next one.
-const readShort = (flags: Flags, word: Word, next: Word | undefined): FlagRead | Unreadable => {
-    for (let at = 1; at < word.text.length; at += 1) {
-        const letter = word.text.charAt(at);
-        const why = flagReason(flags, letter, `-${letter}`);
-        if (why !== undefined) {
-            return { why };
-        }
-        if (takesValue(flags, letter)) {
-            const rest = word.text.slice(at + 1);
-            return valueRead(letter, `-${letter}`, rest === "" ? undefined : { text: rest, dynamic: word.dynamic }, next);
-        }
-    }
-    return { skip: 0 };
-};
-
-const readFlag = (flags: Flags, word: Word, next: Word | undefined): FlagRead | Unreadable | undefined => {
-    if (word.text.startsWith("--")) {
-        return readLong(flags, word, next);
-    }
-    return word.text.startsWith("-") && word.text.length > 1 ? readShort(flags, word, next) : undefined;
-};
-
-interface Parsed {
-    readonly positionals: readonly Word[];
-    readonly values: readonly { readonly name: string; readonly word: Word }[];
-}
-
-// Reads one program's arguments against its table; `--` ends the options.
-const parseFlags = (args: readonly Word[], flags: Flags): Parsed | Unreadable => {
-    const positionals: Word[] = [];
-    const values: { readonly name: string; readonly word: Word }[] = [];
-    let index = 0;
-    for (let word = args.at(0); word !== undefined; word = args.at(index)) {
-        if (word.text === "--") {
-            positionals.push(...args.slice(index + 1));
-            break;
-        }
-        const read = readFlag(flags, word, args.at(index + 1));
-        if (read !== undefined && "why" in read) {
-            return read;
-        }
-        if (read === undefined) {
-            positionals.push(word);
-        } else if (read.value !== undefined) {
-            values.push(read.value);
-        }
-        index += 1 + (read?.skip ?? 0);
-    }
-    return { positionals, values };
+    writeOut: new Set(),
 };
 
 const WEB_SCHEMES = new Set(["http", "https"]);
@@ -678,14 +276,22 @@ const hostsOf = (words: readonly Word[], schemes: ReadonlySet<string>): Reach =>
 };
 
 // curl and wget take every positional as a URL, one without a scheme as http.
-const fetcherReach = (args: readonly Word[], flags: Flags): Reach => {
+const fetcherReach = (args: readonly Word[], flags: FetcherFlags): Reach => {
     const parsed = parseFlags(args, flags);
     if ("why" in parsed) {
         return parsed;
     }
     const valueOf = (name: string): readonly Word[] => parsed.values.filter((value) => value.name === name).map((value) => value.word);
-    if (flags.redirects && !valueOf("max-redirect").some((word) => word.text === "0")) {
+    if (flags.redirects && valueOf("max-redirect").at(-1)?.text !== "0") {
         return { why: STEERS_REDIRECT };
+    }
+    // curl's write-out is a small language, not just text to print. A template from a file / runtime value is unread,
+    // and %output{...} opens a file. %% escapes a literal percent and cannot introduce that directive.
+    for (const word of [...flags.writeOut].flatMap(valueOf)) {
+        const writes = [...word.text.matchAll(/%%|%output\{/g)].some((match) => match[0] !== "%%");
+        if (word.dynamic || word.text.includes(STAND_IN) || word.text.startsWith("@") || writes) {
+            return { why: STEERS_KEEPS };
+        }
     }
     return hostsOf([...parsed.positionals, ...[...flags.destinations].flatMap(valueOf)], WEB_SCHEMES);
 };
@@ -816,6 +422,7 @@ const gitReach = (args: readonly Word[]): Reach => {
 
 // A Map, not an object: a program named `constructor` must find nothing, not Object's own.
 const PROGRAMS: ReadonlyMap<string, (args: readonly Word[]) => Reach> = new Map([
+    ...UTILITY_READERS,
     ["curl", (args: readonly Word[]) => fetcherReach(args, CURL)],
     ["wget", (args: readonly Word[]) => fetcherReach(args, WGET)],
     ["git", gitReach],
@@ -831,7 +438,6 @@ const INERT_PROGRAMS: ReadonlySet<string> = new Set([
     "cd",
     "pwd",
     "echo",
-    "printf",
     "true",
     "false",
     ":",
@@ -849,8 +455,6 @@ const INERT_PROGRAMS: ReadonlySet<string> = new Set([
     "wc",
     "cut",
     "tr",
-    "sort",
-    "uniq",
     "nl",
     "rev",
     "tac",
@@ -860,7 +464,6 @@ const INERT_PROGRAMS: ReadonlySet<string> = new Set([
     "grep",
     "egrep",
     "fgrep",
-    "rg",
     "jq",
     "comm",
 ]);
@@ -877,6 +480,9 @@ const programReach = (words: readonly Word[]): Reach => {
         return { why: "it runs nothing" };
     }
     if (program.assignment === true) {
+        if (words.some((word) => word.assignment === true && word.text.startsWith("PATH="))) {
+            return { why: "it changes PATH, which can change which program runs" };
+        }
         // A stage that is only `NAME=value` literals sets shell variables and runs nothing, so it sends nothing and
         // steers nothing (an unexported name reaches no later program's environment). One with a program after the
         // assignments puts them in that program's environment, which can change where it connects; a value filled in at
@@ -914,14 +520,16 @@ export const commandDestination = (command: string): Destination => {
             hosts.add(host);
         }
     }
-    // A URL written anywhere — a header, a body, an argument of an inert stage — counts as a host the line names, so a
-    // value the reader cannot follow to it is still not sent there unasked.
-    for (const match of text.matchAll(URL_ANYWHERE)) {
-        const host = urlHost(match[0]);
-        if (host === undefined) {
-            return unreadable(`the host in "${match[0]}" cannot be read`);
+    // Read URLs from shell words too: escapes/continuations are already resolved, while comments are gone. Scanning
+    // the raw source again would contradict the lexer for escaped URLs and count addresses in discarded comments.
+    for (const word of lexed.segments.flat()) {
+        for (const match of word.text.matchAll(URL_ANYWHERE)) {
+            const host = urlHost(match[0]);
+            if (host === undefined) {
+                return unreadable(`the host in "${match[0]}" cannot be read`);
+            }
+            hosts.add(host);
         }
-        hosts.add(host);
     }
     return { certain: true, hosts: [...hosts] };
 };
