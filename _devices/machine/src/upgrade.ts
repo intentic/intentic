@@ -4,9 +4,21 @@ import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
 import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
 import { binDir } from "./config.js";
-import { agentAssetUrl, agentPath, download, launcherAssetUrl, launcherPath, renameIfPresent, versionOf } from "./release.js";
+import {
+    agentAssetName,
+    agentAssetUrl,
+    agentPath,
+    download,
+    launcherAssetName,
+    launcherAssetUrl,
+    launcherPath,
+    renameIfPresent,
+    versionOf,
+} from "./release.js";
+import { type ReleaseFile, verifyReleaseFiles } from "./release/release-verify.js";
 
-// One environment to one exact release: download → probe → swap → restart through the supervisor → verify → roll back.
+// One environment to one exact release: download → check against the release's signed SHA256SUMS → probe → swap →
+// restart through the supervisor → verify → roll back.
 // The binary replaced stays beside the new one as `<bin>.previous` until the new agent has run for ten minutes
 // (agent-trial.ts): a release that passes this restart and then keeps crashing is still undone.
 
@@ -22,6 +34,9 @@ export type UpgradeOutcome =
 // The upgrade's effects behind one seam, so the step order is testable without a network, a disk or a running agent.
 export interface UpgradeExec {
     readonly fetchTo: (url: string, dest: string) => Promise<void>;
+    // Why the downloaded files are not the ones the release published (release-verify.ts), or undefined when they are.
+    // Asked before the probe, which runs the download.
+    readonly verify: (version: string, files: readonly ReleaseFile[]) => Promise<string | undefined>;
     // The release the binary reports itself as; undefined where it does not run as an agent.
     readonly probe: (binary: string) => string | undefined;
     readonly swap: (from: string, to: string) => Promise<void>;
@@ -37,6 +52,7 @@ export interface UpgradeExec {
 
 // One file the upgrade replaces: where its release asset is, where it lands first, where the old one waits for rollback.
 interface Piece {
+    readonly asset: string;
     readonly url: string;
     readonly staged: string;
     readonly target: string;
@@ -46,9 +62,23 @@ interface Piece {
 // The agent is last, so every other piece is in place before the one whose restart proves the upgrade.
 const piecesOf = (exec: UpgradeExec, version: string): readonly [...Piece[], Piece] => [
     ...(exec.withLauncher
-        ? [{ url: launcherAssetUrl(version), staged: `${launcherPath}.new-${version}`, target: launcherPath, previous: `${launcherPath}.previous` }]
+        ? [
+              {
+                  asset: launcherAssetName(),
+                  url: launcherAssetUrl(version),
+                  staged: `${launcherPath}.new-${version}`,
+                  target: launcherPath,
+                  previous: `${launcherPath}.previous`,
+              },
+          ]
         : []),
-    { url: agentAssetUrl(version), staged: `${agentPath}.new-${version}`, target: agentPath, previous: `${agentPath}.previous` },
+    {
+        asset: agentAssetName(),
+        url: agentAssetUrl(version),
+        staged: `${agentPath}.new-${version}`,
+        target: agentPath,
+        previous: `${agentPath}.previous`,
+    },
 ];
 
 // The download is an agent of exactly the release asked for, or the machine keeps the one it has.
@@ -159,6 +189,18 @@ export const runUpgrade = async (exec: UpgradeExec, target: string, installed: s
     if (failedDownload !== undefined) {
         return { kind: "failed", reason: failedDownload };
     }
+    // Deleted rather than kept for a resume: a complete file that is wrong would otherwise be "resumed" forever.
+    const unverified = await exec.verify(
+        target,
+        pieces.map((piece) => ({ name: piece.asset, path: piece.staged })),
+    );
+    if (unverified !== undefined) {
+        await discardAll(
+            exec,
+            pieces.map((piece) => piece.staged),
+        );
+        return { kind: "failed", reason: `the download did not check out (${unverified}), so it was deleted and the agent you have is kept.` };
+    }
     const refused = refusal(exec.probe(pieces.at(-1)?.staged ?? `${agentPath}.new-${target}`), target);
     if (refused !== undefined) {
         await discardAll(
@@ -211,6 +253,19 @@ export const realUpgradeExec = (
         await sweepStaged(dest);
         await download(url, dest, { resume: true, onProgress: downloadProgress(log) });
         await chmod(dest, 0o755);
+    },
+    verify: async (version, files) => {
+        try {
+            const sums = await verifyReleaseFiles(version, files);
+            log(
+                sums === "signed"
+                    ? `Checked against the release's signed SHA256SUMS.`
+                    : `Checked against the release's SHA256SUMS (unsigned: v${version} predates signing).`,
+            );
+            return undefined;
+        } catch (error) {
+            return errorMessage(error);
+        }
     },
     probe: versionOf,
     swap: renameIfPresent,

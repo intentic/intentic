@@ -12,7 +12,8 @@ import { adoptRunningDistros } from "./environments/commands.js";
 import { launchUpgrade, UPGRADE_ENV, upgradeHereToMachine } from "./environments/machine-upgrade.js";
 import { machineId } from "./machine-id.js";
 import { runningAsInstalledAgent } from "./installed.js";
-import { agentPath, download, launcherAssetUrl, launcherPath } from "./release.js";
+import { agentPath, download, launcherAssetName, launcherAssetUrl, launcherPath } from "./release.js";
+import { verifyReleaseFiles } from "./release/release-verify.js";
 import { type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
 import { MACHINE_VERSION } from "./version.js";
 
@@ -155,7 +156,8 @@ const windowsPathRepair = async (out: Log): Promise<void> => {
     }
 };
 
-// The windowless launcher where there is none yet, pinned to this agent's release; an upgrade replaces it with the agent.
+// The windowless launcher where there is none yet, pinned to this agent's release and checked against its signed
+// SHA256SUMS; an upgrade replaces it with the agent.
 const ensureWindowsLauncher = async (out: Log): Promise<void> => {
     if (process.platform !== "win32" || MACHINE_VERSION === DEV_VERSION || existsSync(launcherPath)) {
         return;
@@ -165,6 +167,7 @@ const ensureWindowsLauncher = async (out: Log): Promise<void> => {
     try {
         await rm(staged, { force: true });
         await download(launcherAssetUrl(MACHINE_VERSION), staged);
+        await verifyReleaseFiles(MACHINE_VERSION, [{ name: launcherAssetName(), path: staged }]);
         await renameOver(staged, launcherPath);
     } catch (error) {
         await rm(staged, { force: true }).catch(() => undefined);

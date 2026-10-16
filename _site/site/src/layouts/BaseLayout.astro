@@ -178,6 +178,16 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
             }
         </script>
 
+        <script>
+            /* The site's counter and the source a visit carries into the app (lib/visit.ts). Built sites only: a dev
+               server has no Worker to answer /wire/site. */
+            import { APP_URL } from "@intentic/site-content/site";
+            import { startVisit } from "../lib/visit";
+            if (import.meta.env.PROD) {
+                startVisit(new URL(APP_URL).origin);
+            }
+        </script>
+
         {/* Last in the body: a chat bubble a visitor may never use must not delay anything they came for. */}
         <VisitorChat />
     </body>

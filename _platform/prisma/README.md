@@ -21,7 +21,8 @@ flowchart LR
   applied migration changes, when a new one adds a `NOT NULL` column with no `DEFAULT`, or when replaying the history
   does not produce `schema.prisma`.
 - The api image runs `migrate deploy` and then `migrate diff --exit-code` at boot, and stops if the live database
-  differs from the schema baked into that image.
+  differs from the schema baked into that image. Before `migrate deploy` applies anything it dumps the database, and
+  a failed dump stops the boot ([api README](../api/README.md#restoring-from-a-pre-migration-backup)).
 - `prisma.config.ts` loads the repo-root `.env` for `DATABASE_URL`; `build` generates with a placeholder URL, so
   building needs no database.
 
@@ -58,6 +59,9 @@ migration, so the api never boots and no redeploy clears it.
    ```
 
 4. Redeploy. The boot applies the new migration, and `migrate diff` confirms the database matches `schema.prisma`.
+
+The boot dumped the database before the failed attempt. When fixing forward is not an option, restoring that dump and
+running the previous build is the way back ([api README](../api/README.md#restoring-from-a-pre-migration-backup)).
 
 A boot that stops at `migrate diff` instead means the database has drifted from the migrations; the logged diff says
 where.

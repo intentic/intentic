@@ -2,6 +2,19 @@ import { INSTALL_SCRIPTS, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { DESKTOP_ROUTES, RELEASES_URL } from "./src/lib/desktop-downloads";
 import { type LiveContent, LIVE_CACHE_SECONDS, LIVE_CONTENT_URL, type LiveSwitch, parseLiveContent } from "./src/lib/live";
 import { injectPs1, injectSh, parseVerbRoute, refusalScript, resolveVerbRequest, scriptUrlOf, type VerbRequest } from "./src/lib/worker-verbs";
+import { handleSiteWire, type WireEnv } from "./src/lib/site-wire";
+
+// The Worker's bindings: the static assets, and the site counter's PostHog key and salt (lib/site-wire.ts), set as
+// Worker secrets; the counter sends nothing without the key.
+interface WorkerEnv extends WireEnv {
+    readonly ASSETS: { fetch: typeof fetch };
+}
+
+// Cloudflare's two-letter country for the visitor, or undefined where it does not know (`XX`, Tor, a local run).
+const countryOf = (request: Request): string | undefined => {
+    const country = request.cf?.country;
+    return country === undefined || country === "" || country === "XX" ? undefined : country;
+};
 
 // Vanity install-script paths, from @intentic/constants' table, which the app also writes into its one-liners.
 const SCRIPTS: Record<string, string> = Object.fromEntries(Object.values(INSTALL_SCRIPTS).map((script) => [script.path, script.file]));
@@ -197,8 +210,13 @@ function permanentSlash(response: Response, url: URL): Response {
 }
 
 export default {
-    async fetch(request: Request, env: { ASSETS: { fetch: typeof fetch } }): Promise<Response> {
+    async fetch(request: Request, env: WorkerEnv): Promise<Response> {
         const url = new URL(request.url);
+
+        // The site counter answers before anything else: no live notice, redirect or asset is any of its business.
+        if (url.pathname === "/wire/site") {
+            return handleSiteWire(request, env, countryOf(request));
+        }
 
         const secure = httpsRedirect(url);
         if (secure !== undefined) {

@@ -4520,6 +4520,8 @@
         "loader": {
             "declaresUiAppBuild": "declares UI but this app build has no module compiled in for it, the sandbox image and the app are on different versions",
             "listFailedActivated": "the extension list couldn't be loaded, so this build activated it on its own: {failure}",
+            "missingHostExports": "needs {imports}, which this version of the app doesn't have: the extension was built for a different version and needs updating",
+            "namesFromModule": "{names} from {module}",
             "needsIntenticAppProvides": "needs intentic {intentic}; this app provides {extensionApiVersion}",
             "unlistedByImage": "this sandbox image doesn't list it: the image and the app are on different versions, so it can't be switched off here"
         }
@@ -7335,6 +7337,12 @@
             "settingUpNote": "The first time, this installs the sync engine and restarts this computer's agent, so it may show as reconnecting for a moment. It usually takes a minute or two, and carries on if you leave this page.",
             "syncFilesHere": "Sync files here"
         },
+        "sandboxTooOld": {
+            "title": "This sandbox needs an update",
+            "titleNamed": "{name} needs an update",
+            "olderThanApp": "It runs version {version}, and this app works with sandboxes from version {oldest} on. Update it to open it here. Your files and conversations are kept.",
+            "manual": "Installed it yourself? Run this on the machine it runs on:"
+        },
         "sandboxUnauthorized": {
             "noAccessTo": "No access to \"{name}\"",
             "switchGoogleAccount": "Switch Google account",
@@ -7555,11 +7563,14 @@
             "n7Days": "7 days"
         },
         "useDaemonRoutes": {
-            "folderLacks": "'{route}' isn't available for a folder on this computer, only in a sandbox.",
+            "folderLacks": "This part of the app ({area}) isn't available for a folder on this computer, only in a sandbox.",
+            "folderLacksUnnamed": "This part of the app isn't available for a folder on this computer, only in a sandbox.",
             "pageOlder": "This page is running older code than the sandbox: reload the page.",
             "reloadOrUpdate": "Reload this page, or update the sandbox to a newer image.",
-            "routeDrifted": "This sandbox's daemon has '{route}' but exchanges different fields for it than this app expects. {remedy}",
-            "routeMissing": "This sandbox's daemon doesn't provide '{route}'. {remedy}",
+            "routeDrifted": "This sandbox answers this part of the app ({area}) with different fields than this app expects. {remedy}",
+            "routeDriftedUnnamed": "This sandbox answers this part of the app with different fields than this app expects. {remedy}",
+            "routeMissing": "This sandbox is too old for this part of the app ({area}). {remedy}",
+            "routeMissingUnnamed": "This sandbox is too old for this part of the app. {remedy}",
             "unexpectedShape": "This sandbox answered in a shape this app doesn't expect. {remedy}",
             "updateImage": "Update the sandbox to a newer image to use this feature."
         },
@@ -9999,7 +10010,12 @@
             "passkeyNudgeTitle": "Add a passkey for this sandbox",
             "passkeyNudgeDetail": "Add a passkey so you can reach this sandbox even when intentic is down.",
             "passkeyNudgeAdd": "Add a passkey",
-            "passkeyNudgeLater": "Not now"
+            "passkeyNudgeLater": "Not now",
+            "analyticsConsentTitle": "Help us see where intentic gets in the way?",
+            "analyticsConsentDetail": "With your yes, we record how the app is used: the pages you open, your clicks and a masked replay of the interface. Your workspace's contents are left out.",
+            "analyticsConsentHint": "Product analytics run through PostHog. The replay replaces every piece of text that is not the app's own wording with asterisks, and blanks the editor and terminals. You can change your answer any time under Settings, Data & privacy. The privacy policy at intentic.dev/privacy says exactly what is recorded.",
+            "analyticsConsentAllow": "Allow",
+            "analyticsConsentDecline": "No, thanks"
         },
         "presence": {
             "inChat": "In a chat session",

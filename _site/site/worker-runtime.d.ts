@@ -1,8 +1,22 @@
 /* THE TWO CLOUDFLARE-ONLY THINGS `worker.ts` USES, declared rather than depended on. */
 
+/**
+ * Cloudflare's `cf` object, one type both ways so a Request can be handed to another as its init: on a subrequest,
+ * options (`cacheTtl` overrides the origin's own Cache-Control); on an incoming request, facts about it (`country` is
+ * ISO 3166-1 alpha-2, or `XX` when unknown).
+ */
+interface CloudflareProperties {
+    cacheTtl?: number;
+    cacheEverything?: boolean;
+    readonly country?: string;
+}
+
+interface Request {
+    readonly cf?: CloudflareProperties;
+}
+
 interface RequestInit {
-    /** Cloudflare request features. `cacheTtl` overrides the origin's own Cache-Control for this subrequest. */
-    cf?: { cacheTtl?: number; cacheEverything?: boolean };
+    cf?: CloudflareProperties;
 }
 
 interface HTMLRewriterElement {

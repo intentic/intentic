@@ -22,7 +22,9 @@ flowchart LR
   sandbox volumes and sets `INTENTIC_AT_REST_KEY_FILE`. Recreate keeps that mount through updates and rollbacks.
   The bootstrap shims download a fresh static binary on every run, except one pinned to the release already installed
   (`IC_VERSION` beside `IC_URL`, which the desktop app sets to its own); the desktop app and the machine agent call the
-  installed one. An agent reaches it through a connected device's sandbox tools.
+  installed one. An agent reaches it through a connected device's sandbox tools. A download replaces nothing until it
+  matches the release's `SHA256SUMS` (the shims, by `sha256sum`, `shasum` or `Get-FileHash`), and the machine agent
+  also checks the release key's signature over those sums before it puts its own release's ic in place.
 - `ic sandbox connect <code>` redeems the setup code from the platform and brings a sandbox up. The claim names this
   machine and its side (`host`, `os`: `windows`, `linux/archlinux`), and a code already redeemed on another machine, or
   on the other side of this one, is refused with the platform's own sentence instead of starting a second copy

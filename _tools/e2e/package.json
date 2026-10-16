@@ -9,6 +9,7 @@
         "e2e:mobile": "node --experimental-strip-types mobile/audit.mts",
         "e2e:local": "playwright test -c local-face/local-face.playwright.config.ts",
         "e2e:signin": "playwright test -c signin/signin.playwright.config.ts",
+        "e2e:compat": "playwright test -c compat/compat.playwright.config.ts",
         "smoke:signin": "node smoke-signin.mjs"
     },
     "devDependencies": {

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # semantic-release prepareCmd: assert that every release artifact this run is about to publish EXISTS and is
-# the one that was verified, then assemble the release set (updater manifest, checksums, archive verification).
+# the one that was verified, then assemble the release set (updater manifest, archive verification, the signed
+# SHA256SUMS over every asset).
 #
 # NOTHING IS BUILT HERE ANY MORE. The artifacts arrive from the release workflow's parallel jobs, every one of
 # them built from this same commit with the same set-versions stamp, and every one of them a hard `needs` edge
@@ -56,9 +57,14 @@ if [ "$reported" != "$VERSION" ]; then
 fi
 
 # Assemble the desktop release set: validate the staged Linux bundles by exact versioned name, stage the
-# Windows candidate the Windows runner approved, write latest.json + SHA256SUMS, and re-run the archive
-# verification over the complete set.
+# Windows candidate the Windows runner approved, write latest.json, and re-run the archive verification over the
+# complete set.
 bash "$DIR/../desktop/build-desktop.sh" "$VERSION" --assemble "$PREBUILT_WINDOWS_DESKTOP_DIR"
+
+# The release's SHA256SUMS, over every asset the Release attaches (the one build-desktop.sh just wrote covers only the
+# installers), and SHA256SUMS.sig, the updater key's signature over it, which agents check before they replace
+# themselves or ic. Both land in the desktop dist-bin, so publish-github.sh uploads them and the attestation covers them.
+node "$DIR/release-checksums.mjs" "$VERSION"
 
 # This script ENDS HERE, with the artifacts staged, verified and unpublished. Nothing below the prepare step
 # belongs in it: semantic-release creates and pushes the `v<version>` tag itself the moment prepare returns, so

@@ -47,6 +47,7 @@ export const ProgressRing = m["ProgressRing"];
 export const ProjectChip = m["ProjectChip"];
 export const ProseField = m["ProseField"];
 export const RepoPicker = m["RepoPicker"];
+export const RepoRail = m["RepoRail"];
 export const ResizeSeam = m["ResizeSeam"];
 export const ResponsiveOverlay = m["ResponsiveOverlay"];
 export const Row = m["Row"];

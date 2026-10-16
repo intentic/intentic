@@ -9,7 +9,8 @@ defineProps<{ icon: IconName; title: string; spinner?: boolean }>();
 </script>
 
 <template>
-    <div class="flex h-full w-full items-center justify-center p-8">
+    <!-- `data-sandbox-gate`: what a browser check reads to tell a gate from the page it stands in front of (_tools/e2e/compat). -->
+    <div class="flex h-full w-full items-center justify-center p-8" data-sandbox-gate>
         <div class="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl bg-card shadow-sm p-8 text-center">
             <span class="flex h-12 w-12 items-center justify-center rounded-2xl border border-line bg-canvas text-muted">
                 <Icon :name="icon" class="text-xl" />

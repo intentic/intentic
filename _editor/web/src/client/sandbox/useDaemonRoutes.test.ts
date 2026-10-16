@@ -1,4 +1,5 @@
 import { resetSandboxScope } from "@intentic/extension-api";
+import { stubEnv, unstubAllEnvs } from "@intentic/testing/bun";
 import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
 import {
     appBehind,
@@ -231,6 +232,34 @@ describe(`staleDaemonReason`, () => {
         expect(reason).toMatch(/sandbox/i);
         expect(reason).not.toMatch(/reload this page/i);
     });
+
+    // What a person on the shipped app reads: the part of the app in plain words, never the dotted route id, and the
+    // update as the way out. A dev build adds the id (above), which is what a fix is written against.
+    describe(`in a shipped build`, () => {
+        beforeEach(() => stubEnv(`DEV`, ``));
+        afterEach(() => unstubAllEnvs());
+
+        it(`names the part of the app rather than the route`, () => {
+            setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => name !== `org.policy`));
+            const reason = staleDaemonReason(`org.policy`);
+            expect(reason).toBe(`This sandbox is too old for this part of the app (Organisation). Update the sandbox to a newer image to use this feature.`);
+            expect(reason).not.toContain(`org.policy`);
+        });
+
+        it(`names no part at all for a route of no named area, and still no id`, () => {
+            setDaemonRoutes(LEVEL.filter((name) => name !== `vpn.list`));
+            expect(staleDaemonReason(`vpn.list`)).toContain(`(VPN)`);
+            setDaemonRoutes(undefined, undefined, undefined, { rawRoutes: RAW_ROUTE_NAMES.filter((name) => name !== `GET /x/unnamed`) });
+            expect(staleDaemonReason(`GET /x/unnamed`)).toBe(`This sandbox is too old for this part of the app. Update the sandbox to a newer image to use this feature.`);
+        });
+
+        it(`says the same of a drifted route`, () => {
+            setDaemonRoutes(LEVEL, { ...sandboxRouteFingerprints(), "settings.get": `different` });
+            const reason = driftedRouteReason(`settings.get`);
+            expect(reason).toMatch(/^This sandbox answers this part of the app \(Sandbox settings\) with different fields/);
+            expect(reason).not.toContain(`settings.get`);
+        });
+    });
 });
 
 // The daemon's hand-written routes (`POST /workspace/upload-diff`), which used to be advertised nowhere: a call onto
@@ -264,7 +293,7 @@ describe(`the hand-written routes`, () => {
         sandbox(withoutLinks);
         expect(missingRoutes.value).toEqual([LINKS]);
         expect(daemonBehind.value).toBe(true);
-        expect(staleDaemonReason(LINKS)).toMatch(/^This sandbox's daemon doesn't provide 'GET \/system\/links'\./);
+        expect(staleDaemonReason(LINKS)).toMatch(/^This sandbox is too old for this part of the app \(Terminals and devices: GET \/system\/links\)\./);
         // The remedy is the sandbox's, never this page's: a missing route proves which of the two is behind. (In a dev
         // build that remedy is the restart script; in a shipped one, updating the image.)
         expect(staleDaemonReason(LINKS)).not.toMatch(/reload this page/i);
@@ -317,7 +346,7 @@ describe(`a folder on this computer`, () => {
 
     it(`says a missing route is not there for a folder, and never to update a sandbox`, () => {
         setDaemonRoutes(FOLDER, undefined, `folder`);
-        expect(staleDaemonReason(`workspace.mkdir`)).toBe(`'workspace.mkdir' isn't available for a folder on this computer, only in a sandbox.`);
+        expect(staleDaemonReason(`workspace.mkdir`)).toBe(`This part of the app (Files: workspace.mkdir) isn't available for a folder on this computer, only in a sandbox.`);
         expect(staleDaemonReason(`workspace.file`)).toBeUndefined();
     });
 
@@ -335,7 +364,7 @@ describe(`a folder on this computer`, () => {
         setDaemonRoutes(FOLDER, undefined, `folder`);
         setDaemonRoutes(withoutVpn);
         expect([folderSurface.value, daemonBehind.value]).toEqual([false, true]);
-        expect(staleDaemonReason(`vpn.list`)).toMatch(/^This sandbox's daemon doesn't provide 'vpn\.list'\./);
+        expect(staleDaemonReason(`vpn.list`)).toMatch(/^This sandbox is too old for this part of the app \(VPN: vpn\.list\)\./);
     });
 
     // Another sandbox is another daemon, of its own age: what the last one said is no evidence about it.

@@ -490,8 +490,11 @@ jobs:
       # says it skipped and the release is unaffected. The channel and this webhook were created by
       # _tools/scripts/release/discord-community-setup.mjs.
       DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
-      # Not for signing — that happened where the installers were built. The assemble step reads it as the
-      # switch that says "this release is signed", requiring both .sig files and writing latest.json.
+      # The installers were signed where they were built; the assemble step reads this as the switch that says
+      # "this release is signed", requiring both .sig files and writing latest.json. It signs one file itself:
+      # release-checksums.mjs (release-prepare.sh) writes SHA256SUMS over every asset, ic-* and intentic-machine-*
+      # included, and signs it as SHA256SUMS.sig, which agents check before they replace themselves or ic. Unset
+      # here, that step fails the release: agents refuse a release from their floor on without the signature.
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       # AUTHENTICODE, which is a different thing from the key above. That one is minisign and proves an update
       # came from us to the app's own updater; this one is what stops Windows telling every new user the

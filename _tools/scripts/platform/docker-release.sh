@@ -2,8 +2,9 @@
 # Shared per-app image release for the PLATFORM images (ghcr.io/intentic/{api,web,ingress}).
 # Runs from an app dir as its `docker:release` turbo task (turbo.json: dependsOn build), so the app and its
 # workspace deps are already built job-side with the warm turbo cache — each Dockerfile is a pure COPY of the
-# prepared tree, never an in-container install/compile. The ingress is the exception: it is Rust, compiled in a
-# BuildKit stage the way the sandbox's netd is, so no job needs a toolchain. The OSS core images
+# prepared tree, never an in-container install/compile of the app (the api adds one system package, pg_dump for its
+# pre-migration backup). The ingress is the exception: it is Rust, compiled in a BuildKit stage the way the sandbox's
+# netd is, so no job needs a toolchain. The OSS core images
 # (sandbox/dind-host) keep their own publish-images.sh: same job-side-build philosophy, but they ride
 # semantic-release with a trees payload and registry-cache machinery this flow doesn't need.
 #

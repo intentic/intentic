@@ -226,6 +226,17 @@ services:
             LOG_LEVEL: ${LOG_LEVEL:-}
             # OTLP traces (tracing.ts). Unset → no provider is registered and the overhead is zero.
             OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+            # The pre-migration backup (_platform/api/src/migration-backup.ts, which reads these itself because it runs
+            # before the api): how many dumps the volume below keeps (default 10), and MIGRATE_WITHOUT_BACKUP=1 to let a
+            # boot migrate when its dump failed. Leave that one unset except for the one boot that needs it.
+            MIGRATION_BACKUP_KEEP: ${MIGRATION_BACKUP_KEEP:-}
+            MIGRATE_WITHOUT_BACKUP: ${MIGRATE_WITHOUT_BACKUP:-}
+        # WHERE THE DATABASE IS DUMPED BEFORE EVERY MIGRATION. The api's boot pg_dumps the database here when the image
+        # carries migrations the database has not applied, and refuses to migrate when it cannot: there are no down
+        # migrations, and an older api image will not run over a newer schema, so this dump is the only way back. Its
+        # own volume, apart from postgres-data, so losing one never takes the other. Restoring: _platform/api/README.md.
+        volumes:
+            - migration-backups:/backups
         healthcheck:
             test: ["CMD", "bun", "--eval", "fetch('http://127.0.0.1:6480/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
             interval: 10s
@@ -305,3 +316,5 @@ networks:
 volumes:
     postgres-data:
         name: intentic-platform-db
+    migration-backups:
+        name: intentic-platform-migration-backups

@@ -1,6 +1,9 @@
 // The kit's export names: the single source consumed by the web app's shim generator
-// (_editor/web/scripts/generate-ext-shims.mjs) and hostModules' dev-time coverage assertion. Update alongside
-// src/index.ts; the assertion catches drift on the next dev boot, and extensionUiNames.test.ts fails it in CI.
+// (_editor/web/scripts/generate-ext-shims.mjs), hostModules' dev-time coverage assertion and the loader's check of a
+// bundle's imports (extension-host/bundleLinks.ts). Update alongside src/index.ts; the assertion catches drift on the
+// next dev boot, and extensionUiNames.test.ts fails it in CI. A bundle links these by name, so they are versioned with
+// the extension API: surface.json records them per extensionApiVersion (`uiKitExports`), a new one is a minor, and one
+// leaves only from the deprecated list below, in a major (surface-guard.test.ts).
 export const extensionUiNames = [
     "AgentRunButton",
     "AnchoredOverlay",
@@ -94,6 +97,7 @@ export const extensionUiNames = [
     "ProjectChip",
     "ProseField",
     "RepoPicker",
+    "RepoRail",
     "ResizeSeam",
     "ResponsiveOverlay",
     "Row",
@@ -134,4 +138,23 @@ export const extensionUiNames = [
     "useTheme",
     "vAction",
     "wordDiff",
+];
+
+// Names kept only so extensions built against them still link: what to use instead, when it was deprecated, and the
+// first extension API version that may drop it. A name leaves the kit only from this list, and only in a major at or
+// past its floor; the entry stays after it goes, as the record that its going was declared.
+export const extensionUiDeprecated = [
+    {
+        name: "errorMessage",
+        use: "messageOr",
+        deprecated: "2026-10-06",
+        removableIn: "3.0.0",
+    },
+    {
+        // The repository column RepoPicker replaced on 2026-10-12, removed that day with no version moving and restored.
+        name: "RepoRail",
+        use: "RepoPicker",
+        deprecated: "2026-10-15",
+        removableIn: "3.0.0",
+    },
 ];

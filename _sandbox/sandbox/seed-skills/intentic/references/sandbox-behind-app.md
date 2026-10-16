@@ -3,15 +3,18 @@
 ## Why it happens
 
 The app at app.intentic.dev updates itself: it checks its own build every 15 minutes and offers a reload. The
-sandbox daemon updates only when its owner updates it. So a page newer than the daemon it drives is the normal
-case, and the one app talks to daemons of many versions at once. When the sandbox connects it tells the page
-which routes it has, with a fingerprint of each one's shape; the page hides what an older daemon lacks, and where
-a call still lands on a gap it says so in words:
+sandbox daemon moves only to a release: on its owner's own machine it takes a downloaded update by itself once
+nothing is going on (unless the owner turned that off), and otherwise when the owner updates it. So a page newer
+than the daemon it drives is the normal case, and the one app talks to daemons of many versions at once. When the
+sandbox connects it tells the page its version and which routes it has, with a fingerprint of each one's shape. A
+daemon older than the oldest the app supports gets one page saying so in place of the sandbox's own; above that,
+the page hides what an older daemon lacks, and where a call still lands on a gap it says so in words:
 
 | The owner sees | Means |
 |---|---|
-| This sandbox's daemon doesn't provide '<route>'. Update the sandbox to a newer image to use this feature. | the daemon predates that route |
-| This sandbox's daemon has '<route>' but exchanges different fields for it than this app expects. … | same route, different shape |
+| **<name> needs an update** / "It runs version <x>, and this app works with sandboxes from version <y> on." | the daemon is older than the oldest the app supports; nothing else opens until it updates |
+| This sandbox is too old for this part of the app (<area>). Update the sandbox to a newer image to use this feature. | the daemon predates the route behind that part (pages from before 2026-10-15 said "This sandbox's daemon doesn't provide '<route>'") |
+| This sandbox answers this part of the app (<area>) with different fields than this app expects. … | same route, different shape |
 | This sandbox answered in a shape this app doesn't expect. Reload this page, or update the sandbox to a newer image. | the page could not read the answer; either side may be older |
 | This page is running older code than the sandbox: reload the page. | the page is the older side; a reload fixes it |
 | This sandbox's daemon didn't keep <field>. Update the sandbox to a newer image to use it. | a setting saved but not stored: the daemon predates it |
@@ -32,7 +35,7 @@ A hard reload or a cleared cache fixes only the case where the page is the older
 3. The newest release: `tag_name` of `https://api.github.com/repos/intentic/intentic/releases/latest`. The Update
    card offers a release once the same image is also published as `ghcr.io/intentic/sandbox:stable`.
 4. `mcp__diagnostics__errors` with `source: "browser"`: what the page reported about itself, each event with the
-   page's build. Search it for "doesn't provide", "didn't keep" or "answered in a shape".
+   page's build. Search it for "too old for this part", "different fields", "didn't keep" or "answered in a shape".
 
 Say what you found: the daemon's version, the newest one, and the message that names the gap.
 

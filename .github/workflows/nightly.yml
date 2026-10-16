@@ -28,6 +28,7 @@ on:
         options:
           - all
           - e2e
+          - compat-stable
           - onboarding
           - desktop-setup
           - desktop-update
@@ -171,6 +172,52 @@ jobs:
       # it displaces is 1.58 GB that will never be read again.
       - if: always()
         run: docker image prune -f --filter until=12h || true
+
+  # TODAY'S EDITOR AGAINST THE SANDBOX OWNERS RUN (_tools/e2e/compat), the same check ci.yml's `e2e-compat` runs before
+  # the platform deploys. Here as well because `stable` moves on its own: a release, or `rollback-stable.sh`, changes what
+  # owners run without a push to main, and the hosted editor then meets it untested until the next platform push. Once a
+  # night, main's editor is held against whatever `stable` names by then.
+  #
+  # Unlike the e2e job above, the daemon is PULLED, not built: the published image is the whole point. Its own job, not a
+  # step of that one, so a failure names its cause and `only: compat-stable` reruns it alone in a few minutes.
+  compat-stable:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'compat-stable' }}
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+        # Postgres and the released daemon come up through the host's daemon; testcontainers resolves the address each
+        # answers on.
+        - /var/run/docker.sock:/var/run/docker.sock
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 30
+    env:
+      # Not $HOME, which a job container maps to a throwaway /github/home.
+      PLAYWRIGHT_BROWSERS_PATH: /ci-cache/ms-playwright
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      # The pull authenticates client-side, for the reason the e2e job's login gives.
+      - uses: ./.github/actions/ghcr-login
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: ./.github/actions/pnpm-setup
+      - run: pnpm --filter @intentic/e2e exec playwright install --with-deps chromium
+      - run: pnpm e2e:compat
+      - uses: ./.github/actions/upload-artifact-retry
+        if: failure()
+        with:
+          name: compat-stable-results
+          path: |
+            _tools/e2e/.cache/compat-results/
+            _tools/e2e/.cache/signin/api.log
+          retention-days: 7
 
   # THE ONBOARDING JOURNEY (@intentic/onboarding), once per way of getting a sandbox.
   #

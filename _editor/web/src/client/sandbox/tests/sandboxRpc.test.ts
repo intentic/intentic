@@ -241,7 +241,7 @@ it(`blames the sandbox's image for a 404 on a route its daemon never advertised`
     );
     const failure = await sandboxRpc.vpn.list().catch((error: unknown) => error);
     expect(failure).toMatchObject({ status: 404 });
-    expect((failure as Error).message).toStartWith(`This sandbox's daemon doesn't provide 'vpn.list'.`);
+    expect((failure as Error).message).toStartWith(`This sandbox is too old for this part of the app (VPN: vpn.list).`);
     resetSandboxScope();
 });
 
@@ -254,7 +254,7 @@ it(`blames the drift for a 400 on a route whose shape the daemon disagrees about
     const failure = await sandboxRpc.settings.set({}).catch((error: unknown) => error);
     expect(failure).toMatchObject({ status: 400 });
     expect((failure as Error).message).toStartWith(
-        `This sandbox's daemon has 'settings.set' but exchanges different fields for it than this app expects.`,
+        `This sandbox answers this part of the app (Sandbox settings: settings.set) with different fields than this app expects.`,
     );
     resetSandboxScope();
 });

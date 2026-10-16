@@ -1,3 +1,6 @@
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { DeviceSandbox, DeviceScopes } from "@intentic/sandbox-contract";
 import { ScopeError } from "../policy.js";
 import {
@@ -25,7 +28,7 @@ import {
     swapResult,
     tailSandboxLogs,
 } from "./sandboxes.js";
-import { checkPerIcFile, featuresFrom, fetchIc, icCandidates, icNeedsFetch, icVersionFrom } from "./ic-binary.js";
+import { checkPerIcFile, featuresFrom, fetchIc, icAssetName, icCandidates, icNeedsFetch, icVersionFrom } from "./ic-binary.js";
 
 const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     shell: "on",
@@ -372,6 +375,7 @@ test("a failed fetch of the current ic is logged with its reason and names the s
         download: async () => {
             throw new Error("HTTP 404 for ic-linux-x64");
         },
+        verify: async () => {},
         warn: (line) => warned.push(line),
     });
     expect(note).toContain("ic is out of date");
@@ -380,7 +384,34 @@ test("a failed fetch of the current ic is logged with its reason and names the s
     expect(note).toContain("HTTP 404 for ic-linux-x64");
     expect(warned).toEqual([note!]);
     // No ic at all is said as such rather than as a version.
-    expect(await fetchIc("/nonexistent-intentic-test/ic", undefined, "1.313.0", { download: async () => await Promise.reject(new Error("offline")), warn: () => {} })).toContain("none is installed");
+    expect(
+        await fetchIc("/nonexistent-intentic-test/ic", undefined, "1.313.0", {
+            download: async () => await Promise.reject(new Error("offline")),
+            verify: async () => {},
+            warn: () => {},
+        }),
+    ).toContain("none is installed");
+});
+
+// The ic every sandbox verb runs is replaced only by the release's own: one that does not match the release's signed
+// SHA256SUMS is deleted where it landed, the installed ic stays, and the reason is the stale note's.
+test("an ic that does not check out against its release is never put in place", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ic-fetch-"));
+    const target = join(dir, "ic");
+    writeFileSync(target, "the installed ic");
+    const asked: string[] = [];
+    const note = await fetchIc(target, "1.300.0", "1.313.0", {
+        download: async (_url, to) => void writeFileSync(to, "a substituted binary"),
+        verify: async (version, name, path) => {
+            asked.push(`${version} ${name} ${path}`);
+            throw new Error(`the downloaded ${name} is not the one v${version} published`);
+        },
+        warn: () => {},
+    });
+    expect(asked).toEqual([`1.313.0 ${icAssetName()} ${target}.download`]);
+    expect(note).toContain(`the downloaded ${icAssetName()} is not the one v1.313.0 published`);
+    expect(readFileSync(target, "utf8")).toBe("the installed ic");
+    expect(existsSync(`${target}.download`)).toBe(false);
 });
 
 // Once per process let a setup script that put an older ic back leave a current agent driving it for days, every

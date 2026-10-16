@@ -129,6 +129,11 @@ flowchart LR
   _2026-09-30: replaced a panel that appeared after two minutes of silence with three commands (restart, rollback,
   doctor) for the reader to choose between. It was shown to sandboxes that were only busy, and the choice was the
   reader's to get right._
+- **Too old to open.** A sandbox whose daemon is older than `OLDEST_SUPPORTED_DAEMON` (the contract's floor, read off
+  the head of the hello's `build` by `useDaemonVersion.ts`) gets one page in place of its own, `gates/SandboxTooOld.vue`:
+  which version it runs, the oldest this app works with, the Sandbox page's Update card and the update one-liner. A
+  checkout's build (`0.0.0`) is never too old. Above the floor, a call onto a route the daemon lacks fails in words
+  naming the part of the app (`routeAreas.ts`, the Sandbox page's area names), never the route's id.
 - **Older sandboxes.** A view drawn from fields an older daemon does not send never rebuilds them from what it did
   send. It shows what was served as served, and `SandboxOutdatedNotice.vue` says the sandbox needs an update, what the
   view lacks until then, and how to update: the sandbox page's Update card, or `ic sandbox update <slug>` for a sandbox
@@ -272,9 +277,13 @@ flowchart LR
 - **Extensions.** `src/extension-host/loader.ts` activates what the daemon lists. First-party extensions are compiled
   in (`builtins.ts`); the rest arrive from the daemon as single-file ESM bundles imported from a Blob URL.
   `hostModules.ts` and `public/ext-shims/` hand every bundle the app's own `vue`, vue-query and
-  [extension-ui](../../_shared/extension-ui) instances.
-- **Session replay and events.** Analytics is on unless this browser was switched off: nobody is asked, Settings → Data & privacy holds the one switch, and only a `deny` is stored locally. An active sandbox needs loaded settings with `productAnalytics: true` before any event or recording runs. `POSTHOG_UI_HOST` chooses the dashboard host for replay links (default `https://us.posthog.com`), while `POSTHOG_API_HOST` and `POSTHOG_ASSETS_HOST` choose the proxy targets.
+  [extension-ui](../../_shared/extension-ui) instances. Before linking a bundle the loader checks the names it imports
+  from extension-api and extension-ui against what those shims export (`bundleLinks.ts`), and an extension asking for
+  one the app lacks is shown as incompatible, needing an update, rather than failing with the browser's link error.
+- **Session replay and events.** A browser whose time zone is in the EEA, the UK or Switzerland is asked first, on a question card in the notification lane (`analytics-consent` in `shell/notifications/notificationSources.ts`), and records nothing until it answers; everywhere else analytics is on unless this browser was switched off. Settings → Data & privacy holds the one switch, and the answer is stored locally (`app/analyticsConsent.ts`). An active sandbox needs loaded settings with `productAnalytics: true` before any event or recording runs. `POSTHOG_UI_HOST` chooses the dashboard host for replay links (default `https://us.posthog.com`), while `POSTHOG_API_HOST` and `POSTHOG_ASSETS_HOST` choose the proxy targets.
   _2026-10-13: the consent popup is gone and the default is on; switching it off still sends no cookieless counts, since off should make no analytics request._
+  _2026-10-15: European browsers are asked again, by time zone, before anything is recorded; the rest of the world keeps the 10-13 default. Chosen over asking everyone (it costs the analytics no law asks us to ask for) and over the platform's `cf-ipcountry` (a request before the first screen, and absent on a self-hosted platform)._
+- **Funnel milestones.** Besides the setup events, `analytics.ts` sends `signed_up` (an account made within 30 minutes of being seen, from `User.createdAt`) and `first_turn_completed` (the first agent turn that settled on its own, from `turnClient.ts`), each once per account per browser, and registers the `utm_*` tags the visit arrived with on every event of the tab, reading them as the module loads so a redirect to `/login` cannot drop them. The marketing site hands those tags over in its links (`_site/site/src/lib/visit.ts`).
 - **Session replay and events.** `src/app/replayPrivacy.ts` decides what a PostHog recording may hold and
   `src/app/eventPrivacy.ts` does the same for every event, through `before_send`. `analytics.ts` hands both to
   `posthog.init`. In a replay every text node goes through `src/app/replayText.ts`, which keeps wording from an i18n

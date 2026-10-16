@@ -9,7 +9,8 @@ import {
     type DeviceFeature,
     isNewer,
 } from "@intentic/sandbox-contract";
-import { archToken, download, exe, osToken } from "../../release.js";
+import { archToken, download, exe, osToken, releaseAssetUrl } from "../../release.js";
+import { verifyReleaseFiles } from "../../release/release-verify.js";
 import { MACHINE_VERSION } from "../../version.js";
 import { errorMessage } from "@intentic/base/errors";
 import { execBounded } from "@intentic/base/process";
@@ -34,8 +35,8 @@ export const icCandidates = (platform: NodeJS.Platform, home: string | undefined
 const userIcPath = (): string | undefined => icCandidates(process.platform, homeDir())[0];
 
 // The release asset, named the way the shims fetch it (`ic-<os>-<arch>[.exe]`), from the agent's own release.
-export const icAssetUrl = (version: string): string =>
-    `https://github.com/intentic/intentic/releases/download/v${version}/ic-${osToken()}-${archToken()}${exe}`;
+export const icAssetName = (): string => `ic-${osToken()}-${archToken()}${exe}`;
+export const icAssetUrl = (version: string): string => releaseAssetUrl(version, icAssetName());
 
 // What `ic --version` prints (`ic 1.4.2`), read back; undefined for anything else.
 export const icVersionFrom = (stdout: string): string | undefined => /^ic (\d+\.\d+\.\d+)\s*$/.exec(stdout.trim())?.[1];
@@ -91,17 +92,20 @@ export const icStaleNote = (installed: string | undefined, agent: string, reason
 
 export interface IcFetchIo {
     readonly download: (url: string, to: string) => Promise<void>;
+    // Throws, saying why, unless the file at `path` is the asset `name` of release `version` (release-verify.ts).
+    readonly verify: (version: string, name: string, path: string) => Promise<void>;
     readonly warn: (line: string) => void;
 }
 
-// Put `agent`'s release of ic at `target`. Download beside the target and rename into place, as the shims do:
-// overwriting a running executable fails, and a half-downloaded binary must never be what runs. Answers undefined when
-// the fetch landed, else the stale note, which is also logged: a failure is never silent, since what it costs (the
-// verbs the old ic lacks) shows up far from here.
+// Put `agent`'s release of ic at `target`. Download beside the target, check it against the release's signed
+// SHA256SUMS, and rename into place, as the shims do: overwriting a running executable fails, and a half-downloaded or
+// substituted binary must never be what runs. Answers undefined when the fetch landed, else the stale note, which is
+// also logged: a failure is never silent, since what it costs (the verbs the old ic lacks) shows up far from here.
 export const fetchIc = async (target: string, installed: string | undefined, agent: string, io: IcFetchIo): Promise<string | undefined> => {
     const part = `${target}.download`;
     try {
         await io.download(icAssetUrl(agent), part);
+        await io.verify(agent, icAssetName(), part);
         if (process.platform !== "win32") {
             await chmod(part, 0o755);
         }
@@ -171,6 +175,10 @@ const warn = (line: string): void => {
     process.stderr.write(`intentic: ${line}\n`);
 };
 
+const verifyIc = async (version: string, name: string, path: string): Promise<void> => {
+    await verifyReleaseFiles(version, [{ name, path }]);
+};
+
 // Put this agent's own release of ic in the per-user location when what is installed is older (or missing). A fetch
 // that fails leaves whatever is installed to answer for itself, and says so (icOutOfDate).
 const ensureForFile = checkPerIcFile(icSignature, async () => {
@@ -180,7 +188,7 @@ const ensureForFile = checkPerIcFile(icSignature, async () => {
         staleNote = undefined;
         return true;
     }
-    staleNote = await fetchIc(target, installed, MACHINE_VERSION, { download, warn });
+    staleNote = await fetchIc(target, installed, MACHINE_VERSION, { download, verify: verifyIc, warn });
     return staleNote === undefined;
 });
 export const ensureCurrentIc = (): Promise<void> => ensureForFile();
@@ -205,7 +213,8 @@ const helpOf = async (verb: readonly string[]): Promise<string | undefined> => {
 };
 
 // A flag the help lists, spelled whole: `--to` must not be read off `--token` or `--to-x`.
-const helpLists = (help: string | undefined, flag: string): boolean => help !== undefined && new RegExp(`(?:^|[\\s,\\[])${flag}(?![\\w-])`, "m").test(help);
+const helpLists = (help: string | undefined, flag: string): boolean =>
+    help !== undefined && new RegExp(`(?:^|[\\s,\\[])${flag}(?![\\w-])`, "m").test(help);
 
 // Which optional ops this device implements, from what its `ic`'s own help says it has. Both shape features ride
 // `ic sandbox shape` taking the contract's own shape (`--set`, the contract's `icShapeArgs`): `set-shape` directly, and

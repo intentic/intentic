@@ -593,6 +593,19 @@ whose it is.
   cutover and the first quarter hour of probation, and past that while the sandbox does not answer, then resumed; a
   pause somebody made is left alone. Only this environment's records count: a distro syncing a sandbox the Windows side
   swaps is not paused.
+- (2026-10-15) **Nothing downloaded replaces a binary until the release vouches for it**
+  ([`release-verify.ts`](src/release/release-verify.ts)). Before an upgrade runs the new agent (and the Windows launcher
+  beside it), before ic is put in place ([`tools/ic-binary.ts`](src/device/tools/ic-binary.ts)), and before setup
+  installs the launcher, the agent fetches the release's `SHA256SUMS` and `SHA256SUMS.sig`, checks the signature
+  against the release key built into it (the desktop updater's minisign key, held equal to `tauri.conf.json` by a
+  test), and then the file's SHA-256 against the sums. The minisign reader is
+  [`release-signature.ts`](src/release/release-signature.ts): Ed25519 from `node:crypto`, the prehashed `ED` signatures
+  Tauri's signer writes and the legacy `Ed` ones, and the signature over the trusted comment, which must name
+  `SHA256SUMS` and this release's version. From `SIGNED_SUMS_FROM` (1.338.0) on, a release without the signature is
+  refused; an older one has no signature, and its sums list only the installers, so nothing moves onto an agent or
+  ic that old. Anything that does not check out is deleted unrun, the binary in place stays, and the reason is the
+  upgrade's failure (or ic's stale note). Rotating the key needs a release that agents with the old key can still
+  verify.
 - **A self-update is kept undoable** ([`agent-trial.ts`](src/agent-trial.ts)). The replaced binary stays as
   `<bin>.previous` until the new agent has run for ten minutes and written its "healthy since" marker. Three starts of a
   release within ten minutes, none ended by a stop, restart or upgrade, put `.previous` back (at that start, or at the
@@ -803,6 +816,7 @@ version, file time) and the `IC_*`/`INTENTIC_*` variables in the agent's environ
 - [src/environments/machine.ts](src/environments/machine.ts) — the Windows root and its WSL children.
 - [src/upkeep/manifest.ts](src/upkeep/manifest.ts) — what the device upkeep finds and puts right; `reconcile.ts` runs it.
 - [src/resident/watchdog.ts](src/resident/watchdog.ts) — the agent's own hang watchdog.
+- [src/release/release-verify.ts](src/release/release-verify.ts) — a downloaded release binary checked against the release's signed `SHA256SUMS`.
 
 ## Commands
 

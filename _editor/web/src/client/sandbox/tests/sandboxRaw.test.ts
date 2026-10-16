@@ -85,7 +85,7 @@ describe(`sandboxRaw`, () => {
     it(`refuses a route the daemon has said it doesn't serve, naming the gap instead of 404ing`, async () => {
         const { RAW_ROUTE_NAMES } = await import(`@intentic/sandbox-contract`);
         setDaemonRoutes(undefined, undefined, undefined, { rawRoutes: RAW_ROUTE_NAMES.filter((name) => name !== `GET /system/links`) });
-        await expect(sandboxRaw(`GET /system/links`)).rejects.toThrow(`This sandbox's daemon doesn't provide 'GET /system/links'.`);
+        await expect(sandboxRaw(`GET /system/links`)).rejects.toThrow(`This sandbox is too old for this part of the app (Terminals and devices: GET /system/links).`);
         expect(sandboxJson).not.toHaveBeenCalled();
     });
 

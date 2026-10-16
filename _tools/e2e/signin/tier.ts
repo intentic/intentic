@@ -24,6 +24,16 @@ export const POSTGRES_IMAGE = `postgres:18.6-alpine3.24`;
 export const ENV_WEB_URL = `SIGNIN_E2E_WEB_URL`;
 export const ENV_API_URL = `SIGNIN_E2E_API_URL`;
 export const ENV_GOOGLE_KEY = `SIGNIN_E2E_GOOGLE_KEY`;
+// The Postgres the api runs on, for a tier built on this one that seeds rows of its own (../compat).
+export const ENV_DATABASE = `SIGNIN_E2E_DATABASE`;
+
+export const stackDatabase = (): string => {
+    const url = process.env[ENV_DATABASE];
+    if (url === undefined) {
+        throw new Error(`the sign-in stack is not up: run this through a config whose global setup boots it`);
+    }
+    return url;
+};
 
 export const stackUrls = (): { readonly web: string; readonly api: string } => {
     const web = process.env[ENV_WEB_URL];

@@ -1634,6 +1634,72 @@ jobs:
             _tools/e2e/.cache/signin/api.log
           retention-days: 7
 
+  # THE N-1 CHECK, and the third suite `images-platform` waits on. The hosted editor ships from every green push here,
+  # while a sandbox runs the release it last took (`:stable`, a few a day), so the editor that deploys always meets
+  # daemons older than itself, and until this job nothing ran it against one: the nightly e2e builds its daemon from the
+  # same checkout, and `desktop-verify` points at `:latest`. On 2026-10-15 every released daemon answered the editor's
+  # Sandbox page with "This sandbox's daemon doesn't provide 'org.policy'", a call main had added without asking whether
+  # the daemon served it.
+  #
+  # The sign-in tier's stack (this commit's web build, the api harness, Postgres) with a daemon from the released image
+  # beside it, reached through testcontainers' host/port mapping as the Postgres is, and the main pages walked: the
+  # board, the files, a chat, the Sandbox page. It fails on a call the daemon refused, a read that failed, an uncaught
+  # error, or the "too old" page (OLDEST_SUPPORTED_DAEMON in the contract). _tools/e2e/compat says the rest.
+  #
+  # Gating because it is quick and hermetic: the web build is the one `e2e-signin` restores from the same turbo cache,
+  # the walk itself takes about half a minute, and the one cost of its own is pulling `:stable` when it moved since this
+  # runner last did (about 70 s for the whole image, measured 2026-10-15). It runs on the same triggers as `e2e-signin`,
+  # so it has always run when `images-platform` would.
+  e2e-compat:
+    needs: [changes, preflight]
+    if: ${{ !cancelled() && (needs.changes.outputs.platform == 'true' || needs.changes.outputs.signin == 'true') && needs.preflight.result != 'skipped' }}
+    runs-on: [self-hosted, intentic]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-e2e-compat
+      cancel-in-progress: true
+    timeout-minutes: 25
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+        # Postgres and the released daemon come up through the host's daemon; testcontainers resolves the address each
+        # answers on.
+        - /var/run/docker.sock:/var/run/docker.sock
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      PNPM_STORE: /ci-cache/pnpm-store
+      TURBO_CACHE_DIR: /ci-cache/turbo
+      # Not $HOME, which a job container maps to a throwaway /github/home.
+      PLAYWRIGHT_BROWSERS_PATH: /ci-cache/ms-playwright
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+        with:
+          lockfile-drift: measure
+      # The image is public; the login is for the pull's rate limit, client-side, since the host daemon behind the
+      # mounted socket holds no registry credential (nightly.yml's e2e job says the same).
+      - uses: ./.github/actions/ghcr-login
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: pnpm --filter @intentic/e2e exec playwright install --with-deps chromium
+      # Builds the web first (turbo.json `e2e:compat` depends on `@intentic/web#build`), so the tier serves this commit.
+      - run: pnpm e2e:compat
+      - uses: ./.github/actions/upload-artifact-retry
+        if: failure()
+        with:
+          name: compat-results
+          path: |
+            _tools/e2e/.cache/compat-results/
+            _tools/e2e/.cache/signin/api.log
+          retention-days: 7
+
   # Hermetic infra e2e on pull requests — a NON-BLOCKING sidecar. Boots a Docker-in-Docker host via
   # testcontainers and drives the real CLI (resolve -> targeted apply -> adopt -> readiness diagnostics), no
   # external services and no secrets. Needing nothing at all is what earns it a run per pull request.
@@ -1971,6 +2037,9 @@ jobs:
   # went out with every piece of the desktop sign-in passing its own tests and no one able to finish it. It runs on
   # `platform` too, so it has always run when this job does.
   #
+  # `e2e-compat` gates here because the web this job ships meets the sandboxes owners already run, not the daemon this
+  # commit builds: it opens today's editor on the released `:stable` image. Same triggers as `e2e-signin`.
+  #
   # `migrations` gates here because this job is what puts a migration in front of the live database. The history it
   # refuses (an edited applied migration, an ADD COLUMN NOT NULL with no default) is exactly what P3009'd every deploy
   # until it was fixed forward by hand, so a deploy that went ahead of a failed migrations job would be the failure,
@@ -1978,7 +2047,7 @@ jobs:
   #
   # And preflight, by name, for the reason `images` spells out.
   images-platform:
-    needs: [changes, preflight, migrations, verify-platform, e2e-billing, e2e-signin, netd-check]
+    needs: [changes, preflight, migrations, verify-platform, e2e-billing, e2e-signin, e2e-compat, netd-check]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.changes.outputs.platform == 'true'
@@ -1987,6 +2056,7 @@ jobs:
       && needs.verify-platform.result == 'success'
       && needs.e2e-billing.result == 'success'
       && needs.e2e-signin.result == 'success'
+      && needs.e2e-compat.result == 'success'
       && (needs.netd-check.result == 'success' || needs.netd-check.result == 'skipped')
     runs-on: [self-hosted, intentic]
     container:

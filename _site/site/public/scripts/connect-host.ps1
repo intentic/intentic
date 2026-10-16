@@ -457,7 +457,8 @@ function Add-IntenticPath {
 # that finds it or a newer one installed skips it, and only a failed download falls back to an installed ic. Download-
 # then-rename: overwriting a running executable fails, and a half-downloaded binary must never be what runs. A pinned
 # run the desktop app started copies the ic the app carries (INTENTIC_IC_PATH) instead, when that one is exactly the
-# release asked for.
+# release asked for. A download is checked against the release's SHA256SUMS before anything runs it; a mismatch is
+# deleted unrun and the ic already installed stays.
 # Test-IntenticIc: the file starts and answers --version as ic does ('ic <version>'). A download that answered 200 can be
 # a captive portal's login page or an empty body; Windows refuses to start either, which lands in the catch.
 function Test-IntenticIc([string]$Path) {
@@ -465,6 +466,64 @@ function Test-IntenticIc([string]$Path) {
     $said = ''
     try { $said = (& $Path --version | Out-String).Trim() } catch { $said = '' }
     return ($said -like 'ic *')
+}
+
+# Get-IntenticChecksumRefusal: why the file at $Path is not the asset $Asset the release at $Base published, by the
+# SHA256SUMS beside it (@{ Why; Fix }), or $null when it is. A release from before its SHA256SUMS covered ic lists no
+# ic-* asset at all, and has nothing to check against. IC_SKIP_CHECKSUM=1 installs ic unchecked from a server that
+# publishes no SHA256SUMS; it never lets a mismatch through. The release also signs SHA256SUMS (minisign); that
+# signature is the machine agent's to check, before it replaces ic or itself.
+function Get-IntenticChecksumRefusal([string]$Path, [string]$Asset, [string]$Base) {
+    $SumsHost = ([uri]$Base).Host
+    $SumsFile = "$Path.SHA256SUMS"
+    $Sums = @()
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri "$Base/SHA256SUMS" -OutFile $SumsFile -ErrorAction Stop
+        $Sums = @(Get-Content -LiteralPath $SumsFile -ErrorAction Stop)
+    } catch {
+        $Sums = @()
+    }
+    Remove-Item -Force $SumsFile -ErrorAction SilentlyContinue
+    if ($Sums.Count -eq 0) {
+        if ($env:IC_SKIP_CHECKSUM -eq '1') {
+            Write-IntenticWarn "$SumsHost served no SHA256SUMS, so ic is installed unchecked (IC_SKIP_CHECKSUM=1)."
+            return $null
+        }
+        return @{ Why = "$SumsHost served ic but not the SHA256SUMS to check it against."; Fix = 'run the same command again; IC_SKIP_CHECKSUM=1 installs ic unchecked from a server that publishes no SHA256SUMS.' }
+    }
+    $Want = ''
+    $Listed = $false
+    foreach ($Line in $Sums) {
+        if ($Line -match '^([0-9a-fA-F]{64}) [ *](?:\./)?(\S+)\s*$') {
+            if ($Matches[2] -eq $Asset) { $Want = $Matches[1].ToLowerInvariant() }
+            if ($Matches[2] -like 'ic-*') { $Listed = $true }
+        }
+    }
+    if (-not $Want) {
+        if (-not $Listed) {
+            Write-IntenticSay "this release's SHA256SUMS predates checksums for ic, so the download is not checked."
+            return $null
+        }
+        return @{ Why = "the release's SHA256SUMS lists no $Asset, so the download cannot be checked."; Fix = 'run the same command again; if it says the same, report it: the release is missing a checksum.' }
+    }
+    # Get-FileHash is Windows PowerShell 4 and later; .NET's own SHA256 answers the same where it is missing.
+    $Got = ''
+    try {
+        if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) {
+            $Got = (Get-FileHash -Algorithm SHA256 -LiteralPath $Path -ErrorAction Stop).Hash.ToLowerInvariant()
+        } else {
+            $Stream = [IO.File]::OpenRead($Path)
+            try {
+                $Got = ([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($Stream)) -replace '-', '').ToLowerInvariant()
+            } finally {
+                $Stream.Dispose()
+            }
+        }
+    } catch {
+        return @{ Why = "the download could not be read to check it ($($_.Exception.Message))."; Fix = 'run the same command again.' }
+    }
+    if ($Got -eq $Want) { return $null }
+    return @{ Why = "the downloaded ic is not the one the release published (SHA-256 $Got, its SHA256SUMS says $Want), so it was deleted without being run."; Fix = "run the same command again; if it fails the same way, something between this device and $SumsHost is altering the download." }
 }
 
 function Get-IntenticIc {
@@ -523,12 +582,19 @@ function Get-IntenticIc {
             # five-megabyte download take several seconds instead of a fraction of one.
             $ProgressPreference = 'SilentlyContinue'
             $IcFetched = $false
+            $IcRefused = $false
             $IcWhy = "$(([uri]$IcBase).Host) did not answer from this device."
-            # Named .exe so it can be started for the probe below; only a probed download replaces the installed ic.
+            $IcFix = 'check the network, then run the same command again.'
+            # Named .exe so it can be started for the probe below; only a checked, probed download replaces the installed ic.
             $IcNew = "$IcDir\ic.download.exe"
             try {
                 Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile $IcNew -ErrorAction Stop
-                if (Test-IntenticIc $IcNew) {
+                $IcRefusal = Get-IntenticChecksumRefusal $IcNew 'ic-windows-amd64.exe' $IcBase
+                if ($IcRefusal) {
+                    $IcRefused = $true
+                    $IcWhy = $IcRefusal.Why
+                    $IcFix = $IcRefusal.Fix
+                } elseif (Test-IntenticIc $IcNew) {
                     Move-Item -Force $IcNew $IcDest -ErrorAction Stop
                     $IcFetched = $true
                 } else {
@@ -538,19 +604,23 @@ function Get-IntenticIc {
                 $IcFetched = $false
             }
             Remove-Item -Force $IcNew -ErrorAction SilentlyContinue
+            # The warning when an installed ic runs instead; <ic> is where it is.
+            $IcKept = if ($IcRefused) { "the newest ic was not installed: $IcWhy The one installed at <ic> runs instead." } else { 'the newest ic could not be downloaded, so the one installed at <ic> runs instead.' }
             if ($IcFetched) {
                 $Ic = $IcDest
                 Add-IntenticPath -Folder $IcDir -Command 'ic'
             } elseif (Test-IntenticIc $IcDest) {
-                Write-IntenticWarn "the newest ic could not be downloaded, so the one installed at $IcDest runs instead."
+                Write-IntenticWarn $IcKept.Replace('<ic>', $IcDest)
                 $Ic = $IcDest
             } else {
                 $IcInstalled = Get-Command ic -ErrorAction SilentlyContinue
                 if ($IcInstalled -and (Test-IntenticIc $IcInstalled.Source)) {
-                    Write-IntenticWarn "the newest ic could not be downloaded, so the one installed at $($IcInstalled.Source) runs instead."
+                    Write-IntenticWarn $IcKept.Replace('<ic>', $IcInstalled.Source)
                     $Ic = $IcInstalled.Source
+                } elseif ($IcRefused) {
+                    Stop-Intentic 'ic was downloaded but not installed, and no copy is installed.' $IcWhy $IcFix
                 } else {
-                    Stop-Intentic 'ic could not be downloaded, and no copy is installed.' $IcWhy 'check the network, then run the same command again.'
+                    Stop-Intentic 'ic could not be downloaded, and no copy is installed.' $IcWhy $IcFix
                 }
             }
         }

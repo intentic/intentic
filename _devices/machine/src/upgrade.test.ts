@@ -1,4 +1,4 @@
-import { agentAssetUrl, agentPath, launcherAssetUrl, launcherPath } from "./release.js";
+import { agentAssetName, agentAssetUrl, agentPath, launcherAssetName, launcherAssetUrl, launcherPath } from "./release.js";
 import { runUpgrade, type UpgradeExec, type UpgradeOutcome, upgradeMessage, upgradeStop } from "./upgrade.js";
 
 // Records every effect in order, so a test checks the sequence and not just the outcome. Three versions are scripted
@@ -10,6 +10,8 @@ interface Scripted {
     readonly running?: string | undefined;
     /** What comes up when the supervisor restarts it. Defaults to what was downloaded; undefined is nothing came up. */
     readonly came?: string | undefined;
+    /** Why the download does not match the release's signed SHA256SUMS. Undefined (the default) is that it does. */
+    readonly mismatch?: string | undefined;
 }
 
 const TARGET = "2.0.0";
@@ -20,6 +22,10 @@ const scripted = (overrides: Partial<UpgradeExec> & Scripted = {}) => {
     const running = "running" in overrides ? overrides.running : "1.0.0";
     const exec: UpgradeExec = {
         fetchTo: async (url, dest) => void steps.push(`fetch ${url} → ${dest}`),
+        verify: async (version, files) => {
+            steps.push(`verify ${version} ${files.map((file) => `${file.name}=${file.path}`).join(" ")}`);
+            return await Promise.resolve(overrides.mismatch);
+        },
         probe: (binary) => {
             steps.push(`probe ${binary}`);
             return downloaded;
@@ -57,13 +63,32 @@ describe("runUpgrade", () => {
         expect(steps.indexOf(`probe ${staged}`)).toBeLessThan(steps.indexOf(`swap ${agentPath} → ${previous}`));
     });
 
+    // The probe RUNS the download, so a substituted binary must be caught before it, by the release's signed sums.
+    it("checks the download against the release's SHA256SUMS before running it", async () => {
+        const { steps, exec } = scripted();
+        await upgrade(exec, "1.0.0");
+        expect(steps).toContain(`verify ${TARGET} ${agentAssetName()}=${staged}`);
+        expect(steps.indexOf(`verify ${TARGET} ${agentAssetName()}=${staged}`)).toBeLessThan(steps.indexOf(`probe ${staged}`));
+    });
+
+    it("deletes a download that does not check out, runs none of it, and keeps the agent it has", async () => {
+        const { steps, exec } = scripted({ mismatch: "the downloaded intentic-machine-linux-amd64 is not the one v2.0.0 published" });
+        const outcome = await upgrade(exec, "1.0.0");
+        expect(outcome).toEqual({
+            kind: "failed",
+            reason: "the download did not check out (the downloaded intentic-machine-linux-amd64 is not the one v2.0.0 published), so it was deleted and the agent you have is kept.",
+        });
+        expect(steps.some((step) => step.startsWith("probe") || step.startsWith("swap") || step === "restart")).toBe(false);
+        expect(steps).toContain(`discard ${staged}`);
+    });
+
     // Swapping first means whoever restarts the agent (systemd, the logon task, the Windows side) starts the new file:
     // stopping first left a window in which a supervisor brought the OLD build back. The replaced binary is KEPT: the new
     // agent drops it once it has run for ten minutes, and puts it back if it keeps crashing first (agent-trial.ts).
     it("swaps the new binary in before restarting through the supervisor, never stops the agent first, and keeps the old one", async () => {
         const { steps, exec } = scripted();
         await upgrade(exec, "1.0.0");
-        expect(steps.filter((step) => !step.startsWith("fetch") && !step.startsWith("probe"))).toEqual([
+        expect(steps.filter((step) => !step.startsWith("fetch") && !step.startsWith("verify") && !step.startsWith("probe"))).toEqual([
             `swap ${agentPath} → ${previous}`,
             `swap ${staged} → ${agentPath}`,
             `restart`,
@@ -142,6 +167,12 @@ describe("runUpgrade", () => {
 describe("runUpgrade with the Windows launcher", () => {
     const launcherStaged = `${launcherPath}.new-${TARGET}`;
     const launcherPrevious = `${launcherPath}.previous`;
+
+    it("checks the launcher against the same release's sums as the agent, in one pass", async () => {
+        const { steps, exec } = scripted({ withLauncher: true });
+        await upgrade(exec, "1.0.0");
+        expect(steps).toContain(`verify ${TARGET} ${launcherAssetName()}=${launcherStaged} ${agentAssetName()}=${staged}`);
+    });
 
     it("fetches the launcher of the same release and swaps it in before the agent", async () => {
         const { steps, exec } = scripted({ withLauncher: true });

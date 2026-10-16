@@ -2260,6 +2260,8 @@
     "extension-host": {
         "loader": {
             "declaresUiAppBuild": "declara interfaz pero esta compilación de la aplicación no lleva ningún módulo para ella: la imagen del sandbox y la aplicación están en versiones distintas",
+            "missingHostExports": "necesita {imports}, que esta versión de la aplicación no tiene: la extensión se compiló para otra versión y hay que actualizarla",
+            "namesFromModule": "{names} de {module}",
             "needsIntenticAppProvides": "necesita intentic {intentic}; esta aplicación ofrece {extensionApiVersion}"
         }
     },
@@ -4065,7 +4067,7 @@
             "n7Days": "7 días"
         },
         "useDaemonRoutes": {
-            "folderLacks": "«{route}» no está disponible para una carpeta de este ordenador, solo en un sandbox."
+            "folderLacks": "Esta parte de la aplicación ({area}) no está disponible para una carpeta de este ordenador, solo en un sandbox."
         },
         "useDevRebuild": {
             "rebuildSwapsSandboxOnto": "Tu reconstrucción pasa este sandbox a su imagen nueva cuando termina: medio minuto de silencio aproximadamente, y luego esta página se reconecta sola. Tus archivos en /work se conservan.",

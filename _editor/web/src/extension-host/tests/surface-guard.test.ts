@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import * as sdkModule from "@intentic/extension-api";
 import { extensionApiVersion } from "@intentic/extension-api";
+import { extensionUiDeprecated, extensionUiNames } from "@intentic/extension-ui/names";
 import {
     CONTRIBUTION_POINTS,
     ExtensionManifestSchema,
@@ -52,6 +53,9 @@ interface RecordedSurface {
     readonly manifestSchema?: string;
     /* What the PACKAGE exports, recorded from 2.6.0 on: the third grain, and the last one that was still unrecorded. */
     readonly moduleExports?: readonly string[];
+    // What @intentic/extension-ui exports (names.mjs, the list its shim re-exports), recorded from 2.31.0 on: a bundle
+    // links these by name as it does the package's own, and RepoRail left them on 2026-10-12 with nothing recording it.
+    readonly uiKitExports?: readonly string[];
 }
 
 const recorded: Record<string, RecordedSurface> = JSON.parse(readFileSync(resolve(sdkRoot, `src/surface.json`), `utf8`));
@@ -122,6 +126,7 @@ const liveSurface = (): RecordedSurface => ({
             return typeof value === `function` || (typeof value === `object` && value !== null) || name === `extensionApiVersion`;
         })
         .toSorted(),
+    uiKitExports: [...extensionUiNames].toSorted(),
 });
 
 test(`the surface this version promises is the surface it has`, () => {
@@ -137,6 +142,144 @@ test(`every earlier version keeps its own record`, () => {
     // changed.
     const shapes = Object.values(recorded).map((surface) => JSON.stringify(surface));
     expect(new Set(shapes).size).toBe(shapes.length);
+});
+
+// The names a bundle links against are held to semver, which the grains above are not: a version that adds one is at
+// least a minor, one that drops one is a major, and only a name declared deprecated may go, at or past its floor. Then
+// `engines.intentic` alone keeps an extension off a host that lacks a name it was built with, before its link fails.
+interface Deprecation {
+    readonly name: string;
+    readonly removableIn: string;
+}
+
+const semver = (version: string): readonly [number, number, number] => {
+    const [major = 0, minor = 0, patch = 0] = version.split(`.`).map(Number);
+    return [major, minor, patch];
+};
+const byVersion = (a: string, b: string): number => {
+    const [x, y] = [semver(a), semver(b)];
+    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+};
+const majorStep = (from: string, to: string): boolean => semver(to)[0] > semver(from)[0];
+const minorStep = (from: string, to: string): boolean =>
+    majorStep(from, to) || (semver(to)[0] === semver(from)[0] && semver(to)[1] > semver(from)[1]);
+
+// What is wrong with one linked-name grain: the live names against what `version` records, and every step between two
+// recorded versions. Empty when the record is honest. `history` maps a version to its names, absent before the grain
+// was recorded.
+const linkedNameProblems = (
+    history: Readonly<Record<string, readonly string[] | undefined>>,
+    version: string,
+    live: readonly string[],
+    deprecated: readonly Deprecation[],
+): string[] => {
+    const problems: string[] = [];
+    const floors = new Map(deprecated.map((entry) => [entry.name, entry.removableIn]));
+    const recordedNow = new Set(history[version] ?? []);
+    const liveNames = new Set(live);
+    const joined = live.filter((name) => !recordedNow.has(name));
+    if (joined.length > 0) {
+        problems.push(`${joined.join(`, `)} joined without a version: an addition moves extensionApiVersion a minor, recorded in surface.json`);
+    }
+    for (const name of [...recordedNow].filter((entry) => !liveNames.has(entry))) {
+        const floor = floors.get(name);
+        problems.push(
+            floor === undefined
+                ? `${name} left, and every extension importing it would stop loading: put it back, or declare it deprecated and drop it in a major`
+                : `${name} left: dropping a deprecated name moves extensionApiVersion a major, at ${floor} or later, recorded in surface.json`,
+        );
+    }
+    const versions = Object.keys(history)
+        .filter((entry) => history[entry] !== undefined)
+        .toSorted(byVersion);
+    for (const [index, next] of versions.entries()) {
+        const previous = versions[index - 1];
+        if (previous === undefined) {
+            continue;
+        }
+        const [before, after] = [new Set(history[previous]), new Set(history[next])];
+        const added = [...after].filter((name) => !before.has(name));
+        if (added.length > 0 && !minorStep(previous, next)) {
+            problems.push(`${next} adds ${added.join(`, `)} in a patch over ${previous}: an addition is a minor`);
+        }
+        for (const name of [...before].filter((entry) => !after.has(entry))) {
+            const floor = floors.get(name);
+            if (floor === undefined) {
+                problems.push(`${next} drops ${name}, which was never declared deprecated`);
+            } else if (!majorStep(previous, next)) {
+                problems.push(`${next} drops ${name} outside a major`);
+            } else if (byVersion(next, floor) < 0) {
+                problems.push(`${next} drops ${name} before ${floor}, the floor its deprecation set`);
+            }
+        }
+    }
+    const known = new Set([...live, ...versions.flatMap((entry) => history[entry] ?? [])]);
+    for (const entry of deprecated.filter((candidate) => !known.has(candidate.name))) {
+        problems.push(`${entry.name} is declared deprecated, and no recorded version has it`);
+    }
+    return problems;
+};
+
+const grain = (key: `moduleExports` | `uiKitExports`): Record<string, readonly string[] | undefined> =>
+    Object.fromEntries(Object.entries(recorded).map(([version, surface]) => [version, surface[key]]));
+
+// This package's own exports retire the same way, declared here first (none is yet).
+const apiDeprecated: readonly Deprecation[] = [];
+
+test(`the names a bundle links against move only as semver allows`, () => {
+    // A failure says what moved and which bump it needs; the kit's deprecated names are in _shared/extension-ui/names.mjs.
+    const live = liveSurface();
+    expect(linkedNameProblems(grain(`uiKitExports`), extensionApiVersion, live.uiKitExports ?? [], extensionUiDeprecated)).toEqual([]);
+    expect(linkedNameProblems(grain(`moduleExports`), extensionApiVersion, live.moduleExports ?? [], apiDeprecated)).toEqual([]);
+});
+
+describe(`the linked-name rule`, () => {
+    const deprecatedB = [{ name: `B`, removableIn: `3.0.0` }];
+
+    test(`a name that leaves undeclared fails, bumped or not`, () => {
+        expect(linkedNameProblems({ "2.31.0": [`A`, `B`] }, `2.31.0`, [`A`], [])).toEqual([
+            `B left, and every extension importing it would stop loading: put it back, or declare it deprecated and drop it in a major`,
+        ]);
+        expect(linkedNameProblems({ "2.31.0": [`A`, `B`], "3.0.0": [`A`] }, `3.0.0`, [`A`], [])).toEqual([
+            `3.0.0 drops B, which was never declared deprecated`,
+        ]);
+    });
+
+    test(`a deprecated name may leave in a major at or past its floor`, () => {
+        expect(linkedNameProblems({ "2.31.0": [`A`, `B`], "3.0.0": [`A`] }, `3.0.0`, [`A`], deprecatedB)).toEqual([]);
+    });
+
+    test(`a deprecated name still needs the major, and its floor`, () => {
+        expect(linkedNameProblems({ "2.31.0": [`A`, `B`] }, `2.31.0`, [`A`], deprecatedB)).toEqual([
+            `B left: dropping a deprecated name moves extensionApiVersion a major, at 3.0.0 or later, recorded in surface.json`,
+        ]);
+        expect(linkedNameProblems({ "2.31.0": [`A`, `B`], "2.32.0": [`A`] }, `2.32.0`, [`A`], deprecatedB)).toEqual([
+            `2.32.0 drops B outside a major`,
+        ]);
+        expect(linkedNameProblems({ "2.31.0": [`A`, `B`], "3.0.0": [`A`] }, `3.0.0`, [`A`], [{ name: `B`, removableIn: `4.0.0` }])).toEqual([
+            `3.0.0 drops B before 4.0.0, the floor its deprecation set`,
+        ]);
+    });
+
+    test(`an addition needs a new minor recorded`, () => {
+        expect(linkedNameProblems({ "2.31.0": [`A`] }, `2.31.0`, [`A`, `C`], [])).toEqual([
+            `C joined without a version: an addition moves extensionApiVersion a minor, recorded in surface.json`,
+        ]);
+        expect(linkedNameProblems({ "2.31.0": [`A`], "2.31.1": [`A`, `C`] }, `2.31.1`, [`A`, `C`], [])).toEqual([
+            `2.31.1 adds C in a patch over 2.31.0: an addition is a minor`,
+        ]);
+        expect(linkedNameProblems({ "2.31.0": [`A`], "2.32.0": [`A`, `C`] }, `2.32.0`, [`A`, `C`], [])).toEqual([]);
+    });
+
+    test(`versions recorded before the grain are not steps`, () => {
+        expect(linkedNameProblems({ "2.30.0": undefined, "2.31.0": [`A`] }, `2.31.0`, [`A`], [])).toEqual([]);
+    });
+
+    test(`a deprecation must name something the kit has had`, () => {
+        expect(linkedNameProblems({ "2.31.0": [`A`] }, `2.31.0`, [`A`], [{ name: `Typo`, removableIn: `3.0.0` }])).toEqual([
+            `Typo is declared deprecated, and no recorded version has it`,
+        ]);
+    });
 });
 
 test(`the SDK README names exactly the contribution points the schema has`, () => {

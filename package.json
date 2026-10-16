@@ -35,6 +35,7 @@
         "e2e:mobile": "pnpm --filter @intentic/demo build && turbo run e2e:mobile --ui=stream",
         "e2e:local": "turbo run e2e:local --ui=stream",
         "e2e:signin": "turbo run e2e:signin --filter=@intentic/e2e --ui=stream",
+        "e2e:compat": "turbo run e2e:compat --filter=@intentic/e2e --ui=stream",
         "e2e:providers": "turbo run e2e:providers --ui=stream",
         "db:up": "docker compose up -d --wait postgres && node _tools/scripts/db/verify-target.mjs && pnpm --filter @intentic/prisma migrate:deploy",
         "db:down": "docker compose down",

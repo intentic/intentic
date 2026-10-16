@@ -97,8 +97,9 @@ const LOOSE = {
     "perf-browser": /^\.github\/workflows\/ci\.yml/,
     // The tier's own spec and harness live in @intentic/e2e, which nothing of the face depends on.
     "local-face": /^(_tools\/e2e\/local-face\/|\.github\/workflows\/ci\.yml)/,
-    // The sign-in gate's spec, fakes and stack live in @intentic/e2e, which neither the api nor the web depends on.
-    signin: /^(_tools\/e2e\/signin\/|\.github\/workflows\/ci\.yml)/,
+    // The sign-in gate's spec, fakes and stack live in @intentic/e2e, which neither the api nor the web depends on. The
+    // N-1 check (`e2e-compat`) is built on that stack and runs on the same trigger, so its own harness is named too.
+    signin: /^(_tools\/e2e\/(signin|compat)\/|\.github\/workflows\/ci\.yml)/,
     "ci-base-changed": /^_tools\/ci-base\//,
     // ci-desktop's FROM is ci-base's mutable `latest`; a ci-base change forces a rebuild here too.
     "ci-desktop-changed": /^_tools\/ci-(desktop|base)\//,

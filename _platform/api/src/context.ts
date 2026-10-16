@@ -25,6 +25,13 @@ export interface OrpcContext {
     sessionHeaders: Headers;
 }
 
+// When the account was made, for the app's sign-up milestone (User.createdAt); left out when the session does not carry
+// a readable date, rather than failing the request over an analytics field.
+const createdAtOf = (value: Date | string | undefined): { createdAt?: string } => {
+    const at = value === undefined ? Number.NaN : new Date(value).getTime();
+    return Number.isNaN(at) ? {} : { createdAt: new Date(at).toISOString() };
+};
+
 export const buildOrpcContext = async (
     deps: { auth: Auth; prisma: PrismaClient; config: Config; logger: Logger },
     headers: Headers,
@@ -36,6 +43,7 @@ export const buildOrpcContext = async (
               email: session.user.email,
               name: session.user.name,
               image: session.user.image ?? null,
+              ...createdAtOf(session.user.createdAt),
               emailVerified: session.user.emailVerified,
           }
         : null;

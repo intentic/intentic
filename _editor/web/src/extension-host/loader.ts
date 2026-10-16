@@ -14,12 +14,14 @@ import { sandboxRpc } from "../client/sandbox/sandboxRpc";
 import { readFailure } from "../client/sandbox/useDaemonRoutes";
 import { createExtensionApi, deactivateAllExtensions, deactivateExtension, type HostBindings } from "./apiImpl";
 import { builtinModules } from "./builtins";
+import { bundleLinkProblem } from "./bundleLinks";
 import { codeRevisionOf } from "../features/extensions/codeRevision";
 import { LOCAL_EXTENSIONS, localFace } from "../app/environments/local";
 import { type ReportFields, reportClient } from "../app/clientDiagnostics";
 
 // Loads and activates installed extensions from GET /extensions (compiled-in first-party, daemon-baked, and
-// git-installed alike): owner's switch, then engines check, then code.
+// git-installed alike): owner's switch, then engines check, then the bundle's imports against what the host exports
+// (bundleLinks.ts), then code.
 // A daemon-fetched bundle goes through Blob URL import() (bare import() can't carry the Bearer header), which forces
 // single-file ESM bundles.
 // Each extension's failure is contained and recorded on a status the Extensions tab renders; the shell never crashes on
@@ -89,15 +91,19 @@ const runActivate = async (summary: ExtensionSummary, host: HostBindings, module
     await module.activate(api, context);
 };
 
-// Loads a daemon-hosted bundle via Blob URL, revoked right after import() evaluates it; a single-file bundle has no
-// later relative import to resolve.
-const importBundle = async (summary: ExtensionSummary): Promise<ExtensionModule> => {
+const fetchBundle = async (summary: ExtensionSummary): Promise<string> => {
     const path = `/extensions/${encodeURIComponent(summary.id)}/bundle`;
     const response = await sandboxRequest(path);
     if (!response.ok) {
         throw await sandboxError(response, { method: `GET`, path });
     }
-    const url = URL.createObjectURL(new Blob([await response.text()], { type: `text/javascript` }));
+    return response.text();
+};
+
+// Loads a daemon-hosted bundle via Blob URL, revoked right after import() evaluates it; a single-file bundle has no
+// later relative import to resolve.
+const importBundle = async (source: string): Promise<ExtensionModule> => {
+    const url = URL.createObjectURL(new Blob([source], { type: `text/javascript` }));
     try {
         const module = (await import(/* @vite-ignore */ url)) as Partial<ExtensionModule> & { default?: ExtensionModule };
         const resolved = module.default ?? module;
@@ -136,7 +142,21 @@ const loadOne = async (summary: ExtensionSummary, host: HostBindings, startedIn:
     }
     const ran = { ...status, revision: codeRevisionOf(summary), bundle: compiled === undefined ? (`daemon` as const) : (`compiled-in` as const) };
     try {
-        await runActivate(summary, host, compiled ?? (await importBundle(summary)), startedIn);
+        let module: ExtensionModule | undefined = compiled;
+        if (module === undefined) {
+            const source = await fetchBundle(summary);
+            // Before import(): a name the host does not export, any more or yet, fails the link in the browser's own
+            // words, which name neither the extension nor the fix. Its engines range passed, so the range is not saying
+            // what the bundle was built against.
+            const unlinked = bundleLinkProblem(source);
+            if (unlinked !== undefined) {
+                const stale: ExtensionHostStatus = { ...ran, state: `incompatible`, detail: unlinked };
+                reportLoadFailure(stale, summary.source);
+                return stale;
+            }
+            module = await importBundle(source);
+        }
+        await runActivate(summary, host, module, startedIn);
         return { ...ran, state: `active` };
     } catch (error) {
         const failed: ExtensionHostStatus = { ...ran, state: `error`, detail: messageOr(error, String(error)) };

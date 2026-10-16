@@ -261,6 +261,10 @@ export { default as PullToRefresh } from "./components/layout/PullToRefresh.vue"
 // The header picker a view narrows to one repository with: an optional "All repositories" row, a remembered pick.
 export { default as RepoPicker } from "./components/forms/RepoPicker.vue";
 export { type RepoPickerAll } from "./components/forms/repoPicker.js";
+// Deprecated (2026-10-15): the repository column RepoPicker replaced, exported only so extensions built against it
+// still link through @intentic/extension-ui. The shell never draws it.
+export { default as RepoRail } from "./components/layout/RepoRail.vue";
+export { type RepoRailAll, type RepoRailGroup, type RepoRailRow } from "./components/layout/repoRail.js";
 // Drag strip between two panes.
 export { default as ResizeSeam } from "./components/layout/ResizeSeam.vue";
 // Anchored panel on desktop, bottom sheet on a phone, behind one open flag.

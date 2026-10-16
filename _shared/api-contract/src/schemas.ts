@@ -24,6 +24,9 @@ export const UserSchema = z.object({
     image: z.string().nullable(),
     // Absent from a platform from before email sign-in, where every account is a Google one.
     signInMethods: z.array(SignInMethodSchema).optional(),
+    // When the account was made. The app reads it to tell a sign-up from a return (analytics.ts `signed_up`); absent
+    // from a platform from before 2026-10-15.
+    createdAt: z.iso.datetime().optional(),
 });
 export type User = z.infer<typeof UserSchema>;
 

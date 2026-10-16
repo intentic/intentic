@@ -17,7 +17,8 @@
 #
 # `ic-windows-amd64.exe` is staged beside them when `_sandbox/ic/dist-bin` holds one
 # (`bash _tools/scripts/build/build-ic.sh windows-x64`), because the setup the installed app runs DOWNLOADS
-# that binary: connect.ps1 fetches `$IC_URL/ic-windows-amd64.exe`, defaulting to the latest GitHub release. A
+# that binary (with a SHA256SUMS listing it): connect.ps1 fetches `$IC_URL/ic-windows-amd64.exe`, defaulting to the
+# latest GitHub release, and checks it against `$IC_URL/SHA256SUMS`. A
 # working-tree installer carries the 0.0.0 sentinel and so names no release of its own, which means a local
 # install tests this branch's app driving the last release's CLI unless IC_URL points back here
 # (try-onboarding.mjs sets it to http://localhost:4321/desktop). The installers carry an ic of their own beside the
@@ -150,6 +151,11 @@ fi
 stage "$WIN_BUNDLES/nsis/*-setup.exe" "Intentic-setup.exe"
 if [ "$WINDOWS" -eq 1 ]; then
     stage "$ROOT/_sandbox/ic/dist-bin/ic-windows-amd64.exe" "ic-windows-amd64.exe"
+fi
+# connect.ps1 checks the ic it downloads against the SHA256SUMS beside it (scripts-kit/ic-fetch.ps1) and refuses one
+# it cannot check, so the local site lists what it serves, as a release does.
+if [ -f "$STAGE/ic-windows-amd64.exe" ]; then
+    (cd "$STAGE" && sha256sum ./ic-windows-amd64.exe >SHA256SUMS)
 fi
 
 if [ "${#failed[@]}" -gt 0 ]; then

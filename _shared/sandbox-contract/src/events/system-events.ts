@@ -58,6 +58,8 @@ export const HelloSchema = z.object({
     // `rawFingerprints` is what `shapes` is for a procedure, under the name the rest of the code gives it.
     rawRoutes: z.array(z.string()).optional(),
     rawFingerprints: z.record(z.string(), z.string()).optional(),
+    // `<version>:<newest mtime of the compiled tree>`, as every release since 1.0.0 sends it. The version at its head
+    // is what the browser holds against the oldest daemon it supports (state/daemon-floor.ts), so it stays first.
     build: z.string().optional(),
     boot: BootProgressSchema.optional(),
     // A project sandbox's folder, workspace-relative (`my-app` for /work/my-app): the owner's own folder, synced live

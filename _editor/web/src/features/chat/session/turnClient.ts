@@ -28,6 +28,7 @@ import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { accountsOutdated } from "../accounts/accountsOutdated";
 import { type ContinueOptions, repointedPickUp, withHandoffChosen } from "../run/endings/pickUp";
 import { type AttachHead, type FollowEnd, followRun, type SentMessage, type TurnContext } from "../run/turnStream";
+import { noteTurnCompleted } from "../../../app/analytics";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
 import { type ChatAttachment, continuationFor, isNudgeText } from "../transcript/transcript";
 import { refusalWords } from "../transcript/notices/sandboxNotice";
@@ -714,6 +715,10 @@ export class TurnClient {
         // window knew. If the ack came after all, the daemon holds a stopped turn, so the way back is armed now.
         if (phase.kind === `running` && phase.ending !== undefined && host.pickUp.value === undefined) {
             host.pickUp.value = { reason: `stopped` };
+        }
+        // A turn that ran to its own end, nobody stopping it and nothing failing: the funnel's last milestone.
+        if (phase.kind === `running` && phase.ending === undefined && host.error.value === null) {
+            noteTurnCompleted(host.selection.provider.value);
         }
         const waiters = this.settleWaiters;
         this.settleWaiters = [];

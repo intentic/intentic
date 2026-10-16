@@ -259,8 +259,9 @@ First comment, posted immediately after submitting:
 > Credentials sit inside the sandbox and get injected per turn, so they are never in the file tree.
 >
 > It works with Claude Code, Codex, Grok, Kimi Code and Gemini on your own subscription: intentic charges
-> nothing and never meters model usage. MIT, and the platform tier is deliberately thin: it knows who you are
-> and where your sandbox is, and every keystroke goes browser-to-your-machine over your sandbox's own tunnel.
+> nothing and never meters model usage. MIT, and the platform tier is deliberately thin: it stores who you are
+> and where your sandbox is. Browser traffic goes through our relay to your sandbox's tunnel (decrypted in memory
+> to route, never stored), or straight to the sandbox when you open it at its local address.
 >
 > Demo, which is the real workspace running against fixtures: https://intentic.dev/demo/
 > Source: https://github.com/intentic/intentic

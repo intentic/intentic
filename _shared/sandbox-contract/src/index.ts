@@ -302,6 +302,7 @@ export * from "./schemas/workspace/workspace-setup.js";
 export * from "./schemas/workspace/workspace-tree.js";
 export * from "./schemas/workspace/workspace-upload.js";
 export * from "./state/arrival.js";
+export * from "./state/daemon-floor.js";
 export * from "./state/definition.js";
 export * from "./policy/search-globs.js";
 export * from "./state/starter.js";

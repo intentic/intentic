@@ -36,8 +36,12 @@ export const launcherPath = join(binDir, WINDOWS_LAUNCH_STUB);
 const RELEASES = "https://github.com/intentic/intentic/releases";
 
 // Always a tag: every environment of one machine must land on the same bytes, and only a tag names them.
-export const agentAssetUrl = (version: string): string => `${RELEASES}/download/v${version}/intentic-machine-${osToken()}-${archToken()}${exe}`;
-export const launcherAssetUrl = (version: string): string => `${RELEASES}/download/v${version}/intentic-launch-windows-${archToken()}.exe`;
+export const releaseAssetUrl = (version: string, name: string): string => `${RELEASES}/download/v${version}/${name}`;
+// The asset names as the release attaches them, which are also the names its SHA256SUMS lists them by.
+export const agentAssetName = (): string => `intentic-machine-${osToken()}-${archToken()}${exe}`;
+export const launcherAssetName = (): string => `intentic-launch-windows-${archToken()}.exe`;
+export const agentAssetUrl = (version: string): string => releaseAssetUrl(version, agentAssetName());
+export const launcherAssetUrl = (version: string): string => releaseAssetUrl(version, launcherAssetName());
 
 // `releases/latest` redirects to `…/tag/vX.Y.Z`; the API answers the same but is rate-limited per IP.
 export const publishedVersion = async (): Promise<string | undefined> => {

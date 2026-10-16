@@ -126,6 +126,13 @@ export {
     // URL's `?repo=` through `api.route`, left out when the host bound the view to a repository. Never a rail column.
     RepoPicker,
     type RepoPickerAll,
+    // Deprecated (2026-10-15): the repository column `RepoPicker` replaced. It left the kit on 2026-10-12 with no
+    // version moving, and every extension still importing it stopped loading, so it is back for them alone; removable
+    // from extension API 3.0.0 (`extensionUiDeprecated` in names.mjs).
+    RepoRail,
+    type RepoRailAll,
+    type RepoRailGroup,
+    type RepoRailRow,
     // Prose typeset as a document (`ProseField`) and a pane the reader can resize (`ResizeSeam`).
     ProseField,
     ResizeSeam,
@@ -166,7 +173,8 @@ export {
     useLatest,
     // The thrown thing's message, or a fallback when it has none.
     messageOr,
-    // Deprecated: the old name of `messageOr`, kept so extensions built against it still link.
+    // Deprecated (2026-10-06): the old name of `messageOr`, kept so extensions built against it still link; removable
+    // from extension API 3.0.0 (`extensionUiDeprecated` in names.mjs).
     messageOr as errorMessage,
     noticeFrom,
     noticeOf,

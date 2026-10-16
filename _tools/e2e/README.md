@@ -1,6 +1,6 @@
 # e2e
 
-Playwright harnesses that drive the real web app in Chromium: the sign-in gate, the local-stack browser tier, the post-deploy sign-in smoke, the mobile geometry gate, the desktop app's local face, the site's screenshots and the promo take.
+Playwright harnesses that drive the real web app in Chromium: the sign-in gate, the N-1 check against the released sandbox, the local-stack browser tier, the post-deploy sign-in smoke, the mobile geometry gate, the desktop app's local face, the site's screenshots and the promo take.
 
 ```mermaid
 flowchart LR
@@ -27,6 +27,16 @@ flowchart LR
     Each piece passed its own tests, and nothing ran the chain. It is Chromium-only and hermetic because it gates a
     deploy: a real Google account in CI would make the gate fail for reasons that are not ours (the smoke below is
     what checks Google itself).
+- `compat/` is the N-1 check: today's editor against the daemon owners run. It boots the sign-in tier's stack, then a
+  daemon from `ghcr.io/intentic/sandbox:stable` (`COMPAT_E2E_IMAGE` picks another, a version tag or a local build)
+  through testcontainers, so it runs in a CI job container as the sign-in tier does. A new person signs in, is given a
+  sandbox row pointing at that daemon, and walks the agent board, the files, a chat and the Sandbox page. It fails on a
+  call the daemon refused, a read that failed, an uncaught error, any gate left standing, or the "too old" page. The
+  daemon runs with its auth off, so its session is seeded in the browser rather than exchanged, which the sign-in tier
+  and the daemon's own suites cover. CI runs it as `e2e-compat` before the platform deploys and nightly as
+  `compat-stable`.
+  - 2026-10-15: written after the editor on main called `org.policy` on every released daemon, none of which had it.
+    Pointed at 1.248.0 it stops on the too-old page; with the `org.policy` gate taken out it fails on twelve 404s.
 - The browser tier (`playwright.config.ts`, `specs/`) tests the browser-daemon contract. Its stack lives on
   localhost, where a CI job cannot reach it, so it runs on a developer machine. `global-setup.ts` reuses anything
   already running and `global-teardown.ts` stops only what it started.
@@ -57,6 +67,7 @@ flowchart LR
 ## Key files
 
 - [signin/signin.spec.ts](signin/signin.spec.ts) — the sign-in gate: web and desktop sign-in, end to end.
+- [compat/compat.spec.ts](compat/compat.spec.ts) — the N-1 check: this commit's editor on the released daemon.
 - [stack.ts](stack.ts) — origins, ports, seeded rows and the Better Auth cookie recipe.
 - [global-setup.ts](global-setup.ts) — boots the stack in order and writes the storage state.
 - [playwright.config.ts](playwright.config.ts) — the browser tier: serial, one retry, seeded session.
@@ -68,6 +79,7 @@ flowchart LR
 
 ```sh
 pnpm e2e:signin                                   # builds the web first; needs Docker
+pnpm e2e:compat                                   # the same, plus a daemon from :stable; COMPAT_E2E_IMAGE picks another
 pnpm e2e:browser                                  # SANDBOX_E2E_IMAGE picks the daemon image
 pnpm e2e:mobile                                   # builds the demo first
 pnpm e2e:local                                    # builds the local face first

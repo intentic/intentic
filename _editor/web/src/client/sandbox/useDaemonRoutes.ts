@@ -4,6 +4,7 @@ import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { z } from "zod";
 import { contractUncompiled } from "./contractFreshness";
+import { routeArea } from "./daemon/routeAreas";
 
 // What the active daemon can do, from its /events hello frame. A newer browser than daemon is normal, not an
 // error; this turns a silent 404 into a named gap, so features can gate on `supportsRoute` instead of finding out
@@ -187,6 +188,18 @@ const eitherSideOlderRemedy = (): string => {
         : t(`sandbox.useDaemonRoutes.reloadOrUpdate`);
 };
 
+// The part of the app a route serves, as the sentences below name it. A shipped build says the area in plain words
+// (routeAreas.ts) and never the dotted route id, which means nothing to anyone outside this codebase; a dev build adds
+// the id, which is what a fix is written against. Undefined for a route of no named area in a shipped build, whose
+// sentence then names no area at all.
+const areaOf = (name: string): string | undefined => {
+    const label = routeArea(name)?.label;
+    if (!import.meta.env.DEV) {
+        return label;
+    }
+    return label === undefined ? name : `${label}: ${name}`;
+};
+
 // Why a call to route `name` failed because this daemon predates it; undefined for one the daemon advertises. A
 // missing route is directional: only a daemon behind lacks a name this app has. A folder on this computer never has
 // it, and no update brings it.
@@ -194,10 +207,12 @@ export const staleDaemonReason = (name: string): string | undefined => {
     if (supportsRoute(name)) {
         return undefined;
     }
+    const area = areaOf(name);
     if (folderSurface.value) {
-        return t(`sandbox.useDaemonRoutes.folderLacks`, { route: name });
+        return area === undefined ? t(`sandbox.useDaemonRoutes.folderLacksUnnamed`) : t(`sandbox.useDaemonRoutes.folderLacks`, { area });
     }
-    return t(`sandbox.useDaemonRoutes.routeMissing`, { route: name, remedy: daemonOlderRemedy() });
+    const remedy = daemonOlderRemedy();
+    return area === undefined ? t(`sandbox.useDaemonRoutes.routeMissingUnnamed`, { remedy }) : t(`sandbox.useDaemonRoutes.routeMissing`, { area, remedy });
 };
 
 // A schema refusing the daemon's answer is version drift no status code carries, and its issue list is developer JSON.
@@ -214,5 +229,7 @@ export const driftedRouteReason = (name: string): string | undefined => {
     if (!driftedRoutes.value.includes(name)) {
         return undefined;
     }
-    return t(`sandbox.useDaemonRoutes.routeDrifted`, { route: name, remedy: eitherSideOlderRemedy() });
+    const area = areaOf(name);
+    const remedy = eitherSideOlderRemedy();
+    return area === undefined ? t(`sandbox.useDaemonRoutes.routeDriftedUnnamed`, { remedy }) : t(`sandbox.useDaemonRoutes.routeDrifted`, { area, remedy });
 };

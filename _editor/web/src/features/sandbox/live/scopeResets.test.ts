@@ -12,7 +12,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // sandboxes' own reads answer with nothing; the stores, the hello and the switch are the real ones.
 
 jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
-jest.mock("../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined, noteTurnCompleted: jest.fn() }));
 const reachable = ref(false);
 jest.mock("../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId, reachable }) }));
 jest.mock("../../../client/sandbox/sandboxRpc", () => ({

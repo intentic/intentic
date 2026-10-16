@@ -48,7 +48,7 @@ flowchart LR
   UTC+14 and UTC-11. `lib/seed-buildinfo.mjs` starts the web's vue-tsc from a sibling worktree's build info, and on the
   fleet from the last passing check's (`TSBUILDINFO_SHARE_DIR`).
 - Every verify script runs each independent step and prints all failures in one digest at the end of its output (`lib/steps.mjs`).
-- A release is semantic-release on `main`: `release-prepare.sh` checks the artifacts CI built, then `publish-github.sh`, `release-images.sh` and `ship-stable.sh`, which moves `stable` last. `rollback-stable.sh`, run from the manual `rollback.yml` workflow, moves it back and marks the release it left withdrawn (a pre-release whose notes open with `Withdrawn: <reason>`, which sandboxes running it are told).
+- A release is semantic-release on `main`: `release-prepare.sh` checks the artifacts CI built and has `release-checksums.mjs` write `SHA256SUMS` over every asset with the updater key's signature beside it (`SHA256SUMS.sig`, what the machine agent checks before it replaces itself or `ic`), then `publish-github.sh`, `release-images.sh` and `ship-stable.sh`, which moves `stable` last. `rollback-stable.sh`, run from the manual `rollback.yml` workflow, moves it back and marks the release it left withdrawn (a pre-release whose notes open with `Withdrawn: <reason>`, which sandboxes running it are told).
 - Versions are stamped in CI only (`release/set-versions.sh`); the repository keeps `0.0.0`. `lib/packages.sh` is the one list of published npm packages.
 
 ## Layout

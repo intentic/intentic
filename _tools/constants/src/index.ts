@@ -63,7 +63,7 @@ export const FIELD_NOTES_FILE = ".intentic/config/field-notes.toon";
 export const HOST_STATE_ROOT = "/opt/intentic";
 
 // Clickwrap version stamped at sign-up; bump on any material change to the terms or privacy policy.
-export const LEGAL_VERSION = "2026-10-13";
+export const LEGAL_VERSION = "2026-10-15";
 export const LEGAL_CONTACT_EMAIL = "contact@intentic.dev";
 
 // Legal-entity identification EU e-commerce law requires published on the site. ADDRESS and TAX_ID are deliberately

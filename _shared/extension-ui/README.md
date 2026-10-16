@@ -20,6 +20,16 @@ flowchart LR
   re-exports, and a `dist/index.js` bridge that throws when loaded outside an intentic host.
 - `names.mjs` lists the runtime export names by hand, because the `.vue` graph cannot load in Node. The editor's shim
   generator reads it, a dev-time assertion in `hostModules.ts` catches drift, and `extensionUiNames.test.ts` fails it.
+- A bundle links these names, so they are versioned with the extension API. `surface.json` in
+  [extension-api](../extension-api) records them per `extensionApiVersion` (`uiKitExports`, from 2.31.0), and the
+  editor's `surface-guard.test.ts` holds them to semver: a new name moves the version a minor, and a name leaves only
+  if `extensionUiDeprecated` in `names.mjs` lists it, in a major at or past the floor it gives. An extension whose
+  `engines.intentic` range the host satisfies then finds every name it was built with. One that asks for a name anyway
+  is stopped before it links: the editor's loader reads the bundle's imports and says which name is missing and that
+  the extension needs updating, where the browser would only say the module "does not provide an export named …".
+- `RepoRail` and `errorMessage` are deprecated and stay until 3.0.0 (`RepoPicker` and `messageOr` replace them).
+  (2026-10-15: `RepoRail` left the kit on 2026-10-12 with no version moving, and every installed extension still
+  importing it stopped loading. It is back unchanged, and nothing recorded the kit's names before this.)
 - `./diff`, `./format`, `./i18n` and `./worker` skip the component barrel, for extension tests that run without a Vue
   compiler. Each is published as a bridge holding what `src/index.ts` re-exports from that file, so a name a subpath
   file exports must also be re-exported from the barrel and listed in `names.mjs`, or an extension installed from git
@@ -31,7 +41,7 @@ flowchart LR
 
 - [src/index.ts](src/index.ts) — the kit: every name an extension may import, with usage notes.
 - [scripts/build.mjs](scripts/build.mjs) — builds the published types and the host bridge from `_editor/ui`.
-- [names.mjs](names.mjs) — the runtime export names the shims and the host check read.
+- [names.mjs](names.mjs) — the runtime export names the shims and the host check read, and the deprecated ones.
 - [../../_editor/web/src/extension-host/hostModules.ts](../../_editor/web/src/extension-host/hostModules.ts) — where the shell publishes its instances to extension bundles.
 
 ## Commands

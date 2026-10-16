@@ -199,8 +199,9 @@ this paragraph stood alone for a day and was edited on the first turn that touch
     wizard: never as a standalone "install intentic" instruction.
   - Requirements stated honestly wherever setup is shown: a machine with Docker (auto-installed
     with confirmation), a Google account or any email address, **no Cloudflare account required**.
-  - There are no tiers and no limits: every sandbox, capability and shared workspace is included,
-    and nothing on the page may imply otherwise.
+  - There are no feature tiers: every sandbox you run yourself, capability and shared workspace is
+    included. The one paid thing is a hosted sandbox, and the page must not say "nothing is paid"
+    or "no limits" in a way that contradicts `/pricing/` (2026-10-15).
   - Every screenshot is real product UI. Re-shoot on UI shifts; never mock a screen the app doesn't render.
 
 ## Page architecture

@@ -131,7 +131,7 @@ Wake an agent on a schedule, a push, a failed pipeline, a Sentry alert, a paymen
 </picture>
 
 - The sandbox is a Docker container on your laptop, desktop or server. Put it on an always-on machine and work continues while your laptop sleeps.
-- The platform stores your sign-in and your sandbox's address. It never receives your files, prompts or credentials.
+- The platform stores your sign-in and your sandbox's address, never your files, prompts or credentials. Opened at its intentic address, the sandbox's traffic passes through our relay, which decrypts it in memory to route it and stores none of it; opened at its local address, it never reaches us.
 - The sandbox, CLI, workspace and platform are all MIT-licensed, in this repository. Read what runs on your hardware before you run it.
 
 ## How it compares
@@ -151,7 +151,7 @@ Each [comparison page](https://intentic.dev/compare/) includes the case for pick
 <details>
 <summary><b>Is it free?</b></summary>
 
-Yes. Every sandbox, capability, automation and shared workspace is free, with no tiers or card. You pay your AI provider directly. An optional [hosted sandbox](https://intentic.dev/pricing/) exists for people who would rather not run a machine.
+The software is. Every sandbox you run yourself, every capability, automation and shared workspace is free, with no feature tiers and no card. You pay your AI provider directly. The one paid thing is an optional [hosted sandbox](https://intentic.dev/pricing/), a machine of ours to run it on, which also comes in a free size.
 </details>
 
 <details>
@@ -163,7 +163,7 @@ Claude Code (Opus, Sonnet, Haiku), Codex, Cursor, Gemini, Grok, Kimi Code, GLM a
 <details>
 <summary><b>Where does my code live?</b></summary>
 
-On your machine, as plain git. Your browser reaches the sandbox over a private tunnel. The platform never receives your files, and secret files such as `.env` never pass through the connection.
+On your machine, as plain git, unless you choose a hosted sandbox, which runs on a machine we arrange at Fly.io. The platform never stores your files. Your browser reaches the sandbox over a tunnel through our relay, which decrypts the traffic in memory to route it and keeps none of it; open the sandbox at its local address to skip the relay. When the desktop app syncs a folder from your computer, secret files such as `.env` stay out of the sync.
 </details>
 
 <details>

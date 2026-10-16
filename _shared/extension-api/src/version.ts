@@ -193,4 +193,11 @@
 // token for an access token before the card's connection test. An older host's parse drops both keys, so there the
 // token is pasted by hand and the test runs without the trade. No member or top-level key was added, so the manifest
 // digest is the only grain that records it.
-export const extensionApiVersion = "2.30.0";
+// 2.31.0 versions the UI kit. `@intentic/extension-ui`'s exports are names a bundle links against as it links this
+// package's, and nothing recorded them: `RepoRail` left the kit on 2026-10-12 with no version moving, and every
+// installed extension still importing it failed to load with the browser's link error. The recorded surface grows a
+// `uiKitExports` grain (the kit's names.mjs), and those names, with this package's `moduleExports`, are held to semver
+// by the surface guard: a name joining is a minor, and a name leaving is a major, allowed only once names.mjs declares
+// it deprecated and only at or past the floor it gives. Recorded here: `RepoPicker`, added on 2026-10-12 without a
+// version, and `RepoRail`, back and deprecated until 3.0.0. Additive.
+export const extensionApiVersion = "2.31.0";

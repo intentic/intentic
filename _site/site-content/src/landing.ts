@@ -221,7 +221,7 @@ export const landingContent: LandingContent = {
         eyebrow: "What it costs",
         // "intentic" stays lowercase even at a sentence start, per messaging.md.
         heading: "intentic is free. Agents use AI plans you already pay for.",
-        sub: "You bring the AI plans, your machine does the work, and there is nothing to pay us.",
+        sub: "You bring the AI plans and your machine does the work. There is nothing to pay us, unless you would rather rent a machine of ours.",
         // `logo` is the provider's brand mark; paths live in @intentic/constants so this can't drift from the app.
         accounts: [
             { name: "Claude", logo: "claude", detail: "Opus, Sonnet and Haiku, on your Claude plan" },
@@ -239,7 +239,7 @@ export const landingContent: LandingContent = {
         points: [
             "We never meter your tokens or add a markup.",
             "No cloud compute to rent. Agents run on the machine you start them on.",
-            "Everything is included. No tiers, no limits, no card.",
+            "Everything is included. No feature tiers, no card.",
         ],
     },
     // Name, bio, links and cards live in about.ts, shared with /about/; only this band's framing is here.
@@ -451,12 +451,12 @@ export const deskLanding: DeskLandingContent = {
     economics: {
         eyebrow: "What it costs",
         heading: "intentic is free. It uses the AI plan you already pay for.",
-        sub: "Bring your Claude, ChatGPT or Google account. Your computer does the work, and there is nothing to pay us.",
+        sub: "Bring your Claude, ChatGPT or Google account. Your computer does the work, and there is nothing to pay us unless you rent one of our machines instead.",
         flatLabel: "Flat, not metered",
         points: [
             "We never meter what it uses or add a markup.",
             "Nothing to rent. The assistant runs on the computer you start it on.",
-            "Everything is included. No tiers, no limits, no card.",
+            "Everything is included. No feature tiers, no card.",
         ],
     },
     connect: {

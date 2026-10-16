@@ -1,4 +1,4 @@
-import { bundleProblem, bundleSpecifiers, HOST_PUBLISHED_SPECIFIERS } from "./bundle.js";
+import { bundleImportedNames, bundleProblem, bundleSpecifiers, HOST_PUBLISHED_SPECIFIERS, missingImports } from "./bundle.js";
 
 // Every case is a whole bundle and the specifiers it names, in source order. The minified ones are how a bundler
 // actually emits: no whitespace a line-anchored scan could lean on.
@@ -83,9 +83,68 @@ describe("bundleProblem", () => {
         );
     });
 
+    test("an import the host does not export is named, with what to do about it", () => {
+        const host = { "@intentic/extension-ui": ["RepoPicker"] };
+        expect(bundleProblem(`import{RepoRail as e,RepoPicker as t}from"@intentic/extension-ui";`, host)).toBe(
+            "imports RepoRail from @intentic/extension-ui, which this version of the app does not export: it was built against a different version, and the extension needs updating",
+        );
+        expect(bundleProblem(`import{RepoPicker as t}from"@intentic/extension-ui";`, host)).toBe(undefined);
+    });
+
     test("a published package's subpath is not the package", () => {
         expect(bundleProblem(`import{h}from"vue/dist/vue.esm-bundler.js"`)).toBe(
             "imports vue/dist/vue.esm-bundler.js, which the host does not publish, bundle it in, or use one of: vue, @intentic/extension-api, @intentic/extension-ui, @tanstack/vue-query",
         );
+    });
+});
+
+// A bundle links its static imports by name, so each name it asks of a host module is read off the clause: the
+// module's own name, never the local alias a minifier gave it.
+const NAMED: readonly (readonly [string, string, Record<string, string[]>])[] = [
+    [
+        "a minified named import",
+        `import{RepoRail as e,Button as t}from"@intentic/extension-ui";`,
+        { "@intentic/extension-ui": ["RepoRail", "Button"] },
+    ],
+    ["a default import beside named ones", `import d,{a as b}from"z";`, { z: ["default", "a"] }],
+    ["a default import named `default`", `import{default as d}from"z";`, { z: ["default"] }],
+    ["a namespace import names nothing", `import*as n from"z";import d,*as m from"y";`, { z: [], y: ["default"] }],
+    ["a quoted name", `import{"a-b"as c}from"q";`, { q: ["a-b"] }],
+    ["bindings called from", `import from from"f";import{from}from"g";`, { f: ["default"], g: ["from"] }],
+    ["a re-export names what it takes", `export{a as b,c}from"r";export*from"s";export*as t from"u";`, { r: ["a", "c"], s: [], u: [] }],
+    ["one module imported twice", `import{a}from"x";import{b,a as c}from"x";`, { x: ["a", "b"] }],
+    ["a side-effect or dynamic import names nothing", `import"x";const m=await import("y");`, {}],
+];
+
+describe("bundleImportedNames", () => {
+    test.each(NAMED)("%s", (_name, source, expected) => {
+        expect(Object.fromEntries(bundleImportedNames(source))).toEqual(expected);
+    });
+
+    test("leading reads up to the first statement that is not an import, where a bundler has put them all", () => {
+        const source = `"use strict";import{a}from"x";\nimport{b}from"y";var e=1;import{c}from"z";`;
+        expect(Object.fromEntries(bundleImportedNames(source, { leading: true }))).toEqual({ x: ["a"], y: ["b"] });
+        expect(Object.fromEntries(bundleImportedNames(source))).toEqual({ x: ["a"], y: ["b"], z: ["c"] });
+    });
+});
+
+describe("missingImports", () => {
+    const host = { "@intentic/extension-ui": ["Button", "RepoPicker", "RepoRail"], "@intentic/extension-api": ["sandboxPoll"] };
+
+    test("names present on the host pass", () => {
+        const source = `import{sandboxPoll as n}from"@intentic/extension-api";import{RepoRail as a,RepoPicker as b}from"@intentic/extension-ui";`;
+        expect(missingImports(source, host)).toEqual([]);
+    });
+
+    test("a name the host lacks is named with its module", () => {
+        const source = `import{Button as a,Gone as b,AlsoGone as c}from"@intentic/extension-ui";import{sandboxPoll,retired}from"@intentic/extension-api";`;
+        expect(missingImports(source, host)).toEqual([
+            { specifier: "@intentic/extension-ui", names: ["Gone", "AlsoGone"] },
+            { specifier: "@intentic/extension-api", names: ["retired"] },
+        ]);
+    });
+
+    test("a module the host map leaves out is not judged", () => {
+        expect(missingImports(`import{whatever}from"vue";`, host)).toEqual([]);
     });
 });

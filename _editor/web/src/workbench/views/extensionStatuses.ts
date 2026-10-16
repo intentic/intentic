@@ -12,7 +12,8 @@ export interface ExtensionHostStatus {
     // active: running.
     // agent-only: no UI contributions; nothing to activate.
     // disabled: switched off by the owner; the toggle's target state.
-    // incompatible / error: engines mismatch, or activate() threw.
+    // incompatible: an engines mismatch, or a bundle importing a name the host does not export (bundleLinks.ts).
+    // error: the bundle failed to load, or activate() threw.
     // missing / unlisted: image and bundle disagree, a manifest with no module here, or a module here the daemon
     // doesn't list (still activated, but unswitchable).
     readonly state: "active" | "agent-only" | "disabled" | "incompatible" | "missing" | "unlisted" | "error";

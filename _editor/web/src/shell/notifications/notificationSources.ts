@@ -7,6 +7,7 @@ import type { DiagnosisNotice } from "../../features/sandbox/diagnosis/presentat
 import UploadProgressBody from "../../features/workspace/files/upload/UploadProgressBody.vue";
 import { holdReadAloudNotice } from "../../features/chat/voice/readAloud";
 import { useAppUpdate, type AppUpdate } from "../../app/appUpdate";
+import { analyticsAvailable, analyticsChoice, chooseAnalytics } from "../../app/analyticsConsent";
 import { hold, type NotificationInput, type NotificationTone } from "../../workbench/notifications/notifications";
 import { onScreen } from "../../workbench/window/onScreen";
 import { type SandboxAvailability, sandboxRequiresGate } from "../../features/sandbox/overview/availability";
@@ -452,6 +453,26 @@ export const startNotificationSources = (): void => {
             detail: said.detail,
             actions: [{ label: said.action, run: take, tier: `boring` as const }],
             dismiss: dismissUpdate,
+        };
+    });
+
+    // Asked of a browser in the EEA, the UK or Switzerland before anything is recorded (analyticsConsent.ts). No close
+    // button: closing is not an answer, and an unanswered question records nothing, so it stays until it gets one.
+    hold(`analytics-consent`, () => {
+        if (!analyticsAvailable() || analyticsChoice.value !== `unasked`) {
+            return undefined;
+        }
+        return {
+            kind: `question`,
+            tone: `info`,
+            icon: `shield`,
+            title: t(`shell.notificationSources.analyticsConsentTitle`),
+            detail: t(`shell.notificationSources.analyticsConsentDetail`),
+            hint: t(`shell.notificationSources.analyticsConsentHint`),
+            actions: [
+                { label: t(`shell.notificationSources.analyticsConsentDecline`), tier: `boring` as const, run: () => chooseAnalytics(`deny`) },
+                { label: t(`shell.notificationSources.analyticsConsentAllow`), run: () => chooseAnalytics(`allow`) },
+            ],
         };
     });
 

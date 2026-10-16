@@ -39,6 +39,12 @@ flowchart LR
 - `HOST_PUBLISHED_SPECIFIERS` lists the only bare imports a published bundle may use: the modules the shell's import
   map provides. `bundleProblem` finds a bundle's imports with a small tokenizer rather than a line regex, since a
   minified bundle puts them all on one line and a string or comment may spell the word.
+- The same reading names what each static import takes (`bundleImportedNames`: `RepoRail` of
+  `import { RepoRail as e }`, `default` of a default import). `missingImports` compares that with what a host's modules
+  export, which the caller hands in, and `bundleProblem` says it in words when given them. The editor's loader runs it
+  before linking a bundle, over only the imports at the bundle's head (`leading`), where a bundler puts them all. That
+  takes a fraction of a millisecond where reading a 700 KB bundle whole took about 20 (2026-10-15), and an import it
+  does not reach fails to link as it would have.
 
 ## Key files
 

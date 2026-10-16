@@ -13,7 +13,7 @@ flowchart LR
     sign --> store["publish-msstore.mjs<br/>checks before submitting"]
 ```
 
-- Windows warns about any program it cannot attribute to a publisher, and only an Authenticode signature from a certificate issued to a verified legal entity supplies one. `TAURI_SIGNING_PRIVATE_KEY` is a different key: minisign, read only by the app's updater.
+- Windows warns about any program it cannot attribute to a publisher, and only an Authenticode signature from a certificate issued to a verified legal entity supplies one. `TAURI_SIGNING_PRIVATE_KEY` is a different key: minisign, which signs the updater's artifacts and the release's `SHA256SUMS` (as `SHA256SUMS.sig`, checked by the machine agent), and which Windows never sees.
 - [`sign-windows.sh`](../../_tools/scripts/build/sign-windows.sh) does nothing when `WINDOWS_SIGN_TOOL` is unset and says so in the build log, so local and non-release builds stay unsigned and runnable. When it is set, `verify-desktop-bundle.sh` fails a build whose installer carries no signature.
 - The installer is cross-built with cargo-xwin, so `signtool.exe` is not available; both supported signers run on Linux.
 - Every signature is SHA-256 with an RFC 3161 timestamp (`WINDOWS_SIGN_TIMESTAMP_URL`), so it keeps verifying after the certificate expires.

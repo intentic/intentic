@@ -7,7 +7,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 // Same module-eval cuts useAgents.test.ts makes: importing the fleet store pulls in the router, analytics and sandbox
 // modules, which read environment.ts's `window.env` at import time.
 jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
-jest.mock("../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined, noteTurnCompleted: jest.fn() }));
 // The roster's own report when it catches itself behind (auditRoster) posts through sandboxTarget, another of those
 // import-time reads.
 jest.mock("../../../app/clientDiagnostics", () => ({ reportClient: jest.fn() }));

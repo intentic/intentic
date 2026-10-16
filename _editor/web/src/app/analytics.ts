@@ -1,6 +1,7 @@
 import type { PostHog } from "posthog-js";
 import type { User } from "@intentic/api-contract";
 import { type Ref, watch } from "vue";
+import { deviceKey, storedValue, storeValue } from "@intentic/ui/storage";
 import { analyticsAvailable, analyticsChoice } from "./analyticsConsent";
 import { desktopApp } from "./environments/desktop";
 import { environment } from "./environments/environment";
@@ -24,8 +25,9 @@ import { replayPrivacy } from "./replayPrivacy";
 // before its first screen, and its recorder then started serialising a page still being built. Milestones raised
 // before the SDK is there wait in `early` and go out only while capture is allowed.
 //
-// Nobody is asked: analytics is on unless this browser was switched off under Settings, Data
-// (analyticsConsent.ts), and a sandbox's own switch can withhold it for everyone in that sandbox (the gate below).
+// A browser in the EEA, the UK or Switzerland is asked first and sends nothing until it allows it; elsewhere analytics is
+// on unless this browser was switched off under Settings, Data (analyticsConsent.ts). A sandbox's own switch can
+// withhold it for everyone in that sandbox (the gate below).
 let enabled = false;
 let allowed = false;
 let client: PostHog | undefined;
@@ -81,8 +83,7 @@ export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readon
             client.startSessionRecording();
             registerClient(client);
             if (user.value) {
-                client.identify(user.value.id, { email: user.value.email, name: user.value.name });
-                linkInstall(client, user.value.id);
+                identify(client, user.value);
             }
         } else {
             client.stopSessionRecording();
@@ -147,10 +148,10 @@ export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readon
     watch(
         user,
         (current, previous) => {
+            account = current?.id;
             if (!allowed) {return;}
             if (current) {
-                posthog.identify(current.id, { email: current.email, name: current.name });
-                linkInstall(posthog, current.id);
+                identify(posthog, current);
                 return;
             }
             if (previous) {
@@ -171,7 +172,7 @@ export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readon
 const registerClient = (posthog: PostHog): void => {
     const app = desktopApp();
     posthog.register(
-        app === undefined ? { client: `browser` } : { client: `desktop`, desktop_version: app.version, desktop_install_id: app.installId },
+        app === undefined ? { client: `browser`, ...landingCampaign } : { client: `desktop`, desktop_version: app.version, desktop_install_id: app.installId, ...landingCampaign },
     );
 };
 
@@ -201,6 +202,49 @@ export const replaySessionId = (): string | undefined => {
     }
 };
 
+// THE CAMPAIGN A VISIT ARRIVED WITH (2026-10-15), read as this module loads: before the router can redirect the
+// address it came in on (to /login, to /setup) and before the SDK loads at the first idle moment, when PostHog would
+// otherwise look for it. The site hands it over in the sign-in link (_site/site/src/lib/visit.ts). Registered on every
+// event of the tab, so `signed_up` carries it, and set once on the person as where they first came from.
+const CAMPAIGN_KEYS = [`utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`] as const;
+interface Campaign {
+    utm_source?: string;
+    utm_medium?: string;
+    utm_campaign?: string;
+    utm_term?: string;
+    utm_content?: string;
+}
+const arrivedWith = (search: string): Campaign => {
+    const params = new URLSearchParams(search);
+    const campaign: Campaign = {};
+    for (const key of CAMPAIGN_KEYS) {
+        const value = params.get(key)?.trim().slice(0, 150);
+        if (value !== undefined && value !== ``) {
+            campaign[key] = value;
+        }
+    }
+    return campaign;
+};
+const landingCampaign = arrivedWith(globalThis.location?.search ?? ``);
+// The person's first-touch fields; an absent tag is left out when the SDK serialises the call.
+const firstTouch = () => ({
+    initial_utm_source: landingCampaign.utm_source,
+    initial_utm_medium: landingCampaign.utm_medium,
+    initial_utm_campaign: landingCampaign.utm_campaign,
+    initial_utm_term: landingCampaign.utm_term,
+    initial_utm_content: landingCampaign.utm_content,
+});
+
+const identify = (posthog: PostHog, current: User): void => {
+    if (Object.keys(landingCampaign).length === 0) {
+        posthog.identify(current.id, { email: current.email, name: current.name });
+    } else {
+        posthog.identify(current.id, { email: current.email, name: current.name }, firstTouch());
+    }
+    linkInstall(posthog, current.id);
+    noteSignUp(current);
+};
+
 // Funnel milestone events from call sites. No-op until `initAnalytics` has run (no key in dev); otherwise
 // uninitialized `posthog.capture` logs a console error per call.
 export const track = (event: string, properties?: Milestone): void => {
@@ -213,4 +257,41 @@ export const track = (event: string, properties?: Milestone): void => {
         return;
     }
     client.capture(event, properties);
+};
+
+// THE FUNNEL'S TWO MILESTONES THE SDK CANNOT SEE (2026-10-15). `signed_up` is an account's first arrival: the platform
+// says when the account was made (User.createdAt), and an account made within SIGN_UP_WINDOW_MS of being seen here is a
+// sign-up rather than a return. `first_turn_completed` is the first agent turn this browser saw finish on its own (not
+// stopped, not failed). Each is sent once per account per browser (a device-scoped flag), and carries `$set_once` so the
+// person keeps the first moment whichever browser said it first. A browser that has not allowed analytics sends neither
+// and sets no flag, so allowing it later inside the window still counts the sign-up.
+const SIGN_UP_WINDOW_MS = 30 * 60_000;
+// allow(module-state): the account signed in on this page, for the once-per-account flags
+let account: string | undefined;
+const onceKey = (milestone: string, userId: string): string => deviceKey(`intentic-milestone-${milestone}-${userId}`);
+
+const once = (milestone: string, userId: string, properties: Milestone): void => {
+    if (!enabled || !allowed || storedValue(onceKey(milestone, userId)) !== undefined) {
+        return;
+    }
+    storeValue(onceKey(milestone, userId), new Date().toISOString());
+    track(milestone, properties);
+};
+
+const noteSignUp = (current: User): void => {
+    account = current.id;
+    const createdAt = current.createdAt === undefined ? Number.NaN : Date.parse(current.createdAt);
+    if (Number.isNaN(createdAt) || Date.now() - createdAt > SIGN_UP_WINDOW_MS) {
+        return;
+    }
+    const method = current.signInMethods?.includes(`google`) === true ? `google` : `email`;
+    once(`signed_up`, current.id, { method, $set_once: { signed_up_at: current.createdAt } });
+};
+
+/** An agent turn this window followed settled on its own, neither stopped nor failed. */
+export const noteTurnCompleted = (agent: string): void => {
+    if (account === undefined) {
+        return;
+    }
+    once(`first_turn_completed`, account, { agent, $set_once: { first_turn_completed_at: new Date().toISOString() } });
 };

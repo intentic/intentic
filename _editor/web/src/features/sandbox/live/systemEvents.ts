@@ -19,6 +19,7 @@ import { applyTreeChanged, markDerivedChanged, markWorkspaceChanged, worktreeMov
 import { daemonRebuilt, dropSandboxLocalState, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
 import { setDaemonBoot } from "../../../client/sandbox/useDaemonBoot";
 import { setDaemonRoutes } from "../../../client/sandbox/useDaemonRoutes";
+import { setDaemonVersion } from "../../../client/sandbox/daemon/useDaemonVersion";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 
 // Routes a daemon `/events` frame to whatever it invalidates; connection liveness lives elsewhere (see
@@ -91,6 +92,8 @@ const applyHello = (event: Extract<SystemEvent, { kind: `hello` }>, sandboxId: s
     void refreshAgents();
     // Route surface gates features for the rest of this connection; shapes ride the same frame.
     setDaemonRoutes(event.routes, event.shapes, event.surface, { rawRoutes: event.rawRoutes, rawFingerprints: event.rawFingerprints });
+    // Which release answers, held against the oldest this app supports: below it, one page says so (SandboxGate).
+    setDaemonVersion(event.build, event.surface);
     // Daemon boot state, needed before other daemon queries are allowed to fire this tick.
     setDaemonBoot(event.boot);
     // Between events a cached read is taken as true (staleTime, queryPersistence), which makes a (re)connect the one

@@ -208,17 +208,24 @@ free column is your machine, the other is ours.
 
 ## Objection bank (FAQ source of truth)
 
-1. **Where does my code live?**: On your machine. The sandbox runs where you start it; your
-   browser reaches it over a private Cloudflare tunnel. The platform stores your identity and the
-   sandbox's URL: it never relays your files or sits between you and your sandbox.
+1. **Where does my code live?**: On your machine, unless you choose a hosted sandbox (a machine we
+   arrange at Fly.io). The platform stores your identity and the sandbox's address, never your files.
+   Opened at its intentic address, the browser's traffic passes through our relay (the ingress), which
+   decrypts it in memory to route it and stores none of it; opened at its local address, it never
+   reaches us. (2026-10-15) Replaces "it never relays your files or sits between you and your
+   sandbox", which the privacy policy (`site-content/src/legal.ts`, "Sandboxes you run yourself")
+   contradicts: the ingress terminates TLS. Say "never stores", never "never receives".
 2. **What happens when I close the browser?**: Nothing, to the runs. The agents live on your
    machine, not in the tab; the browser is a window. Terminals survive the disconnect, turns finish
    without you, and reopening from any device (including a phone) lands you on the same fleet,
    sorted by who now needs you.
-3. **Can intentic read my secrets?**: No. Credentials live inside your sandbox; the platform has
-   no path to them. What little the platform does store (OAuth tokens, connect tokens) is
-   AES-256-GCM encrypted with no decrypt path in the product. Secret files are denylisted from the
-   workspace file relay.
+3. **Can intentic read my secrets?**: We never store them. Credentials live inside your sandbox;
+   the platform keeps only the encrypted tokens that connect your browser to it. Two limits, said
+   plainly: what you view or type in the workspace passes the relay readable while it is routed, and
+   a hosted sandbox keeps credentials on a disk at Fly.io. (2026-10-15) The old "No … secret files
+   are denylisted from the workspace file relay" was not true: the file API locks only `.intentic/`,
+   and `.env` is left out of the desktop folder sync (`_devices/machine/src/sync/ssh.ts`), not out of
+   the browser connection.
 4. **Which AI models does it use?**, Your choice per conversation: Claude Code (Opus, Sonnet,
    Haiku), Codex, or Grok, with adjustable reasoning effort. Your provider, your account, your usage.
 5. **Do I need a Cloudflare account?**: No. By default intentic provisions the tunnel under its
@@ -230,9 +237,11 @@ free column is your machine, the other is ours.
    in plan mode: it proposes, you approve. Every file change is reviewable as a diff you can discard
    or commit; environment (Dockerfile) changes require your explicit approval; stricter and looser
    modes are one click away.
-8. **Is any of it paid?**: No. Every sandbox, every capability, the agent, automations and team
-   sharing are free, with no tiers and no card. The whole product is MIT on GitHub. You pay only
-   your own model provider, directly.
+8. **Is any of it paid?**: The product is not. Every sandbox you run yourself, every capability,
+   the agent, automations and team sharing are free, with no feature tiers and no card, and the whole
+   product is MIT on GitHub. You pay your own model provider, directly. The one paid thing is a
+   hosted sandbox, a machine of ours, which also comes in a free size. (2026-10-15) Aligned with
+   `/pricing/`: "No … no tiers, limits or card" on the landing page contradicted the paid sizes.
 9. **What are automations?**, Scheduled or event-driven agent wake-ups: GitHub/GitLab pushes,
    Sentry alerts, Stripe payments, new email, Discord messages, or plain cron: each run a fresh
    agent session with a transcript, optionally gated by a guard command you define.

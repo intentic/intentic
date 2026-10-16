@@ -103,8 +103,10 @@ export const faqGroups: FaqGroup[] = [
                 id: "is-any-of-it-paid",
                 question: "Is any of it paid?",
                 answer: [
-                    "No. Every sandbox, capability and shared workspace is free, with no tiers, limits or card. All of intentic is MIT on GitHub. You pay your own model provider, directly.",
+                    "The product is not. Every sandbox you run yourself, every capability and every shared workspace is free, with no feature tiers and no card, and all of intentic is MIT on GitHub. You pay your own model provider, directly.",
+                    "The one paid thing is a machine of ours to run it on, a hosted sandbox, which also comes in a free size.",
                 ],
+                more: { label: "What a hosted sandbox costs", href: "/pricing/" },
             },
             {
                 id: "can-the-agent-break-things",
@@ -132,7 +134,8 @@ export const faqGroups: FaqGroup[] = [
                 id: "where-does-my-code-live",
                 question: "Where does my code live?",
                 answer: [
-                    "On your machine. The sandbox runs where you start it, and your browser connects over a private tunnel. The platform stores your identity and the sandbox's URL. It never receives your files.",
+                    "On your machine, unless you choose a hosted sandbox, which runs on a machine we arrange at Fly.io. The platform stores your identity and the sandbox's address, never your files.",
+                    "When you open the sandbox at its intentic address, your browser's traffic passes through our relay, which decrypts it in memory to route it and stores none of it. Open the sandbox at its local address on the machine it runs on, and that traffic never reaches us.",
                 ],
                 more: { label: "Where your code goes with any coding agent", href: guidesHref("where-your-code-goes-with-cloud-coding-agents") },
             },
@@ -140,7 +143,8 @@ export const faqGroups: FaqGroup[] = [
                 id: "can-intentic-read-my-secrets",
                 question: "Can intentic read my secrets?",
                 answer: [
-                    "No. Your credentials stay inside the sandbox and never reach the platform. The platform stores only encrypted tokens that connect your browser to the sandbox. Secret files such as .env are never sent through that connection.",
+                    "We never store them. Your credentials stay inside the sandbox; the platform keeps only the encrypted tokens that connect your browser to it.",
+                    "Two limits, stated plainly. Whatever you view or type in the workspace, a secret included, passes through our relay in readable form while it is routed, when you open the sandbox at its intentic address. And a hosted sandbox keeps your credentials on a disk at our infrastructure provider.",
                 ],
                 more: {
                     label: "Giving an agent credentials without leaking them",

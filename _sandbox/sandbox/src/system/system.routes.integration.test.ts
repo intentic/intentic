@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { stubEnv } from "@intentic/testing/bun";
 
-import { type Hello, projectRemoteDir, RAW_ROUTE_NAMES, type SandboxMetrics } from "@intentic/sandbox-contract";
+import { daemonVersionOfBuild, type Hello, projectRemoteDir, RAW_ROUTE_NAMES, type SandboxMetrics } from "@intentic/sandbox-contract";
 import { createApp } from "../app.js";
 
 import { createLogger } from "../logger.js";
@@ -25,6 +25,7 @@ import { filePeerStore } from "../peers/peer-store.js";
 import { MAX_BACKLOG_FRAMES } from "../seams/frame-backlog.js";
 import { connectedCount } from "./presence.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
+import { version } from "../version.js";
 
 // System routes, driven over the daemon's HTTP surface as the browser does. Fakes and the client are shared
 // (route-services.testing.ts and siblings); what lives here is what these routes do.
@@ -299,6 +300,13 @@ test("events: the hello names the hand-written routes and their shapes, beside t
     // fingerprint is only ever published for a route that has one.
     expect(hello.rawFingerprints?.["GET /system/links"]).toEqual(expect.any(String));
     expect(Object.keys(hello.rawFingerprints ?? {}).every((name) => hello.rawRoutes?.includes(name))).toBe(true);
+});
+
+// The editor holds this daemon against the oldest one it supports by the version at the head of the hello's build id;
+// a build id that stopped opening with it would read as a daemon of no known age, never as one too old.
+test("events: the hello's build opens with this daemon's version", async () => {
+    const hello = await helloFrom(clientFor(createApp(services())));
+    expect(daemonVersionOfBuild(hello.build)).toBe(version);
 });
 
 test("events: the hello names the daemon's build and where its boot is, then streams every step", async () => {

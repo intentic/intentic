@@ -33,6 +33,10 @@ flowchart LR
   own build, so a route an older daemon lacks shows as a missing feature instead of a 404. The desktop app's folder
   sidecar sends the same frame with `surface: "folder"` and only the few routes it serves, which the browser offers
   and never reads as out of date.
+- The oldest daemon the editor supports is declared here, `OLDEST_SUPPORTED_DAEMON` in `src/state/daemon-floor.ts`,
+  with a dated line for why it is that release. The editor reads a daemon's version off the head of the hello's
+  `build` (`<version>:<mtime>`) and draws a single "needs an update" page below it. The floor's test freezes the fields
+  every `/events` frame requires, since a field made required later is one a daemon at the floor leaves out.
 - `settings.agentDomain` reads the execution-domain policy; `settings.setAgentDomain` requires the owner's bearer,
   never a panel, agent or control token. This policy is stored in the daemon's auth root, not in the agent-writable
   settings manifest. Its rollout default remains `root`; a daemon build whose execution boundary is incomplete

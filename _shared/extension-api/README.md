@@ -43,8 +43,14 @@ flowchart LR
   with every surface change (additive is a minor), and a manifest's `engines.intentic` range is matched against it at
   load, failing closed. The editor's `surface-guard.test.ts` fails when the surface moves without a new entry in
   `src/surface.json`, which records the api's members, from 2.20.0 a digest of the whole generated manifest
-  schema, since a host's parse drops a field it does not know at any depth, from 2.21.0 `ToolDefinition`'s fields, and
-  from 2.22.0 `api.sideViews`' members and `SideViewRegistration`'s fields.
+  schema, since a host's parse drops a field it does not know at any depth, from 2.21.0 `ToolDefinition`'s fields,
+  from 2.22.0 `api.sideViews`' members and `SideViewRegistration`'s fields, and from 2.31.0 the names
+  [extension-ui](../extension-ui) exports (`uiKitExports`).
+- A bundle links by name both this package's runtime exports (`moduleExports`) and the UI kit's, so those two grains
+  are held to semver as well: a version that adds a name is at least a minor, and one that drops a name is a major, for
+  a name declared deprecated first (the kit's in its `names.mjs`) and at or past the floor that declaration gives. The
+  guard fails naming what moved and the bump it needs. (2026-10-15: the kit's `RepoRail` was removed on 2026-10-12 with
+  no version, and installed extensions importing it failed to load; nothing recorded the kit before 2.31.0.)
 - A cached read is keyed through the api, never spelled: `api.sandbox.readKey(procedure, input)` for one contract
   read, which is the host's own key for it, so a view shares the shell's entry and every push the daemon makes for that
   procedure; `api.sandbox.key(...names)` for anything else (a `json` route, a composite). The entry holds the
@@ -85,7 +91,7 @@ flowchart LR
 - [src/runtime.ts](src/runtime.ts) — the backend api built for the host and for a process, activation and its deadlines.
 - [src/testing.ts](src/testing.ts) — `fakeExtensionApi`, a backend under test on a fake daemon.
 - [src/version.ts](src/version.ts) — `extensionApiVersion` and what each version added.
-- [src/surface.json](src/surface.json) — the recorded public surface, per version.
+- [src/surface.json](src/surface.json) — the recorded public surface, the UI kit's names included, per version.
 - [src/scope.ts](src/scope.ts) — module state that belongs to one sandbox.
 - [src/background.ts](src/background.ts) — `sandboxPoll` and `sandboxLedger` for work done off screen.
 

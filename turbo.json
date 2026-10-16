@@ -272,6 +272,14 @@
             "cache": false,
             "passThroughEnv": ["PLAYWRIGHT_BROWSERS_PATH", "SIGNIN_E2E_REUSE_BUILD", "SIGNIN_E2E_DATABASE_URL"]
         },
+        // The N-1 check (_tools/e2e/compat): the sign-in tier's stack with a daemon from the released image beside it
+        // (`ghcr.io/intentic/sandbox:stable`, or COMPAT_E2E_IMAGE), and this commit's web build walked over its main
+        // pages. Built on the sign-in tier, so it depends on the same builds and reads the same variables.
+        "e2e:compat": {
+            "dependsOn": ["^build", "@intentic/web#build", "@intentic/api#build"],
+            "cache": false,
+            "passThroughEnv": ["PLAYWRIGHT_BROWSERS_PATH", "SIGNIN_E2E_REUSE_BUILD", "SIGNIN_E2E_DATABASE_URL", "COMPAT_E2E_IMAGE"]
+        },
         "bench:retrieval": {
             "dependsOn": ["^build", "build"],
             "cache": false,

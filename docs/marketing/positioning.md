@@ -41,8 +41,10 @@ The shape of the product: you sign in with Google or an emailed code and run a s
 laptop, a VPS), reached by your browser over a private Cloudflare tunnel. Inside it, a coding agent
 (Claude Code, Codex, or Grok) works your files and repos with human-in-the-loop approval. You grow
 it with capabilities (GitHub, databases, Discord, Stripe, SSH, MCP servers…), wake it on
-**automations**, and run a whole team of agents. The platform is architecturally a
-thin identity store that *cannot* touch your code, secrets, or systems (`README.md`, `ARCHITECTURE.md`).
+**automations**, and run a whole team of agents. The platform is a thin identity store that
+stores none of your code, secrets or systems and is off the command path. Its relay does carry the
+browser's traffic, decrypted in memory to route it, when a sandbox is opened at its intentic address
+(2026-10-15: "architecturally *cannot* touch" overclaimed; see `site-content/src/legal.ts`).
 
 **Category**: the persistent agent sandbox you own, cloud-grade reach and observability with
 local-grade ownership.
@@ -109,8 +111,10 @@ below, so that is what the page now claims and proves; the rest support it or li
    Local orchestrators share the ownership instinct; none of them pair it with the persistence, the
    reach and the environment below. (P1, P2, P4, P6)
 2. **Ownership without giving up the cloud UX**, the moat: the only agent workspace where the
-   vendor is architecturally *unable* to read your code or drive your sandbox (identity-only hub,
-   off the command path; secrets AES-256-GCM at rest with no decrypt path, `_platform/api/src/crypto.ts`). (P1)
+   vendor stores none of your code and cannot drive your sandbox (identity-only hub, off the command
+   path; platform-held tokens AES-256-GCM at rest, `_platform/api/src/crypto.ts`). Claim "never
+   stores", not "never sees": the relay decrypts browser traffic in transit, and a sandbox opened at
+   its local address bypasses it. (P1)
 3. **The whole environment is editable, not just the prompt**: everyone lets you tune a system
    prompt; intentic opens the image the dev-tools are installed in (owner-approved overlay), the
    systems the agent may reach (capabilities, with a "this will add to your sandbox" effects panel

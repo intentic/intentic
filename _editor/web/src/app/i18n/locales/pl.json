@@ -4520,6 +4520,8 @@
         "loader": {
             "declaresUiAppBuild": "deklaruje interfejs, ale ten build aplikacji nie ma wkompilowanego modułu dla niego — obraz sandboxa i aplikacja są w różnych wersjach",
             "listFailedActivated": "nie udało się wczytać listy rozszerzeń, więc ten build aplikacji włączył je sam: {failure}",
+            "missingHostExports": "wymaga {imports}, a ta wersja aplikacji tego nie ma: rozszerzenie zbudowano pod inną wersję i trzeba je zaktualizować",
+            "namesFromModule": "{names} z {module}",
             "needsIntenticAppProvides": "wymaga intentic {intentic}; ta aplikacja daje {extensionApiVersion}",
             "unlistedByImage": "obraz tego sandboxa go nie wymienia: obraz i aplikacja są w różnych wersjach, więc nie da się go tu wyłączyć"
         }
@@ -6996,6 +6998,12 @@
             "settingUpNote": "Za pierwszym razem instaluje to silnik synchronizacji i restartuje agenta tego komputera, więc przez chwilę może być widoczny jako ponownie łączący się. Zwykle trwa to minutę lub dwie i nie przerywa się, jeśli opuścisz tę stronę.",
             "syncFilesHere": "Synchronizuj pliki tutaj"
         },
+        "sandboxTooOld": {
+            "title": "Ten sandbox wymaga aktualizacji",
+            "titleNamed": "{name} wymaga aktualizacji",
+            "olderThanApp": "Działa w wersji {version}, a ta aplikacja obsługuje sandboxy od wersji {oldest}. Zaktualizuj go, żeby otworzyć go tutaj. Twoje pliki i rozmowy zostaną zachowane.",
+            "manual": "Instalowałeś go sam? Uruchom to na maszynie, na której działa:"
+        },
         "sandboxUnauthorized": {
             "noAccessTo": "Brak dostępu do „{name}”",
             "switchGoogleAccount": "Przełącz konto Google",
@@ -7349,11 +7357,14 @@
             "n7Days": "7 dni"
         },
         "useDaemonRoutes": {
-            "folderLacks": "„{route}” nie jest dostępne dla folderu na tym komputerze, tylko w sandboksie.",
+            "folderLacks": "Ta część aplikacji ({area}) nie jest dostępna dla folderu na tym komputerze, tylko w sandboksie.",
+            "folderLacksUnnamed": "Ta część aplikacji nie jest dostępna dla folderu na tym komputerze, tylko w sandboksie.",
             "pageOlder": "Ta strona działa na starszym kodzie niż sandbox: przeładuj stronę.",
             "reloadOrUpdate": "Przeładuj tę stronę albo zaktualizuj sandbox do nowszego obrazu.",
-            "routeDrifted": "Demon tego sandboxa ma '{route}', ale wymienia przy nim inne pola, niż oczekuje ta aplikacja. {remedy}",
-            "routeMissing": "Demon tego sandboxa nie udostępnia '{route}'. {remedy}",
+            "routeDrifted": "Ten sandbox odpowiada w tej części aplikacji ({area}) innymi polami, niż oczekuje ta aplikacja. {remedy}",
+            "routeDriftedUnnamed": "Ten sandbox odpowiada w tej części aplikacji innymi polami, niż oczekuje ta aplikacja. {remedy}",
+            "routeMissing": "Ten sandbox jest za stary na tę część aplikacji ({area}). {remedy}",
+            "routeMissingUnnamed": "Ten sandbox jest za stary na tę część aplikacji. {remedy}",
             "unexpectedShape": "Ten sandbox odpowiedział w formacie, którego ta aplikacja się nie spodziewa. {remedy}",
             "updateImage": "Zaktualizuj sandbox do nowszego obrazu, żeby korzystać z tej funkcji."
         },
@@ -9572,7 +9583,12 @@
             "passkeyNudgeTitle": "Dodaj klucz dostępu do tego sandboxa",
             "passkeyNudgeDetail": "Dodaj klucz dostępu, żeby dostać się do tego sandboxa nawet wtedy, gdy intentic nie działa.",
             "passkeyNudgeAdd": "Dodaj klucz",
-            "passkeyNudgeLater": "Nie teraz"
+            "passkeyNudgeLater": "Nie teraz",
+            "analyticsConsentTitle": "Pomożesz nam zobaczyć, gdzie intentic przeszkadza?",
+            "analyticsConsentDetail": "Jeśli się zgodzisz, zapiszemy, jak używasz aplikacji: otwierane strony, kliknięcia i zamaskowane nagranie interfejsu. Zawartość Twojej przestrzeni roboczej jest pomijana.",
+            "analyticsConsentHint": "Analityka produktu działa przez PostHog. Nagranie zastępuje gwiazdkami każdy tekst, który nie jest słowami samej aplikacji, a edytor i terminale zasłania. Odpowiedź zmienisz w każdej chwili w Ustawieniach, w sekcji Dane i prywatność. Polityka prywatności na intentic.dev/privacy mówi dokładnie, co jest zapisywane.",
+            "analyticsConsentAllow": "Zezwól",
+            "analyticsConsentDecline": "Nie, dziękuję"
         },
         "pushMenuRow": {
             "addToHomeScreen": "Dodaj do ekranu głównego, żeby dostawać powiadomienia",

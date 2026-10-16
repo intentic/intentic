@@ -4,7 +4,7 @@ import { ref } from "vue";
 // Needs jsdom: the stream router's import chain reaches the app's environment read at module eval.
 
 jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
-jest.mock("../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined, noteTurnCompleted: jest.fn() }));
 jest.mock("../../../client/sandbox/useSandbox", () => {
     return {
         useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),

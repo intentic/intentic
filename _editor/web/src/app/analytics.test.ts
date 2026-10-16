@@ -302,3 +302,44 @@ describe(`sandbox switch`, () => {
         activeSandboxId.value = undefined;
     });
 });
+
+describe(`funnel milestones`, () => {
+    beforeEach(() => {
+        globalThis.localStorage?.clear();
+    });
+
+    // A sign-up is an account made moments ago; the same account coming back next week is a return, not a sign-up.
+    it(`counts an account made moments ago as a sign-up, once per account, and an older one not at all`, async () => {
+        const { posthog } = await bootAnalytics(`phc_test`);
+        user.value = { id: `new-1`, email: `a@b.c`, name: `A`, image: null, signInMethods: [`google`], createdAt: new Date().toISOString() };
+        await nextTick();
+        expect(posthog.capture).toHaveBeenCalledWith(`signed_up`, expect.objectContaining({ method: `google` }));
+
+        jest.clearAllMocks();
+        user.value = null;
+        await nextTick();
+        user.value = { id: `new-1`, email: `a@b.c`, name: `A`, image: null, signInMethods: [`google`], createdAt: new Date().toISOString() };
+        await nextTick();
+        expect(posthog.capture).not.toHaveBeenCalledWith(`signed_up`, expect.anything());
+
+        user.value = null;
+        await nextTick();
+        user.value = { id: `old-1`, email: `a@b.c`, name: `A`, image: null, createdAt: new Date(Date.now() - 86_400_000).toISOString() };
+        await nextTick();
+        expect(posthog.capture).not.toHaveBeenCalledWith(`signed_up`, expect.anything());
+    });
+
+    it(`reports the first finished turn of an account once, and nothing before anyone has signed in`, async () => {
+        const { posthog, analytics } = await bootAnalytics(`phc_test`);
+        analytics.noteTurnCompleted(`claude`);
+        expect(posthog.capture).not.toHaveBeenCalledWith(`first_turn_completed`, expect.anything());
+
+        user.value = { id: `u-turn`, email: `a@b.c`, name: `A`, image: null };
+        await nextTick();
+        analytics.noteTurnCompleted(`claude`);
+        analytics.noteTurnCompleted(`codex`);
+        const sent = mocked(posthog.capture).mock.calls.filter(([event]) => event === `first_turn_completed`);
+        expect(sent).toHaveLength(1);
+        expect(sent[0]![1]).toEqual(expect.objectContaining({ agent: `claude` }));
+    });
+});

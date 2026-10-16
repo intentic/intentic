@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { oneLinerFits } from "@intentic/constants";
 import { type CommandOs, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { RouterLink } from "vue-router";
-import { oneLiner } from "../../../../app/environments/scriptCommand";
 import RunCommand from "../../../../components/RunCommand.vue";
 import { useServingSlug } from "../../environment/servingSlug";
+import { updateCommand } from "../../gates/updateCommand";
 
 // A SANDBOX TOO OLD FOR A VIEW: one calm note wherever a section is drawn from fields its daemon does not send yet (the
 // persona a conversation speaks as now), in place of the guesses the editor used to rebuild from what an older daemon did
@@ -22,11 +21,7 @@ defineProps<{
 }>();
 
 const slug = useServingSlug();
-// The update one-liner for this sandbox, which fetches the current ic first; ic's bare verb where no name is known.
-const command = (os: CommandOs): string => {
-    const name = slug.value;
-    return name !== undefined && oneLinerFits(`update`, [name]) ? oneLiner(`update`, [name], os) : `ic sandbox update`;
-};
+const command = (os: CommandOs): string => updateCommand(slug.value, os);
 </script>
 
 <template>

@@ -237,6 +237,16 @@ flowchart LR
   unset (Stripe, APNs, trial keys, Fly) is switched off rather than failing the boot.
 - Bun runs the TypeScript source; there is no build. The image applies migrations and then refuses to start if the
   database differs from `schema.prisma` ([Dockerfile](Dockerfile)).
+- Before it applies a migration, the boot dumps the database (`src/migration-backup.ts`): when `prisma migrate status`
+  reports anything pending, `pg_dump` writes a custom-format dump to `MIGRATION_BACKUP_DIR` (default `/backups`, the
+  self-host compose file's `migration-backups` volume), named for the time and the pending migrations. A failed dump
+  stops the boot before anything is migrated, unless `MIGRATE_WITHOUT_BACKUP=1`. `MIGRATION_BACKUP_KEEP` (default 10)
+  dumps are kept, and of several dumps for the same pending migrations, as a failing migration's restarts leave, only
+  the first and the last. The image's `pg_dump` is PostgreSQL 18's, the server's major; a server on a newer major needs
+  `POSTGRES_MAJOR` in the Dockerfile moved with it. The production Komodo stack (`intentic-platform`) keeps its own
+  inline copy of the compose file, so the volume has to be added there as well; without it, the first deploy that
+  carries a migration stops at the backup. (2026-10-15: there are no down migrations, several migrations drop or
+  rename, and the old image's boot refuses a migrated database, so a dump taken just before is the only way back.)
 - [specs](specs) holds a TLA+ model of the hosted awake-hour meter.
 
 ## Layout
@@ -263,6 +273,7 @@ flowchart LR
 - [src/ingress.ts](src/ingress.ts) — serves a machine-facing route under its entry in the contract's ingress table.
 - [src/router.ts](src/router.ts) — the oRPC router, one entry per domain, shaped by `@intentic/api-contract`.
 - [src/config.ts](src/config.ts) — every setting, its env var and its default.
+- [src/migration-backup.ts](src/migration-backup.ts) — the dump the boot takes before migrating, and which dumps it keeps.
 - [src/sandbox/hosted/hosted.ts](src/sandbox/hosted/hosted.ts) — provisioning and waking hosted machines.
 - [src/sandbox/reachability.ts](src/sandbox/reachability.ts) — the hostname and signed grant each sandbox gets.
 
@@ -274,6 +285,39 @@ pnpm --filter @intentic/api dev        # watch mode, reads the root .env
 pnpm --filter @intentic/api test
 pnpm --filter @intentic/api fleet      # read-only: what the platform runs on Fly, and for whom
 ```
+
+## Restoring from a pre-migration backup
+
+A dump is the database as it was just before a migration, so anything written after that is lost by restoring it. Run
+these in the stack's directory on the host (`_tools/selfhost/platform`, or the Komodo stack's).
+
+1. Find the dump. Its name says when it was taken and which migrations were about to apply:
+
+   ```sh
+   docker compose run --rm --no-deps api ls -l /backups
+   ```
+
+2. Stop the api, so nothing holds a connection to the database:
+
+   ```sh
+   docker compose stop api
+   ```
+
+3. Restore it. `--clean --create` drops the database and recreates it from the dump, which also removes tables the
+   migration added; `pg_restore` connects to the `postgres` maintenance database to do that, hence the swapped name
+   at the end of `DATABASE_URL` (the compose file's URL has no query string):
+
+   ```sh
+   docker compose run --rm --no-deps api sh -c \
+       'pg_restore --dbname="${DATABASE_URL%/*}/postgres" --clean --if-exists --create --exit-on-error "$1"' \
+       restore /backups/pre-migrate_20261015T093005Z_20261013120000_organisations.dump
+   ```
+
+4. Run the build from before the migration: set `INTENTIC_IMAGE_TAG=sha-<short sha>` in the stack's `.env` (Komodo:
+   the stack's environment) and `docker compose up -d api`. Its boot finds nothing pending and its schema check
+   passes. Redeploying `latest` would apply the same migration again, after taking a new dump.
+
+`pg_restore --list <dump>` reads a dump's contents without restoring it; the boot runs it on every dump it writes.
 
 ## Repair (`POST /api/repair/turn`)
 
