@@ -109,6 +109,7 @@ jobs:
         env:
           CHANNEL: ${{ steps.plan.outputs.channel }}
           VERSION: ${{ steps.plan.outputs.version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash _os/os-image/build.sh --edition desktop --channel "$CHANNEL" --version "$VERSION"
 
       - uses: ./.github/actions/ghcr-login

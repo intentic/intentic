@@ -84,7 +84,11 @@ build_desktop() {
         cp "$APP_RPM" "$HERE/desktop/rpm/"
     else
         echo "build.sh: fetching the newest released desktop app .rpm"
-        url="$(curl -fsSL https://api.github.com/repos/intentic/intentic/releases/latest \
+        # Unauthenticated API calls share a small per-IP limit that a CI runner's address often has spent already
+        # (a 403); CI hands its GITHUB_TOKEN in, a local build without one goes unauthenticated.
+        auth=()
+        [ -z "${GITHUB_TOKEN:-}" ] || auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+        url="$(curl -fsSL "${auth[@]}" https://api.github.com/repos/intentic/intentic/releases/latest \
             | grep -o '"browser_download_url": *"[^"]*x86_64\.rpm"' | head -n 1 | cut -d'"' -f4)"
         [ -n "$url" ] || { echo "build.sh: no .rpm on the newest release; pass --app-rpm" >&2; exit 1; }
         curl -fsSL -o "$HERE/desktop/rpm/intentic.rpm" "$url"
