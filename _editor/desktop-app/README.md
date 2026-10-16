@@ -125,7 +125,13 @@ flowchart LR
   that page the path instead of loading it again (`open_in_place` in `windows.rs`): a script the app runs in the page
   calls the opener the page registered (`__INTENTIC_OPEN__`, the web's `installDesktopOpener`), which selects the
   sandbox the path names and routes there in place. A page that registered none, from another origin or still
-  loading, is loaded at the address, as before the opener existed.
+  loading, is loaded at the address, as before the opener existed. The press comes from a window, and the workspace
+  comes up in that window's place (`workspace_open`, `show_workspace_from`): in the main window it is the usual swap
+  of the two faces; in a folder or document window (`files-<n>`, the window `intentic .` opens) it takes that window's
+  frame, and the folder window is hidden and closed. Unsaved edits hold that close as they hold any other, so the
+  window comes back in front with its page's question. _(2026-10-16) The workspace always took the main window's frame,
+  so a sandbox picked in a window `intentic .` had opened came up as a second window beside it, and the workspace's ×,
+  answered "Quit", closed both._
 - **Native work is the public scripts.** Setup, sync and everything done to a sandbox run the same `connect`,
   `sync` and `recreate` scripts the copy-paste one-liners run. `stage-desktop-scripts.sh` copies them from
   `_site/site/public/scripts` at the current commit, so an uncommitted script edit does not reach `tauri dev` or a
@@ -207,7 +213,11 @@ flowchart LR
   keeper's poll wakes the sandbox as before. _(2026-10-15) Opening the app on a sleeping sandbox waited out that poll
   on top of the start and the boot._
 - **Tray-resident.** The × of either face hides it into the tray, once the first × has asked whether that is what
-  closing should do (`close-action.json`, "Keep Intentic in the tray" or "Quit Intentic"). The tray's "Open Intentic"
+  closing should do (`close-action.json`, "Keep Intentic in the tray" or "Quit Intentic"). While a folder or document
+  window is on screen beside it, a face's × hides that face alone and asks nothing, since the app is not closing
+  (`face_close`); with "Quit" chosen, the app ends when the reader closes its last window on screen, a folder window's ×
+  included (`quit_with_last_window`). _(2026-10-16) "Quit" ended the app from any face's ×, taking every folder window
+  open beside it down too._ The tray's "Open Intentic"
   opens the last face, "This computer" the main window, "Open workspace" appears once an account has been seen, then
   "Open a folder…" and "Open a file…" (each in a window of its own), the wake word's two rows once there is an account
   (below), the machine agent's row (This device), the update row, "Start Intentic at login" and Quit. Updates download

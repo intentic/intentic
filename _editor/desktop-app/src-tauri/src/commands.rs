@@ -1083,7 +1083,8 @@ pub async fn sandbox_logs(slug: String, tail: u32) -> CommandResult<String> {
     .map_err(|error| error.to_string())?
 }
 
-/// The workspace in the main window's place — at the app's root, or at a path under it.
+/// The workspace in the place of the window that asked — the main window's, or a folder window's, which it replaces
+/// (windows.rs `show_workspace_from`) — at the app's root, or at a path under it.
 ///
 /// The path is what makes the workspace's own screens reachable from this computer's: This device and the workspace's
 /// Devices tab manage the same containers on the same machine through two different doors, and a finished setup
@@ -1095,8 +1096,8 @@ pub async fn sandbox_logs(slug: String, tail: u32) -> CommandResult<String> {
 /// handled (Tauri's `WebviewWindowBuilder` known issue). An async one runs off that thread, and the build is handed
 /// to the event loop like any other. The answer arrives once the workspace is up, which is what the press waits on.
 #[tauri::command]
-pub async fn workspace_open(app: AppHandle, path: Option<String>) {
-    crate::windows::show_workspace_at(&app, path.as_deref());
+pub async fn workspace_open(app: AppHandle, window: tauri::WebviewWindow, path: Option<String>) {
+    crate::windows::show_workspace_from(&app, path.as_deref(), &window);
 }
 
 /// What the local shell and This device need to know about this install to decide what they offer: whether there is

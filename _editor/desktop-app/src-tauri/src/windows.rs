@@ -482,6 +482,49 @@ fn open_in_browser(app: &AppHandle, url: &str) {
 /// heuristic. Sign-in now happens in the real browser (auth.rs), so nothing in this window ever talks to
 /// Google and the webview can present itself honestly.
 pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
+    show_workspace_over(app, path, None);
+}
+
+/// The workspace opened by a press in `asked_in`, a local window's place chip (a sandbox, "Add a sandbox", the way to
+/// agents) or its Settings: [`show_workspace_at`], in the place of the window that was pressed. The main window is the
+/// workspace's other face and is swapped as always. A folder or document window (local.rs `FILES`) is a window of its
+/// own, so the workspace takes ITS frame and the folder window goes ([`close_replaced`]): the reader sees the window they
+/// pressed in change what it shows. _(2026-10-16) The workspace only ever took the main window's frame: a sandbox picked
+/// in a window `intentic .` opened came up as a second window beside it, and the × of that one, answered "Quit", took
+/// both down._
+pub fn show_workspace_from(app: &AppHandle, path: Option<&str>, asked_in: &WebviewWindow) {
+    let replaced = is_folder_window(asked_in.label()).then(|| asked_in.clone());
+    show_workspace_over(app, path, replaced);
+}
+
+/// A folder or document window (local.rs `FILES`): a window of the app's own beside its one window of two faces. The
+/// workspace opened from one takes its place (`show_workspace_from`), and while one is on screen a face's × closes that
+/// face alone (`face_close`). The main window is already the workspace's other face, and a floating panel is a part of
+/// the workspace's page.
+fn is_folder_window(label: &str) -> bool {
+    label.starts_with(crate::local::FILES)
+}
+
+/// Whether a folder or document window other than `except` is where the reader can see it. A spare is never on screen.
+fn folder_window_on_screen(app: &AppHandle, except: Option<&str>) -> bool {
+    app.webview_windows().into_iter().any(|(label, window)| {
+        is_folder_window(&label) && Some(label.as_str()) != except && on_screen(&window)
+    })
+}
+
+/// The folder window the workspace has just taken the place of goes as its own × would close it: hidden first, so the
+/// two are never on screen together, then closed, which revokes its folder (local.rs `window_closed`). Unsaved edits
+/// hold the close as they hold any other (`close_turn`): the window comes back in front with its page's question.
+fn close_replaced(window: Option<WebviewWindow>) {
+    let Some(window) = window else {
+        return;
+    };
+    let _ = window.hide();
+    let _ = window.close();
+}
+
+/// [`show_workspace_at`], in the frame of `replaced` when it is given (`show_workspace_from`), else the main window's.
+fn show_workspace_over(app: &AppHandle, path: Option<&str>, replaced: Option<WebviewWindow>) {
     let state = app.state::<AppState>();
     state.remember_workspace_seen();
     // Whatever brought it up, the workspace is now the face this app is being used through: the next launch and
@@ -506,8 +549,9 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         // Before its frame is set, which a minimised window would only keep for when it is restored.
         let _ = window.unminimize();
         let home = app.get_webview_window(HOME);
-        take_frame(&window, home.as_ref());
+        take_frame(&window, replaced.as_ref().or(home.as_ref()));
         swap_in(&window, home, Keyboard::Take);
+        close_replaced(replaced);
         // The workspace coming back is the cheapest evidence this machine is awake and being used, which the
         // six-hourly timer cannot see through a night of sleep (update.rs).
         crate::update::nudge(app);
@@ -538,8 +582,9 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         return;
     };
     let home = app.get_webview_window(HOME);
-    take_frame(&window, home.as_ref());
+    take_frame(&window, replaced.as_ref().or(home.as_ref()));
     swap_in(&window, home, Keyboard::Take);
+    close_replaced(replaced);
 }
 
 pub fn show_workspace(app: &AppHandle) {
@@ -1004,7 +1049,9 @@ pub fn show_files_window(
         // for a page that never takes the question, the app asks in its place (`close_turn`).
         WindowEvent::CloseRequested { api, .. } => {
             let turn = UNSAVED.lock().unwrap().close_turn(&own, Instant::now());
-            if turn != CloseTurn::Close {
+            if turn == CloseTurn::Close {
+                quit_with_last_window(&handle, &own);
+            } else {
                 api.prevent_close();
                 if let Some(window) = handle.get_webview_window(&own) {
                     match turn {
@@ -1333,6 +1380,7 @@ fn ask_here(app: &AppHandle, window: &WebviewWindow) {
             // Destroyed rather than closed: the answer is in, and a page that cannot take a question cannot be
             // relied on to let its window go either.
             if close {
+                quit_with_last_window(&handle, &label);
                 if let Some(window) = handle.get_webview_window(&label) {
                     let _ = window.destroy();
                 }
@@ -1817,10 +1865,48 @@ fn request_close(app: &AppHandle) {
     if crate::os::kiosk() {
         return;
     }
-    match app.state::<crate::state::AppState>().close_action() {
+    let chosen = app.state::<crate::state::AppState>().close_action();
+    match face_close(folder_window_on_screen(app, None), chosen) {
         Some(action) => apply_close(app, action),
         None => ask_before_closing(app),
     }
+}
+
+/// What a face's × comes to. Beside a folder or document window still on screen it closes the face alone, as the × of
+/// one of an app's windows does, and asks nothing, since the app is not closing; the app ends, when the reader chose
+/// "Quit", with its last window (`quit_with_last_window`). Otherwise it is what the reader chose, and `None` asks.
+/// _(2026-10-16) "Quit" ended the app from any face's ×, and took every folder window open beside it down too._
+fn face_close(folder_window_on_screen: bool, chosen: Option<CloseAction>) -> Option<CloseAction> {
+    if folder_window_on_screen {
+        Some(CloseAction::Tray)
+    } else {
+        chosen
+    }
+}
+
+/// The reader closed the folder or document window `own`. When it was the last window of the app on screen, the app does
+/// what the reader chose the × to do: "Quit" ends it, as a face's × would; the tray, or nothing chosen yet, leaves it
+/// running there as before. Never in kiosk mode, where the session would only start the app again.
+fn quit_with_last_window(app: &AppHandle, own: &str) {
+    if crate::os::kiosk() {
+        return;
+    }
+    let face_on_screen = [WORKSPACE, HOME]
+        .into_iter()
+        .filter_map(|label| app.get_webview_window(label))
+        .any(|window| on_screen(&window));
+    let another_on_screen = face_on_screen || folder_window_on_screen(app, Some(own));
+    let chosen = app.state::<crate::state::AppState>().close_action();
+    if quits_with_last_window(another_on_screen, chosen) {
+        // Its close goes ahead (nothing unsaved, or the reader let it go), so the Quit does not ask about it again.
+        forget_unsaved(own);
+        app.exit(0);
+    }
+}
+
+/// Pure, for the tests: whether a folder or document window's close ends the app.
+fn quits_with_last_window(another_on_screen: bool, chosen: Option<CloseAction>) -> bool {
+    !another_on_screen && chosen == Some(CloseAction::Quit)
 }
 
 /// Both answers, once one has been given. Hiding rather than destroying is what makes the tray instant, and
@@ -2603,6 +2689,44 @@ mod unsaved_tests {
             wait.begin().is_some(),
             "a wait that ended leaves room for the next"
         );
+    }
+
+    /// A sandbox picked in a folder or document window opens the workspace in that window's place; picked in the main
+    /// window, it is the usual swap of the two faces.
+    #[test]
+    fn the_workspace_takes_the_place_of_the_folder_window_it_was_opened_from() {
+        assert!(is_folder_window("files-1"));
+        assert!(is_folder_window("files-12"));
+        assert!(!is_folder_window(HOME));
+        assert!(!is_folder_window(WORKSPACE));
+        assert!(!is_folder_window("floating-chat"));
+        assert!(!is_folder_window(CONFIRM_CLOSE));
+    }
+
+    /// Beside a folder window on screen, a face's × closes the face alone and asks nothing, whatever was chosen; on its
+    /// own, it does what was chosen, and asks when nothing was.
+    #[test]
+    fn a_face_closes_alone_beside_a_folder_window() {
+        for chosen in [None, Some(CloseAction::Tray), Some(CloseAction::Quit)] {
+            assert_eq!(
+                face_close(true, chosen),
+                Some(CloseAction::Tray),
+                "{chosen:?}"
+            );
+            assert_eq!(face_close(false, chosen), chosen, "{chosen:?}");
+        }
+    }
+
+    /// "Quit" ends the app with its last window on screen, and never while another is up; the tray, or nothing chosen,
+    /// never ends it from a folder window.
+    #[test]
+    fn quit_ends_the_app_with_its_last_window() {
+        assert!(quits_with_last_window(false, Some(CloseAction::Quit)));
+        assert!(!quits_with_last_window(true, Some(CloseAction::Quit)));
+        for another in [false, true] {
+            assert!(!quits_with_last_window(another, Some(CloseAction::Tray)));
+            assert!(!quits_with_last_window(another, None));
+        }
     }
 
     #[test]

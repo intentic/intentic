@@ -663,8 +663,16 @@ pub fn onboarding_restart(app: AppHandle, when: String) -> Result<(), String> {
 
 /// A machine we host instead, for a PC that cannot run a sandbox.
 #[tauri::command]
-pub async fn onboarding_use_cloud(app: AppHandle) -> Result<(), String> {
-    crate::commands::workspace_open(app, Some("/setup?elsewhere=1&machine=hosted".into())).await;
+pub async fn onboarding_use_cloud(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<(), String> {
+    crate::commands::workspace_open(
+        app,
+        window,
+        Some("/setup?elsewhere=1&machine=hosted".into()),
+    )
+    .await;
     Ok(())
 }
 
