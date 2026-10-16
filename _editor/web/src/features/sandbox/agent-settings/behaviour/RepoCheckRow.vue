@@ -82,9 +82,10 @@ const waitingWhileRunning = computed((): number => {
     return indices.some(runs) ? indices.filter(waits).length : 0;
 });
 
-type Status = { tone: `success` | `warning` | `default`; words: string } | undefined;
+type Status = { tone: `success` | `warning` | `default`; words: string | undefined } | undefined;
 
-// What the switch means right now, said beside it; a repository declaring nothing has nothing to switch.
+// What the switch means right now; a repository declaring nothing has nothing to switch. The healthy state has no words:
+// the switch standing on and the shield turning green already say it runs, so a line only appears when something is off.
 const status = computed((): Status => {
     if (entry.checks.length === 0) {
         return undefined;
@@ -98,11 +99,13 @@ const status = computed((): Status => {
         };
     }
     return entry.adopted
-        ? { tone: `success`, words: t(`sandbox.repoCheckRow.running`) }
+        ? { tone: `success`, words: undefined }
         : { tone: `default`, words: t(`sandbox.repoCheckRow.declaredNotRunningNothing`) };
 });
 
 const STATUS_TEXT = { success: `text-success`, warning: `text-warning`, default: `text-subtle` } as const;
+
+const statusWords = computed((): string | undefined => status.value?.words);
 </script>
 
 <template>
@@ -113,14 +116,11 @@ const STATUS_TEXT = { success: `text-success`, warning: `text-warning`, default:
                 <span v-if="title === undefined" class="min-w-0 break-all font-mono text-2xs text-subtle">{{ entry.path }}</span>
             </span>
         </template>
-        <template v-if="entry.error !== undefined || status !== undefined" #description>
+        <template v-if="entry.error !== undefined || statusWords !== undefined" #description>
             <span v-if="entry.error !== undefined" class="text-danger">{{
                 t(`sandbox.repoCheckRow.checksFileCouldNot`, { error: entry.error })
             }}</span>
-            <span v-else-if="status !== undefined" class="inline-flex items-baseline gap-1.5" :class="STATUS_TEXT[status.tone]">
-                <span v-if="status.tone === `success`" class="size-1.5 shrink-0 translate-y-[-0.1em] rounded-full bg-success" aria-hidden="true" />
-                {{ status.words }}
-            </span>
+            <span v-else-if="status !== undefined" :class="STATUS_TEXT[status.tone]">{{ statusWords }}</span>
         </template>
         <!-- Only a declaration has anything to adopt. -->
         <template v-if="entry.checks.length > 0" #control>

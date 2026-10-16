@@ -3510,8 +3510,7 @@
             "landRetired": "Tras integrarse — ya no se ejecuta; la CI comprueba lo que se envía",
             "whenTurnEnds": "Cuando acaba un turno — se le comunica al agente una vez, nunca bloquea",
             "lastFlagged": "último aviso {ago}",
-            "neverFlagged": "nunca avisó",
-            "running": "En marcha"
+            "neverFlagged": "nunca avisó"
         },
         "restartWatch": {
             "seeLog": "Ver el registro",

@@ -3499,8 +3499,7 @@
             "landRetired": "Après son intégration — ne tourne plus ; la CI vérifie ce qui est poussé",
             "whenTurnEnds": "À la fin d'un tour — signalé une fois à l'agent, ne bloque jamais",
             "lastFlagged": "dernier signalement {ago}",
-            "neverFlagged": "jamais rien signalé",
-            "running": "En cours"
+            "neverFlagged": "jamais rien signalé"
         },
         "restartWatch": {
             "seeLog": "Voir le journal",

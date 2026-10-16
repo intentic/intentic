@@ -3497,8 +3497,7 @@
             "landRetired": "Nachdem es gelandet ist — läuft nicht mehr; das CI prüft, was gepusht wird",
             "whenTurnEnds": "Wenn ein Zug endet — einmal an den Agenten zurückgemeldet, blockiert nie",
             "lastFlagged": "zuletzt gemeldet {ago}",
-            "neverFlagged": "nie etwas gemeldet",
-            "running": "Läuft"
+            "neverFlagged": "nie etwas gemeldet"
         },
         "restartWatch": {
             "seeLog": "Das Protokoll ansehen",

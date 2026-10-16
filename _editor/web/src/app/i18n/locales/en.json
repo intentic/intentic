@@ -6929,7 +6929,6 @@
             "whenTurnEnds": "When a turn ends — said back to the agent once, never blocks",
             "lastFlagged": "last flagged {ago}",
             "neverFlagged": "never flagged",
-            "running": "Running",
             "thisWorkspace": "This workspace"
         },
         "restartWatch": {

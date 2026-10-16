@@ -6527,7 +6527,6 @@
             "whenTurnEnds": "Gdy tura się kończy — przekazane agentowi raz, nigdy nie blokuje",
             "lastFlagged": "ostatnio zgłosił {ago}",
             "neverFlagged": "nigdy nic nie zgłosił",
-            "running": "Działa",
             "thisWorkspace": "Ta przestrzeń robocza"
         },
         "restartWatch": {
