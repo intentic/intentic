@@ -376,7 +376,7 @@ watch(
     },
 );
 
-// Placeholder rows while the roster loads, so the tab doesn't open claiming nobody's invited.
+// The people grid's placeholder while the roster loads, so the tab doesn't open claiming nobody's invited.
 const outline = useSandboxOutline(listing);
 
 // Invite list is owner-only (the API 403s a member); load only when the viewer owns this sandbox.
@@ -583,7 +583,23 @@ const revoke = async (target: string): Promise<void> => {
                         :image="user?.image ?? undefined"
                         :line="isOwner ? t(`sandbox.sandboxAccess.wordOwner`) : ownRole"
                     />
-                    <template v-if="isOwner">
+                    <!-- While the roster is read, the cells after the owner's own card are drawn as they last looked (the
+                         people and the add tile, one run of grid items imprinted together), else as one person-shaped
+                         card; the add tile comes with the list, so it lands in its place instead of arriving early and
+                         being pushed along by the people that load ahead of it. -->
+                    <template v-if="isOwner && listing">
+                        <SkeletonSnapshot v-if="outline" of="sandbox.access.people" :label="t(`sandbox.sandboxAccess.readingWhoAccess`)">
+                            <div role="status" aria-busy="true" class="flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5">
+                                <span class="sr-only">{{ t(`sandbox.sandboxAccess.readingWhoAccess`) }}</span>
+                                <span class="skeleton block size-8 shrink-0 rounded-full" aria-hidden="true" />
+                                <span class="flex min-w-0 flex-1 flex-col gap-1.5" aria-hidden="true">
+                                    <span class="skeleton block h-3.5 w-32 max-w-full" />
+                                    <span class="skeleton block h-2.5 w-16 max-w-full" />
+                                </span>
+                            </div>
+                        </SkeletonSnapshot>
+                    </template>
+                    <div v-else-if="isOwner" v-skeleton-source="`sandbox.access.people`" class="contents">
                         <PersonCard
                             v-for="member in members"
                             :key="member.email"
@@ -596,10 +612,6 @@ const revoke = async (target: string): Promise<void> => {
                             pressable
                             @press="toggle(member)"
                         />
-                        <div v-if="listing" role="status" aria-busy="true" class="flex items-center px-3">
-                            <span class="sr-only">{{ t(`sandbox.sandboxAccess.readingWhoAccess`) }}</span>
-                            <SkeletonRows :rows="1" />
-                        </div>
                         <form
                             v-if="adding"
                             class="ui-field-shell flex min-w-0 items-center gap-3 rounded-xl px-3 py-2"
@@ -647,7 +659,7 @@ const revoke = async (target: string): Promise<void> => {
                                 <span class="truncate text-xs text-subtle">{{ t(`sandbox.sandboxAccess.addPersonSub`) }}</span>
                             </span>
                         </button>
-                    </template>
+                    </div>
                 </div>
                 <RowNote v-if="!isOwner">{{ t(`sandbox.sandboxAccess.onlySandboxOwnerInvite`) }}</RowNote>
 

@@ -149,7 +149,8 @@ const buttonLabelled = (label: string): HTMLButtonElement | undefined =>
 
 // The People group's own add row: an address, and the Add press that sends it.
 const addPerson = async (address: string): Promise<void> => {
-    // The last card of the group: pressed, it becomes the address field in place.
+    // The last card of the group, drawn once the roster has landed: pressed, it becomes the address field in place.
+    await settle();
     [...document.body.querySelectorAll(`button`)].find((button) => button.textContent?.trim().startsWith(`Add person`))?.click();
     await settle();
     const field = document.body.querySelector<HTMLInputElement>(`input[type=email]`);
