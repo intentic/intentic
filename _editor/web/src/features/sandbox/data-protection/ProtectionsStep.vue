@@ -72,48 +72,55 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
             <Notice v-if="presetError" :of="{ tone: `danger`, title: t(`sandbox.dataProtection.couldntReadPreset`), detail: presetError }" />
             <Notice v-if="outcome" :of="outcome" />
 
-            <div v-if="plan.recommended.length > 0" class="flex flex-col gap-3">
-                <RowGroup :label="t(`sandbox.dataProtection.recommended`)">
-                    <template #info>
-                        <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.dataProtection.recommended`) })">
-                            <span class="block text-xs text-content">{{ t(`sandbox.dataProtection.recommendedHint`) }}</span>
-                        </InfoHint>
+            <RowGroup
+                v-if="plan.recommended.length > 0"
+                :label="t(`sandbox.dataProtection.recommended`)"
+                :caption="isOwner ? undefined : t(`sandbox.dataProtection.ownerApplies`)"
+            >
+                <template #info>
+                    <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.dataProtection.recommended`) })">
+                        <span class="block text-xs text-content">{{ t(`sandbox.dataProtection.recommendedHint`) }}</span>
+                    </InfoHint>
+                </template>
+                <!-- The group's own action, in its header like every other group's: it does what the ticks below say, and the
+                     dialog it opens lists them before anything changes. -->
+                <template #actions>
+                    <Button
+                        size="small"
+                        tone="accent"
+                        :disabled="!isOwner || pickedItems.length === 0"
+                        :loading="apply.isPending.value"
+                        :label="t(`sandbox.dataProtection.apply`, { count: pickedItems.length }, pickedItems.length)"
+                        @click="confirming = true"
+                    />
+                </template>
+                <Row v-for="entry in plan.recommended" :key="entry.measure.id" indent>
+                    <template #title><HintedTitle :title="nameOf(entry.measure)">{{ whatOf(entry.measure) }}</HintedTitle></template>
+                    <template #control>
+                        <StatusBadge :variant="STATUS_TONE[entry.measure.status]" dot :label="statusOf(entry.measure)" />
                     </template>
-                    <Row v-for="entry in plan.recommended" :key="entry.measure.id" indent>
-                        <template #title><HintedTitle :title="nameOf(entry.measure)">{{ whatOf(entry.measure) }}</HintedTitle></template>
-                        <template #control>
-                            <StatusBadge :variant="STATUS_TONE[entry.measure.status]" dot :label="statusOf(entry.measure)" />
-                        </template>
-                        <template #below>
-                            <div class="flex flex-col gap-1.5">
-                                <label v-for="item in entry.changes" :key="item.id" class="flex cursor-pointer items-start gap-2 text-xs">
-                                    <Checkbox
-                                        :model-value="picked.has(item.id)"
-                                        binary
-                                        size="small"
-                                        :disabled="!isOwner"
-                                        :input-id="`preset-${item.id}`"
-                                        @update:model-value="(on: unknown) => toggle(item, on === true)"
-                                    />
-                                    <span>
-                                        <span class="text-content">{{ presetLabel(item) }}:</span>
-                                        <span class="px-1 text-muted">{{ presetValue(item, item.current) }} →</span>
-                                        <span class="font-medium text-content">{{ presetValue(item, item.proposed) }}</span>
-                                    </span>
-                                </label>
-                                <p v-for="item in entry.unavailable" :key="item.id" class="text-xs text-muted">{{ presetLabel(item) }}: {{ reasonOf(item) }}</p>
-                            </div>
-                        </template>
-                    </Row>
-                </RowGroup>
-                <!-- Held in view while the list scrolls under it: the press that does what the ticks above say. -->
-                <div class="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 bg-canvas/90 py-2 backdrop-blur">
-                    <Button tone="accent" :disabled="!isOwner || pickedItems.length === 0" :loading="apply.isPending.value" @click="confirming = true">
-                        {{ t(`sandbox.dataProtection.apply`, { count: pickedItems.length }, pickedItems.length) }}
-                    </Button>
-                    <span class="text-xs text-muted">{{ isOwner ? t(`sandbox.dataProtection.applyNote`) : t(`sandbox.dataProtection.ownerApplies`) }}</span>
-                </div>
-            </div>
+                    <template #below>
+                        <div class="flex flex-col gap-1.5">
+                            <label v-for="item in entry.changes" :key="item.id" class="flex cursor-pointer items-start gap-2 text-xs">
+                                <Checkbox
+                                    :model-value="picked.has(item.id)"
+                                    binary
+                                    size="small"
+                                    :disabled="!isOwner"
+                                    :input-id="`preset-${item.id}`"
+                                    @update:model-value="(on: unknown) => toggle(item, on === true)"
+                                />
+                                <span>
+                                    <span class="text-content">{{ presetLabel(item) }}:</span>
+                                    <span class="px-1 text-muted">{{ presetValue(item, item.current) }} →</span>
+                                    <span class="font-medium text-content">{{ presetValue(item, item.proposed) }}</span>
+                                </span>
+                            </label>
+                            <p v-for="item in entry.unavailable" :key="item.id" class="text-xs text-muted">{{ presetLabel(item) }}: {{ reasonOf(item) }}</p>
+                        </div>
+                    </template>
+                </Row>
+            </RowGroup>
             <Notice v-else-if="items !== undefined" tone="success">{{ t(`sandbox.dataProtection.nothingToChange`) }}</Notice>
 
             <RowGroup v-if="plan.more.length > 0" :label="t(`sandbox.dataProtection.more`)">

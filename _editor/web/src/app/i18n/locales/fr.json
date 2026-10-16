@@ -4267,7 +4267,6 @@
             },
             "recommendedHint": "Ce qu'une administration soumise au RGPD et au règlement sur l'IA devrait activer. Elles sont déjà cochées : décochez ce que vous ne voulez pas, puis appuyez sur « Appliquer ».",
             "recommended": "Recommandées",
-            "applyNote": "Vous confirmerez d'abord.",
             "more": "Ce que vous pouvez encore activer",
             "moreHint": "Facultatif, selon le fonctionnement de votre administration. Chacune s'active là où elle se règle.",
             "inPlace": "Déjà en place",
