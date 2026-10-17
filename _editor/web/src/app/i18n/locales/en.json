@@ -6455,11 +6455,8 @@
         "discoverCard": {
             "cantClone": "Can't clone",
             "cantInstall": "can't install",
-            "install": "Install →",
             "installed": "installed",
             "installing": "installing…",
-            "loads": "loads",
-            "nightlyScan": "Nightly scan",
             "noDescriptionPublished": "No description published.",
             "notAudited": "Not audited",
             "notPinned": "Not pinned",

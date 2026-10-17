@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import {
-    BrandMark,
     Button,
     ConfirmDialog,
     FilterBar,
@@ -40,6 +39,8 @@ import CapabilityConnections from "./connect/CapabilityConnections.vue";
 import CapabilityContext from "./connect/CapabilityContext.vue";
 import CapabilityEffects from "./connect/CapabilityEffects.vue";
 import CapabilityFieldRow from "../../components/CapabilityFieldRow.vue";
+import CatalogDetail from "../../components/CatalogDetail.vue";
+import CatalogTile from "../../components/CatalogTile.vue";
 import CapabilityInstanceRow from "./connect/CapabilityInstanceRow.vue";
 import CapabilityRail from "./connect/CapabilityRail.vue";
 import CapabilityRenameDialog from "./connect/CapabilityRenameDialog.vue";
@@ -226,298 +227,313 @@ onBeforeUnmount(() => {
 
         <template #detail>
             <!-- Capability configuration and apply share the tile layout. -->
-            <div v-if="selected" class="scrollbar-stable @container min-h-0 flex-1 overflow-y-auto pr-2">
-                <div class="mx-auto flex max-w-xl flex-col @3xl:max-w-none @3xl:flex-row @3xl:items-start @3xl:justify-center @3xl:gap-6">
-                    <!-- Capped below the reading measure: this column holds single-line inputs, not prose. -->
-                    <div class="flex min-w-0 flex-1 flex-col @3xl:max-w-lg">
-                        <!-- Back to the slice the tile was picked from, named rather than a generic "All capabilities". -->
-                        <button type="button" :class="ui.textButton({ tone: `quiet` }, `mb-4`)" @click="back">
-                            <Icon name="arrow-left" class="text-2xs" /> {{ activeScope.label }}
-                        </button>
-
-                        <!-- The walk's own strip: position in it, and a way past a tile. -->
-                        <div v-if="walking" class="mb-4 flex items-center gap-2 rounded-lg bg-card shadow-sm px-3 py-2">
+            <div v-if="selected" class="scrollbar-stable min-h-0 flex-1 overflow-y-auto pr-2">
+                <!-- Back to the slice the tile was picked from, named rather than a generic "All capabilities". -->
+                <CatalogDetail
+                    :back="activeScope.label"
+                    :name="entryName(selected)"
+                    :description="entryDescription(selected)"
+                    :logo="selected.logo"
+                    :icon="entryIcon(selected)"
+                    @back="back"
+                >
+                    <!-- The walk's own strip: position in it, and a way past a tile. -->
+                    <template v-if="walking" #lead>
+                        <div class="mb-4 flex items-center gap-2 rounded-lg bg-card shadow-sm px-3 py-2">
                             <Icon name="sparkles" class="text-info" />
                             <span class="text-xs text-content">{{ t(`capabilities.capabilities.recommendedSetup`) }}</span>
                             <span class="text-2xs text-muted">{{ t(`capabilities.capabilities.left`, { count: walkQueue.length }) }}</span>
                             <Button class="ml-auto" :label="t(`ui.action.skip`)" size="small" tier="quiet" @click="skip" />
                         </div>
+                    </template>
 
-                        <!-- Tile heading plus, for a singleton tile, its state (which describes the whole screen, not one row) and its removal control. -->
-                        <div class="mb-4 flex items-center gap-3">
-                            <BrandMark :size="32" :name="entryName(selected)" :logo="selected.logo" :icon="entryIcon(selected)" />
-                            <div class="min-w-0 flex-1">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <span class="font-medium text-content">{{ entryName(selected) }}</span>
-                                    <StatusBadge
-                                        v-if="soleInstance"
-                                        size="xs"
-                                        :dot="true"
-                                        :variant="rowState(selected, soleInstance).tone"
-                                        :label="rowState(selected, soleInstance).label"
-                                    />
-                                </div>
-                                <div class="text-xs text-muted">{{ entryDescription(selected) }}</div>
-                            </div>
-                            <Button
-                                v-if="soleInstance && selected.kind !== 'devops'"
-                                :label="t(`ui.action.remove`)"
-                                size="small"
-                                tier="quiet"
-                                tone="danger"
-                                @click="confirmRemoveId = soleInstance.id"
-                            >
-                                <template #icon><Icon name="trash" /></template>
-                            </Button>
-                        </div>
+                    <!-- For a singleton tile, its state (which describes the whole screen, not one row) and its removal control. -->
+                    <template v-if="soleInstance" #badge>
+                        <StatusBadge
+                            size="xs"
+                            :dot="true"
+                            :variant="rowState(selected, soleInstance).tone"
+                            :label="rowState(selected, soleInstance).label"
+                        />
+                    </template>
+                    <template v-if="soleInstance && selected.kind !== 'devops'" #actions>
+                        <Button :label="t(`ui.action.remove`)" size="small" tier="quiet" tone="danger" @click="confirmRemoveId = soleInstance.id">
+                            <template #icon><Icon name="trash" /></template>
+                        </Button>
+                    </template>
 
-                        <!-- A singleton tile with no finished setup has no row to carry its pending step, so it goes here instead. -->
-                        <RouterLink
-                            v-if="soleInstance && soleRebuildStep(soleInstance)"
-                            to="/sandbox/environment"
-                            class="mb-4 inline-flex w-fit items-center gap-1 text-xs text-warning hover:underline"
+                    <!-- A singleton tile with no finished setup has no row to carry its pending step, so it goes here instead. -->
+                    <RouterLink
+                        v-if="soleInstance && soleRebuildStep(soleInstance)"
+                        to="/sandbox/environment"
+                        class="mb-4 inline-flex w-fit items-center gap-1 text-xs text-warning hover:underline"
+                    >
+                        <Icon name="exclamation-triangle" />
+                        {{ soleInstance.status.detail ?? t(`capabilities.words.needsSandboxRebuild`)
+                        }}{{ t(`capabilities.capabilities.finishSetup`) }}
+                    </RouterLink>
+
+                    <form class="flex flex-col gap-3" @submit.prevent="submit">
+                        <!-- What you already have of this tile, suppressed on a singleton tile. -->
+                        <LiveLinkRows
+                            v-if="(selected.kind === 'vpn' || selected.kind === 'netdisk') && selectedInstances.length > 0"
+                            :kind="selected.kind"
+                            :instances="selectedInstances"
+                            :editing-id="editing?.id"
+                            @edit="openEdit"
+                            @rename="askRename"
+                            @remove="confirmRemoveId = $event"
+                        />
+                        <RowGroup
+                            v-else-if="(selectedInstances.length > 0 || selectedDevices.length > 0) && !selected.singleton"
+                            :label="t(`shared.connections`)"
                         >
-                            <Icon name="exclamation-triangle" />
-                            {{ soleInstance.status.detail ?? t(`capabilities.words.needsSandboxRebuild`)
-                            }}{{ t(`capabilities.capabilities.finishSetup`) }}
+                            <CapabilityInstanceRow
+                                v-for="instance in selectedInstances"
+                                :key="instance.id"
+                                :entry="selected"
+                                :instance="instance"
+                                :host="hostFor(instance.id)"
+                                :browser="browserFor(instance.id)"
+                                :phone="phoneFor(instance.id)"
+                                :state="rowState(selected, instance)"
+                                :facts="cardRowFacts(instance)"
+                                :editing="editing?.id === instance.id"
+                                @connect="openPairing(selected, instance)"
+                                @revoke="removePairedAccess(selected, instance.id)"
+                                @browse="openBrowser(instance.id, instance.id, `browse`)"
+                                @login="openBrowser(instance.id, instance.id)"
+                                @agent-login="startAgentLogin(instance.id)"
+                                @edit="openEdit(instance.id)"
+                                @rename="askRename(instance.id)"
+                                @remove="confirmRemoveId = instance.id"
+                            />
+                            <!-- Last, after what is actually connected: machines already reachable through desktop sync, which this tile would give commands, files and screen. -->
+                            <SyncOnlyDeviceRow
+                                v-for="device in selectedDevices"
+                                :key="device.id"
+                                :device="device"
+                                @connect="openConnection(device.entryId, device.id)"
+                                @disconnect="disconnecting = device"
+                            />
+                        </RowGroup>
+
+                        <!-- The gateway serving these connections, answering "is this still working" where the connector page is actually read. -->
+                        <RowGroup
+                            v-if="cardProcesses.length > 0"
+                            :label="t(`capabilities.capabilities.backgroundProcess`)"
+                            :caption="t(`capabilities.capabilities.relaysEventsToAgent`)"
+                        >
+                            <Row v-for="row in cardProcesses" :key="row.id">
+                                <!-- State dot goes in `#lead`, where every other list in the app puts one. -->
+                                <template #lead>
+                                    <span
+                                        class="h-1.5 w-1.5 shrink-0 rounded-full"
+                                        :class="row.running ? 'bg-success' : 'bg-content/25'"
+                                        aria-hidden="true"
+                                    />
+                                </template>
+                                <template #title>{{ row.name }}</template>
+                                <template #meta>
+                                    <span :class="row.running ? 'text-muted' : 'text-warning'">{{
+                                        row.running ? t(`capabilities.capabilities.running`) : t(`capabilities.capabilities.stopped`)
+                                    }}</span>
+                                </template>
+                                <template #control>
+                                    <Button
+                                        v-if="row.session"
+                                        :label="t(`capabilities.capabilities.logs`)"
+                                        size="small"
+                                        tier="quiet"
+                                        tone="accent"
+                                        @click="viewProcessLogs(row)"
+                                    >
+                                        <template #icon><Icon name="align-left" /></template>
+                                    </Button>
+                                    <Button
+                                        :label="row.running ? t(`ui.action.restart`) : t(`ui.action.start`)"
+                                        size="small"
+                                        tier="quiet"
+                                        tone="accent"
+                                        :disabled="processBusy === row.id"
+                                        @click="startProcess(row)"
+                                    >
+                                        <template #icon><Icon :name="row.running ? 'refresh' : 'play'" /></template>
+                                    </Button>
+                                    <Button
+                                        v-if="row.running"
+                                        :label="t(`ui.action.stop`)"
+                                        size="small"
+                                        tier="quiet"
+                                        tone="danger"
+                                        :disabled="processBusy === row.id"
+                                        @click="stopProcess(row)"
+                                    >
+                                        <template #icon><Icon name="stop" /></template>
+                                    </Button>
+                                </template>
+                            </Row>
+                        </RowGroup>
+
+                        <!-- Fills this form from FortiClient's own file; keyed on the tile so switching tiles clears the zone. -->
+                        <ForticlientImport v-if="selected.kind === 'vpn'" :key="selected.id" @pick="pickForticlient" @notice="error = $event" />
+
+                        <!-- Pairs this sandbox with another of the reader's and fills this form; the fields stay for doing it by hand. -->
+                        <LinkPairing
+                            v-if="selected.kind === 'link' && editing === undefined"
+                            :key="selected.id"
+                            @pick="pickLinked"
+                            @notice="error = $event"
+                        />
+
+                        <!-- Where extensions are found, on the tile people arrive at wanting one. -->
+                        <RouterLink
+                            v-if="selected.kind === 'extension'"
+                            to="/sandbox/extensions?view=browse"
+                            class="flex items-center gap-3 rounded-lg bg-card shadow-sm px-3 py-2.5 transition-colors hover:bg-overlay"
+                        >
+                            <Icon name="search" class="shrink-0 text-link" />
+                            <span class="min-w-0 flex-1">
+                                <span class="block text-xs font-medium text-content">{{
+                                    t(`capabilities.capabilities.browsePublishedExtensions`)
+                                }}</span>
+                                <span class="block text-2xs text-muted">
+                                    <template v-if="publishedCount > 0"
+                                        >{{ t(`capabilities.capabilities.publishedCount`, { count: publishedCount })
+                                        }}<template v-if="verifiedCount > 0">{{
+                                            t(`capabilities.capabilities.sourceReadByHuman`, { verifiedCount })
+                                        }}</template
+                                        >. </template
+                                    >{{ t(`capabilities.capabilities.installInClickRegistry`) }}
+                                </span>
+                            </span>
+                            <Icon name="arrow-right" class="shrink-0 text-subtle" />
                         </RouterLink>
 
-                        <form class="flex flex-col gap-3" @submit.prevent="submit">
-                            <!-- What you already have of this tile, suppressed on a singleton tile. -->
-                            <LiveLinkRows
-                                v-if="(selected.kind === 'vpn' || selected.kind === 'netdisk') && selectedInstances.length > 0"
-                                :kind="selected.kind"
-                                :instances="selectedInstances"
-                                :editing-id="editing?.id"
-                                @edit="openEdit"
-                                @rename="askRename"
-                                @remove="confirmRemoveId = $event"
-                            />
-                            <RowGroup
-                                v-else-if="(selectedInstances.length > 0 || selectedDevices.length > 0) && !selected.singleton"
-                                :label="t(`shared.connections`)"
-                            >
-                                <CapabilityInstanceRow
-                                    v-for="instance in selectedInstances"
-                                    :key="instance.id"
-                                    :entry="selected"
-                                    :instance="instance"
-                                    :host="hostFor(instance.id)"
-                                    :browser="browserFor(instance.id)"
-                                    :phone="phoneFor(instance.id)"
-                                    :state="rowState(selected, instance)"
-                                    :facts="cardRowFacts(instance)"
-                                    :editing="editing?.id === instance.id"
-                                    @connect="openPairing(selected, instance)"
-                                    @revoke="removePairedAccess(selected, instance.id)"
-                                    @browse="openBrowser(instance.id, instance.id, `browse`)"
-                                    @login="openBrowser(instance.id, instance.id)"
-                                    @agent-login="startAgentLogin(instance.id)"
-                                    @edit="openEdit(instance.id)"
-                                    @rename="askRename(instance.id)"
-                                    @remove="confirmRemoveId = instance.id"
-                                />
-                                <!-- Last, after what is actually connected: machines already reachable through desktop sync, which this tile would give commands, files and screen. -->
-                                <SyncOnlyDeviceRow
-                                    v-for="device in selectedDevices"
-                                    :key="device.id"
-                                    :device="device"
-                                    @connect="openConnection(device.entryId, device.id)"
-                                    @disconnect="disconnecting = device"
-                                />
-                            </RowGroup>
+                        <!-- Registry browse for plugins only; extensions have their own Browse tab, linked above. -->
+                        <PluginRegistryBrowse
+                            v-if="selected.kind === 'plugin'"
+                            :key="selected.id"
+                            :kind="selected.kind"
+                            @pick="applyRegistryPick"
+                            @notice="error = $event"
+                        />
 
-                            <!-- The gateway serving these connections, answering "is this still working" where the connector page is actually read. -->
-                            <RowGroup
-                                v-if="cardProcesses.length > 0"
-                                :label="t(`capabilities.capabilities.backgroundProcess`)"
-                                :caption="t(`capabilities.capabilities.relaysEventsToAgent`)"
-                            >
-                                <Row v-for="row in cardProcesses" :key="row.id">
-                                    <!-- State dot goes in `#lead`, where every other list in the app puts one. -->
-                                    <template #lead>
-                                        <span
-                                            class="h-1.5 w-1.5 shrink-0 rounded-full"
-                                            :class="row.running ? 'bg-success' : 'bg-content/25'"
-                                            aria-hidden="true"
-                                        />
-                                    </template>
-                                    <template #title>{{ row.name }}</template>
-                                    <template #meta>
-                                        <span :class="row.running ? 'text-muted' : 'text-warning'">{{
-                                            row.running ? t(`capabilities.capabilities.running`) : t(`capabilities.capabilities.stopped`)
-                                        }}</span>
-                                    </template>
-                                    <template #control>
-                                        <Button
-                                            v-if="row.session"
-                                            :label="t(`capabilities.capabilities.logs`)"
-                                            size="small"
-                                            tier="quiet"
-                                            tone="accent"
-                                            @click="viewProcessLogs(row)"
-                                        >
-                                            <template #icon><Icon name="align-left" /></template>
-                                        </Button>
-                                        <Button
-                                            :label="row.running ? t(`ui.action.restart`) : t(`ui.action.start`)"
-                                            size="small"
-                                            tier="quiet"
-                                            tone="accent"
-                                            :disabled="processBusy === row.id"
-                                            @click="startProcess(row)"
-                                        >
-                                            <template #icon><Icon :name="row.running ? 'refresh' : 'play'" /></template>
-                                        </Button>
-                                        <Button
-                                            v-if="row.running"
-                                            :label="t(`ui.action.stop`)"
-                                            size="small"
-                                            tier="quiet"
-                                            tone="danger"
-                                            :disabled="processBusy === row.id"
-                                            @click="stopProcess(row)"
-                                        >
-                                            <template #icon><Icon name="stop" /></template>
-                                        </Button>
-                                    </template>
-                                </Row>
-                            </RowGroup>
-
-                            <!-- Fills this form from FortiClient's own file; keyed on the tile so switching tiles clears the zone. -->
-                            <ForticlientImport v-if="selected.kind === 'vpn'" :key="selected.id" @pick="pickForticlient" @notice="error = $event" />
-
-                            <!-- Pairs this sandbox with another of the reader's and fills this form; the fields stay for doing it by hand. -->
-                            <LinkPairing v-if="selected.kind === 'link' && editing === undefined" :key="selected.id" @pick="pickLinked" @notice="error = $event" />
-
-                            <!-- Where extensions are found, on the tile people arrive at wanting one. -->
-                            <RouterLink
-                                v-if="selected.kind === 'extension'"
-                                to="/sandbox/extensions?view=browse"
-                                class="flex items-center gap-3 rounded-lg bg-card shadow-sm px-3 py-2.5 transition-colors hover:bg-overlay"
-                            >
-                                <Icon name="search" class="shrink-0 text-link" />
-                                <span class="min-w-0 flex-1">
-                                    <span class="block text-xs font-medium text-content">{{
-                                        t(`capabilities.capabilities.browsePublishedExtensions`)
-                                    }}</span>
-                                    <span class="block text-2xs text-muted">
-                                        <template v-if="publishedCount > 0"
-                                            >{{ t(`capabilities.capabilities.publishedCount`, { count: publishedCount })
-                                            }}<template v-if="verifiedCount > 0">{{
-                                                t(`capabilities.capabilities.sourceReadByHuman`, { verifiedCount })
-                                            }}</template
-                                            >. </template
-                                        >{{ t(`capabilities.capabilities.installInClickRegistry`) }}
-                                    </span>
-                                </span>
-                                <Icon name="arrow-right" class="shrink-0 text-subtle" />
-                            </RouterLink>
-
-                            <!-- Registry browse for plugins only; extensions have their own Browse tab, linked above. -->
-                            <PluginRegistryBrowse
-                                v-if="selected.kind === 'plugin'"
-                                :key="selected.id"
-                                :kind="selected.kind"
-                                @pick="applyRegistryPick"
-                                @notice="error = $event"
-                            />
-
-                            <!-- States the form's intent up front, since the same fields mean "add" or "change this one". -->
-                            <div
-                                v-if="editing || selected.singleton || selectedInstances.length > 0"
-                                class="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"
-                            >
-                                <div :class="ui.sectionLabel()">
-                                    <!-- A singleton tile always says "Settings": it never adds a second anything, and has no name to show. -->
-                                    <template v-if="selected.singleton">{{ t(`shared.settings`) }}</template>
-                                    <template v-else-if="editing">
-                                        {{ t(`capabilities.capabilities.editing`) }} <span class="font-mono normal-case">{{ editing.id }}</span>
-                                    </template>
-                                    <template v-else>{{ t(`capabilities.capabilities.addAnother`) }}</template>
-                                </div>
-                                <!-- Way out of an edit, beside what it's editing, not by the submit button, which stays reachable from anywhere already. -->
-                                <button
-                                    v-if="editing && !selected.singleton"
-                                    type="button"
-                                    :class="ui.textButton({ size: `xs` })"
-                                    @click="stopEditing"
-                                >
-                                    {{ t(`capabilities.capabilities.cancelAddAnotherInstead`) }}
-                                </button>
+                        <!-- States the form's intent up front, since the same fields mean "add" or "change this one". -->
+                        <div
+                            v-if="editing || selected.singleton || selectedInstances.length > 0"
+                            class="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"
+                        >
+                            <div :class="ui.sectionLabel()">
+                                <!-- A singleton tile always says "Settings": it never adds a second anything, and has no name to show. -->
+                                <template v-if="selected.singleton">{{ t(`shared.settings`) }}</template>
+                                <template v-else-if="editing">
+                                    {{ t(`capabilities.capabilities.editing`) }} <span class="font-mono normal-case">{{ editing.id }}</span>
+                                </template>
+                                <template v-else>{{ t(`capabilities.capabilities.addAnother`) }}</template>
                             </div>
+                            <!-- Way out of an edit, beside what it's editing, not by the submit button, which stays reachable from anywhere already. -->
+                            <button v-if="editing && !selected.singleton" type="button" :class="ui.textButton({ size: `xs` })" @click="stopEditing">
+                                {{ t(`capabilities.capabilities.cancelAddAnotherInstead`) }}
+                            </button>
+                        </div>
 
-                            <!-- No name box while editing or on a singleton tile: renaming moves state a form can't (askRename), so a second box here would be a lossy shortcut for it. -->
-                            <label v-if="!selected.singleton && !editing" class="ui-field">
-                                <span class="ui-field-label">{{ t(`shared.name`) }}</span>
-                                <input
-                                    v-model="name"
-                                    placeholder="my-tool"
-                                    :class="[ui.input(), nameCollision || (attempted && nameProblem) ? 'ui-field-error-box' : '']"
-                                    @input="nameEdited = true"
-                                    @blur="finishName"
-                                />
-                                <!-- A taken name is refused, not saved over: this form holds the tile's defaults, which would overwrite a live connection's settings. -->
-                                <span v-if="nameCollision" class="ui-field-error">
-                                    <Icon name="exclamation-triangle" class="text-2xs" />
-                                    "{{ savedName }}{{ t(`capabilities.capabilities.alreadyExistsOpenAbove`) }}
-                                </span>
-                                <span v-else-if="attempted && nameProblem" class="ui-field-error">
-                                    <Icon name="exclamation-triangle" class="text-2xs" />
-                                    {{ nameProblem }}
-                                </span>
-                                <!-- Shows the repair (spaces/punctuation to hyphens) rather than applying it silently; blur commits it, after which there's nothing to show. -->
-                                <span v-else-if="namePreview" class="mt-1 flex items-center gap-1 text-2xs text-muted">
-                                    <Icon name="check" class="text-2xs text-success" />
-                                    {{ t(`capabilities.capabilities.saved`) }} <span class="font-mono text-content">{{ namePreview }}</span>
-                                </span>
-                                <span v-else-if="selectedInstances.length > 0" class="mt-1 text-2xs text-subtle">
-                                    {{ t(`capabilities.capabilities.whatAgentCallConnection`) }}
-                                </span>
-                            </label>
-                            <!-- Narrow reference column shown inline below @3xl; the docked aside version takes over above it. -->
-                            <CapabilityContext :entry="selected" :values="values" :effects="liveEffects" class="@3xl:hidden" />
-                            <!-- A device's access as a posture: the preset sets all switches at once; the sentence states what they currently spell. -->
-                            <label v-if="selected.kind === 'device'" class="flex items-start justify-between gap-4">
-                                <span class="min-w-0">
-                                    <span class="ui-field-label">{{ t(`capabilities.words.access`) }}</span>
-                                    <span class="mt-0.5 block text-2xs text-muted">{{ hostGrantSummary(values) }}</span>
-                                </span>
-                                <SegmentedControl
-                                    class="shrink-0"
-                                    :model-value="matchHostPreset(values) ?? ''"
-                                    :options="hostPresetOptions"
-                                    @update:model-value="applyHostPreset($event)"
-                                />
-                            </label>
+                        <!-- No name box while editing or on a singleton tile: renaming moves state a form can't (askRename), so a second box here would be a lossy shortcut for it. -->
+                        <label v-if="!selected.singleton && !editing" class="ui-field">
+                            <span class="ui-field-label">{{ t(`shared.name`) }}</span>
+                            <input
+                                v-model="name"
+                                placeholder="my-tool"
+                                :class="[ui.input(), nameCollision || (attempted && nameProblem) ? 'ui-field-error-box' : '']"
+                                @input="nameEdited = true"
+                                @blur="finishName"
+                            />
+                            <!-- A taken name is refused, not saved over: this form holds the tile's defaults, which would overwrite a live connection's settings. -->
+                            <span v-if="nameCollision" class="ui-field-error">
+                                <Icon name="exclamation-triangle" class="text-2xs" />
+                                "{{ savedName }}{{ t(`capabilities.capabilities.alreadyExistsOpenAbove`) }}
+                            </span>
+                            <span v-else-if="attempted && nameProblem" class="ui-field-error">
+                                <Icon name="exclamation-triangle" class="text-2xs" />
+                                {{ nameProblem }}
+                            </span>
+                            <!-- Shows the repair (spaces/punctuation to hyphens) rather than applying it silently; blur commits it, after which there's nothing to show. -->
+                            <span v-else-if="namePreview" class="mt-1 flex items-center gap-1 text-2xs text-muted">
+                                <Icon name="check" class="text-2xs text-success" />
+                                {{ t(`capabilities.capabilities.saved`) }} <span class="font-mono text-content">{{ namePreview }}</span>
+                            </span>
+                            <span v-else-if="selectedInstances.length > 0" class="mt-1 text-2xs text-subtle">
+                                {{ t(`capabilities.capabilities.whatAgentCallConnection`) }}
+                            </span>
+                        </label>
+                        <!-- Narrow reference column shown inline below @3xl; the docked aside version takes over above it. -->
+                        <CapabilityContext :entry="selected" :values="values" :effects="liveEffects" class="@3xl:hidden" />
+                        <!-- A device's access as a posture: the preset sets all switches at once; the sentence states what they currently spell. -->
+                        <label v-if="selected.kind === 'device'" class="flex items-start justify-between gap-4">
+                            <span class="min-w-0">
+                                <span class="ui-field-label">{{ t(`capabilities.words.access`) }}</span>
+                                <span class="mt-0.5 block text-2xs text-muted">{{ hostGrantSummary(values) }}</span>
+                            </span>
+                            <SegmentedControl
+                                class="shrink-0"
+                                :model-value="matchHostPreset(values) ?? ''"
+                                :options="hostPresetOptions"
+                                @update:model-value="applyHostPreset($event)"
+                            />
+                        </label>
 
-                            <GpuHostedNote v-if="selected.kind === 'docker' && hosted" v-model="values['gpu']" />
-                            <!-- Main fields first, rarely-changed ones folded behind Advanced. -->
-                            <template v-for="field in mainFields(selected)" :key="field.key">
-                                <!-- An extension pins a commit, so that box is answered from the repository rather than typed into. -->
-                                <GitRefField
-                                    v-if="picksVersion(selected, field)"
-                                    :field="field"
-                                    :values="values"
-                                    :url="values['url'] ?? ''"
-                                    :token="versionToken"
-                                    :keeping="editing?.id"
-                                    :alarm="fieldAlarm(field)"
-                                    @left="finishField(field)"
-                                />
-                                <!-- A key the sandbox makes: the private half never reaches this page, only the public half to authorize. -->
-                                <SshKeyField
-                                    v-else-if="generatesKey(selected, field, values)"
-                                    :field="field"
-                                    :values="values"
-                                    :entry="selected.id"
-                                    :connection="editing?.id"
-                                    :stored="keptSecrets.has(field.key)"
-                                    :alarm="fieldAlarm(field)"
-                                    @left="finishField(field)"
-                                />
+                        <GpuHostedNote v-if="selected.kind === 'docker' && hosted" v-model="values['gpu']" />
+                        <!-- Main fields first, rarely-changed ones folded behind Advanced. -->
+                        <template v-for="field in mainFields(selected)" :key="field.key">
+                            <!-- An extension pins a commit, so that box is answered from the repository rather than typed into. -->
+                            <GitRefField
+                                v-if="picksVersion(selected, field)"
+                                :field="field"
+                                :values="values"
+                                :url="values['url'] ?? ''"
+                                :token="versionToken"
+                                :keeping="editing?.id"
+                                :alarm="fieldAlarm(field)"
+                                @left="finishField(field)"
+                            />
+                            <!-- A key the sandbox makes: the private half never reaches this page, only the public half to authorize. -->
+                            <SshKeyField
+                                v-else-if="generatesKey(selected, field, values)"
+                                :field="field"
+                                :values="values"
+                                :entry="selected.id"
+                                :connection="editing?.id"
+                                :stored="keptSecrets.has(field.key)"
+                                :alarm="fieldAlarm(field)"
+                                @left="finishField(field)"
+                            />
+                            <CapabilityFieldRow
+                                v-else
+                                :field="field"
+                                :values="values"
+                                :inline="inlineField(field)"
+                                :placeholder="fieldPlaceholder(field)"
+                                :alarm="fieldAlarm(field)"
+                                :quiet="fieldQuiet(field)"
+                                :checked="fieldChecked(field)"
+                                :url-fix="fieldUrlFix(field)"
+                                :note="pasteNotes[field.key]"
+                                :summary="fieldConfSummary(field)"
+                                @edited="onFieldInput(field)"
+                                @pasted="onFieldPaste(field, $event)"
+                                @left="finishField(field)"
+                                @fix="applyUrlFix(field)"
+                            />
+                        </template>
+                        <template v-if="advancedFields(selected).length > 0">
+                            <button type="button" :class="ui.textButton({ tone: `quiet` })" @click="advancedOpen = !advancedOpen">
+                                <Icon :name="advancedOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
+                                {{ advancedLabel(selected) }}
+                            </button>
+                            <template v-if="advancedOpen">
                                 <CapabilityFieldRow
-                                    v-else
+                                    v-for="field in advancedFields(selected)"
+                                    :key="field.key"
                                     :field="field"
                                     :values="values"
                                     :inline="inlineField(field)"
@@ -534,116 +550,90 @@ onBeforeUnmount(() => {
                                     @fix="applyUrlFix(field)"
                                 />
                             </template>
-                            <template v-if="advancedFields(selected).length > 0">
-                                <button type="button" :class="ui.textButton({ tone: `quiet` })" @click="advancedOpen = !advancedOpen">
-                                    <Icon :name="advancedOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
-                                    {{ advancedLabel(selected) }}
-                                </button>
-                                <template v-if="advancedOpen">
-                                    <CapabilityFieldRow
-                                        v-for="field in advancedFields(selected)"
-                                        :key="field.key"
-                                        :field="field"
-                                        :values="values"
-                                        :inline="inlineField(field)"
-                                        :placeholder="fieldPlaceholder(field)"
-                                        :alarm="fieldAlarm(field)"
-                                        :quiet="fieldQuiet(field)"
-                                        :checked="fieldChecked(field)"
-                                        :url-fix="fieldUrlFix(field)"
-                                        :note="pasteNotes[field.key]"
-                                        :summary="fieldConfSummary(field)"
-                                        @edited="onFieldInput(field)"
-                                        @pasted="onFieldPaste(field, $event)"
-                                        @left="finishField(field)"
-                                        @fix="applyUrlFix(field)"
-                                    />
-                                </template>
-                            </template>
-                            <!-- Why the grid badged this one: the claim plus the evidence that produced it, which "Not needed" dismisses. -->
-                            <!-- The sentence the answers add up to, computed live so it matches what submit actually agrees to. -->
-                            <p v-if="formSummary" class="flex items-start gap-2 rounded-lg bg-card shadow-sm px-3 py-2 text-xs text-content">
-                                <Icon name="info-circle" class="mt-0.5 shrink-0 text-2xs text-subtle" />
-                                {{ formSummary }}
-                            </p>
+                        </template>
+                        <!-- Why the grid badged this one: the claim plus the evidence that produced it, which "Not needed" dismisses. -->
+                        <!-- The sentence the answers add up to, computed live so it matches what submit actually agrees to. -->
+                        <p v-if="formSummary" class="flex items-start gap-2 rounded-lg bg-card shadow-sm px-3 py-2 text-xs text-content">
+                            <Icon name="info-circle" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+                            {{ formSummary }}
+                        </p>
 
-                            <Notice v-if="selectedRecommendation" tone="info">
-                                <div class="flex items-start gap-3">
-                                    <div class="min-w-0 flex-1">
-                                        <div>{{ t(`capabilities.capabilities.recommended`, { reason: selectedRecommendation.reason }) }}</div>
-                                        <div class="mt-0.5 truncate font-mono text-2xs text-subtle">{{ selectedRecommendation.evidence }}</div>
-                                    </div>
-                                    <Button
-                                        :label="t(`capabilities.capabilities.notNeeded`)"
-                                        size="small"
-                                        tier="quiet"
-                                        :loading="dismissRecommendation.isPending.value"
-                                        @click="dismiss(selected)"
-                                    />
+                        <Notice v-if="selectedRecommendation" tone="info">
+                            <div class="flex items-start gap-3">
+                                <div class="min-w-0 flex-1">
+                                    <div>{{ t(`capabilities.capabilities.recommended`, { reason: selectedRecommendation.reason }) }}</div>
+                                    <div class="mt-0.5 truncate font-mono text-2xs text-subtle">{{ selectedRecommendation.evidence }}</div>
                                 </div>
-                            </Notice>
-
-                            <!-- Submit stays stuck to the pane's foot: some tiles (VPN, a device's permissions) are long. -->
-                            <!-- What the probe itself said, shown above the submit since "will this work" belongs before the commitment. -->
-                            <p
-                                v-if="probeResult"
-                                class="flex items-start gap-2 rounded-lg border px-3 py-2 text-xs"
-                                :class="
-                                    probeResult.ok
-                                        ? toneTint(`success`, `strong`, `text-content`)
-                                        : probeResult.checked
-                                          ? toneTint(`danger`, `strong`, `text-content`)
-                                          : `border-line bg-card text-muted`
-                                "
-                            >
-                                <Icon
-                                    :name="probeResult.ok ? 'check-circle' : probeResult.checked ? 'exclamation-triangle' : 'info-circle'"
-                                    class="mt-0.5 shrink-0 text-2xs"
-                                    :class="probeResult.ok ? 'text-success' : probeResult.checked ? 'text-danger' : 'text-subtle'"
-                                />
-                                {{ probeResult.message }}
-                            </p>
-
-                            <div
-                                :class="[
-                                    'sticky bottom-0 -mx-1 flex flex-wrap items-center gap-3 px-1 py-3',
-                                    auditable ? 'justify-between' : 'justify-end',
-                                    shaking ? 'ui-shake' : '',
-                                ]"
-                                @animationend="shaking = false"
-                            >
-                                <!-- The read sits beside the approval, since that's when it matters. -->
-                                <button v-if="auditable" type="button" :class="ui.textButton({ size: `xs` })" @click="startAudit">
-                                    {{
-                                        updateFrom !== undefined
-                                            ? t(`capabilities.capabilities.agentReadWhatChanged`)
-                                            : t(`capabilities.capabilities.agentReadFirstWhat`)
-                                    }}
-                                </button>
-                                <!-- Testing is optional and stays secondary to Save; hidden once a tile has answered that no test exists (canProbe). -->
                                 <Button
-                                    v-if="canProbe"
-                                    class="ml-auto"
-                                    :label="t(`capabilities.capabilities.test`)"
+                                    :label="t(`capabilities.capabilities.notNeeded`)"
                                     size="small"
                                     tier="quiet"
-                                    :loading="probing"
-                                    @click="runProbe"
-                                >
-                                    <template #icon><Icon name="wave-pulse" /></template>
-                                </Button>
-                                <Button type="submit" size="small" :label="submitLabel" :loading="submitting">
-                                    <template #icon><Icon name="check" /></template>
-                                </Button>
+                                    :loading="dismissRecommendation.isPending.value"
+                                    @click="dismiss(selected)"
+                                />
                             </div>
-                        </form>
-                    </div>
+                        </Notice>
+
+                        <!-- Submit stays stuck to the pane's foot: some tiles (VPN, a device's permissions) are long. -->
+                        <!-- What the probe itself said, shown above the submit since "will this work" belongs before the commitment. -->
+                        <p
+                            v-if="probeResult"
+                            class="flex items-start gap-2 rounded-lg border px-3 py-2 text-xs"
+                            :class="
+                                probeResult.ok
+                                    ? toneTint(`success`, `strong`, `text-content`)
+                                    : probeResult.checked
+                                      ? toneTint(`danger`, `strong`, `text-content`)
+                                      : `border-line bg-card text-muted`
+                            "
+                        >
+                            <Icon
+                                :name="probeResult.ok ? 'check-circle' : probeResult.checked ? 'exclamation-triangle' : 'info-circle'"
+                                class="mt-0.5 shrink-0 text-2xs"
+                                :class="probeResult.ok ? 'text-success' : probeResult.checked ? 'text-danger' : 'text-subtle'"
+                            />
+                            {{ probeResult.message }}
+                        </p>
+
+                        <div
+                            :class="[
+                                'sticky bottom-0 -mx-1 flex flex-wrap items-center gap-3 px-1 py-3',
+                                auditable ? 'justify-between' : 'justify-end',
+                                shaking ? 'ui-shake' : '',
+                            ]"
+                            @animationend="shaking = false"
+                        >
+                            <!-- The read sits beside the approval, since that's when it matters. -->
+                            <button v-if="auditable" type="button" :class="ui.textButton({ size: `xs` })" @click="startAudit">
+                                {{
+                                    updateFrom !== undefined
+                                        ? t(`capabilities.capabilities.agentReadWhatChanged`)
+                                        : t(`capabilities.capabilities.agentReadFirstWhat`)
+                                }}
+                            </button>
+                            <!-- Testing is optional and stays secondary to Save; hidden once a tile has answered that no test exists (canProbe). -->
+                            <Button
+                                v-if="canProbe"
+                                class="ml-auto"
+                                :label="t(`capabilities.capabilities.test`)"
+                                size="small"
+                                tier="quiet"
+                                :loading="probing"
+                                @click="runProbe"
+                            >
+                                <template #icon><Icon name="wave-pulse" /></template>
+                            </Button>
+                            <Button type="submit" size="small" :label="submitLabel" :loading="submitting">
+                                <template #icon><Icon name="check" /></template>
+                            </Button>
+                        </div>
+                    </form>
 
                     <!-- Docked reference column, shown only above @3xl (below that width, the inline version renders in the form instead). -->
-                    <aside class="hidden @3xl:block @3xl:w-80 @3xl:shrink-0 @4xl:w-96">
+                    <template #aside>
                         <CapabilityContext :entry="selected" :values="values" :effects="liveEffects" />
-                    </aside>
-                </div>
+                    </template>
+                </CatalogDetail>
             </div>
 
             <!-- Step 1: the catalog. -->
@@ -684,57 +674,43 @@ onBeforeUnmount(() => {
                             <div v-if="!inCategory" :class="ui.sectionLabel()">{{ group.label }}</div>
                             <!-- Container query, not viewport: how many tiles fit is a fact about this pane, not the screen. -->
                             <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4">
-                                <!-- Padding is the text's, not the tile's, so the mark can reach the tile's edges; `overflow-hidden` clips it to the radius. -->
-                                <button
+                                <CatalogTile
                                     v-for="tile in group.entries"
                                     :key="tile.entry.id"
-                                    type="button"
-                                    class="flex h-full w-full items-stretch overflow-hidden rounded-lg bg-card shadow-sm text-left transition-colors hover:bg-overlay"
+                                    :name="entryName(tile.entry)"
+                                    :description="entryDescription(tile.entry)"
+                                    :logo="tile.entry.logo"
+                                    :icon="entryIcon(tile.entry)"
                                     @click="pick(tile.entry)"
                                 >
-                                    <!-- Mark spans the tile's full height as a left-edge band, for scanning a grid of many by logo. -->
-                                    <BrandMark
-                                        flush
-                                        class="border-r border-line"
-                                        :size="44"
-                                        :name="entryName(tile.entry)"
-                                        :logo="tile.entry.logo"
-                                        :icon="entryIcon(tile.entry)"
-                                    />
-                                    <div class="min-w-0 flex-1 px-2.5 py-2">
-                                        <!-- One line only: a grid row is as tall as its tallest tile, so any growing line costs every tile beside it. -->
-                                        <div class="flex items-center gap-x-1.5">
-                                            <span class="truncate text-xs font-semibold text-content">{{ entryName(tile.entry) }}</span>
-                                            <!-- Count shown only above one: a lone tick already means connected. -->
-                                            <span
-                                                v-if="tile.connected > 0"
-                                                v-tooltip.top="t(`capabilities.capabilities.connected`, { connected: tile.connected })"
-                                                class="inline-flex shrink-0 items-center gap-0.5 text-2xs text-success"
-                                                :aria-label="t(`capabilities.capabilities.connected`, { connected: tile.connected })"
-                                            >
-                                                <Icon name="check-circle" />
-                                                <template v-if="tile.connected > 1">{{ tile.connected }}</template>
-                                            </span>
-                                            <!-- The scan's finding rides its own badge; the tooltip carries the claim and the evidence so it stays checkable. -->
-                                            <span
-                                                v-if="tile.recommendation"
-                                                v-tooltip.top="{
-                                                    title: t(`capabilities.capabilities.recommendedTitle`),
-                                                    tone: `info`,
-                                                    rows: [{ label: t(`capabilities.capabilities.evidence`), value: tile.recommendation.evidence }],
-                                                    note: tile.recommendation.reason,
-                                                }"
-                                                class="shrink-0 text-2xs text-info"
-                                                :aria-label="t(`capabilities.capabilities.recommended2`, { reason: tile.recommendation.reason })"
-                                            >
-                                                <Icon name="sparkles" />
-                                            </span>
-                                            <CapabilityEffects :effects="badgeEffects(tile.entry)" :compact="true" />
-                                        </div>
-                                        <!-- Truncated, not just short: a derived tile's description comes from a manifest nobody here wrote and must not set row height. -->
-                                        <div class="truncate text-2xs text-muted">{{ entryDescription(tile.entry) }}</div>
-                                    </div>
-                                </button>
+                                    <template #marks>
+                                        <!-- Count shown only above one: a lone tick already means connected. -->
+                                        <span
+                                            v-if="tile.connected > 0"
+                                            v-tooltip.top="t(`capabilities.capabilities.connected`, { connected: tile.connected })"
+                                            class="inline-flex shrink-0 items-center gap-0.5 text-2xs text-success"
+                                            :aria-label="t(`capabilities.capabilities.connected`, { connected: tile.connected })"
+                                        >
+                                            <Icon name="check-circle" />
+                                            <template v-if="tile.connected > 1">{{ tile.connected }}</template>
+                                        </span>
+                                        <!-- The scan's finding rides its own badge; the tooltip carries the claim and the evidence so it stays checkable. -->
+                                        <span
+                                            v-if="tile.recommendation"
+                                            v-tooltip.top="{
+                                                title: t(`capabilities.capabilities.recommendedTitle`),
+                                                tone: `info`,
+                                                rows: [{ label: t(`capabilities.capabilities.evidence`), value: tile.recommendation.evidence }],
+                                                note: tile.recommendation.reason,
+                                            }"
+                                            class="shrink-0 text-2xs text-info"
+                                            :aria-label="t(`capabilities.capabilities.recommended2`, { reason: tile.recommendation.reason })"
+                                        >
+                                            <Icon name="sparkles" />
+                                        </span>
+                                        <CapabilityEffects :effects="badgeEffects(tile.entry)" :compact="true" />
+                                    </template>
+                                </CatalogTile>
                             </div>
                         </div>
                     </template>

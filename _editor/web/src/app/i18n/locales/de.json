@@ -3048,11 +3048,8 @@
         "discoverCard": {
             "cantClone": "Nicht klonbar",
             "cantInstall": "lässt sich nicht installieren",
-            "install": "Installieren →",
             "installed": "installiert",
             "installing": "wird installiert…",
-            "loads": "lädt",
-            "nightlyScan": "Nächtlicher Scan",
             "noDescriptionPublished": "Keine Beschreibung veröffentlicht.",
             "notAudited": "Nicht geprüft",
             "notPinned": "Nicht fixiert",

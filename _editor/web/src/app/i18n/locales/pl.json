@@ -6050,11 +6050,8 @@
         "discoverCard": {
             "cantClone": "Nie do sklonowania",
             "cantInstall": "nie da się zainstalować",
-            "install": "Zainstaluj →",
             "installed": "zainstalowane",
             "installing": "instalowanie…",
-            "loads": "wczytuje się",
-            "nightlyScan": "Nocny skan",
             "noDescriptionPublished": "Nie opublikowano opisu.",
             "notAudited": "Bez audytu",
             "notPinned": "Nieprzypięte",

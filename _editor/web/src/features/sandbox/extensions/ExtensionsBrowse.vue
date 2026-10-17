@@ -18,13 +18,16 @@ import { auditBrief, updateBrief } from "../../../models/sandbox/extensionBrief"
 import DiscoverCard from "./DiscoverCard.vue";
 import DiscoverDetail from "./DiscoverDetail.vue";
 import { type DiscoverListing, listingSections, toListing } from "../../../models/sandbox/discoverListing";
+import { openEntryOf } from "./extensionRoute";
 import { extensionBusy } from "./extensionWork";
 import { INSTALLS, type InstallVerb, installedSentence, installOutcome, installsInFlight } from "./installsInFlight";
 import { useT } from "@intentic/ui/i18n";
 
-// Browse: what other people have published, the other half of the Extensions section; search, pills and registry line
-// are owned by SandboxExtensions.vue and passed in as `query`/`trust`. Shows no manifest, since the code hasn't been
-// cloned yet; it states who vouched for it, what the scan found, and where it lives.
+// Browse: what other people have published, the other half of the Extensions section, drawn as the Capabilities catalog
+// is: tiles in a grid grouped under section labels, and a picked listing opened where the grid stood (DiscoverDetail),
+// with the way back named after this list. Search and pills are owned by SandboxExtensions.vue and passed in as
+// `query`/`trust`. Shows no manifest, since the code hasn't been cloned yet; it states who vouched for it, what the scan
+// found, and where it lives.
 
 const t = useT();
 
@@ -43,6 +46,8 @@ const emit = defineEmits<{
     clear: [];
     /** Show this installed extension (by its id, when the list has it) on the Installed pill. */
     reveal: [id: string | undefined];
+    /** Whether a listing's page stands where the grid was, so the section can put away the grid's own instrument. */
+    detail: [open: boolean];
 }>();
 
 const route = useRoute();
@@ -94,20 +99,21 @@ watch(
 );
 
 // Encodes the open listing in the URL as a query param beside the `view` pill, so a reload or a pasted link reopens the
-// same panel.
-const openName = computed<string | undefined>(() => (typeof route.query[`ext`] === `string` ? route.query[`ext`] : undefined));
+// same page. Both opening and the way back push, as Capabilities' tiles do (capabilityRoute.ts), so the browser's Back
+// retraces the reader's own steps.
+const openName = computed(() => openEntryOf(route.query));
 const opened = computed<DiscoverListing | undefined>(() => listings.value.find((listing) => listing.entry.name === openName.value));
-const detailOpen = computed({
-    get: () => opened.value !== undefined,
-    set: (next: boolean) => {
-        if (!next) {
-            void router.replace({ query: { ...route.query, ext: undefined } });
-        }
-    },
-});
 const openListing = (listing: DiscoverListing): void => {
-    void router.replace({ query: { ...route.query, ext: listing.entry.name } });
+    void router.push({ query: { ...route.query, ext: listing.entry.name } });
 };
+const closeListing = (): void => {
+    void router.push({ query: { ...route.query, ext: undefined } });
+};
+watch(
+    () => opened.value !== undefined,
+    (open) => emit(`detail`, open),
+    { immediate: true },
+);
 
 // The open listing's install, running or ended: its failure and what it came to are the dialog's to say.
 const openedRun = computed(() => (opened.value === undefined ? undefined : installs.at(opened.value.entry.name)));
@@ -241,6 +247,9 @@ const backToOfficial = (): void => {
     changing.value = false;
 };
 
+// The Capabilities catalog's grid, column for column, so the two catalogs wrap at the same widths.
+const GRID = `grid grid-cols-1 gap-2 @xl:grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4`;
+
 // What to say when nothing matches, kept distinct from the error notice: a registry that failed to read has not 'listed
 // no extensions'.
 const emptyNote = computed<string | undefined>(() => {
@@ -255,7 +264,22 @@ const emptyNote = computed<string | undefined>(() => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-6">
+    <!-- A picked listing takes the grid's place, as a picked tile does in Capabilities. Keyed by listing, so an
+         acknowledgment given for one extension never carries over to the next. -->
+    <DiscoverDetail
+        v-if="opened"
+        :key="opened.entry.name"
+        :listing="opened"
+        :can-install="canOperate"
+        :installing="installsInFlight.has(opened.entry.name)"
+        :failure="failure"
+        :outcome="outcome"
+        @install="install(opened)"
+        @audit="audit(opened)"
+        @reveal="revealOpened"
+        @back="closeListing"
+    />
+    <div v-else class="flex flex-col gap-6">
         <!-- Where the list came from, stated rather than asked for; changing it is one click, not a blocking field. -->
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs">
             <span class="text-subtle">{{ t(`sandbox.words.source`) }}</span>
@@ -292,21 +316,17 @@ const emptyNote = computed<string | undefined>(() => {
             <p class="text-2xs text-subtle">{{ t(`sandbox.extensionsBrowse.tokenOnlyNeededPrivate`) }}</p>
         </div>
 
-        <!-- Registry loading draws the listing as it last looked here; until it has been seen once, the real card grid shape. -->
+        <!-- Registry loading draws the listing as it last looked here; until it has been seen once, the tile grid's shape. -->
         <SkeletonSnapshot v-if="isLoading && outline" of="sandbox.extensions.browse" :label="t(`sandbox.extensionsBrowse.readingRegistry`)">
             <div class="@container" role="status" aria-busy="true">
                 <span class="sr-only">{{ t(`sandbox.extensionsBrowse.readingRegistry`) }}</span>
-                <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @4xl:grid-cols-3" aria-hidden="true">
-                    <div v-for="card in 6" :key="card" class="flex flex-col gap-2 rounded-lg bg-card shadow-sm px-3 py-2.5">
-                        <div class="flex w-full items-start gap-2.5">
-                            <span class="skeleton block h-7 w-7 shrink-0 rounded-md" />
-                            <div class="flex min-w-0 flex-1 flex-col gap-1.5">
-                                <span class="skeleton block h-3.5" :class="[`w-28`, `w-36`, `w-24`][card % 3]" />
-                                <span class="skeleton block h-2 w-20" />
-                            </div>
+                <div :class="GRID" aria-hidden="true">
+                    <div v-for="tile in 6" :key="tile" class="flex h-[2.875rem] items-stretch overflow-hidden rounded-lg bg-card shadow-sm">
+                        <span class="skeleton block w-11 shrink-0 rounded-none" />
+                        <div class="flex min-w-0 flex-1 flex-col justify-center gap-1.5 px-2.5">
+                            <span class="skeleton block h-3" :class="[`w-24`, `w-32`, `w-20`][tile % 3]" />
+                            <span class="skeleton block h-2 w-4/5" />
                         </div>
-                        <span class="skeleton block h-2.5 w-full" />
-                        <span class="skeleton block h-2.5 w-3/5" />
                     </div>
                 </div>
             </div>
@@ -321,15 +341,15 @@ const emptyNote = computed<string | undefined>(() => {
                     <span :class="ui.sectionLabel()">{{ section.label }}</span>
                     <span v-if="section.caption" class="text-2xs text-muted">{{ section.caption }}</span>
                 </div>
-                <!-- Container query: how many cards fit depends on this pane's own width, not the viewport. -->
+                <!-- Container query: how many tiles fit is a fact about this pane, not the screen. -->
                 <div class="@container">
-                    <div class="grid grid-cols-1 gap-3 @xl:grid-cols-2 @xl:gap-4 @4xl:grid-cols-3">
+                    <div :class="GRID">
                         <DiscoverCard
                             v-for="listing in section.listings"
                             :key="listing.entry.name"
                             :listing="listing"
                             :installing="installsInFlight.has(listing.entry.name)"
-                            @open="openListing(listing)"
+                            @click="openListing(listing)"
                         />
                     </div>
                 </div>
@@ -360,20 +380,5 @@ const emptyNote = computed<string | undefined>(() => {
                 {{ t(`sandbox.extensionsBrowse.registry`) }}
             </a>
         </p>
-
-        <!-- Keyed by listing, so an acknowledgment given for one extension never carries over to the next. -->
-        <DiscoverDetail
-            v-if="opened"
-            :key="opened.entry.name"
-            v-model="detailOpen"
-            :listing="opened"
-            :can-install="canOperate"
-            :installing="installsInFlight.has(opened.entry.name)"
-            :failure="failure"
-            :outcome="outcome"
-            @install="install(opened)"
-            @audit="audit(opened)"
-            @reveal="revealOpened"
-        />
     </div>
 </template>

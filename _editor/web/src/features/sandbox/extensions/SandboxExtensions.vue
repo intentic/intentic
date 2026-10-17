@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { Button, ui, FilterBar, type NoticeModel, NoticeStack, SegmentedControl, timeAgo, vAction } from "@intentic/ui";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { storedValue, storeValue } from "../../../app/storage/browserStorage";
 import { useExtensionList } from "../../extensions/useExtensionList";
@@ -10,6 +10,7 @@ import { useRegistry } from "../../extensions/useRegistry";
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
 import { dismissOperation, useOperations } from "../../../workbench/operations/operations";
 import { toListing, updateCount } from "../../../models/sandbox/discoverListing";
+import { openEntryOf } from "./extensionRoute";
 import { endedNotice, ROWS, SECTION } from "./extensionWork";
 import ExtensionsBrowse from "./ExtensionsBrowse.vue";
 import ExtensionsInstalled from "./ExtensionsInstalled.vue";
@@ -17,9 +18,12 @@ import { INSTALLS, type InstallVerb, installNotice, installsInFlight, listingOf 
 import NewExtensionDialog from "./NewExtensionDialog.vue";
 import { useT } from "@intentic/ui/i18n";
 
-// The sandbox hub's Extensions section: installed and published listings as two pills over one shared search box.
-// The mode rides the URL (`?view=browse|installed`) rather than component state, so a reload or pasted link lands on
-// the same view; a bare URL opens the view last picked here, Browse until one has been.
+// The sandbox hub's Extensions section, laid out as the Capabilities page is, less the rail the hub already provides:
+// the two lists as tabs with the section's verbs at the strip's end, one filter spanning whichever list is open, and an
+// entry picked from either list opened as its own page in the list's place, with the way back named after the list
+// (`?ext=`). Installed lists what is here as rows, as Capabilities lists what is connected; Browse draws the registry as
+// Capabilities draws its catalog. The tab rides the URL (`?view=browse|installed`) rather than component state, so a
+// reload or pasted link lands on the same view; a bare URL opens the view last picked here, Browse until one has been.
 
 const t = useT();
 
@@ -41,7 +45,7 @@ const view = computed<View>(() => {
     const asked = route.query[`view`];
     return isView(asked) ? asked : lastPicked();
 });
-// Switching views drops `ext`: it's Browse's own deep-link state, useless while the installed list is shown.
+// Switching views drops `ext`: the open entry belongs to the list it was picked from.
 const show = (next: View): void => {
     storeValue(VIEW_KEY, next);
     void router.replace({ query: { ...route.query, view: next, ext: undefined } });
@@ -168,30 +172,64 @@ const checkNow = async (): Promise<void> => {
 };
 
 const creating = ref(false);
-// The row a newly created extension opens on, passed down to the installed half rather than reached into.
-const focused = ref<string | undefined>(undefined);
-// Browse's way to an extension it just installed: the Installed pill, opened on that row.
+// Browse's way to an extension it just installed, and a new extension's way to itself: its page on the Installed tab.
+// The list opens it once its row arrives, which for a just-made one can be after the host reload below.
 const reveal = (id: string | undefined): void => {
-    focused.value = id;
-    show(`installed`);
+    storeValue(VIEW_KEY, `installed`);
+    void router.push({ query: { ...route.query, view: `installed`, ext: id } });
 };
-// Reloads the extension host so the new extension actually runs, then opens on its row. The wish was already handed to
+// Reloads the extension host so the new extension actually runs, then opens on its page. The wish was already handed to
 // an agent by the creation itself (NewExtensionDialog), which runs on whether or not this section is still open.
 const created = async (extension: { id: string }): Promise<void> => {
-    // Switches to the installed view so the newly created row isn't hidden behind the other pill.
-    if (view.value !== `installed`) {
-        show(`installed`);
-    }
-    focused.value = extension.id;
+    reveal(extension.id);
     await reload();
 };
+
+// Whether the open list has an entry's page up in its place; each list says so itself, since only it knows whether
+// the `ext` it was handed names something it holds yet.
+const detailOpen = ref(false);
+// The hub scrolls as one page, so a page opened from a row far down would open at that row's depth, and closing it
+// would drop the reader at the top of a long list. Opening goes to the section's top; the way back returns to where
+// the list was left.
+const root = useTemplateRef<HTMLElement>(`root`);
+let left: { scroller: HTMLElement; top: number } | undefined;
+const scrollerOf = (element: HTMLElement): HTMLElement | undefined => {
+    for (let at = element.parentElement; at !== null; at = at.parentElement) {
+        const { overflowY } = getComputedStyle(at);
+        if ((overflowY === `auto` || overflowY === `scroll`) && at.scrollHeight > at.clientHeight) {
+            return at;
+        }
+    }
+    return undefined;
+};
+watch(detailOpen, async (open) => {
+    const element = root.value;
+    if (element === null) {
+        return;
+    }
+    if (open) {
+        const scroller = scrollerOf(element);
+        left = scroller === undefined ? undefined : { scroller, top: scroller.scrollTop };
+        await nextTick();
+        if (scroller !== undefined && element.getBoundingClientRect().top < scroller.getBoundingClientRect().top) {
+            element.scrollIntoView({ block: `start` });
+        }
+        return;
+    }
+    const back = left;
+    left = undefined;
+    await nextTick();
+    if (back !== undefined) {
+        back.scroller.scrollTop = back.top;
+    }
+});
 
 const revealInstalled = (key: string, id: string | undefined): void => {
     dismissOperation(key);
     reveal(id);
 };
 // The open listing's install is said in its dialog, not here.
-const openListing = computed(() => (view.value === `browse` && typeof route.query[`ext`] === `string` ? route.query[`ext`] : undefined));
+const openListing = computed(() => (view.value === `browse` ? openEntryOf(route.query) : undefined));
 const workNotices = computed<(NoticeModel | undefined)[]>(() => [
     // The dialog says a creation's failure while it is open; closed over one, the section does.
     ...section.all.value.filter((operation) => !(creating.value && operation.key === `${SECTION}/create`)).map((operation) => endedNotice(operation)),
@@ -208,65 +246,23 @@ const dismissWork = (notice: NoticeModel): void => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-6">
-        <!-- Installed and Browse are two lists, so they are tabs, as every page's parts are; the search below is whichever is open's. -->
-        <SegmentedControl
-            :model-value="view"
-            :options="viewOptions"
-            variant="underline"
-            :aria-label="t(`sandbox.sandboxNav.extensions`)"
-            @update:model-value="show"
-        />
-
-        <div v-if="viewNotice || staleNotice || newNotice || workNotices.some(Boolean)" class="flex flex-col gap-2">
-            <NoticeStack :of="[viewNotice, staleNotice, newNotice]" />
-            <NoticeStack :of="workNotices" :dismiss-label="t(`ui.action.dismiss`)" @dismiss="dismissWork" />
-        </div>
-
-        <!-- The open tab's instrument: the search box takes the row's slack, filters ride #controls, the verbs end it. -->
-        <div class="flex flex-wrap items-center gap-2">
-            <FilterBar
-                v-if="filterable"
-                v-model="query"
-                :placeholder="
-                    view === `installed` ? t(`sandbox.sandboxExtensions.nameContribution`) : t(`sandbox.sandboxExtensions.namePublisherWhatDoes`)
-                "
-                :count="matched"
-                :aria-label="
-                    view === `installed`
-                        ? t(`sandbox.sandboxExtensions.filterInstalledExtensions`)
-                        : t(`sandbox.sandboxExtensions.searchPublishedExtensions`)
-                "
-                class="min-w-0 flex-1 basis-64"
-            >
-                <template v-if="view === `installed`" #controls>
-                    <SegmentedControl
-                        v-model="mode"
-                        :options="[
-                            { label: t(`sandbox.words.all`), value: `all`, badge: entries.length },
-                            { label: t(`sandbox.sandboxExtensions.on`), value: `on`, badge: enabledCount },
-                            { label: t(`sandbox.sandboxExtensions.off`), value: `off`, badge: entries.length - enabledCount },
-                        ]"
-                    />
-                </template>
-                <!-- Hidden while nothing is verified: a filter that could only empty the page misrepresents the catalogue. -->
-                <template v-else-if="verifiedCount > 0" #controls>
-                    <SegmentedControl
-                        v-model="trust"
-                        :options="[
-                            { label: t(`sandbox.words.all`), value: `all`, badge: listings.length },
-                            { label: t(`sandbox.words.verified`), value: `verified`, badge: verifiedCount },
-                        ]"
-                    />
-                </template>
-            </FilterBar>
-            <div v-else class="flex-1"></div>
-
-            <!-- One cluster, so the two verbs wrap together onto the row's next line instead of the refresh stranding on a line of its own. -->
-            <div class="ml-auto flex shrink-0 items-center gap-2">
-                <!-- A labelled button, not an icon: it creates something, unlike the others which only narrow or refresh. -->
+    <div ref="root" class="flex flex-col gap-6">
+        <!-- Installed and Browse are two lists, so they are tabs, as every page's parts are. The section's verbs end the
+             strip, as a page's own actions end its header, which leaves the filter below free to span the list. -->
+        <div :class="ui.tabStrip(`flex items-end gap-3`)">
+            <SegmentedControl
+                class="min-w-0 flex-1"
+                :model-value="view"
+                :options="viewOptions"
+                variant="underline"
+                :aria-label="t(`sandbox.sandboxNav.extensions`)"
+                @update:model-value="show"
+            />
+            <!-- One cluster, so the verbs stay together; put away while an entry's page is open, which has verbs of its own. -->
+            <div v-if="!detailOpen" class="flex shrink-0 items-center gap-1.5 pb-1.5">
+                <!-- A labelled button, not an icon: it creates something, unlike the refresh, which only reads again. -->
                 <template v-if="view === `installed`">
-                    <Button :label="t(`sandbox.words.newExtension`)" size="small" @click="creating = true">
+                    <Button :label="t(`sandbox.words.newExtension`)" size="small" tier="quiet" @click="creating = true">
                         <template #icon><Icon name="plus" /></template>
                     </Button>
                     <button
@@ -274,6 +270,7 @@ const dismissWork = (notice: NoticeModel): void => {
                         :class="ui.iconButton({ size: `lg` })"
                         :disabled="reloading"
                         v-tooltip.top="t(`sandbox.sandboxExtensions.reloadExtensions`)"
+                        :aria-label="t(`sandbox.sandboxExtensions.reloadExtensions`)"
                         v-action="reload"
                     >
                         <Icon name="refresh" :spin="reloading" />
@@ -285,6 +282,7 @@ const dismissWork = (notice: NoticeModel): void => {
                     :class="ui.iconButton({ size: `lg` })"
                     :disabled="isFetching"
                     v-tooltip.top="t(`sandbox.sandboxExtensions.refreshRegistry`)"
+                    :aria-label="t(`sandbox.sandboxExtensions.refreshRegistry`)"
                     @click="refetch"
                 >
                     <Icon name="refresh" :spin="isFetching" />
@@ -292,18 +290,60 @@ const dismissWork = (notice: NoticeModel): void => {
             </div>
         </div>
 
+        <div v-if="viewNotice || staleNotice || newNotice || workNotices.some(Boolean)" class="flex flex-col gap-2">
+            <NoticeStack :of="[viewNotice, staleNotice, newNotice]" />
+            <NoticeStack :of="workNotices" :dismiss-label="t(`ui.action.dismiss`)" @dismiss="dismissWork" />
+        </div>
+
+        <!-- The open tab's instrument, spanning the list it narrows as Capabilities' does: the search takes the row, the
+             tab's own pills ride #controls. -->
+        <FilterBar
+            v-if="filterable && !detailOpen"
+            v-model="query"
+            :placeholder="
+                view === `installed` ? t(`sandbox.sandboxExtensions.nameContribution`) : t(`sandbox.sandboxExtensions.namePublisherWhatDoes`)
+            "
+            :count="matched"
+            :aria-label="
+                view === `installed`
+                    ? t(`sandbox.sandboxExtensions.filterInstalledExtensions`)
+                    : t(`sandbox.sandboxExtensions.searchPublishedExtensions`)
+            "
+        >
+            <template v-if="view === `installed`" #controls>
+                <SegmentedControl
+                    v-model="mode"
+                    :options="[
+                        { label: t(`sandbox.words.all`), value: `all`, badge: entries.length },
+                        { label: t(`sandbox.sandboxExtensions.on`), value: `on`, badge: enabledCount },
+                        { label: t(`sandbox.sandboxExtensions.off`), value: `off`, badge: entries.length - enabledCount },
+                    ]"
+                />
+            </template>
+            <!-- Hidden while nothing is verified: a filter that could only empty the page misrepresents the catalogue. -->
+            <template v-else-if="verifiedCount > 0" #controls>
+                <SegmentedControl
+                    v-model="trust"
+                    :options="[
+                        { label: t(`sandbox.words.all`), value: `all`, badge: listings.length },
+                        { label: t(`sandbox.words.verified`), value: `verified`, badge: verifiedCount },
+                    ]"
+                />
+            </template>
+        </FilterBar>
+
         <NewExtensionDialog v-model="creating" :create="create" @created="created" />
 
         <ExtensionsInstalled
             v-if="view === `installed`"
             :query="query"
             :mode="mode"
-            :focus="focused"
             :published-matches="publishedMatches"
             @notice="viewNotice = $event"
             @matched="matched = $event"
             @browse="show(`browse`)"
             @clear="clearFilters"
+            @detail="detailOpen = $event"
         />
         <ExtensionsBrowse
             v-else
@@ -313,10 +353,11 @@ const dismissWork = (notice: NoticeModel): void => {
             @matched="matched = $event"
             @clear="clearFilters"
             @reveal="reveal"
+            @detail="detailOpen = $event"
         />
 
         <!-- How many installed extensions have a newer commit and when that was checked; absent until first check runs. -->
-        <p v-if="updatesCheckedAt !== undefined" class="text-right text-2xs text-subtle">
+        <p v-if="updatesCheckedAt !== undefined && !detailOpen" class="text-right text-2xs text-subtle">
             <template v-if="updatable > 0">
                 <button v-if="view === `installed`" type="button" :class="ui.textButton({ size: `xs` })" @click="show(`browse`)">
                     {{ t(`sandbox.sandboxExtensions.updatesToInstall`, { count: updatable }, updatable) }}

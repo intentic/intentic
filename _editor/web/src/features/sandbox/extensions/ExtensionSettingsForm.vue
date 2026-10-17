@@ -56,10 +56,11 @@ const secretIsSet = (setting: SettingContribution): boolean => store().secretsSe
                 :aria-label="setting.title"
                 @change="(event) => setValue(setting, (event.target as HTMLInputElement).value)"
             />
-            <!-- Compact, matching the row switch this form opens under: two switch sizes in one panel would read as two controls. -->
+            <!-- Compact, matching the switch at the head of the page this form sits on: two switch sizes on one page would read as
+                 two kinds of control. Never squeezed by a long description beside it, as every other control here isn't. -->
             <ToggleSwitch
                 v-else-if="setting.type === `boolean`"
-                class="ui-switch-sm"
+                class="ui-switch-sm mt-1 shrink-0"
                 :model-value="valueOf(setting) === true"
                 :aria-label="setting.title"
                 @update:model-value="(value: boolean) => setValue(setting, value)"

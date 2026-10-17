@@ -3060,11 +3060,8 @@
         "discoverCard": {
             "cantClone": "No clonable",
             "cantInstall": "no se puede instalar",
-            "install": "Instalar →",
             "installed": "instalada",
             "installing": "instalando…",
-            "loads": "carga",
-            "nightlyScan": "Escaneo nocturno",
             "noDescriptionPublished": "Sin descripción publicada.",
             "notAudited": "Sin auditar",
             "notPinned": "Sin fijar",
