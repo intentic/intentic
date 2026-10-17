@@ -471,7 +471,7 @@ export const startNotificationSources = (): void => {
             hint: t(`shell.notificationSources.analyticsConsentHint`),
             actions: [
                 { label: t(`shell.notificationSources.analyticsConsentDecline`), tier: `boring` as const, run: () => chooseAnalytics(`deny`) },
-                { label: t(`shell.notificationSources.analyticsConsentAllow`), run: () => chooseAnalytics(`allow`) },
+                { label: t(`shell.notificationSources.analyticsConsentAllow`), tier: `quiet` as const, run: () => chooseAnalytics(`allow`) },
             ],
         };
     });
