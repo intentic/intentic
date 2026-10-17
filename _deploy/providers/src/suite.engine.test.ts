@@ -54,7 +54,7 @@ const fakeSsh = (): SshExecutor => {
                     return ok("24.0.0");
                 }
                 if (command.includes("ip -4 -o route")) {
-                    return ok("10.0.0.5\n");
+                    return ok("1.1.1.1 via 10.0.0.1 dev eth0 src 10.0.0.5 uid 0 \\    cache \n");
                 }
                 // Captures every heredoc-written file (compose.yaml, config.toml, runner config.yaml, ...).
                 const write = /cat > (\S+) <<'(\w+)'\n([\s\S]*)\2/.exec(command);
@@ -151,7 +151,8 @@ const fakeSsh = (): SshExecutor => {
                     return ok("", started.has("intentic-forgejo") ? 0 : 1);
                 }
                 if (command.includes("cat /data/.runner")) {
-                    return ok(started.has("intentic-forgejo-runner") ? "http://10.0.0.5:3000" : "");
+                    // act_runner's registration file: JSON naming the instance it registered with.
+                    return ok(started.has("intentic-forgejo-runner") ? JSON.stringify({ id: 1, address: "http://10.0.0.5:3000" }) : "");
                 }
                 // Runner config read (configuredJobImage): returns the file the provider wrote.
                 const read = /cat (\/\S+) 2>\/dev\/null/.exec(command);

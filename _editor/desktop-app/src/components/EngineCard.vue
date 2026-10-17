@@ -3,7 +3,7 @@ import { Button, Notice, ui } from "@intentic/ui";
 import { formatDateLong, formatPercent } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
-import type { EngineMoveEnd, EngineStatus, MoveTarget } from "../desktop";
+import type { EngineMoveEnd, EngineStatus, MoveTarget } from "../desktopEngine";
 import { barOf, gigabytes, keptCopiesOf, moveTargetOf, offerOf, pcEngineOf, type MoveProgress } from "../device/engineMove";
 
 // WHICH ENGINE THIS PC'S SANDBOXES RUN ON, beside Docker's own card on This device (device/engine.ts holds it, the app's

@@ -1,7 +1,7 @@
 import "@intentic/testing/dom";
 import { freshImport, waitFor } from "@intentic/testing/bun";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
-import type { EngineMoveEnd, EngineMoveEvent, EngineStatus } from "../desktop";
+import type { EngineMoveEnd, EngineMoveEvent, EngineStatus } from "../desktopEngine";
 
 // The engine as a window holds it: ic's status read and re-read, a move run at the reader's yes with every step any
 // window hears folded in, its end said once whichever of its answer and its last step reaches the window first, the

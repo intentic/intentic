@@ -1,5 +1,5 @@
 import type { IntenticOsStatus } from "@intentic/sandbox-contract/schemas/intentic-os";
-import type { OsRunEnd, OsRunEvent } from "../../desktop";
+import type { OsRunEnd, OsRunEvent } from "../../desktopOs";
 import {
     KEPT_LINES,
     canRollBack,

@@ -57,7 +57,7 @@ const fakeSsh = (): SshExecutor => {
                     return { stdout: "24.0.0", stderr: "", code: 0 };
                 }
                 if (command.includes("ip -4 -o route")) {
-                    return { stdout: "10.0.0.5\n", stderr: "", code: 0 };
+                    return { stdout: "1.1.1.1 via 10.0.0.1 dev eth0 src 10.0.0.5 uid 0 \\    cache \n", stderr: "", code: 0 };
                 }
                 if (command.includes("docker inspect")) {
                     return { stdout: running !== undefined ? (image ?? "") : "", stderr: "", code: 0 };

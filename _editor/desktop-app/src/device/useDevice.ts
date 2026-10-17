@@ -5,8 +5,6 @@ import {
     desktopInfo,
     deviceAgentRestart,
     dockerReady as dockerReadyProbe,
-    onEngineMove,
-    onOsRun,
     onPendingFix,
     onPendingRecreate,
     onPendingSetup,
@@ -22,6 +20,8 @@ import {
     type RunEvent,
     type UpdateStage,
 } from "../desktop";
+import { onEngineMove } from "../desktopEngine";
+import { onOsRun } from "../desktopOs";
 import * as docker from "./docker";
 import * as engine from "./engine";
 import * as fixing from "./fix";

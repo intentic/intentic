@@ -41,6 +41,8 @@ const NOT_OURS = new Set([
     // Lives in ranuts/document. The onlyoffice editor's guards/index.ts names it in its AGPL attribution, where the
     // upstream path is the point; the port here is split across guards/ under other names.
     "iframe-guards.ts",
+    // Ships in @anthropic-ai/claude-agent-sdk: the typed shapes of the Claude Code CLI's tool outputs.
+    "sdk-tools.d.ts",
 ]);
 
 // The only file allowed to quote dead names; its header is evidence, not a pointer.

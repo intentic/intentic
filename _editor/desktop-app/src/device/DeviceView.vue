@@ -23,11 +23,12 @@ import EngineCard from "../components/EngineCard.vue";
 import FixProgress from "../components/FixProgress.vue";
 import Requirements from "../components/Requirements.vue";
 import SetupProgress from "../components/SetupProgress.vue";
-import { openUrl, revealLog, signIn, workspaceOpen } from "../desktop";
+import { openUrl, signIn, workspaceOpen } from "../desktop";
 import LeftoverSandboxes from "./machineSandbox/LeftoverSandboxes.vue";
 import MachineSandboxSection from "./machineSandbox/MachineSandboxSection.vue";
-import { machineSandbox } from "./machineSandbox";
+import { machineNeedsDocker, machineShown } from "./machineSandbox";
 import SystemCard from "./intenticOs/SystemCard.vue";
+import { showOsLog } from "./intenticOs/system";
 import SandboxWindowsCard from "./intenticOs/screen/SandboxWindowsCard.vue";
 import SecurityCard from "./intenticOs/screen/SecurityCard.vue";
 import ThisComputer from "./intenticOs/ThisComputer.vue";
@@ -36,7 +37,8 @@ import PcSetupCard from "./pcSetup/PcSetupCard.vue";
 import PasswordsGroup from "./keyring/PasswordsGroup.vue";
 import { pcCardShown } from "./pcSetup/livePcCard";
 import { DEVICES_PATH, DOCKER_DOCS, REFRESH_EVERY_MS, useDevice } from "./useDevice";
-import { keptCopiesOf, moveTargetOf, offerOf } from "./engineMove";
+import { engineBackShown, engineDownSentence, engineEventful, engineQuiet, showMoveLog } from "./engine";
+import { moveTargetOf } from "./engineMove";
 
 // THIS DEVICE: the page the app adds to a local window's rail (host.ts), where the launcher window's card used to be.
 // This computer's sandboxes with every verb the workspace's Devices tab has for them, its machine agent, the Docker
@@ -63,7 +65,6 @@ const {
     openDocker,
     engineState,
     onOurEngine,
-    ourEngineHeld,
     engineMoving,
     engineMoveEnd,
     engineMoveError,
@@ -166,16 +167,6 @@ const {
     dismissFix,
 } = device;
 
-// This computer's own sandbox (machineSandbox.ts), said at the top of the page from the moment there is anything to say
-// about it: once someone is signed in, or a folder waits for it. Before that the page's own "no sandbox" card offers the
-// sign-in, and one way to it is enough.
-const machineShown = computed(() => {
-    const record = machineSandbox.value;
-    return record !== undefined && (record.state !== `signedOut` || record.folders.some((folder) => folder.state === `queued`));
-});
-// It waits on Docker: the engine's own card and notice are its way forward.
-const machineNeedsDocker = computed(() => machineSandbox.value?.state === `needsDocker`);
-
 // Whether this machine's Docker is this page's business: a sandbox runs or has run here, or one is being set up. On a
 // machine that only opens files, an engine that is off is nobody's problem, and saying so was the launcher's old nag.
 const dockerMatters = computed(
@@ -184,35 +175,11 @@ const dockerMatters = computed(
 
 // Which engine the sandboxes run on, and the move to the other (engine.ts). It stands back while Docker's own card is up,
 // which is the one thing to act on then, but never from a move: its card is the move's while it runs and just after.
-// On Intentic's engine with nothing under way and no copies kept, the card would only name the engine and point back to
-// Docker Desktop: it stays away, and the way back is the footnote at the page's foot.
-const engineEventful = computed(() => engineMoving.value !== undefined || engineMoveEnd.value !== undefined || engineMoveError.value !== undefined);
-const engineQuiet = computed(
-    () => engineState.value?.engine === `intentic` && !engineEventful.value && keptCopiesOf(engineState.value).length === 0,
-);
 const engineShown = computed(() => engineState.value !== undefined && !engineQuiet.value && (!dockerCardShown.value || engineEventful.value));
-// The way back to Docker Desktop, kept within reach but out of the way: never while a move runs or its card speaks.
-const engineBackShown = computed(() => engineState.value !== undefined && offerOf(engineState.value) === `back` && !engineEventful.value);
 // The engine is down on a computer that has hosted a sandbox: an empty list says nothing about what is here.
 const engineDownWithSandboxes = computed(() => engineListening.value === false && facts.value?.hostsSandboxes === true);
-// The engine that is down, by its own name: Intentic's engine on a PC that runs on it, and why it is down when that was
-// on purpose (a start here ends the hold; the app's keeper never does).
-const engineDownSentence = computed(() => {
-    if (ourEngineHeld.value) {
-        return t(`desktop.device.oursHeld`);
-    }
-    return onOurEngine.value ? t(`desktop.device.oursIsntRunning`) : t(`desktop.device.dockerIsntRunning`);
-});
 // A sandbox by the name this app knows it by, else its slug: what a move says it is moving.
 const sandboxName = (slug: string): string => sandboxes.value.find((sandbox) => sandbox.slug === slug)?.name ?? slug;
-// The transcript of a move that stopped part way, in the machine's own file manager.
-const showMoveLog = (path: string): void => {
-    revealLog(path).catch((error: unknown) => console.error(`[device] the move's log could not be shown:`, error));
-};
-// The transcript of a change to Intentic OS that did not finish, the same way.
-const showOsLog = (path: string): void => {
-    revealLog(path).catch((error: unknown) => console.error(`[device] the system change's log could not be shown:`, error));
-};
 
 // The way to a sandbox, from a computer that has none: the workspace's setup once there is an account, a sign-in before.
 const signedIn = computed(() => facts.value?.accountSeen === true);

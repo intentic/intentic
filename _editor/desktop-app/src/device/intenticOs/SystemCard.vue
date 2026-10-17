@@ -3,7 +3,7 @@ import type { IntenticOsChannel, IntenticOsStatus, IntenticOsUpdateCheck } from 
 import { Button, DeviceRunLog, Notice, SegmentedControl, StatusBadge, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import type { OsRunEnd } from "../../desktop";
+import type { OsRunEnd } from "../../desktopOs";
 import {
     CHANNELS,
     canRollBack,

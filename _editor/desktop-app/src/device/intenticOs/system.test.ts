@@ -2,7 +2,7 @@ import "@intentic/testing/dom";
 import type { IntenticOsStatus } from "@intentic/sandbox-contract/schemas/intentic-os";
 import { freshImport, waitFor } from "@intentic/testing/bun";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
-import type { OsRunEnd, OsRunEvent } from "../../desktop";
+import type { OsRunEnd, OsRunEvent } from "../../desktopOs";
 import { registerDesktopCatalog } from "../../i18n";
 
 // This system as a window holds it: ic's status read and re-read, each change run at the reader's yes where it restarts

@@ -22,6 +22,14 @@ import {
 
 /** The app's record, once it has been read; undefined before. */
 export const machineSandbox = ref<MachineSandbox | undefined>(undefined);
+/** Said at the top of This device from the moment there is anything to say about it: once someone is signed in, or a
+ *  folder waits for it. Before that the page's own "no sandbox" card offers the sign-in, and one way to it is enough. */
+export const machineShown = computed(() => {
+    const record = machineSandbox.value;
+    return record !== undefined && (record.state !== `signedOut` || record.folders.some((folder) => folder.state === `queued`));
+});
+/** It waits on Docker: the engine's own card and notice are its way forward. */
+export const machineNeedsDocker = computed(() => machineSandbox.value?.state === `needsDocker`);
 
 // Only a newer record replaces the one held: the opening read can answer after a change it predates was heard. A change
 // heard in the same second as the read is taken, since it was sent after the state the read could have seen.

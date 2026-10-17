@@ -268,11 +268,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/desktop-app/src/desktop.ts": {
-        "count": 899,
+        "count": 877,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/desktop-app/src/device/DeviceView.vue": {
-        "count": 665,
+        "count": 663,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/desktop-app/src/device/setup.ts": {
@@ -636,7 +636,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/sandbox/gates/SandboxSwitcher.vue": {
-        "count": 792,
+        "count": 753,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/sandbox/overview/sandboxAttention.ts#useSandboxAttention.<anonymous>#lines": {

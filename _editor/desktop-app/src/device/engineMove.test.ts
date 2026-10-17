@@ -1,4 +1,4 @@
-import type { EngineMoveEvent, EngineStatus } from "../desktop";
+import type { EngineMoveEvent, EngineStatus } from "../desktopEngine";
 import { barOf, endOf, engineOf, foldMove, gigabytes, keptCopiesOf, moveTargetOf, offerOf, pcEngineOf, startMove, type MoveProgress } from "./engineMove";
 
 // A move between engines as the card reads it: what it offers for where the PC is, how far a move has got from the steps

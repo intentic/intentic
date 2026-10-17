@@ -2,6 +2,7 @@ import { t } from "@intentic/ui/i18n";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { computed, ref } from "vue";
 import { setEngine, track } from "../analytics";
+import { revealLog } from "../desktop";
 import {
     engineCleanup,
     engineMove,
@@ -11,8 +12,8 @@ import {
     type EngineMoveEvent,
     type EngineStatus,
     type MoveTarget,
-} from "../desktop";
-import { endOf, engineOf, foldMove, keptCopiesOf, pcEngineOf, startMove, type MoveProgress } from "./engineMove";
+} from "../desktopEngine";
+import { endOf, engineOf, foldMove, keptCopiesOf, offerOf, pcEngineOf, startMove, type MoveProgress } from "./engineMove";
 import { running, start } from "./runs";
 
 // WHICH ENGINE THIS PC'S SANDBOXES RUN ON, AND THE MOVE TO THE OTHER (src-tauri/src/engine.rs): Docker Desktop or
@@ -42,6 +43,30 @@ export const engineCleaning = ref(false);
 export const engineCleanupNote = ref<string | undefined>(undefined);
 /** The reader's "Not now" did not take. */
 export const engineOfferError = ref<string | undefined>(undefined);
+
+/** A move runs, or the card still speaks for one (how it ended, or why it never ran): the card is the move's then. */
+export const engineEventful = computed(
+    () => engineMoving.value !== undefined || engineMoveEnd.value !== undefined || engineMoveError.value !== undefined,
+);
+/** On Intentic's engine with nothing under way and no copies kept, the card would only name the engine and point back to
+ *  Docker Desktop: it stays away, and the way back is the footnote at This device's foot. */
+export const engineQuiet = computed(
+    () => engineState.value?.engine === `intentic` && !engineEventful.value && keptCopiesOf(engineState.value).length === 0,
+);
+/** The way back to Docker Desktop, kept within reach but out of the way: never while a move runs or its card speaks. */
+export const engineBackShown = computed(() => engineState.value !== undefined && offerOf(engineState.value) === `back` && !engineEventful.value);
+/** The engine that is down, by its own name: Intentic's engine on a PC that runs on it, and why it is down when that was
+ *  on purpose (a start here ends the hold; the app's keeper never does). */
+export const engineDownSentence = computed(() => {
+    if (ourEngineHeld.value) {
+        return t(`desktop.device.oursHeld`);
+    }
+    return onOurEngine.value ? t(`desktop.device.oursIsntRunning`) : t(`desktop.device.dockerIsntRunning`);
+});
+/** The transcript of a move that stopped part way, in the machine's own file manager. */
+export const showMoveLog = (path: string): void => {
+    revealLog(path).catch((error) => console.error(`[device] the move's log could not be shown:`, error));
+};
 
 /* Only the newest read writes: an answer from before a move ended would put the old engine back on screen. */
 let reads = 0;

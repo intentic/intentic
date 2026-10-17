@@ -1,5 +1,5 @@
 import { formatFixed } from "@intentic/ui/format";
-import type { EngineId, EngineMoveEnd, EngineMoveEvent, EngineStatus, MoveTarget } from "../desktop";
+import type { EngineId, EngineMoveEnd, EngineMoveEvent, EngineStatus, MoveTarget } from "../desktopEngine";
 
 // A MOVE BETWEEN ENGINES, READ (src-tauri/src/engine.rs runs it, engine.ts holds it, components/EngineCard.vue draws it):
 // what the card offers for the engine this PC runs on, how far a move has got from the steps ic prints, how it ended,

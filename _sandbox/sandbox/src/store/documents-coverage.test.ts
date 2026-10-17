@@ -95,6 +95,10 @@ const callArguments = (text: string, callee: string): string[] =>
 // JSON written whole through the atomic writer by hand, past every document: what the shape check and the conversions
 // cannot see, each named with why it stands. The list only shrinks.
 const RAW_JSON_WRITERS = [
+    // A note in the audit inbox, left by `host-session-cli.js` (a root process beside the daemon, with no store of its
+    // own) under a name of its own, and deleted by the daemon's next audit tick once it has parsed it with the trail's
+    // own event schema: a message between two processes of one build, never a file kept across versions.
+    "auth/host/host-session.ts",
     // Claude Code's own settings.json: one key merged into a file whose shape another program owns.
     "sessions/session-store.ts",
     // Written synchronously as a failed boot exits, where no store's write queue can be waited on.

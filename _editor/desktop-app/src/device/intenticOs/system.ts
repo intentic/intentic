@@ -3,7 +3,8 @@ import { t } from "@intentic/ui/i18n";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { ref } from "vue";
 import { track } from "../../analytics";
-import { osChannel, osReboot, osRollback, osStatus, osUpdate, osUpdateCheck, type OsRunEnd, type OsRunEvent, type OsVerb } from "../../desktop";
+import { revealLog } from "../../desktop";
+import { osChannel, osReboot, osRollback, osStatus, osUpdate, osUpdateCheck, type OsRunEnd, type OsRunEvent, type OsVerb } from "../../desktopOs";
 import { running, start } from "../runs";
 import { endOf, foldRun, startRun, waitingVersionOf, type OsRestart, type OsRunProgress } from "./systemCard";
 
@@ -25,6 +26,10 @@ export const osRunError = ref<string | undefined>(undefined);
 export const osCheck = ref<IntenticOsUpdateCheck | undefined>(undefined);
 export const osChecking = ref(false);
 export const osCheckError = ref<string | undefined>(undefined);
+/** The transcript of a change that did not finish, in the machine's own file manager. */
+export const showOsLog = (path: string): void => {
+    revealLog(path).catch((error) => console.error(`[device] the system change's log could not be shown:`, error));
+};
 
 // Each change streams under a run of its own (os.rs `Verb::run`), which the page's other verbs wait for.
 const RUN_OF = { update: `os-update`, rollback: `os-rollback`, channel: `os-channel`, reboot: `os-reboot` } as const satisfies Record<OsVerb, string>;

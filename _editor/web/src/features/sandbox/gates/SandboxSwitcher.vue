@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import TourMark from "../../tour/TourMark.vue";
-import type { Disposable } from "@intentic/extension-api";
 import { SANDBOX_RECOVERY_DAYS as RECOVERY_DAYS, type SandboxSummary } from "@intentic/api-contract";
 import {
     AnchoredOverlay,
@@ -16,10 +15,9 @@ import {
     useHoverMenu,
 } from "@intentic/ui";
 import { sandboxSubdomain } from "@intentic/sandbox-contract/ids/hostnames";
-import { computed, nextTick, onMounted, onUnmounted, ref, watch, type WatchStopHandle } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { SANDBOX } from "../../../workbench/commands/categories";
-import { commandShortcut, registerCommand } from "../../../workbench/commands/useCommands";
+import { commandShortcut } from "../../../workbench/commands/useCommands";
 import ViewBadgeChip from "../../../workbench/views/ViewBadgeChip.vue";
 import { RUNNING_MARK_CLASS } from "../../../workbench/views/viewBadge";
 import TileMark from "../../../components/TileMark.vue";
@@ -47,6 +45,7 @@ import { announceDesktopRoster, desktopApp, openThisComputer } from "../../../ap
 import { useAuth } from "../../../client/auth/useAuth";
 import { removalTakes } from "./switcherRows";
 import { useRemovalDoor } from "./useRemovalDoor";
+import { slotChord, useSwitchCommands } from "./useSwitchCommands";
 import { useT } from "@intentic/ui/i18n";
 
 // Rail control to switch between the user's sandboxes or add another; selecting one re-points every sandbox-backed
@@ -243,82 +242,13 @@ if (inDesktopApp) {
     );
 }
 
-// Alt+1…9 picks the Nth switchable sandbox; a digit past the end does nothing rather than clamping.
-const SWITCH_SLOTS = 9;
-// Reads the chord from the registry rather than a literal "Alt+N", so a remap or unbind shows correctly.
-const slotChord = (at: number): string | undefined => (at < SWITCH_SLOTS ? commandShortcut(`sandbox.switch${at + 1}`) : undefined);
-
-let disposables: readonly Disposable[] = [];
-
-const release = (): void => {
-    for (const disposable of disposables) {
-        disposable.dispose();
-    }
-    disposables = [];
-};
-
-// One command per box that exists, not per slot: an empty slot's command would be a palette row with nowhere to go.
-// Re-registered as the roster changes, so a box added in another window is a chord here without a reload.
-const syncSwitchCommands = (options: readonly SandboxSummary[]): void => {
-    release();
-    disposables = options.slice(0, SWITCH_SLOTS).map((_option, at) =>
-        registerCommand({
-            owner: `builtin`,
-            command: `sandbox.switch${at + 1}`,
-            // Getter, so the row names the box this chord lands on even as the roster reorders under it.
-            get title(): string {
-                const option = switchable.value[at];
-                return option === undefined ? t(`sandbox.sandboxSwitcher.switchToSlot`, { slot: at + 1 }) : t(`sandbox.sandboxSwitcher.switchTo`, { name: option.name });
-            },
-            category: SANDBOX,
-            icon: `server`,
-            keybinding: `Alt+${at + 1}`,
-            handler: (): void => {
-                // The Nth switchable sandbox, in popover order; unfinished setups are excluded from it.
-                const option = switchable.value[at];
-                if (option !== undefined) {
-                    pick(option);
-                }
-            },
-        }),
-    );
-};
-
-// Held rather than left to the component's scope, so the watcher stops in the same breath the commands are released.
-let stopSync: WatchStopHandle | undefined;
-
-// ALT+0 IS THIS COMPUTER, the place listed first, beside Alt+1…9 for the sandboxes under it; a local window binds the
-// same digits to the same sandboxes (local/localKeys.ts). Only inside the app, the one place this computer is a place.
-let thisComputerCommand: Disposable | undefined;
-
 onMounted(() => {
     if (sandbox.sandboxes.value.length === 0) {
         void sandbox.list();
     }
-    stopSync = watch(switchable, syncSwitchCommands, { immediate: true });
-    if (inDesktopApp) {
-        thisComputerCommand = registerCommand({
-            owner: `builtin`,
-            command: `sandbox.thisComputer`,
-            // Getter, so the palette row follows a language switch.
-            get title(): string {
-                return t(`sandbox.sandboxSwitcher.switchToThisComputer`);
-            },
-            category: SANDBOX,
-            icon: `desktop`,
-            keybinding: `Alt+0`,
-            handler: toThisComputer,
-        });
-    }
 });
-
-onUnmounted(() => {
-    stopSync?.();
-    stopSync = undefined;
-    release();
-    thisComputerCommand?.dispose();
-    thisComputerCommand = undefined;
-});
+// Alt+0 for this computer inside the app, Alt+1…9 for the sandboxes under it (useSwitchCommands.ts).
+useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
 
 // The sandbox awaiting removal confirmation; removal is non-destructive, the daemon keeps running.
 const pending = ref<SandboxSummary | undefined>(undefined);

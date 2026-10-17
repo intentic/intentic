@@ -1,6 +1,6 @@
 import type { IntenticOsChannel, IntenticOsStatus, IntenticOsUpdateCheck } from "@intentic/sandbox-contract/schemas/intentic-os";
 import type { StatusVariant } from "@intentic/ui";
-import type { OsRunEnd, OsRunEvent, OsVerb } from "../../desktop";
+import type { OsRunEnd, OsRunEvent, OsVerb } from "../../desktopOs";
 
 // THIS SYSTEM, READ (src-tauri/src/os.rs runs `ic os`, system.ts holds it, SystemCard.vue draws it): what waits for the
 // next boot and the press that restarts into it, the boot's health, how sandboxes are isolated, the channel the next
