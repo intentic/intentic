@@ -1,18 +1,6 @@
 <script setup lang="ts">
 import { type BuiltinPromptText, SYSTEM_PROMPT_MAX, type SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
-import {
-    Button,
-    ConfirmDialog,
-    CopyButton,
-    MarkdownDocument,
-    Modal,
-    Notice,
-    Row,
-    RowGroup,
-    RowNote,
-    SegmentedControl,
-    type Tip,
-} from "@intentic/ui";
+import { Button, ConfirmDialog, CopyButton, MarkdownDocument, Modal, Notice, Row, RowGroup, RowNote, SegmentedControl, type Tip } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
@@ -106,18 +94,14 @@ const viewPromptTip = computed((): Tip => ({
     title: t(`sandbox.agentInstructions.viewPrompt`),
     rows: [
         { label: t(`sandbox.agentInstructions.promptReachReplaces`), value: spokenList(reach.replaces) },
-        ...(reach.adds.length > 0
-            ? [{ label: t(`sandbox.agentInstructions.promptReachAdds`), value: spokenList(reach.adds) }]
-            : []),
-        ...(reach.ignores.length > 0
-            ? [{ label: t(`sandbox.agentInstructions.promptReachIgnores`), value: spokenList(reach.ignores) }]
-            : []),
+        ...(reach.adds.length > 0 ? [{ label: t(`sandbox.agentInstructions.promptReachAdds`), value: spokenList(reach.adds) }] : []),
+        ...(reach.ignores.length > 0 ? [{ label: t(`sandbox.agentInstructions.promptReachIgnores`), value: spokenList(reach.ignores) }] : []),
     ],
 }));
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.words.instructions`)">
+    <RowGroup data-setting="agent-system-prompt" :label="t(`sandbox.words.instructions`)">
         <Row icon="pencil" :title="t(`sandbox.words.systemPrompt`)">
             <template #description>
                 <template v-if="promptMode === `custom`">{{ t(`sandbox.agentInstructions.ownPromptAgentRuns`) }}</template>

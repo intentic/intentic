@@ -30,6 +30,8 @@ import "./models/sandbox/sandboxScreen";
 import "./extension-host/hostModules";
 import { coreViews } from "./core-views/coreViews";
 import { provideBuiltinViews } from "./workbench/views/registry";
+import { provideHubSources } from "./workbench/hub/useHubSearch";
+import { useHubSearchSources } from "./shell/hubSearchSources";
 import { openInPage, router } from "./router";
 import { routePatternOf } from "./router/routePattern";
 import { installNotificationTaps } from "./workbench/notifications/notificationTaps";
@@ -39,6 +41,8 @@ installDevStyles();
 
 // The views the app builds in join the registry extensions register into; it sits below them, so they are handed in.
 provideBuiltinViews(coreViews);
+// The same for the hubs' search: what it searches names both hubs and their models, which sit above the search itself.
+provideHubSources(useHubSearchSources);
 
 // Called first: a startup crash after this wipes stored state and reloads once, not needing 'clear site data'.
 installSelfHeal();

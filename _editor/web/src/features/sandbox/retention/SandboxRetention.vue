@@ -54,7 +54,7 @@ const setAuditDays = (event: Event): void => {
 
 <template>
     <div class="@container flex flex-col gap-6">
-        <RowGroup :label="t(`sandbox.retention.title`)">
+        <RowGroup data-setting="retention-periods" :label="t(`sandbox.retention.title`)">
             <RowNote>{{ t(`sandbox.retention.intro`) }}</RowNote>
             <Row v-for="row in ROWS" :key="row.key" :icon="row.icon" :title="row.title" :description="row.description">
                 <template #control>

@@ -149,7 +149,9 @@ const adding = ref(false);
 const newEmail = ref(``);
 const validEmail = (value: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
 const newAddress = computed(() => newEmail.value.trim().toLowerCase());
-const newTaken = computed(() => members.value.some((member) => member.email === newAddress.value) || newAddress.value === user.value?.email?.toLowerCase());
+const newTaken = computed(
+    () => members.value.some((member) => member.email === newAddress.value) || newAddress.value === user.value?.email?.toLowerCase(),
+);
 // Said only once there is something to say it about: an address already here at once, one that is not an address only
 // after Enter was pressed on it, since a half-typed one is the next keystroke rather than a mistake.
 const addTried = ref(false);
@@ -248,9 +250,7 @@ const deliveryNotice = computed((): NoticeModel | undefined => {
           };
 });
 // The one thing this tab has to say right now: a failure, or an invite whose link the owner must carry.
-const notice = computed(
-    () => localNotice.value ?? writes.failure.value?.notice ?? sessions.failure.value ?? deliveryNotice.value,
-);
+const notice = computed(() => localNotice.value ?? writes.failure.value?.notice ?? sessions.failure.value ?? deliveryNotice.value);
 // What the open panel says: a write it made that was refused, or a roster it cannot trust. A link to carry is the page's.
 const panelNotice = computed(() => localNotice.value ?? writes.failure.value?.notice);
 // Accept link the owner carries when mail didn't; beside `notice`, not inside it, since a link is markup.
@@ -307,9 +307,7 @@ const doors = computed(() => {
             icon: `desktop`,
             title: t(`sandbox.sandboxAccess.pairedDevicesRunners`),
             description:
-                paired === undefined
-                    ? notReadable()
-                    : t(`sandbox.sandboxAccess.pairedLine`, { what: pairedWhat(paired.devices, paired.runners) }),
+                paired === undefined ? notReadable() : t(`sandbox.sandboxAccess.pairedLine`, { what: pairedWhat(paired.devices, paired.runners) }),
         });
     }
     return rows;
@@ -574,7 +572,7 @@ const revoke = async (target: string): Promise<void> => {
             <Notice v-if="notice && (selectedMember === undefined || handover !== undefined)" :of="notice">
                 <span v-if="handover" class="mt-1 block break-all font-medium">{{ handover }}</span>
             </Notice>
-            <RowGroup :label="t(`sandbox.sandboxAccess.people`)" flat undivided>
+            <RowGroup data-setting="access-people" :label="t(`sandbox.sandboxAccess.people`)" flat undivided>
                 <!-- One card per person, the signed-in one first, and the next card is where a new one is added: pressed, it
                      becomes the address field in place, so adding someone grows the group by one card and moves nothing. -->
                 <div role="group" :aria-label="t(`sandbox.sandboxAccess.people`)" class="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-1">
@@ -684,7 +682,7 @@ const revoke = async (target: string): Promise<void> => {
              up, as the daemon lists the confirmations and takes the setting from no one below. On Agent ▸ Safety until
              2026-10-13, where it is not about the agent; the product analytics switch beside it went to Privacy shield on
              2026-10-16, being data that leaves the box rather than words people read. -->
-        <RowGroup v-if="canShip" :label="t(`sandbox.sandboxAccess.aiNotice`)">
+        <RowGroup v-if="canShip" data-setting="access-ai-notice" :label="t(`sandbox.sandboxAccess.aiNotice`)">
             <AiLiteracySettings />
         </RowGroup>
 
@@ -698,7 +696,7 @@ const revoke = async (target: string): Promise<void> => {
         <LinkedSandboxesSection />
 
         <!-- Credential revocation answers whether any access remains active. -->
-        <RowGroup v-if="canShip" :label="t(`sandbox.sandboxAccess.signedInBrowsers`)">
+        <RowGroup v-if="canShip" data-setting="access-signed-in-browsers" :label="t(`sandbox.sandboxAccess.signedInBrowsers`)">
             <!-- The one signed-in browser the app can name, because it is running in it. -->
             <Row icon="desktop" :title="t(`sandbox.sandboxAccess.browser`)" :description="thisBrowser">
                 <template #meta><StatusBadge variant="success" :label="t(`sandbox.sandboxAccess.signedIn`)" size="xs" /></template>

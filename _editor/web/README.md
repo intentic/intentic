@@ -97,6 +97,18 @@ flowchart LR
   the audit log. Each settings page ends on the way to its record, and each record on the way to its settings
   (`SectionLink.vue`). 2026-10-17: these were two groups of six rows (Privacy & safety, then Records); collapsible
   groups were the alternative, rejected because a folded group still costs its heading and can hide the page open.
+- **Finding a setting.** A setting can sit four steps down (hub, page, the page's own category, card), and one subject
+  is often split between the hubs: the wake word this device listens for is Settings ▸ Notifications ▸ Voice, the agent's spoken
+  replies are Sandbox ▸ Agent ▸ Tools. So both hubs open on a search field above their index (`/` reaches it), and it
+  searches both hubs' pages and cards at once, this hub's answers first. It matches each card's own name, the names of
+  the rows it holds, and a line of the words people use for it in each language (`settings.search.*`,
+  `sandbox.search.*`: "dark mode" finds Theme, "invoice" finds Billing). The cards are listed beside each hub's index
+  (`features/settings/settingsIndex.ts`, `models/sandbox/sandboxIndex.ts`) and gated the way the pages are. Each card
+  carries a `data-setting` mark, and `workbench/hub/hubSearch.test.ts` checks the list and the marks against each other
+  in both directions. An answer is an address ending in `#setting-<id>`. The page lands on the card once it has drawn it,
+  keeps it in view while the cards above settle, rings it and gives it focus (`workbench/hub/settingAnchor.ts`), so
+  the same address works as a link. The palette offers the same cards as "Settings: …" and "Sandbox: …" rows once
+  something is typed. A search that finds nothing offers the palette's wider search for the same words.
 - **Data protection.** `/sandbox/data-protection` (`features/sandbox/data-protection/`, maintainer and up) draws the
   daemon's compliance report as three steps (`?step=`), each a tile that says how it stands before it is opened.
   Protections: every measure, the public-office preset's changes filed under the measure each switches (current →

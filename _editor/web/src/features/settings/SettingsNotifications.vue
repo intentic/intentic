@@ -84,12 +84,14 @@ const systemOff = computed((): string | undefined => {
 
 // The browser tab's own signals (shell/browser-tab/): per browser, no daemon involved. A sound switched on is played at
 // once, so the reader hears what they chose, and the click is what lets this page make sound at all later.
-const chimeSwitch = (preference: typeof chimeAsks, chime: Chime) => (next: boolean): void => {
-    preference.value = next;
-    if (next) {
-        void playChime(chime);
-    }
-};
+const chimeSwitch =
+    (preference: typeof chimeAsks, chime: Chime) =>
+    (next: boolean): void => {
+        preference.value = next;
+        if (next) {
+            void playChime(chime);
+        }
+    };
 const setChimeAsks = chimeSwitch(chimeAsks, `asks`);
 const setChimeFinished = chimeSwitch(chimeFinished, `finished`);
 // Why this window can't take push, in the words that fit it: the Home Screen only where adding the app there helps.
@@ -125,7 +127,7 @@ const status = computed(() => {
 <template>
     <div class="flex flex-col gap-6">
         <div v-if="inApp" class="flex flex-col gap-2">
-            <RowGroup :label="t(`settings.settingsNotifications.desktopNotices`)" equal-rows>
+            <RowGroup data-setting="desktop-notifications" :label="t(`settings.settingsNotifications.desktopNotices`)" equal-rows>
                 <Row
                     as="label"
                     icon="exclamation-circle"
@@ -155,7 +157,7 @@ const status = computed(() => {
         </div>
 
         <div class="flex flex-col gap-2">
-            <RowGroup :label="t(`settings.settingsNotifications.pushNotifications`)" equal-rows>
+            <RowGroup data-setting="push-notifications" :label="t(`settings.settingsNotifications.pushNotifications`)" equal-rows>
                 <Row icon="bolt" :title="t(`settings.settingsNotifications.notifyDevice`)" :description="status">
                     <template #control><ToggleSwitch :model-value="shown" :disabled="!canToggle" @update:model-value="toggle" /></template>
                 </Row>
@@ -172,7 +174,10 @@ const status = computed(() => {
         </div>
 
         <!-- One switch for one mark: the tab's in a browser, the app's icon in the app, whose window has no tab. -->
-        <RowGroup :label="inApp ? t(`settings.settingsNotifications.appIcon`) : t(`settings.settingsNotifications.browserTab`)">
+        <RowGroup
+            data-setting="status-badge"
+            :label="inApp ? t(`settings.settingsNotifications.appIcon`) : t(`settings.settingsNotifications.browserTab`)"
+        >
             <Row
                 as="label"
                 :icon="inApp ? `desktop` : `browsers`"
@@ -184,7 +189,7 @@ const status = computed(() => {
         </RowGroup>
 
         <div class="flex flex-col gap-2">
-            <RowGroup :label="t(`settings.settingsNotifications.sounds`)" equal-rows>
+            <RowGroup data-setting="sounds" :label="t(`settings.settingsNotifications.sounds`)" equal-rows>
                 <Row
                     as="label"
                     icon="exclamation-circle"
@@ -202,7 +207,9 @@ const status = computed(() => {
                     <template #control><ToggleSwitch :model-value="chimeFinished" @update:model-value="setChimeFinished" /></template>
                 </Row>
             </RowGroup>
-            <p class="text-xs text-muted">{{ inApp ? t(`settings.settingsNotifications.chimesWhenApp`) : t(`settings.settingsNotifications.chimesWhen`) }}</p>
+            <p class="text-xs text-muted">
+                {{ inApp ? t(`settings.settingsNotifications.chimesWhenApp`) : t(`settings.settingsNotifications.chimesWhen`) }}
+            </p>
         </div>
     </div>
 </template>

@@ -34,7 +34,7 @@ const note = computed(() => {
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentProjectInstalls.title`)">
+    <RowGroup data-setting="guardrails-project-installs" :label="t(`sandbox.agentProjectInstalls.title`)">
         <Row icon="box" :title="t(`sandbox.agentProjectInstalls.whenInstalls`)" :description="t(`sandbox.agentProjectInstalls.whetherAsked`)">
             <template #control>
                 <SegmentedControl

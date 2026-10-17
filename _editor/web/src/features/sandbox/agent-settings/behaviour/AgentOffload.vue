@@ -38,14 +38,12 @@ const setKind = (kind: string, runner: string | undefined): void => {
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentOffload.title`)">
+    <RowGroup data-setting="agent-offload" :label="t(`sandbox.agentOffload.title`)">
         <RowNote>
             {{ t(`sandbox.agentOffload.intro`) }}
             <i18n-t v-if="noRunners" keypath="sandbox.agentOffload.noRunners" tag="span" scope="global">
                 <template #devices
-                    ><RouterLink :to="{ name: `devices` }" class="underline">{{
-                        t(`sandbox.words.devicesSection`)
-                    }}</RouterLink></template
+                    ><RouterLink :to="{ name: `devices` }" class="underline">{{ t(`sandbox.words.devicesSection`) }}</RouterLink></template
                 >
             </i18n-t>
         </RowNote>

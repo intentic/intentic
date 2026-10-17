@@ -28,7 +28,7 @@ const repoLabel = (repo: string): string => (repo === `root` ? t(`sandbox.agentC
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentChangelog.changelog`)">
+    <RowGroup data-setting="agent-changelog" :label="t(`sandbox.agentChangelog.changelog`)">
         <!-- One row per repo, `root` first (ordered by useRepos). -->
         <Row v-for="repo in repos" :key="repo" icon="book" :title="repoLabel(repo)" :description="t(`sandbox.agentChangelog.includeReleaseNoteEach`)">
             <template #control>

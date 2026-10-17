@@ -78,7 +78,9 @@ const speeds = computed(() => speedChoices(voice.value.speed));
 // that it wakes by mistake.
 const wakeDraft = ref<string>();
 const wakeShown = computed(() => wakeDraft.value ?? voice.value.wake.word);
-const wakeInvalid = computed(() => wakeDraft.value !== undefined && wakeDraft.value.trim() !== `` && !WakeWordSchema.safeParse(wakeDraft.value).success);
+const wakeInvalid = computed(
+    () => wakeDraft.value !== undefined && wakeDraft.value.trim() !== `` && !WakeWordSchema.safeParse(wakeDraft.value).success,
+);
 const wakeShort = computed(() => [...wakeShown.value.replaceAll(/\s/gu, ``)].length <= 3);
 const onWakeInput = (event: Event): void => {
     if (event.target instanceof HTMLInputElement) {
@@ -105,7 +107,9 @@ const languages = computed(() => (view.value === undefined ? [] : languageChoice
 const chosenLanguage = ref<string>();
 const language = computed(() => {
     const chosen = chosenLanguage.value;
-    return chosen !== undefined && languages.value.some((choice) => choice.value === chosen) ? chosen : initialLanguage(languages.value, activeLocale.value);
+    return chosen !== undefined && languages.value.some((choice) => choice.value === chosen)
+        ? chosen
+        : initialLanguage(languages.value, activeLocale.value);
 });
 const setLanguage = (event: Event): void => {
     chosenLanguage.value = selectValue(event);
@@ -128,7 +132,9 @@ const removePick = (pickedLanguage: string): void => saveVoice({ ...voice.value,
 // The page's one player, so a preview stops a reply being read and the other way round. Plays what the select shows:
 // the pick, or what speaks the language without one.
 const player = useSpeechPlayer();
-const previewVoice = computed(() => (picked.value !== `` ? picked.value : view.value === undefined ? undefined : defaultVoiceFor(view.value, voice.value.cloud, language.value)));
+const previewVoice = computed(() =>
+    picked.value !== `` ? picked.value : view.value === undefined ? undefined : defaultVoiceFor(view.value, voice.value.cloud, language.value),
+);
 const previewKey = computed(() => (previewVoice.value === undefined ? undefined : `preview:${previewVoice.value}`));
 const previewing = computed(() => previewKey.value !== undefined && player.speaking.value === previewKey.value);
 const previewWaiting = computed(() => previewing.value && player.state.value !== `speaking`);
@@ -183,15 +189,17 @@ const setProvider = (event: Event): void => {
 
 // Written when the field is left, not per keystroke; the field is put back to what was kept, so an emptied secret name
 // shows the one still in force.
-const commitCloud = (field: `secret` | `model` | `voice`) => (event: Event): void => {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement)) {
-        return;
-    }
-    const next = withCloudField(voice.value, field, input.value);
-    input.value = next.cloud?.[field] ?? ``;
-    saveVoice(next);
-};
+const commitCloud =
+    (field: `secret` | `model` | `voice`) =>
+    (event: Event): void => {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement)) {
+            return;
+        }
+        const next = withCloudField(voice.value, field, input.value);
+        input.value = next.cloud?.[field] ?? ``;
+        saveVoice(next);
+    };
 const commitSecret = commitCloud(`secret`);
 const commitModel = commitCloud(`model`);
 const commitCloudVoice = commitCloud(`voice`);
@@ -220,7 +228,7 @@ const voicesFailure = computed<NoticeModel | undefined>(() =>
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentVoice.group`)">
+    <RowGroup data-setting="agent-voice" :label="t(`sandbox.agentVoice.group`)">
         <Row icon="volume-up" :title="t(`sandbox.agentVoice.replies`)" :description="t(`sandbox.agentVoice.repliesNote`)">
             <template #control>
                 <ToggleSwitch
@@ -290,7 +298,12 @@ const voicesFailure = computed<NoticeModel | undefined>(() =>
         >
             <template #control>
                 <div class="flex flex-wrap items-center gap-2">
-                    <select class="ui-field-box ui-field-sm w-36" :aria-label="t(`sandbox.agentVoice.language`)" :value="language" @change="setLanguage">
+                    <select
+                        class="ui-field-box ui-field-sm w-36"
+                        :aria-label="t(`sandbox.agentVoice.language`)"
+                        :value="language"
+                        @change="setLanguage"
+                    >
                         <option v-for="choice in languages" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
                     </select>
                     <select
@@ -316,7 +329,9 @@ const voicesFailure = computed<NoticeModel | undefined>(() =>
             <template v-if="picks.length > 0" #below>
                 <ul class="flex flex-col gap-0.5" :aria-label="t(`sandbox.agentVoice.picked`)">
                     <li v-for="pick in picks" :key="pick.language" class="flex min-w-0 items-center gap-1.5 text-xs text-muted">
-                        <span class="min-w-0 truncate">{{ t(`sandbox.agentVoice.override`, { language: pick.languageLabel, voice: pick.voiceLabel }) }}</span>
+                        <span class="min-w-0 truncate">{{
+                            t(`sandbox.agentVoice.override`, { language: pick.languageLabel, voice: pick.voiceLabel })
+                        }}</span>
                         <button
                             type="button"
                             :class="ui.iconButton({ size: `xs`, tone: `danger` })"
@@ -338,7 +353,7 @@ const voicesFailure = computed<NoticeModel | undefined>(() =>
     </RowGroup>
 
     <!-- The owner's own account with a speech service: better voices, at the price of the words leaving the sandbox. -->
-    <RowGroup :label="t(`sandbox.agentVoice.providerGroup`)">
+    <RowGroup data-setting="agent-speech-provider" :label="t(`sandbox.agentVoice.providerGroup`)">
         <Row icon="cloud" :title="t(`sandbox.agentVoice.provider`)" :description="t(`sandbox.agentVoice.providerNote`)">
             <template #control>
                 <select

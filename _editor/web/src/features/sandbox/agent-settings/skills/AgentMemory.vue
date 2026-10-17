@@ -28,28 +28,14 @@ onMounted(() => void load());
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentMemory.memory`)">
+    <RowGroup data-setting="agent-memory" :label="t(`sandbox.agentMemory.memory`)">
         <!-- The group's card IS the page: a document wrapped in a field shell reads as a hole punched in the section. -->
         <template #actions>
             <!-- Where a long edit goes: the same file, in the editor that gives it the whole pane; made first when missing. -->
-            <Button
-                v-if="missing"
-                :label="t(`sandbox.agentMemory.createFile`)"
-                size="small"
-                tier="quiet"
-                :loading="saving"
-                @click="createAndOpen"
-            >
+            <Button v-if="missing" :label="t(`sandbox.agentMemory.createFile`)" size="small" tier="quiet" :loading="saving" @click="createAndOpen">
                 <template #icon><Icon name="plus" /></template>
             </Button>
-            <Button
-                v-else
-                :as="RouterLink"
-                :to="`/workspace/${MEMORY_FILE}`"
-                :label="t(`sandbox.agentMemory.openFile`)"
-                size="small"
-                tier="quiet"
-            >
+            <Button v-else :as="RouterLink" :to="`/workspace/${MEMORY_FILE}`" :label="t(`sandbox.agentMemory.openFile`)" size="small" tier="quiet">
                 <template #icon><Icon name="arrow-up-right" /></template>
             </Button>
         </template>
@@ -65,9 +51,7 @@ onMounted(() => void load());
             save="explicit"
             :label="MEMORY_FILE"
             :placeholder="
-                onDisk === undefined
-                    ? t(`sandbox.agentMemory.reading`, { memory_file: MEMORY_FILE })
-                    : t(`sandbox.agentMemory.nothingHereYetWhat`)
+                onDisk === undefined ? t(`sandbox.agentMemory.reading`, { memory_file: MEMORY_FILE }) : t(`sandbox.agentMemory.nothingHereYetWhat`)
             "
             @save="commit"
         >

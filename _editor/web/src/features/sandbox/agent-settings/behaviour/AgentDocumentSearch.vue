@@ -13,7 +13,7 @@ const { settings, patch } = useSandboxSettings();
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentDocumentSearch.group`)">
+    <RowGroup data-setting="agent-document-search" :label="t(`sandbox.agentDocumentSearch.group`)">
         <Row icon="file-pdf" :title="t(`sandbox.agentDocumentSearch.title`)" :description="t(`sandbox.agentDocumentSearch.description`)">
             <template #control>
                 <ToggleSwitch

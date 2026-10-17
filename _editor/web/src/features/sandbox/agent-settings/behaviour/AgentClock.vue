@@ -37,15 +37,11 @@ const setZone = (event: Event): void => {
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentClock.clock`)">
+    <RowGroup data-setting="agent-clock" :label="t(`sandbox.agentClock.clock`)">
         <Row
             icon="clock"
             :title="t(`sandbox.agentClock.scheduleTimesAreIn`)"
-            :description="
-                readerDiffers
-                    ? t(`sandbox.agentClock.yourOwnClockIs`, { zone: localZone() })
-                    : t(`sandbox.agentClock.whatAnAutomations`)
-            "
+            :description="readerDiffers ? t(`sandbox.agentClock.yourOwnClockIs`, { zone: localZone() }) : t(`sandbox.agentClock.whatAnAutomations`)"
         >
             <template #control>
                 <select

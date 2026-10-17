@@ -17,20 +17,25 @@ const t = useT();
 
 const listener = useWakeListener();
 const { canShip } = useRole();
-const now = useNow(computed(() => listener.pausedUntil.value !== undefined), 30_000);
+const now = useNow(
+    computed(() => listener.pausedUntil.value !== undefined),
+    30_000,
+);
 
 const word = computed(() => listener.word.value);
 const status = computed(() => wakeStatus(listener, now.value));
 
 const paused = computed(() => listener.pausedUntil.value !== undefined && listener.pausedUntil.value > now.value);
-const listening = computed(() => listener.enabled.value && !paused.value && (listener.phase.value === `listening` || listener.phase.value === `elsewhere`));
+const listening = computed(
+    () => listener.enabled.value && !paused.value && (listener.phase.value === `listening` || listener.phase.value === `elsewhere`),
+);
 
 // Where the word is chosen: the sandbox's own Agent settings, which only a maintainer reaches.
 const wordSettings = `/sandbox/agent?section=tools`;
 </script>
 
 <template>
-    <RowGroup :label="t(`settings.settingsVoice.group`)">
+    <RowGroup data-setting="wake-word" :label="t(`settings.settingsVoice.group`)">
         <Row icon="microphone" :title="t(`settings.settingsVoice.listen`, { word })" :description="t(`settings.settingsVoice.listenNote`, { word })">
             <template #control>
                 <ToggleSwitch
@@ -43,7 +48,9 @@ const wordSettings = `/sandbox/agent?section=tools`;
         <Row v-if="status !== undefined" :icon="status.icon" :title="status.label" :description="status.detail" indent>
             <template #control>
                 <Button v-if="listening" size="small" thumb tier="quiet" @click="listener.pause(60)">{{ t(`settings.settingsVoice.pause`) }}</Button>
-                <Button v-else-if="paused" size="small" thumb tier="quiet" @click="listener.resume()">{{ t(`settings.settingsVoice.resume`) }}</Button>
+                <Button v-else-if="paused" size="small" thumb tier="quiet" @click="listener.resume()">{{
+                    t(`settings.settingsVoice.resume`)
+                }}</Button>
             </template>
         </Row>
         <Row icon="comments" :title="t(`settings.settingsVoice.word`)" :description="t(`settings.settingsVoice.wordNote`)">

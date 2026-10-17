@@ -54,7 +54,7 @@ const notesSchedule = computed<string>(() => {
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentCodeSearch.codeSearch`)">
+    <RowGroup data-setting="agent-code-search" :label="t(`sandbox.agentCodeSearch.codeSearch`)">
         <!-- Loads the iq plugin so the assistant searches with the iq CLI instead of grep/find/glob. -->
         <!-- `spine` hangs the measurement block off this row's name rather than the group's edge. -->
         <Row spine icon="search" :title="t(`sandbox.agentCodeSearch.iqCodeSearch`)" :description="t(`sandbox.agentCodeSearch.useIqSearchCli`)">
@@ -107,12 +107,7 @@ const notesSchedule = computed<string>(() => {
         <!-- The one composed piece that is written rather than derived: a monthly automation rewrites it off the session
              record, so it can carry what no scan of the tree can. Rides the system prompt for the whole session, unlike
              the map above, which is sent once with the opening message. -->
-        <Row
-            spine
-            icon="book"
-            :title="t(`sandbox.agentCodeSearch.fieldNotes`)"
-            :description="t(`sandbox.agentCodeSearch.whatSessionsLearned`)"
-        >
+        <Row spine icon="book" :title="t(`sandbox.agentCodeSearch.fieldNotes`)" :description="t(`sandbox.agentCodeSearch.whatSessionsLearned`)">
             <template #control>
                 <ToggleSwitch
                     :model-value="settings?.fieldNotes ?? false"

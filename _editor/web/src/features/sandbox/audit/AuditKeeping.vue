@@ -29,7 +29,7 @@ const urlError = ref<string>();
 const commitUrl = (event: Event): void => {
     // SAFETY: bound only to the URL <input> below, whose change event targets that input.
     const value = (event.target as HTMLInputElement).value.trim();
-    const valid = value === `` || URL.canParse(value) && new URL(value).protocol === `https:`;
+    const valid = value === `` || (URL.canParse(value) && new URL(value).protocol === `https:`);
     urlError.value = valid ? undefined : t(`sandbox.sandboxAudit.forwardUrlInvalid`);
     if (valid && value !== audit.value?.forwardUrl) {
         setAudit({ forwardUrl: value });
@@ -41,7 +41,9 @@ const { inventory } = useSecretInventory();
 const NO_SECRET = `__none__`;
 const secretOptions = computed(() => [
     { value: NO_SECRET, label: t(`sandbox.sandboxAudit.forwardSecretNone`) },
-    ...inventory.value.filter((entry) => (entry.kind === `env` || entry.kind === `generated`) && entry.status === `set`).map((entry) => ({ value: entry.key, label: entry.key })),
+    ...inventory.value
+        .filter((entry) => (entry.kind === `env` || entry.kind === `generated`) && entry.status === `set`)
+        .map((entry) => ({ value: entry.key, label: entry.key })),
 ]);
 const pickSecret = (value: string | undefined): void => {
     if (value !== undefined) {
@@ -55,7 +57,10 @@ const forwardingLine = computed(() => {
         return undefined;
     }
     if (forwarding.lastError !== undefined) {
-        return { tone: `danger` as const, text: t(`sandbox.sandboxAudit.forwardFailing`, { error: forwarding.lastError, count: forwarding.pending }) };
+        return {
+            tone: `danger` as const,
+            text: t(`sandbox.sandboxAudit.forwardFailing`, { error: forwarding.lastError, count: forwarding.pending }),
+        };
     }
     return forwarding.pending === 0
         ? { tone: `success` as const, text: t(`sandbox.sandboxAudit.forwardUpToDate`) }
@@ -64,7 +69,7 @@ const forwardingLine = computed(() => {
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.retention.auditKeeping`)">
+    <RowGroup data-setting="retention-audit" :label="t(`sandbox.retention.auditKeeping`)">
         <Row icon="eye" :title="t(`sandbox.sandboxAudit.readsTitle`)" :description="t(`sandbox.sandboxAudit.readsDescription`)">
             <template #control>
                 <ToggleSwitch

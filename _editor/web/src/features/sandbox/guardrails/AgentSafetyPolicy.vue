@@ -23,7 +23,7 @@ const refused = computed<NoticeModel | undefined>(() =>
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentSafetyPolicy.safetyPolicy`)">
+    <RowGroup data-setting="guardrails-policy" :label="t(`sandbox.agentSafetyPolicy.safetyPolicy`)">
         <!-- The group's card IS the page. Only the document scrolls, so a long policy never carries Save off the screen. -->
         <MarkdownDocument
             v-model="draft"

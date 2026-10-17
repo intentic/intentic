@@ -13,7 +13,7 @@ const { settings, patch } = useSandboxSettings();
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentChatPages.group`)">
+    <RowGroup data-setting="agent-chat-pages" :label="t(`sandbox.agentChatPages.group`)">
         <Row icon="globe" :title="t(`sandbox.agentChatPages.title`)" :description="t(`sandbox.agentChatPages.description`)">
             <template #control>
                 <ToggleSwitch

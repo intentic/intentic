@@ -10,7 +10,7 @@ const { importError, importText, importing, importMemory } = useAgentMemory();
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentMemory.bringMemoryOverAnother`)">
+    <RowGroup data-setting="agent-memory-import" :label="t(`sandbox.agentMemory.bringMemoryOverAnother`)">
         <RowNote variant="block">
             <Notice v-if="importError" :of="importError" />
 

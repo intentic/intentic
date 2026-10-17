@@ -4,6 +4,7 @@ import { useT } from "@intentic/ui/i18n";
 import HubLayout from "../../workbench/hub/HubLayout.vue";
 import type { HubTab } from "../../workbench/hub/hubNav";
 import { hubWorkKey, hubWorkRunning } from "../../workbench/hub/hubWork";
+import { useHubSearchPanel } from "../../workbench/hub/useHubSearchPanel";
 import { computed, nextTick, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useAudience } from "../../app/useAudience";
@@ -73,10 +74,13 @@ watch(
     },
     { immediate: true, flush: `post` },
 );
+
+// Finds a page or a single setting here or on the sandbox hub, by name (useHubSearchPanel.ts).
+const search = useHubSearchPanel(HUB);
 </script>
 
 <template>
-    <HubLayout :title="t(`shared.settings`)" :route-name="HUB" :default-slug="DEFAULT" :groups="GROUPS" :ready="!planLoading">
+    <HubLayout :title="t(`shared.settings`)" :route-name="HUB" :default-slug="DEFAULT" :groups="GROUPS" :ready="!planLoading" :search="search">
         <template #default="{ slug }">
             <div class="flex flex-col gap-6">
                 <SettingsProfile v-if="slug === `profile`" />

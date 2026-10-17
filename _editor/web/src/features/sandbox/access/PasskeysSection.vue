@@ -53,7 +53,11 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.passkeysSection.passkeys`)" :count="list.passkeys.length === 0 ? undefined : list.passkeys.length">
+    <RowGroup
+        data-setting="access-passkeys"
+        :label="t(`sandbox.passkeysSection.passkeys`)"
+        :count="list.passkeys.length === 0 ? undefined : list.passkeys.length"
+    >
         <Row v-for="passkey in list.passkeys" :key="passkey.id" icon="key" :title="passkey.label" :description="describe(passkey)">
             <template #meta>
                 <!-- Another member's passkey, in the owner's list: named so a reset removes the right one. -->
@@ -96,7 +100,11 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
         <template v-if="isOwner && unread === undefined">
             <Row icon="shield" :title="t(`sandbox.passkeysSection.requirePasskeyToOpen`)">
                 <template #meta>
-                    <StatusBadge :variant="list.required ? `success` : `neutral`" :label="list.required ? t(`sandbox.passkeysSection.required`) : t(`sandbox.passkeysSection.optional`)" size="xs" />
+                    <StatusBadge
+                        :variant="list.required ? `success` : `neutral`"
+                        :label="list.required ? t(`sandbox.passkeysSection.required`) : t(`sandbox.passkeysSection.optional`)"
+                        size="xs"
+                    />
                 </template>
                 <template #control>
                     <Button
@@ -116,13 +124,7 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
                 :description="t(`sandbox.passkeysSection.unusedOneCodePlus`, { remaining: list.recovery?.remaining ?? 0 })"
             >
                 <template #control>
-                    <Button
-                        :label="t(`sandbox.passkeysSection.newCodes`)"
-                        size="small"
-                        tier="quiet"
-                        :disabled="busy"
-                        @click="regenerateCodes"
-                    />
+                    <Button :label="t(`sandbox.passkeysSection.newCodes`)" size="small" tier="quiet" :disabled="busy" @click="regenerateCodes" />
                 </template>
                 <template v-if="codes" #below>
                     <div class="flex flex-col gap-2">

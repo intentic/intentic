@@ -101,7 +101,8 @@ const move = (role: ModelRole, target: DropTarget): void => {
         return;
     }
     const id = target.kind === `unassigned` ? undefined : target.id;
-    const already = id === undefined ? view.value.unassigned.includes(role) : view.value.setups.find((setup) => setup.id === id)?.roles.includes(role) === true;
+    const already =
+        id === undefined ? view.value.unassigned.includes(role) : view.value.setups.find((setup) => setup.id === id)?.roles.includes(role) === true;
     if (!already) {
         write(withJobOn(stored.value, role, id));
     }
@@ -247,11 +248,19 @@ const draggedName = computed(() => (drag.dragged.value === undefined ? `` : role
             </div>
         </section>
 
-        <section class="flex flex-col gap-2.5">
+        <section data-setting="agent-model-setups" class="flex flex-col gap-2.5">
             <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-1">
                 <h2 :class="ui.sectionLabel()">{{ t(`sandbox.agentModels.setups`) }}</h2>
                 <span class="min-w-0 text-2xs text-subtle">{{ t(`sandbox.agentModels.setupsCaption`) }}</span>
-                <Button class="ml-auto" size="small" tier="quiet" icon="plus" :label="t(`sandbox.agentModels.newSetup`)" :disabled="!loaded" @click="makeSetup" />
+                <Button
+                    class="ml-auto"
+                    size="small"
+                    tier="quiet"
+                    icon="plus"
+                    :label="t(`sandbox.agentModels.newSetup`)"
+                    :disabled="!loaded"
+                    @click="makeSetup"
+                />
             </div>
             <div class="flex flex-col gap-3">
                 <SetupCard

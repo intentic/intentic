@@ -195,7 +195,7 @@ const removeLogo = async (): Promise<void> => {
 <template>
     <div class="@container flex flex-col gap-6">
         <!-- Identity: name + logo (owner-editable), self-reported image/version/URL. -->
-        <Card class="flex flex-col gap-4">
+        <Card data-setting="overview-name" class="flex flex-col gap-4">
             <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
                 <div class="flex min-w-0 flex-1 items-center gap-3">
                     <!-- The logo tile is the control itself: live for owners in every state, disabled for members. -->
@@ -344,7 +344,7 @@ const removeLogo = async (): Promise<void> => {
                 </div>
                 <!-- Its share of the machine, and the one form that changes it. Maintainer and up: acting on a device is
                      maintainer-floored at the daemon, so a member below that gets the fact without a button that would refuse. -->
-                <div v-if="shareLine" class="grid gap-x-3 gap-y-0.5 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
+                <div v-if="shareLine" data-setting="overview-resources" class="grid gap-x-3 gap-y-0.5 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
                     <dt class="text-subtle">{{ t(`sandbox.sandboxOverview.resources`) }}</dt>
                     <dd class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 @md:justify-end">
                         <span class="min-w-0 break-words text-content">{{ shareLine }}</span>

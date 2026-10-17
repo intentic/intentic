@@ -198,7 +198,7 @@ const describe = (token: ControlTokenSummary): string =>
 </script>
 
 <template>
-    <RowGroup v-if="canShip" :label="t(`shared.apiTokens`)" :count="tokens.length === 0 ? undefined : tokens.length">
+    <RowGroup v-if="canShip" data-setting="access-api-tokens" :label="t(`shared.apiTokens`)" :count="tokens.length === 0 ? undefined : tokens.length">
         <Row v-for="token in tokens" :key="token.id" icon="key" :title="token.label" :description="describe(token)">
             <!-- Same pill the member roster uses for the same word, so "expired" doesn't get two spellings. -->
             <template v-if="expired(token)" #meta>

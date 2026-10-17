@@ -37,7 +37,7 @@ const mixedLine = (row: ServiceRow): string =>
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.guardrails.actions.title`)">
+    <RowGroup data-setting="guardrails-outside-actions" :label="t(`sandbox.guardrails.actions.title`)">
         <RowNote>{{ t(`sandbox.guardrails.actions.intro`) }}</RowNote>
         <Row icon="subagents" :title="t(`sandbox.agentSubagents.spawnSubagents`)" :description="t(`sandbox.agentSubagents.spawnedSubagentSpends`)">
             <template #control>

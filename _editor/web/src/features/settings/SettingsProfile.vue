@@ -78,7 +78,7 @@ const linkGoogle = async (): Promise<void> => {
 
 <template>
     <div class="flex flex-col gap-6">
-        <RowGroup :label="t(`settings.settingsProfile.profile`)">
+        <RowGroup data-setting="display-name" :label="t(`settings.settingsProfile.profile`)">
             <RowNote variant="block">
                 <div class="flex min-w-0 items-center gap-3">
                     <button
@@ -129,8 +129,12 @@ const linkGoogle = async (): Promise<void> => {
             </RowNote>
         </RowGroup>
 
-        <RowGroup v-if="showsSignIn" :label="t(`settings.settingsProfile.signIn`)">
-            <Row icon="envelope" :title="t(`settings.settingsProfile.emailCode`)" :description="t(`settings.settingsProfile.emailCodeDetail`, { email: user?.email ?? `` })" />
+        <RowGroup v-if="showsSignIn" data-setting="sign-in" :label="t(`settings.settingsProfile.signIn`)">
+            <Row
+                icon="envelope"
+                :title="t(`settings.settingsProfile.emailCode`)"
+                :description="t(`settings.settingsProfile.emailCodeDetail`, { email: user?.email ?? `` })"
+            />
             <Row
                 icon="google"
                 :title="t(`settings.settingsProfile.google`)"

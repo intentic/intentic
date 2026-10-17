@@ -117,7 +117,7 @@ const removeSkill = (skill: SkillSummary): void => {
             <RowNote variant="action" :label="t(`sandbox.words.writeSkill`)" @click="startAdd" />
         </RowGroup>
     </SkeletonSnapshot>
-    <RowGroup v-else v-skeleton-source="`sandbox.agent.skills`" :label="t(`sandbox.agentSkills.skills`)">
+    <RowGroup v-else v-skeleton-source="`sandbox.agent.skills`" data-setting="agent-skills" :label="t(`sandbox.agentSkills.skills`)">
         <!-- One field, not a toolbar: a full bar for a single control would look like it belongs to more than this group. -->
         <template v-if="filterable" #actions>
             <SearchBar

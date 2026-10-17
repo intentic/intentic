@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { type IconName, type NavGroup, NavRail, providePageBack, Row, SegmentedControl, SplitView, useDevice, usePageBack } from "@intentic/ui";
 import { sectionIcon } from "@intentic/ui/icons";
-import { computed, watch } from "vue";
+import { computed, useId, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { badgeSpeaks } from "../views/viewBadge";
 import { hubDrills, hubSectionParam } from "./hubDrill";
@@ -10,6 +10,11 @@ import { type HubTab, hubRowOf, hubRowSections } from "./hubNav";
 import HubIndex from "./HubIndex.vue";
 import HubRowBadge from "./HubRowBadge.vue";
 import { hubWorkKey, provideHubSection } from "./hubWork";
+import { settingOfHash } from "./hubSearch";
+import HubSearchField from "./HubSearchField.vue";
+import HubSearchResults from "./HubSearchResults.vue";
+import { seekSetting } from "./settingAnchor";
+import type { HubSearchPanel } from "./useHubSearchPanel";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -22,6 +27,7 @@ const {
     defaultSlug,
     addressable = false,
     ready = true,
+    search,
 } = defineProps<{
     title: string;
     description?: string;
@@ -38,6 +44,11 @@ const {
     groups: readonly NavGroup<HubTab>[];
     /** Holds the unknown-slug redirect while the set is still filling in. */
     ready?: boolean;
+    /**
+     * The hub's search over both hubs' pages and settings (useHubSearchPanel.ts), drawn above the index; while
+     * something is typed its answers stand in the index's place. Made by the hub, so this stays a layout.
+     */
+    search?: HubSearchPanel;
 }>();
 
 const route = useRoute();
@@ -139,6 +150,22 @@ const optionOf = (tab: HubTab) => {
 const options = computed(() => rows.value.map(optionOf));
 const partOptions = computed(() => parts.value.map(optionOf));
 
+// An address that names a card (`#setting-<id>`, a search answer or a link to one) lands on it once the section has
+// drawn it: the router's own scroll gives up while the section is still reading what it shows (settingAnchor.ts).
+watch(
+    () => route.hash,
+    (hash) => {
+        const setting = settingOfHash(hash);
+        if (setting !== undefined) {
+            void seekSetting(setting);
+        }
+    },
+    { immediate: true },
+);
+
+const searchList = useId();
+const searching = computed(() => search?.searching.value === true);
+
 // An unknown slug (/sandbox/nonsense) resolves to the default: clean the URL back to the canonical one, which on a
 // phone is the index.
 watch(
@@ -155,23 +182,30 @@ watch(
 <template>
     <!-- Wide because the index spends 14rem of it: at the 56rem default the body would be left narrower than it was before the column arrived. -->
     <!-- A phone swaps: the index or one section, never both on screen (see `drill`). -->
-    <SplitView
-        :title="pageTitle"
-        :description="pageDescription"
-        scroll="page"
-        :mobile="drill ? `swap` : `collapse`"
-        :detail-open="!onIndex"
-    >
+    <SplitView :title="pageTitle" :description="pageDescription" scroll="page" :mobile="drill ? `swap` : `collapse`" :detail-open="!onIndex">
         <!-- A desktop pane too narrow for the rail keeps the strip. It wraps rather than scrolls: this is the index of everything the hub holds, and a section a reader can't see is a section they won't look for. -->
         <template v-if="!drill" #compact>
-            <div class="border-b border-line-subtle pb-2">
-                <SegmentedControl :model-value="activeRow?.slug ?? activeSlug" :options="options" wrap @update:model-value="selectRow" />
+            <div class="flex flex-col gap-2 border-b border-line-subtle pb-2">
+                <HubSearchField v-if="search" :search="search" :list-id="searchList" />
+                <HubSearchResults v-if="search && searching" :search="search" :list-id="searchList" look="rail" />
+                <SegmentedControl v-else :model-value="activeRow?.slug ?? activeSlug" :options="options" wrap @update:model-value="selectRow" />
             </div>
         </template>
 
         <template #rail>
-            <HubIndex v-if="drill" :groups="groups" :link-to="rowLink" />
-            <NavRail v-else :aria-label="t(`shell.hubLayout.sections`)" :groups="groups">
+            <div v-if="drill" class="flex flex-col gap-4">
+                <HubSearchField v-if="search" :search="search" :list-id="searchList" />
+                <HubSearchResults v-if="search && searching" :search="search" :list-id="searchList" look="page" />
+                <HubIndex v-else :groups="groups" :link-to="rowLink" />
+            </div>
+            <!-- While a search is typed the rail's groups give way to its answers, drawn where the rail draws an empty index; the field stays pinned, so typing never loses it. -->
+            <NavRail v-else :aria-label="t(`shell.hubLayout.sections`)" :groups="searching ? [] : groups">
+                <template v-if="search" #pinned>
+                    <HubSearchField :search="search" :list-id="searchList" />
+                </template>
+                <template v-if="search && searching" #empty>
+                    <HubSearchResults :search="search" :list-id="searchList" look="rail" />
+                </template>
                 <template #row="{ item: tab }">
                     <!-- Internal navigation wraps the presentational row to provide its href. -->
                     <RouterLink :key="tab.slug" :to="rowLink(tab)" class="block">

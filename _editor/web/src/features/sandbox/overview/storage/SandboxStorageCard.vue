@@ -127,7 +127,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
 </script>
 
 <template>
-    <Card v-if="storage.available.value" class="@container/storage flex min-w-0 flex-col gap-3">
+    <Card v-if="storage.available.value" data-setting="overview-disk" class="@container/storage flex min-w-0 flex-col gap-3">
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
             <div class="flex min-w-0 items-center gap-2">
                 <Icon name="database" class="shrink-0 text-link" />

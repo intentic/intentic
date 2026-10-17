@@ -13,7 +13,7 @@ const { canShip: canOperate } = useRole();
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.words.export`)">
+    <RowGroup data-setting="environment-export" :label="t(`sandbox.words.export`)">
         <RowNote v-if="canOperate" variant="block"><MoveOutPanel /></RowNote>
         <RowNote v-else icon="lock">{{ t(`sandbox.words.ownerOnly`) }}</RowNote>
     </RowGroup>

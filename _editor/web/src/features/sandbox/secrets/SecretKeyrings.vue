@@ -23,7 +23,9 @@ const standingOf = (keyring: SandboxKeyring): Standing => {
     if (!keyring.online) {
         return { label: t(`sandbox.keyrings.offline`), tone: `neutral` };
     }
-    return keyring.locked === true ? { label: t(`sandbox.keyrings.locked`), tone: `neutral` } : { label: t(`sandbox.keyrings.unlocked`), tone: `success` };
+    return keyring.locked === true
+        ? { label: t(`sandbox.keyrings.locked`), tone: `neutral` }
+        : { label: t(`sandbox.keyrings.unlocked`), tone: `success` };
 };
 
 const factsOf = (keyring: SandboxKeyring): string =>
@@ -39,7 +41,9 @@ const factsOf = (keyring: SandboxKeyring): string =>
 const canPair = computed(() => online.value.length >= 2);
 const pairing = ref(false);
 const chosen = ref<string[]>([]);
-const paired = ref<{ readonly a: string; readonly b: string; readonly fingerprints: { readonly a: string; readonly b: string } } | undefined>(undefined);
+const paired = ref<{ readonly a: string; readonly b: string; readonly fingerprints: { readonly a: string; readonly b: string } } | undefined>(
+    undefined,
+);
 const pairError = ref<NoticeModel | undefined>(undefined);
 const waiting = ref(false);
 
@@ -87,7 +91,7 @@ const doPair = async (): Promise<void> => {
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.keyrings.title`)" :count="keyrings.length">
+    <RowGroup data-setting="secrets-keyrings" :label="t(`sandbox.keyrings.title`)" :count="keyrings.length">
         <template #actions>
             <Button v-if="canPair && !pairing" size="small" tier="boring" :label="t(`sandbox.keyrings.pair`)" @click="openPair">
                 <template #icon><Icon name="link" /></template>
@@ -144,7 +148,13 @@ const doPair = async (): Promise<void> => {
                 <Notice v-if="pairError" :of="pairError" />
 
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <button v-if="!paired" type="button" :class="ui.textButton({ size: `xs` })" :disabled="chosen.length !== 2 || waiting" v-action="doPair">
+                    <button
+                        v-if="!paired"
+                        type="button"
+                        :class="ui.textButton({ size: `xs` })"
+                        :disabled="chosen.length !== 2 || waiting"
+                        v-action="doPair"
+                    >
                         {{ t(`sandbox.keyrings.pairThese`) }}
                     </button>
                     <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="closePair">

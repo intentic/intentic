@@ -29,7 +29,15 @@ interface MintRequest {
     readonly terms: LinkTerms;
 }
 
-const { tokens: links, minted, minting, notice, mint, forgetMinted, revoke } = useMintedTokens({
+const {
+    tokens: links,
+    minted,
+    minting,
+    notice,
+    mint,
+    forgetMinted,
+    revoke,
+} = useMintedTokens({
     list: async () => (await sandboxRaw(`GET /system/links`)).links,
     mint: async ({ label, terms }: MintRequest) => {
         const { token } = await sandboxRaw(`POST /system/links`, { input: { label, terms } });
@@ -82,7 +90,9 @@ const personaName = (id: string | undefined): string | undefined =>
 
 const termsLine = (terms: LinkTerms): string =>
     [
-        terms.actsAs === undefined ? t(`sandbox.linkedSandboxes.wearsNothing`) : t(`sandbox.linkedSandboxes.wears`, { persona: personaName(terms.actsAs) ?? `` }),
+        terms.actsAs === undefined
+            ? t(`sandbox.linkedSandboxes.wearsNothing`)
+            : t(`sandbox.linkedSandboxes.wears`, { persona: personaName(terms.actsAs) ?? `` }),
         terms.approve ? t(`sandbox.linkedSandboxes.eachWaits`) : t(`sandbox.linkedSandboxes.startsAtOnce`),
         t(`sandbox.linkedSandboxes.perHour`, { count: terms.turnsPerHour }),
     ].join(` · `);
@@ -91,7 +101,9 @@ const describe = (link: InboundLinkSummary): string =>
     [
         termsLine(link.terms),
         t(`sandbox.linkedSandboxes.conversations`, { count: link.conversations }, link.conversations),
-        link.lastUsedAt === undefined ? t(`sandbox.linkedSandboxes.neverUsed`) : t(`sandbox.linkedSandboxes.usedAgo`, { ago: timeAgo(link.lastUsedAt, { days: true }) }),
+        link.lastUsedAt === undefined
+            ? t(`sandbox.linkedSandboxes.neverUsed`)
+            : t(`sandbox.linkedSandboxes.usedAgo`, { ago: timeAgo(link.lastUsedAt, { days: true }) }),
     ].join(` · `);
 
 const askedLine = (request: LinkRequest): string =>
@@ -146,11 +158,19 @@ const address = computed(() => daemonUrl.value ?? ``);
 
 <template>
     <section v-if="canShip" :id="LINKED_SANDBOXES_ANCHOR" ref="section" class="scroll-mt-4">
-        <RowGroup :label="t(`sandbox.linkedSandboxes.title`)" :count="shown.length === 0 ? undefined : shown.length">
+        <RowGroup
+            data-setting="access-linked-sandboxes"
+            :label="t(`sandbox.linkedSandboxes.title`)"
+            :count="shown.length === 0 ? undefined : shown.length"
+        >
             <template v-for="link in shown" :key="link.id">
                 <Row icon="link" :title="link.label" :description="describe(link)">
                     <template v-if="link.requests.length > 0" #meta>
-                        <StatusBadge variant="warning" :label="t(`sandbox.linkedSandboxes.waiting`, { count: link.requests.length }, link.requests.length)" size="xs" />
+                        <StatusBadge
+                            variant="warning"
+                            :label="t(`sandbox.linkedSandboxes.waiting`, { count: link.requests.length }, link.requests.length)"
+                            size="xs"
+                        />
                     </template>
                     <template #control>
                         <Button :label="t(`sandbox.linkedSandboxes.terms`)" size="small" tier="quiet" @click="edit(link)" />
@@ -168,7 +188,13 @@ const address = computed(() => daemonUrl.value ?? ``);
                 >
                     <template #control>
                         <Button :label="t(`sandbox.linkedSandboxes.allow`)" size="small" @click="decide(link, request, true)" />
-                        <Button :label="t(`sandbox.linkedSandboxes.decline`)" size="small" tier="quiet" tone="danger" @click="decide(link, request, false)" />
+                        <Button
+                            :label="t(`sandbox.linkedSandboxes.decline`)"
+                            size="small"
+                            tier="quiet"
+                            tone="danger"
+                            @click="decide(link, request, false)"
+                        />
                     </template>
                 </Row>
                 <RowNote v-if="editing === link.id" variant="block">
@@ -187,7 +213,13 @@ const address = computed(() => daemonUrl.value ?? ``);
                                 {{ t(`sandbox.linkedSandboxes.askMeFirst`) }}
                             </label>
                             <label class="flex items-center gap-2 text-sm text-content">
-                                <input v-model.number="draft.turnsPerHour" type="number" min="1" max="120" :class="ui.input({ size: `sm` }, `w-20`)" />
+                                <input
+                                    v-model.number="draft.turnsPerHour"
+                                    type="number"
+                                    min="1"
+                                    max="120"
+                                    :class="ui.input({ size: `sm` }, `w-20`)"
+                                />
                                 {{ t(`sandbox.linkedSandboxes.turnsAnHour`) }}
                             </label>
                             <Button type="submit" :label="t(`ui.action.save`)" size="small" />
@@ -220,7 +252,13 @@ const address = computed(() => daemonUrl.value ?? ``);
                             <ToggleSwitch v-model="approve" />
                             {{ t(`sandbox.linkedSandboxes.askMeFirst`) }}
                         </label>
-                        <Button type="submit" :label="t(`sandbox.linkedSandboxes.newLink`)" size="small" :loading="minting" :disabled="minting || label.trim() === ``">
+                        <Button
+                            type="submit"
+                            :label="t(`sandbox.linkedSandboxes.newLink`)"
+                            size="small"
+                            :loading="minting"
+                            :disabled="minting || label.trim() === ``"
+                        >
                             <template #icon><Icon name="link" /></template>
                         </Button>
                     </form>

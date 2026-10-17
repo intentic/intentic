@@ -27,10 +27,12 @@ const GUARDRAILS = { name: `sandbox`, params: { tab: `guardrails` } } as const;
 </script>
 
 <template>
-    <RowGroup :label="t(`shared.subagents`)" equal-rows>
+    <RowGroup data-setting="agent-subagents" :label="t(`shared.subagents`)" equal-rows>
         <RowNote>
             {{ spawnDenied ? t(`sandbox.agentSubagents.spawningRefusedOutright`) : t(`sandbox.agentSubagents.whetherInGuardrails`) }}
-            <RouterLink :to="GUARDRAILS" :class="ui.textButton()">{{ t(`sandbox.sandboxNav.guardrails`) }}<Icon name="arrow-right" class="text-2xs" /></RouterLink>
+            <RouterLink :to="GUARDRAILS" :class="ui.textButton()"
+                >{{ t(`sandbox.sandboxNav.guardrails`) }}<Icon name="arrow-right" class="text-2xs"
+            /></RouterLink>
         </RowNote>
 
         <!-- First ceiling a fan-out hits; the assistant stops rather than retries here, so a low number serializes work instead of failing it. -->

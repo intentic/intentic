@@ -13,7 +13,7 @@ const { canShip: canOperate } = useRole();
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.importCard.import`)">
+    <RowGroup data-setting="environment-import" :label="t(`sandbox.importCard.import`)">
         <RowNote v-if="canOperate" variant="block"><ArrivalPanel /></RowNote>
         <RowNote v-else icon="lock">{{ t(`sandbox.words.ownerOnly`) }}</RowNote>
     </RowGroup>

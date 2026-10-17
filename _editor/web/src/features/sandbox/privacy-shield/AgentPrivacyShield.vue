@@ -118,7 +118,9 @@ const write = (from: WriteSource, change: (current: PrivacyShieldPolicy) => Priv
     setPolicy(change);
 };
 
-const saveNotice = computed(() => shieldRefusal(saveError.value, t(`sandbox.agentPrivacyShield.ownerOnly`), t(`sandbox.agentPrivacyShield.couldntSave`)));
+const saveNotice = computed(() =>
+    shieldRefusal(saveError.value, t(`sandbox.agentPrivacyShield.ownerOnly`), t(`sandbox.agentPrivacyShield.couldntSave`)),
+);
 const forgetNotice = computed(() =>
     shieldRefusal(forgetError.value, t(`sandbox.agentPrivacyShield.ownerOnlyForget`), t(`sandbox.agentPrivacyShield.couldntForget`)),
 );
@@ -143,7 +145,12 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
         <SkeletonSnapshot v-if="isLoading" of="sandbox.agent.privacy-shield">
             <RowGroup :label="t(`sandbox.agentPrivacyShield.title`)"><SkeletonRows :rows="1" description /></RowGroup>
         </SkeletonSnapshot>
-        <RowGroup v-else v-skeleton-source="`sandbox.agent.privacy-shield`" :label="t(`sandbox.agentPrivacyShield.title`)">
+        <RowGroup
+            v-else
+            v-skeleton-source="`sandbox.agent.privacy-shield`"
+            data-setting="privacy-shield-personal-data"
+            :label="t(`sandbox.agentPrivacyShield.title`)"
+        >
             <RowNote v-if="error !== undefined" variant="block"
                 ><Notice tone="danger">{{ error }}</Notice></RowNote
             >

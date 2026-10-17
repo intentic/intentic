@@ -216,7 +216,7 @@ const pushToCi = async (): Promise<void> => {
         <div v-else v-skeleton-source="`sandbox.secrets`" class="flex flex-col gap-6">
             <!-- Filter and scope narrow everything below as one control; the page's actions sit beside it, so adding a secret
                  needs no section of its own while there is nothing in it yet. -->
-            <div class="flex flex-wrap items-center justify-end gap-2">
+            <div data-setting="secrets-add" class="flex flex-wrap items-center justify-end gap-2">
                 <FilterBar
                     v-if="filterable"
                     v-model="query"

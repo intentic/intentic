@@ -32,7 +32,12 @@ const waiting = computed(() => (repos.value ?? []).filter((entry) => !entry.adop
             </div>
         </RowGroup>
     </SkeletonSnapshot>
-    <RowGroup v-else v-skeleton-source="`sandbox.agent.repo-checks`" :label="t(`sandbox.agentRepoChecks.checksAfterEdits`)">
+    <RowGroup
+        v-else
+        v-skeleton-source="`sandbox.agent.repo-checks`"
+        data-setting="agent-repo-checks"
+        :label="t(`sandbox.agentRepoChecks.checksAfterEdits`)"
+    >
         <!-- The brief wait before the outline: still a wait, with nothing drawn yet. -->
         <div v-if="repos === undefined" role="status" aria-busy="true" />
 

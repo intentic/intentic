@@ -138,7 +138,7 @@ const gaps = computed(() => savings.value?.input.gaps.slice(0, 5) ?? []);
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentCommandOutput.commandOutput`)">
+    <RowGroup data-setting="agent-command-output" :label="t(`sandbox.agentCommandOutput.commandOutput`)">
         <!-- One switch is the whole decision; what it saved hangs under its name, and the parts behind it fold away. -->
         <Row
             indent

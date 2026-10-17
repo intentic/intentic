@@ -4,11 +4,22 @@ import { basename, parentDir } from "@intentic/ui/path";
 import { computed, type Ref } from "vue";
 import { useRouter } from "vue-router";
 import { nameScore, rankCommands } from "../../workbench/commands/commandSearch";
-import { groupJumpRows, type JumpGroup, type JumpKind, type JumpQuery, parseJumpQuery, type ScoredRow, UNSCOPED_CAP } from "../../workbench/commands/jumpSearch";
+import {
+    groupJumpRows,
+    type JumpGroup,
+    type JumpKind,
+    type JumpQuery,
+    parseJumpQuery,
+    type ScoredRow,
+    UNSCOPED_CAP,
+} from "../../workbench/commands/jumpSearch";
 import { formatChord, isApplePlatform } from "../../workbench/commands/keybindings";
 import { recentCommandIds, rememberCommand } from "../../workbench/commands/recentCommands";
 import { commandLabel, commands, executeCommand, type RegisteredCommand } from "../../workbench/commands/useCommands";
 import { effectiveKeybinding } from "../../workbench/commands/useKeymap";
+import { categoryLabel, SANDBOX, SETTINGS } from "../../workbench/commands/categories";
+import { useHubSearch } from "../../workbench/hub/useHubSearch";
+import { arriveAt } from "../../workbench/hub/useHubSearchPanel";
 import { agentDisplayTitle, agentStatusMeta } from "../../models/agent-status/agentStatus-meta";
 import { previewOf } from "../../models/conversations/panel/useChat-strip";
 import { sessionIdFrom } from "../../features/agents/fleet/sessionRef";
@@ -88,6 +99,56 @@ const sectionsOf = (group: JumpGroup<PaletteRow>): readonly JumpSection[] => {
         { kind: group.kind, heading: t(`shell.quickOpen.allCommands`), rows: group.rows.slice(recent.length) },
     ];
 };
+
+// Commands run recently, in that order, dropped as soon as a query is typed: ranking is a better answer than habit once
+// someone has said what they're after. A remembered command whose surface isn't mounted is simply not listed.
+const useRecentCommands = (text: Ref<string>) =>
+    computed<readonly RegisteredCommand[]>(() =>
+        text.value.length > 0
+            ? []
+            : recentCommandIds.value.flatMap((id) => {
+                  const entry = commands.value.find((candidate) => candidate.command === id);
+                  return entry === undefined ? [] : [entry];
+              }),
+    );
+
+// A single setting inside a hub page, found by its own name or the words people use for it (hubSearch.ts), as a
+// destination beside the "Sandbox: …" and "Settings: …" pages the registry already holds — which is why the pages
+// themselves are left out here. Only once something is typed (the hub search answers nothing to an empty query): a few
+// hundred settings in the `>` list would bury the commands it is for. Answers the ranked commands with the settings
+// ranked in among them; stable, so a setting and a command that score the same keep the command first.
+function useSettingRows(text: Ref<string>) {
+    const router = useRouter();
+    const { results } = useHubSearch(text);
+    const rows = computed<readonly PaletteRow[]>(() =>
+        results.value.flatMap((result) =>
+            result.setting === undefined
+                ? []
+                : [
+                      {
+                          kind: `command`,
+                          key: `setting:${result.key}`,
+                          score: result.score,
+                          title: `${categoryLabel(result.hub === `sandbox` ? SANDBOX : SETTINGS)}: ${result.title}`,
+                          detail: result.trail,
+                          icon: result.icon,
+                          tone: undefined,
+                          chord: undefined,
+                          recent: false,
+                          run: (): void => {
+                              void router.push(result.to);
+                              arriveAt(result);
+                          },
+                      },
+                  ],
+        ),
+    );
+    return computed(
+        () =>
+            (ranked: readonly PaletteRow[]): readonly PaletteRow[] =>
+                [...ranked, ...rows.value].toSorted((left, right) => right.score - left.score),
+    );
+}
 
 export function useJumpRows(query: Ref<string>, isOpen: Ref<boolean>) {
     const router = useRouter();
@@ -200,16 +261,8 @@ export function useJumpRows(query: Ref<string>, isOpen: Ref<boolean>) {
             .toSorted((left, right) => right.score - left.score);
     });
 
-    // Commands run recently, in that order, dropped as soon as a query is typed: ranking is a better answer than habit
-    // once someone has said what they're after. A remembered command whose surface isn't mounted is simply not listed.
-    const recentCommands = computed<readonly RegisteredCommand[]>(() =>
-        text.value.length > 0
-            ? []
-            : recentCommandIds.value.flatMap((id) => {
-                  const entry = commands.value.find((candidate) => candidate.command === id);
-                  return entry === undefined ? [] : [entry];
-              }),
-    );
+    const recentCommands = useRecentCommands(text);
+    const withSettings = useSettingRows(text);
 
     const commandRow = (entry: RegisteredCommand, recent: boolean): PaletteRow => {
         // The effective chord (override or default), read reactively so a live remap updates the hint.
@@ -246,7 +299,7 @@ export function useJumpRows(query: Ref<string>, isOpen: Ref<boolean>) {
             return recent.map((entry) => commandRow(entry, true));
         }
         const ranked = rankCommands(commands.value, text.value).filter((entry) => !recent.includes(entry));
-        return [...recent.map((entry) => commandRow(entry, true)), ...ranked.map((entry) => commandRow(entry, false))];
+        return [...recent.map((entry) => commandRow(entry, true)), ...withSettings.value(ranked.map((entry) => commandRow(entry, false)))];
     });
 
     const sections = computed<readonly JumpSection[]>(() => {

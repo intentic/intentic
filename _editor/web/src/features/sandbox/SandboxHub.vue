@@ -26,6 +26,7 @@ import ExtensionView from "../../core-views/ExtensionView.vue";
 import HubLayout from "../../workbench/hub/HubLayout.vue";
 import type { HubTab } from "../../workbench/hub/hubNav";
 import { hubWorkKey, hubWorkRunning } from "../../workbench/hub/hubWork";
+import { useHubSearchPanel } from "../../workbench/hub/useHubSearchPanel";
 import SandboxAccess from "./access/SandboxAccess.vue";
 import SandboxMap from "./map/SandboxMap.vue";
 import SandboxAgent from "./overview/SandboxAgent.vue";
@@ -191,6 +192,10 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
         ? []
         : [{ key: `contributed`, label: t(`sandbox.sandboxHub.addedByExtensions`), items: contributed.value.map(contributedRow) }]),
 ]);
+
+// Finds a page or a single setting here or in Settings, by name: a setting is often a page and a category deep, and
+// sometimes in the other hub (useHubSearchPanel.ts).
+const search = useHubSearchPanel(HUB);
 </script>
 
 <template>
@@ -201,6 +206,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
         :addressable="isGuest"
         :groups="groups"
         :ready="!isLoading"
+        :search="search"
     >
         <template #default="{ slug }">
             <!-- An organisation's lock draws the section read-only; every personal sandbox passes straight through. -->

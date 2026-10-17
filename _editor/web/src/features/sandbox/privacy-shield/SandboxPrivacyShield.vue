@@ -24,10 +24,14 @@ const PLACES = { name: `sandbox`, params: { tab: `data-protection` }, query: { s
         <AgentPrivacyShield />
 
         <!-- Not the agent's traffic but the editor's: usage events and recordings of visits, which this box can refuse whatever each person agreed to. -->
-        <RowGroup :label="t(`sandbox.privacyShieldPage.sentToIntentic`)">
+        <RowGroup data-setting="privacy-shield-analytics" :label="t(`sandbox.privacyShieldPage.sentToIntentic`)">
             <SandboxAnalytics />
         </RowGroup>
 
-        <SectionLink :text="t(`sandbox.privacyShieldPage.record`)" :to="activityPart(`personal`)" :label="t(`sandbox.privacyShieldPage.recordLink`)" />
+        <SectionLink
+            :text="t(`sandbox.privacyShieldPage.record`)"
+            :to="activityPart(`personal`)"
+            :label="t(`sandbox.privacyShieldPage.recordLink`)"
+        />
     </div>
 </template>

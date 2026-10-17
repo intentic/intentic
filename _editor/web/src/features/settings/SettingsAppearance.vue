@@ -160,8 +160,12 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
 <template>
     <div class="flex flex-col gap-6">
         <!-- Who the words are for; first, since it decides what the rest of the app is called. -->
-        <RowGroup :label="t(`settings.words.group`)">
-            <Row icon="user" :title="t(`settings.words.group`)" :description="maker ? t(`settings.appearance.plain.workHint`) : t(`settings.appearance.work.hint`)">
+        <RowGroup data-setting="audience" :label="t(`settings.words.group`)">
+            <Row
+                icon="user"
+                :title="t(`settings.words.group`)"
+                :description="maker ? t(`settings.appearance.plain.workHint`) : t(`settings.appearance.work.hint`)"
+            >
                 <template #control
                     ><SegmentedControl :model-value="audience" :options="audienceOptions" @update:model-value="setAudience"
                 /></template>
@@ -171,7 +175,12 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         <!-- Look: whole-workspace appearance choices. -->
         <RowGroup :label="t(`settings.appearance.look.group`)" equal-rows>
             <!-- First in the group: it decides what every other row on this page is written in. -->
-            <Row icon="globe" :title="t(`settings.appearance.look.language`)" :description="maker ? t(`settings.appearance.plain.languageHint`) : t(`settings.appearance.look.languageHint`)">
+            <Row
+                data-setting="language"
+                icon="globe"
+                :title="t(`settings.appearance.look.language`)"
+                :description="maker ? t(`settings.appearance.plain.languageHint`) : t(`settings.appearance.look.languageHint`)"
+            >
                 <template #control>
                     <!-- Ghost, like every other Picker that sits in a settings Row: a bordered field here would tower
                          over the segmented controls it shares the group with. -->
@@ -186,35 +195,43 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                     />
                 </template>
             </Row>
-            <Row :icon="THEME_ICON[themeChoice]" :title="t(`settings.appearance.look.theme`)">
+            <Row data-setting="theme" :icon="THEME_ICON[themeChoice]" :title="t(`settings.appearance.look.theme`)">
                 <template #control
                     ><SegmentedControl :model-value="themeChoice" :options="themeOptions" @update:model-value="setThemeChoice"
                 /></template>
             </Row>
-            <Row icon="image" :title="t(`settings.appearance.look.wallpaper`)" :description="maker ? t(`settings.appearance.plain.wallpaperHint`) : t(`settings.appearance.look.wallpaperHint`)">
+            <Row
+                data-setting="wallpaper"
+                icon="image"
+                :title="t(`settings.appearance.look.wallpaper`)"
+                :description="maker ? t(`settings.appearance.plain.wallpaperHint`) : t(`settings.appearance.look.wallpaperHint`)"
+            >
                 <template #control>
                     <SegmentedControl :model-value="wallpaper" :options="wallpaperOptions" @update:model-value="(value) => (wallpaper = value)" />
                 </template>
             </Row>
             <!-- wide-control lets this wrap to a second line in a narrow pane rather than stretch the row. -->
-            <Row icon="palette" :title="t(`settings.appearance.look.colour`)" wide-control>
+            <Row data-setting="accent-colour" icon="palette" :title="t(`settings.appearance.look.colour`)" wide-control>
                 <template #control>
                     <ColorPicker :model-value="accent" size="sm" class="justify-end" @update:model-value="setAccent" />
                 </template>
             </Row>
-            <Row icon="sparkles" :title="t(`settings.appearance.motion.title`)" :description="t(`settings.appearance.motion.hint`)">
-                <template #control
-                    ><SegmentedControl :model-value="motion" :options="motionOptions" @update:model-value="setMotion"
-                /></template>
+            <Row
+                data-setting="motion"
+                icon="sparkles"
+                :title="t(`settings.appearance.motion.title`)"
+                :description="t(`settings.appearance.motion.hint`)"
+            >
+                <template #control><SegmentedControl :model-value="motion" :options="motionOptions" @update:model-value="setMotion" /></template>
             </Row>
             <!-- Above the rail row: this one moves the whole workspace, that one moves a column of it. -->
-            <Row icon="expand" :title="t(`settings.appearance.look.textSize`)">
+            <Row data-setting="text-size" icon="expand" :title="t(`settings.appearance.look.textSize`)">
                 <template #control
                     ><SegmentedControl :model-value="textSize" :options="textSizeOptions" @update:model-value="setTextSize"
                 /></template>
             </Row>
             <!-- A phone has no rail to size: its sections are the tab bar and the Menu page. -->
-            <Row v-if="!mobile" icon="sliders-h" :title="t(`settings.appearance.look.iconRail`)">
+            <Row v-if="!mobile" data-setting="icon-rail" icon="sliders-h" :title="t(`settings.appearance.look.iconRail`)">
                 <template #control>
                     <SegmentedControl
                         :model-value="iconRailSize"
@@ -226,7 +243,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         </RowGroup>
 
         <!-- File tree: the explorer's look, with its live preview flush under the row (no boxed inset). -->
-        <RowGroup v-if="!maker" :label="t(`settings.appearance.explorer.group`)">
+        <RowGroup v-if="!maker" data-setting="file-tree" :label="t(`settings.appearance.explorer.group`)">
             <Row icon="sitemap" :title="t(`settings.appearance.explorer.title`)" indent>
                 <template #control>
                     <SegmentedControl
@@ -287,7 +304,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         </RowGroup>
 
         <!-- How a review reads: its file list and where each diff opens; grouping mirrors the panel's own toggle. -->
-        <RowGroup v-if="!maker" :label="t(`shared.changes`)">
+        <RowGroup v-if="!maker" data-setting="changes-list" :label="t(`shared.changes`)">
             <Row
                 as="label"
                 icon="box"
@@ -314,7 +331,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         </RowGroup>
 
         <!-- How much of an agent's working-out shows in transcripts; also flipped from the chat's own readout row. -->
-        <RowGroup v-if="!maker" :label="t(`shared.chat`)">
+        <RowGroup v-if="!maker" data-setting="tool-calls" :label="t(`shared.chat`)">
             <Row as="label" icon="eye" :title="t(`chat.words.showToolCalls`)" :description="t(`settings.appearance.chat.showToolCallsHint`)">
                 <template #control><ToggleSwitch v-model="showToolCalls" /></template>
             </Row>
@@ -322,7 +339,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
 
         <!-- The status bar's CPU, memory and disk gauges, and each card's share; off means the sandbox measures nothing for
              them, not that they are hidden. The bar itself is always there on a desktop, carrying what the sandbox runs. -->
-        <RowGroup v-if="!maker" :label="t(`settings.appearance.statusBar.group`)">
+        <RowGroup v-if="!maker" data-setting="status-bar" :label="t(`settings.appearance.statusBar.group`)">
             <Row
                 as="label"
                 icon="cpu"

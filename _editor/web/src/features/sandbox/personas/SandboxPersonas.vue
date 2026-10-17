@@ -312,7 +312,11 @@ const confirmRemove = async (): Promise<void> => {
 
 <template>
     <div class="flex flex-col gap-6">
-        <RowGroup v-if="settings !== undefined && personas.length > 0" :label="t(`sandbox.sandboxPersonas.newChats`)">
+        <RowGroup
+            v-if="settings !== undefined && personas.length > 0"
+            data-setting="personas-new-chats"
+            :label="t(`sandbox.sandboxPersonas.newChats`)"
+        >
             <Row
                 icon="users"
                 :title="t(`sandbox.sandboxPersonas.matchNewChatsTo`)"

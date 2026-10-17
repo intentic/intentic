@@ -69,7 +69,7 @@ const download = async (kind: ComplianceDocumentKind): Promise<void> => {
             </div>
         </div>
 
-        <RowGroup :label="t(`sandbox.dataProtection.step.documents`)">
+        <RowGroup data-setting="data-protection-documents" :label="t(`sandbox.dataProtection.step.documents`)">
             <template #info>
                 <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.dataProtection.step.documents`) })">
                     <span class="block text-xs text-content">{{ t(`sandbox.dataProtection.documentsHint`) }}</span>
@@ -77,7 +77,9 @@ const download = async (kind: ComplianceDocumentKind): Promise<void> => {
             </template>
             <Row v-for="kind in DOCUMENTS" :key="kind" icon="file" :description="t(`sandbox.dataProtection.document.${kind}Ref`)">
                 <template #title>
-                    <HintedTitle :title="t(`sandbox.dataProtection.document.${kind}`)">{{ t(`sandbox.dataProtection.document.${kind}Note`) }}</HintedTitle>
+                    <HintedTitle :title="t(`sandbox.dataProtection.document.${kind}`)">{{
+                        t(`sandbox.dataProtection.document.${kind}Note`)
+                    }}</HintedTitle>
                 </template>
                 <template #control>
                     <Button

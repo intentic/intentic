@@ -99,7 +99,12 @@ const CHANNELS = computed((): readonly PickerOption<`blessed` | `latest` | `pinn
             </div>
         </RowGroup>
     </SkeletonSnapshot>
-    <RowGroup v-else v-skeleton-source="`sandbox.environment.engines`" :label="t(`sandbox.enginesCard.agentEngines`)">
+    <RowGroup
+        v-else
+        v-skeleton-source="`sandbox.environment.engines`"
+        data-setting="environment-engines"
+        :label="t(`sandbox.enginesCard.agentEngines`)"
+    >
         <template #actions>
             <div class="flex flex-wrap items-center justify-end gap-2">
                 <Button

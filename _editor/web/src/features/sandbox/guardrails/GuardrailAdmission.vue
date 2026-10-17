@@ -23,7 +23,7 @@ const setRule = (key: AdmissionKey, rule: AdmissionRule): void => {
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.guardrails.admission.title`)">
+    <RowGroup data-setting="guardrails-admission" :label="t(`sandbox.guardrails.admission.title`)">
         <RowNote>{{ t(`sandbox.guardrails.admission.intro`) }}</RowNote>
         <Row v-for="key in ADMISSION_KEYS" :key="key" icon="automations" :title="t(`sandbox.guardrails.admission.${key}`)">
             <template #control>

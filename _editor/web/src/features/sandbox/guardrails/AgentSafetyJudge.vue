@@ -30,7 +30,7 @@ const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(model
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentSafetyJudge.safetyJudge`)">
+    <RowGroup data-setting="guardrails-judge" :label="t(`sandbox.agentSafetyJudge.safetyJudge`)">
         <!-- Which commands reach this gate at all is reference, not a setting: behind the (i), so the page holds controls. -->
         <template #info>
             <InfoDialog :title="t(`sandbox.agentSafetyRules.whatGetsStopped`)" size="lg"><AgentSafetyRules /></InfoDialog>
@@ -50,7 +50,13 @@ const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(model
             <!-- `as` keeps native link behavior (hover preview, cmd-click new tab) while Button supplies the control styling. -->
             <!-- Names the job, so Models opens on the judge's own row rather than on a Simple view that has none. -->
             <template #control>
-                <Button :as="RouterLink" :to="{ name: `sandbox`, params: { tab: `agent` }, query: { job: `safety-judge` } }" size="small" tier="quiet" tone="accent">
+                <Button
+                    :as="RouterLink"
+                    :to="{ name: `sandbox`, params: { tab: `agent` }, query: { job: `safety-judge` } }"
+                    size="small"
+                    tier="quiet"
+                    tone="accent"
+                >
                     {{ t(`sandbox.agentSafetyJudge.changeInModels`) }}
                 </Button>
             </template>
