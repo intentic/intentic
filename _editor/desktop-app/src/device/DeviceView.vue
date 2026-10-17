@@ -36,6 +36,7 @@ import PcSetupCard from "./pcSetup/PcSetupCard.vue";
 import PasswordsGroup from "./keyring/PasswordsGroup.vue";
 import { pcCardShown } from "./pcSetup/livePcCard";
 import { DEVICES_PATH, DOCKER_DOCS, REFRESH_EVERY_MS, useDevice } from "./useDevice";
+import { keptCopiesOf, moveTargetOf, offerOf } from "./engineMove";
 
 // THIS DEVICE: the page the app adds to a local window's rail (host.ts), where the launcher window's card used to be.
 // This computer's sandboxes with every verb the workspace's Devices tab has for them, its machine agent, the Docker
@@ -183,11 +184,15 @@ const dockerMatters = computed(
 
 // Which engine the sandboxes run on, and the move to the other (engine.ts). It stands back while Docker's own card is up,
 // which is the one thing to act on then, but never from a move: its card is the move's while it runs and just after.
-const engineShown = computed(
-    () =>
-        engineState.value !== undefined &&
-        (!dockerCardShown.value || engineMoving.value !== undefined || engineMoveEnd.value !== undefined || engineMoveError.value !== undefined),
+// On Intentic's engine with nothing under way and no copies kept, the card would only name the engine and point back to
+// Docker Desktop: it stays away, and the way back is the footnote at the page's foot.
+const engineEventful = computed(() => engineMoving.value !== undefined || engineMoveEnd.value !== undefined || engineMoveError.value !== undefined);
+const engineQuiet = computed(
+    () => engineState.value?.engine === `intentic` && !engineEventful.value && keptCopiesOf(engineState.value).length === 0,
 );
+const engineShown = computed(() => engineState.value !== undefined && !engineQuiet.value && (!dockerCardShown.value || engineEventful.value));
+// The way back to Docker Desktop, kept within reach but out of the way: never while a move runs or its card speaks.
+const engineBackShown = computed(() => engineState.value !== undefined && offerOf(engineState.value) === `back` && !engineEventful.value);
 // The engine is down on a computer that has hosted a sandbox: an empty list says nothing about what is here.
 const engineDownWithSandboxes = computed(() => engineListening.value === false && facts.value?.hostsSandboxes === true);
 // The engine that is down, by its own name: Intentic's engine on a PC that runs on it, and why it is down when that was
@@ -565,7 +570,7 @@ onMounted(() => {
             </template>
 
             <!-- One row per sandbox with its folder, ports, image and verbs, in the workspace Devices tab's own group. -->
-            <RowGroup v-if="groups.length > 0" :label="t(`desktop.app.sandboxesOnDevice`)" :count="groups.length" :flat="true" :undivided="true">
+            <RowGroup v-if="groups.length > 0" :label="t(`desktop.app.sandboxesOnDevice`)" :flat="true" :undivided="true">
                 <div class="flex flex-col">
                     <DeviceDetail :pairings="status?.sync.pairings" :ports="status?.sync.ports" :sandboxes="sandboxRows">
                         <template #actions="{ group }">
@@ -659,6 +664,20 @@ onMounted(() => {
             <p v-if="agentsElsewhere.length > 0" class="flex items-start gap-2.5 text-xs text-subtle">
                 <Icon name="server" class="mt-0.5 shrink-0" />
                 <span>{{ t(`desktop.device.agentsElsewhere`, { places: agentsElsewhere.join(`, `) }) }}</span>
+            </p>
+            <!-- The way back to Docker Desktop, last and in the quietest ink: Intentic's engine is where sandboxes belong on a
+                 PC, so the move away is there for whoever looks for it and never put in front of anyone. The move asks first. -->
+            <p v-if="engineBackShown && engineState" class="flex flex-wrap items-center gap-x-1.5 text-2xs text-subtle">
+                <span>{{ t(`desktop.engine.runsOn.intentic`) }}</span>
+                <span aria-hidden="true">·</span>
+                <button
+                    type="button"
+                    :class="ui.textButton({ tone: `quiet` })"
+                    :disabled="running || busy !== undefined"
+                    @click="void moveEngine(moveTargetOf(engineState) ?? `docker-desktop`, false)"
+                >
+                    {{ t(`desktop.engine.moveBack`) }}
+                </button>
             </p>
         </div>
 

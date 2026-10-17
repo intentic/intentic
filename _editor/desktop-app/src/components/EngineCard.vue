@@ -9,8 +9,9 @@ import { barOf, gigabytes, keptCopiesOf, moveTargetOf, offerOf, pcEngineOf, type
 // WHICH ENGINE THIS PC'S SANDBOXES RUN ON, beside Docker's own card on This device (device/engine.ts holds it, the app's
 // engine.rs runs `ic engine`): Docker Desktop or Intentic's engine, and the move to the other one. On Docker Desktop the
 // move is in reach with a line of why and of what happens, and in front of the reader with a "Not now" once ic says it
-// is worth making; on Intentic's engine the way back is a quiet link. While a move runs, which sandbox it is on, its step
-// and its bytes; after, how it ended. The copies a move left behind are said with their day, and can go sooner.
+// is worth making. On Intentic's engine the card offers no way back: that is a footnote at the foot of This device
+// (DeviceView.vue), there for whoever looks for it and never pressed on anyone. While a move runs, which sandbox it is on,
+// its step and its bytes; after, how it ended. The copies a move left behind are said with their day, and can go sooner.
 
 const t = useT();
 
@@ -199,14 +200,6 @@ const copies = computed(() => keptCopiesOf(props.status));
             <Button v-if="offer === `offer`" size="small" tier="quiet" :label="t(`desktop.engine.notNow`)" :disabled="busy" @click="emit(`decline`)" />
         </div>
         <Notice v-if="offerError" tone="warning" class="text-2xs">{{ offerError }}</Notice>
-        <!-- The way back, quietly: Docker Desktop is still installed, and moving back is a move like any other. -->
-        <div v-if="!moving && offer === `back` && target">
-            <button type="button" :class="ui.textButton({ tone: `quiet` })" :disabled="busy" @click="emit(`move`, target, false)">
-                <Icon name="arrows-h" class="shrink-0" />
-                <span>{{ t(`desktop.engine.moveBack`) }}</span>
-            </button>
-        </div>
-
         <!-- What the engine left behind keeps: until the day ic removes it by itself, or now. -->
         <div v-if="copies.length > 0 && !moving" class="flex flex-col gap-1.5 border-t border-line pt-2.5">
             <p v-for="kept in copies" :key="kept.on" class="flex items-start gap-1.5 text-2xs text-subtle">
