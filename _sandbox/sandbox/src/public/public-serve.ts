@@ -1,6 +1,7 @@
 import { createReadStream } from "node:fs";
 import type http from "node:http";
 import { pipeline } from "node:stream";
+import { codingFor, isCompressibleText, MIN_COMPRESSED_BYTES, streamEncoder } from "../http/compression.js";
 import { interstitial } from "../panels/interstitial.js";
 import { type PublicResolution, resolvePublicFile } from "./public-files.js";
 
@@ -10,6 +11,9 @@ import { type PublicResolution, resolvePublicFile } from "./public-files.js";
 // 2. X-Robots-Tag: noindex, since a link pasted publicly can be followed even though the hostname is unguessable.
 // 3. X-Content-Type-Options: nosniff, so public-files.ts's allowlist is the last word on how a response is interpreted.
 // 4. Range requests, since a published screen recording needs to seek.
+// 5. A whole text file (a page, its scripts and styles, JSON, SVG, WebAssembly) leaves encoded in the best coding the
+//    visitor's browser accepts, as it is read off disk; a range of one leaves as written, since its offsets name the
+//    unencoded bytes. A published site would otherwise cross the tunnel at full size on every visit.
 // Every refusal renders the same branded 404, whatever the reason; the publisher reads the real one off the Public
 // view.
 
@@ -28,6 +32,10 @@ const parseRange = (header: string | undefined, size: number): { readonly start:
     const end = rawStart === "" || rawEnd === "" ? size - 1 : Number(rawEnd);
     return start < 0 || end < start || start >= size ? undefined : { start, end: Math.min(end, size - 1) };
 };
+
+// Shrinks three- to tenfold under any coding; every other published type is already compressed (images, media, fonts,
+// PDF) or a download.
+const compressible = (type: string): boolean => isCompressibleText(type) || /^(image\/svg\+xml|application\/wasm)\b/u.test(type);
 
 // CSP for SVG only: presentation intact, scripting gone. HTML pages keep scripts; that's the point of one.
 const SVG_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:";
@@ -53,16 +61,29 @@ export const createPublicHandler =
         }
 
         const etag = etagOf(resolution);
+        const encodable = compressible(resolution.type) && resolution.size >= MIN_COMPRESSED_BYTES;
+        const coding = encodable && req.headers.range === undefined ? codingFor(req.headers["accept-encoding"]) : undefined;
+        // The weak ETag holds for every coding of the same file, which is what `W/` promises.
         const headers: http.OutgoingHttpHeaders = {
             "content-type": resolution.type,
             "x-content-type-options": "nosniff",
             "x-robots-tag": "noindex",
             "cache-control": "no-cache",
-            "accept-ranges": "bytes",
             etag,
-            ...(resolution.inline ? {} : { "content-disposition": "attachment" }),
-            ...(resolution.type === "image/svg+xml" ? { "content-security-policy": SVG_CSP } : {}),
         };
+        // An encoded answer has no offsets to seek in; a range request is still honoured, unencoded.
+        if (coding === undefined) {
+            headers["accept-ranges"] = "bytes";
+        }
+        if (encodable) {
+            headers.vary = "accept-encoding";
+        }
+        if (!resolution.inline) {
+            headers["content-disposition"] = "attachment";
+        }
+        if (resolution.type === "image/svg+xml") {
+            headers["content-security-policy"] = SVG_CSP;
+        }
 
         if (req.headers["if-none-match"] === etag) {
             res.writeHead(304, headers);
@@ -70,8 +91,13 @@ export const createPublicHandler =
             return;
         }
         if (req.method === "HEAD") {
-            res.writeHead(200, { ...headers, "content-length": resolution.size });
+            res.writeHead(200, coding === undefined ? { ...headers, "content-length": resolution.size } : { ...headers, "content-encoding": coding });
             res.end();
+            return;
+        }
+        if (coding !== undefined) {
+            res.writeHead(200, { ...headers, "content-encoding": coding });
+            pipeline(createReadStream(resolution.absPath), streamEncoder(coding).encoder, res, () => undefined);
             return;
         }
 

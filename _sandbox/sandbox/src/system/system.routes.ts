@@ -1,6 +1,6 @@
 import { noteAudit } from "../audit/audit-http.js";
 import { type Fence, fenceReaches } from "@intentic/sandbox-contract/policy/fence-paths";
-import type { SystemEvent } from "@intentic/sandbox-contract/events/system-events";
+import type { Hello, SystemEvent } from "@intentic/sandbox-contract/events/system-events";
 import type { TerminalsList } from "@intentic/sandbox-contract/schemas/terminal";
 import type { UsageAccount } from "@intentic/sandbox-contract/schemas/providers/usage";
 import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
@@ -52,6 +52,7 @@ import { workspaceIdentity } from "./workspace-identity.js";
 import { framedEvent, framedMetrics, framedSubagents } from "../auth/fleet-scope.js";
 import { frameBacklog } from "../seams/frame-backlog.js";
 import { callerFence } from "../areas/area-scope.js";
+import { UPLOAD_ENCODINGS } from "../http/request-body.js";
 
 // A project sandbox's folder, for the hello: withheld from a caller whose fence does not reach it, as a fenced stream
 // withholds any repository's name (auth/fleet-scope.ts).
@@ -59,6 +60,22 @@ const shownProjectDir = (config: Services["config"], fence: Fence): { readonly p
     const projectDir = projectDirOf(config);
     return projectDir !== undefined && fenceReaches(fence, projectDir) ? { projectDir } : {};
 };
+
+// The stream's first frame: workspace identity (a wipe/recreate gets a new one), the route/shape surface this build
+// implements, the codings its uploads decode, the build id for cache invalidation, boot progress, and the project folder
+// the browser opens on.
+const helloFrame = async (services: Services, fence: Fence): Promise<Hello> => ({
+    kind: "hello",
+    workspaceId: await workspaceIdentity(services),
+    routes: [...SANDBOX_ROUTE_NAMES],
+    shapes: { ...sandboxRouteFingerprints() },
+    rawRoutes: [...RAW_ROUTE_NAMES],
+    rawFingerprints: { ...rawRouteFingerprints() },
+    uploadEncodings: [...UPLOAD_ENCODINGS],
+    build: buildId(),
+    boot: services.boot.progress(),
+    ...shownProjectDir(services.config, fence),
+});
 
 // Long-lived /events stream: heartbeats every ~2s interleaved with workspaceChanged batches and presence snapshots.
 // `member` joins the roster for this connection's lifetime; undefined observes without joining.
@@ -85,20 +102,8 @@ async function* systemEvents(
     // paths, a fenced member's own folders. Resolved once here rather than per frame, which a file read cannot be;
     // editing an area revokes the connection, so this can never outlive the grant it was read from.
     const fence = callerFence(await services.areas.list(), identity);
-    // First frame: workspace identity (a wipe/recreate gets a new one), the route/shape surface this build implements,
-    // the build id for cache invalidation, boot progress, and the project folder the browser opens on; sent before
-    // subscribing so it appears before any wait.
-    yield {
-        kind: "hello",
-        workspaceId: await workspaceIdentity(services),
-        routes: [...SANDBOX_ROUTE_NAMES],
-        shapes: { ...sandboxRouteFingerprints() },
-        rawRoutes: [...RAW_ROUTE_NAMES],
-        rawFingerprints: { ...rawRouteFingerprints() },
-        build: buildId(),
-        boot: services.boot.progress(),
-        ...shownProjectDir(services.config, fence),
-    };
+    // Sent before subscribing so it appears before any wait.
+    yield await helloFrame(services, fence);
     // Every subscription this connection holds, released together and last-first: at the end of the stream, or at the
     // cut, since a consumer that stopped reading leaves this generator suspended at `yield` and its `finally` may never
     // run.

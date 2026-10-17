@@ -3,6 +3,7 @@ import { mkdtemp, readdir, readlink, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { brotliDecompressSync, gunzipSync, zstdDecompressSync } from "node:zlib";
 import { createPublicHandler } from "./public-serve.js";
 
 // The outbox over real HTTP: the actual headers a stranger's browser gets, plus conditional requests (no stale cache)
@@ -106,6 +107,51 @@ test("an unsatisfiable or malformed range falls back to the whole file", async (
     const port = await serve({ "clip.txt": "0123456789" });
     expect((await request(port, "/clip.txt", { headers: { range: "bytes=99-200" } })).body).toBe("0123456789");
     expect((await request(port, "/clip.txt", { headers: { range: "lines=1-2" } })).body).toBe("0123456789");
+});
+
+// The same request, with the body kept as bytes: an encoded body is not text until it is decoded.
+const requestBytes = (port: number, path: string, headers: Record<string, string>): Promise<{ headers: http.IncomingHttpHeaders; body: Buffer }> =>
+    new Promise((resolve, reject) => {
+        const req = http.request({ host: "127.0.0.1", port, path, headers }, (response) => {
+            const chunks: Buffer[] = [];
+            response.on("data", (chunk: Buffer) => chunks.push(chunk));
+            response.on("end", () => resolve({ headers: response.headers, body: Buffer.concat(chunks) }));
+        });
+        req.on("error", reject);
+        req.end();
+    });
+
+const page = `<!doctype html><title>Report</title>${"<p>quarterly figures, region by region</p>".repeat(400)}`;
+
+test("a published page leaves in the coding the browser accepts, and decodes to the file", async () => {
+    const port = await serve({ "index.html": page });
+    for (const [asked, decode] of [
+        ["zstd", zstdDecompressSync],
+        ["gzip, deflate, br", brotliDecompressSync],
+        ["gzip", gunzipSync],
+    ] as const) {
+        const response = await requestBytes(port, "/index.html", { "accept-encoding": asked });
+        expect(response.headers["content-encoding"]).toBe(asked.split(", ").at(-1));
+        expect(response.headers.vary).toBe("accept-encoding");
+        expect(response.headers["content-length"]).toBeUndefined();
+        expect(response.headers["accept-ranges"]).toBeUndefined();
+        expect(response.body.length).toBeLessThan(page.length / 4);
+        expect(decode(response.body).toString("utf8")).toBe(page);
+    }
+});
+
+test("a range of a page, a picture, and a page too small to shrink leave as written", async () => {
+    const port = await serve({ "index.html": page, "tiny.html": "<p>hi</p>", "photo.png": "x".repeat(4096) });
+    const range = await requestBytes(port, "/index.html", { "accept-encoding": "zstd", range: "bytes=0-9" });
+    expect(range.headers["content-encoding"]).toBeUndefined();
+    expect(range.body.toString("utf8")).toBe(page.slice(0, 10));
+    for (const path of ["/tiny.html", "/photo.png"]) {
+        expect((await requestBytes(port, path, { "accept-encoding": "zstd" })).headers["content-encoding"]).toBeUndefined();
+    }
+    // HEAD says what GET would send.
+    const head = await request(port, "/index.html", { method: "HEAD", headers: { "accept-encoding": "br" } });
+    expect(head.headers["content-encoding"]).toBe("br");
+    expect(head.headers["content-length"]).toBeUndefined();
 });
 
 test("the outbox is read-only from the internet", async () => {

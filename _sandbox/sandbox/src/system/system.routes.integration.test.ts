@@ -377,6 +377,7 @@ test("events: a project sandbox's hello names its folder, workspace-relative, an
         "shapes",
         "rawRoutes",
         "rawFingerprints",
+        "uploadEncodings",
         "build",
         "boot",
     ]);

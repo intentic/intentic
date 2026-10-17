@@ -20,6 +20,7 @@ import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
 import type { Caller } from "../../auth/auth.js";
 import { callerEditFence, callerFence } from "../../areas/area-scope.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
+import { decodedBody } from "../../http/request-body.js";
 
 // Byte routes that stay off oRPC because their bodies are streamed: raw file read, ranged media read, and file/diff/tar
 // uploads. Registered before the oRPC catch-all, like /health.
@@ -89,6 +90,38 @@ const uploadTarget = async (
         return { error: "outside your access to this workspace", status: 403 };
     }
     return { target: resolved.path };
+};
+
+// ?offset positions this part of a chunked upload; the write lands in place instead of truncating. A 400 for an offset
+// that is no position, a 413 for a part that declares it would end past the cap.
+const partOffset = (c: Context<AppEnv>): number | Response => {
+    const offset = Number(c.req.query("offset") ?? 0);
+    if (!Number.isInteger(offset) || offset < 0) {
+        return c.json({ error: "invalid offset" }, 400);
+    }
+    // The declared length only refuses early. The cap itself is writeStream's, which counts the bytes as they reach
+    // disk, so a chunked body (no Content-Length) is held to it too and never buffered whole, and so is an encoded one,
+    // whose declared length is what it inflates from.
+    // allow(primitive-tiers): an early refusal only; the streamed write is the cap.
+    const declared = Number(c.req.header("content-length"));
+    return Number.isFinite(declared) && offset + declared > MAX_UPLOAD_BYTES ? c.json({ error: "file too large" }, 413) : offset;
+};
+
+// x-intentic-base-hash pins the sha256 the browser last read; true when the file has moved on since, which refuses
+// the write with 409.
+const movedOnFrom = async (files: WorkspaceBytesRoutesDeps["files"], target: string, baseHash: string | undefined): Promise<boolean> => {
+    if (baseHash === undefined) {
+        return false;
+    }
+    const current = await files.read(target);
+    return current === undefined || sha256Text(current) !== baseHash;
+};
+
+// An upload's body as the routes write it: decoded as it streams when the browser encoded it (http/request-body.ts), or
+// the 415 a coding the daemon does not decode is answered with.
+const uploadBody = (c: Context<AppEnv>): { readonly body: ReadableStream<Uint8Array> | null } | Response => {
+    const decoded = decodedBody(c.req.raw.body, c.req.header("content-encoding"));
+    return "unsupported" in decoded ? c.json({ error: `an upload cannot be sent in the ${decoded.unsupported} coding` }, 415) : decoded;
 };
 
 const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
@@ -253,27 +286,19 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
             return c.json({ error: resolved.error }, resolved.status);
         }
         const target = resolved.target;
-        // ?offset positions this part of a chunked upload; the write lands in place instead of truncating.
-        const offset = Number(c.req.query("offset") ?? 0);
-        if (!Number.isInteger(offset) || offset < 0) {
-            return c.json({ error: "invalid offset" }, 400);
+        const offset = partOffset(c);
+        if (offset instanceof Response) {
+            return offset;
         }
-        // The declared length only refuses early. The cap itself is writeStream's, which counts the bytes as they
-        // reach disk, so a chunked body (no Content-Length) is held to it too and never buffered whole.
-        // allow(primitive-tiers): an early refusal only; the streamed write below is the cap.
-        const declared = Number(c.req.header("content-length"));
-        if (Number.isFinite(declared) && offset + declared > MAX_UPLOAD_BYTES) {
-            return c.json({ error: "file too large" }, 413);
+        if (await movedOnFrom(services.files, target, c.req.header("x-intentic-base-hash"))) {
+            return c.json({ error: "the file changed on disk since it was read" }, 409);
         }
-        // x-intentic-base-hash pins the sha256 last read by the browser; a mismatch refuses the write with 409.
-        const baseHash = c.req.header("x-intentic-base-hash");
-        if (baseHash !== undefined) {
-            const current = await services.files.read(target);
-            if (current === undefined || sha256Text(current) !== baseHash) {
-                return c.json({ error: "the file changed on disk since it was read" }, 409);
-            }
+        // `offset` counts decoded bytes: each part of an encoded upload is encoded on its own.
+        const decoded = uploadBody(c);
+        if (decoded instanceof Response) {
+            return decoded;
         }
-        const body = c.req.raw.body;
+        const body = decoded.body;
         // An empty body writes only at offset 0; a later empty part must not erase what's already written.
         if (body === null) {
             if (offset === 0) {
@@ -316,7 +341,11 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
     // Same guards as single upload (400 escape, skip control-plane paths, 413 over cap); `.git` is written, keeping a
     // dropped repo's remote.
     uploadArchive: async (c: Context<AppEnv>): Promise<Response> => {
-        const body = c.req.raw.body;
+        const decoded = uploadBody(c);
+        if (decoded instanceof Response) {
+            return decoded;
+        }
+        const body = decoded.body;
         if (body === null) {
             return c.json({ error: "empty body" }, 400);
         }

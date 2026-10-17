@@ -14,6 +14,7 @@ export function sandboxRawUpload(
         readonly signal?: AbortSignal;
         readonly at?: string;
         readonly whole?: boolean;
+        readonly encoding?: `gzip` | undefined;
     } = {},
 ): Promise<void> {
     const { query, ...rest } = opts;

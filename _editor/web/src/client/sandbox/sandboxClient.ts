@@ -9,6 +9,7 @@ import { sandboxAuthenticatedFetch, uploadsBody } from "./sandboxAuthFetch";
 import { refusalText, SandboxHttpError, wordsOf } from "./sandboxHttpError";
 import { useSandboxSession } from "../session/sandboxSession";
 import { currentSandboxTarget, type SandboxTarget, targetFor } from "./sandboxTarget";
+import { encodedPart, type SentPart } from "../../lib/files/uploadEncoding";
 
 // The raw client, for what the contract does not carry: bytes (a file, a thumbnail, a bundle), chunked uploads, the
 // daemon's hand-written routes, and extensions' api.sandbox.request/json. Every contract procedure goes through
@@ -90,11 +91,12 @@ const uploadTarget = (at: string | undefined): SandboxTarget => {
 };
 
 // `whole` sends the body as one request with no `&offset=`, for a route that takes its body in one piece (an archive,
-// which the caller already keeps to about one part's size).
+// which the caller already keeps to about one part's size). `encoding` sends each part gzipped, with `&offset=` and
+// progress still counted in the body's own bytes; only for a daemon that advertises the coding.
 export async function sandboxUpload(
     path: string,
     body: Blob,
-    opts?: { onProgress?: (loaded: number) => void; signal?: AbortSignal; at?: string; whole?: boolean },
+    opts?: { onProgress?: (loaded: number) => void; signal?: AbortSignal; at?: string; whole?: boolean; encoding?: `gzip` | undefined },
 ): Promise<void> {
     const target = uploadTarget(opts?.at);
     const signal = opts?.signal;
@@ -109,9 +111,9 @@ export async function sandboxUpload(
             throw new Error(t(`sandbox.sandboxClient.signIn`));
         }
         const url = opts?.whole === true ? `${target.base}${path}` : `${target.base}${path}&offset=${offset}`;
-        const part = body.slice(offset, offset + partBytes);
+        const { part, sent } = await encodedPart(body, offset, partBytes, opts?.encoding);
         try {
-            await sendPart(url, part, offset, bearer.token, target.connectToken, opts);
+            await sendPart(url, part, sent, bearer.token, target.connectToken, opts);
         } catch (error) {
             if (!(error instanceof SandboxHttpError) || error.status !== 401) {
                 throw error;
@@ -121,7 +123,7 @@ export async function sandboxUpload(
             if (bearer === undefined) {
                 throw error;
             }
-            await sendPart(url, part, offset, bearer.token, target.connectToken, opts);
+            await sendPart(url, part, sent, bearer.token, target.connectToken, opts);
         }
     }
 }
@@ -129,7 +131,7 @@ export async function sandboxUpload(
 const sendPart = (
     url: string,
     part: Blob,
-    offset: number,
+    sent: SentPart,
     token: string,
     connectToken: string | undefined,
     opts?: { onProgress?: (loaded: number) => void; signal?: AbortSignal },
@@ -141,6 +143,9 @@ const sendPart = (
         xhr.setRequestHeader(`authorization`, `Bearer ${token}`);
         if (connectToken !== undefined) {
             xhr.setRequestHeader(`x-intentic-connect`, connectToken);
+        }
+        if (sent.encoding !== undefined) {
+            xhr.setRequestHeader(`content-encoding`, sent.encoding);
         }
 
         // Idle watchdog, rearmed on send and every progress tick; fires only once the request goes silent.
@@ -161,7 +166,7 @@ const sendPart = (
 
         xhr.upload.addEventListener(`progress`, (event) => {
             arm();
-            opts?.onProgress?.(offset + event.loaded);
+            opts?.onProgress?.(sent.offset + Math.round(event.loaded * sent.scale));
         });
         xhr.addEventListener(`load`, () => {
             if (xhr.status >= 200 && xhr.status < 300) {

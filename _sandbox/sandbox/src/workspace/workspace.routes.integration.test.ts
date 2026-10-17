@@ -5,7 +5,9 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { gzipSync } from "node:zlib";
 import sharp from "sharp";
+import { pack } from "tar-stream";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { createResidentEngine, type HealthRequest, type QueryRequest } from "@intentic/iq-engine";
 
@@ -766,6 +768,49 @@ test("POST /workspace/upload threads ?offset to the streaming write and rejects 
     expect((await app.request("/workspace/upload?path=app/big.bin&offset=-1", { method: "POST", body })).status).toBe(400);
     expect((await app.request("/workspace/upload?path=app/big.bin&offset=nope", { method: "POST", body })).status).toBe(400);
     expect(writes).toHaveLength(1);
+});
+
+// The editor gzips an upload that compresses (a dropped tree's tar, a large text file) for a daemon whose hello names
+// the coding; what lands on disk is the decoded bytes, and the cap counts those, not the smaller ones that crossed.
+test("POST /workspace/upload and /workspace/upload-archive write a gzipped body decoded, and 415 a coding they cannot decode", async () => {
+    const workspace = tempWorkspace([]);
+    const cap = 64 * 1024;
+    const app = createApp(
+        services({
+            workspace,
+            files: fakeFiles({ writeStream: (absPath, body, _limit, offset) => writeWorkspaceFileStream(absPath, body, cap, offset) }),
+        }),
+    );
+    const text = "export const value = 1;\n".repeat(400);
+    const headers = { "content-encoding": "gzip" };
+    expect((await app.request("/workspace/upload?path=notes/a.ts", { method: "POST", body: gzipSync(text), headers })).status).toBe(200);
+    expect(await readFile(join(workspace.root, "notes/a.ts"), "utf8")).toBe(text);
+
+    const tar = pack();
+    tar.entry({ name: "dropped/src/index.ts" }, text);
+    tar.finalize();
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of tar) {
+        // SAFETY: tar-stream's pack yields the archive's bytes as Buffers.
+        chunks.push(chunk as Uint8Array);
+    }
+    const archive = gzipSync(Buffer.concat(chunks));
+    expect((await app.request("/workspace/upload-archive", { method: "POST", body: archive, headers })).status).toBe(200);
+    expect(await readFile(join(workspace.root, "dropped/src/index.ts"), "utf8")).toBe(text);
+
+    const refused = await app.request("/workspace/upload?path=notes/b.ts", {
+        method: "POST",
+        body: "x",
+        headers: { "content-encoding": "compress" },
+    });
+    expect(refused.status).toBe(415);
+    expect(existsSync(join(workspace.root, "notes/b.ts"))).toBe(false);
+
+    // A body that inflates past the cap is refused like a plain one that size, however small it was on the wire.
+    const bomb = gzipSync(new Uint8Array(cap * 4));
+    expect(bomb.length).toBeLessThan(cap);
+    expect((await app.request("/workspace/upload?path=notes/bomb.bin", { method: "POST", body: bomb, headers })).status).toBe(413);
+    expect(existsSync(join(workspace.root, "notes/bomb.bin"))).toBe(false);
 });
 
 test("workspace.mkdir/delete/move/copy resolve within /work and reject escapes", async () => {

@@ -13,7 +13,6 @@ import {
 import { tunnelBulkRoutes } from "@intentic/sandbox-contract/protocol/tunnel-bulk";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Logger } from "pino";
-import { WebSocketServer } from "ws";
 import { createApp } from "../app.js";
 import { connectNetd, type NetdAsks, type NetdLink, type TunnelReport } from "../netd/netd-link.js";
 import { netdCheckoutFeed, useCheckoutFeed } from "../git/feed/checkout-feed.js";
@@ -22,6 +21,7 @@ import { type ReachPosture, reachPosture, tunnelUrl } from "../system/listeners/
 import { type LocalCertificate, readLocalCertificate, startLocalCertificateRenewal } from "../system/tls/local-cert.js";
 import { publicRoot } from "../public/public-files.js";
 import { createPublicHandler } from "../public/public-serve.js";
+import { PeerDeflateServer } from "../http/peer-deflate.js";
 import type { PushSender } from "../push/push.js";
 import { claimHolder, type ContainerRole } from "../system/boot/container-owner.js";
 import type { ProfileTraits } from "../system/boot/profile.js";
@@ -313,7 +313,8 @@ export const startNetdDoor = async (phase: BootPhase, host: string, { controlPat
 
     const app = createApp(services);
     // The cast bridges ws's `boolean | undefined` and node-server's plain-boolean option; the shapes match at runtime.
-    const sockets = new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike;
+    // Deflate is negotiated on peer links only (http/peer-deflate.ts).
+    const sockets = new PeerDeflateServer() as unknown as WebSocketServerLike;
     const server = createAdaptorServer({ fetch: app.fetch, websocket: { server: sockets }, createServer: netdDoorServer(preview, logger) });
     rmSync(httpPath, { force: true });
     server.listen(httpPath);

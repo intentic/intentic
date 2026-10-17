@@ -9,16 +9,15 @@ import { computed, ref } from "vue";
 import { detectProjects, managerFromPackageJson, type ProjectSetup } from "@intentic/workspace-setup";
 import { captureDrop, type DroppedFile, isRootGitPath, walkDrop } from "../../../../models/workspace/tree/dropEntries";
 import { packTar } from "../../explorer/transfer/tarArchive";
-import { useEndpoint } from "../../../../client/endpoint/useEndpoint";
 import { sandboxRaw } from "../../../../client/sandbox/sandboxRaw";
 import { sandboxRawUpload } from "../../../../client/sandbox/sandboxRawUpload";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { rpcPrefix } from "../../../../lib/queryKeys";
-import { measuredProtocol, streamCapacity } from "../../../../lib/streamBudget";
 import { workspaceAgent } from "../../../../app/workspaceScope";
 import { chunkItems, dedupeByPath } from "../../../../lib/files/uploadChunking";
 import { clearUnsettledUploads, markFailed, markSettled, noteArriving } from "../../../../models/workspace/files/provisionalEntries";
+import { encodingFor, multiplexed } from "./uploadLink";
 import { captureNativeDrop, copyNatively, type NativeDrop, type NativeEvent, type NativeProgress } from "./nativeCopy";
 
 // Workspace upload queue: drops and picks append to a shared queue rather than clobbering an in-flight upload.
@@ -390,16 +389,10 @@ const uploadOneXhr = async (item: QueueFile, signal: AbortSignal): Promise<void>
         query: { path: item.path, mtime: String(item.file.lastModified) },
         signal,
         onProgress: counted,
+        encoding: encodingFor([item]),
     });
     // A landed file counts whole, whether or not the last progress event said so.
     counted(item.size);
-};
-
-// Whether the address in use multiplexes requests; by what the browser negotiated where known (lib/streamBudget.ts).
-const multiplexed = (): boolean => {
-    const { daemonBase, usingLocal, degradedTransport } = useEndpoint();
-    const kind = degradedTransport.value ? `local-insecure` : usingLocal.value ? `local` : `public`;
-    return streamCapacity(kind, measuredProtocol(daemonBase.value)) === Number.POSITIVE_INFINITY;
 };
 
 // Bounded-concurrency per-file upload (POOL_SIZE at once). A failed file is recorded and skipped; the rest keeps
@@ -462,7 +455,7 @@ const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): P
         schedulePublish();
     };
     try {
-        await sandboxRawUpload(`POST /workspace/upload-archive`, blob, { signal, whole: true, onProgress: progress });
+        await sandboxRawUpload(`POST /workspace/upload-archive`, blob, { signal, whole: true, onProgress: progress, encoding: encodingFor(items) });
         progress(blob.size);
         for (const item of items) {
             setStatus(item, `done`);
