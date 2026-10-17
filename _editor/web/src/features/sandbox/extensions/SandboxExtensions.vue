@@ -209,15 +209,22 @@ const dismissWork = (notice: NoticeModel): void => {
 
 <template>
     <div class="flex flex-col gap-6">
+        <!-- Installed and Browse are two lists, so they are tabs, as every page's parts are; the search below is whichever is open's. -->
+        <SegmentedControl
+            :model-value="view"
+            :options="viewOptions"
+            variant="underline"
+            :aria-label="t(`sandbox.sandboxNav.extensions`)"
+            @update:model-value="show"
+        />
+
         <div v-if="viewNotice || staleNotice || newNotice || workNotices.some(Boolean)" class="flex flex-col gap-2">
             <NoticeStack :of="[viewNotice, staleNotice, newNotice]" />
             <NoticeStack :of="workNotices" :dismiss-label="t(`ui.action.dismiss`)" @dismiss="dismissWork" />
         </div>
 
-        <!-- The section's instrument, not either half's: pills lead, the search box takes the row's slack, and filters ride #controls. -->
+        <!-- The open tab's instrument: the search box takes the row's slack, filters ride #controls, the verbs end it. -->
         <div class="flex flex-wrap items-center gap-2">
-            <SegmentedControl :model-value="view" :options="viewOptions" @update:model-value="show" />
-
             <FilterBar
                 v-if="filterable"
                 v-model="query"

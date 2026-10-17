@@ -39,3 +39,12 @@ it("lets the strip override what it owns", () => {
     expect(classesOf(true, `bg-canvas`)).toContain(`bg-canvas`);
     expect(classesOf(false, `hover:bg-content/6`)).toContain(`hover:bg-content/6`);
 });
+
+// The line a strip of tabs stands on takes no room: a border would sit a pixel BELOW a tab seated on the strip's foot,
+// leaving the selected rule floating over a second line instead of covering the one it stands on.
+it("draws the strip's line as a shadow, which the selected tab's rule covers", () => {
+    const classes = ui.tabStrip().split(/\s+/).filter(Boolean);
+    expect(classes.filter((name) => name.startsWith(`shadow-[inset`))).toHaveLength(1);
+    expect(classes.filter((name) => name.startsWith(`border`))).toEqual([]);
+    expect(ui.tabStrip(`gap-4`)).toContain(`gap-4`);
+});

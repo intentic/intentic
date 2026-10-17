@@ -205,6 +205,10 @@ const coachOpen = ref(false);
 const coachTrigger = ref<HTMLButtonElement | null>(null);
 const responsiveTrigger = ref<HTMLButtonElement | null>(null);
 const segment = ref(`all`);
+const SEGMENTS = [{ label: `All`, value: `all`, badge: 12 }, { label: `Mine`, value: `mine` }, { label: `Failing`, value: `bad`, badge: 2 }];
+// A badge of 0 draws no chip, so only Tools wears one.
+const PARTS = [`Jobs`, `Instructions`, `Tools`, `Finishing`].map((label) => ({ label, value: label, badge: label === `Tools` ? 3 : 0 }));
+const part = ref(`Jobs`);
 const picked = ref<string | undefined>(`sonnet`);
 const query = ref(``);
 const filter = ref(``);
@@ -885,16 +889,12 @@ const pickedTier = ref(`collaborator`);
                         <span class="ui-field-label">FilterBar</span>
                         <FilterBar v-model="filter" placeholder="Filter…" :count="7" />
                     </div>
-                    <div class="flex flex-col gap-1">
-                        <span class="ui-field-label">SegmentedControl</span>
-                        <SegmentedControl
-                            v-model="segment"
-                            :options="[
-                                { label: `All`, value: `all`, badge: 12 },
-                                { label: `Mine`, value: `mine` },
-                                { label: `Failing`, value: `bad`, badge: 2 },
-                            ]"
-                        />
+                    <!-- What the options ARE picks the variant: a filter is pills; the parts of a page are tabs, and in a bar, xs ones whose line is its foot. -->
+                    <div class="flex flex-col gap-2">
+                        <span class="ui-field-label">SegmentedControl · pills: a mode, filter or value · underline: a page's parts</span>
+                        <SegmentedControl v-model="segment" :options="SEGMENTS" />
+                        <SegmentedControl v-model="part" variant="underline" :options="PARTS" />
+                        <SegmentedControl v-model="part" size="xs" variant="underline" class="min-h-8 rounded-t-md bg-card px-3" :options="PARTS" />
                     </div>
                     <div class="flex flex-col gap-1">
                         <span class="ui-field-label">ui.emptyState</span>

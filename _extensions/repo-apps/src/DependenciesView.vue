@@ -82,7 +82,8 @@ const lookInside = (name: string): void => {
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 px-4 pt-2">
-            <SegmentedControl v-model="tab" :options="tabs" variant="underline" />
+            <!-- `flex-1`: the tabs' line runs on to the grouping control, which applies to whichever tab is open. -->
+            <SegmentedControl v-model="tab" :options="tabs" variant="underline" class="flex-1" />
             <label v-if="hasMap && tab !== `inside`" class="flex items-center gap-2 pb-1.5 text-2xs text-muted">
                 {{ t(`dependenciesView.grouping.label`) }}
                 <SegmentedControl v-model="grouping" :options="groupings" size="xs" />

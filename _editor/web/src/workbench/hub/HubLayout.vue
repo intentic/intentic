@@ -237,7 +237,6 @@ watch(
                         :model-value="activeSlug"
                         :options="partOptions"
                         variant="underline"
-                        wrap
                         :aria-label="activeRow?.label"
                         @update:model-value="select"
                     />

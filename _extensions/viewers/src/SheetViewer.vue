@@ -82,9 +82,16 @@ onBeforeUnmount(() => client?.close());
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <div v-if="sheets.length > 1" class="flex shrink-0 items-center overflow-x-auto border-b border-line-subtle px-2 py-1.5">
-            <SegmentedControl v-model="active" size="xs" :options="tabOptions" @update:model-value="select" />
-        </div>
+        <!-- A workbook's sheets are its parts, so they are tabs, and the strip is the bar: its line is the bar's foot, and it scrolls. -->
+        <SegmentedControl
+            v-if="sheets.length > 1"
+            v-model="active"
+            size="xs"
+            variant="underline"
+            :options="tabOptions"
+            class="shrink-0 px-4 pt-1.5"
+            @update:model-value="select"
+        />
         <div class="min-h-0 flex-1">
             <ViewerStatus :loading="loading" :error="error">
                 <div v-if="columnCount === 0" class="flex h-full items-center justify-center text-sm text-muted">

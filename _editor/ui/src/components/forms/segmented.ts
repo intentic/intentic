@@ -1,4 +1,5 @@
 import { tv } from "tailwind-variants";
+import { ui } from "../../lib/ui.js";
 
 /* SegmentedControl's two parts, the track and an option, as one recipe with slots: its four axes (variant, stretch,
    size, selected) used to be a nested ternary in the template, and a nested ternary is where a combination nobody
@@ -9,20 +10,29 @@ export const segmented = tv({
         option: `cursor-pointer transition-colors`,
     },
     variants: {
-        // - pills: a track of toggles, for switching a view INSIDE a panel that keeps its own frame.
-        // - underline: tabs with no track at all, for the switch that says what a whole column or pane IS. No fill, no
-        //   radius and no inset: the tabs sit flush with whatever hosts them, so a tab's label lines up with the left
-        //   edge of whatever is stacked under it. `gap-4`, because with nothing boxing a tab, the space beside it is
-        //   all that separates the two.
-        variant: { pills: { option: `rounded-md font-medium` }, underline: { track: `gap-4` } },
+        // - pills: a MODE, a FILTER or a VALUE: the same content shown another way (Preview | Source), narrowed
+        //   (All | On | Off), or a setting picked (3 | 7 | 30 days). A control among controls, in a toolbar or a row.
+        // - underline: PARTS: the switch between pages that hold different things (Jobs | Instructions | Tools),
+        //   standing on its own line as the heading of the part under it. No fill, no radius and no inset: the tabs sit
+        //   flush with whatever hosts them, so a tab's label lines up with the left edge of whatever is stacked under
+        //   it. The strip stands on `ui.tabStrip()`'s hairline, which the selected tab's rule covers. `gap-4`, because
+        //   with nothing boxing a tab, the space beside it is all that separates the two. One line, always: tabs that
+        //   outgrow it SCROLL (the open one kept in view, SegmentedControl.vue) rather than wrap, since a wrapped row
+        //   leaves the first line's rule floating over the second, under no line at all.
+        variant: {
+            pills: { option: `rounded-md font-medium` },
+            underline: { track: ui.tabStrip(`scrollbar-none items-end gap-4 overflow-x-auto`) },
+        },
         // Full-width, thumb-height track for a task step on a narrow screen (pills only).
         stretch: { true: {}, false: {} },
         size: { sm: {}, xs: {} },
         active: { true: {}, false: {} },
         // Lets the row, not a pill, break when options overflow; off by default since a toolbar row is fixed-height.
-        wrap: { true: { track: `flex-wrap gap-y-1` } },
+        // Pills only: an underline row scrolls instead (above).
+        wrap: { true: {}, false: {} },
     },
     compoundVariants: [
+        { variant: `pills`, wrap: true, class: { track: `flex-wrap gap-y-1` } },
         { variant: `pills`, active: true, class: { option: `ui-pill-on` } },
         { variant: `pills`, active: false, class: { option: `text-muted hover:text-content` } },
         // A compact pill is ONE line, always. It rides fixed-height toolbar rows (.view-header is 2.25rem), so a pill

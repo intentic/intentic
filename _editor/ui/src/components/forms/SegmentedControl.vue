@@ -1,8 +1,8 @@
-<!-- SegmentedControl control: a row of small toggle pills for switching between a few exclusive views (Preview/Source, Linux/Windows, Name/Content). -->
+<!-- SegmentedControl: one of a few exclusive options. Pills pick a mode, filter or value (Preview/Source, All/Mine, Linux/Windows); `variant="underline"` is tabs, which switch between the parts of a page or pane (Jobs/Instructions/Tools). -->
 <script setup lang="ts" generic="T extends string">
 import type { IconName } from "../../icons/iconSets.js";
 import { useDevice } from "../../composables/useDevice.js";
-import { computed, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { ui } from "../../lib/ui.js";
 import { segmented } from "./segmented.js";
 import { countBadgePlate, countBadgeText } from "../feedback/countBadge.js";
@@ -37,14 +37,20 @@ const {
     }[];
     // sm: viewer toggles; xs: cramped rows (e.g. the workspace filter bar).
     size?: `sm` | `xs`;
-    // - pills: a track of toggles, for switching a view INSIDE a panel that keeps its own frame.
-    // - underline: tabs with no track at all, for the switch that says what a whole column or pane IS. Reach for it
-    //   where the control would otherwise stack a second bordered box on a surface that already has one.
+    // Which one is a question of what the options ARE, not of how the control looks beside its neighbours:
+    // - pills: the same content another way (Preview | Source, List | Calendar), narrowed (All | On | Off), or a
+    //   value picked (Light | Dark, 3 | 7 | 30 days). A control among controls.
+    // - underline: parts that hold different things, each a page of its own (Jobs | Instructions | Tools, Installed |
+    //   Browse, one sheet of a workbook). On its own line above the part it opens, where it is that part's heading:
+    //   a page whose sections were pills drew its navigation exactly like the settings inside them. The one exception
+    //   is a phone's top bar, where two parts are switched by the segmented thumb that platform draws there (the
+    //   workspace's Files | Changes, an agent's Chat | Changes).
     // `stretch` is a pills-only shape; underline sizes itself to its labels, since a tab reads as a heading.
     variant?: `pills` | `underline`;
     // Full-width, thumb-height track for a task step on a narrow screen; compact is a mouse control elsewhere.
     stretch?: boolean;
     // Lets the row, not a pill, break when options overflow; off by default since a toolbar row is fixed-height.
+    // Pills only: underline tabs stay on one line and scroll, keeping the open one in view.
     wrap?: boolean;
 }>();
 
@@ -94,10 +100,41 @@ const CHIP = `ml-1 inline-flex h-[1.35em] min-w-[1.35em] items-center justify-ce
 // reaches 10px past the strip and takes presses meant for whatever sits under it (in the chat rail, the filter
 // field 6px below). `items-end` spends the extra height upward, so the label keeps its rule and the target grows
 // into the header's own margin instead.
+//
+// An unselected tab shows a faint rule under the pointer: the selection's own mark, previewed where a press would put it.
 const underlineTab = (active: boolean): string =>
-    ui.tab(active, coarse.value ? `flex min-h-11 items-end` : ``, size === `xs` ? `pb-1.5 text-xs` : `pb-2 text-sm`);
+    ui.tab(
+        active,
+        // Never squeezed or broken: the strip scrolls instead (segmented.ts).
+        `shrink-0 whitespace-nowrap`,
+        coarse.value ? `flex min-h-11 items-end` : ``,
+        size === `xs` ? `pb-1.5 text-xs` : `pb-2 text-sm`,
+        !active && `hover:border-b-line`,
+    );
 
 const look = computed(() => segmented({ variant, stretch: variant === `pills` && stretch, size, wrap }));
+
+// Tabs that outgrow their line scroll, so the open one is scrolled to wherever it is chosen from: a link straight to
+// the last tab, or a press on one half out of view. By hand rather than `scrollIntoView`, which also scrolls every
+// scroller above the strip, the page included. The step past the tab shows a sliver of its neighbour, so the reader
+// can see there is more on that side.
+const PEEK = 24;
+const reveal = (): void => {
+    const strip = track.value;
+    const open = strip?.querySelectorAll<HTMLElement>(`[role="tab"]`)[tabStop.value];
+    if (variant !== `underline` || strip === undefined || open === undefined || strip.scrollWidth <= strip.clientWidth) {
+        return;
+    }
+    const edge = strip.getBoundingClientRect();
+    const tab = open.getBoundingClientRect();
+    if (tab.left < edge.left) {
+        strip.scrollLeft -= edge.left - tab.left + PEEK;
+    } else if (tab.right > edge.right) {
+        strip.scrollLeft += tab.right - edge.right + PEEK;
+    }
+};
+onMounted(reveal);
+watch(tabStop, reveal, { flush: `post` });
 const optionClass = (active: boolean): string => (variant === `underline` ? underlineTab(active) : look.value.option({ active }));
 </script>
 

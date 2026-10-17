@@ -235,6 +235,15 @@ const tabRecipe = tv({
 const tab = (active: boolean | TabVariants, ...classes: ClassArg[]): string =>
     tabRecipe({ active: typeof active === `boolean` ? active : (active.active ?? false), class: classes });
 
+// The line a row of tabs stands on: a hairline at the strip's foot that the selected tab's rule covers, so the strip
+// reads as the top edge of the part it switches rather than as loose words above it, and the unselected labels read as
+// tabs rather than as text. A box-shadow, not a border: it takes no room, so a tab seated on the strip's foot draws its
+// rule OVER the line instead of a pixel above it. `SegmentedControl variant="underline"` draws it under its own tabs; a
+// host that runs the line wider than its tabs (a toolbar holding the strip and a control beside it) puts it on itself
+// and seats the tabs on its foot, with no bottom padding between.
+const tabStripRecipe = tv({ base: `shadow-[inset_0_-1px_0_var(--color-line-subtle)]` });
+const tabStrip = (...classes: ClassArg[]): string => tabStripRecipe({ class: classes });
+
 export const ui = {
     iconButton,
     textButton,
@@ -250,4 +259,5 @@ export const ui = {
     sectionLabel,
     sectionLabelSm,
     tab,
+    tabStrip,
 };

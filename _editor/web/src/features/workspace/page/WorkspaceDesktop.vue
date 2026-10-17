@@ -802,10 +802,10 @@ const homeTooltip = computed((): Tip => ({
                 :style="narrowBody ? undefined : { width: uiLength(layout.sidebarWidth.value) }"
             >
                 <!-- Files and Changes are the primary modes; restore history is deliberately quieter, sharing one resize handle. -->
-                <!-- No bottom rule: the filter row below already separates the switch from the tree; `shadow-none` drops the skin fillet that stands in for one. -->
-                <div class="view-header flex items-center gap-1 px-1.5 shadow-none">
-                    <SegmentedControl v-model="sidebarMode" size="xs" :options="sidebarModeOptions" />
-                    <span class="flex-1"></span>
+                <!-- No bar rule: the tabs' own line is the header's foot, up to its buttons; `shadow-none` drops the skin fillet that would draw a second. -->
+                <!-- Tabs, not pills: they name the column, and pills here read as one more mode beside the search's own Name | Text | Smart below. -->
+                <div class="view-header flex items-center gap-1 pl-3 pr-1.5 shadow-none">
+                    <SegmentedControl v-model="sidebarMode" size="xs" variant="underline" :options="sidebarModeOptions" class="min-w-0 flex-1 self-stretch" />
                     <button
                         type="button"
                         :class="ui.iconButton({ on: layout.sidebarPanel.value === 'history' })"

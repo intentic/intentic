@@ -39,10 +39,9 @@ const selected = computed<string>({
 
 <template>
     <div v-if="active" class="flex h-full min-h-0 flex-col">
-        <!-- Seven tabs outgrow a split pane's width, so the strip scrolls rather than clipping the last of them. -->
-        <div v-if="activations.length > 1" class="scrollbar-none flex h-8 shrink-0 items-center overflow-x-auto border-b border-line px-1.5">
-            <SegmentedControl v-model="selected" size="xs" :options="options" />
-        </div>
+        <!-- Each activation is a view of its own, so they are tabs, and the strip is the bar: its line is the bar's foot. -->
+        <!-- Seven tabs outgrow a split pane's width; the strip scrolls rather than clipping the last of them. -->
+        <SegmentedControl v-if="activations.length > 1" v-model="selected" size="xs" variant="underline" :options="options" class="min-h-8 shrink-0 px-3" />
         <div class="min-h-0 flex-1 overflow-auto">
             <ExtensionView :extension="active.extension" :activation="active.activation" />
         </div>

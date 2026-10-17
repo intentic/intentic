@@ -111,8 +111,13 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
 <template>
     <!-- `@container`: every category below thins against this pane, which the docked chat can leave a third of the window's width. -->
     <div class="@container flex flex-col gap-6">
-        <!-- No border under the strip: on mobile the hub draws its own bordered pill row above this one, and two bordered strips would read as two controls. -->
-        <SegmentedControl v-model="section" :options="SECTIONS" :aria-label="t(`sandbox.sandboxAgent.agentSettingsCategory`)" wrap />
+        <!-- Tabs, as every page's parts are (Privacy & safety's, Activity's): as pills they read as one more setting beside the settings they open. -->
+        <SegmentedControl
+            v-model="section"
+            :options="SECTIONS"
+            variant="underline"
+            :aria-label="t(`sandbox.sandboxAgent.agentSettingsCategory`)"
+        />
 
         <!-- Page-level so it sits above whichever category is showing; every control below is inert while the read is pending or failed. -->
         <Notice v-if="settingsBlocked" :of="settingsBlocked" />

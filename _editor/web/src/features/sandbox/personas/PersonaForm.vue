@@ -175,8 +175,8 @@ const configure = (pin: ModelPin): void => {
 <template>
     <!-- The form spans the persona row; text fields keep their own reading width. -->
     <div class="flex max-w-4xl flex-col gap-6">
-        <!-- Section pills rely on the surrounding field frame. -->
-        <SegmentedControl v-model="section" :options="SECTIONS" :aria-label="t(`sandbox.personaForm.whatToChangeAbout`)" wrap />
+        <!-- Tabs under the persona's name, one per part of it: as pills they read as one more choice among the form's own. -->
+        <SegmentedControl v-model="section" :options="SECTIONS" variant="underline" :aria-label="t(`sandbox.personaForm.whatToChangeAbout`)" />
 
         <template v-if="section === `identity`">
             <!-- The persona's own line, shown first since it's the persona saying who it is; also the sentence a new chat is matched on. -->

@@ -71,7 +71,7 @@ const RETENTION = { name: `sandbox`, params: { tab: `retention` } } as const;
 
 <template>
     <div class="@container flex flex-col gap-6">
-        <SegmentedControl v-if="options.length > 1" v-model="part" :options="options" variant="underline" :aria-label="t(`sandbox.activityPage.parts`)" wrap />
+        <SegmentedControl v-if="options.length > 1" v-model="part" :options="options" variant="underline" :aria-label="t(`sandbox.activityPage.parts`)" />
 
         <template v-if="part === `turns`">
             <slot v-if="turns" name="turns" />
