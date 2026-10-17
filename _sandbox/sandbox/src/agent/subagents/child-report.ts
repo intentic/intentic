@@ -28,6 +28,8 @@ export interface ChildReportDeps {
     readonly killNote: (childId: string, failure: string) => Promise<string | undefined>;
     // Where the child's work went, in the parent's words (child-lands.ts childLandingWords).
     readonly landingOf: (childId: string) => string | undefined;
+    // Whether the child is moving itself onto a fallback (children.ts childMovingOn): the move says its own words.
+    readonly movingOn?: (childId: string) => boolean;
 }
 
 // Characters of the child's answer a report carries, from the head where the answer is; the rest stays in its chat.
@@ -58,7 +60,8 @@ const parentToTell = (
     if (
         parent === undefined ||
         (settled.actor !== undefined && parentOfActor(settled.actor) !== parent) ||
-        subagentEndingReported(deps.conversations, settled.conversationId)
+        subagentEndingReported(deps.conversations, settled.conversationId) ||
+        deps.movingOn?.(settled.conversationId) === true
     ) {
         return undefined;
     }
@@ -88,6 +91,7 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
             child: settled.conversationId,
             title: target.title,
             failed: settled.failure !== undefined,
+            stopped: settled.stopped === true,
             report: reportText(settled, settled.failure === undefined ? undefined : await deps.killNote(settled.conversationId, settled.failure)),
             verification: childVerification(deps.conversations, settled.conversationId),
             landing: deps.landingOf(settled.conversationId),

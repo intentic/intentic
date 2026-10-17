@@ -10,7 +10,10 @@
 // makes in a package nobody working on it opens, such as a table in the demo that must name every contract procedure.
 //
 // The tree is judged as it stands, committed and uncommitted work together, files nobody has added to git yet included,
-// against the commit the work is built on: `--base`, else where HEAD left the main line. Only what the change added is
+// against the commit the work is built on: `--base`, else the commit the sandbox names in INTENTIC_TURN_BASE (a
+// subagent's, where its branch was cut from its parent's work), else where HEAD left the main line. Measured from main, a
+// subagent was charged with every sibling's work its parent had taken in: six children were each handed the same ~42
+// findings, none of them theirs (2026-10-17). Only what the change added is
 // reported, `code` checks included, where CI's push check fails one outright (verify-push.mjs): many conversations run
 // at once, and a failure main already carries would send every one of them after the same breakage. The judging is the
 // push check's own (check-snapshot.mjs, turn-findings.mjs, measure-change.mjs), so the two cannot disagree about what a
@@ -45,6 +48,8 @@ const REACH_CEILING_MS = 120_000;
 export const LINES_PER_CHECK = 15;
 
 const MANIFEST = "_tools/checks/manifest.mjs";
+
+const nonEmpty = (value) => (value === undefined || value.trim() === "" ? undefined : value.trim());
 
 /** The commit the change is judged against: `--base` as a commit this clone holds, else where HEAD left the first main
  *  line that answers; undefined when neither can be named. */
@@ -233,7 +238,7 @@ const judgeTree = async (root, base, verdicts, renames) => {
 // checkout of a test's own. Throws only for a fault of its own, which `runGuarded` answers.
 export const run = async (root, args, reach = reachTypecheck) => {
     const started = Date.now();
-    const baseArg = args.includes("--base") ? (args[args.indexOf("--base") + 1] ?? "") : undefined;
+    const baseArg = args.includes("--base") ? (args[args.indexOf("--base") + 1] ?? "") : nonEmpty(process.env.INTENTIC_TURN_BASE);
     const base = baseOf(root, baseArg);
     const why = base === undefined ? noBase(baseArg) : unjudged(root, base);
     if (why !== undefined) {

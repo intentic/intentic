@@ -1,13 +1,14 @@
 import { spawnCatalogText } from "./spawn-catalog.js";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../engines/claude-sdk.js";
-import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
+import { type AgentHarness, AgentHarnessSchema, type AgentProvider, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { harnessChoosable, loopsOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
-import { type ChildSupervisor, spawnedNote } from "./children.js";
+import { type ChildRehome, type ChildSupervisor, spawnedNote } from "./children.js";
 import type { SubagentWaitUntil } from "./subagents.js";
-import { waitForWork, workWaitAnswer } from "./work-wait.js";
+import { type ChildrenWaitAnswer, childrenWaitAnswer, waitForChildren, waitForWork, workWaitAnswer } from "./work-wait.js";
+import { opt } from "../../opt.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import { keepBackgroundJob, type KeepOutcome } from "../tools/jobs/background-jobs.js";
 
@@ -51,6 +52,88 @@ const KEEP_ANSWERS = {
 const answer = (payload: Record<string, unknown>): { content: [{ type: "text"; text: string }] } => ({
     content: [{ type: "text", text: JSON.stringify(payload) }],
 });
+
+// What the send tool tells the model, kept outside the server it is mounted on.
+const SEND_WORDS =
+    "Steer or continue a subagent you spawned. A working one gets the message mid-turn (where its runtime " +
+    "takes one); a finished one runs a follow-up turn on its own conversation, continuing its session, " +
+    "so refinement costs a message rather than a fresh agent. Supervise the follow-up with wait. A message " +
+    "the owner must allow returns at once and goes when they do; you are told if it does not. Name a provider " +
+    "and model to move a finished, failed or paused one there: it carries on in its own worktree with its work so far, " +
+    "in a fresh session seeded from its own record, and a re-run booked where it was is dropped. That is the way on " +
+    "for a child refused on its provider: a fresh spawn would start over.";
+
+// A move with a send: the provider and model its next turn runs on, the loop and effort only where named.
+const REHOME_FIELDS = {
+    provider: AgentProviderSchema.optional().describe("Move it to this provider for this turn; needs `model`."),
+    model: z.string().min(1).optional().describe("The model on that provider; needs `provider`."),
+    harness: AgentHarnessSchema.optional().describe(SPAWN_HARNESS_WORDS),
+    effort: z.string().optional().describe("How hard it should think there, where that provider offers a choice."),
+};
+
+const rehomeOf = (args: {
+    readonly provider?: AgentProvider | undefined;
+    readonly model?: string | undefined;
+    readonly harness?: AgentHarness | undefined;
+    readonly effort?: string | undefined;
+}): ChildRehome | undefined =>
+    args.provider === undefined || args.model === undefined
+        ? undefined
+        : { provider: args.provider, model: args.model, ...opt("harness", args.harness), ...opt("effort", args.effort) };
+
+// Where a spawned child goes by itself when its provider refuses it outright or its allowance is far from reopening.
+const FALLBACKS_FIELD = z
+    .array(z.object({ provider: AgentProviderSchema, model: z.string().min(1) }))
+    .max(4)
+    .optional()
+    .describe(
+        "Where it goes by itself, in this order, when its provider refuses it in a way no wait soon answers (an account refused outright, a model off the plan, a spent allowance with no reset or one hours away): it moves to the next one the records do not call spent, in its own worktree, and you are told.",
+    );
+
+// What the wait tool tells the model it does, in one place outside the server it is mounted on.
+const WAIT_WORDS =
+    "Wait until work you started here needs you: a subagent you started, or a command you ran with " +
+    "run_in_background. Blocks until the target is blocked on input (a question or permission), or " +
+    "finishes, whichever comes first. For an agent it returns its status, its last report (whole, as " +
+    "`report`, where the row's `summary` is only its head), and " +
+    "`verification` — whether anything actually checked the work that report describes (`verified` / " +
+    "`unproven` / `failing` / `no-code`, with the check that spoke). Read it before you build on what it " +
+    "says: an agent's own account of its work is a claim, not a result. A spawned one's `landing` says where " +
+    "its work went: into your checkout already, or held on its branch where it clashed with your edits " +
+    "(merge brings it in). For a command it returns the " +
+    "exit code, the tail of its output and the file holding all of it, and while it runs how long it has " +
+    "been quiet; a command sitting at a prompt (blocked reading its terminal, nothing moving) returns " +
+    "`blocked` with `waitingForInput`, since nothing in your turn can type into it and waiting again will " +
+    "not end it. Target a subagent your runtime's own " +
+    "tool started by that call's id, one you spawned by the id spawn returned, a background command by " +
+    'the ID its Bash call returned, or "any" for whichever of these moves first (each is reported once). ' +
+    "An agent `paused` has not finished: its turn stopped on a spent allowance or stopped short, the sandbox " +
+    "runs it again by itself (its `error` says when), and its report comes after that; cancel it before " +
+    "giving its task to another agent. " +
+    'To wait on several children as one, name them in `targets` (or pass target "all" for every child ' +
+    "still running): the wait comes back early only for trouble (a child blocked on a question, paused, " +
+    "failed or stopped, as `agent`), and otherwise once every one has finished, each in `agents` with its " +
+    "whole report, so a fan-out costs you one wake instead of one per child. " +
+    "Use this instead of sleeping or polling in a loop. On timeout it returns the current state: call it " +
+    "again to keep waiting. It also returns early, with outcome `message`, when something is said into your " +
+    "turn while it waits (the owner, a watch, a subagent's report, a land of a subagent's work), so you read it " +
+    "now rather than when the wait runs out.";
+
+// A wait on several children as one (work-wait.ts waitForChildren): `targets`, or every live child for "all".
+const waitOnMany = async (
+    deps: SubagentWaitDeps,
+    conversationId: string,
+    targets: readonly string[] | undefined,
+    timeoutMs: number,
+): Promise<ChildrenWaitAnswer> => {
+    const many = await waitForChildren(deps.conversations, conversationId, { ...opt("targets", targets), timeoutMs, signal: deps.signal });
+    const said = childrenWaitAnswer(many, {
+        pendingQuestion: (childId) => deps.children?.pendingQuestion(childId),
+        report: (childId) => deps.children?.report(childId),
+        landing: (childId) => deps.children?.landing(childId),
+    });
+    return many.outcome === "unknown-target" ? { ...said, note: NOTHING_TO_WAIT_FOR } : said;
+};
 
 export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWithInstance =>
     sdk().createSdkMcpServer({
@@ -122,6 +205,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                                       'Which machine runs it: a runner\'s name, or "here" to keep it in this sandbox. Leave it out and the fleet ' +
                                           "decides, which is what spreads a fan-out over every machine you have connected.",
                                   ),
+                              fallbacks: FALLBACKS_FIELD,
                           },
                           async (args) => {
                               const children = deps.children;
@@ -136,6 +220,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                                   ...(args.harness !== undefined ? { harness: args.harness } : {}),
                                   ...(args.effort !== undefined ? { effort: args.effort } : {}),
                                   ...(args.on !== undefined ? { on: args.on } : {}),
+                                  ...opt("fallbacks", args.fallbacks),
                               });
                               return answer(
                                   result.ok
@@ -148,20 +233,18 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                       ),
                       sdk().tool(
                           "send",
-                          "Steer or continue a subagent you spawned. A working one gets the message mid-turn (where its runtime " +
-                              "takes one); a finished one runs a follow-up turn on its own conversation, continuing its session, " +
-                              "so refinement costs a message rather than a fresh agent. Supervise the follow-up with wait. A message " +
-                              "the owner must allow returns at once and goes when they do; you are told if it does not.",
+                          SEND_WORDS,
                           {
                               child: z.string().min(1).describe("The subagent's id, from spawn."),
                               message: z.string().min(1).describe("What to tell it, self-contained."),
+                              ...REHOME_FIELDS,
                           },
                           async (args) => {
                               const children = deps.children;
                               if (children === undefined) {
                                   return answer({ ok: false, message: "This turn cannot supervise agents." });
                               }
-                              return answer(await children.send(args.child, args.message));
+                              return answer(await children.send(args.child, args.message, rehomeOf(args)));
                           },
                           { annotations: toolAnnotations("write") },
                       ),
@@ -230,30 +313,19 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                   ]),
             sdk().tool(
                 "wait",
-                "Wait until work you started here needs you: a subagent you started, or a command you ran with " +
-                    "run_in_background. Blocks until the target is blocked on input (a question or permission), or " +
-                    "finishes, whichever comes first. For an agent it returns its status, its last report (whole, as " +
-                    "`report`, where the row's `summary` is only its head), and " +
-                    "`verification` — whether anything actually checked the work that report describes (`verified` / " +
-                    "`unproven` / `failing` / `no-code`, with the check that spoke). Read it before you build on what it " +
-                    "says: an agent's own account of its work is a claim, not a result. A spawned one's `landing` says where " +
-                    "its work went: into your checkout already, or held on its branch where it clashed with your edits " +
-                    "(merge brings it in). For a command it returns the " +
-                    "exit code, the tail of its output and the file holding all of it, and while it runs how long it has " +
-                    "been quiet; a command sitting at a prompt (blocked reading its terminal, nothing moving) returns " +
-                    "`blocked` with `waitingForInput`, since nothing in your turn can type into it and waiting again will " +
-                    "not end it. Target a subagent your runtime's own " +
-                    "tool started by that call's id, one you spawned by the id spawn returned, a background command by " +
-                    'the ID its Bash call returned, or "any" for whichever of these moves first (each is reported once). ' +
-                    "An agent `paused` has not finished: its turn stopped on a spent allowance or stopped short, the sandbox " +
-                    "runs it again by itself (its `error` says when), and its report comes after that; cancel it before " +
-                    "giving its task to another agent. " +
-                    "Use this instead of sleeping or polling in a loop. On timeout it returns the current state: call it " +
-                    "again to keep waiting. It also returns early, with outcome `message`, when something is said into your " +
-                    "turn while it waits (the owner, a watch, a subagent's report, a land of a subagent's work), so you read it " +
-                    "now rather than when the wait runs out.",
+                WAIT_WORDS,
                 {
-                    target: z.string().min(1).describe('The subagent\'s id (its call\'s, or the one spawn returned), a background command\'s ID, or "any"'),
+                    target: z
+                        .string()
+                        .min(1)
+                        .describe(
+                            'The subagent\'s id (its call\'s, or the one spawn returned), a background command\'s ID, "any", or "all" for every child still running',
+                        ),
+                    targets: z
+                        .array(z.string().min(1))
+                        .min(1)
+                        .optional()
+                        .describe("Several children's ids, waited on as one; `target` is then ignored. Returns early only for trouble."),
                     until: z.array(UNTIL).min(1).optional().describe('Which states end the wait; default ["blocked","finished"]'),
                     timeoutSeconds: z.number().min(5).max(MAX_TIMEOUT_S).optional().describe(`Default ${DEFAULT_TIMEOUT_S}`),
                 },
@@ -262,6 +334,9 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                     const timeoutMs = Math.round((args.timeoutSeconds ?? DEFAULT_TIMEOUT_S) * 1000);
                     if (deps.conversationId === undefined) {
                         return answer({ outcome: "unknown-target", note: "This turn has no conversation, so it has no children to wait on." });
+                    }
+                    if (args.targets !== undefined || args.target === "all") {
+                        return answer({ ...(await waitOnMany(deps, deps.conversationId, args.targets, timeoutMs)) });
                     }
                     const result = await waitForWork(deps.conversations, deps.conversationId, {
                         ...(args.target !== "any" ? { target: args.target } : {}),

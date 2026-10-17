@@ -167,6 +167,13 @@ describe("a spawned child's report", () => {
         });
     });
 
+    // 2026-10-17: a child its parent cancelled reached the parent as having finished.
+    it("says a child that was stopped was stopped, not that it finished", async () => {
+        const doors = doorsOf();
+        await reportChildTurn(doors.deps, settledOf({ stopped: true }));
+        expect((doors.started[0]?.prompt ?? "").split("\n", 1)[0]).toMatch(/was stopped\.$/u);
+    });
+
     it("stays quiet for a turn a person started in the child's own chat", async () => {
         const doors = doorsOf();
         await reportChildTurn(doors.deps, settledOf({ actor: "owner@example.com" }));

@@ -118,6 +118,16 @@ flowchart LR
   over it. A runtime serves helpers by declaring `sealed` on its adapter (Claude Code, Cursor, OpenCode's Gemini).
   (2026-10-07) Before, each runtime had a one-shot path of its own beside its turn, and each had drifted: the privacy
   shield refused Cursor's for its runtime, a conversation's grant never reached it, and Cursor kept its own account loop.
+- What a refusal leaves on record is read as narrowly as it was given (`agent/run/frames/classify-failure.ts`). An
+  account its provider refuses outright, like Cursor's `[role_forbidden]` (code `account-not-entitled`), is filed against
+  that account for every model (`usage/observed-limits.ts` `ACCOUNT_WIDE`, believed for a day). Placement, the spawn gate
+  and a conversation remembering that account all move off it. An answer settles a spent allowance only for the model it
+  came on (`usage/provider-refusals.ts` `answeredBy`), and a running turn's later fresh answers count as well as its
+  first. The reset is the vendor's own word where it gives one (`usage/reset-sentences.ts`: "Resets in 166h40m39s", "try
+  again at 5:46 PM"). A loop's retry and the translator's bench only set the earliest re-run, and a pool the sentence
+  names by length ("your 5-hour usage limit") reopens when the reading says that pool does. A spent allowance in a
+  routed refusal envelope stays a spent allowance, not a model off the plan. An admin-granted credit ("send a request to
+  your admin") is filed `unmetered`, so no usage reading answers it.
 - Codex sends steering after `turn/started` acknowledges the active turn. A refused message becomes a follow-up
   on the same thread once that turn settles; this preserves accepted input even when completion wins the race
   (2026-10-01). Final completion closes steering admission before yielding terminal frames, while planning keeps

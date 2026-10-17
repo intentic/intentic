@@ -6,6 +6,7 @@ import { whenFileAppears } from "../tools/file-appears.js";
 import { type BackgroundJob, backgroundJobOf, jobFinished, jobInputWait, type JobReport, jobReport, jobStatusPath, runningJobsOf } from "../tools/jobs/background-jobs.js";
 import { followRun } from "../tools/jobs/input-wait-follow.js";
 import { type SubagentWaitOptions, type SubagentWaitUntil, waitForSubagent } from "./subagents.js";
+import { type SubagentsWaitOptions, type SubagentsWaitOutcome, waitForSubagents } from "./subagent-waits.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import { whenSteered } from "../../conversations/actor/conversation-holdings.js";
 import { opt } from "../../opt.js";
@@ -163,6 +164,66 @@ export const waitForWork = async (
     } finally {
         heard.abort();
     }
+};
+
+/** A wait on several children as one (subagent-waits.ts waitForSubagents), handed back early for words said into the turn. */
+export const waitForChildren = async (
+    actors: Pick<ConversationActors, "holdings" | "queued" | "send">,
+    conversationId: string,
+    options: SubagentsWaitOptions,
+): Promise<SubagentsWaitOutcome | { readonly outcome: "message"; readonly agents: readonly SubagentSession[] }> => {
+    const heard = new AbortController();
+    const signal = anySignal(heard.signal, options.signal);
+    try {
+        const result = await Promise.race([
+            waitForSubagents(actors, conversationId, { ...options, signal }),
+            wordsSaid(actors, conversationId, signal).then(() => ({ outcome: "message" as const, agents: [] })),
+        ]);
+        // Every ending this wait hands over comes back out of the queue, or it arrives a second time.
+        if (result.outcome !== "message" && result.outcome !== "timeout") {
+            for (const agent of result.agents) {
+                if (ENDED.has(agent.status) || agent.status === "blocked") {
+                    withdrawQueuedReport(actors, agent.id);
+                }
+            }
+        }
+        return result;
+    } finally {
+        heard.abort();
+    }
+};
+
+/** One child as a wait on several hands it over: its row, its whole report and where its work went, once it ended. */
+export type WaitedChild = SubagentSession & { readonly report?: string; readonly landing?: string };
+
+/** What a wait on several answers. */
+export interface ChildrenWaitAnswer {
+    readonly outcome: SubagentsWaitOutcome["outcome"] | "message";
+    // The child that brought the wait back early, and the question it is parked on where it is one.
+    readonly agent?: SubagentSession;
+    readonly question?: PendingChildCard;
+    readonly agents: readonly WaitedChild[];
+    readonly note?: string;
+}
+
+const waitedChild = (agent: SubagentSession, lookups: ChildLookups): WaitedChild => {
+    const ended = ENDED.has(agent.status);
+    return { ...agent, ...opt("report", ended ? lookups.report(agent.id) : undefined), ...opt("landing", ended ? lookups.landing(agent.id) : undefined) };
+};
+
+/** The answer a wait on several gives: each child with its whole report and where its work went, once it has ended. */
+export const childrenWaitAnswer = (
+    result: SubagentsWaitOutcome | { readonly outcome: "message"; readonly agents: readonly SubagentSession[] },
+    lookups: ChildLookups,
+): ChildrenWaitAnswer => {
+    const matched = "matched" in result ? result.matched : undefined;
+    return {
+        outcome: result.outcome,
+        ...opt("agent", matched),
+        ...opt("question", matched !== undefined && result.outcome === "blocked" ? lookups.pendingQuestion(matched.id) : undefined),
+        agents: result.agents.map((agent) => waitedChild(agent, lookups)),
+        ...opt("note", result.outcome === "message" ? WORDS_SAID : undefined),
+    };
 };
 
 // The park itself: the named command, else the children, raced against every command still running for "any".

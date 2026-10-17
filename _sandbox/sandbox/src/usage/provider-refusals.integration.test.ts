@@ -146,3 +146,25 @@ test("logs each refusal recorded, whose refusal it superseded, and a settle only
     expect(lines[1]?.fields).toMatchObject({ superseded: { account: "first", kind: "limit", keptForAccount: true } });
     expect(lines[2]?.fields).toMatchObject({ settledBy: "second" });
 });
+
+// 2026-10-17: a title job on Composer settled an Opus refusal two seconds after it was filed. A spent allowance is about
+// the model it named; only an answer on that model proves it over.
+test("a spent allowance is settled only by an answer on the model it named", async () => {
+    const { store } = tempStore();
+    await store.record("cursor", refusal({ account: "a", model: "claude-opus-5-5" }));
+    await store.clear("cursor", "a", "composer-2.5");
+    await store.clear("cursor", "a", undefined);
+    expect((await store.read())[`cursor`]?.model).toBe("claude-opus-5-5");
+    expect((await store.onFile())[`cursor`]).toHaveLength(2);
+
+    await store.clear("cursor", "a", "claude-opus-5-5");
+    expect(await store.read()).toEqual({});
+    expect(await store.onFile()).toEqual({});
+});
+
+test("a refused account is settled by an answer on any model", async () => {
+    const { store } = tempStore();
+    await store.record("cursor", refusal({ kind: "entitlement", account: "a", model: "claude-opus-5-5" }));
+    await store.clear("cursor", "a", "composer-2.5");
+    expect(await store.read()).toEqual({});
+});

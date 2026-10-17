@@ -1542,10 +1542,6 @@
         "count": 185,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/turn/turn-runs.ts": {
-        "count": 607,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/agent/run/turn/turn-runs.ts#startTurnRun.<anonymous>#cognitive": {
         "count": 38,
         "why": "standing when the check arrived (2026-10-16)"
@@ -1567,7 +1563,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/subagents/children.ts": {
-        "count": 1902,
+        "count": 1864,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/subagents/subagent-wait.ts#subagentWaitServer#lines": {
@@ -1575,7 +1571,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/subagents/subagents.ts": {
-        "count": 1078,
+        "count": 1073,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/subagents/subagents.ts#noteSubagentTask#cognitive": {
@@ -2476,7 +2472,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts": {
-        "count": 789,
+        "count": 778,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts#attempt#cognitive": {

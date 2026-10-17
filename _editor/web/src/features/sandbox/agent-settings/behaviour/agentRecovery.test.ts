@@ -71,3 +71,17 @@ test("the threads row keeps to what the save accepts, and shows the number it ke
     expect(patch).toHaveBeenLastCalledWith({ automationThreadsAtOnce: 1 });
     expect(box.value).toBe(`1`);
 });
+
+// The longest turn on a sandbox-driven loop: opens on the daemon's default, writes its own key, keeps to its bounds.
+const capBox = (host: HTMLElement): HTMLInputElement => host.querySelector<HTMLInputElement>(`input[aria-label="Longest turn, in minutes"]`)!;
+
+test("the turn cap row opens on the daemon's default, writes its own key, and keeps to what the save accepts", async () => {
+    const host = mount();
+    const box = capBox(host);
+    expect(box.value).toBe(String(SandboxSettingsSchema.parse({}).turnCapMinutes));
+    await change(box, `90`);
+    expect(patch).toHaveBeenLastCalledWith({ turnCapMinutes: 90 });
+    await change(box, `1`);
+    expect(patch).toHaveBeenLastCalledWith({ turnCapMinutes: 5 });
+    expect(box.value).toBe(`5`);
+});

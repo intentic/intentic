@@ -65,6 +65,16 @@ describe("a retry OpenCode scheduled", () => {
         });
     });
 
+    // 2026-10-17: Google said "Resets in 166h40m39s" and the turn was booked fifteen minutes out, at OpenCode's capped
+    // retry, and refused again.
+    test("a quota whose vendor names its own reset is handed over at that reset, not at OpenCode's capped retry", () => {
+        const said = "Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 166h40m39s.";
+        expect(retryHandover(retry(failure("provider.quota", said, 429), 2, 15 * 60_000), CAP_LEFT, NOW)).toMatchObject({
+            code: "rate_limit",
+            resetsAt: Math.ceil(NOW / 1_000 + 166 * 3_600 + 40 * 60 + 39),
+        });
+    });
+
     test("a rate limit whose wait outlasts the turn's patience is handed over with its reset", () => {
         expect(retryHandover(retry(failure("provider.rate-limit", "slow down", 429), 2, RATE_LIMIT_PATIENCE_MS + 1_000), CAP_LEFT, NOW)).toMatchObject({
             code: "rate_limit",

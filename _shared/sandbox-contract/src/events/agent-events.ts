@@ -283,6 +283,9 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 "claude-token-refused",
                 // The account authenticates and has real usage pools, but the org disabled Claude Code for this seat.
                 "claude-not-entitled",
+                // Any other provider's account signs in but is refused service outright, for every model (Cursor's
+                // `[role_forbidden]` for a non-billable admin): filed against the account, so placement skips it.
+                "account-not-entitled",
                 // The provider failed transiently and in-turn retries did not outlast it; the daemon retries on
                 // backoff.
                 "provider-outage",

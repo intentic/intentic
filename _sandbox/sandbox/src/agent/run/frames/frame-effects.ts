@@ -11,6 +11,8 @@ import type { TurnInput } from "../../../seams/turn-starter.js";
 import type { FailureWrite } from "./classify-failure.js";
 import type { Attribution } from "./frame-decorators.js";
 import { accountFactsOf } from "../../../usage/serviceability/serviceability.js";
+import { ACCOUNT_WIDE } from "../../../usage/observed-limits.js";
+import { FAN_OUT } from "../../subagents/fan-out-governor.js";
 import { runOutOf } from "../../../usage/run-outs.js";
 import { runningOn } from "../turn/turn-pulse.js";
 
@@ -79,22 +81,41 @@ export const turnActivity =
 // The first real content proves an outage over fleet-wide, releasing every stranded turn at once, and settles what this
 // provider and account last refused: content on the wire is the only evidence a refusal no poll can re-check yields to.
 // It reopens the model it ran on as well, so the picker stops greying a row whose turns go through.
+// A spent allowance is settled only for the model that answered (provider-refusals.ts answeredBy); an account refused
+// outright is settled by any answer on it. The observed ledger is settled the same way: the account's entry for the model
+// it just served, and its account-wide refusal.
 export const providerAnswered = (
-    deps: Pick<Services, "providerRefusals" | "claudeSeats" | "modelCooldowns" | "logger">,
+    deps: Pick<Services, "providerRefusals" | "claudeSeats" | "modelCooldowns" | "observedLimits" | "logger">,
     provider: string,
     account: string | undefined,
     model: string | undefined,
 ): void => {
     recordProviderSuccess(provider);
-    void deps.providerRefusals.clear(provider, account).catch((error: unknown) => deps.logger.warn({ err: error }, "provider refusal: settle failed"));
-    if (model !== undefined && model !== "") {
-        void deps.modelCooldowns.clear(provider, model).catch((error: unknown) => deps.logger.warn({ err: error }, "model cooldown: settle failed"));
+    const served = model === undefined || model === "" ? undefined : model;
+    // Proves the lane to the fan-out governor, so a child spawned onto what its parent already runs on starts at once.
+    if (served !== undefined) {
+        FAN_OUT.served({ provider, model: served });
+    }
+    void deps.providerRefusals.clear(provider, account, served).catch((error: unknown) => deps.logger.warn({ err: error }, "provider refusal: settle failed"));
+    if (served !== undefined) {
+        void deps.modelCooldowns.clear(provider, served).catch((error: unknown) => deps.logger.warn({ err: error }, "model cooldown: settle failed"));
     }
     // Clears the seat mark too, so a re-enabled account rejoins rotation without a reconnect.
     if (account === undefined) {
         return;
     }
+    void settleObserved(deps, provider, account, served);
     void deps.claudeSeats.clear(account).catch((error: unknown) => deps.logger.warn({ err: error }, "claude account: could not clear the entitlement mark"));
+};
+
+// The account's own refusals in the observed ledger, settled by its answer: the model it served, and the account-wide
+// refusal. Never rejects: a settle that fails is its own line.
+const settleObserved = async (deps: Pick<Services, "observedLimits" | "logger">, provider: string, account: string, served: string | undefined): Promise<void> => {
+    try {
+        await Promise.all([ACCOUNT_WIDE, ...(served === undefined ? [] : [served])].map(async (entry) => deps.observedLimits.forget(provider, account, entry)));
+    } catch (error) {
+        deps.logger.warn({ err: error }, "observed limit: settle failed");
+    }
 };
 
 // Files a turn's plan-limit reading under the account it describes, so every open window's rings move too. A routed

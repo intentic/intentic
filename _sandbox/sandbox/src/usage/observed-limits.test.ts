@@ -1,4 +1,4 @@
-import { observedTurnLimit, type ObservedSpend, observedWindows, pickObservedAccount } from "./observed-limits.js";
+import { ACCOUNT_WIDE, ENTITLEMENT_FOR_MS, OBSERVED_FOR_MS, observedTurnLimit, type ObservedSpend, observedUntil, observedWindows, pickObservedAccount } from "./observed-limits.js";
 
 /* A refusal is the only measurement some plans give, so what this suite pins is that it is read as narrowly as it was
    given: about one account, about one model, and never as a claim about when anything reopens. */
@@ -92,4 +92,27 @@ test("with every account out of the model, the one refused longest ago is tried"
     const stale = { account: `b`, spent: { "composer-2.5": { at: NOW - 60_000, message: `429` } } };
 
     expect(pickObservedAccount([fresh, stale], COMPOSER)?.account).toBe(`b`);
+});
+
+// 2026-10-17: an account Cursor refuses outright (`[role_forbidden]`) read as untouched room, so a fan-out was placed on it
+// twice in a row.
+const refusedAccount: ObservedSpend = { [ACCOUNT_WIDE]: { at: NOW, message: `[role_forbidden] not available`, refused: `entitlement` } };
+
+test("an account refused outright is spent for every model, under its own name", () => {
+    expect(observedWindows(refusedAccount)).toEqual([{ kind: `observed:*`, label: `Account refused`, utilization: 100, gates: `all` }]);
+    expect(observedTurnLimit([{ account: `a`, spent: refusedAccount }], OPUS, labels, NOW)).toEqual({ pool: `Account refused`, spent: 1, withHeadroom: 0 });
+    expect(observedTurnLimit([{ account: `a`, spent: refusedAccount }], COMPOSER, labels, NOW)).toMatchObject({ spent: 1, withHeadroom: 0 });
+});
+
+test("a refused account is placed on after every other, even one out of the model, since only a spent allowance reopens by itself", () => {
+    const refused = { account: `a`, spent: refusedAccount };
+    const out = { account: `b`, spent: spent(`composer-2.5`) };
+
+    expect(pickObservedAccount([refused, out], COMPOSER)?.account).toBe(`b`);
+    expect(pickObservedAccount([refused], COMPOSER)?.account).toBe(`a`);
+});
+
+test("an account refusal is believed for a day, a spent model for two hours", () => {
+    expect(observedUntil({ at: NOW, message: `x`, refused: `entitlement` })).toBe(NOW + ENTITLEMENT_FOR_MS);
+    expect(observedUntil({ at: NOW, message: `x` })).toBe(NOW + OBSERVED_FOR_MS);
 });

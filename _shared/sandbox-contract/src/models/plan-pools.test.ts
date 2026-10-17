@@ -258,6 +258,18 @@ test("a refusal stands until a later reading contradicts it, and never past its 
     expect(refusalVerdict(refusal({ kind: "limit", account: "a" }), [])).toBe("standing");
 });
 
+// 2026-10-17: Codex's team credit ran out while its weekly pool read 57% on the shared credential.
+test("an allowance no reading measures stands against every reading, until the provider's own reset", () => {
+    const room = at(Date.now() + 60_000, window({ kind: "seven_day", utilization: 43 }));
+    const credit = refusal({ kind: "limit", unmetered: true, at: Date.now(), resetsAt: Math.floor(Date.now() / 1000) + 3_600 });
+    expect(refusalVerdict(credit, [{ account: "a", usage: room }, { account: "b", usage: room }])).toBe("standing");
+    expect(refusalVerdict({ ...credit, resetsAt: Math.floor(Date.now() / 1000) - 1 }, [{ account: "a", usage: room }, { account: "b", usage: room }])).toBe(
+        "answered",
+    );
+    expect(refusalVerdict({ ...credit, resetsAt: undefined }, [{ account: "a", usage: room }])).toBe("standing");
+});
+
+
 // Codex's usage endpoint kept reading room while every turn was refused "try again at 3:38 PM": the provider's own
 // instant is what ends the refusal, where it is known which account it refused.
 test("a spent allowance with the provider's own reset stands until that instant, whatever a later reading says", () => {

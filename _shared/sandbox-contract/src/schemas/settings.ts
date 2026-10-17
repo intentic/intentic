@@ -452,6 +452,10 @@ export const SandboxSettingsSchema = z.object({
     outagePolicy: RetryPolicySchema.default("wait").describe(
         "What happens to a turn the model provider's own failure killed. `wait` holds it for a press. `retry` re-runs it on the shared per-provider breaker, backing off between attempts. The sandbox-wide default; any one conversation can say otherwise. Worth `retry` for a sandbox whose work mostly happens with nobody in the room.",
     ),
+    // A vendor loop's hard cap on one turn; half an hour ended two Gemini children mid-work as failures (2026-10-17).
+    turnCapMinutes: z.number().int().min(5).max(1440).default(30).describe(
+        "The longest one turn may run on a loop the sandbox drives itself (OpenCode, an ACP agent, Pi, Muse) before it is ended, in minutes, however busy it keeps. A subagent's turn that reaches it is carried on in a fresh turn of the same session rather than ended as a failure. The Claude Code and Codex loops have no such cap.",
+    ),
     // The posture that used to live only in a browser tab; moving it here is what lets it fire with nothing open.
     stopPolicy: RetryPolicySchema.default("wait").describe(
         "What happens to a turn that stopped short with nothing to repair — a hung runtime, a crashed harness. `wait` holds it for a press. `retry` re-runs the held turn on a short ladder, standing down after three tries that got nowhere rather than looping forever.",

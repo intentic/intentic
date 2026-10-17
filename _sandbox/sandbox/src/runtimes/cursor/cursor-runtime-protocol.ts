@@ -24,7 +24,7 @@ export interface WireError {
 
 // What `Run.wait()` resolves to, cut to the fields the adapter reads. `code` crosses with the message: it is the half of
 // a terminal error that survives a reworded sentence, and the adapter reads both to tell a spent allowance from any
-// other failure (cursor-agent.ts cursorRunErrorFrame).
+// other failure (turn/cursor-failures.ts cursorRunErrorFrame).
 export interface WireRunResult {
     readonly status: string;
     readonly error?: { readonly message: string; readonly code?: string };

@@ -1,4 +1,5 @@
 import type { HookCallbackMatcher } from "@anthropic-ai/claude-agent-sdk";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import type { Logger } from "pino";
 import type { EditCommandRun } from "../../rules/file-edited.js";
@@ -101,10 +102,22 @@ export const turnChecksNote = (reports: readonly TurnCheckReport[]): string => {
     ].join("\n\n");
 };
 
+// Who said the notice a turn's transcript carries where the checks were said back (`agentNotice.source`), the boundary
+// a report reads its real closing from (turn-runs.ts closingOf): the model's answer to the checks comes after it.
+export const TURN_CHECKS_SOURCE = "turn checks";
+
+/** The notice row itself: what a reader of the transcript sees, since the note rode to the model and nowhere else. */
+export const turnChecksNotice = (reports: readonly TurnCheckReport[]): AgentEvent => ({
+    kind: "agent_notice",
+    level: "info",
+    source: TURN_CHECKS_SOURCE,
+    text: `The end-of-turn checks found something in this change (${reports.map(({ rule }) => named(rule)).join(", ")}) and said it back once.`,
+});
+
 /** The repositories' `turn` checks as a Stop matcher (agent.ts mergeHooks), beside the checklist note (checklist-close.ts).
  *  Wires nothing for a turn in the shared tree, whose working tree carries everyone's uncommitted work, or for one no
- *  adopted repository declares a `turn` check for. */
-export const turnCheckHooks = (checks: TurnChecks | undefined, isolated: boolean): TurnCheckHooks => {
+ *  adopted repository declares a `turn` check for. `say` puts the notice row in the turn's transcript. */
+export const turnCheckHooks = (checks: TurnChecks | undefined, isolated: boolean, say?: (event: AgentEvent) => void): TurnCheckHooks => {
     if (checks === undefined || !isolated || checks.rules.length === 0) {
         return {};
     }
@@ -125,7 +138,11 @@ export const turnCheckHooks = (checks: TurnChecks | undefined, isolated: boolean
                         ran = true;
                         try {
                             const reports = await turnCheckReports(checks);
-                            return reports.length === 0 ? {} : { hookSpecificOutput: { hookEventName: "Stop", additionalContext: turnChecksNote(reports) } };
+                            if (reports.length === 0) {
+                                return {};
+                            }
+                            say?.(turnChecksNotice(reports));
+                            return { hookSpecificOutput: { hookEventName: "Stop", additionalContext: turnChecksNote(reports) } };
                         } catch (error) {
                             // Never a failed Stop: a check that cannot be run is no reason to keep the turn from ending.
                             checks.logger.warn({ err: error }, "turn checks: could not run the repositories' turn checks, so the turn ends without them");

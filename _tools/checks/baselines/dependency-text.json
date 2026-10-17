@@ -29,10 +29,7 @@
     "_sandbox/sandbox/src/git/ops/stash.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_sandbox/sandbox/src/netdisk/smb.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_sandbox/sandbox/src/runtimes/claude/claude-accounts.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
-    "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts": {
-        "count": 2,
-        "why": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)"
-    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_sandbox/sandbox/src/runtimes/devin/accounts/devin-accounts.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_sandbox/sandbox/src/runtimes/minted/minted-login.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_sandbox/sandbox/src/runtimes/pi/pi-extension-ui.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",

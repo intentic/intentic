@@ -18,7 +18,7 @@ import type {
     StopResult,
     StopTurn,
 } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import type { LimitPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
+import type { LimitPolicy, RetryPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { ResumeReason } from "@intentic/sandbox-contract/events/resume";
 import type { SessionOwner } from "@intentic/sandbox-contract/schemas/agents";
 import type { TurnErrand, TurnSpeaker } from "@intentic/sandbox-contract/schemas/speaker";
@@ -52,7 +52,7 @@ export type TurnInput = AgentTurn & {
     // The conversation's own answers to the sandbox-wide defaults it opens with: a spawned child's to a spent allowance,
     // a maintainer's to whether finished work lands by itself (`conversationAutoLand`). Read only by the turn that opens
     // the conversation, so no later turn overwrites an answer its owner gave since.
-    readonly postures?: { readonly limit?: LimitPolicy; readonly autoLand?: boolean };
+    readonly postures?: { readonly limit?: LimitPolicy; readonly stopped?: RetryPolicy; readonly autoLand?: boolean };
 };
 
 // A turn as the engine takes it: provider and loop named, by the port it came in through (routeTurn), so

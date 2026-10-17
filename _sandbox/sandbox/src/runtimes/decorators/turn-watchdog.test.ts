@@ -1,5 +1,5 @@
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { beforeDeadline, DEFAULT_TURN_TIMEOUTS, EXPIRED, idleWait, SETTLED, turnWatchdog, watchedPull } from "./turn-watchdog.js";
+import { beforeDeadline, DEFAULT_TURN_TIMEOUTS, EXPIRED, idleWait, SETTLED, turnWatchdog, watchedPull, withTurnCap } from "./turn-watchdog.js";
 
 // The clock's arithmetic at its edges, with the system time held still, and the waits it drives under fake timers.
 
@@ -77,7 +77,8 @@ test("an expiry names the deadline that passed, so a timed-out turn says whether
     jest.setSystemTime(START + 1_710_000);
     quiet.touch();
     jest.setSystemTime(START + 1_800_000);
-    expect(quiet.expiry()).toBe("the turn reached its 30m 0s cap after 1m 30s with nothing from the loop");
+    // 2026-10-17: "cap after 1m 47s with nothing from the loop" read as a turn that died at 1m 47s.
+    expect(quiet.expiry()).toBe("the turn reached its 30m 0s cap, 30m 0s in, the loop having sent nothing for the last 1m 30s");
 
     jest.setSystemTime(START);
     const aborted = turnWatchdog({ inactivityMs: 120_000, maxTurnMs: 1_800_000 });
@@ -330,4 +331,10 @@ test("the cap's own remainder ignores the silence window, and a held clock has n
     release();
     // The time held moved the cap out by as much.
     expect(clock.capRemaining()).toBe(600);
+});
+
+// The owner's own cap (SandboxSettings.turnCapMinutes) replaces the loop's default; nothing set keeps it.
+test("a turn's own cap replaces the loop's default, and none keeps it", () => {
+    expect(withTurnCap(DEFAULT_TURN_TIMEOUTS, 90 * 60_000)).toEqual({ ...DEFAULT_TURN_TIMEOUTS, maxTurnMs: 90 * 60_000 });
+    expect(withTurnCap(DEFAULT_TURN_TIMEOUTS, undefined)).toBe(DEFAULT_TURN_TIMEOUTS);
 });

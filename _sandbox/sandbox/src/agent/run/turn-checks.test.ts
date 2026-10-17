@@ -1,3 +1,4 @@
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { StopHookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import type { EditCommandRun } from "../../rules/file-edited.js";
@@ -9,6 +10,7 @@ import {
     TURN_CHECK_OUTPUT_BYTES,
     type TurnChange,
     type TurnCheckHooks,
+    TURN_CHECKS_SOURCE,
     turnCheckHooks,
     type TurnChecks,
     turnChecksNote,
@@ -29,6 +31,7 @@ interface Armed {
     readonly ran: { readonly command: string; readonly timeoutMs: number; readonly repo: string | undefined }[];
     readonly fired: string[];
     readonly warn: ReturnType<typeof jest.fn>;
+    readonly said: AgentEvent[];
 }
 
 const armed = (
@@ -38,6 +41,7 @@ const armed = (
     const ran: Armed["ran"] = [];
     const fired: string[] = [];
     const warn = jest.fn();
+    const said: AgentEvent[] = [];
     const checks: TurnChecks = {
         rules: answers.rules ?? [TURN_CHECK!],
         change: answers.change ?? (async () => CHANGED),
@@ -48,7 +52,7 @@ const armed = (
         onFired: (rule) => fired.push(rule.id),
         logger: { warn },
     };
-    return { hooks: turnCheckHooks(checks, isolated), ran, fired, warn };
+    return { hooks: turnCheckHooks(checks, isolated, (event) => said.push(event)), ran, fired, warn, said };
 };
 
 const STOP: StopHookInput = { hook_event_name: "Stop", session_id: "s1", transcript_path: "s1.jsonl", cwd: ".", stop_hook_active: false };
@@ -75,6 +79,16 @@ describe("turnCheckHooks", () => {
         // The second Stop is the model's answer to the first, whatever it did; running again would make it a gate.
         expect(await stop(hooks)).toBeUndefined();
         expect(ran).toHaveLength(1);
+    });
+
+    // The boundary a report reads its real closing from (turn-runs.ts closingOf), and the reader's own sign it happened.
+    it("puts a notice in the turn's transcript where it said the findings back, and none when there were none", async () => {
+        const found = armed({ run: { status: "failed", output: `${FOUND}\n` } });
+        await stop(found.hooks);
+        expect(found.said).toEqual([expect.objectContaining({ kind: "agent_notice", source: TURN_CHECKS_SOURCE, level: "info" })]);
+        const clean = armed();
+        await stop(clean.hooks);
+        expect(clean.said).toEqual([]);
     });
 
     it("says nothing for a check that passed, and does not run it again at a later Stop", async () => {

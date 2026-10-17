@@ -1,3 +1,4 @@
+import { opt } from "../opt.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AuditEvent } from "@intentic/sandbox-contract/schemas/audit";
@@ -254,7 +255,7 @@ export interface TurnWrites {
     readonly activity: Parameters<Services["activity"]["append"]>[0][];
     readonly usage: Parameters<Services["usage"]["record"]>[0][];
     readonly providerRefusals: { readonly provider: string; readonly refusal: Parameters<Services["providerRefusals"]["record"]>[1] }[];
-    readonly refusalsCleared: { readonly provider: string; readonly account: string | undefined }[];
+    readonly refusalsCleared: { readonly provider: string; readonly account: string | undefined; readonly model?: string }[];
     readonly headroomRefreshes: Parameters<Services["headroom"]["refresh"]>[0][];
     readonly headroomRecords: {
         readonly provider: string;
@@ -274,6 +275,7 @@ export interface TurnWrites {
         readonly cooldown: Parameters<Services["modelCooldowns"]["record"]>[2];
     }[];
     readonly cooldownsCleared: { readonly provider: string; readonly model: string }[];
+    readonly observedForgotten: { readonly provider: string; readonly account: string; readonly model: string }[];
     readonly observedLimits: {
         readonly provider: string;
         readonly account: string;
@@ -307,7 +309,10 @@ const benchRecorders = (writes: TurnWrites): Pick<ServiceOverrides, "modelRefusa
         spent: async () => ({}),
         record: async (provider, account, model, limit) => void writes.observedLimits.push({ provider, account, model, limit }),
         clear: async () => {},
-        forget: async () => false,
+        forget: async (provider, account, model) => {
+            writes.observedForgotten.push({ provider, account, model });
+            return false;
+        },
     },
 });
 
@@ -329,6 +334,7 @@ export const recordingTurnStores = (
         modelRefusals: [],
         modelCooldowns: [],
         cooldownsCleared: [],
+        observedForgotten: [],
         observedLimits: [],
         snapshots: [],
         checkpoints: [],
@@ -346,7 +352,7 @@ export const recordingTurnStores = (
                 read: async () => ({}),
                 onFile: async () => ({}),
                 record: async (provider, refusal) => void writes.providerRefusals.push({ provider, refusal }),
-                clear: async (provider, account) => void writes.refusalsCleared.push({ provider, account }),
+                clear: async (provider, account, model) => void writes.refusalsCleared.push({ provider, account, ...opt("model", model) }),
                 onChange: () => () => {},
             },
             // Every other member answers as the inert headroom above does.

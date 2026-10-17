@@ -15,10 +15,11 @@ import {
     type TurnWatchdog,
     turnWatchdog,
     watchedPull,
+    withTurnCap,
 } from "../decorators/turn-watchdog.js";
 import { handoffDirOf } from "../../conversations/worktrees/isolation.js";
 import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
-import { turnCheckReports, turnChecksNote } from "../../agent/run/turn-checks.js";
+import { turnCheckReports, turnChecksNote, turnChecksNotice } from "../../agent/run/turn-checks.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
 import { opt } from "../../opt.js";
@@ -233,7 +234,7 @@ async function* runPiTurn(
             return settled(true);
         }
 
-        const clock = turnWatchdog(timeouts);
+        const clock = turnWatchdog(withTurnCap(timeouts, request.spec.turnCapMs));
         state.clock = clock;
         const pull = watchedPull({
             take: () => state.queue.shift(),
@@ -340,15 +341,21 @@ async function* endingChecks(proc: PiProcess, state: PiTurnState, request: Agent
         return;
     }
     let note: string | undefined;
+    let notice: AgentEvent | undefined;
     try {
         const reports = await turnCheckReports(checks);
         note = reports.length === 0 ? undefined : turnChecksNote(reports);
+        notice = reports.length === 0 ? undefined : turnChecksNotice(reports);
     } catch (error) {
         // Never a failed turn: a check that cannot be run is no reason to keep the turn from ending.
         checks.logger.warn({ err: error }, "turn checks: could not run the repositories' turn checks, so the turn ends without them");
         return;
     }
     if (note !== undefined) {
+        // The boundary the report is read from (turn-runs.ts closingOf): what Pi says next answers the checks.
+        if (notice !== undefined) {
+            yield notice;
+        }
         yield* runPiTurn(proc, state, request, { type: "prompt", message: note }, timeouts);
     }
 }

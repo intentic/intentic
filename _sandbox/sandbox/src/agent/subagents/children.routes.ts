@@ -1,6 +1,6 @@
 import { conversationReader, registryProvenance } from "../../auth/scope/conversation-reader.js";
 import type { Context } from "hono";
-import { AgentHarnessSchema } from "@intentic/sandbox-contract/schemas/agent";
+import { AgentHarnessSchema, type AgentProvider, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { z } from "zod";
 import { listSubagentSessions, type SubagentWaitUntil } from "./subagents.js";
 import { waitForWork, workWaitAnswer } from "./work-wait.js";
@@ -52,7 +52,14 @@ const DelegateBodySchema = z.object({
 const SendBodySchema = z.object({
     child: z.string().min(1),
     message: z.string().min(1),
+    // Moves a finished, failed or paused child to this provider and model for this turn (children.ts sendToChild).
+    provider: AgentProviderSchema.optional(),
+    model: z.string().min(1).optional(),
 });
+
+// The move a send body names, where it names both halves of one.
+const rehomeOfBody = (body: z.infer<typeof SendBodySchema>): { readonly provider: AgentProvider; readonly model: string } | undefined =>
+    body.provider === undefined || body.model === undefined ? undefined : { provider: body.provider, model: body.model };
 
 // One of `answers` (keyed by question text) or `text` (a one-question card's shorthand).
 const AnswerBodySchema = z
@@ -200,7 +207,7 @@ const createChildrenRoutes = (services: Services) => ({
         if (!parsed.success) {
             return c.json({ ok: false, message: 'Pass JSON like {"child": "sub-…", "message": "…"}.' }, 400);
         }
-        const result = await supervisor.send(parsed.data.child, parsed.data.message);
+        const result = await supervisor.send(parsed.data.child, parsed.data.message, rehomeOfBody(parsed.data));
         return c.json(result, result.ok ? 200 : 409);
     },
     /** POST /children/cancel — stop a child's running turn, its pending start, or the re-run the sandbox booked for it. */

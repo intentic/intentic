@@ -12,6 +12,10 @@ export interface TurnTimeouts {
 // Two minutes of silence is a stuck turn; half an hour is the backstop even for one that keeps dribbling events.
 export const DEFAULT_TURN_TIMEOUTS: TurnTimeouts = { inactivityMs: 120_000, maxTurnMs: 30 * 60_000 };
 
+/** The loop's timeouts with the turn's own cap (TurnSpec.turnCapMs, the owner's setting) in place of the default. */
+export const withTurnCap = (timeouts: TurnTimeouts, capMs: number | undefined): TurnTimeouts =>
+    capMs === undefined || capMs <= 0 ? timeouts : { ...timeouts, maxTurnMs: capMs };
+
 // What a pull answers once the loop should stop waiting: the source finished, or a deadline passed first.
 export const SETTLED: unique symbol = Symbol("turn-settled");
 export const EXPIRED: unique symbol = Symbol("turn-expired");
@@ -91,9 +95,11 @@ export const turnWatchdog = (timeouts: TurnTimeouts): TurnWatchdog => {
             // quiet says for how long, so neither reads as the other.
             if (now >= turnDeadline) {
                 const quiet = now - lastActivity;
+                // Said as how long the quiet lasted, never as when the turn ended: "cap after 1m 47s with nothing from
+                // the loop" read as a turn that died at 1m 47s (2026-10-17).
                 return quiet < CAP_STILL_ACTIVE_MS
                     ? `the turn reached its ${duration(timeouts.maxTurnMs)} cap while still active (${silent})`
-                    : `the turn reached its ${duration(timeouts.maxTurnMs)} cap after ${duration(quiet)} with nothing from the loop`;
+                    : `the turn reached its ${duration(timeouts.maxTurnMs)} cap, ${duration(now - startedAt)} in, the loop having sent nothing for the last ${duration(quiet)}`;
             }
             if (now >= inactivityDeadline) {
                 return `nothing arrived for ${duration(now - lastActivity)}, past the ${duration(timeouts.inactivityMs)} silence limit, ${duration(now - startedAt)} into the turn`;

@@ -116,6 +116,18 @@ const setAutomationFailureLimit = (event: Event): void => {
     patch({ automationFailureLimit });
 };
 
+// Minutes; bounds mirror SandboxSettingsSchema.turnCapMinutes.
+const TURN_CAP = { min: 5, max: 24 * 60 };
+const setTurnCap = (event: Event): void => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) {
+        return;
+    }
+    const turnCapMinutes = Math.min(TURN_CAP.max, Math.max(TURN_CAP.min, Math.round(Number(input.value) || 30)));
+    input.value = String(turnCapMinutes);
+    patch({ turnCapMinutes });
+};
+
 // Bounds mirror SandboxSettingsSchema, so the box never keeps a number the save would refuse.
 const setAutomationThreadsAtOnce = (event: Event): void => {
     const input = event.target;
@@ -207,6 +219,23 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
                     size="xs"
                     :wrap="true"
                     :class="{ 'pointer-events-none opacity-60': settings === undefined }"
+                />
+            </template>
+        </Row>
+
+        <!-- How long one turn may run on a loop the sandbox drives itself (OpenCode, ACP, Pi, Muse) before it is ended; a
+             subagent that reaches it is carried on rather than failed. -->
+        <Row icon="clock" :title="t(`sandbox.agentRecovery.turnCap`)" :description="t(`sandbox.agentRecovery.turnCapNote`)">
+            <template #control>
+                <input
+                    type="number"
+                    :min="TURN_CAP.min"
+                    :max="TURN_CAP.max"
+                    :aria-label="t(`sandbox.agentRecovery.turnCapLabel`)"
+                    class="ui-field-box ui-field-sm w-20 text-right"
+                    :value="settings?.turnCapMinutes ?? 30"
+                    :disabled="settings === undefined"
+                    @change="setTurnCap"
                 />
             </template>
         </Row>

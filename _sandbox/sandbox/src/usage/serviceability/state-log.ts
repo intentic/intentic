@@ -2,6 +2,7 @@ import type { AccountState, ProviderRefusal } from "@intentic/sandbox-contract/s
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { bindingWindow, type ModelRef, type RefusalsOnFile, refusalVerdict, type ServiceFacts } from "@intentic/sandbox-contract/models/plan-pools";
 import type { Logger } from "pino";
+import { opt } from "../../opt.js";
 
 // The verdict on an account is computed on demand from four stores and published nowhere but the account lists, so the
 // moment an account went from ready to spent (and why) was in no log: an agent asked to explain a stuck turn had to call
@@ -54,6 +55,39 @@ const evidence = (facts: ServiceFacts, state: AccountState, refusal: ProviderRef
 const refusalList = (refusals: RefusalsOnFile): readonly ProviderRefusal[] =>
     refusals === undefined ? [] : "kind" in refusals ? [refusals] : refusals;
 
+/** An account that could not serve and now can: the moment a parent waiting on capacity wants to hear. */
+export interface AccountReopened {
+    readonly provider: string;
+    readonly account: string;
+    readonly label?: string;
+    // The verdict it came back from, in the log's words ("spent", "blocked (wait)").
+    readonly from: string;
+}
+
+// Heard by whoever subscribes (agent/subagents/capacity-reopened.ts): a change this log writes was, until it, the only
+// sign an account came back, and a parent waiting on capacity sat on until a person read the log for it (2026-10-17).
+const reopenedListeners = new Set<(event: AccountReopened) => void>();
+
+/** Hears every account that comes back to `ready` from spent or blocked; answers its own unsubscribe. */
+export const onAccountReopened = (listener: (event: AccountReopened) => void): (() => void) => {
+    reopenedListeners.add(listener);
+    return () => reopenedListeners.delete(listener);
+};
+
+const cameBack = (previous: string | undefined, shape: string): boolean =>
+    shape === "ready" && previous !== undefined && (previous === "spent" || previous.startsWith("blocked"));
+
+// Tells every listener of an account that came back, once per change the log writes.
+const announceReopened = (provider: string, entry: ServiceFacts, previous: string | undefined, shape: string): void => {
+    if (previous === undefined || !cameBack(previous, shape)) {
+        return;
+    }
+    const event: AccountReopened = { provider, account: entry.account, ...opt("label", entry.label), from: previous };
+    for (const listener of reopenedListeners) {
+        listener(event);
+    }
+};
+
 export interface AccountStateLog {
     // Every account of one provider as just judged together; writes a line for each whose verdict changed since the last
     // judgement on the same question (the same model, or none).
@@ -90,6 +124,7 @@ export const createAccountStateLog = (logger: Pick<Logger, "info">, now: () => n
                 if (previous === undefined && (state.kind === "unknown" || shape === "ready")) {
                     continue;
                 }
+                announceReopened(provider, entry, previous, shape);
                 const refusal = standing.find((candidate) => (candidate.account ?? entry.account) === entry.account);
                 logger.info(
                     {

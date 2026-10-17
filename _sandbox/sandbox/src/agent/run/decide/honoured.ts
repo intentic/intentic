@@ -206,6 +206,7 @@ export const honoured = (
             ...opt("systemAppend", placement.systemAppend),
             search: searchToolOf(premise),
             sessionStore: facts.sessionStore,
+            turnCapMs: settings.turnCapMinutes * 60_000,
             ...opt("cwd", startPath),
             // A fact about that cwd: only an isolated turn works in a copy of its own. Read by the command gate.
             ownCheckout: isolated,

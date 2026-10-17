@@ -907,6 +907,7 @@ const classified = async (services: Services, event: ErrorFrame, turn: TurnState
             attribution: turn.attribution,
             sessionId: readings.sessionId,
             answered: readings.silence.answered,
+            child: input.conversationId !== undefined && isSpawnedChild(services.conversations, input.conversationId),
             carriedOff: turn.carriedOff,
             door: turn.door,
             remint: turn.remint,

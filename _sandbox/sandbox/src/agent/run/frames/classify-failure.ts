@@ -6,13 +6,14 @@ import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/provide
 import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
 import type { LimitWay, limitWayOf } from "../../models/limit-way.js";
-import { mentionsSpentAllowance } from "../../../engines/failure-sentences.js";
+import { isAdminGrantedAllowanceText, mentionsSpentAllowance } from "../../../engines/failure-sentences.js";
+import { latestOf, namedPeriod, namedReset } from "../../../usage/reset-sentences.js";
 import { OUTAGE_MAX_ATTEMPTS, type OutageState } from "../../providers/provider-health.js";
 import type { VerificationStanding } from "../../verification/agent-verification.js";
 import type { RefreshOptions } from "../../../usage/headroom.js";
 import type { StoredCooldown } from "../../../usage/model-cooldowns.js";
 import type { StoredModelRefusal } from "../../../usage/model-refusals.js";
-import type { ObservedLimit } from "../../../usage/observed-limits.js";
+import { ACCOUNT_WIDE, type ObservedLimit } from "../../../usage/observed-limits.js";
 import { opt } from "../../../opt.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import type { HeldReason, HeldTurn } from "../turn/turn-resume.js";
@@ -31,6 +32,8 @@ const HANDLED_FAILURE_CODES: ReadonlySet<string> = new Set([
     "provider-outage",
     "claude-token-refused",
     "claude-not-entitled",
+    // Filed against the account (observed-limits.json, account-wide), so placement and the spawn gate skip it.
+    "account-not-entitled",
     // Filed against the model (model-refusals.json); happens once, since the picker stops offering it after.
     "model-unavailable",
     // The provider's classifier, not this sandbox: held for a person with the vendor's own words.
@@ -38,7 +41,10 @@ const HANDLED_FAILURE_CODES: ReadonlySet<string> = new Set([
 ]);
 
 // Codes filed as a durable refusal against the provider, whose `kind` reads the sentence rather than the code.
-const REFUSING_CODES: ReadonlySet<string> = new Set(["rate_limit", "claude-token-refused", "claude-not-entitled"]);
+const REFUSING_CODES: ReadonlySet<string> = new Set(["rate_limit", "claude-token-refused", "claude-not-entitled", "account-not-entitled"]);
+
+// Codes that refuse the account itself rather than one model's allowance.
+const ENTITLEMENT_CODES: ReadonlySet<string> = new Set(["claude-not-entitled", "account-not-entitled"]);
 
 // Everything classifying one failure frame reads, as it stood when the frame arrived.
 export interface FailureContext {
@@ -55,6 +61,8 @@ export interface FailureContext {
     readonly sessionId: string | undefined;
     // Whether the provider answered before this frame: `ran` on every hold this frame promises.
     readonly answered: boolean;
+    // A spawned child's turn: nobody watches it, so a reset far off is no re-run worth booking for it (FAR_RERUN_MS).
+    readonly child?: boolean | undefined;
     // Whether this turn re-ran a held one, its session carried onto another account than the one it was held on.
     readonly carriedOff?: boolean | undefined;
     // Held at the door for a spent allowance (spent-door.ts): no request went out, so nothing is filed against the
@@ -77,11 +85,13 @@ export interface FailureContext {
 export interface FailureQueries {
     // This conversation's own answer for one ending, read the same way the resume pass will read it.
     readonly breakPolicy: (conversationId: string, ending: TurnBreak) => Promise<TurnBreakPolicy>;
-    // When a spent allowance reopens by the account's snapshot or the translator's pool.
+    // When a spent allowance reopens by the account's snapshot or the translator's pool; `period` is the length of the
+    // pool the vendor's sentence said ran out, whose own reset is then the answer.
     readonly reopensAt: (at: {
         readonly provider: AgentProvider;
         readonly model: string | undefined;
         readonly account: string | undefined;
+        readonly period?: number;
     }) => Promise<number | undefined>;
     readonly limitWay: (params: Parameters<typeof limitWayOf>[1]) => Promise<LimitWay | undefined>;
     // How many rungs the stop ladder has spent, and when its next would fire (undefined once it is spent).
@@ -125,7 +135,7 @@ const named = (model: string | undefined): string | undefined => (model === unde
 
 // `kind` reads the sentence, not the code, which can disagree.
 const refusalKind = (event: ErrorFrame): ProviderRefusal["kind"] => {
-    if (event.code === "claude-not-entitled") {
+    if (event.code !== undefined && ENTITLEMENT_CODES.has(event.code)) {
         return "entitlement";
     }
     return event.code === "rate_limit" || mentionsSpentAllowance(event.message) ? "limit" : "auth";
@@ -138,6 +148,20 @@ const refusalKind = (event: ErrorFrame): ProviderRefusal["kind"] => {
    accounts until a reading after it shows room, and its re-read covers them all. */
 const refusingAccount = (provider: AgentProvider, account: string | undefined): string | undefined =>
     KeyedProviderSchema.safeParse(provider).success ? undefined : account;
+
+// A plan with nothing to poll keeps its refusals as the reading: a spent allowance against the model that spent it, an
+// account refused outright against every model (ACCOUNT_WIDE), so the next placement and the spawn gate skip it rather
+// than read it as untouched room (2026-10-17: a Cursor account refusing `[role_forbidden]` took two children in a row).
+const observedWrites = (
+    event: ErrorFrame,
+    at: { readonly provider: AgentProvider; readonly account: string; readonly model: string | undefined; readonly now: number },
+): FailureWrite[] => {
+    const { provider, account, model, now } = at;
+    if (event.code === "account-not-entitled") {
+        return [{ kind: "observed-limit", provider, account, model: ACCOUNT_WIDE, limit: { at: now, message: event.message, refused: "entitlement" } }];
+    }
+    return event.code === "rate_limit" && model !== undefined ? [{ kind: "observed-limit", provider, account, model, limit: { at: now, message: event.message } }] : [];
+};
 
 // The durable refusal a refusing code files, the re-measure it owes, and for a plan with nothing to poll, the reading.
 const refusalWrites = (event: ErrorFrame, context: FailureContext): FailureWrite[] => {
@@ -159,12 +183,12 @@ const refusalWrites = (event: ErrorFrame, context: FailureContext): FailureWrite
         ...actor,
         ...opt("account", refusingAccount(provider, context.attribution.account)),
         ...opt("model", model),
-        ...opt("resetsAt", kind === "limit" ? (context.limitReset ?? event.resetsAt) : undefined),
+        ...opt("resetsAt", kind === "limit" ? (context.limitReset ?? latestOf(namedReset(event.message, now), event.resetsAt)) : undefined),
+        // A team's credit no usage endpoint reads: the refusal stands against every reading (ProviderRefusal.unmetered).
+        ...opt("unmetered", kind === "limit" && isAdminGrantedAllowanceText(event.message) ? true : undefined),
     };
     const observed: FailureWrite[] =
-        event.code === "rate_limit" && account !== undefined && model !== undefined && !reportsPlanLimits(provider)
-            ? [{ kind: "observed-limit", provider, account, model, limit: { at: now, message: event.message } }]
-            : [];
+        account === undefined || reportsPlanLimits(provider) ? [] : observedWrites(event, { provider, account, model, now });
     return [
         { kind: "provider-refusal", provider, refusal },
         { kind: "headroom-refresh", options: { scope: { providers: [provider], ...opt("account", account) }, maxAgeMs: 0 } },
@@ -239,6 +263,11 @@ const heldOf = (ran: boolean, way: LimitWay | undefined, moving: string | undefi
     ...opt("handoff", way?.handoff),
 });
 
+/* HOW FAR OFF A RESET A CHILD IS STILL WORTH HOLDING FOR. A child's parent waits on it, and was told "do not give the
+   task to another agent meanwhile" for a quota that reopened next week (2026-10-17). Past this, a child's spent turn is
+   not booked to re-run by itself: it ends offering the reset, and its parent hears where else its work can go on. */
+export const FAR_RERUN_MS = 90 * 60_000;
+
 // Dresses a spent-allowance frame with when it reopens, whether it is held, and whether a clock resumes it unasked;
 // `autoResume` needs a held turn and a known instant. A booked move fires on the next pass, "now" to a reader, so it
 // names no instant.
@@ -251,10 +280,12 @@ const limitFrame = async (
         readonly held: boolean;
         readonly ran: boolean;
         readonly way: LimitWay | undefined;
+        // A child whose reset is past FAR_RERUN_MS: offered, never booked.
+        readonly far: boolean;
     },
 ): Promise<ErrorFrame> => {
     const { conversationId, resetsAt, held, ran, way } = limit;
-    const schedulable = held && resetsAt !== undefined && conversationId !== undefined;
+    const schedulable = held && resetsAt !== undefined && conversationId !== undefined && !limit.far;
     // `move` implies the appointment, so anything but `wait` keeps it.
     const armed = schedulable ? breakArmed(await queries.breakPolicy(conversationId, "limit")) : false;
     const moving = held ? way?.move?.account : undefined;
@@ -308,11 +339,31 @@ const leftBy = (context: FailureContext): Pick<LimitWay, "standing" | "checklist
     ...opt("contextTokens", context.contextTokens),
 });
 
+/* WHEN A SPENT ALLOWANCE REOPENS. The stream's own reset outranks everything (dressLimit). Then the vendor's sentence,
+   when it names an instant ("Resets in 166h40m39s", "try again at 5:46 PM"): exact, and the only word a loop's own
+   instant must not overrule. Otherwise the frame's instant is only a floor, since a loop hands a limit over at the
+   moment IT would ask again (OpenCode's capped retry-after, the translator's bench), and the pool the sentence names
+   ("your 5-hour usage limit") reopens when the account's reading says it does: the later of the two. A frame with no
+   instant at all reads the snapshot, as before. Booked at the floor, a Gemini quota resetting in a week was re-run in
+   fifteen minutes and a Kimi five-hour window with two hours left in thirty, each refused again (2026-10-17). */
+const reopeningOf = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<number | undefined> => {
+    const said = namedReset(event.message, context.now);
+    if (said !== undefined) {
+        return latestOf(said, event.resetsAt);
+    }
+    const period = namedPeriod(event.message);
+    const floor = event.resetsAt;
+    if (floor !== undefined && period === undefined) {
+        return floor;
+    }
+    const { provider, account } = context;
+    return latestOf(floor, await queries.reopensAt({ provider, model: context.model, account, ...opt("period", period) }));
+};
+
 // A spent allowance: when it reopens, whether it is held, the way on, and the model a routed provider benches.
 const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<Dressed> => {
     const { turn, provider, account, answered } = context;
-    // One precedence for the reset instant: the stream's, the frame's own, else the account or pool snapshot.
-    const resetsAt = context.limitReset ?? event.resetsAt ?? (await queries.reopensAt({ provider, model: context.model, account }));
+    const resetsAt = context.limitReset ?? (await reopeningOf(event, context, queries));
     const model = named(context.model);
     const writes: FailureWrite[] =
         KeyedProviderSchema.safeParse(provider).success && model !== undefined && resetsAt !== undefined && context.door !== true
@@ -337,7 +388,8 @@ const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: F
     if (resetsAt === undefined && held === undefined) {
         return { frame: event, held, writes };
     }
-    const frame = await limitFrame(queries, event, { conversationId, resetsAt, held: held !== undefined, ran: answered, way });
+    const far = context.child === true && resetsAt !== undefined && resetsAt * 1000 - context.now > FAR_RERUN_MS;
+    const frame = await limitFrame(queries, event, { conversationId, resetsAt, held: held !== undefined, ran: answered, way, far });
     return { frame, held, writes };
 };
 

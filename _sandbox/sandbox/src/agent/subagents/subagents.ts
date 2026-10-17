@@ -96,7 +96,7 @@ const sweep = (actors: Actors): void => {
 // Notified synchronously on every open() and patch(), which makes waitForSubagent race-free: a listener added before
 // the read cannot miss a transition. Not the runtime-watch bus, which rate-limits per domain. Held by the conversation
 // waited on, under an id of the wait's own.
-const WAITERS: Holding<() => void> = { name: "subagent waits" };
+export const WAITERS: Holding<() => void> = { name: "subagent waits" };
 const notifyChanged = (actors: Actors): void => {
     for (const [, listener] of actors.holdings(WAITERS).entries()) {
         listener();
@@ -128,7 +128,7 @@ export const noteSubagentSpawn = (actors: Actors, id: string, spawn: { readonly 
         .hold(undefined, id, { ...(spawn.background === true ? { background: true } : {}), ...(model !== undefined ? { model } : {}) });
 };
 
-const wire = (record: SubagentRecord): SubagentSession => ({
+export const wire = (record: SubagentRecord): SubagentSession => ({
     id: record.id,
     kind: record.kind,
     conversationId: record.conversationId,

@@ -21,6 +21,12 @@ describe("another agent's words", () => {
         expect(agentWordsOf(prompt)).toEqual({ kind: "peer", from: "sharp-shale-htw8", title: "Bun migration", sent: prompt });
     });
 
+    // 2026-10-17: a child its parent cancelled was reported to it as finished.
+    it("says a stopped child was stopped, and still reads it back as a child's report", () => {
+        expect(report({ stopped: true }).split("\n", 1)[0]).toMatch(/ was stopped\.$/u);
+        expect(agentWordsOf(report({ stopped: true }))).toMatchObject({ kind: "child" });
+    });
+
     it("round-trips a child's report, finished or failed", () => {
         expect(agentWordsOf(report())).toMatchObject({ kind: "child", from: "sub-x7", title: "Port the parser" });
         expect(agentWordsOf(report()) ?? {}).not.toHaveProperty("failed");

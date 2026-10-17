@@ -11,8 +11,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { AgentHarness, AgentProvider, TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import type { AskQuestion, ChildAgentAsk, ChildMove, ChildRun } from "@intentic/sandbox-contract/events/requests";
 import type { LimitPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
-import type { ResumeReason } from "@intentic/sandbox-contract/events/resume";
-import { canonicalHarness, capabilitiesOf, loopLabel, loopOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
+import { capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
 import { childRunOf, sameChildRun } from "@intentic/sandbox-contract/events/child-run";
 import { newConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { cardDeps } from "../../conversations/actor/card-deps.js";
@@ -26,9 +25,7 @@ import { guard } from "../../guard/guard.js";
 import { conversationTaintSource, markConversationTaint, RUNTIME_SOURCE } from "../../guard/turn-taint.js";
 import { killCauseOf, killNote, runtimeKilled } from "./child-death.js";
 import { noteChildWork } from "./child-verification.js";
-import { spawnBlocked, spawnCatalogText, type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
-import { mentionsSpentAllowance } from "../../engines/failure-sentences.js";
-import { spentRung } from "../models/role-model-quota.js";
+import { bestRoomFor, type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
 import {
     blockedMoveReporter,
     markSubagentEndingReported,
@@ -52,6 +49,7 @@ import {
     markFamilyEnded,
 } from "./family-cancel.js";
 import { filePausedChildren } from "./paused-children.js";
+import { capForRoom, FAN_OUT, type Lane, siblingNewsWords } from "./fan-out-governor.js";
 import { waitForWork, type WorkWaitOutcome } from "./work-wait.js";
 import { deliverWake } from "../../seams/wake-delivery.js";
 import { spokenBy } from "../../seams/turn-speaker.js";
@@ -61,6 +59,9 @@ import { opt } from "../../opt.js";
 import { credentialsTravel, placeFanOut } from "../../runners/runner-scheduler.js";
 import { freshRunnerSummaries } from "../../runners/runner-peer.js";
 import type { DelegateAsk, LinkListing } from "../../links/linked-children.js";
+import { childOpening, childProfile, childRouting, movesOn, onceOnly, providerRefusal, rehomedSpec, repointedNote, sameModel, taskLine, withRun } from "./child-spec.js";
+import { ALWAYS_LABEL, BEHIND_MAX_MS, CANCELLED, CANCEL_NOTES, LINKED_MERGE, LINKED_REHOME, MOVE_BUTTON, MOVE_TITLE, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, laneHeldNote, movedWords, noRerun, nowhereToAsk, questionWords, quoted, startedWhy, unansweredWords } from "./child-words.js";
+import { elsewhereFor, namedPaths, spentAsked } from "./child-listing.js";
 
 // Spawns, steers and answers full agents from inside a turn, on any connected provider; a child is an ordinary
 // conversation on the same turn pump, queued until the box has memory for it. A parked question is the parent's to
@@ -97,6 +98,18 @@ export interface ChildSpawnSpec {
     readonly account?: string;
     // Runner id, or "here" to pin this sandbox; absent lets the fleet scheduler place it.
     readonly on?: string;
+    // Where it goes by itself, in this order, when its own provider refuses it in a way no wait soon answers: an account
+    // refused outright, a model off the plan, a spent allowance with no reset or one far off (FAR_RERUN_MS). It moves in
+    // its own worktree onto the next one the records do not call spent, and its parent is told.
+    readonly fallbacks?: readonly ChildRehome[];
+}
+
+/** Another provider and model for a child's next turn, in the same worktree (sendToChild, a spawn's fallbacks). */
+export interface ChildRehome {
+    readonly provider: AgentProvider;
+    readonly model: string;
+    readonly harness?: AgentHarness;
+    readonly effort?: string;
 }
 
 export interface ChildParent {
@@ -122,11 +135,13 @@ export interface PendingChildCard {
 
 // Everything known about one child, keyed by its conversation id. `spec`/`sessionId` are what a follow-up resumes with;
 // `pending` is the escalation ladder's state. In-memory: dies with the daemon.
-interface ChildRecord {
+export interface ChildRecord {
     readonly parent: string;
-    readonly spec: ChildSpawnSpec;
-    // What every turn of this child runs as, resolved once at spawn, so a follow-up never drifts to another model.
-    readonly profile: TurnProfile;
+    // Replaced only by a re-home (rehomeChild), never by a follow-up drifting.
+    spec: ChildSpawnSpec;
+    // What every turn of this child runs as, resolved once at spawn, so a follow-up never drifts to another model; a
+    // re-home moves it whole.
+    profile: TurnProfile;
     readonly depth: number;
     readonly cwd: string;
     sessionId: string | undefined;
@@ -139,14 +154,18 @@ interface ChildRecord {
     // Waiting for a turn somebody else started on its conversation to end before this one starts: `running`, with no
     // turn of the parent's to steer either.
     behind: boolean;
-    // What of it waits on the owner's answer to a card: its start, or the parent's last message to it.
-    held: "start" | "message" | undefined;
+    // What of it waits on the owner's answer to a card: its start, or the parent's last message to it; or its start,
+    // held by the fan-out governor until a sibling on its provider is answered or a seat on it frees (`lane`).
+    held: "start" | "message" | "lane" | undefined;
     // The OOM killer's count as its current turn started, so its ending can tell a kill from its own failure.
     oomKillsAtStart: number | undefined;
     // Its last settled turn's whole closing message: what a wait hands over where the roster row's summary cut it.
     report: string | undefined;
     // Its parent cancelled it: the turn that stops, or the start that is kept from happening, ends as killed.
     cancelled: boolean;
+    // Its turn was refused in a way its spawn's fallbacks answer: set the moment the refusal arrives, so the report of the
+    // run that ended is not told to the parent as the end (child-report.ts), and cleared once the move is made or fails.
+    movingOn: { readonly failure: string } | undefined;
     // Its turn ended on a wall the sandbox re-runs it past by itself: what stopped it, the run that ended so, the look
     // that ends the pause as failed if the re-run never comes, and what strikes the pause off the record a restart reads
     // (paused-children.ts).
@@ -218,6 +237,7 @@ export const resetChildrenForTest = (actors: Actors): void => {
     actors.holdings(TURN_GRANTS).clear();
     actors.holdings(HELD_MOVES).clear();
     actors.holdings(PERSON_RUNS).clear();
+    FAN_OUT.reset();
 };
 
 // Display label for the roster row; a provider absent from PROVIDERS shows as its raw id.
@@ -274,19 +294,6 @@ const BEHIND_SUMMARY = "Waiting for the turn already running on it to end; your 
 // How many times a follow-up waits out another turn before it gives up: a turn that ends can be followed at once by
 // what waited in the conversation's own queue.
 const BEHIND_TRIES = 3;
-// How long one wait behind another turn may last; past it the parent is told its words were not delivered.
-const BEHIND_MAX_MS = 2 * 60 * 60_000;
-
-// Why a child's turn never started, as the ending its parent reads.
-const NOT_STARTED = {
-    stuck: `The turn already running on it did not end within ${BEHIND_MAX_MS / 3_600_000} hours, so your message was not delivered: send it again once it is free.`,
-    busy: "Other turns kept its conversation busy, so your message was not delivered: send it again once it is free.",
-    archived: "That child is archived: only a person's message reopens it.",
-    cancelled: "Cancelled by its parent before it started.",
-} as const satisfies Record<string, string>;
-
-// What a cancelled child's ending says, whatever its turn was doing when the cancel came.
-const CANCELLED = "Stopped: its parent cancelled it.";
 
 type StartedChildTurn = Exclude<ReturnType<Services["turns"]["run"]>, string>;
 
@@ -348,7 +355,7 @@ const startWhenFree = async (
 };
 
 // What a child's turn has shown so far, as its frames are followed; the report is its last closed bubble.
-interface ChildTurnTally {
+export interface ChildTurnTally {
     bubble: string;
     report: string;
     toolUses: number;
@@ -356,9 +363,27 @@ interface ChildTurnTally {
     failure: string | undefined;
     // A re-run of this same turn the sandbox booked for itself, as its failure frame states it.
     rerun: { readonly at?: number | undefined } | undefined;
+    // Whether the provider answered at all: what proves its lane to the fan-out governor.
+    answered: boolean;
+    // The failure frame's code, which says whether a wait answers it (a spent allowance) or nothing here does.
+    code: string | undefined;
+    // Whether its parent was told this turn runs on another model than it was spawned on.
+    substituted: boolean;
+    // Whether the failure came as an error frame of its turn, rather than a start the sandbox could not make.
+    errored: boolean;
 }
 
-const freshTally = (): ChildTurnTally => ({ bubble: "", report: "", toolUses: 0, tokens: 0, failure: undefined, rerun: undefined });
+const freshTally = (): ChildTurnTally => ({ bubble: "", report: "", toolUses: 0, tokens: 0, failure: undefined, rerun: undefined, answered: false, code: undefined, substituted: false, errored: false });
+
+// The first frame the provider itself produced proves the child's lane, and starts whatever waited on it.
+const takeAnswer = (childId: string, tally: ChildTurnTally, event: AgentEvent): void => {
+    if (tally.answered || !ANSWERS.has(event.kind) || ("parentToolUseId" in event && event.parentToolUseId !== undefined)) {
+        return;
+    }
+    tally.answered = true;
+    FAN_OUT.answered(childId);
+};
+const ANSWERS: ReadonlySet<AgentEvent["kind"]> = new Set(["delta", "thinking", "tool_call"]);
 
 // The child's own prose, top level only: a sub-delegation's words are not its report.
 const takeProse = (tally: ChildTurnTally, event: Extract<AgentEvent, { kind: "delta" | "text_end" }>): void => {
@@ -373,18 +398,6 @@ const takeProse = (tally: ChildTurnTally, event: Extract<AgentEvent, { kind: "de
     tally.report = tally.bubble.trim() === "" ? tally.report : tally.bubble;
     tally.bubble = "";
 };
-
-// What a parent is told of the question its child parked on: the questions whole, options and all, and the door that
-// answers them, since the parent may have no wait open to read them from.
-const questionWords = (childId: string, spec: ChildSpawnSpec, questions: readonly AskQuestion[]): string =>
-    [
-        `Your subagent \`${childId}\` ("${taskLine(spec)}") stopped on a question and is waiting for your answer; until you give one it does nothing and keeps its seat.`,
-        ...questions.map((asked) => {
-            const options = asked.options.map((option) => option.label);
-            return `- ${asked.question}${options.length === 0 ? "" : ` (options: ${options.join(", ")}${asked.multiSelect ? "; pick any number" : ""})`}`;
-        }),
-        `Answer with answer(child: "${childId}", answers: [{ question, picks }]), one entry per question in its own words. If it is not yours to decide, say so to the owner rather than guessing.`,
-    ].join("\n");
 
 // Wakes the parent with a question its child parked on, where no wait of the parent's took it: a parent with no live turn
 // hears of nothing else until the child ends, so the child would sit blocked until a person happened to look. Said
@@ -449,7 +462,11 @@ const takeParked = (services: Services, childId: string, kid: ChildRecord | unde
 // a child's own sub-delegations still count as its proof.
 const takeChildFrame = (services: Services, childId: string, kid: ChildRecord | undefined, tally: ChildTurnTally, event: AgentEvent): void => {
     noteChildWork(services.conversations, event, childId);
+    takeAnswer(childId, tally, event);
     switch (event.kind) {
+        case "init":
+            takeServedModel(services, childId, kid, tally, event.model);
+            return;
         case "session":
             if (kid !== undefined) {
                 kid.sessionId = event.sessionId;
@@ -477,7 +494,12 @@ const takeChildFrame = (services: Services, childId: string, kid: ChildRecord | 
             return;
         case "error":
             tally.failure = event.message;
+            tally.code = event.code;
+            tally.errored = true;
             tally.rerun = event.autoResume === "scheduled" ? { at: event.nextAt } : undefined;
+            if (kid !== undefined && movesOn(kid, event)) {
+                kid.movingOn = { failure: event.message };
+            }
             return;
         default:
             takeParked(services, childId, kid, event);
@@ -497,12 +519,6 @@ const freeSeat = (services: Services, parent: string): void => {
 // it gone before the pause ends as failed; two, since a re-run firing is a moment with no hold and no run yet.
 const PAUSE_LOOK_MS = 15_000;
 const PAUSE_MISSES = 2;
-
-// A paused child's re-run is no longer coming: the sandbox gave it up or dropped it, or a person ran the turn themselves.
-const noRerun = (ranElsewhere: boolean): string =>
-    ranElsewhere
-        ? "Its turn was run again from its own chat rather than for you: read its chat for how that went, or send it again."
-        : "The sandbox did not run it again after all (the re-run was given up or dropped), so it is not coming back by itself: send it again, or give the task to another agent.";
 
 /**
  * Ends a child's pause, whatever ends it: its re-run starting, a message from its parent, a cancel (its parent's, or its
@@ -549,47 +565,6 @@ const pauseChild = (services: Services, childId: string, parent: string, kid: Ch
     kid.paused = { failure, run: turnRunOf(services.conversations, childId)?.id, look, unrecord: () => void ledger.forget([childId]) };
 };
 
-// How long the allowance listing gets before whoever wanted it carries on without it. It probes every connected
-// provider's readiness and catalog, which takes seconds; nothing that reads it here is worth stalling a settle or a
-// refusal for, so a slow one simply goes unquoted.
-const LISTING_MS = 3_000;
-
-// The listing, or undefined when it failed or took too long. Never raises: every caller is composing a sentence, and a
-// sentence without its alternatives still says what happened.
-const listingWithin = async (services: Services, what: string): Promise<readonly SpawnableProvider[] | undefined> => {
-    const read = async (): Promise<readonly SpawnableProvider[] | undefined> => {
-        try {
-            return await spawnableProviders(services);
-        } catch (error) {
-            services.logger.warn({ err: error, what }, "the allowance listing could not be read");
-            return undefined;
-        }
-    };
-    return within(read(), LISTING_MS, undefined, { unref: true });
-};
-
-// Where a child that died on a spent allowance could be sent instead, appended to the vendor's own sentence. A parent
-// otherwise gets only the provider's words ("You're out of usage. Switch to Auto or Composer 2.5") and has to spend a
-// turn working out where else the work can go; a provider with no reopen instant is not coming back on a clock, so this
-// is the whole way forward. Never raises: a listing that cannot be read leaves the sentence as the vendor wrote it.
-const elsewhereFor = async (services: Services, spec: ChildSpawnSpec | undefined, failure: string): Promise<string | undefined> => {
-    if (spec === undefined || !mentionsSpentAllowance(failure)) {
-        return undefined;
-    }
-    const providers = await listingWithin(services, "child failure");
-    if (providers === undefined) {
-        return undefined;
-    }
-    const room = providers
-        .filter((provider) => provider.models.length > 0)
-        .map((provider) => `${provider.id}/${provider.models[0]?.id ?? ""}`)
-        .slice(0, 4);
-    if (room.length === 0) {
-        return "Nothing connected has measured room right now, so re-sending this task anywhere would be refused too.";
-    }
-    return `Re-spawning it elsewhere is the way on; with room right now: ${room.join(", ")} (\`agents providers\` for the rest).`;
-};
-
 /** How a child's turn ended, in the words its parent reads, and whether a re-run is booked past it. */
 interface ChildEnding {
     // The whole sentence: what ended it, then the re-run or where else the task could go.
@@ -619,8 +594,53 @@ const childEnding = async (
     }
     const rerun = tally.rerun === undefined ? undefined : bookedRerunWords(tally.rerun, childId);
     // Only where nothing is bringing it back: with a re-run booked, where else it could go is noise.
-    const elsewhere = rerun !== undefined ? undefined : await elsewhereFor(services, kid?.spec, failure);
+    const elsewhere = rerun !== undefined ? undefined : await elsewhereFor(services, childId, kid?.spec, failure);
     return { error: [failure, rerun, elsewhere].filter((part) => part !== undefined).join(" "), rerun };
+};
+
+// A turn that opens on another model than its child was spawned on is said to the parent at once, never left to the
+// row: a re-run of a Kimi child once ran on kimi-k3 after kimi-k3-256k was taken off the list, and nothing said so
+// (2026-10-17).
+const takeServedModel = (services: Services, childId: string, kid: ChildRecord | undefined, tally: ChildTurnTally, served: string): void => {
+    const asked = kid?.spec.model;
+    if (kid === undefined || tally.substituted || asked === undefined || asked === "" || sameModel(served, asked)) {
+        return;
+    }
+    tally.substituted = true;
+    void sayToParent(
+        services,
+        kid.parent,
+        `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") runs this turn on ${served}, not on ${asked} as it was spawned: ${asked} was not offered when the turn started. Cancel it if that model will not do.`,
+    );
+};
+
+// Onto the first fallback the records do not call spent and the owner's rules let through without a card (a move the
+// owner must allow is theirs to make, not the sandbox's), its seat given back first since the move takes one of its own.
+// Answers whether it moved; a child that could not is put back on what it ran on.
+const moveOnward = async (services: Services, childId: string, parent: string, kid: ChildRecord, failure: string, giveSeatBack: () => void): Promise<boolean> => {
+    const from = kid.spec;
+    const options = from.fallbacks ?? [];
+    for (const [index, option] of options.entries()) {
+        const target = rehomedSpec(from, option, options.slice(index + 1));
+        if ((await spentAsked(services, target)) !== undefined || (await judgeMove(services, parent, target.provider)).effect !== "allow") {
+            continue;
+        }
+        giveSeatBack();
+        rehomeChild(services, childId, kid, target);
+        const sent = await followUp(services, { conversationId: parent, cwd: kid.cwd }, kid, childId, carryOnWords(from, kid.spec, failure));
+        if (sent.ok) {
+            void sayToParent(
+                services,
+                parent,
+                `Your subagent \`${childId}\` ("${taskLine(from)}") was refused on ${from.provider}/${from.model} and moved itself to ${kid.spec.provider}/${kid.spec.model}, the next of the fallbacks you gave it: it carries on in the same worktree, and its report comes when that turn ends. The refusal: ${failure}`,
+            );
+            return true;
+        }
+        kid.spec = from;
+        kid.profile = childProfile(from);
+        return false;
+    }
+    return false;
 };
 
 // Settles a child's turn from its tally: its closing text as the report, a kill named from outside, a re-run the sandbox
@@ -637,6 +657,12 @@ const settleChildTurn = async (
     // Read while the record still says running, so a `send` cannot start a follow-up this settle then overwrites.
     const killed = tally.failure === undefined ? undefined : await childKillNote(services, childId, tally.failure);
     const cancelled = kid?.cancelled === true;
+    FAN_OUT.ended(childId, { answered: tally.answered, failure: cancelled ? undefined : providerRefusal(tally) });
+    const giveSeatBack = onceOnly(() => freeSeat(services, parent));
+    const moving = await movedOn(services, { childId, parent, kid, whole }, { cancelled, killed }, giveSeatBack);
+    if (moving === "moved") {
+        return;
+    }
     const { error, rerun } = await childEnding(services, childId, kid, tally, { cancelled, killed });
     if (kid !== undefined) {
         kid.running = false;
@@ -654,7 +680,35 @@ const settleChildTurn = async (
             ...opt("error", error),
         });
     }
-    freeSeat(services, parent);
+    giveSeatBack();
+    // Its report was held back while it was to move (child-report.ts): the parent hears how it ended after all.
+    if (moving === "stayed" && error !== undefined && kid !== undefined) {
+        void sayToParent(services, parent, `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") stays stopped: none of its fallbacks could take it. ${error}`);
+    }
+};
+
+// A child whose refusal its fallbacks answer is moved before its turn settles: `moved` ends the settle there, `stayed`
+// settles it as it ended and tells its parent, whose report was held back for the move; undefined is no move at all.
+const movedOn = async (
+    services: Services,
+    ended: { readonly childId: string; readonly parent: string; readonly kid: ChildRecord | undefined; readonly whole: string },
+    outside: { readonly cancelled: boolean; readonly killed: string | undefined },
+    giveSeatBack: () => void,
+): Promise<"moved" | "stayed" | undefined> => {
+    const { childId, parent, kid, whole } = ended;
+    const moving = kid?.movingOn;
+    if (kid === undefined || moving === undefined) {
+        return undefined;
+    }
+    if (outside.cancelled || outside.killed !== undefined) {
+        kid.movingOn = undefined;
+        return undefined;
+    }
+    kid.running = false;
+    kid.report = whole.slice(0, REPORT_WHOLE);
+    const moved = await moveOnward(services, childId, parent, kid, moving.failure, giveSeatBack);
+    kid.movingOn = undefined;
+    return moved ? "moved" : "stayed";
 };
 
 // Follows a run of the child's to its end onto its roster row, whoever started it; one that never started settles as the
@@ -710,6 +764,9 @@ const admitRoom = async (services: Services, childId: string, kid: ChildRecord |
     return undefined;
 };
 
+// How long a wait for memory may run before the records are asked again whether the child's model is still askable.
+const STALE_ADMISSION_MS = 30_000;
+
 // Admits one child turn to the box and starts it once its conversation is free, or says in the tally why it did not.
 const admitAndStart = async (
     services: Services,
@@ -719,6 +776,7 @@ const admitAndStart = async (
     where: WorkPlace,
     tally: ChildTurnTally,
 ): Promise<StartedChildTurn | undefined> => {
+    const queuedAt = Date.now();
     const short = await admitRoom(services, childId, kid, where);
     if (short !== undefined) {
         tally.failure = short;
@@ -726,6 +784,12 @@ const admitAndStart = async (
     }
     if (kid?.cancelled === true) {
         tally.failure = NOT_STARTED.cancelled;
+        return undefined;
+    }
+    // A start that waited for memory is asked of the records again: what was askable when it queued may be spent now.
+    const spent = Date.now() - queuedAt < STALE_ADMISSION_MS || kid === undefined ? undefined : await spentAsked(services, kid.spec);
+    if (spent !== undefined) {
+        tally.failure = `Not started after waiting for memory, and nothing spent on it: ${spent}`;
         return undefined;
     }
     if (kid !== undefined) {
@@ -768,39 +832,6 @@ const rosterHandle = (services: Services, parent: string): SubagentTurn => ({
 const childBirth = (id: string, spec: ChildSpawnSpec, depth: number): SpawnedChildBirth => {
     const { provider, model } = childRouting(spec);
     return { id, description: taskLine(spec), agentType: labelOf(provider), provider, spawnDepth: depth, model };
-};
-
-// Why the sandbox sent a child's turn again by itself, in its parent's words.
-const RERUN_WHY = {
-    auth: "its Claude sign-in was renewed",
-    outage: "its model provider came back",
-    restart: "the sandbox restarted in the middle of its turn",
-    stopped: "its last turn stopped short",
-    limit: "its allowance reopened",
-    switched: "its allowance ran out and it moved to another account",
-    carried: "its allowance ran out and it moved to another account",
-    trimmed: "its allowance ran out and it went on in a trimmed copy of its session",
-    summarized: "its allowance ran out and it went on in a fresh session opened with a summary",
-    refused: "its allowance refused the last attempt before anything ran",
-    door: "its last attempt was turned away before anything ran",
-    overflow: "its session outgrew the model's window",
-    flagged: "its model's safety classifier stopped the last attempt and a person chose to go on",
-    continued: "a person chose to carry on after its last turn stopped",
-    answered: "the sandbox restarted while it waited on an answer",
-} as const satisfies Record<ResumeReason, string>;
-
-// What started a turn on a child without its parent, in words for the parent.
-const startedWhy = (started: DomainEventMap["run.started"]): string => {
-    if (started.resume !== undefined) {
-        return `the sandbox sent its turn again by itself because ${RERUN_WHY[started.resume]}`;
-    }
-    const speaker = started.speaker;
-    if (speaker?.kind === "agent") {
-        return `another conversation, \`${speaker.conversationId}\`, sent it a message`;
-    }
-    return speaker?.kind === "sandbox" && speaker.source !== undefined
-        ? `the sandbox started a turn on it (${speaker.source})`
-        : "the sandbox started a turn on it";
 };
 
 /**
@@ -893,44 +924,6 @@ const refusedByRules = async (services: Services, provider: string): Promise<str
     return verdict.effect === "deny" ? `Refused: ${verdict.reason}.` : undefined;
 };
 
-// Which supervisor move is held, so the card names the action truthfully rather than a generic one. The owner reads a
-// spawned child as the editor names every agent another one started, whichever mechanism started it.
-const MOVE_TITLE: Readonly<Record<ChildMove, string>> = {
-    spawn: "Start a subagent",
-    send: "Send this to a subagent",
-    answer: "Answer a subagent",
-};
-const MOVE_BUTTON: Readonly<Record<ChildMove, string>> = { spawn: "Start it", send: "Send it", answer: "Answer it" };
-
-// The card's second allow: this move, and every held one on the same provider for the rest of the parent's turn.
-const ALWAYS_LABEL = "Allow for the rest of this turn";
-
-// What the card quotes of the parent's words to a child: enough to judge it by, not a second transcript.
-const MESSAGE_SHOWN = 600;
-
-// The parent's words as the card quotes them: cut at MESSAGE_SHOWN, back to the last word that fits whole where one ends
-// near the cut, and marked, so a quote never stops mid-word as though that were all it said.
-const quoted = (words: string): string => {
-    const trimmed = words.trim();
-    if (trimmed.length <= MESSAGE_SHOWN) {
-        return trimmed;
-    }
-    const cut = trimmed.slice(0, MESSAGE_SHOWN);
-    const lastSpace = cut.search(/\s\S*$/u);
-    return `${(lastSpace > MESSAGE_SHOWN - 40 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
-};
-
-// Why a hold refuses with nowhere to ask: a detached `agents` shell, or a turn that already ended.
-const nowhereToAsk = (reason: string): string =>
-    `Held for the owner: ${reason}. This call arrived outside a live turn, so there was nowhere to ask them. Ask in chat; they can also set the agents.spawn action rule.`;
-
-// What a move that went unanswered tells its parent: why the owner was asked, and that it may ask again, which raises a
-// new card; nothing about it was declined. A card lives exactly as long as the parent's turn: no clock ends it
-// (docs/architecture/conventions.md, "A person's answers"). 2026-10-12: it also ended after six hours; dropped, since
-// the turn that holds it is the one bound that means anything to the owner.
-const unansweredWords = (move: ChildMove, reason: string): string =>
-    `Nobody answered the owner's card to ${move === "spawn" ? "start" : move} this subagent before your turn ended, so it did not run. It was held because ${reason}. Nothing was declined: you may ask again, which raises a new card, and waiting on it keeps your turn (and so the card) open. If the work cannot wait for the owner, say what you left undone.`;
-
 // Raises the card on the parent's live turn and settles with the owner's answer, however long that takes; nobody's call
 // waits on it. The two refusals differ because the model's next move differs, and only one is the owner declining.
 const askOwner = async (services: Services, parent: string, run: LiveRun, ask: ChildAgentAsk, reason: string): Promise<Admission> => {
@@ -1016,10 +1009,16 @@ const admitChildTurn = async (
         return { ok: false, message: `This conversation has started ${ledger.total} child turns, its lifetime budget.` };
     }
     seats.hold(parent, parent, { live: ledger.live + 1, total: ledger.total + 1 });
+    // Once only: a start the governor held and then failed to start can reach two refunds for the one seat.
+    let refunded = false;
     return {
         ok: true,
         limitPolicy: settings.limitPolicy,
         release: (): void => {
+            if (refunded) {
+                return;
+            }
+            refunded = true;
             const now = seats.get(parent);
             if (now !== undefined) {
                 seats.hold(parent, parent, { live: Math.max(0, now.live - 1), total: Math.max(0, now.total - 1) });
@@ -1027,98 +1026,6 @@ const admitChildTurn = async (
         },
     };
 };
-
-// `provider` and `model` are required, with no fallback default. `harness` still defaults to "native" (the provider's
-// own loop), which spends no extra allowance and needs no account; a loop the provider doesn't offer reads as that too,
-// so the child is placed and floored for the loop that will actually run it.
-const childRouting = (spec: ChildSpawnSpec): { readonly provider: AgentProvider; readonly harness: AgentHarness; readonly model: string } => ({
-    provider: spec.provider,
-    harness: canonicalHarness(spec.provider, spec.harness),
-    model: spec.model,
-});
-
-// Every child turn's profile: its own worktree, so parallel children and the parent never edit the same files, and
-// nobody at a composer, which also floors the persona so it speaks for no outside account. No `runRole`: the parent's
-// own provider and model pick decides, not a settings-row default.
-const childProfile = (spec: ChildSpawnSpec): TurnProfile => {
-    const { provider, harness, model } = childRouting(spec);
-    const profile: TurnProfile = { agent: provider, harness, model, isolated: true, unattended: true };
-    // Each knob only where one was named: an absent one is the model's own default.
-    if (spec.effort !== undefined) {
-        profile.effort = spec.effort;
-    }
-    if (spec.thinking !== undefined) {
-        profile.thinking = spec.thinking;
-    }
-    if (spec.fast !== undefined) {
-        profile.fast = spec.fast;
-    }
-    if (spec.account !== undefined) {
-        profile.account = spec.account;
-    }
-    return profile;
-};
-
-// A spec while it is being put together, before it is handed on as the readonly one.
-type SpecDraft = { -readonly [K in keyof ChildSpawnSpec]: ChildSpawnSpec[K] };
-
-// The spec the owner allowed, when they re-pointed the child on the card: their run replaces the agent's whole, so an
-// effort or an account the agent named for its own model never rides along onto another.
-const withRun = (spec: ChildSpawnSpec, run: ChildRun): ChildSpawnSpec => {
-    const { harness: _harness, account: _account, effort: _effort, thinking: _thinking, fast: _fast, ...task } = spec;
-    const next: SpecDraft = { ...task, provider: run.provider, model: run.model };
-    if (run.harness !== undefined) {
-        next.harness = run.harness;
-    }
-    if (run.account !== undefined) {
-        next.account = run.account;
-    }
-    if (run.effort !== undefined) {
-        next.effort = run.effort;
-    }
-    if (run.thinking !== undefined) {
-        next.thinking = run.thinking;
-    }
-    if (run.fast !== undefined) {
-        next.fast = run.fast;
-    }
-    return next;
-};
-
-// A run in words for the parent's tool result: provider and model as the ids the agent spawns with, since that is its
-// vocabulary, and each knob only when one was named.
-const runWords = (run: ChildRun): string =>
-    [
-        `${run.provider}/${run.model}`,
-        run.effort !== undefined ? `${run.effort} effort` : undefined,
-        run.thinking === false ? "no extended thinking" : undefined,
-        run.fast === true ? "fast speed" : undefined,
-        run.harness !== undefined && canonicalHarness(run.provider, run.harness) !== "native"
-            ? `the ${loopLabel(run.provider, loopOf(run.provider, run.harness))} loop`
-            : undefined,
-        run.account !== undefined ? `account ${run.account}` : undefined,
-    ]
-        .filter((part) => part !== undefined)
-        .join(", ");
-
-/** What the parent is told when the owner started its child on something else, so its own report names the right model. */
-export const repointedNote = (asked: ChildRun, run: ChildRun): string =>
-    `The owner changed what it runs on before allowing it: it runs on ${runWords(run)}, not on ${runWords(asked)} as you asked.`;
-
-// A child's task in one line, as its roster row and the gate's card both show it.
-const taskLine = (spec: Pick<ChildSpawnSpec, "prompt" | "description">): string =>
-    (spec.description ?? spec.prompt).replaceAll(/\s+/gu, " ").trim().slice(0, 200);
-
-// What the turn that opens a child's conversation says of it beyond its task, which the registry reads off that turn
-// alone. Its title is the parent's own words when the parent described it, a name the naming pass keeps, else the
-// prompt's head for that pass to name. And nobody watches a child while its parent waits on it, so where the sandbox's
-// standing answer to a spent allowance is to wait for a person's press, the child answers that ending itself: its turn
-// goes again once the allowance reopens. A sandbox already answering `resend` or `move` is inherited as it stands.
-const childOpening = (spec: ChildSpawnSpec, sandboxLimit: LimitPolicy): Pick<TurnInput, "title" | "titleSource" | "postures"> => ({
-    title: taskLine(spec).slice(0, 80),
-    ...opt("titleSource", spec.description === undefined ? undefined : ("model" as const)),
-    ...opt("postures", sandboxLimit === "wait" ? { limit: "resend" as const } : undefined),
-});
 
 // What the gate's card says about a child: its run, task and machine off the call's spec or the child's own record,
 // never the parent's prose about them.
@@ -1174,17 +1081,6 @@ const childPlacement = async (
               },
           ).runner;
 
-// What a parent is told of a move held for the owner: why it was held, and how long the card waits. Nothing holds its
-// call open while they decide: it carries on, and hears what becomes of the move.
-const heldFor = (reason: string): string =>
-    `Held for the owner's approval, because ${reason}. A card in your chat asks them, and you carry on meanwhile. The card lasts while your turn does: if nobody answers by then the move does not happen, nothing is declined, and you may ask again.`;
-const heldStart = (reason: string): string =>
-    `${heldFor(reason)} It starts once they allow it; wait on it like any child, which also keeps your turn, and the card, open. If they decline, or your turn ends first, it ends as failed without having run.`;
-const heldMessage = (reason: string): string => `${heldFor(reason)} It goes to the child once they allow it, and you are told if it does not.`;
-const heldAnswer = (reason: string): string => `${heldFor(reason)} Your answer goes once they allow it, and you are told if it does not.`;
-// What a held start's roster row says while the owner decides.
-const START_SUMMARY = "Waiting for the owner to allow its start, on the card in your chat.";
-
 // A child's record, as it is filed before its first turn: resolved routing rather than the raw spec, so a follow-up
 // reaches the same provider and model without drift.
 const childRecordOf = (parent: ChildParent, spec: ChildSpawnSpec, depth: number, held?: ChildRecord["held"]): ChildRecord => {
@@ -1205,6 +1101,7 @@ const childRecordOf = (parent: ChildParent, spec: ChildSpawnSpec, depth: number,
         oomKillsAtStart: undefined,
         report: undefined,
         cancelled: false,
+        movingOn: undefined,
         paused: undefined,
     };
 };
@@ -1216,12 +1113,64 @@ interface ChildStart {
     readonly id: string;
 }
 
-// Starts a child the gate let through: on the owner's pick when they re-pointed it (`repointed`), else as asked.
-const startChild = async (
-    services: Services,
-    parent: ChildParent,
-    start: ChildStart & { readonly spec: ChildSpawnSpec; readonly repointed?: ChildRun },
-): Promise<ChildSpawnResult> => {
+// A seat reserved for a child's turn (admitChildTurn): what a start held by the governor keeps while it waits, so a held
+// child costs its parent's budgets exactly as a running one does, and refunds it if it never starts.
+type Seat = Extract<Awaited<ReturnType<typeof admitChildTurn>>, { readonly ok: true }>;
+
+type GovernedStart = ChildStart & { readonly spec: ChildSpawnSpec; readonly repointed?: ChildRun };
+
+// A start the governor let go, or held on its lane (fan-out-governor.ts) with its seat. Undefined lets it start now; a
+// held one is filed as a waiting child, and its result says why and that it starts by itself.
+const governedStart = async (services: Services, parent: ChildParent, start: GovernedStart, seat: Seat): Promise<ChildSpawnResult | undefined> => {
+    const lane: Lane = { provider: start.spec.provider, model: start.spec.model };
+    const admission = FAN_OUT.admit(start.id, lane, capForRoom(await bestRoomFor(services, start.spec.provider, lane.model)));
+    if (admission.go) {
+        return undefined;
+    }
+    holdOnLane(services, parent, { ...start, seat }, lane, admission.reason);
+    const news = siblingNewsWords(FAN_OUT.news(lane.provider));
+    return {
+        ok: true,
+        id: start.id,
+        held: true,
+        note: [laneHeldNote(start.id, admission.reason), news].filter((part) => part !== undefined).join(" "),
+    };
+};
+
+// Filed as a waiting child, so `wait` parks on it and `send` says why it has not started; the governor starts it.
+const holdOnLane = (services: Services, parent: ChildParent, start: GovernedStart & { readonly seat: Seat }, lane: Lane, reason: string): void => {
+    services.conversations.holdings(CHILDREN).hold(parent.conversationId, start.id, childRecordOf(parent, start.spec, start.depth, "lane"), start.id);
+    openSpawnedChild(rosterHandle(services, parent.conversationId), childBirth(start.id, start.spec, start.depth), true);
+    noteSpawnedChild(services.conversations, start.id, { status: "pending", summary: `Held: ${reason}.` });
+    const giveUp = async (why: string): Promise<void> => {
+        start.seat.release();
+        await abandonChildStart(services, parent.conversationId, start.id, why);
+    };
+    FAN_OUT.hold({
+        childId: start.id,
+        lane,
+        // Asked of the records again first: the sibling it waited on may have filed the refusal that makes it pointless.
+        start: async () => {
+            try {
+                const spent = await spentAsked(services, start.spec);
+                const started = spent === undefined ? await startChild(services, parent, start) : { ok: false as const, message: spent };
+                if (!started.ok) {
+                    await giveUp(`Not started, and nothing spent on it: ${started.message}`);
+                }
+                return started.ok;
+            } catch (error) {
+                await giveUp(errorMessage(error));
+                return false;
+            }
+        },
+        abandon: giveUp,
+        cancel: () => start.seat.release(),
+    });
+};
+
+// Starts a child the gate let through: on the owner's pick when they re-pointed it (`repointed`), else as asked. `seat`
+// is the one a start the governor held kept while it waited; it is already counted on its lane.
+const startChild = async (services: Services, parent: ChildParent, start: GovernedStart & { readonly seat?: Seat }): Promise<ChildSpawnResult> => {
     const { asked, spec, depth, id, repointed } = start;
     if (spec.provider !== asked.provider) {
         const refused = await refusedByRules(services, spec.provider);
@@ -1229,11 +1178,16 @@ const startChild = async (
             return { ok: false, message: refused };
         }
     }
-    const { provider, harness } = childRouting(spec);
-    const admitted = await admitChildTurn(services, parent.conversationId);
+    const admitted = start.seat ?? (await admitChildTurn(services, parent.conversationId));
     if (!admitted.ok) {
         return admitted;
     }
+    const governed = start.seat === undefined ? await governedStart(services, parent, start, admitted) : undefined;
+    if (governed !== undefined) {
+        return governed;
+    }
+    const { provider, harness } = childRouting(spec);
+
     // Seat is claimed here; every exit must hand it to a running turn or refund it, or the cap drops permanently.
     let handedOff = false;
     try {
@@ -1255,10 +1209,15 @@ const startChild = async (
         openSpawnedChild(rosterHandle(services, parent.conversationId), childBirth(id, spec, depth), true);
         runChildTurn(services, id, parent.conversationId, turn, placement === undefined ? "local" : { runner: placement });
         handedOff = true;
-        return repointed === undefined ? { ok: true, id } : { ok: true, id, note: repointedNote(childRunOf(asked), repointed) };
+        const note = [
+            repointed === undefined ? undefined : repointedNote(childRunOf(asked), repointed),
+            siblingNewsWords(FAN_OUT.news(provider)),
+        ].filter((part) => part !== undefined);
+        return note.length === 0 ? { ok: true, id } : { ok: true, id, note: note.join(" ") };
     } finally {
         if (!handedOff) {
             admitted.release();
+            FAN_OUT.ended(id, { answered: false, failure: undefined });
         }
     }
 };
@@ -1308,31 +1267,6 @@ const startAllowed = async (services: Services, parent: ChildParent, start: Chil
     }
 };
 
-// A model the records already call spent, refused before a seat is taken. Nothing validated a spawn against the
-// allowance listing before this, so a fan-out onto a spent provider cost a spawn, a wait and a re-spawn for every child
-// — five of them in 32 seconds on one occasion (2026-10-11). Advisory still where it has to be: only a model measured
-// spent is refused, an unreadable listing refuses nothing, and the refusal names what can run so the retry is one call.
-const spentAsked = async (services: Services, asked: ChildSpawnSpec): Promise<string | undefined> => {
-    // The catalog's default, which names no pool to judge.
-    if (asked.model === "") {
-        return undefined;
-    }
-    // One provider's own records, not the whole listing: `spawnableProviders` probes every connected provider's
-    // readiness and catalog and takes seconds, which a fan-out would pay for every child. `spentRung` only ever says
-    // spent, so an unmeasured model and a failed read both go ahead as before.
-    const spent = await spentRung(services, { provider: asked.provider, model: asked.model });
-    if (spent === undefined) {
-        return undefined;
-    }
-    // Only now, on the rare refusal, is the full listing worth its round trips: it is what makes the retry one call.
-    // The refusal stands on `spentRung`'s own reading either way, so a listing that cannot be read only costs it the
-    // alternatives, never its clarity.
-    const providers = await listingWithin(services, "spawn preflight");
-    const elsewhere = providers === undefined ? undefined : spawnBlocked(providers, { provider: asked.provider, model: asked.model });
-    const listing = providers === undefined ? `` : `\n\nConnected right now:\n${spawnCatalogText(providers)}`;
-    return `${elsewhere ?? `${asked.provider}/${asked.model} is out of allowance: ${spent.reason}`}${listing}`;
-};
-
 /**
  * Starts a child agent and returns once it is queued; on a box short of memory it waits as `pending` before its turn
  * runs. Budget/depth refusals and a model the records call spent come back immediately; any other provider refusal
@@ -1373,6 +1307,9 @@ export const spawnChild = async (services: Services, parent: ChildParent, asked:
 
 // Why a message cannot go to the child yet, whatever the owner's rules say; undefined when it can.
 const notYet = (kid: ChildRecord): string | undefined => {
+    if (kid.held === "lane") {
+        return "It has not started: it waits for a sibling on its provider to be answered first, or for a seat on it to free. Wait for it, then send again.";
+    }
     if (kid.held === "start") {
         return "It has not started: the owner has not allowed its start yet. Wait for it, then send again.";
     }
@@ -1387,6 +1324,7 @@ const notYet = (kid: ChildRecord): string | undefined => {
 
 // A follow-up turn on a settled child, resuming its last reported session.
 const followUp = async (services: Services, parent: ChildParent, kid: ChildRecord, childId: string, message: string): Promise<ChildActionResult> => {
+    composeRuntimeFloor(parent.conversationId, kid.spec.provider, capabilitiesOf(kid.spec.provider, childRouting(kid.spec).harness));
     const admitted = await admitChildTurn(services, parent.conversationId);
     if (!admitted.ok) {
         return admitted;
@@ -1434,20 +1372,55 @@ const followUp = async (services: Services, parent: ChildParent, kid: ChildRecor
     }
 };
 
-// A message the gate let through: steered into the child's live turn, else a follow-up turn of its own.
+/* RE-HOMING A CHILD: its next turn on another provider and model, in the same worktree. 2026-10-17: a parent whose
+   children were refused on four providers rescued their work by hand, re-spawning twelve of them with replacement
+   prompts and copying seven patches across worktrees, because `send` could only continue a child where it was. */
+
+// Why a child cannot move now; undefined when it can. Between turns only: a turn under way stays where it runs.
+const unmovable = (kid: ChildRecord): string | undefined =>
+    kid.running
+        ? "It is mid-turn: a child moves between turns only. Cancel it (its work stays in its worktree), then send again naming the provider and model."
+        : notYet(kid);
+
+// Moves a settled or paused child for its next turn: a re-run booked where it was is dropped, and its session stays
+// with the provider that minted it, so the next turn opens a fresh one seeded from the child's own record (routing.ts
+// sessionFor) on top of the same worktree.
+const rehomeChild = (services: Pick<Services, "conversations">, childId: string, kid: ChildRecord, spec: ChildSpawnSpec): void => {
+    if (kid.paused !== undefined) {
+        endPause(kid);
+        const held = services.conversations.state(childId)?.resume.held;
+        if (held !== undefined && !held.fired) {
+            services.conversations.send(childId, { kind: "resume-dropped" });
+        }
+    }
+    const { provider, harness, model } = childRouting(spec);
+    kid.spec = { ...spec, provider, harness, model };
+    kid.profile = childProfile(spec);
+    kid.sessionId = undefined;
+};
+
+// A message the gate let through: steered into the child's live turn, else a follow-up turn of its own, on `target` where
+// the parent moved it.
 const deliverToChild = async (
     services: Services,
     parent: ChildParent,
     kid: ChildRecord,
     childId: string,
     message: string,
+    target?: ChildSpawnSpec,
 ): Promise<ChildActionResult> => {
-    composeRuntimeFloor(parent.conversationId, kid.spec.provider, capabilitiesOf(kid.spec.provider, childRouting(kid.spec).harness));
     // Asked again: an owner answering later may find the child waiting on something new.
-    const waiting = notYet(kid);
+    const waiting = target === undefined ? notYet(kid) : unmovable(kid);
     if (waiting !== undefined) {
         return { ok: false, message: waiting };
     }
+    const from = kid.spec;
+    if (target !== undefined) {
+        rehomeChild(services, childId, kid, target);
+        const sent = await followUp(services, parent, kid, childId, message);
+        return sent.ok ? { ok: true, note: `${movedWords(from, kid.spec)} ${sent.note ?? ""}`.trim() } : sent;
+    }
+    composeRuntimeFloor(parent.conversationId, kid.spec.provider, capabilitiesOf(kid.spec.provider, childRouting(kid.spec).harness));
     if (kid.running) {
         // Mid-turn, the only door is the runtime's own steering seam; a runtime without one cannot take words yet.
         return steerTurn(services.conversations, childId, { text: message, voice: "agent" })
@@ -1461,20 +1434,19 @@ const deliverToChild = async (
 const sendAllowed = async (
     services: Services,
     parent: ChildParent,
-    kid: ChildRecord,
-    childId: string,
-    message: string,
+    sent: { readonly kid: ChildRecord; readonly childId: string; readonly message: string; readonly target: ChildSpawnSpec | undefined },
     admission: Admission,
 ): Promise<void> => {
+    const { kid, childId, message, target } = sent;
     kid.held = undefined;
-    let sent: ChildActionResult;
+    let outcome: ChildActionResult;
     try {
-        sent = admission.ok ? await deliverToChild(services, parent, kid, childId, message) : admission;
+        outcome = admission.ok ? await deliverToChild(services, parent, kid, childId, message, target) : admission;
     } catch (error) {
-        sent = { ok: false, message: errorMessage(error) };
+        outcome = { ok: false, message: errorMessage(error) };
     }
-    if (!sent.ok) {
-        void sayToParent(services, parent.conversationId, `Your message to subagent \`${childId}\` did not go: ${sent.message}`);
+    if (!outcome.ok) {
+        void sayToParent(services, parent.conversationId, `Your message to subagent \`${childId}\` did not go: ${outcome.message}`);
     }
 };
 
@@ -1494,17 +1466,29 @@ const noSuchChild = (services: { readonly conversations: Actors }, parent: Child
  * Steers a working child, or sends a settled one a follow-up turn resuming its last reported session. Only the parent
  * that started it may reach it. A message the owner must allow comes back at once, and goes when they do.
  */
-export const sendToChild = async (services: Services, parent: ChildParent, childId: string, message: string): Promise<ChildActionResult> => {
+export const sendToChild = async (
+    services: Services,
+    parent: ChildParent,
+    childId: string,
+    message: string,
+    rehome?: ChildRehome,
+): Promise<ChildActionResult> => {
     const kid = services.conversations.holdings(CHILDREN).get(childId);
     if (kid === undefined || kid.parent !== parent.conversationId) {
         return noSuchChild(services, parent, childId);
     }
-    const verdict = await judgeMove(services, parent.conversationId, kid.spec.provider);
+    // A move is judged on where it goes: the records first, so a spent target is refused before any card is raised.
+    const target = rehome === undefined ? undefined : rehomedSpec(kid.spec, rehome);
+    const blocked = target === undefined ? undefined : (unmovable(kid) ?? (await spentAsked(services, target)));
+    if (blocked !== undefined) {
+        return { ok: false, message: blocked };
+    }
+    const verdict = await judgeMove(services, parent.conversationId, (target ?? kid.spec).provider);
     if (verdict.effect === "deny") {
         return { ok: false, message: verdict.message };
     }
     if (verdict.effect === "allow") {
-        return deliverToChild(services, parent, kid, childId, message);
+        return deliverToChild(services, parent, kid, childId, message, target);
     }
     // No card for words that could not go even if the owner allowed them now.
     const waiting = notYet(kid);
@@ -1516,8 +1500,8 @@ export const sendToChild = async (services: Services, parent: ChildParent, child
         return { ok: false, message: nowhereToAsk(verdict.reason) };
     }
     kid.held = "message";
-    void askOwner(services, parent.conversationId, run, askAbout(kid, "send", childId, message), verdict.reason).then((admission) =>
-        sendAllowed(services, parent, kid, childId, message, admission),
+    void askOwner(services, parent.conversationId, run, askAbout({ ...kid, spec: target ?? kid.spec }, "send", childId, message), verdict.reason).then(
+        (admission) => sendAllowed(services, parent, { kid, childId, message, target }, admission),
     );
     return { ok: true, note: heldMessage(verdict.reason) };
 };
@@ -1589,29 +1573,14 @@ export const answerChild = async (
     return { ok: true, note: heldAnswer(verdict.reason) };
 };
 
+/** Whether a child is moving itself onto a fallback: the run that just ended is not its parent's news yet. */
+export const childMovingOn = (actors: Actors, childId: string): boolean => actors.holdings(CHILDREN).get(childId)?.movingOn !== undefined;
+
 /** A child's last settled turn's whole closing message, for the wait that hands its ending over. */
 export const childReportOf = (actors: Actors, childId: string): string | undefined => {
     const report = actors.holdings(CHILDREN).get(childId)?.report;
     return report === undefined || report === "" ? undefined : report;
 };
-
-// What a cancel found to stop, as its parent reads it.
-const CANCEL_NOTES = {
-    running:
-        "Cancelled: its turn is being stopped, and it ends as killed. Whatever it already wrote stays in its worktree; send it a message to carry on.",
-    waiting: "Cancelled: it will not start. Send it a message if you want it after all.",
-    paused: "Cancelled: the sandbox will not run it again by itself, and it ends as killed. Send it a message to carry on from where it stopped.",
-} as const satisfies Record<string, string>;
-
-// A path list as a parent reads it: the first few named, the rest counted.
-const namedPaths = (paths: readonly string[]): string =>
-    [
-        paths
-            .slice(0, 5)
-            .map((path) => `\`${path}\``)
-            .join(", "),
-        ...(paths.length > 5 ? [`and ${paths.length - 5} more`] : []),
-    ].join(" ");
 
 /**
  * Brings a child's work into its parent's own checkout, leaving conflict markers where it clashes with the parent's
@@ -1678,6 +1647,12 @@ export const cancelChild = async (services: ChildCancelDeps, parent: ChildParent
 
 // The cancel of one child this daemon supervises, whoever asked for it: its parent, or the end of its family.
 const cancelRecord = async (services: ChildCancelDeps, childId: string, kid: ChildRecord): Promise<ChildActionResult> => {
+    // Held by the governor, not by the owner: the parent may take it back, and it never starts.
+    if (kid.held === "lane" && FAN_OUT.withdraw(childId)) {
+        services.conversations.holdings(CHILDREN).drop(childId);
+        settleSpawnedChild(services.conversations, childId, { status: "killed", report: "", error: CANCELLED });
+        return { ok: true, note: CANCEL_NOTES.waiting };
+    }
     if (kid.held !== undefined) {
         return { ok: false, message: "It waits on the owner's card, which is theirs to answer: it does not go unless they allow it." };
     }
@@ -1827,7 +1802,8 @@ export interface ChildSupervisor {
     readonly spawn: (spec: ChildSpawnSpec) => Promise<ChildSpawnResult>;
     // Read at call time, never snapshotted: an allowance can empty while a turn runs.
     readonly providers: () => Promise<readonly SpawnableProvider[]>;
-    readonly send: (childId: string, message: string) => Promise<ChildActionResult>;
+    // `rehome` moves a settled or paused child onto another provider and model for this turn, in its own worktree.
+    readonly send: (childId: string, message: string, rehome?: ChildRehome) => Promise<ChildActionResult>;
     readonly answer: (childId: string, answers: Record<string, string[]>) => Promise<ChildActionResult>;
     readonly pendingQuestion: (childId: string) => PendingChildCard | undefined;
     // Its last turn's whole closing message, where the roster row cut it.
@@ -1847,20 +1823,20 @@ export interface ChildSupervisor {
     readonly links: () => Promise<readonly LinkListing[]>;
 }
 
-// A merge has nothing to bring in from a linked task: its work never comes into this checkout.
-const LINKED_MERGE: ChildActionResult = {
-    ok: false,
-    message: "That task ran in another sandbox and lands there: there is nothing of it to merge into this checkout.",
-};
-
 export const childSupervisor = (services: Services, parent: ChildParent): ChildSupervisor => {
     const linked = services.linkedChildren;
     const ownChild = (childId: string): boolean => services.conversations.holdings(CHILDREN).get(childId)?.parent === parent.conversationId;
     return {
         spawn: (spec) => spawnChild(services, parent, spec),
         providers: () => spawnableProviders(services),
-        send: (childId, message) => (linked.owns(childId) ? linked.send(parent, childId, message) : sendToChild(services, parent, childId, message)),
-        answer: (childId, answers) => (linked.owns(childId) ? linked.answer(parent, childId, answers) : answerChild(services, parent, childId, answers)),
+        send: (childId, message, rehome) => {
+            if (!linked.owns(childId)) {
+                return sendToChild(services, parent, childId, message, rehome);
+            }
+            return rehome === undefined ? linked.send(parent, childId, message) : Promise.resolve(LINKED_REHOME);
+        },
+        answer: (childId, answers) =>
+            linked.owns(childId) ? linked.answer(parent, childId, answers) : answerChild(services, parent, childId, answers),
         pendingQuestion: (childId) => {
             if (linked.owns(childId)) {
                 return linked.pendingQuestion(childId);

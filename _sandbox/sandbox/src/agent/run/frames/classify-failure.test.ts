@@ -6,6 +6,7 @@ import {
     classifyFailure,
     ERROR_MESSAGE_CHARS,
     type ErrorFrame,
+    FAR_RERUN_MS,
     type FailureContext,
     type FailureQueries,
     type FailureWrite,
@@ -146,6 +147,46 @@ describe("a spent allowance", () => {
         expect((await classifyFailure(limit, context(), answering({ way, reopensAt: 5 }))).frame.resetsAt).toBe(5);
     });
 
+    // 2026-10-17: a child was booked to re-run against a quota reopening next week, its parent told not to hand the task on.
+    test("a child's reset far off is offered, never booked, and a near one is booked as before", async () => {
+        const far = Math.ceil(NOW / 1000) + FAR_RERUN_MS / 1000 + 600;
+        const offered = await classifyFailure(limit, context({ child: true, limitReset: far }), answering({ way, policy: "resend" }));
+        // Held for a press, as a reset nothing names is: never on a clock.
+        expect(offered.frame).toMatchObject({ resetsAt: far, held: { ran: true } });
+        expect(offered.frame.autoResume).toBeUndefined();
+        expect(offered.frame.nextAt).toBeUndefined();
+        const near = Math.ceil(NOW / 1000) + 600;
+        const booked = await classifyFailure(limit, context({ child: true, limitReset: near }), answering({ way, policy: "resend" }));
+        expect(booked.frame).toMatchObject({ autoResume: "scheduled", nextAt: near });
+    });
+
+    // 2026-10-17: Codex's team credit ran out while its weekly pool read 57%; no reading may answer that refusal.
+    test("an allowance an admin grants is filed as one no reading measures, with the reset the vendor named", async () => {
+        const codex: ErrorFrame = { ...limit, message: "You’ve hit your usage limit. To get more access now, send a request to your admin or try again at 5:46 PM." };
+        const plan = await classifyFailure(codex, context({ provider: "codex", model: "gpt-6.1-sol" }), answering({ way }));
+        const [write] = plan.writes;
+        expect(write).toMatchObject({ kind: "provider-refusal", refusal: { kind: "limit", unmetered: true, resetsAt: expect.any(Number) } });
+    });
+
+    // 2026-10-17: each of these was booked at the loop's own instant and refused again when it came.
+    test("the vendor's own named instant outranks the loop's, which is only a floor", async () => {
+        const gemini: ErrorFrame = { ...limit, message: "Individual quota reached. Resets in 166h40m39s.", resetsAt: Math.ceil(NOW / 1000) + 900 };
+        const queries = answering({ way, reopensAt: 5 });
+        expect((await classifyFailure(gemini, context(), queries)).frame.resetsAt).toBe(Math.ceil(NOW / 1000 + 166 * 3_600 + 40 * 60 + 39));
+        expect(queries.asked.map(([name]) => name)).not.toContain("reopensAt");
+    });
+
+    test("a pool the sentence names by length reopens at the later of the loop's floor and that pool's reset", async () => {
+        const kimi: ErrorFrame = {
+            ...limit,
+            message: "You've reached your 5-hour usage limit. Your quota will reset when the current 5-hour window ends.",
+            resetsAt: 1_800,
+        };
+        const queries = answering({ way, reopensAt: 7_200 });
+        expect((await classifyFailure(kimi, context(), queries)).frame.resetsAt).toBe(7_200);
+        expect(queries.asked).toContainEqual(["reopensAt", { provider: "claude", model: "opus", account: "acct", period: 5 * 3_600 }]);
+    });
+
     const armed: [string, TurnBreakPolicy, LimitWay, Partial<ErrorFrame>][] = [
         ["an armed conversation keeps the reset as its appointment", "resend", way, { autoResume: "scheduled", nextAt: 60 }],
         ["an unarmed one only offers", "wait", way, { autoResume: "available" }],
@@ -273,6 +314,25 @@ describe("a spent allowance", () => {
                 limit: { at: NOW, message: "Claude usage limit reached." },
             },
         ]);
+    });
+
+    // 2026-10-17: `[role_forbidden]` went out bare, nothing was filed, and the next child was placed on the same account.
+    test("an account refused outright is filed against the account for every model, whatever model it was on", async () => {
+        const roleForbidden: ErrorFrame = {
+            kind: "error",
+            code: "account-not-entitled",
+            message: "[role_forbidden] Cloud Agent is not available for non-billable admins.",
+        };
+        const plan = await classifyFailure(roleForbidden, context({ provider: "cursor", model: "claude-opus-5-5", attribution: { account: "acct" } }), answering());
+        expect(plan.writes).toContainEqual({
+            kind: "observed-limit",
+            provider: "cursor",
+            account: "acct",
+            model: "*",
+            limit: { at: NOW, message: roleForbidden.message, refused: "entitlement" },
+        });
+        expect(plan.writes).toContainEqual(expect.objectContaining({ kind: "provider-refusal", refusal: expect.objectContaining({ kind: "entitlement" }) }));
+        expect(plan.log.level).toBe("warn");
     });
 
     test.each([

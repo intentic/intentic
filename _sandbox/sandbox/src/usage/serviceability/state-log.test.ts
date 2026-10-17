@@ -1,7 +1,7 @@
 import type { AccountState, ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { type ServiceFacts, serviceStates } from "@intentic/sandbox-contract/models/plan-pools";
 import { recordingLogger } from "../../harness/route-fakes.testing.js";
-import { createAccountStateLog } from "./state-log.js";
+import { type AccountReopened, createAccountStateLog, onAccountReopened } from "./state-log.js";
 
 // The verdict on an account was computed on every read and logged nowhere; an agent had to call the provider's usage API
 // by hand to learn a weekly pool sat at 100. One line per change, with the reading that decided it.
@@ -56,4 +56,19 @@ test("judgements scoped to different models are tracked apart", () => {
     log.note("claude", facts, judge(facts), undefined);
     log.note("claude", facts, serviceStates(facts, undefined, { id: "claude-opus-5-5" }, NOW), undefined, { id: "claude-opus-5-5" });
     expect(lines.map((line) => line["model"])).toEqual([undefined, "claude-opus-5-5"]);
+});
+
+// 2026-10-17: the second Claude account came back and only this log said so; a waiting parent hears it now.
+test("an account coming back to ready from spent is announced, once, to whoever listens", () => {
+    const { logger } = recordingLogger();
+    const log = createAccountStateLog(logger, () => NOW);
+    const heard: AccountReopened[] = [];
+    const stop = onAccountReopened((event) => heard.push(event));
+    const spent = [{ account: "uuid-1", label: "work", usage: weekly(100) }];
+    const ready = [{ account: "uuid-1", label: "work", usage: weekly(30) }];
+    log.note("claude", spent, judge(spent), undefined);
+    log.note("claude", ready, judge(ready), undefined);
+    log.note("claude", ready, judge(ready), undefined);
+    stop();
+    expect(heard).toEqual([{ provider: "claude", account: "uuid-1", label: "work", from: "spent" }]);
 });

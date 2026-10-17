@@ -89,12 +89,18 @@ export const retryStormFrame = (attempts: number, status: number | undefined): E
 });
 
 // A routed 5xx that is really the model not being on this plan (routed-refusal.ts); coded `model-unavailable` so the
-// picker drops it instead of retrying as an outage.
-export const modelUnavailableFrame = (model: string, refusal: string): ErrorEvent => ({
-    kind: "error",
-    code: "model-unavailable",
-    message: `${refusal} Nothing here can retry past that: pick another model for this chat (${model} is off the list until the plan covers it).`,
-});
+// picker drops it instead of retrying as an outage. A spent allowance arrives in the same envelope ("Failed to
+// authenticate. API Error: 403 You've reached your 5-hour usage limit"), and filed as the model being off the plan it hid
+// that model for a day while the window reopened in two hours, where a sibling refused by the same limit was held for the
+// reset (2026-10-17): the allowance's wording is read first, and it goes out as the spent allowance it is.
+export const modelUnavailableFrame = (model: string, refusal: string): ErrorEvent =>
+    mentionsSpentAllowance(refusal)
+        ? { kind: "error", code: "rate_limit", message: refusal }
+        : {
+              kind: "error",
+              code: "model-unavailable",
+              message: `${refusal} Nothing here can retry past that: pick another model for this chat (${model} is off the list until the plan covers it).`,
+          };
 
 // A session past the model's window, in the provider's own words; coded so the daemon re-runs the turn in a fresh
 // session, since resuming this one only overflows again (classify-failure.ts).

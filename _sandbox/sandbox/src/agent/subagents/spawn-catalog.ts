@@ -1,4 +1,4 @@
-import type { AccountUsage, UsageWindow, ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AccountState, AccountUsage, UsageWindow, ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AgentLoop, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { loopsOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
 import {
@@ -39,6 +39,18 @@ export interface ModelHeadroom {
     readonly readAt?: number;
     // Present while re-reading that account keeps failing: the figure is its last good reading, and may be well past.
     readonly stale?: { readonly since: number; readonly reason: string };
+    // How the provider's other accounts stand for this model, present only when some cannot serve it: a figure off the
+    // best account says nothing of the rest. Gemini read "83% left" off one of three ready accounts while 22 others were
+    // benched for a week, and a fan-out spent the three in twelve minutes (2026-10-17).
+    readonly fleet?: AccountsStanding;
+}
+
+/** How many of a provider's accounts can serve a model, and when the first of the others is back. */
+export interface AccountsStanding {
+    readonly ready: number;
+    readonly total: number;
+    // Epoch seconds when the first account that cannot serve now is back, where any says; absent for none named.
+    readonly backAt?: number;
 }
 
 export interface SpawnableModel {
@@ -122,6 +134,7 @@ const bestHeadroom = (readings: readonly FleetReading[], model: ModelRef, refusa
     if (best === undefined) {
         return undefined;
     }
+    const fleet = standingOf(readings, states, ready.length);
     const pool = bindingWindow(best.reading.usage, model);
     const unread = best.reading.usage?.unread;
     const others = otherPools(best.reading.usage, model, pool);
@@ -132,7 +145,39 @@ const bestHeadroom = (readings: readonly FleetReading[], model: ModelRef, refusa
         account: best.reading.label ?? best.reading.account,
         ...opt("readAt", best.reading.usage?.measuredAt),
         ...opt("stale", unread === undefined ? undefined : { since: unread.since, reason: unread.reason }),
+        ...opt("fleet", fleet),
     };
+};
+
+// The fleet's standing beside the best figure; undefined while every account can serve.
+const standingOf = (readings: readonly FleetReading[], states: ReadonlyMap<string, AccountState>, ready: number): AccountsStanding | undefined => {
+    if (ready === readings.length) {
+        return undefined;
+    }
+    const back = readings.flatMap((reading) => {
+        const state = states.get(reading.account);
+        const at = state?.kind === "blocked" ? state.until : state?.kind === "spent" ? state.reopensAt : undefined;
+        return at === undefined ? [] : [at];
+    });
+    return { ready, total: readings.length, ...opt("backAt", back.length === 0 ? undefined : Math.min(...back)) };
+};
+
+/**
+ * The most room any one account of a provider has left for a model, in percent, as the listing would quote it; undefined
+ * for a provider nothing measures, or a reading that fails. What the fan-out governor caps concurrent children by.
+ */
+export const bestRoomFor = async (services: Services, provider: AgentProvider, model: string): Promise<number | undefined> => {
+    try {
+        const readings = (await fleetReadings(services)).get(provider) ?? [];
+        if (readings.length === 0) {
+            return undefined;
+        }
+        const refusals = (await services.providerRefusals.onFile())[provider];
+        return bestHeadroom(readings, { id: model }, refusals)?.percentLeft;
+    } catch {
+        // allow(silent-catch): a cap is advice; an unreadable reading caps nothing, as before there was one.
+        return undefined;
+    }
 };
 
 // `spent` and `reopensAt` describe what was left out: a provider fully at the cap still reports via a renewal instant
@@ -277,8 +322,20 @@ const headroomText = (headroom: ModelHeadroom, now: number): string => {
     const others = (headroom.others ?? []).map((other) => `${other.pool} ${other.percentLeft}%`);
     const beside = others.length === 0 ? `` : ` (${others.join(`, `)} left)`;
     const read = headroom.readAt === undefined ? `` : `, read ${agoWords(headroom.readAt, now)}`;
-    const stale = headroom.stale === undefined ? `` : `, STALE: re-reading it has failed since ${agoWords(headroom.stale.since, now)} (${headroom.stale.reason})`;
-    return `${pool}${headroom.percentLeft}% left${whose}${beside}${read}${stale}`;
+    const stale =
+        headroom.stale === undefined
+            ? ``
+            : `, STALE: re-reading it has failed since ${agoWords(headroom.stale.since, now)} (${headroom.stale.reason})`;
+    return `${pool}${headroom.percentLeft}% left${whose}${beside}${read}${stale}${fleetText(headroom.fleet, now)}`;
+};
+
+// "; 3 of 25 accounts ready, the next back in about 7 days": the figure is the best account's, and the rest are out.
+const fleetText = (fleet: AccountsStanding | undefined, now: number): string => {
+    if (fleet === undefined) {
+        return ``;
+    }
+    const back = fleet.backAt === undefined ? `` : `, the next back ${inWords(fleet.backAt, now)}`;
+    return `; ${String(fleet.ready)} of ${String(fleet.total)} accounts ready${back}`;
 };
 
 const NOT_METERED = `not metered`;

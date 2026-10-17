@@ -105,3 +105,35 @@ test("a lookup that fails takes nothing with it", async () => {
         }),
     ).resolves.toBeUndefined();
 });
+
+// 2026-10-17: Kimi said "You've reached your 5-hour usage limit", the translator benched the credential for thirty
+// minutes, and the reading knew the five-hour window had two hours left. The named pool's own reset is the answer.
+test("a refusal naming its pool by length reads that pool's reset, even before the reading shows it full", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const routed = unstubbed<Services>(`services`, {
+        cliProxy: unstubbed<Services[`cliProxy`]>(`cliProxy`, {
+            accounts: async () => ({
+                codex: [],
+                grok: [],
+                gemini: [],
+                kimi: [
+                    {
+                        name: `k`,
+                        label: `k`,
+                        usage: {
+                            measuredAt: 0,
+                            windows: [
+                                { kind: `five_hour`, utilization: 80, resetsAt: now + 7_200, gates: `all` },
+                                { kind: `seven_day`, utilization: 40, resetsAt: now + 400_000, gates: `all` },
+                            ],
+                        },
+                    },
+                ],
+            }),
+            turnLimit: async () => ({ spent: 1, withHeadroom: 0, reopensAt: now + 1_800 }),
+        }),
+    });
+
+    expect(await limitReopensAt({ services: routed, provider: `kimi`, model: `kimi-k3`, account: undefined, period: 5 * 3_600 })).toBe(now + 7_200);
+    expect(await limitReopensAt({ services: routed, provider: `kimi`, model: `kimi-k3`, account: undefined })).toBe(now + 1_800);
+});

@@ -545,7 +545,7 @@ const baseOptions = (
                 ...sessionHooks(request.spec),
                 // The repositories' own `turn` checks, once, as an isolated turn is about to stop: what they found in its
                 // change is said back, and the model fixes it or says why not. Nothing waits on them.
-                turnCheckHooks(request.hooks.turnChecks, ownWorktree(request.spec.isolation)),
+                turnCheckHooks(request.hooks.turnChecks, ownWorktree(request.spec.isolation), push),
                 // Refuses a mid-turn edit that would change which settings or skill hooks run, which the CLI applies live.
                 settingsHookChangeHooks(request),
                 // Apply worktree redirection only when no anchor already resolves paths.

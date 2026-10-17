@@ -29,6 +29,7 @@ import {
     type TurnWatchdog,
     turnWatchdog,
     watchedPull,
+    withTurnCap,
 } from "../decorators/turn-watchdog.js";
 import { isContextOverflowText } from "../../engines/failure-sentences.js";
 import { workspacePath } from "../../sessions/vocabulary/tool-calls.js";
@@ -547,7 +548,7 @@ export const createAcpAgent = (connections: AcpConnections, timeouts: TurnTimeou
                         runAcpTurn(connection, request, [...textBlocks(text, request.spec.command), ...images.map(imageBlock)], sessionId, {
                             phase: planning ? "plan" : "execute",
                             captureText: planning,
-                            timeouts,
+                            timeouts: withTurnCap(timeouts, request.spec.turnCapMs),
                             gate,
                             taint,
                             sink,

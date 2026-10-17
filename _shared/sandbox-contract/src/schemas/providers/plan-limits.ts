@@ -148,6 +148,14 @@ export const ProviderRefusalSchema = z.object({
         .describe(
             "When the provider said to try again, in epoch seconds, for a spent allowance where it named one. Until then the refusal stands whatever a reading says; after it, it is over.",
         ),
+    // Codex's "To get more access now, send a request to your admin": a team's credit, which no usage endpoint reads,
+    // so a weekly pool at 57% says nothing about it (2026-10-17).
+    unmetered: z
+        .literal(true)
+        .optional()
+        .describe(
+            "Set on a spent allowance no usage reading measures, such as a credit an organisation's admin grants. No reading answers it: it stands until the provider's own reset, or until a turn is answered.",
+        ),
 });
 export type ProviderRefusal = z.infer<typeof ProviderRefusalSchema>;
 export const ProviderRefusalsSchema = z.object({

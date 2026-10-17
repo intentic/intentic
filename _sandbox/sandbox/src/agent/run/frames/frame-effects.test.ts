@@ -138,6 +138,21 @@ describe("the first answer", () => {
         expect(writes.cooldownsCleared).toStrictEqual([{ provider: "codex", model: "gpt-6-astra" }]);
     });
 
+    // A spent allowance is about one model, so the settle says which one answered (provider-refusals.ts answeredBy).
+    test("settles what was refused for the model that answered, and the account's own refusals in the ledger", async () => {
+        const { deps, writes } = recorded();
+        providerAnswered(deps, "cursor", "acct", "composer-2.5");
+        expect(writes.refusalsCleared).toStrictEqual([{ provider: "cursor", account: "acct", model: "composer-2.5" }]);
+        await waitFor(
+            () =>
+                expect(writes.observedForgotten).toStrictEqual([
+                    { provider: "cursor", account: "acct", model: "*" },
+                    { provider: "cursor", account: "acct", model: "composer-2.5" },
+                ]),
+            SETTLES,
+        );
+    });
+
     test("with no model named reopens nothing", () => {
         const { deps, writes } = recorded();
         providerAnswered(deps, "codex", undefined, "");

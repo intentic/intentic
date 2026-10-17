@@ -1,3 +1,4 @@
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { type AgentTurn, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import { agentWordsOf } from "@intentic/sandbox-contract/events/agent-words";
@@ -163,11 +164,12 @@ describe("what a child's conversation opens with", () => {
     };
     const go = { prompt: "Review the audit of batch 24", provider: "codex", model: "gpt-5.1-codex" } as const;
 
-    // Under `resend` or `move` it inherits, so the card shows the sandbox's answer and follows the owner changing it.
+    // Under `resend` or `move` it inherits, so the card shows the sandbox's answer and follows the owner changing it. A
+    // turn that stopped short is carried on whatever the sandbox answers: nobody watches a child (2026-10-17).
     const answers: [LimitPolicy, string, Postures, LimitPolicy | undefined][] = [
-        ["wait", "a re-run of its own", { limit: "resend" }, "resend"],
-        ["resend", "nothing of its own", {}, undefined],
-        ["move", "nothing of its own", {}, undefined],
+        ["wait", "a re-run of its own", { limit: "resend", stopped: "retry" }, "resend"],
+        ["resend", "nothing of its own", { stopped: "retry" }, undefined],
+        ["move", "nothing of its own", { stopped: "retry" }, undefined],
     ];
     it.each(answers)(
         "under a sandbox answering a spent allowance with %s, it opens answering with %s",
@@ -292,7 +294,9 @@ describe("the child's life on the roster", () => {
             throw new Error(result.message);
         }
         await settled(result.id);
-        expect(listSubagentSessions(actors)[0]).toMatchObject({ status: "failed", error: "no Cursor subscription connected" });
+        // The vendor's words first, then what the child left and the doors that keep it (children.ts elsewhereFor).
+        expect(listSubagentSessions(actors)[0]).toMatchObject({ status: "failed", error: expect.stringMatching(/^no Cursor subscription connected /u) });
+        expect(listSubagentSessions(actors)[0]?.error).toContain(`merge(child: "${result.id}")`);
     });
 });
 
@@ -2164,7 +2168,7 @@ describe("on a box short of memory", () => {
         await settled(result.id);
         expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({
             status: "failed",
-            error: "Claude Code process exited with code 1",
+            error: expect.stringMatching(/^Claude Code process exited with code 1 /u),
         });
     });
 });
@@ -2245,5 +2249,137 @@ describe("what a parent reads of a child's report", () => {
         });
         gate.resolve();
         await settled(result.id);
+    });
+});
+
+// 2026-10-17: three children went onto a Cursor nothing had proven that day, and all three were refused.
+describe("the fan-out governor", () => {
+    const refusing = (turns: TurnInput[]): TurnStarter["stream"] =>
+        async function* refused(input: TurnInput) {
+            turns.push(input);
+            yield { kind: "error", code: "account-not-entitled", message: "[role_forbidden] Cloud Agent is not available for non-billable admins." };
+            yield { kind: "done" };
+        };
+    const answering = (turns: TurnInput[]): TurnStarter["stream"] =>
+        async function* answered(input: TurnInput) {
+            turns.push(input);
+            yield { kind: "delta", text: "On it." };
+            yield { kind: "done" };
+        };
+    const opus = { provider: "cursor", model: "claude-opus-5-5" } as const;
+
+    it("starts one child on a lane nothing has proven, and the rest once it is answered", async () => {
+        const turns: TurnInput[] = [];
+        const services = drivenBy(spawnServices({}, [], actors), answering(turns));
+        const first = await spawnChild(services, parent, { prompt: "ws1", ...opus });
+        const second = await spawnChild(services, parent, { prompt: "ws2", ...opus });
+        expect(first).toMatchObject({ ok: true });
+        expect(second).toMatchObject({ ok: true, held: true, note: expect.stringContaining("Held before it starts") });
+        if (!first.ok || !second.ok) {
+            throw new Error("not started");
+        }
+        await settled(first.id);
+        await settled(second.id);
+        expect(turns.map((turn) => turn.prompt)).toEqual(["ws1", "ws2"]);
+    });
+
+    it("tells the next spawn on the provider what its sibling was just refused with", async () => {
+        const turns: TurnInput[] = [];
+        const services = drivenBy(spawnServices({}, [], actors), refusing(turns));
+        const first = await spawnChild(services, parent, { prompt: "ws1", ...opus });
+        if (!first.ok) {
+            throw new Error(first.message);
+        }
+        await settled(first.id);
+        const next = await spawnChild(services, parent, { prompt: "ws2", ...opus });
+        expect(next).toMatchObject({ ok: true, note: expect.stringContaining("[role_forbidden]") });
+    });
+
+    it("lets a parent cancel a child it holds, which then never starts", async () => {
+        const turns: TurnInput[] = [];
+        const gate = Promise.withResolvers<void>();
+        const slow = async function* (input: TurnInput): AsyncGenerator<AgentEvent> {
+            turns.push(input);
+            await gate.promise;
+            yield { kind: "done" };
+        };
+        const services = drivenBy(spawnServices({}, [], actors), slow);
+        await spawnChild(services, parent, { prompt: "ws1", ...opus });
+        const held = await spawnChild(services, parent, { prompt: "ws2", ...opus });
+        if (!held.ok) {
+            throw new Error(held.message);
+        }
+        await expect(cancelChild(services, parent, held.id)).resolves.toMatchObject({ ok: true });
+        gate.resolve();
+        await settled(held.id);
+        expect(turns.map((turn) => turn.prompt)).toEqual(["ws1"]);
+    });
+});
+
+// 2026-10-17: a parent whose children were refused on four providers rescued their work by hand, re-spawning twelve
+// of them, because `send` could only continue a child where it was.
+describe("moving a child to another provider", () => {
+    it("runs its next turn there, in a fresh session, and says so", async () => {
+        const turns: TurnInput[] = [];
+        const services = drivenBy(spawnServices({}, [], actors), fakeTurn(turns, [{ kind: "session", sessionId: "cursor-session" }, { kind: "done" }]));
+        const started = await spawnChild(services, parent, { prompt: "ws3", provider: "cursor", model: "composer-2.5" });
+        if (!started.ok) {
+            throw new Error(started.message);
+        }
+        await settled(started.id);
+        const moved = await sendToChild(services, parent, started.id, "Carry on.", { provider: "claude", model: "claude-sonnet-4-6" });
+        expect(moved).toMatchObject({ ok: true, note: expect.stringContaining("Moved from cursor/composer-2.5 to claude/claude-sonnet-4-6") });
+        await settled(started.id);
+        expect(turns[1]).toMatchObject({ prompt: "Carry on.", agent: "claude", model: "claude-sonnet-4-6" });
+        // The session belonged to the provider it was minted on.
+        expect(turns[1]?.sessionId).toBeUndefined();
+    });
+
+    it("is refused mid-turn, since a turn stays where it runs", async () => {
+        const gate = Promise.withResolvers<void>();
+        const slow = async function* (input: TurnInput): AsyncGenerator<AgentEvent> {
+            void input;
+            yield { kind: "delta", text: "working" };
+            await gate.promise;
+            yield { kind: "done" };
+        };
+        const services = drivenBy(spawnServices({}, [], actors), slow);
+        const started = await spawnChild(services, parent, { prompt: "ws3", provider: "cursor", model: "composer-2.5" });
+        if (!started.ok) {
+            throw new Error(started.message);
+        }
+        expect(await sendToChild(services, parent, started.id, "Carry on.", { provider: "claude", model: "claude-sonnet-4-6" })).toMatchObject({
+            ok: false,
+            message: expect.stringContaining("mid-turn"),
+        });
+        gate.resolve();
+        await settled(started.id);
+    });
+
+    it("moves itself onto the next of its fallbacks when its account is refused outright", async () => {
+        const turns: TurnInput[] = [];
+        const refusedThenWorks = async function* (input: TurnInput): AsyncGenerator<AgentEvent> {
+            turns.push(input);
+            if (input.agent === "cursor") {
+                yield { kind: "error", code: "account-not-entitled", message: "[role_forbidden] Cloud Agent is not available for non-billable admins." };
+            } else {
+                yield { kind: "delta", text: "Done on claude." };
+                yield { kind: "text_end" };
+            }
+            yield { kind: "done" };
+        };
+        const services = drivenBy(spawnServices({}, [], actors), refusedThenWorks);
+        const started = await spawnChild(services, parent, {
+            prompt: "ws4",
+            provider: "cursor",
+            model: "claude-opus-5-5",
+            fallbacks: [{ provider: "claude", model: "claude-sonnet-4-6" }],
+        });
+        if (!started.ok) {
+            throw new Error(started.message);
+        }
+        await waitFor(() => expect(turns.map((turn) => turn.agent)).toEqual(["cursor", "claude"]), SETTLES);
+        expect(turns[1]?.prompt).toContain("[role_forbidden]");
+        expect(await settled(started.id)).toMatchObject({ outcome: "finished", matched: { status: "completed" } });
     });
 });

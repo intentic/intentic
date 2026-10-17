@@ -13,6 +13,45 @@ import { sumUsage, type UsageFrame } from "../turn/turn-usage.js";
 // Frames a successful model request produces, which is what clears a standing outage.
 export const ANSWERED_FRAMES: ReadonlySet<AgentEvent["kind"]> = new Set(["delta", "thinking", "tool_call"]);
 
+/* A TURN STILL BEING ANSWERED IS EVIDENCE TOO. Only a turn's first answer used to settle what its provider last refused,
+   so a refusal filed while siblings were mid-turn stood against all of them: one Codex 429 marked a model spent while
+   two other children on it were answered for twenty more minutes, and the parent cancelled both believing the listing
+   (2026-10-17). A later answer counts when it is a fresh request's, the first model frame after a tool's result (a
+   reply streaming since before the refusal proves nothing), and at most once a minute per turn. */
+
+// How often a running turn's later answers re-settle its provider's refusals.
+export const RESETTLE_EVERY_MS = 60_000;
+
+export interface AnswerResettle {
+    // True when this frame is a fresh request's answer worth settling refusals on.
+    readonly note: (event: AgentEvent, now: number) => boolean;
+}
+
+export const createAnswerResettle = (): AnswerResettle => {
+    let lastAt: number | undefined;
+    let toolAnswered = false;
+    return {
+        note: (event, now) => {
+            if (event.kind === "tool_call_update" && (event.status === "completed" || event.status === "failed")) {
+                toolAnswered = true;
+                return false;
+            }
+            const fresh = toolAnswered && (event.kind === "delta" || event.kind === "thinking" || event.kind === "tool_call") && event.parentToolUseId === undefined;
+            if (!fresh) {
+                return false;
+            }
+            toolAnswered = false;
+            if (lastAt !== undefined && now - lastAt < RESETTLE_EVERY_MS) {
+                return false;
+            }
+            const first = lastAt === undefined;
+            lastAt = now;
+            // The turn's first answer is TurnFrames.note's to report; this one only starts the clock.
+            return !first;
+        },
+    };
+};
+
 // How full the window was at the last reading; the frame as the stream sent it.
 export type ContextFrame = Extract<AgentEvent, { kind: "context_usage" }>;
 
@@ -100,7 +139,8 @@ export interface TurnReadings {
 }
 
 export interface TurnFrames {
-    // Folds one frame into every reading and ledger; true when it is the first proof the provider answered.
+    // Folds one frame into every reading and ledger; true when it is the first proof the provider answered, or a fresh
+    // request's answer since, at most once a minute (createAnswerResettle): each settles what the provider last refused.
     readonly note: (event: AgentEvent) => boolean;
     // Takes what classifying a failure frame held the turn as, replacing what an earlier one held.
     readonly hold: (held: HeldTurn | undefined) => void;
@@ -158,6 +198,8 @@ export const createTurnFrames = (root: string, resumed: string | undefined): Tur
     ];
     // Moved from both sides, by frames and by classifications, so one state both fold into.
     let held: HeldTurn | undefined;
+    // A later fresh answer settles refusals too, not only the first.
+    const resettle = createAnswerResettle();
     return {
         note: (event) => {
             const answered = silence.reading().answered;
@@ -165,7 +207,8 @@ export const createTurnFrames = (root: string, resumed: string | undefined): Tur
             for (const fold of folds) {
                 fold.note(event);
             }
-            return !answered && silence.reading().answered;
+            const again = resettle.note(event, Date.now());
+            return (!answered && silence.reading().answered) || again;
         },
         hold: (next) => {
             held = next;

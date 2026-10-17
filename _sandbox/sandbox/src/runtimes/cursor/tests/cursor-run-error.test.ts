@@ -1,4 +1,4 @@
-import { cursorRunErrorFrame } from "../cursor-agent.js";
+import { cursorRunErrorFrame, refusesAccount } from "../turn/cursor-failures.js";
 
 /* Cursor reports a spent plan as a run that ENDED in error, not as a thrown RateLimitError — the SDK keeps that class
    for an HTTP 429. The frame went out uncoded, so classify-failure.ts filed no refusal and no observed limit, the child
@@ -31,4 +31,13 @@ test("leaves any other failure uncoded rather than guessing at one", () => {
 test("says something rather than nothing when the run reports no error at all", () => {
     expect(cursorRunErrorFrame(undefined)).toEqual({ kind: "error", message: "The Cursor turn failed." });
     expect(cursorRunErrorFrame({ message: `` })).toEqual({ kind: "error", message: "The Cursor turn failed." });
+});
+
+// 2026-10-17: a 403 the SDK files under its catch-all class, with the server's code in brackets and on the error.
+test("codes an account the server refuses outright, by its code or by the bracket in its sentence", () => {
+    const said = `[role_forbidden] Cloud Agent is not available for non-billable admins.`;
+
+    expect(cursorRunErrorFrame({ message: said })).toEqual({ kind: "error", message: said, code: "account-not-entitled" });
+    expect(cursorRunErrorFrame({ message: `Forbidden.`, code: "role_forbidden" })).toMatchObject({ code: "account-not-entitled" });
+    expect(refusesAccount(undefined, `[repository_access] The repository is not covered.`)).toBe(false);
 });

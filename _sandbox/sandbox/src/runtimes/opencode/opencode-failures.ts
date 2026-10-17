@@ -2,6 +2,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import { isContextOverflowText, isModelRefusalText } from "../../engines/failure-sentences.js";
 import { modelUnavailableFrame } from "../../agent/run/error-frames.js";
 import { opt } from "../../opt.js";
+import { latestOf, namedReset } from "../../usage/reset-sentences.js";
 import { isRateLimited, RATE_LIMIT_PATIENCE_MS, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
 import { OPENCODE_XAI_PROVIDER } from "./xai-models.js";
 
@@ -133,7 +134,9 @@ export const retryHandover = (retry: ScheduledRetry, capRemainingMs: number, now
     const wait = retry.at - now;
     const pastCap = wait >= capRemainingMs;
     if (kind === "rate-limit") {
-        const resetsAt = Math.ceil(retry.at / 1_000);
+        // OpenCode's own retry is capped at fifteen minutes, so it is a floor: the vendor's countdown in the error or its
+        // body ("Resets in 166h40m39s") is when the quota reopens (usage/reset-sentences.ts).
+        const resetsAt = latestOf(Math.ceil(retry.at / 1_000), namedReset(errorDetail(retry.error), now));
         const handed = pastCap || retry.error.type === "provider.quota" || wait > RATE_LIMIT_PATIENCE_MS;
         return handed ? { kind: "error", code: "rate_limit", message: retry.error.message, ...opt("resetsAt", resetsAt) } : undefined;
     }

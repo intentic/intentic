@@ -127,8 +127,8 @@ test("plans a sealed request on the runtime's own arm and answers with what its 
     // No conversation is made for it, whoever it is for: nothing in the request files under one.
     expect(Object.keys(context.base.spec)).not.toContain("conversationId");
     expect(context.attachmentPaths).toEqual([]);
-    // Its words on the wire settle what Cursor last refused on that account, as a turn's do.
-    expect(refusals.clear).toHaveBeenCalledWith("cursor", "cursor-one");
+    // Its words on the wire settle what Cursor last refused on that account for the model it ran on, as a turn's do.
+    expect(refusals.clear).toHaveBeenCalledWith("cursor", "cursor-one", "composer-2.5");
 });
 
 test("runs in the issued context's view, not wherever the workspace happens to be", async () => {

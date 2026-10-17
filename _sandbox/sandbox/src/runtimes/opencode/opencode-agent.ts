@@ -12,7 +12,7 @@ import { loadAttachments } from "../../agent/prompt/attachment-images.js";
 import { vendorShellEnv } from "../../agent/run/vendor-shell-env.js";
 import { workloadStamp } from "../../seams/workload-stamp.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
-import { DEFAULT_TURN_TIMEOUTS, EXPIRED, type TurnTimeouts, type TurnWatchdog, turnWatchdog } from "../decorators/turn-watchdog.js";
+import { DEFAULT_TURN_TIMEOUTS, EXPIRED, type TurnTimeouts, type TurnWatchdog, turnWatchdog, withTurnCap } from "../decorators/turn-watchdog.js";
 import { modelUnavailableFrame } from "../../agent/run/error-frames.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
@@ -128,6 +128,8 @@ export interface OpenCodeTurn {
     // A sealed request (agent-request.ts `policy.sealed`): every tool denied, and its session deleted once it answered,
     // since nothing resumes it.
     readonly sealed?: true;
+    // The turn's hard cap in place of the runner's default (TurnSpec.turnCapMs, the owner's setting).
+    readonly capMs?: number;
     readonly signal: AbortSignal;
 }
 
@@ -571,7 +573,7 @@ async function* runOpenCodeTurn(
         if (turn.env !== undefined && turn.sealed !== true) {
             await c.session.environment({ sessionID: sessionId, variables: { ...turn.env } });
         }
-        const clock = turnWatchdog(timeouts);
+        const clock = turnWatchdog(withTurnCap(timeouts, turn.capMs));
         detachRelay = attachRelay(turn, queue, clock);
         const own = sessionFamily(sessionId, judgeOf(turn, sessionId, queue, clock), openCode.judges);
         family = own;
@@ -992,6 +994,7 @@ const openCodeTurnOf =
             mounts: base.mounts,
             ...opt("system", systemOf(request)),
             ...(sealed ? { sealed: true as const } : {}),
+            ...opt("capMs", request.spec.turnCapMs),
             signal: request.signal,
         };
     };

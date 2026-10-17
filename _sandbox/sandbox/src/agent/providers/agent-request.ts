@@ -68,6 +68,9 @@ export interface TurnSpec {
     readonly resumeAt?: string;
     // This conversation's runtime session store, where its checklist is read back from (sessions/session-store.ts).
     readonly sessionStore?: string;
+    // The hard cap a vendor loop the daemon drives holds this turn to (SandboxSettings.turnCapMinutes); absent is the
+    // loop's own default (turn-watchdog.ts). Claude Code and Codex hold no such cap.
+    readonly turnCapMs?: number;
     // Defaults to the account/subscription default; override with INTENTIC_AGENT_MODEL.
     readonly model?: string;
     // Reasoning controls forwarded to the model: effort level and extended thinking.

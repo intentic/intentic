@@ -114,6 +114,14 @@ export const agentRepoChanges = async (
         : changesBetweenRefs(worktrees.mainDir(composed.repo), from, entry.placement.branch, git);
 };
 
+/** The commit a repo's outstanding change is measured from, as the land and the review measure it: for a subagent, the
+ *  parent's work it was cut from (or its last land), so a check of its change is not charged with its siblings'. */
+export const agentRepoAnchor = async (worktrees: AgentWorktrees, entry: IsolatedAgent, composed: RepoRecord, git: GitRunner = defaultGit): Promise<string> => {
+    const main = worktrees.mainDir(composed.repo);
+    const dir = (await worktrees.attached(entry.id, composed.repo)) ? worktrees.worktreeDir(entry.id, composed.repo) : main;
+    return anchorOf(entry.placement, dir, main, entry.placement.branch, composed.landedTip, composed.base, git);
+};
+
 // Resolves the checkout/main repo, delta anchor and scratch together, so the answers cannot diverge. Only a live copy
 // has scratch: a retired one's went with it.
 const agentRepoScope = async (

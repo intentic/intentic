@@ -7,6 +7,7 @@ import {
     serviceStates,
     SPENT_UTILIZATION,
 } from "@intentic/sandbox-contract/models/plan-pools";
+import { latestOf } from "../reset-sentences.js";
 
 // What the recorded quota says about a provider's fleet for one model. `withHeadroom` separates a real refusal from
 // CLIProxyAPI cooling a credential for another reason, since a fleet-wide proxy makes every refusal look quota-shaped.
@@ -49,19 +50,35 @@ const soonestOf = (exhausted: readonly Exhausted[]): Exhausted | undefined =>
 // folds rather than branches.
 type Verdict = { readonly kind: "unmeasured" } | { readonly kind: "room"; readonly measuredAt: number } | { readonly kind: "spent"; readonly exhausted: readonly Exhausted[] };
 
-// A blocked account reopens only when its bench lifts (`until`), and never by a wait otherwise; a spent one names the
-// full pools this model spends, the only ones worth naming, or, spent by a standing refusal the reading does not show,
-// the instant the provider itself said to try again.
+// The pools this model spends that read full on the account.
+const fullPools = (reading: FleetReading, model: ModelRef | undefined): readonly UsageWindow[] =>
+    gatingWindows(reading.usage, model).filter((window) => window.utilization >= SPENT_UTILIZATION);
+
+// When an account is open again for this model: once EVERY full pool it spends has reopened, so the latest of them, and
+// never before a bench on it lifts. A bench is the translator's own retry, a floor rather than the reopening: a Kimi
+// credential benched for thirty minutes with its five-hour window two hours from reopening was re-run at thirty minutes
+// and refused again (2026-10-17). Named by the pool that reopens last, the one actually holding it.
+const accountReopening = (full: readonly UsageWindow[], floor: number | undefined, fallback: number | undefined): Exhausted => {
+    const last = full.reduce<UsageWindow | undefined>(
+        (latest, window) => (window.resetsAt !== undefined && (latest?.resetsAt === undefined || window.resetsAt > latest.resetsAt) ? window : latest),
+        undefined,
+    );
+    const pool = last ?? full[0];
+    return { resetsAt: latestOf(floor, last?.resetsAt ?? fallback), pool: pool === undefined ? undefined : exhaustedPool(pool).pool };
+};
+
+// A blocked account reopens only when its bench lifts (`until`) and its full pools have reopened, and never by a wait
+// otherwise; a spent one when its full pools this model spends have, or, spent by a standing refusal the reading does
+// not show, at the instant the provider itself said to try again.
 const judge = (reading: FleetReading, state: AccountState, model: ModelRef | undefined): Verdict => {
     switch (state.kind) {
         case "blocked":
-            return { kind: "spent", exhausted: [{ resetsAt: state.until, pool: undefined }] };
-        case "spent": {
-            const full = gatingWindows(reading.usage, model)
-                .filter((window) => window.utilization >= SPENT_UTILIZATION)
-                .map(exhaustedPool);
-            return { kind: "spent", exhausted: full.length > 0 ? full : [{ resetsAt: state.reopensAt, pool: undefined }] };
-        }
+            return {
+                kind: "spent",
+                exhausted: [state.until === undefined ? { resetsAt: undefined, pool: undefined } : accountReopening(fullPools(reading, model), state.until, undefined)],
+            };
+        case "spent":
+            return { kind: "spent", exhausted: [accountReopening(fullPools(reading, model), undefined, state.reopensAt)] };
         case "ready":
             return { kind: "room", measuredAt: reading.usage?.measuredAt ?? 0 };
         case "unknown":

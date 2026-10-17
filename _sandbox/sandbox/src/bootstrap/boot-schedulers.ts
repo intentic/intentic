@@ -1,8 +1,10 @@
 import { startRuntimeHealth } from "../agent/providers/adapter-health.js";
 import { noteLinkTurnSettled, noteLinkTurnStarted } from "../links/link-tasks.js";
 import { childLandingWords, reportChildLanded } from "../conversations/land/child-lands.js";
+import { capacityNoticer } from "../agent/subagents/capacity-reopened.js";
 import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
-import { adoptChildTurn, childKillNote } from "../agent/subagents/children.js";
+import { onAccountReopened } from "../usage/serviceability/state-log.js";
+import { adoptChildTurn, childKillNote, childMovingOn } from "../agent/subagents/children.js";
 import { createProjectDelivery, type ProjectDeliveryDeps } from "../conversations/land/project-delivery.js";
 import { landHeldForWake } from "../conversations/land/wake-held-land.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
@@ -35,6 +37,7 @@ const childReportDeps = (services: BootPhase["services"], logger: BootPhase["log
     },
     killNote: (childId, failure) => childKillNote(services, childId, failure),
     landingOf: (childId) => childLandingWords(services.agents, childId),
+    movingOn: (childId) => childMovingOn(services.conversations, childId),
 });
 
 // A wake disarmed before it fired: the land its conversation's last close skipped for it runs now, if still due.
@@ -121,6 +124,12 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     // A spawned child's settled turn is its parent's news, delivered like a wake unless a parked `wait` took it.
     const childReports = childReportDeps(services, logger);
     shutdown.push(services.events.subscribe("run.settled", (settled) => reportChildTurn(childReports, settled)));
+    // An account coming back is news to a parent waiting with children failed or paused on it (capacity-reopened.ts).
+    shutdown.push(
+        onAccountReopened(
+            capacityNoticer({ conversations: services.conversations, doors: childReports.doors, profileOf: childReports.profileOf, logger }),
+        ),
+    );
     // So is its work reaching the main tree, while the parent still supervises (child-lands.ts), and a turn that starts on
     // it without the parent, which the parent supervises like its own (children.ts adoptChildTurn).
     shutdown.push(services.events.subscribe("workspace", (event) => reportChildLanded(services, event)));

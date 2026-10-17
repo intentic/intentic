@@ -188,9 +188,10 @@ export interface ServiceFacts {
 
 // A spent allowance is over once a reading with room lands after it; a refused credential once any reading does (the
 // token worked). Nothing a reading says answers an entitlement refusal: a seatless account authenticates and reads fine.
+// Nor does any reading answer an allowance it does not measure (`unmetered`: an admin's credit).
 const answers = (refusal: ProviderRefusal, facts: ServiceFacts): boolean => {
     const measuredAt = facts.usage?.measuredAt;
-    if (refusal.kind === "entitlement" || measuredAt === undefined || measuredAt <= refusal.at) {
+    if (refusal.kind === "entitlement" || refusal.unmetered === true || measuredAt === undefined || measuredAt <= refusal.at) {
         return false;
     }
     if (refusal.kind === "auth") {
@@ -218,7 +219,7 @@ export const refusalVerdict = (
     // only one), its own words outrank a usage endpoint that kept showing room while it refused: over at that instant,
     // and not before. A nameless refusal over several accounts is still answered by any of them reading room, since the
     // translator benches the one it refused and routes on.
-    if (refusal.kind === "limit" && refusal.resetsAt !== undefined && (refusal.account !== undefined || accounts.length <= 1)) {
+    if (refusal.kind === "limit" && refusal.resetsAt !== undefined && (refusal.account !== undefined || accounts.length <= 1 || refusal.unmetered === true)) {
         return refusal.resetsAt * 1000 <= now ? "answered" : "standing";
     }
     return (refusal.account === undefined ? accounts : named).some((facts) => answers(refusal, facts)) ? "answered" : "standing";

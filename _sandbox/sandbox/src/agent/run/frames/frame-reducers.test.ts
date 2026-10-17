@@ -5,6 +5,7 @@ import type { HeldReason, HeldTurn } from "../turn/turn-resume.js";
 import type { UsageFrame } from "../turn/turn-usage.js";
 import {
     type ContextFrame,
+    createAnswerResettle,
     createTurnFrames,
     foldChecklist,
     foldCompactions,
@@ -16,6 +17,7 @@ import {
     foldSilence,
     foldUsage,
     frameReducer,
+    RESETTLE_EVERY_MS,
     type Silence,
     type TurnFailure,
 } from "./frame-reducers.js";
@@ -253,5 +255,32 @@ describe("a turn's frames", () => {
         expect(frames.readings().held).toStrictEqual(heldAs("limit"));
         frames.note({ kind: "thinking", text: "again" });
         expect(frames.readings().held).toBeUndefined();
+    });
+});
+
+describe("a running turn's later answers", () => {
+    const tool = { kind: "tool_call_update", id: "t", status: "completed" } as const;
+    const said = { kind: "delta", text: "ok" } as const;
+
+    test("re-settle refusals at most once a minute, and only on a fresh request's answer", () => {
+        const resettle = createAnswerResettle();
+        // The first answer is TurnFrames.note's to report; this one starts the clock.
+        expect(resettle.note(tool, 0)).toBe(false);
+        expect(resettle.note(said, 0)).toBe(false);
+        // Streaming on without a tool result in between is the same reply.
+        expect(resettle.note(said, RESETTLE_EVERY_MS * 2)).toBe(false);
+        expect(resettle.note(tool, RESETTLE_EVERY_MS * 2)).toBe(false);
+        expect(resettle.note(said, RESETTLE_EVERY_MS * 2)).toBe(true);
+        // Within the minute: nothing more.
+        expect(resettle.note(tool, RESETTLE_EVERY_MS * 2 + 1)).toBe(false);
+        expect(resettle.note(said, RESETTLE_EVERY_MS * 2 + 1)).toBe(false);
+    });
+
+    test("ignore a subagent's narration", () => {
+        const resettle = createAnswerResettle();
+        resettle.note(tool, 0);
+        resettle.note(said, 0);
+        resettle.note(tool, RESETTLE_EVERY_MS * 2);
+        expect(resettle.note({ kind: "delta", text: "x", parentToolUseId: "p" }, RESETTLE_EVERY_MS * 2)).toBe(false);
     });
 });

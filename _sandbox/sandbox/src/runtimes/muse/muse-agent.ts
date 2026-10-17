@@ -19,6 +19,7 @@ import {
     type TurnWatchdog,
     turnWatchdog,
     watchedPull,
+    withTurnCap,
 } from "../decorators/turn-watchdog.js";
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import { answerApproval, answerApprovalStage, answerQuestions, type MuseAsks, musePosture } from "./muse-asks.js";
@@ -424,7 +425,7 @@ export const createMuseAgent = (options: MuseAgentOptions = {}) => {
         }
         const planning = request.policy.permissionMode === "plan";
         const { gate, taint, release } = vendorTurnGate(request);
-        const clock = turnWatchdog(timeouts);
+        const clock = turnWatchdog(withTurnCap(timeouts, request.spec.turnCapMs));
         const line = turnLine();
         const pushFrame = (frame: AgentEvent): void => line.push({ kind: "frame", frame });
         const detach = request.hooks.relay?.attach({ push: pushFrame, hold: clock.hold, guard: { gate, taint } });

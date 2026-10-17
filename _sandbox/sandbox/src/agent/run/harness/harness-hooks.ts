@@ -1,6 +1,7 @@
 import { isAbsolute, join } from "node:path";
 import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import { shellQuote } from "@intentic/sandbox-run/quote";
+import { agentRepoAnchor } from "../../../conversations/land/agent-changes.js";
 import { landingPaths } from "../../../conversations/land/landing-paths.js";
 import { isIsolated } from "../../../conversations/registry/agents-store.js";
 import { fromWorktree, inWorktree, type IsolationAnchor, ownWorktree } from "../../../conversations/worktrees/isolation.js";
@@ -99,6 +100,25 @@ const turnChangeOf = async (deps: HarnessHooksDeps, conversationId: string, name
     return { paths, repos: reposOf(paths, nested) };
 };
 
+// Where a subagent's own change in one repo starts, or undefined for any other conversation, whose checks measure from
+// where its branch left the main line, as they always have.
+const childBaseOf = async (deps: HarnessHooksDeps, conversationId: string, repo: string | undefined): Promise<string | undefined> => {
+    const entry = deps.agents.entry(conversationId);
+    if (entry === undefined || !isIsolated(entry) || entry.placement.parent === undefined) {
+        return undefined;
+    }
+    const composed = entry.placement.repos.find((record) => record.repo === (repo ?? "root"));
+    if (composed === undefined) {
+        return undefined;
+    }
+    try {
+        return await agentRepoAnchor(deps.agentWorktrees, entry, composed);
+    } catch (error) {
+        deps.logger.warn({ err: error, conversationId, repo }, "turn checks: the child's own base could not be read, so its checks measure from main");
+        return undefined;
+    }
+};
+
 // The `turn.ending` moment: each repository's own `turn` checks, run once as an isolated turn is about to stop, in the
 // repository they name in the turn's own tree and through its namespace, as the edit checks are. Isolated turns only: a
 // main-tree turn's working tree carries everyone's uncommitted work, and a check of it would charge the turn with theirs.
@@ -115,8 +135,13 @@ export const turnChecksOf = (deps: HarnessHooksDeps, context: TurnContext, rules
             change: () => turnChangeOf(deps, conversationId, named),
             // With the turn's shell variables, its connector cards' among them: a turn check stands where the turn's last
             // command stood, so what the turn could reach, its check can (the shared turbo cache's warmer needs its card).
-            run: (command, timeoutMs, repo) =>
-                spawnEditCommand(repoCwd(context.localCwd, repo), context.cliEnv)(ruleCommandIn(command, isolation.anchor, repo), timeoutMs),
+            // A subagent's checks are told where its own work starts (INTENTIC_TURN_BASE, which verify-turn.mjs reads):
+            // measured from main, each child was charged with every sibling's work its parent had taken in.
+            run: async (command, timeoutMs, repo) => {
+                const base = await childBaseOf(deps, conversationId, repo);
+                const env = base === undefined ? context.cliEnv : { ...context.cliEnv, INTENTIC_TURN_BASE: base };
+                return spawnEditCommand(repoCwd(context.localCwd, repo), env)(ruleCommandIn(command, isolation.anchor, repo), timeoutMs);
+            },
             // A firing date on the settings list, as an edit check's; a feed row per turn would be noise.
             onFired: (rule) => stampFiring(deps, rule),
             logger: deps.logger.child({ conversationId }),

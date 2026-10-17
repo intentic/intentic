@@ -33,6 +33,21 @@ test("reports the most headroom any one account has, and names only a pool the p
     expect(claude?.spent).toBe(0);
 });
 
+// 2026-10-17: Gemini read "83% left" off one of three ready accounts while 22 others were benched for a week.
+test("says how many accounts can serve beside the best one's figure, once any cannot, and when the next is back", async () => {
+    const weekly = { kind: "seven_day", label: "Weekly", gates: "all" } as const;
+    const nowS = Math.floor(Date.now() / 1000);
+    const rows = await spawnableProviders(
+        claudeOnly({
+            fresh: usage(window({ ...weekly, utilization: 17 })),
+            spent: usage(window({ ...weekly, utilization: 100, resetsAt: nowS + 7 * 86_400 })),
+        }),
+    );
+    const claude = rows.find((row) => row.id === "claude");
+    expect(claude?.models[0]?.headroom?.fleet).toEqual({ ready: 1, total: 2, backAt: nowS + 7 * 86_400 });
+    expect(spawnCatalogText(claude === undefined ? [] : [claude])).toContain("; 1 of 2 accounts ready, the next back in about 7 days");
+});
+
 test("names a pool the plan meters separately, so the number says which allowance it is about", async () => {
     const rows = await spawnableProviders(
         claudeOnly({ one: usage(window({ kind: "opus_weekly", label: "Opus", gates: { models: ["opus"] }, utilization: 25 })) }),

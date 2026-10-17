@@ -40,6 +40,8 @@ export interface ChildReportFields {
     readonly child: string;
     readonly title: string | undefined;
     readonly failed: boolean;
+    // Stopped by a person or its parent rather than ending by itself: said as such, never as finished.
+    readonly stopped?: boolean | undefined;
     readonly report: string;
     // Undefined when nothing of the child's work was seen, which is not a verdict.
     readonly verification: SubagentVerification | undefined;
@@ -70,7 +72,7 @@ const verificationLine = (verification: SubagentVerification | undefined): strin
 export const childReportPrompt = (fields: ChildReportFields): string => {
     const verification = verificationLine(fields.verification);
     return [
-        `${CHILD_OPENING}${senderOf(fields.child, fields.title)} ${fields.failed ? "failed" : "finished"}.`,
+        `${CHILD_OPENING}${senderOf(fields.child, fields.title)} ${fields.failed ? "failed" : fields.stopped === true ? "was stopped" : "finished"}.`,
         ...(verification === undefined ? [] : [verification]),
         "",
         fields.report.trim() === "" ? "(It ended without a closing report.)" : fields.report.trim(),
@@ -81,7 +83,7 @@ export const childReportPrompt = (fields: ChildReportFields): string => {
 };
 
 const PEER_LINE = /^Message from another conversation in this workspace: `([^`]+)`(?: \("(.*)"\))?\.$/u;
-const CHILD_LINE = /^Report from a (?:subagent|child agent) you started: `([^`]+)`(?: \("(.*)"\))? (finished|failed)\.$/u;
+const CHILD_LINE = /^Report from a (?:subagent|child agent) you started: `([^`]+)`(?: \("(.*)"\))? (finished|failed|was stopped)\.$/u;
 
 const peerOf = (first: string, prompt: string): TranscriptAgentWords | undefined => {
     const match = first.startsWith(PEER_OPENING) ? PEER_LINE.exec(first) : null;

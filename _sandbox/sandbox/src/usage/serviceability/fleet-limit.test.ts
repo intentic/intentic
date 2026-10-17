@@ -80,3 +80,18 @@ test("with no model named, every pool that gates anything counts and one gating 
     ];
     expect(fleetLimit(fleet, undefined)).toEqual({ spent: 0, withHeadroom: 1, roomMeasuredAt: 1_000 });
 });
+
+// 2026-10-17: a Kimi credential benched for thirty minutes, its five-hour window two hours from reopening: re-run at the
+// bench's instant, refused again in five seconds.
+test("a bench is a floor under the account's full pools: it reopens when they do, if that is later", () => {
+    const now = Math.floor(Date.now() / 1000);
+    const fleet = [{ ...reading("k", window({ kind: "five_hour", utilization: 100, resetsAt: now + 7_200 })), cooling: { until: now + 1_800 } }];
+    expect(fleetLimit(fleet, { id: "kimi-k3" })).toEqual({ spent: 1, withHeadroom: 0, reopensAt: now + 7_200 });
+});
+
+test("an account with two full pools is open again only once both have reopened", () => {
+    const fleet = [
+        reading("one", window({ kind: "five_hour", utilization: 100, resetsAt: 1_000 }), window({ kind: "seven_day", utilization: 100, resetsAt: 8_000 })),
+    ];
+    expect(fleetLimit(fleet, { id: "gpt-5" })).toEqual({ spent: 1, withHeadroom: 0, reopensAt: 8_000 });
+});

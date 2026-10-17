@@ -15,6 +15,7 @@ import { opt } from "../../../opt.js";
 import { commandListOf, recordCommands } from "../../providers/agent-commands.js";
 import { type FrameBacklog, frameBacklog } from "../../../seams/frame-backlog.js";
 import { turnPulseOf } from "./turn-pulse.js";
+import { settledOf } from "./turn-closing.js";
 
 // Turn execution decoupled from any client connection: POST /agent starts a run, folds the transcript frame by frame,
 // and any number of clients attach to it live. Holds rows, not frames; each run is held by its conversation's actor
@@ -293,9 +294,6 @@ export class TurnRun implements LiveRun {
         }
     }
 }
-
-const closingOf = (rows: readonly TranscriptRow[]): string =>
-    rows.findLast((row) => row.role === "assistant" && row.text.trim() !== "")?.text.trim() ?? "";
 
 // A refusal whose turn the daemon keeps whole: `ran: false`, since a door refusal is decided before any request.
 const heldWhole = (event: AgentEvent): AgentEvent => (event.kind === "error" ? { ...event, held: { ran: false } } : event);
@@ -593,14 +591,7 @@ export function startTurnRun(
                 "turn ended",
             );
             tell((target) => target.settled(failure === undefined ? { ok: true } : { ok: false, error: failure }));
-            deps.events.publish("run.settled", {
-                conversationId: input.conversationId,
-                actor: input.actor,
-                speaker: input.speaker,
-                failure,
-                closing: closingOf(run.rows),
-                ...opt("rerun", rerun),
-            });
+            deps.events.publish("run.settled", settledOf(input, run.rows, { failure, stopped, rerun }));
         }
     })();
     return run;
