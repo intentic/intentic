@@ -1,4 +1,14 @@
-import { isUnknownSlashCommand, localCommandText, publishedCommandOf, recordCommands, resetCommands, unknownCommandName } from "../agent-commands.js";
+import {
+    commandListOf,
+    commandsOf,
+    isUnknownSlashCommand,
+    localCommandText,
+    publishedCommandOf,
+    recordCommands,
+    recordProbedCommands,
+    resetCommands,
+    unknownCommandName,
+} from "../agent-commands.js";
 
 beforeEach(() => {
     resetCommands();
@@ -67,6 +77,25 @@ test("a published command is named by the prompt it opens; prose, a typo and an 
     expect(publishedCommandOf("claude", "/")).toBeUndefined();
     expect(publishedCommandOf("claude", "run /compact later")).toBeUndefined();
     expect(publishedCommandOf("codex", "/compact")).toBeUndefined();
+});
+
+// A probe (model discovery) misses what a turn mounts for itself: it may say a command exists, never that one does not.
+test("a probed list names commands before any turn, and never makes the guard call a name unknown", () => {
+    recordProbedCommands("claude", [{ name: "code-review", description: "Review the diff" }]);
+    expect(publishedCommandOf("claude", "/code-review high")).toBe("code-review");
+    expect(commandsOf("claude")).toEqual([{ name: "code-review", description: "Review the diff" }]);
+    expect(isUnknownSlashCommand("claude", "/iq:iq where is the parser")).toBe(false);
+    // A turn's own list takes over whole.
+    publish();
+    expect(publishedCommandOf("claude", "/code-review high")).toBeUndefined();
+    expect(isUnknownSlashCommand("claude", "/code-review high")).toBe(true);
+});
+
+// It is the Claude Code CLI that reads the slash, whichever provider it serves; every other loop keeps its own list.
+test("a turn on the Claude Code loop files its commands as Claude Code's", () => {
+    expect(commandListOf("claude", "native")).toBe("claude");
+    expect(commandListOf("codex", "claude-code")).toBe("claude");
+    expect(commandListOf("codex", "native")).toBe("codex");
 });
 
 test("local command output is unwrapped from the tag the transcript stores it under", () => {

@@ -163,6 +163,53 @@ const SOFT_DELETES: AgentTranscript = {
             role: `assistant`,
             text: `Done, **4 files, +210 / −55**, held on \`agent/soft-deletes\`.\n\nOne thing to decide when you read it: the API still returns retired users to admin tokens (that's what the \`includeRetired\` flag does). If you'd rather they were invisible everywhere, say so and I'll drop the flag.`,
         },
+        // Claude Code's own reviewer over the branch, its findings drawn as the chat's review card (events/review.ts).
+        { role: `user`, text: `/code-review high` },
+        {
+            role: `assistant`,
+            text: `Reviewed the branch at high effort: two findings survived verification, and one is worth fixing before this lands.`,
+            tools: [
+                {
+                    id: `tc_soft_review`,
+                    name: `ReportFindings`,
+                    category: `other`,
+                    status: `completed`,
+                    content: [{ type: `text`, text: `3 findings reported` }],
+                },
+            ],
+            review: {
+                id: `review-soft-deletes`,
+                source: `claude`,
+                level: `high`,
+                findings: [
+                    {
+                        file: `api/src/jobs/purge.ts`,
+                        line: 38,
+                        summary: `The purge job still selects every user, so a row retired yesterday is hard-deleted with the month-old ones.`,
+                        title: `Purge ignores the 30-day window`,
+                        scenario: `A user retired at 09:00 is gone by the 02:00 purge run: \`purgeRetired()\` filters on \`deletedAt IS NOT NULL\` and never compares it with now − 30 days.`,
+                        category: `correctness`,
+                        verdict: `CONFIRMED`,
+                    },
+                    {
+                        file: `web/src/api/users.ts`,
+                        line: 22,
+                        summary: `The client's typed row lacks \`deletedAt\`, so the admin list renders retired users as live.`,
+                        scenario: `An admin token lists users with \`includeRetired\`; the row arrives with \`deletedAt\` set and the table, typed without it, shows no "retired" badge.`,
+                        category: `correctness`,
+                        verdict: `PLAUSIBLE`,
+                    },
+                    {
+                        file: `api/src/routes/users.ts`,
+                        line: 14,
+                        summary: `\`deleteUser\` answers ok for an id that does not exist.`,
+                        category: `correctness`,
+                        verdict: `PLAUSIBLE`,
+                        outcome: `no_change_needed`,
+                    },
+                ],
+            },
+        },
     ],
 };
 

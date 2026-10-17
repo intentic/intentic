@@ -18,6 +18,9 @@ export interface ChatSurface {
     readonly imageUrl: (path: string) => string | undefined;
     // Open a workspace file, at a line where known; absent means paths render as text, not buttons.
     readonly openFile?: (path: string, line?: number) => void;
+    // Put words in the conversation's composer for the reader to send (a review's Fix); never sends them. Absent where
+    // there is no composer (a published page), which then offers nothing to write.
+    readonly draftMessage?: (text: string) => void;
     // Show a call's picture in the conversation's viewer (ChatShotViewer); absent means a picture opens as a file.
     readonly viewPicture?: (toolId: string, path: string) => void;
     // Decorates a document's prose with workspace links; keeps the query client out of a published page's bundle.

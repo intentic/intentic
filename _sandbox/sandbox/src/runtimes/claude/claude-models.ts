@@ -12,6 +12,8 @@ import type { Config } from "../../env.config.js";
 import { cacheFile } from "../../store/open-document.js";
 import { type ClaudeStore, ensureFreshToken } from "../../agent/providers/claude/claude-credentials.js";
 import { containerKeyEnv } from "../../seams/sealed-env.js";
+import { recordProbedCommands } from "../../agent/providers/agent-commands.js";
+import { opt } from "../../opt.js";
 
 // Claude's model catalog merges the CLI's tier aliases (effort levels and badges, no versioned id) with Anthropic's
 // REST /v1/models (versioned ids and names); only versioned rows are offered, aliases just lend capabilities and are
@@ -81,7 +83,12 @@ const discoverClaudeModels = async (oauthToken: string | undefined, cwd: string)
     };
     const session = sdk().query({ prompt: pendingInput(abort.signal), options });
     try {
-        return (await session.supportedModels()).map((model) => {
+        // The same session answers the CLI's slash commands, so a `/code-review` typed before any turn runs is already
+        // known for one (agent-commands.ts); a failure costs that head start, never the models.
+        // allow(silent-catch): an unread command list leaves the first turn to learn it, as before this probe asked
+        const [models, commands] = await Promise.all([session.supportedModels(), session.supportedCommands().catch(() => [])]);
+        recordProbedCommands("claude", commands.map((command) => ({ name: command.name, description: command.description, ...opt("hint", command.argumentHint || undefined) })));
+        return models.map((model) => {
             const entry: Model = { id: model.value, label: model.displayName };
             if (model.supportedEffortLevels !== undefined) {
                 entry.efforts = model.supportedEffortLevels;

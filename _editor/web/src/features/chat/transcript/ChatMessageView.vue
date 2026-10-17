@@ -86,9 +86,9 @@ const reply = async (answer: CardAnswer): Promise<void> => {
     }
 };
 
-// A page the agent showed, and the card for one it asked on: loaded the first time a chat draws one, since most never do
-// and the sealed document builder behind them is not small.
-const ChatPageView = defineAsyncComponent(() => loadChunk(() => import(`./pages/ChatPageView.vue`)));
+// What a row draws inline (a page, a review's findings), and the card for a page asked on: loaded the first time a chat
+// draws one, since most never do and the sealed document builder behind a page is not small.
+const ChatInlineBlocks = defineAsyncComponent(() => loadChunk(() => import(`./ChatInlineBlocks.vue`)));
 const ChatPageAskCard = defineAsyncComponent(() => loadChunk(() => import(`./pages/ChatPageAskCard.vue`)));
 
 // The card each request field is drawn as, as cardReplies' FIELD_OF names the answers; a row holds at most one.
@@ -638,8 +638,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <span class="chat-mark"><Icon name="pencil" class="text-2xs" /></span>{{ t(`chat.chatMessageView.placedBy`) }}
             </p>
 
-            <!-- A page the agent showed here, drawn inline where its reply continues (ChatPageView). -->
-            <ChatPageView v-if="message.page" :page="message.page" />
+            <!-- A page the agent showed here, or a review's findings, drawn inline where its reply continues (ChatInlineBlocks). -->
+            <ChatInlineBlocks v-if="message.page || message.review" :message="message" />
 
             <!-- The card this row holds, by its field (CARDS); every answer goes through the chat's one reply. -->
             <component :is="CARDS[card]" v-if="card" :message="message" :settling="settling" :reply="reply" />

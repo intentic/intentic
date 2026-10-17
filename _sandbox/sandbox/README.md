@@ -145,6 +145,14 @@ flowchart LR
   so a connected MCP server's own `ui://` app is drawn the same way after a call to its tool (`mcp-apps.ts`). What
   that app later asks of its server goes through `POST /pages/app-call`, which calls only tools the server lets its
   app call. Without the reader's press, it calls only read-only ones.
+- Code reviews in chat (2026-10-17): a harness's own reviewer, typed as a slash command or asked from a Review press,
+  ends in one typed `review` event (`sandbox-contract/events/review.ts`) the chat draws as a card. Claude Code's
+  `/code-review` runs with `CLAUDE_CODE_REPORT_FINDINGS` pinned on (`agent/run/harness/pinned-env.ts`), so it reports through
+  its ReportFindings tool, read whole by a PostToolUse hook (`agent/run/harness/review-findings.ts`). Codex's `/review` is
+  published beside the thread's skills and sent as `review/start`; its exitedReviewMode text is split into the prose
+  the bubble shows and the findings the card draws (`runtimes/codex/commands/codex-commands.ts`). OpenCode's `/review` is its own
+  command and answers in prose. A turn whose words open with a published command sends them first, its notes riding
+  the prompt hook (Claude Code), the text after the skill (Codex) or a block of their own (ACP) (`agent/run/command-turn.ts`).
 - Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
   a nudge, an automation's thread) is refused on an archived one (`conversations/actor/conversation-decide.ts`), and a
   thread whose conversation was archived opens a fresh one instead.

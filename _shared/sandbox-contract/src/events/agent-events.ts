@@ -13,6 +13,7 @@ import { RetryLadderSchema } from "../schemas/turn-break.js";
 import { HandedOffSchema, HandoffOfferSchema } from "../schemas/providers/handoff.js";
 import { AgentCommandSchema, browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, ContextUsageSchema, credentialOfferRequest, CredentialReceiptSchema, pageAskRequest, PageSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionRequestSchema, PlanRequestSchema, QuestionRequestSchema, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
 import { TranscriptPatchSchema, TranscriptRowSchema, TurnNoteSchema } from "./transcript.js";
+import { ReviewFindingsSchema } from "./review.js";
 import { agentNoticeEvent, agentStatusEvent } from "./agent-ui.js";
 
 // Every frame an agent turn streams, as one `kind`-discriminated union: turn facts (session, standing, cost) and the
@@ -239,6 +240,9 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // A page the agent showed (its `show_page` tool): drawn inline where the turn stands, in a sealed frame. Parks
     // nothing. A page whose id an earlier one already holds is a redraw, and the earlier row folds to a line.
     z.object({ kind: z.literal("page"), page: PageSchema }),
+    // A code review's findings (events/review.ts), drawn inline as one card. A review whose id an earlier one holds is
+    // its re-report, its fixes applied, and the earlier card folds to a line, as a page's redraw does.
+    z.object({ kind: z.literal("review"), review: ReviewFindingsSchema }),
     // A page the agent showed to be answered (`ask_page`): parks the turn until the page sends its answer back, or the
     // person dismisses it. Not journalled for restore: the tool call waiting on it dies with the daemon.
     z.object({ kind: z.literal("page_ask"), ...pageAskRequest }),

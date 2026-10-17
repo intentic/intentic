@@ -8,6 +8,7 @@ import { HeldEndingSchema, RetryLadderSchema } from "../schemas/turn-break.js";
 import { HandoffOfferSchema } from "../schemas/providers/handoff.js";
 import { NoticeCodeSchema } from "./sandbox-notice.js";
 import { TranscriptAgentNoticeSchema } from "./agent-ui.js";
+import { ReviewFindingsSchema } from "./review.js";
 import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind } from "./requests.js";
 import {
     browserHelpRequest,
@@ -387,6 +388,8 @@ export const TranscriptRowSchema = z.object({
     backgroundJob: TranscriptBackgroundJobSchema.optional().describe("The background job this row marks the start of."),
     // Not a card: a page parks nothing, it is part of what the agent said. On the bubble whose tool call showed it.
     page: PageSchema.optional().describe("A page the agent showed here, drawn inline."),
+    // Not a card either: a review's findings are what the agent said, drawn as one block on the bubble that reported them.
+    review: ReviewFindingsSchema.optional().describe("A code review's findings the agent reported here, drawn inline."),
     pageAsk: TranscriptPageAskSchema.optional().describe("A page the agent asked to be answered on, and what it sent back."),
     credentialOffer: TranscriptCredentialOfferSchema.optional().describe(
         "The gated credential this row asked to use, who may release it, and who did.",

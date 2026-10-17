@@ -64,6 +64,8 @@ import { routedEndpointOf } from "../providers/routed-refusal.js";
 import { defaultQuery, promptInput, type QueryFn, streamSdk, type TurnPosture } from "./sdk-stream.js";
 import { checklistCloseHooks } from "./checklist-close.js";
 import { commandNotesHooks, commandWire } from "./command-turn.js";
+import { PINNED_ENV } from "./harness/pinned-env.js";
+import { reviewHooks } from "./harness/review-findings.js";
 import { turnCheckHooks } from "./turn-checks.js";
 import { settingsHookChangeHooks } from "./harness/settings-hook-gate.js";
 import { checklistSeedOf } from "./task-store.js";
@@ -158,17 +160,6 @@ const subagentEnv = (request: HarnessRequest): Record<string, string> => ({
     ...opt("CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH", request.policy.subagentDepth?.toString()),
 });
 
-// Pins Claude Code's checklist tools on: newer models gate Task*/TodoWrite off by default, but the prompt and reducer
-// both depend on them.
-const CHECKLIST_ENV: Record<string, string> = {
-    CLAUDE_CODE_ENABLE_TODO_TOOLS: "1",
-    CLAUDE_CODE_ENABLE_TASKS: "1",
-};
-
-// Turns off the CLI's own switch to another model when the provider's safety classifier stops a response, so a flagged
-// turn ends for the person to choose (2026-09-30: asked every time, the owner's call over switching automatically).
-const REFUSAL_ENV = { CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK: "1" } as const;
-
 // Hides CLI skills with no daemon equivalent: loop/schedule need a live process, keybindings-help/update-config target
 // the CLI's own UI, and plugin-authoring writes mods whose panes and status lines nothing draws under the Agent SDK.
 // Keeps the CLI's built-in AGENTS.md loader out of a turn the daemon composes AGENTS.md for (claude-builtins.ts).
@@ -255,11 +246,9 @@ const turnEnv = (request: HarnessRequest) => ({
     ...cleanerEnv(request),
     // Delegation ceilings this turn overrides, if any, on top of the harness defaults.
     ...subagentEnv(request),
-    // Checklist tools the prompt advertises and the task list needs; not owner-tunable, see CHECKLIST_ENV.
-    ...CHECKLIST_ENV,
-    // A response the safety classifier stops is the person's to route (retry or another model, from the chat's
-    // card), never a model the CLI swaps in by itself. Its one retry on the same model within the turn stays.
-    ...REFUSAL_ENV,
+    // The CLI features the prompt and the chat depend on: the checklist tools, no model swapped in for a response the
+    // safety classifier stopped (its one retry on the same model stays), and typed review findings (pinned-env.ts).
+    ...PINNED_ENV,
     // Where tmux-run talks to tmux: the daemon's namespace, not the turn's, so it starts a server there if
     // needed. A fenced turn's sandbox has a tmux server of its own instead, and its own temp and log dirs.
     ...anchorEnv(request.spec.isolation?.anchor),
@@ -580,8 +569,9 @@ const baseOptions = (
                 // Pairs this turn's in-process children with their meta files (type, ask, model, report) and appends what
                 // checked their work to each delegation's result.
                 subagents !== undefined ? subagentHooks(subagents) : {},
-                // A connected MCP server's app, drawn in the chat after a call to the tool it belongs to (mcp-apps.ts).
+                // Drawn in the chat after a call: a connected MCP server's app (mcp-apps.ts), a review's findings (review-findings.ts).
                 appHooks(request, push),
+                reviewHooks(push),
                 // Placed by the turn's isolation, since an anchored turn's dependencies exist only inside its own
                 // namespace.
                 editDiagnosticsHooks(

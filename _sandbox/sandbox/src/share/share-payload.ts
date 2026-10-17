@@ -2,8 +2,10 @@ import { extname } from "node:path";
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import type { ShareDetail } from "@intentic/sandbox-contract/schemas/share";
 import type { ToolCallContent } from "@intentic/sandbox-contract/events/requests";
+import type { ReviewFindings } from "@intentic/sandbox-contract/events/review";
 import { maskCredentialMaterial } from "@intentic/sandbox-contract/policy/credential-material";
 import { SHARE_FILES_DIR } from "@intentic/sandbox-contract/share-paths";
+import { opt } from "../opt.js";
 
 // Pure, synchronous reduction of a conversation to what a stranger may read: testable without a renderer doing file
 // I/O. Three steps, in order:
@@ -119,6 +121,19 @@ class Pages {
     }
 }
 
+// A review's findings with every word the model wrote put through the same redaction as a row's prose.
+const sharedReview = (review: ReviewFindings): ReviewFindings => ({
+    ...review,
+    findings: review.findings.map((finding) => ({
+        ...finding,
+        file: redactSecrets(finding.file),
+        summary: redactSecrets(finding.summary),
+        ...opt("title", finding.title === undefined ? undefined : redactSecrets(finding.title)),
+        ...opt("scenario", finding.scenario === undefined ? undefined : redactSecrets(finding.scenario)),
+        ...opt("body", finding.body === undefined ? undefined : redactSecrets(finding.body)),
+    })),
+});
+
 export interface SharedTranscript {
     readonly messages: TranscriptRow[];
     readonly pictures: readonly SharePicture[];
@@ -139,6 +154,10 @@ export const shareTranscript = (messages: readonly TranscriptRow[], detail: Shar
         message.page === undefined || message.page.superseded === true || options.keepNames === false
             ? {}
             : { page: { id: message.page.id, title: redactSecrets(message.page.title), path: pages.published(message.page.path), ...(message.page.measured === undefined ? {} : { measured: message.page.measured }), ...(message.page.height === undefined ? {} : { height: message.page.height }) } };
+    // A review's findings are what the agent said too, and nothing the prose repeats: they ride both levels, words
+    // redacted; a report it later re-made is left out, as the chat folds it away.
+    const reviewOf = (message: TranscriptRow): Pick<TranscriptRow, "review"> =>
+        message.review === undefined || message.review.superseded === true ? {} : { review: sharedReview(message.review) };
     const shared = messages.map((message): TranscriptRow => {
         const base: TranscriptRow = {
             role: message.role,
@@ -152,7 +171,7 @@ export const shareTranscript = (messages: readonly TranscriptRow[], detail: Shar
             const published = pictures.published(path);
             return published === undefined ? [] : [published];
         });
-        const withAttachments = { ...(attachments.length === 0 ? base : { ...base, attachments }), ...pageOf(message) };
+        const withAttachments = { ...(attachments.length === 0 ? base : { ...base, attachments }), ...pageOf(message), ...reviewOf(message) };
         if (detail === "messages") {
             return withAttachments;
         }

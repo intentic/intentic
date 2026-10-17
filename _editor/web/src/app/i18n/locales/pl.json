@@ -302,7 +302,8 @@
             "stopKeepingWarm": "Przestań utrzymywać pamięć podręczną",
             "stopKeepingWarmHint": "Utrzymywana ciepła do {time}",
             "tryLandAgain": "Spróbuj scalić ponownie",
-            "landsIfConflictsGone": "Scala, jeśli konflikty zniknęły"
+            "landsIfConflictsGone": "Scala, jeśli konflikty zniknęły",
+            "reviewChanges": "Przejrzyj zmiany"
         },
         "agentStatus": {
             "approvalNeeded": "Potrzebna zgoda",
@@ -910,6 +911,9 @@
             "landLine": "Agent pracował na własnej kopii, więc Twoja przestrzeń robocza jeszcze się nie zmieniła. Scalenie wprowadza te zmiany. Jeśli coś jest nie tak, napisz agentowi w jego czacie, co poprawić.",
             "close": "Zamknij",
             "startOwn": "Uruchom mojego agenta"
+        },
+        "reviewAsk": {
+            "inWords": "Przejrzyj zmiany na swojej gałęzi pod kątem błędów. Przy każdej uwadze podaj plik i wiersz, co działa źle i przy jakich danych."
         }
     },
     "app": {
@@ -4278,6 +4282,25 @@
             "agentTold": "agent o tym wie",
             "askFix": "Poproś o poprawkę",
             "fixRequest": "Strona \"{title}\" (id \"{id}\") rzuciła błędy w moim czacie:\n{errors}\n\nPopraw ją i pokaż ponownie z replaces: \"{id}\"."
+        },
+        "chatReview": {
+            "title": "Przegląd kodu",
+            "sourceClaude": "Claude Code",
+            "sourceCodex": "Codex",
+            "findings": "{count} uwaga | {count} uwagi | {count} uwag",
+            "clean": "Brak uwag",
+            "fixAll": "Popraw wszystkie",
+            "fixOne": "Popraw",
+            "fixAllRequest": "Popraw te uwagi z przeglądu powyżej:\n{list}",
+            "fixOneRequest": "Popraw tę uwagę z przeglądu powyżej: {finding}",
+            "superseded": "Przegląd kodu: wcześniejszy raport, zaktualizowany niżej",
+            "show": "Pokaż",
+            "openFile": "Otwórz plik",
+            "confirmed": "potwierdzone",
+            "plausible": "prawdopodobne",
+            "fixed": "poprawione",
+            "skipped": "pominięte",
+            "noChangeNeeded": "bez zmian"
         },
         "handoffChoice": {
             "label": "Przekazanie",
@@ -11273,7 +11296,8 @@
             "unstageFrom": "Usuń z indeksu {count} plik od „{origin}” | Usuń z indeksu {count} pliki od „{origin}” | Usuń z indeksu {count} plików od „{origin}”",
             "stageFrom": "Dodaj do indeksu {count} plik od „{origin}” | Dodaj do indeksu {count} pliki od „{origin}” | Dodaj do indeksu {count} plików od „{origin}”",
             "messageBeingWritten": "wiadomość commita jest w trakcie pisania",
-            "namesTheCommit": "nadaje nazwę commitowi"
+            "namesTheCommit": "nadaje nazwę commitowi",
+            "reviewChanges": "Przejrzyj zmiany"
         },
         "rowActions": {
             "changedSinceOn": "Zmienione od włączenia",

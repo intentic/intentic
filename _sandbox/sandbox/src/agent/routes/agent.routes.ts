@@ -11,7 +11,7 @@ import type { OrpcContext } from "../../app-env.js";
 import { resolveWithin } from "../../workspace/files/workspace-files-paths.js";
 import { type QueueChange, queueView } from "../../conversations/actor/conversation-queue.js";
 import { rewindConversation } from "../checkpoints/rewind.js";
-import { commandsOf } from "../providers/agent-commands.js";
+import { commandListOf, commandsOf } from "../providers/agent-commands.js";
 import { switchAccount } from "../providers/accounts/switch-account.js";
 import { areasOf } from "../../auth/principal.js";
 import { operatorHere } from "../../auth/operator.js";
@@ -313,7 +313,7 @@ export const createAgentRoutes = (services: Services) => {
             return outcome;
         }),
         // The provider's slash commands from its most recent turn; empty (not an error) if never run.
-        commands: i.commands.handler(({ input }) => ({ commands: [...commandsOf(input.agent ?? DEFAULT_PROVIDER)] })),
+        commands: i.commands.handler(({ input }) => ({ commands: [...commandsOf(commandListOf(input.agent ?? DEFAULT_PROVIDER, "native"))] })),
         // What each provider last refused a turn with; empty is the common, healthy case.
         refusals: i.refusals.handler(async () => ({ refusals: await services.providerRefusals.read() })),
         // Never throws: no offer, no personas, no model, or a deadline are all "nothing chosen" with a reason; the

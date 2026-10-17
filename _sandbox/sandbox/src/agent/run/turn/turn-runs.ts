@@ -12,7 +12,7 @@ import type { DomainEvents } from "../../../seams/domain-events.js";
 import type { RoutedTurn, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import type { JournalledTurn } from "../../../store/journals/turn-journal.js";
 import { opt } from "../../../opt.js";
-import { recordCommands } from "../../providers/agent-commands.js";
+import { commandListOf, recordCommands } from "../../providers/agent-commands.js";
 import { type FrameBacklog, frameBacklog } from "../../../seams/frame-backlog.js";
 import { turnPulseOf } from "./turn-pulse.js";
 
@@ -505,7 +505,7 @@ export function startTurnRun(
                 const event = kept(frame);
                 // Every provider republishes its slash commands each turn; cache the latest (agent-commands.ts).
                 if (event.kind === "commands") {
-                    recordCommands(input.agent, event.items);
+                    recordCommands(commandListOf(input.agent, input.harness), event.items);
                 }
                 // Frames that park the turn on the user; they keep the run's fetch open, so it still looks live.
                 if (isParkKind(event.kind)) {

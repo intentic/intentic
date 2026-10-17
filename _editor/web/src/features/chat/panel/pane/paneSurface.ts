@@ -6,6 +6,7 @@ import { agentSeed } from "../../../../models/fleet/useAgents-actions";
 import { summonChat } from "../../../../models/conversations/run/summon";
 import { agentTabOf } from "../../../../models/conversations/panel/useChat-reveal";
 import { snapshotTab } from "../../../../models/conversations/tabs/tabSnapshot";
+import { focusComposer } from "../../../../models/conversations/tabs/useChat-tabs";
 import { fileLinkDecorator } from "../../../../lib/markdown/renderMarkdown";
 import { navigateInApp } from "../../../../workbench/window/mainWindow";
 import { openWorkTerminal } from "../../../../models/terminal/useWorkTerminals";
@@ -32,6 +33,12 @@ export const paneSurface = (conversation: () => Conversation, router: Router, su
         // The daemon's re-encoded view rather than the file, in the conversation's own scope like `openFile`.
         imageUrl: (path) => picture(agent(), path, `view`)?.url,
         openFile: (path, line) => openWorkspaceRef(path, line, { agent: agent() }),
+        // After what the reader already wrote, never over it.
+        draftMessage: (text) => {
+            const draft = conversation().draft.value.trim();
+            conversation().draft.value = draft === `` ? text : `${draft}\n\n${text}`;
+            focusComposer();
+        },
         // Same file-link decoration as the assistant's own prose, rebuilt per fragment since `agent` can change under it.
         decorate: (fragment) => fileLinkDecorator({ agent: agent() })(fragment),
         commandTerminal: () => conversation().agentTerminal.value,

@@ -242,6 +242,20 @@ describe(`an @ pick`, () => {
 });
 
 describe(`the / list`, () => {
+    // Claude Code publishes forty-odd commands; its reviewer would otherwise sit past the popover's eighth row.
+    it(`leads with the harness's own reviewer, the rest in the harness's order`, () => {
+        const { chat, type, lists } = composerOf();
+        chat.availableCommands.value = [
+            { name: `compact`, description: `Compact the context.` },
+            { name: `context`, description: `Show the context.` },
+            { name: `code-review`, description: `Review the diff.` },
+        ];
+        type(`/`);
+        expect(lists.commandMatches.value.map((command) => command.name)).toEqual([`code-review`, `compact`, `context`]);
+        type(`/co`);
+        expect(lists.commandMatches.value.map((command) => command.name)).toEqual([`code-review`, `compact`, `context`]);
+    });
+
     it(`lists the commands the first token could still become, and writes the picked one in`, async () => {
         const { chat, type, lists } = composerOf();
         chat.availableCommands.value = COMMANDS;

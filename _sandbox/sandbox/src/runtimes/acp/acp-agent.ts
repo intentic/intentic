@@ -17,6 +17,7 @@ import type { AgentRequest, ContainerCredential } from "../../agent/providers/ag
 import type { CommandGuard } from "../../guard/command-guard.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
 import { imageBlock } from "../../agent/prompt/attachment-images.js";
+import { commandFirstTexts } from "../../agent/run/command-turn.js";
 import type { PlanPhaseResult } from "../decorators/plan-mode.js";
 import {
     DEFAULT_TURN_TIMEOUTS,
@@ -418,6 +419,9 @@ const settledFailure = (response: PromptResponse | undefined, failure: unknown, 
     return stopReason === "max_tokens" || stopReason === "max_turn_requests" ? `The agent stopped early (${stopReason}).` : undefined;
 };
 
+// The prompt's words as text blocks: one, or a command's words first and the daemon's notes after (command-turn.ts).
+const textBlocks = (text: string, command: string | undefined): ContentBlock[] => commandFirstTexts(text, command).map((part) => ({ type: "text", text: part }));
+
 // One prompt turn on one session: resolves/creates/loads it, binds routing, and streams mapped updates until the
 // response settles or the watchdog fires. Never emits the terminal `done`; callers do once the whole turn settles.
 async function* runAcpTurn(
@@ -540,7 +544,7 @@ export const createAcpAgent = (connections: AcpConnections, timeouts: TurnTimeou
                 try {
                     // Native image blocks when the agent advertises image prompts; everything else rides the file note.
                     yield* textPlanTurn(EMULATED_PLAN, request, connection.capabilities.promptCapabilities?.image === true, (text, images, sessionId, planning) =>
-                        runAcpTurn(connection, request, [{ type: "text", text }, ...images.map(imageBlock)], sessionId, {
+                        runAcpTurn(connection, request, [...textBlocks(text, request.spec.command), ...images.map(imageBlock)], sessionId, {
                             phase: planning ? "plan" : "execute",
                             captureText: planning,
                             timeouts,

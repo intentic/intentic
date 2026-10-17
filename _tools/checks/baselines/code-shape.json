@@ -1466,7 +1466,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/agent.ts": {
-        "count": 1086,
+        "count": 1084,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/agent.ts#baseOptions#cognitive": {
@@ -1543,7 +1543,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-runs.ts": {
-        "count": 613,
+        "count": 607,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-runs.ts#startTurnRun.<anonymous>#cognitive": {
@@ -2448,7 +2448,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/runtimes/codex/codex-app-server.ts": {
-        "count": 1690,
+        "count": 1685,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/runtimes/codex/codex-app-server.ts#createCodexAppServerRunner#lines": {
@@ -3324,7 +3324,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/text/transcript-fold.ts": {
-        "count": 1002,
+        "count": 999,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/text/transcript-fold.ts#apply#cognitive": {

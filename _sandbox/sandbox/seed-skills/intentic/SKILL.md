@@ -260,6 +260,11 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
   size or publishes it to the outbox. A connected MCP server's own app (an MCP Apps `ui://` resource) is drawn
   the same way after a call to its tool. The owner can switch all of it off (Sandbox ▸ Agent ▸ Tools ▸ Pages
   in chat).
+- **Code review in chat**: a harness's own reviewer draws its findings as one card in the chat: Claude Code's
+  `/code-review [low|medium|high|xhigh|max]`, Codex's `/review [branch <name> | commit <sha> | what to look at]`.
+  Each finding opens its file at the line, and **Fix** (one, or all) writes the ask into the composer. The same review
+  is asked from an agent's session menu (**Review changes**, its own branch) and from the Changes bar (your uncommitted
+  work, in a new chat on the shared tree). OpenCode's `/review` answers in prose.
 - **Agents** (`/agents`): the fleet board, every conversation as an agent with its branch and status. Every agent
   a conversation started hangs under its card as a row, whichever way it was started, and the chat's list of open
   chats hangs the same rows under its cards: a conversation it spawned (its row opens its own chat) and a subagent

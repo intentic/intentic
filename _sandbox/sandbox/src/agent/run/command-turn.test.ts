@@ -1,6 +1,6 @@
 import { composeWirePrompt, LITERAL_SLASH_NOTE } from "../prompt/turn-preamble.js";
 import { LANDING_CHECKS_NOTE } from "../prompt/checks-note.js";
-import { commandNotesHooks, commandWire } from "./command-turn.js";
+import { commandFirstTexts, commandNotesHooks, commandWire } from "./command-turn.js";
 
 const wire = composeWirePrompt([LANDING_CHECKS_NOTE], "/code-review high --fix");
 
@@ -26,6 +26,13 @@ test("the notes are said once, with the turn's first prompt", async () => {
         hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: "## Checks after landing\n\nrun the tests" },
     });
     expect(await fire(hooks)).toEqual({});
+});
+
+// ACP's prompt is a list of blocks: the agent reads its slash in the first.
+test("a command's words lead the blocks, its notes after them; anything else is one block", () => {
+    expect(commandFirstTexts(wire, "code-review")).toEqual(["/code-review high --fix", LANDING_CHECKS_NOTE.text]);
+    expect(commandFirstTexts(wire, undefined)).toEqual([wire]);
+    expect(commandFirstTexts("/loop again", "loop")).toEqual(["/loop again"]);
 });
 
 test("a turn with nothing cut wires no hook", () => {

@@ -16,6 +16,7 @@ import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js
 import type { Services } from "../../composition.js";
 import { turnPersona } from "../../personas/personas.js";
 import { opt } from "../../opt.js";
+import { commandListOf, publishedCommandOf } from "../../agent/providers/agent-commands.js";
 import { assertAgentExecutionContext } from "../../workload/agent-execution.js";
 import { type DaemonServersDeps, daemonServersFor } from "../daemon-tools/daemon-servers.js";
 import { acpLaunchOf } from "./acp-spawn.js";
@@ -67,6 +68,8 @@ export const planAcpTurn = async (
         withAttachments(
             {
                 ...context.base,
+                // A message opening with one of the agent's own commands is sent with that command first (acp-agent.ts).
+                spec: { ...context.base.spec, ...opt("command", publishedCommandOf(commandListOf(provider, input.harness), context.base.spec.prompt)) },
                 // The browser stack's facts (ports, output dir) feed the Claude Code hooks and observer, which an ACP agent
                 // has none of: its browsers are servers in `remote` like everything else.
                 tools: { ...context.base.tools, ...opt("remote", tools.length > 0 ? tools : undefined), diagnostics: daemon.diagnostics },

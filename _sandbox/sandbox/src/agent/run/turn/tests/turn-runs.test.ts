@@ -660,7 +660,7 @@ describe(`turn runs`, () => {
     it(`caches each provider's published commands so a conversation that hasn't run a turn can read them`, async () => {
         resetCommands();
         const { turnFn, push, close } = crankedTurn();
-        startTurnRun(deps, turnFn, { ...turn(`c-commands`), agent: `kimi` });
+        startTurnRun(deps, turnFn, { ...turn(`c-commands`), agent: `codex`, harness: `native` });
 
         const followed = collect(`c-commands`);
         push({ kind: `commands`, items: [{ name: `review`, description: `Review a PR` }] });
@@ -670,9 +670,25 @@ describe(`turn runs`, () => {
         close();
         await followed;
 
-        expect(commandsOf(`kimi`)).toEqual([{ name: `deploy`, description: `Ship it` }]);
-        // Keyed by provider; an absent `agent` means claude.
+        expect(commandsOf(`codex`)).toEqual([{ name: `deploy`, description: `Ship it` }]);
+        // Keyed by the loop's own list: native Codex keeps its own, and nothing landed under Claude Code's.
         expect(commandsOf(`claude`)).toEqual([]);
+    });
+
+    // It is the Claude Code CLI that reads the slash, whichever provider it serves, so its list is filed as its own.
+    it(`files a Claude Code loop's commands as Claude Code's, whichever provider the turn serves`, async () => {
+        resetCommands();
+        const { turnFn, push, close } = crankedTurn();
+        startTurnRun(deps, turnFn, { ...turn(`c-routed`), agent: `codex`, harness: `claude-code` });
+
+        const followed = collect(`c-routed`);
+        push({ kind: `commands`, items: [{ name: `code-review`, description: `Review the diff` }] });
+        push({ kind: `done` });
+        close();
+        await followed;
+
+        expect(commandsOf(`claude`)).toEqual([{ name: `code-review`, description: `Review the diff` }]);
+        expect(commandsOf(`codex`)).toEqual([]);
     });
 });
 

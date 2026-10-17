@@ -61,7 +61,7 @@ const fakeAppServer = (incoming: readonly Incoming[], options: FakeAppServerOpti
             if (method === "skills/list") {
                 return { data: [{ cwd: "/workspace/repo", errors: [], skills: options.skills ?? [] }] };
             }
-            if (method === "turn/start") {
+            if (method === "turn/start" || method === "review/start") {
                 starts += 1;
                 return { turn: { id: `turn-${starts}` } };
             }
@@ -245,6 +245,7 @@ test.each([false, true])("app-server wire inputs keep translator configuration b
 
     expect(events).toEqual([
         { type: "thread.started", thread_id: "thr-new" },
+        { type: "commands", skills: [REVIEW_ROW] },
         { type: "turn.started" },
         { type: "turn.completed" },
     ]);
@@ -293,7 +294,7 @@ test("resumes an existing thread without emitting a duplicate session event", as
         { method: "turn/completed", params: { threadId: "thr-resumed", turn: { id: "turn-1", status: "completed", error: null } } },
     ]);
 
-    expect(await collect(createCodexAppServerRunner(appServer.connector)(turn("thr-old")))).toEqual([{ type: "turn.completed" }]);
+    expect(await collect(createCodexAppServerRunner(appServer.connector)(turn("thr-old")))).toEqual([{ type: "commands", skills: [REVIEW_ROW] }, { type: "turn.completed" }]);
     expect(appServer.requests[1]).toMatchObject({ method: "thread/resume", params: { threadId: "thr-old" } });
 });
 
@@ -344,6 +345,7 @@ test("normalizes image generation and latest-turn token usage", async () => {
 
     expect(await collect(createCodexAppServerRunner(appServer.connector)(turn()))).toEqual([
         { type: "thread.started", thread_id: "thr-new" },
+        { type: "commands", skills: [REVIEW_ROW] },
         { type: "item.started", item: { id: "ig-1", type: "image_generation", status: "in_progress", result: "" } },
         {
             type: "item.completed",
@@ -441,6 +443,7 @@ test("normalizes app-server reasoning, command, MCP, search, plan, compaction, a
 
     expect(await collect(createCodexAppServerRunner(appServer.connector)(turn()))).toEqual([
         { type: "thread.started", thread_id: "thr-new" },
+        { type: "commands", skills: [REVIEW_ROW] },
         { type: "item.completed", item: { id: "r1", type: "reasoning", text: "first\nsecond" } },
         {
             type: "item.completed",
@@ -494,6 +497,9 @@ test("maps failed and interrupted app-server turns to terminal failures", async 
     });
 });
 
+// Codex's own reviewer, published beside the thread's skills.
+const REVIEW_ROW = expect.objectContaining({ name: "review", path: "" });
+
 const SKILLS = [
     {
         name: "release",
@@ -518,7 +524,7 @@ test("publishes the thread's enabled skills and sends a picked command as a stru
     // The one-line blurb wins over the body, and the disabled skill is not offered at all.
     expect(events).toContainEqual({
         type: "commands",
-        skills: [{ name: "release", description: "Cut a release", path: "/workspace/repo/.codex/skills/release" }],
+        skills: [{ name: "release", description: "Cut a release", path: "/workspace/repo/.codex/skills/release" }, REVIEW_ROW],
     });
     expect(appServer.requests.find((call) => call.method === "turn/start")?.params).toMatchObject({
         input: [
@@ -548,6 +554,78 @@ test("a picked command resolves behind the daemon's notes, which stay in the tex
     });
 });
 
+// Codex's reviewer is its own request, not a prompt: the thread reviews, and its items stream as any turn's.
+test("/review starts Codex's reviewer on the thread, aimed at what its words name", async () => {
+    const done = { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed", error: null } } };
+    const notes = "## Where this turn's files live\n\nUse relative paths.\n\n---\n\n";
+    for (const [words, target] of [
+        ["/review", { type: "uncommittedChanges" }],
+        ["/review branch main", { type: "baseBranch", branch: "main" }],
+        ["/review 4f7c1416ec", { type: "commit", sha: "4f7c1416ec", title: null }],
+        ["/review the retry loop in the uploader", { type: "custom", instructions: "the retry loop in the uploader" }],
+    ] as const) {
+        const appServer = fakeAppServer([done], { skills: SKILLS });
+        await collect(createCodexAppServerRunner(appServer.connector)({ ...turn(), prompt: `${notes}${words}` }));
+        expect(appServer.requests.find((call) => call.method === "review/start")?.params).toEqual({ threadId: "thr-new", target, delivery: "inline" });
+        expect(appServer.requests.some((call) => call.method === "turn/start")).toBe(false);
+    }
+});
+
+test("a thread skill named review keeps the name, and is sent as that skill", async () => {
+    const appServer = fakeAppServer(
+        [{ method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed", error: null } } }],
+        { skills: [{ ...SKILLS[0], name: "review", interface: undefined, shortDescription: "House review" }] },
+    );
+    const events = await collect(createCodexAppServerRunner(appServer.connector)({ ...turn(), prompt: "/review" }));
+    expect(events).toContainEqual({ type: "commands", skills: [{ name: "review", description: "House review", path: "/workspace/repo/.codex/skills/release" }] });
+    expect(appServer.requests.some((call) => call.method === "review/start")).toBe(false);
+});
+
+// path-literals: content, the file a Codex finding names as its rendered review carries it
+const REVIEW_TEXT = [
+    "The retry path can lose an upload.",
+    "",
+    "Full review comments:",
+    "",
+    "- [P1] Retry drops the last chunk — /workspace/repo/src/upload.ts:40-44",
+    "  The loop exits before the final flush.",
+    "  A 3-chunk file uploads 2.",
+    "- Timeout is never cleared — /workspace/repo/src/upload.ts:12",
+].join("\n");
+
+test("a review's end is the reviewer's word on the bubble and its findings on one card", async () => {
+    const appServer = fakeAppServer(
+        [
+            { method: "item/completed", params: { threadId: "thr-new", turnId: "turn-1", item: { type: "exitedReviewMode", id: "rv1", review: REVIEW_TEXT } } },
+            { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed", error: null } } },
+        ],
+        { skills: SKILLS },
+    );
+    const events = await collect(createCodexAppServerRunner(appServer.connector)({ ...turn(), prompt: "/review" }));
+    expect(events).toContainEqual({ type: "item.completed", item: { id: "rv1", type: "agent_message", text: "The retry path can lose an upload." } });
+    expect(events).toContainEqual({
+        type: "frame",
+        frame: {
+            kind: "review",
+            review: {
+                id: "review-rv1",
+                source: "codex",
+                findings: [
+                    {
+                        file: "/workspace/repo/src/upload.ts",
+                        line: 40,
+                        endLine: 44,
+                        summary: "Retry drops the last chunk",
+                        priority: 1,
+                        body: "The loop exits before the final flush.\nA 3-chunk file uploads 2.",
+                    },
+                    { file: "/workspace/repo/src/upload.ts", line: 12, summary: "Timeout is never cleared" },
+                ],
+            },
+        },
+    });
+});
+
 test("prose that merely starts with a slash is sent verbatim", async () => {
     const appServer = fakeAppServer(
         [{ method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed", error: null } } }],
@@ -564,13 +642,14 @@ test("prose that merely starts with a slash is sent verbatim", async () => {
     });
 });
 
-test("a skills/list that fails costs the popover and nothing else", async () => {
+test("a skills/list that fails leaves the popover Codex's own review, and costs nothing else", async () => {
     const appServer = fakeAppServer([
         { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed", error: null } } },
     ]);
     // The fake answers with an empty list; a build that refuses the method outright takes the same path.
     expect(await collect(createCodexAppServerRunner(appServer.connector)(turn()))).toEqual([
         { type: "thread.started", thread_id: "thr-new" },
+        { type: "commands", skills: [REVIEW_ROW] },
         { type: "turn.completed" },
     ]);
 });
@@ -602,6 +681,7 @@ test("a steering message reaches the running turn, and the run follows the turn 
 
     expect(await collect(createCodexAppServerRunner(appServer.connector)({ ...turn(), steering }))).toEqual([
         { type: "thread.started", thread_id: "thr-new" },
+        { type: "commands", skills: [REVIEW_ROW] },
         { type: "turn.started" },
         { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Using fetch." } },
         { type: "turn.completed" },
@@ -778,6 +858,7 @@ test("a question raised on another turn is answered empty instead of reaching a 
 
     expect(await collect(createCodexAppServerRunner(appServer.connector)(turn()))).toEqual([
         { type: "thread.started", thread_id: "thr-new" },
+        { type: "commands", skills: [REVIEW_ROW] },
         { type: "turn.completed" },
     ]);
     expect(appServer.answered).toEqual([{ answers: {} }]);
@@ -804,6 +885,7 @@ test("grants an MCP tool call's approval and takes the session-wide yes when it 
 
     expect(await collect(createCodexAppServerRunner(appServer.connector)(turn()))).toEqual([
         { type: "thread.started", thread_id: "thr-new" },
+        { type: "commands", skills: [REVIEW_ROW] },
         { type: "turn.completed" },
     ]);
     expect(appServer.answered).toEqual([{ action: "accept", content: null, _meta: { persist: "session" } }]);

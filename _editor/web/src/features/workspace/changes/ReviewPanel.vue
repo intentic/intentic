@@ -25,6 +25,7 @@ import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import HoverCard from "../../chat/tabs/HoverCard.vue";
 import ReviewStat from "./ReviewStat.vue";
+import WorkspaceReviewButton from "./WorkspaceReviewButton.vue";
 import CommitField from "./commit/CommitField.vue";
 import IndexRunPrompt from "./commit/IndexRunPrompt.vue";
 import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
@@ -287,9 +288,7 @@ const chipNotice = computed<string | undefined>(() =>
     }),
 );
 
-const matchesFilter = (repo: RepoChanges, change: GitChange): boolean => {
-    return originFilter.value === undefined || isFrom(repo, change, originFilter.value);
-};
+const matchesFilter = (repo: RepoChanges, change: GitChange): boolean => originFilter.value === undefined || isFrom(repo, change, originFilter.value);
 
 // Quiet when the row's only origin is the lit chip (already said by the filter); a file two agents landed
 // still shows both, since that's information the filter alone doesn't give.
@@ -1169,7 +1168,8 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                     >
                         <Icon name="cloud-download" class="text-2xs" />
                     </button>
-                    <!-- The commit action reports progress while stages, hooks, and reads run. -->
+                    <!-- An agent's review, then Commit, in the order the two happen; Commit reports progress while stages, hooks, and reads run. -->
+                    <WorkspaceReviewButton v-if="changes.count.value > 0" :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']" />
                     <Button
                         v-if="changes.count.value > 0"
                         size="small"

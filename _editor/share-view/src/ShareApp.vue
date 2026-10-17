@@ -8,6 +8,7 @@ import { formatDate, formatDateTime } from "@intentic/ui/format";
 import { CHAT_SURFACE } from "@intentic/web/models/conversations/tools/chatToolSurface";
 import { dayMarksOf, turnsOf } from "@intentic/web/models/conversations/transcript/transcript";
 import ChatToolCard from "@intentic/web/features/chat/tools/ChatToolCard.vue";
+import ChatReviewCard from "@intentic/web/features/chat/transcript/review/ChatReviewCard.vue";
 import { computed, onBeforeUnmount, onMounted, provide, ref } from "vue";
 import { readPayload } from "./payload";
 import { shareSurface } from "./shareSurface";
@@ -161,6 +162,9 @@ const toggleThinking = (index: number): void => {
                                 :data-share-page="message.page.path"
                             />
                         </div>
+
+                        <!-- A review's findings, drawn as the chat draws them: places as text, nothing to press. -->
+                        <ChatReviewCard v-if="message.review" :review="message.review" />
                     </div>
                 </template>
             </main>

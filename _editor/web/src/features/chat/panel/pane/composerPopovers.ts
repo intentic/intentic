@@ -11,6 +11,7 @@ import { chatPickable, isOlderEntry, pickerEntries } from "../../../../models/co
 import { effortsFor } from "../../../../models/providers/effortScale";
 import { ensureProviderCommands, loadAllProviderModels } from "../../../../models/conversations/accounts/useChat-catalog";
 import { providerReady } from "../../../../models/providers/access";
+import { isReviewCommand } from "../../../../models/providers/reviewCommands";
 import type { Conversation } from "../../../../models/conversations/session/conversation";
 import type { ConversationView } from "../../../../models/conversations/panel/useChat-view";
 import { placeConversation } from "./composerControls";
@@ -136,6 +137,13 @@ const applySend = (chat: Conversation, to: SendLater | `now` | `custom`, openPan
     return to === `now` ? undefined : `later`;
 };
 
+// The commands a typed token could still become, the harness's own reviewer first (reviewCommands.ts): a list of forty
+// would otherwise bury it past the popover's eighth row.
+const commandsMatching = (commands: readonly AgentCommand[], needle: string | undefined): readonly AgentCommand[] =>
+    needle === undefined
+        ? []
+        : commands.filter((command) => command.name.toLowerCase().includes(needle)).toSorted((a, b) => Number(isReviewCommand(b)) - Number(isReviewCommand(a)));
+
 export const useComposerPopovers = (host: PopoversHost) => {
     const { draft, availableCommands } = host.view;
     const caret = ref(0);
@@ -152,10 +160,7 @@ export const useComposerPopovers = (host: PopoversHost) => {
         popoverDismissed.value = false;
     });
     // Commands the typed token could still become; nothing to show closes the popover rather than drawing an empty one.
-    const commandMatches = computed<readonly AgentCommand[]>(() => {
-        const needle = slashQuery.value?.toLowerCase();
-        return needle === undefined ? [] : availableCommands.value.filter((command) => command.name.toLowerCase().includes(needle));
-    });
+    const commandMatches = computed<readonly AgentCommand[]>(() => commandsMatching(availableCommands.value, slashQuery.value?.toLowerCase()));
     // Files complete against this workspace's tree, so a conversation in another box is offered none.
     const filesOffered = computed(() => !host.placement.remote.value);
     const quickSources = computed(() => quickSourcesOf(host.view.conversation.value, host));

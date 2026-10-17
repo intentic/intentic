@@ -5,7 +5,7 @@ import { namespaceTargetOf, nsenterArgv, type NamespaceEntryReference } from "..
 import { CODEX_BINARY_MISSING, codexBinary } from "./codex-path.js";
 import { type CodexSubagentThreads, codexSubagentThreads } from "./codex-subagents.js";
 import { opt } from "../../opt.js";
-import { splitTurnPreamble } from "../../sessions/vocabulary/prompt-envelope.js";
+import { publishedCommands, reviewFrames, reviewProse, reviewTargetIn, skillInput } from "./commands/codex-commands.js";
 import { jsonLines, outputTail } from "../stdio/child-output.js";
 import { z } from "zod";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
@@ -425,6 +425,7 @@ const ITEM_READERS = {
     webSearch: (id, item) => ({ id, type: "web_search", query: string(item, "query", "webSearch") }),
     imageGeneration: imageItem,
     contextCompaction: (id) => ({ id, type: "context_compaction" }),
+    exitedReviewMode: (id, item) => ({ id, type: "agent_message", text: reviewProse(string(item, "review", "exitedReviewMode")) }),
 } as const satisfies Readonly<Record<string, (id: string, item: JsonObject) => CodexItem>>;
 
 const isReadKind = (type: string): type is keyof typeof ITEM_READERS => Object.hasOwn(ITEM_READERS, type);
@@ -560,7 +561,7 @@ export const stdioConnector =
             }
         };
         const request: CodexAppServerConnection["request"] = (method, params) => {
-            if (method === "turn/start" || method === "turn/steer") {
+            if (method === "turn/start" || method === "turn/steer" || method === "review/start") {
                 ownThreadId = string(object(params, `${method} params`), "threadId", `${method} params`);
             }
             requestId += 1;
@@ -925,16 +926,6 @@ const skillsFrom = (result: unknown): readonly CodexSkill[] => {
         }
     }
     return [...found.values()];
-};
-
-// Resolves a /command prompt against the thread's published skills, read after the daemon's notes (which every worktree
-// turn carries and the text keeps), so app-server loads the skill. Undefined for a slash-led path or a plan turn.
-const skillInput = (prompt: string, skills: readonly CodexSkill[]): { readonly skill: CodexSkill; readonly text: string } | undefined => {
-    const { words } = splitTurnPreamble(prompt);
-    const named = /^\/([^\s/]+)[ \t]*/.exec(words);
-    const skill = named === null ? undefined : skills.find((candidate) => candidate.name === named[1]);
-    const notes = prompt.slice(0, prompt.length - words.length);
-    return skill === undefined || named === null ? undefined : { skill, text: `${notes}${words.slice(named[0].length)}` };
 };
 
 // Whether a request is this turn's to answer: raised in one of its own turns, or in a thread one of its subagents runs
@@ -1337,7 +1328,7 @@ function* notificationEvents(notification: AppServerNotification, scope: CodexNo
     if (notification.method === "item/started" || notification.method === "item/completed") {
         const event = itemEvent(notification.method, notification.params, turnIds);
         if (event !== undefined) {
-            yield* namingSpawns([event], threads);
+            yield* namingSpawns([event, ...reviewFrames(notification)], threads);
         }
         return;
     }
@@ -1490,11 +1481,10 @@ async function* startCodexTurn(connection: CodexAppServerConnection, turn: Codex
         .request("skills/list", { cwds: [turn.options.workingDirectory], forceReload: false })
         .then(skillsFrom)
         .catch(() => []);
-    if (skills.length > 0) {
-        yield { type: "commands", skills };
-    }
+    yield { type: "commands", skills: publishedCommands(skills) };
 
     const command = skillInput(turn.prompt, skills);
+    const review = reviewTargetIn(turn.prompt, skills);
     const input = [
         ...(command === undefined ? [] : [{ type: "skill", name: command.skill.name, path: command.skill.path }]),
         { type: "text", text: command?.text ?? turn.prompt, text_elements: [] },
@@ -1510,7 +1500,12 @@ async function* startCodexTurn(connection: CodexAppServerConnection, turn: Codex
         ...opt("serviceTier", turn.options.serviceTier),
         ...opt("collaborationMode", collaborationModeOf(turn.options)),
     };
-    const startedTurnId = turnIdFrom(await connection.request("turn/start", { ...startParams, input }));
+    // Codex's reviewer runs as a turn of the thread's own (delivery inline), so its items stream like any turn's.
+    const started =
+        review === undefined
+            ? connection.request("turn/start", { ...startParams, input })
+            : connection.request("review/start", { threadId, target: review, delivery: "inline" });
+    const startedTurnId = turnIdFrom(await started);
     return { threadId, startedTurnId, startParams };
 }
 

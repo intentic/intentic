@@ -10,6 +10,7 @@ import { useAgents } from "../../../../models/fleet/useAgents";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { useAuth } from "../../../../client/auth/useAuth";
 import { agentWork, assignAgent } from "../../../../models/fleet/agentActions";
+import { draftReviewAsk } from "../../../../models/fleet/reviewAsk";
 import { startOperation } from "../../../../workbench/operations/operations";
 import { mayAssign, ownedBy } from "../../../../models/agent-status/ownership";
 import { landsByDefault } from "../../../../models/sandbox/environment/rules";
@@ -244,6 +245,11 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                 <span class="text-sm text-content md:text-xs">{{ t(`agents.words.sessionName`) }}</span>
                 <span class="truncate font-mono text-2xs text-subtle">{{ sessionName }}</span>
             </span>
+        </button>
+        <!-- The agent reviews its own branch before it lands; the ask goes into its composer, for a level or a target first. -->
+        <button v-if="!archived && changes.pending.value.length > 0" type="button" :class="ITEM" @click="run(() => void draftReviewAsk(agentId))">
+            <Icon name="list-check" class="mt-0.5 text-xs text-subtle" />
+            <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.reviewChanges`) }}</span>
         </button>
         <button type="button" :class="ITEM" @click="run(() => changes.refresh())">
             <Icon name="refresh" class="mt-0.5 text-xs text-subtle" :spin="changes.fetching.value" />

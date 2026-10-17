@@ -1,6 +1,6 @@
 import { cancelledRequests, settledRequests } from "../policy/request-status.js";
 import type { AgentEvent } from "../events/agent-events.js";
-import type { Page } from "../events/requests.js";
+import { drawInline, type InlineEvent, supersedeEarlier } from "./transcript-inline.js";
 import {
     REQUEST_FIELDS,
     holdsRequest,
@@ -450,12 +450,9 @@ export class TranscriptFold {
                 return this.steered(event);
             case "checkpoint":
                 // Anchors the pre-turn snapshot id and this turn's transcript position on its user row, for rewind.
-                return this.stampOpener((row) => {
-                    row.checkpointId = event.id;
-                    if (event.index !== undefined) {
-                        row.rewindIndex = event.index;
-                    }
-                });
+                return this.stampOpener((row) =>
+                    Object.assign(row, { checkpointId: event.id }, event.index === undefined ? {} : { rewindIndex: event.index }),
+                );
             case "preamble":
                 // Collapses the daemon's preamble notes onto the user row; an empty note list is not a disclosure.
                 return event.notes.length === 0 ? [] : this.stampOpener((row) => (row.notes = [...event.notes]));
@@ -472,7 +469,7 @@ export class TranscriptFold {
             case "handoff":
                 return this.pushRow({ role: "notice", text: handedOffLine(event), noticeCode: noticeCode(handedOffNotice(event)) });
             case "worktree":
-                return event.sync === undefined ? [] : this.synced(event.sync);
+                return this.synced(event.sync);
             case "landed":
                 return this.pushRow(landedRow(event));
             case "compact":
@@ -541,7 +538,8 @@ export class TranscriptFold {
             case "credential_offer":
                 return this.park(event.requestId, { credentialOffer: { requestId: event.requestId, offer: event.offer, status: "pending" } });
             case "page":
-                return this.showPage(event.page);
+            case "review":
+                return this.showInline(event);
             case "page_ask":
                 return this.park(event.requestId, { pageAsk: { requestId: event.requestId, page: event.page, status: "pending" } });
             case "need":
@@ -596,20 +594,16 @@ export class TranscriptFold {
     }
 
     /**
-     * A page drawn on the bubble whose call showed it, which it then closes, as a card does: the prose after it is the
-     * next row. A redraw of a page already shown folds the earlier row to a line rather than drawing two copies.
+     * Drawn on the bubble whose call showed it (a page, a review's findings), which it then closes, as a card does: the
+     * prose after it is the next row. A redraw of one already shown folds the earlier row to a line rather than drawing
+     * two copies (transcript-inline.ts).
      */
-    private showPage(page: Page): TranscriptPatch[] {
-        const patches: TranscriptPatch[] = [];
-        const earlier = this.rows.findLastIndex((row) => row.page !== undefined && row.page.id === page.id && row.page.superseded !== true);
-        if (earlier !== -1) {
-            this.rows[earlier]!.page = { ...this.rows[earlier]!.page!, superseded: true };
-            patches.push(this.replace(earlier));
-        }
+    private showInline(event: InlineEvent): TranscriptPatch[] {
+        const earlier = supersedeEarlier(this.rows, event);
         const [index, opened] = this.open();
-        this.rows[index]!.page = page;
+        drawInline(this.rows[index]!, event);
         this.bubble = undefined;
-        return [...patches, ...opened, this.replace(index)];
+        return [...(earlier === undefined ? [] : [this.replace(earlier)]), ...opened, this.replace(index)];
     }
 
     /** A message pushed into a running turn; only a person's own message is a rewind anchor. */
@@ -898,7 +892,10 @@ export class TranscriptFold {
 
     // The rebase notice, less what a resolve turn was sent to fix: that turn opens because the branch couldn't rebase, so
     // saying so again one row under its own errand only repeats it. What did move is still told.
-    private synced(sync: { commits: number; blocked: readonly string[] }): TranscriptPatch[] {
+    private synced(sync: { commits: number; blocked: readonly string[] } | undefined): TranscriptPatch[] {
+        if (sync === undefined) {
+            return [];
+        }
         const opener = this.opener === undefined ? undefined : this.rows[this.opener];
         const told = opener !== undefined && isLandConflict(opener.text) ? { ...sync, blocked: [] } : sync;
         const text = syncLine(told);

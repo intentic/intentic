@@ -302,7 +302,8 @@
             "stopKeepingWarm": "Stop keeping cache warm",
             "stopKeepingWarmHint": "Kept warm until {time}",
             "tryLandAgain": "Try landing again",
-            "landsIfConflictsGone": "Lands if the conflicts are gone"
+            "landsIfConflictsGone": "Lands if the conflicts are gone",
+            "reviewChanges": "Review changes"
         },
         "agentStatus": {
             "approvalNeeded": "Approval needed",
@@ -910,6 +911,9 @@
             "landLine": "The agent worked on its own copy, so your workspace hasn't changed yet. Land brings these changes in. If they aren't right, tell the agent what to fix in its chat instead.",
             "close": "Close",
             "startOwn": "Start my own agent"
+        },
+        "reviewAsk": {
+            "inWords": "Review the changes on your branch for correctness bugs. For each finding, name the file and line, what goes wrong, and the inputs that make it go wrong."
         }
     },
     "app": {
@@ -4278,6 +4282,25 @@
             "agentTold": "the agent heard it",
             "askFix": "Ask to fix",
             "fixRequest": "The page \"{title}\" (id \"{id}\") threw in my chat:\n{errors}\n\nFix it and show it again with replaces: \"{id}\"."
+        },
+        "chatReview": {
+            "title": "Code review",
+            "sourceClaude": "Claude Code",
+            "sourceCodex": "Codex",
+            "findings": "{count} finding | {count} findings",
+            "clean": "No findings",
+            "fixAll": "Fix all",
+            "fixOne": "Fix",
+            "fixAllRequest": "Fix these findings from the review above:\n{list}",
+            "fixOneRequest": "Fix this finding from the review above: {finding}",
+            "superseded": "Code review: an earlier report, updated below",
+            "show": "Show",
+            "openFile": "Open file",
+            "confirmed": "confirmed",
+            "plausible": "plausible",
+            "fixed": "fixed",
+            "skipped": "skipped",
+            "noChangeNeeded": "no change needed"
         },
         "handoffChoice": {
             "label": "Hand-off",
@@ -11715,7 +11738,8 @@
             "unstageFrom": "Unstage {count} file from {origin} | Unstage {count} files from {origin}",
             "stageFrom": "Stage {count} file from {origin} | Stage {count} files from {origin}",
             "messageBeingWritten": "its commit message is being written",
-            "namesTheCommit": "names the commit"
+            "namesTheCommit": "names the commit",
+            "reviewChanges": "Review changes"
         },
         "rowActions": {
             "changedSinceOn": "Changed since switched on",

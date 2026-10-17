@@ -24,6 +24,13 @@ export const commandWire = (spec: Pick<TurnSpec, "prompt" | "command">): Command
     return notes === "" ? { prompt: spec.prompt } : { prompt: words, notes };
 };
 
+// For a runtime whose prompt is a list of blocks (ACP): a command's words in the first block, where the agent reads a slash,
+// and the notes cut from in front of them in a block of their own after it; any other prompt as one block.
+export const commandFirstTexts = (text: string, command: string | undefined): readonly string[] => {
+    const wire = command === undefined ? { prompt: text } : commandWire({ prompt: text, command });
+    return wire.notes === undefined ? [text] : [wire.prompt, wire.notes];
+};
+
 // The hook fires for every prompt the session takes, steered ones included; the notes belong to the first only.
 export const commandNotesHooks = (notes: string | undefined) => {
     if (notes === undefined) {

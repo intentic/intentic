@@ -11,7 +11,7 @@ import { standing } from "../../../rules/rules.js";
 import { offloadRunEnabled } from "../../../offload/offload-prefix.js";
 import { armPlan, type TurnArmPlan, type TurnContext } from "../../providers/adapter.js";
 import type { HarnessCredential, TurnPolicy, TurnSpec, TurnTools } from "../../providers/agent-request.js";
-import { isUnknownSlashCommand, publishedCommandOf } from "../../providers/agent-commands.js";
+import { commandListOf, isUnknownSlashCommand, publishedCommandOf } from "../../providers/agent-commands.js";
 import {
     type HarnessCredentialDeps,
     type HarnessCredentials,
@@ -84,8 +84,9 @@ const harnessMounts = (deps: HarnessPlanDeps, input: RoutedAgentTurn, granted: r
 const wordsOf = (input: RoutedAgentTurn, context: TurnContext): Pick<TurnSpec, "prompt" | "notes" | "command"> => {
     const { prompt: typed, notes } = context.base.spec;
     const prompt = context.attachmentPaths.length > 0 ? withAttachmentNote(typed, [...context.attachmentPaths]) : typed;
-    const literalSlash = isUnknownSlashCommand(input.agent, prompt);
-    const command = publishedCommandOf(input.agent, prompt);
+    const list = commandListOf(input.agent, input.harness);
+    const literalSlash = isUnknownSlashCommand(list, prompt);
+    const command = publishedCommandOf(list, prompt);
     return { prompt, ...opt("notes", literalSlash ? [...(notes ?? []), LITERAL_SLASH_NOTE] : notes), ...opt("command", command) };
 };
 
