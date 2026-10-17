@@ -27,31 +27,31 @@
     },
     "engines": {
         "claude": {
-            "blessed": "0.3.299",
+            "blessed": "0.3.302",
             "notes": "npm @anthropic-ai/claude-agent-sdk; ships as Claude Code 2.1.x sharing this version's last component, which is the number the API states its floors in."
         },
         "codex": {
-            "blessed": "0.162.1",
+            "blessed": "0.163.0",
             "notes": "npm @openai/codex, pinned to @openai/codex-sdk's own dependency."
         },
         "cursor": {
-            "blessed": "1.0.37",
+            "blessed": "1.0.38",
             "notes": "npm @cursor/sdk. Never baked into a published image: its licence grants no redistribution."
         },
         "devin": {
-            "blessed": "3000.11.3",
+            "blessed": "3000.11.92",
             "notes": "npm devin, Cognition's Devin CLI, spawned as `devin acp` for Devin turns. Never baked into a published image: its licence grants no redistribution."
         },
         "grok-build": {
-            "blessed": "1.0.52",
+            "blessed": "1.0.62",
             "notes": "xAI's Grok Build CLI (`grok`), Apache-2.0 source, fetched as xAI's own build from https://x.ai/cli; spawned as `grok agent stdio` for Grok turns on its own loop."
         },
         "kimi": {
-            "blessed": "2.1.1",
+            "blessed": "2.2.0",
             "notes": "npm @moonshot-ai/kimi-code, Moonshot's Kimi Code CLI (MIT); spawned as `kimi acp` for Kimi turns on its own loop."
         },
         "muse": {
-            "blessed": "1.4.7-R6101.1",
+            "blessed": "1.4.10-R6427.1",
             "notes": "Meta's Muse Code CLI from its own download host, spawned as `muse serve` for Muse turns; its build number pairs with @muse-code/sdk 1.4.6. Never baked into a published image: Meta grants no redistribution."
         },
         "opencode": {
@@ -60,11 +60,11 @@
             "notes": "npm opencode-ai, the runtime behind Grok turns."
         },
         "opencode-v2": {
-            "blessed": "2.0.28",
+            "blessed": "2.0.32",
             "notes": "npm @opencode/cli, the runtime behind Grok and Gemini turns. Its own key, so released daemons, which drive OpenCode 1, never read a 2.x number."
         },
         "translator": {
-            "blessed": "8.0.28",
+            "blessed": "8.0.32",
             "notes": "CLIProxyAPI GitHub release, the subscription translator behind Gemini, Kimi and ChatGPT turns."
         }
     }
