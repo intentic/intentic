@@ -12158,6 +12158,8 @@
                 "adding": "Dodawanie {name} do sandboxa tego komputera",
                 "copying": "Kopiowanie {name} do sandboxa tego komputera",
                 "copyingDetail": "Agenci mogą zacząć, gdy pierwsza kopia będzie gotowa. Zmiany wprowadzane tutaj są przenoszone na bieżąco.",
+                "paused": "Kopiowanie {name} jest wstrzymane",
+                "pausedDetail": "Otwórz stronę Urządzenia w sandboxie, aby wznowić synchronizację plików.",
                 "preparing": "Przygotowywanie sandboxa na ten folder…",
                 "failed": "Nie udało się dodać {name}",
                 "ready": "{name} jest w sandboxie tego komputera",
@@ -12168,6 +12170,7 @@
                 "waiting": "Czekam na sandbox tego komputera",
                 "waitingPercent": "Czekam na sandbox tego komputera ({percent}%)",
                 "copying": "Kopiowanie folderu…",
+                "paused": "Kopiowanie jest wstrzymane",
                 "failed": "Nie udało się dodać tego folderu",
                 "setUpComputer": "Przygotuj ten komputer do pracy z agentami",
                 "signingIn": "Czekam na zalogowanie…"

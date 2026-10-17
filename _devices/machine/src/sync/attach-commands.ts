@@ -6,7 +6,7 @@ import type { CommandContext } from "@stricli/core";
 import { buildCommand } from "../cli-ui.js";
 import { baseDir } from "../config.js";
 import { ensureResident } from "../resident/resident.js";
-import { attachedKey, isAttachedPairing, type Pairing, pairingKey, pairingTransport, readState, removePairing, upsertPairing } from "./config.js";
+import { attachedKey, isAttachedPairing, type Pairing, pairingKey, pairingTransport, readState, removePairing, updateState, withPairing } from "./config.js";
 import { transportFor } from "./endpoint.js";
 import { runProcess } from "./exec.js";
 import { canonicalFolder, folderRefusal, overlappingPairing, sameFolder } from "./folders.js";
@@ -147,9 +147,11 @@ export const planAttach = async (pairings: readonly Pairing[], ask: AttachAsk, s
         deliver: "auto",
         // The sandbox's switch, carried so the report says of this folder what it says of its sandbox. A folder never
         // mirrors ports whatever it says (mirror.ts): the projects host does, once.
-        ...(host.mirrorOff === true ? { mirrorOff: true } : {}),
-        ...(sameName?.autoHealOff === true ? { autoHealOff: true } : {}),
-        ...reach,
+        mirrorOff: host.mirrorOff,
+        autoHealOff: sameName?.autoHealOff,
+        // A new transport replaces the old one, including clearing Docker when the sandbox moved elsewhere.
+        transport: reach.transport,
+        container: reach.container,
     };
 };
 
@@ -162,7 +164,12 @@ export const attachFolder = async (
     seams: AttachSeams & { readonly ensureAgent?: (log: Log) => Promise<void> } = {},
 ): Promise<AttachResult> => {
     const pairing = await planAttach((await readState()).pairings, ask, seams);
-    await upsertPairing(pairing);
+    // Reattaching keeps the session, including any pause the watcher must lift. Read its latest state at the write:
+    // the folder and transport checks above may have taken long enough for the watcher to pause or resume it.
+    await updateState((state) => {
+        const { syncToken: _oldToken, ...held } = state.pairings.find((candidate) => pairingKey(candidate) === pairingKey(pairing)) ?? {};
+        return { pairings: withPairing(state.pairings, { ...held, ...pairing }) };
+    });
     if (pairingTransport(pairing) === "ssh") {
         await writeManagedSshConfig(pairingSshConfig((await readState()).pairings));
     }

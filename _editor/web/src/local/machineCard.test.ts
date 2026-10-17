@@ -125,6 +125,18 @@ describe(`the card of this window's folder, once the sandbox is up`, () => {
             actions: [`retryFolder`],
         });
     });
+
+    it(`says a paused first copy is waiting, and follows it back to copying when it resumes`, () => {
+        expect(machineCardOf(facts(ready, folderAt(`copying`, { status: `paused` })))).toMatchObject({
+            tone: `waiting`,
+            stage: `lit`,
+            title: `Copying shop is paused`,
+            detail: `Open the sandbox's Devices page to resume file syncing.`,
+            actions: [`open`],
+            key: `folder:paused`,
+        });
+        expect(machineCardOf(facts(ready, folderAt(`copying`, { status: `scanning` })))).toMatchObject({ tone: `working`, key: `folder:copying` });
+    });
 });
 
 describe(`the folder's own button`, () => {
@@ -175,6 +187,14 @@ describe(`the folder's own button`, () => {
         // Attached means the folder has its sandbox already: the copy still leads the button until it is in.
         expect(folderButtonOf({ hasSandbox: true, machine: ready, folder: folderAt(`copying`) })).toEqual({ label: `Copying your folder…`, busy: true, press: `card` });
         expect(folderButtonOf({ hasSandbox: true, machine: ready, folder: folderAt(`ready`) })).toEqual({ label: `Open this folder's sandbox`, busy: false, press: `open` });
+    });
+
+    it(`stops spinning while the folder's first copy is paused`, () => {
+        expect(folderButtonOf({ hasSandbox: true, machine: at({ state: `ready` }), folder: folderAt(`copying`, { status: `paused` }) })).toEqual({
+            label: `Copying is paused`,
+            busy: false,
+            press: `card`,
+        });
     });
 
     it(`opens a sandbox of the folder's own from before, whatever this computer's is doing`, () => {

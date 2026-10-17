@@ -97,6 +97,53 @@ describe("sync attach", () => {
         expect((await readState()).pairings.find((pairing) => pairing.key !== undefined)?.direction).toBe("both");
     });
 
+    it("keeps the watcher's pause ownership and outage history when the same folder is attached again", async () => {
+        await attachFolder({ sandboxUrl: URL_OF, dir: shop, name: "shop" }, quiet, here);
+        const held = (await readState()).pairings.find((pairing) => pairing.key !== undefined)!;
+        const paused = {
+            ...held,
+            fileSyncAutoPaused: true,
+            fileSyncSwapPaused: true,
+            fileSyncPausedFor: "gone" as const,
+            unreachableSince: 1234,
+            goneSince: 5678,
+            goneCheckedAt: 9012,
+            goneBy: "edge" as const,
+            icSlug: "sandbox-5a1b2c3d4e5f",
+        };
+        await upsertPairing(paused);
+
+        await attachFolder({ sandboxUrl: URL_OF, dir: shop, name: "shop" }, quiet, here);
+
+        expect((await readState()).pairings).toEqual([host, paused]);
+    });
+
+    it("refreshes the host's switches and transport while keeping a folder's automatic pause", async () => {
+        await attachFolder({ sandboxUrl: URL_OF, dir: shop, name: "shop" }, quiet, here);
+        const held = (await readState()).pairings.find((pairing) => pairing.key !== undefined)!;
+        await upsertPairing({ ...held, fileSyncAutoPaused: true, mirrorOff: true });
+
+        await attachFolder({ sandboxUrl: URL_OF, dir: shop, name: "shop" }, quiet, { ...here, locate: async () => undefined });
+
+        const { transport: _transport, container: _container, ...overSsh } = held;
+        expect((await readState()).pairings).toEqual([host, { ...overSsh, fileSyncAutoPaused: true }]);
+    });
+
+    it("keeps a pause the watcher applied while reattach was checking the transport", async () => {
+        await attachFolder({ sandboxUrl: URL_OF, dir: shop, name: "shop" }, quiet, here);
+        const held = (await readState()).pairings.find((pairing) => pairing.key !== undefined)!;
+
+        await attachFolder({ sandboxUrl: URL_OF, dir: shop, name: "shop" }, quiet, {
+            ...here,
+            locate: async () => {
+                await upsertPairing({ ...held, fileSyncAutoPaused: true });
+                return CONTAINER;
+            },
+        });
+
+        expect((await readState()).pairings).toEqual([host, { ...held, fileSyncAutoPaused: true }]);
+    });
+
     it("rides ssh where the sandbox's container is not on this machine's engine", async () => {
         const pairing = await planAttach([host], { sandboxUrl: URL_OF, dir: shop, name: "shop" }, { ...here, locate: async () => undefined });
         expect(pairing.transport).toBeUndefined();

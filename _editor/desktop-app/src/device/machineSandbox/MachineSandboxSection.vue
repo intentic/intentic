@@ -67,7 +67,7 @@ const open = (): void => {
     }
 };
 
-const folderWord = (folder: MachineFolder): string => t(`desktop.machineSandbox.folder.${folder.state}`);
+const folderWord = (folder: MachineFolder): string => t(`desktop.machineSandbox.folder.${folder.state === `copying` && folder.status === `paused` ? `paused` : folder.state}`);
 
 const useCloud = (): void => {
     void localHost().onboarding?.useCloud();

@@ -87,6 +87,19 @@ const folderCard = (folder: LocalFolderSandbox, justIn: boolean): MachineCard | 
         case `attaching`:
             return card({ about: `folder`, tone: `working`, stage: `moving`, title: t(`local.machine.folder.adding`, { name }), detail: undefined, actions: [] }, `folder:adding`);
         case `copying`:
+            if (folder.status === `paused`) {
+                return card(
+                    {
+                        about: `folder`,
+                        tone: `waiting`,
+                        stage: `lit`,
+                        title: t(`local.machine.folder.paused`, { name }),
+                        detail: t(`local.machine.folder.pausedDetail`),
+                        actions: [`open`],
+                    },
+                    `folder:paused`,
+                );
+            }
             return card(
                 {
                     about: `folder`,
@@ -243,8 +256,8 @@ export const machineCardOf = (facts: CardFacts): MachineCard | undefined => {
 
 /**
  * The folder's own button: what it says, and what a press does — ask the dialog, open its sandbox, unfold the card, or
- * the one thing the sandbox is stopped on. `open` here is the folder's own sandbox, which the card's `open` also is;
- * the two never meet, since a folder whose card offers `open` is one this button has already answered as `open`.
+ * the one thing the sandbox is stopped on. `open` here and on the card opens the folder's own sandbox. A paused copy
+ * unfolds the card, which offers that sandbox so the reader can manage its file syncing.
  */
 export interface FolderButton {
     readonly label: string;
@@ -266,6 +279,9 @@ const onItsWayButton = (machine: LocalMachineSandbox | undefined, folder: LocalF
         return { label: t(`local.machine.button.signingIn`), busy: true, press: `card` };
     }
     if (machine?.state === `ready`) {
+        if (folder.status === `paused`) {
+            return { label: t(`local.machine.button.paused`), busy: false, press: `card` };
+        }
         return { label: t(`local.machine.button.copying`), busy: true, press: `card` };
     }
     // The sandbox stopped on something only the reader can do (this PC's own setup, Docker, a sign-in): the button IS

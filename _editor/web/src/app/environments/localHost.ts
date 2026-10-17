@@ -333,7 +333,7 @@ export interface LocalFolderSandbox {
     readonly state: `queued` | `attaching` | `copying` | `ready` | `failed`;
     /** Why it could not be added, in the machine agent's own words. */
     readonly reason: string | undefined;
-    /** The copy's own word for what it is doing, while it copies. */
+    /** The first copy's status: paused, or the sync's word while it runs. */
     readonly status: string | undefined;
 }
 

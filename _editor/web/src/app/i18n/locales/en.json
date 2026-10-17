@@ -4918,6 +4918,8 @@
                 "adding": "Adding {name} to this computer's sandbox",
                 "copying": "Copying {name} into this computer's sandbox",
                 "copyingDetail": "Agents can start once the first copy is in. Changes you make here keep going over.",
+                "paused": "Copying {name} is paused",
+                "pausedDetail": "Open the sandbox's Devices page to resume file syncing.",
                 "preparing": "Getting the sandbox ready for this folder…",
                 "failed": "{name} couldn't be added",
                 "ready": "{name} is in this computer's sandbox",
@@ -4928,6 +4930,7 @@
                 "waiting": "Waiting for this computer's sandbox",
                 "waitingPercent": "Waiting for this computer's sandbox ({percent}%)",
                 "copying": "Copying your folder…",
+                "paused": "Copying is paused",
                 "failed": "Couldn't add this folder",
                 "setUpComputer": "Set this computer up for agents",
                 "signingIn": "Waiting for you to sign in…"

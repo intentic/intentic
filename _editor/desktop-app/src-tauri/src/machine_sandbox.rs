@@ -172,7 +172,7 @@ pub struct Folder {
     pub state: FolderState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
-    /// Mutagen's own word for the copy, while it copies.
+    /// The first copy's status: paused, or Mutagen's word while it runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
 }
@@ -876,15 +876,25 @@ pub fn attach_answer(answer: Result<serde_json::Value, AgentSilence>) -> Result<
     }
 }
 
-/// How far a first copy is, by the agent's word for its Mutagen session (`mutagenStatus`): `watching` is a copy that is
-/// done; every other word (`connecting-beta`, `scanning`, `reconciling`, `staging-beta`, `transitioning`, `saving`,
-/// and any it may add) is one still going. The first `watching` is the end of it: a folder found ready is not followed
+/// How far a first copy is, by its status: `watching` is a copy that is done; every other word (`paused`,
+/// `connecting-beta`, `scanning`, `reconciling`, `staging-beta`, `transitioning`, `saving`, and any it may add) is
+/// one still followed. The first `watching` is the end of it: a folder found ready is not followed
 /// again, so the same words passing through for a later edit never read as a copy starting over.
 pub fn copy_state(status: &str) -> FolderState {
     if status.to_ascii_lowercase().contains("watching") {
         FolderState::Ready
     } else {
         FolderState::Copying
+    }
+}
+
+/// Mutagen reports a paused session as disconnected. Keep following its first copy, but tell the window it is
+/// paused so it does not promise progress until the session resumes. The pause wins over a stale watching status.
+fn copy_status(pairing: &serde_json::Value) -> Option<&str> {
+    if pairing["paused"].as_bool() == Some(true) {
+        Some("paused")
+    } else {
+        pairing["mutagenStatus"].as_str()
     }
 }
 
@@ -2304,7 +2314,7 @@ fn follow_copies(app: &AppHandle) {
             .iter()
             .find(|pairing| pairing["sandboxId"].as_str() == record.sandbox_id.as_deref())
             .or_else(|| pairings.first());
-        if let Some(said) = ours.and_then(|pairing| pairing["mutagenStatus"].as_str()) {
+        if let Some(said) = ours.and_then(|pairing| copy_status(pairing)) {
             set_folder(app, &path, copy_state(said), None, Some(said.to_string()));
         }
     }
@@ -3395,6 +3405,31 @@ mod tests {
             "something-new",
         ] {
             assert_eq!(copy_state(going), FolderState::Copying, "{going}");
+        }
+    }
+
+    #[test]
+    fn a_paused_first_copy_is_said_as_paused_and_keeps_being_followed() {
+        for status in ["disconnected", "watching"] {
+            let pairing = serde_json::json!({ "paused": true, "mutagenStatus": status });
+            assert_eq!(copy_status(&pairing), Some("paused"));
+            assert_eq!(
+                copy_state(copy_status(&pairing).unwrap()),
+                FolderState::Copying
+            );
+        }
+        assert_eq!(
+            copy_status(&serde_json::json!({ "paused": true })),
+            Some("paused")
+        );
+        assert_eq!(copy_status(&serde_json::json!({})), None);
+        for paused in [None, Some(false)] {
+            let pairing = serde_json::json!({ "paused": paused, "mutagenStatus": "watching" });
+            assert_eq!(copy_status(&pairing), Some("watching"));
+            assert_eq!(
+                copy_state(copy_status(&pairing).unwrap()),
+                FolderState::Ready
+            );
         }
     }
 

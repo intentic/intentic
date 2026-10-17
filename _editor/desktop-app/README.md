@@ -494,7 +494,9 @@ flowchart LR
   https://<hostname> --dir <folder> --name <name> --json`, which only records the pairing), remembered in
   `projects.json` with this computer's sandbox, and every window on it hears so (`intentic:sandbox`). The app then
   follows the folder's first copy in `intentic-machine status --json` until the agent's word for its Mutagen session is
-  `watching`. Every local window carries a card in its corner while this computer's sandbox is not ready, in the
+  `watching`. A paused session stays followed, with the copy card and folder button saying it is paused instead of
+  showing progress; the card offers the sandbox, where Devices can resume file syncing. Every local window carries a
+  card in its corner while this computer's sandbox is not ready, in the
   notification lane (the web's `local/LocalMachineCard.vue`, worded by `local/machineCard.ts`): the house goes up stage
   by stage as the setup's real phases arrive (the plans, the ground and its materials as the image arrives, the walls as
   the container starts, the roof as the daemon comes up, the lights as it answers), then the folder's copy moves in

@@ -108,6 +108,8 @@ flowchart LR
   sandbox's, in this environment or another of this PC's (see [What folder sync owns](#what-folder-sync-owns)), and a
   set-up-again that would change where a paired sandbox's folder syncs. It is **copy-first** unless
   its owner opted into two-way: see [Copy-first projects](#copy-first-projects).
+  Attaching the same folder again keeps its session and the watcher's pause and outage records, so an automatic pause
+  still resumes when its reason ends. The host's enrollment and transport settings are refreshed.
 - **Through Docker** ([`sync/endpoint.ts`](src/sync/endpoint.ts)): with `setup --transport auto`, the default, a
   project's sandbox is reached through this machine's own Docker engine when the container `ic` named after the
   pairing URL's slug is running there with that URL as its `SANDBOX_PUBLIC_URL`. Anything else stays on ssh: a hosted

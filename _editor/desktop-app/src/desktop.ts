@@ -622,7 +622,7 @@ export interface MachineFolder {
     readonly name: string;
     readonly state: `queued` | `attaching` | `copying` | `ready` | `failed`;
     readonly reason?: string;
-    /** Mutagen's own word for its first copy, while it copies. */
+    /** The first copy's status: paused, or Mutagen's word while it runs. */
     readonly status?: string;
 }
 

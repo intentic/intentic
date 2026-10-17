@@ -251,6 +251,7 @@
             "queued": "waiting",
             "attaching": "adding",
             "copying": "copying",
+            "paused": "paused",
             "ready": "in",
             "failed": "couldn't be added"
         },
