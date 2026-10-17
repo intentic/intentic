@@ -68,8 +68,8 @@ flowchart LR
   rail tile, the page or the control itself, the closest one on screen leading (`features/tour/`). The list is never
   offered on a sandbox where work has already landed, so nobody who is past their first run meets it. `?mode=fresh`
   in `_site/demo` shows it.
-- **Map.** `/sandbox/map` (`features/sandbox/map/`, maintainer and up) opens the hub's Reach group and draws its other
-  three rows as one picture. On the left are the ways in: people, control tokens and other sandboxes' links. In the
+- **Map.** `/sandbox/map` (`features/sandbox/map/`, maintainer and up) closes the hub's Reach group and draws the three
+  rows above it as one picture. On the left are the ways in: people, control tokens and other sandboxes' links. In the
   middle is the box, with its areas, personas and secrets. On the right is everything it reaches: services, accounts
   and browsers, machines, other sandboxes, what it publishes, and models. Pointing at a way in lights what it reaches
   and dims the rest. Pointing at a thing lights who reaches it, and threads it to what it is tied to (a persona to its

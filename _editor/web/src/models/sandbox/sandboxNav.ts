@@ -60,10 +60,6 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
         key: `reach`,
         label: t(`sandbox.sandboxNav.reach`),
         items: [
-            // The whole of the group on one drawing: who gets in, the box, and everything it reaches, each line drawn from
-            // what the daemon enforces. First, since it is the overview of the three rows below, which each set one part of
-            // it. Maintainer, as most of what it draws is a maintainer's read (connections, tokens, links).
-            { slug: `map`, label: t(`sandbox.sandboxNav.map`), icon: `sitemap`, maintainer: true },
             // Who may use this box: members, invites, roles. `shield`, not `users` (Personas' glyph, one row below).
             // Access stays below maintainer: revoking your own grant is anyone's.
             { slug: `access`, label: t(`sandbox.words.access`), icon: `shield` },
@@ -73,6 +69,14 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
             // Who this box acts as outward; not beside `agent` in Configuration, easy to conflate, opposite in stakes.
             // Devices was the last row here until 2026-10-01; it is a rail view of its own now (/devices).
             { slug: `personas`, label: t(`shared.personas`), icon: `user`, maintainer: true },
+            // The whole of the group on one drawing: who gets in, the box, and everything it reaches, each line drawn from
+            // what the daemon enforces. Last, not first: it sets nothing, and every line on it is changed on one of the
+            // rows above (or Models, Secrets, Devices), which its caption links to. It was the group's first row until
+            // 2026-10-17, which put a read-only picture ahead of the pages people come to change. A row of its own, not a
+            // tab on Access: it draws areas, personas, secrets and everything the box reaches, which Access does not own,
+            // and Access is a guest's one section while the map is a maintainer's. Maintainer, as most of what it draws
+            // is a maintainer's read (connections, tokens, links).
+            { slug: `map`, label: t(`sandbox.sandboxNav.map`), icon: `sitemap`, maintainer: true },
         ],
     },
     {

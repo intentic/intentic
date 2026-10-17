@@ -1,7 +1,7 @@
 import { sandboxEmbedOf, sandboxKeyAllowed, sandboxSectionGroups, sandboxSections } from "./sandboxNav";
 
-// How the Sandbox hub's index is filed. The reach group opens on its own overview, the map, before the three pages that
-// each set one part of it. What this box does with what passes through it (the officer's page, what may
+// How the Sandbox hub's index is filed. The reach group leads with the three pages that each set one part of who gets in
+// and what the box reaches, and closes on the map, the read-only drawing of all of it. What this box does with what passes through it (the officer's page, what may
 // leave, what the agent may do unasked, how long things are kept) is one group of its own, and the records of what
 // happened, split by who did it, are the last; the one extension view a section draws inside itself is kept for that
 // extension, since a stranger's view under the same name would read as the sandbox's own record.
@@ -12,7 +12,7 @@ it(`files privacy and safety as one group, and the records after everything they
     expect(filing()).toEqual([
         [`box`, [`overview`, `usage`]],
         [`configuration`, [`models`, `agent`, `environment`, `secrets`, `extensions`]],
-        [`reach`, [`map`, `access`, `areas`, `personas`]],
+        [`reach`, [`access`, `areas`, `personas`, `map`]],
         [`privacy`, [`data-protection`, `privacy-shield`, `guardrails`, `retention`]],
         [`records`, [`activity`, `audit`]],
     ]);
