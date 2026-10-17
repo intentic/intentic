@@ -11213,7 +11213,6 @@
             "command": "Polecenie",
             "commit": "Commit",
             "commitsRepos": "Commity {repos}",
-            "committing": "Commitowanie…",
             "committingNow": "Commitowanie {repos}…",
             "conflicts": "Konflikty",
             "couldntReadChanges": "Nie udało się odczytać zmian",

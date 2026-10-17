@@ -56,7 +56,14 @@ const ownSpinner = computed(() => slots[`loadingicon`] === undefined);
 </script>
 
 <template>
-    <PrimeButton v-bind="passthrough" :disabled="held" :loading="shown" :class="wrapped ? `relative` : ``" @click="press(listener, $event)">
+    <PrimeButton
+        v-bind="passthrough"
+        :disabled="held"
+        :loading="shown"
+        :aria-busy="shown || undefined"
+        :class="wrapped ? `relative` : ``"
+        @click="press(listener, $event)"
+    >
         <template v-for="name in forwarded" #[name]="slotProps" :key="name"><slot :name="name" v-bind="slotProps ?? {}" /></template>
         <template v-if="ownSpinner" #loadingicon><Icon name="spinner" spin /></template>
         <template v-else #loadingicon="slotProps"><slot name="loadingicon" v-bind="slotProps ?? {}" /></template>

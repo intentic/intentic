@@ -547,6 +547,10 @@ const commitReady = computed(
 );
 // A plain Commit carries its staged count beside the label; the stage-first press says "all" instead.
 const commitLabel = computed(() => (stagesFirst.value ? t(`workspace.reviewPanel.commitAll`) : t(`workspace.reviewPanel.commit`)));
+// The face as pressed, held while the commit runs under a spinner that keeps its width, so the run never resizes it.
+const commitFace = computed<{ readonly label: string; readonly count: number }>((held) =>
+    commitRunning.value && held !== undefined ? held : { label: commitLabel.value, count: stagesFirst.value ? 0 : changes.stagedCount.value },
+);
 
 // The commit button's hover: what the press will record, and the chord that presses it from the box. Nothing while it
 // runs, since the readout beside it already names the repos being committed.
@@ -973,6 +977,7 @@ const heldTip = computed((): Tip | undefined => {
 const outgoing = computed<"flow" | "held" | "offer" | undefined>(() =>
     stageLine.value !== undefined ? `flow` : heldLine.value !== undefined ? `held` : syncMeta.value !== undefined ? `offer` : undefined,
 );
+const pushPress = computed(() => syncMeta.value !== undefined && (outgoing.value === `offer` || outgoing.value === `held` || pushFlow.running.value));
 // Commit and the sync share one bar under the message field, so the box stands whenever either has something to say.
 const actionBar = computed(() => changes.count.value > 0 || outgoing.value !== undefined);
 // Commit keeps the primary slot while there's anything to record, so the two buttons are never both full-weight.
@@ -1090,8 +1095,8 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
             <!-- The bar's own width says the one thing its buttons can't, most pressing first: what stops Commit, a press
                  under way, why Ctrl+Enter refused, the push in flight or just done, why the lit chip left the box alone,
                  and last what the sync spans. A line that matters keeps a floor (basis), so a narrow box wraps the buttons
-                 under it rather than cutting it to nothing; at rest there is no line, and the bar never wraps. -->
-            <div class="flex flex-wrap items-center justify-end gap-x-1 gap-y-1.5">
+                 under it rather than cutting it to nothing; at rest there is no line, and it is never shorter than a press. -->
+            <div class="flex min-h-6.5 flex-wrap items-center justify-end gap-x-1 gap-y-1.5 max-md:min-h-8">
                 <span v-if="changes.count.value > 0 && blockedByConflicts" :class="BAR_LINE" class="text-danger">
                     {{ t(`workspace.reviewPanel.resolveConflictsFirst`) }}
                 </span>
@@ -1110,13 +1115,10 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                     v-tooltip.right="mobile ? undefined : stageTip"
                 >
                     <!-- Flex centres the glyph on the line box, whose descender room the label's capitals never use, so it
-                         read ~1.5px low beside "Pushed": lift it onto the cap-height centre. -->
+                         read ~1.5px low beside "Pushed": lift it onto the cap-height centre. Empty while Push spins. -->
                     <span :class="LEAD" class="translate-y-[-0.12em]">
-                        <Icon
-                            :name="pushFlow.running.value ? `spinner` : `check-circle`"
-                            :spin="pushFlow.running.value"
-                            :class="pushFlow.running.value ? `text-link` : `text-success`"
-                        />
+                        <Icon v-if="!pushFlow.running.value" name="check-circle" class="text-success" />
+                        <Icon v-else-if="!pushPress" name="spinner" spin class="text-link" />
                     </span>
                     <span v-if="mobile && stageHint" class="flex min-w-0 flex-1 flex-col">
                         <span class="truncate whitespace-nowrap">{{ stageLine }}</span>
@@ -1177,26 +1179,23 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                         thumb
                         class="shrink-0 whitespace-nowrap"
                         :disabled="!commitReady"
+                        :loading="commitRunning"
                         @click="doCommit"
                         v-tooltip.right="commitTip"
                     >
-                        <Icon :name="commitRunning ? `spinner` : `check`" :spin="commitRunning" />{{
-                            commitRunning ? t(`workspace.reviewPanel.committing`) : commitLabel
-                        }}
+                        <Icon name="check" />{{ commitFace.label }}
                         <!-- What a plain Commit records, said on the press itself rather than in a readout beside it. -->
-                        <span v-if="!commitRunning && !stagesFirst && changes.stagedCount.value > 0" class="tabular-nums opacity-70">{{
-                            changes.stagedCount.value
-                        }}</span>
+                        <span v-if="commitFace.count > 0" class="tabular-nums opacity-70">{{ commitFace.count }}</span>
                     </Button>
-                    <!-- After Commit, in the order the two happen. The flow owns the bar's line while it runs, so Push has
-                         no separate disabled state. Its word gives way first in a narrow box: the arrow and the count
-                         carry it, and the hover and the spoken name keep the whole of it. -->
+                    <!-- After Commit, in order. It spins in place through its run, the line beside it keeping the clock. Its
+                         word gives way first in a narrow box: the arrow and count carry it, the hover and spoken name the rest. -->
                     <Button
-                        v-if="(outgoing === `offer` || outgoing === `held`) && syncMeta"
+                        v-if="pushPress && syncMeta"
                         size="small"
                         :tier="syncTier"
                         class="shrink-0 whitespace-nowrap"
-                        :disabled="changes.actionBusy.value"
+                        :disabled="changes.actionBusy.value || pushFlow.running.value"
+                        :loading="pushFlow.running.value"
                         v-tooltip.bottom="syncTip"
                         :aria-label="`${syncMeta.label} ${syncSummary}`"
                         @click="doSync"

@@ -6332,7 +6332,6 @@
             "alsoTerminalChats": "Aussi terminal et chats principaux",
             "command": "Commande",
             "commit": "Committer",
-            "committing": "Commit en cours…",
             "committingNow": "Commit de {repos} en cours…",
             "conflicts": "Conflits",
             "couldntReadChanges": "Impossible de lire les changements",

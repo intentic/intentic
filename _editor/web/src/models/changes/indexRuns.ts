@@ -22,6 +22,9 @@ export const SLOW_GIT_OP_MS = 30_000;
 interface FollowedRun {
     readonly run: IndexRun;
     readonly lostContact: boolean;
+    // When this tab started following it, on the tab's own clock (the run's `startedAt` is the daemon's), so the prompt
+    // can tell a quick run from a slow one.
+    readonly since: number;
 }
 export const followedRuns = sandboxRef<ReadonlyMap<string, FollowedRun>>(() => new Map());
 
@@ -76,12 +79,13 @@ const reportIfSlow = (run: IndexRun): void => {
 // forgets runs), which is said rather than read as that other run's verdict.
 const follow = async (repo: string, request: Omit<IndexRunStart, `repo`>): Promise<IndexRun> => {
     const started = await sandboxRpc.git.indexRunStart({ repo, ...request });
-    show(repo, { run: started, lostContact: false });
+    const since = Date.now();
+    show(repo, { run: started, lostContact: false, since });
     try {
         const settled = await followCommandRun(() => sandboxRpc.git.indexRunState({ repo }), {
             intervalMs: POLL_MS,
-            onState: (run) => show(repo, { run, lostContact: false }),
-            onError: () => show(repo, { run: followedRuns.value.get(repo)?.run ?? started, lostContact: true }),
+            onState: (run) => show(repo, { run, lostContact: false, since }),
+            onError: () => show(repo, { run: followedRuns.value.get(repo)?.run ?? started, lostContact: true, since }),
         });
         if (settled === undefined || settled.id !== started.id) {
             throw new Error(t(`workspace.indexRuns.lost`, { repo }));

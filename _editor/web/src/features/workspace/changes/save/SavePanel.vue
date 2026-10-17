@@ -168,6 +168,9 @@ const namePlaceholder = computed(() => {
 const blockedByConflicts = computed(() => scannable.value.some((repo: RepoChanges) => repo.conflicted.length > 0));
 const savingNow = computed(() => changes.committing.value.length > 0);
 const saveReady = computed(() => pending.value > 0 && !blockedByConflicts.value && !changes.actionBusy.value && !savingNow.value);
+// The count Save carries, held as pressed while the save runs: its own staging reaches the change feed mid-run, and a
+// count changing under the spinner resizes the button for nothing.
+const saveCount = computed<number>((held) => (savingNow.value && held !== undefined ? held : pending.value));
 const saveFailure = computed(() => changes.failures.value.get(COMMIT_SCOPE));
 
 const doSave = async (): Promise<void> => {
@@ -229,6 +232,11 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
             />
             <IndexRunPrompt />
             <div class="flex items-center justify-end gap-1">
+                <!-- What a press under way is doing, in the room beside the presses, so the presses never reword themselves:
+                     each keeps its face and width under its spinner from click to answer. -->
+                <span v-if="savingNow || actions.backingUp.value" class="min-w-0 flex-1 truncate text-2xs text-muted" aria-live="polite">{{
+                    savingNow ? t(`workspace.savePanel.saving`) : t(`workspace.savePanel.backingUp`)
+                }}</span>
                 <Button
                     v-if="pending > 0"
                     size="small"
@@ -236,15 +244,14 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                     thumb
                     class="shrink-0 whitespace-nowrap"
                     :disabled="!saveReady"
+                    :loading="savingNow"
                     @click="doSave"
                     v-tooltip.right="saveTip"
-                    :aria-label="t(`workspace.savePanel.saveChanges`, { count: pending }, pending)"
+                    :aria-label="t(`workspace.savePanel.saveChanges`, { count: saveCount }, saveCount)"
                 >
-                    <Icon :name="savingNow ? `spinner` : `save`" :spin="savingNow" />{{
-                        savingNow ? t(`workspace.savePanel.saving`) : t(`ui.action.save`)
-                    }}
+                    <Icon name="save" />{{ t(`ui.action.save`) }}
                     <!-- Everything, said on the press itself, as Commit says what it records. -->
-                    <span v-if="!savingNow" class="tabular-nums opacity-70" aria-hidden="true">{{ pending }}</span>
+                    <span class="tabular-nums opacity-70" aria-hidden="true">{{ saveCount }}</span>
                 </Button>
                 <!-- After Save, in the order the two happen; the push flow's own card asks before anything leaves. Its word
                      gives way first in a narrow box: the arrow and the count carry it, the hover keeps the whole of it. -->
@@ -255,18 +262,16 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                     thumb
                     class="shrink-0 whitespace-nowrap"
                     :disabled="actions.backingUp.value || changes.actionBusy.value"
+                    :loading="actions.backingUp.value"
                     @click="actions.doBackUp()"
                     v-tooltip.bottom="actions.backupTip.value"
                     :aria-label="words.push"
                 >
-                    <Icon :name="actions.backingUp.value ? `spinner` : `cloud-upload`" :spin="actions.backingUp.value" />
-                    <span v-if="actions.backingUp.value">{{ t(`workspace.savePanel.backingUp`) }}</span>
-                    <template v-else>
-                        <span class="hidden @2xs:inline">{{ words.push }}</span>
-                        <span v-if="actions.backupCommits.value > 0" class="tabular-nums opacity-70" aria-hidden="true">{{
-                            actions.backupCommits.value
-                        }}</span>
-                    </template>
+                    <Icon name="cloud-upload" />
+                    <span class="hidden @2xs:inline">{{ words.push }}</span>
+                    <span v-if="actions.backupCommits.value > 0" class="tabular-nums opacity-70" aria-hidden="true">{{
+                        actions.backupCommits.value
+                    }}</span>
                 </Button>
             </div>
             <!-- What stops Save, in full: the one line here a maker has to act on, so it wraps rather than truncates. -->

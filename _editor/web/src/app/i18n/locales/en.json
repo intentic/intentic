@@ -11655,7 +11655,6 @@
             "command": "Command",
             "commit": "Commit",
             "commitsRepos": "Commits {repos}",
-            "committing": "Committing…",
             "committingNow": "Committing {repos}…",
             "conflicts": "Conflicts",
             "couldntReadChanges": "Couldn't read changes",

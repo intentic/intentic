@@ -6382,7 +6382,6 @@
             "alsoTerminalChats": "Auch Terminal, Hauptbaum-Chats",
             "command": "Befehl",
             "commit": "Committen",
-            "committing": "Wird committet…",
             "committingNow": "{repos} wird committet…",
             "conflicts": "Konflikte",
             "couldntReadChanges": "Änderungen ließen sich nicht lesen",

@@ -6411,7 +6411,6 @@
             "agentEditing": "Un agente está editando {paths} ahora mismo. «{action}» lo registra a medio escribir. | Un agente está editando {paths} ahora mismo. «{action}» los registra a medio escribir.",
             "alsoTerminalChats": "También terminal y chats principales",
             "command": "Comando",
-            "committing": "Haciendo commit…",
             "committingNow": "Haciendo commit de {repos}…",
             "conflicts": "Conflictos",
             "couldntReadChanges": "No se pudieron leer los cambios",
