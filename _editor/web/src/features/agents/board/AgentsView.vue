@@ -330,11 +330,11 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
      unoptimized — every slotted child, closed dialogs included, redraws on every board render. -->
 <template>
     <div ref="boardEl" class="agents-board relative flex h-full min-h-0 flex-col">
-        <!-- The filter remains usable at narrow /agents widths. -->
+        <!-- Size the groups by their controls so the header wraps before they overlap the search field. -->
         <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
-            <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
+            <div class="flex min-w-0 max-w-full flex-auto flex-wrap items-center gap-2">
                 <!-- Drawn only when more than one sandbox exists (scopeOffered): a switch whose two settings look identical teaches the reader to ignore controls. -->
-                <SegmentedControl v-if="scopeOffered" v-model="fleetScope" :options="scopeOptions" class="shrink-0" />
+                <SegmentedControl v-if="scopeOffered" v-model="fleetScope" :options="scopeOptions" wrap class="max-w-full" />
                 <!-- Whose sessions the board shows; hidden when access names only one person, since Everyone and Mine say the same thing, and on a first run, with no sessions to split. -->
                 <SegmentedControl
                     v-if="user !== null && sharedAccess && !first"
@@ -342,7 +342,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     :options="ownerOptions"
                     size="xs"
                     wrap
-                    class="shrink-0"
+                    class="max-w-full"
                 />
                 <!-- The open project, and the way out of it: the same scope the workspace chip clears, so both say the same thing. -->
                 <ProjectChip :project="projectScope" :hidden="projectHidden" noun="agents" @clear="setProjectScope(undefined)" />
@@ -363,7 +363,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 :class="narrow ? 'order-last basis-full' : 'w-72'"
                 @keydown.enter="onFieldEnter"
             />
-            <div class="flex min-w-0 flex-1 basis-0 items-center justify-end gap-2">
+            <div class="flex min-w-0 max-w-full flex-auto flex-wrap items-center justify-end gap-2">
                 <!-- Filtering shows a searching state while lane counts are partial. -->
                 <span v-if="filtering" class="shrink-0 text-2xs text-muted" :aria-busy="searchPartial">{{ matchTally }}</span>
                 <!-- Appears exactly when two or more chats sit side by side (the panes are the selection); opens a draft composed from their transcripts but not sent. -->
