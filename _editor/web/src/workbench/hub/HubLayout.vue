@@ -22,7 +22,6 @@ const {
     defaultSlug,
     addressable = false,
     ready = true,
-    fullWidth = [],
 } = defineProps<{
     title: string;
     description?: string;
@@ -39,8 +38,6 @@ const {
     groups: readonly NavGroup<HubTab>[];
     /** Holds the unknown-slug redirect while the set is still filling in. */
     ready?: boolean;
-    /** Sections that run sideways (a drawing, not a document) and take the whole width instead of the reading measure. */
-    fullWidth?: readonly string[];
 }>();
 
 const route = useRoute();
@@ -145,7 +142,6 @@ watch(
         :title="pageTitle"
         :description="pageDescription"
         scroll="page"
-        :width="fullWidth.includes(activeSlug) ? `full` : `wide`"
         :mobile="drill ? `swap` : `collapse`"
         :detail-open="!onIndex"
     >
