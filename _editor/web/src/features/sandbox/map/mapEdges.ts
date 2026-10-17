@@ -76,18 +76,19 @@ const threadPath = (from: Rect, to: Rect, flow: Flow): string => {
     return `M${a.x} ${a.y} C${reach} ${a.y} ${reach} ${b.y} ${b.x} ${b.y}`;
 };
 
-const entryEdges = (layout: MapLayout, map: ReachMap, lighting: Lighting | undefined, doors: ReadonlyMap<PrincipalKind, Point>, spine: number): Edge[] =>
+const entryEdges = (layout: MapLayout, map: ReachMap, lighting: Lighting | undefined, doors: ReadonlyMap<PrincipalKind, Point>, lanes: ReadonlyMap<PrincipalKind, number>): Edge[] =>
     map.principals.flatMap((principal) => {
         const placed = layout.principals.get(principal.id);
         const door = doors.get(principal.kind);
-        if (placed === undefined || door === undefined) {
+        const lane = lanes.get(principal.kind);
+        if (placed === undefined || door === undefined || lane === undefined) {
             return [];
         }
         const how = lighting?.principals.get(principal.id);
         return [
             {
                 key: `entry:${principal.id}`,
-                d: elbow(exitOf(placed.rect, `across`), door, spine),
+                d: elbow(exitOf(placed.rect, `across`), door, lane),
                 kind: `entry` as const,
                 state: stateOf(how !== undefined, lighting !== undefined),
                 dashed: how === `through` || principal.status === `invited`,
@@ -108,17 +109,18 @@ const hiddenHow = (map: ReachMap, layout: MapLayout, lighting: Lighting | undefi
     return undefined;
 };
 
-const reachEdges = (layout: MapLayout, map: ReachMap, lighting: Lighting | undefined, ports: ReadonlyMap<GroupKey, Point>, spine: number): Edge[] =>
+const reachEdges = (layout: MapLayout, map: ReachMap, lighting: Lighting | undefined, ports: ReadonlyMap<GroupKey, Point>, lanes: ReadonlyMap<GroupKey, number>): Edge[] =>
     [...layout.nodes].flatMap(([id, placed]) => {
         const port = placed.group === undefined ? undefined : ports.get(placed.group);
-        if (port === undefined || placed.group === undefined) {
+        const lane = placed.group === undefined ? undefined : lanes.get(placed.group);
+        if (port === undefined || lane === undefined || placed.group === undefined) {
             return [];
         }
         const how = id.startsWith(`bundle:`) ? (lighting?.nodes.get(id) ?? hiddenHow(map, layout, lighting, placed.group)) : lighting?.nodes.get(id);
         return [
             {
                 key: `reach:${id}`,
-                d: elbow(port, entryOf(placed.rect, `across`), spine),
+                d: elbow(port, entryOf(placed.rect, `across`), lane),
                 kind: `reach` as const,
                 state: stateOf(how !== undefined, lighting !== undefined),
                 dashed: how === `through`,
@@ -175,6 +177,27 @@ const trunks = (layout: MapLayout, map: ReachMap, lighting: Lighting | undefined
     return { edges, door, port };
 };
 
+// ONE LANE PER CLUSTER. Lines bound for one cluster share a vertical lane in the gutter, and each cluster has its own, so two
+// groups whose ports sit side by side on the box's corner never run down the same line. The cluster that travels farthest
+// from its socket takes the lane nearest the box: its run then passes beside the shorter ones instead of across their
+// turns, which keeps every lane free of crossings. Lanes stay a few pixels apart, closer when the gutter is narrow.
+const LANE_GAP = 8;
+const LANE_INSET = 6;
+
+const lanesFor = <K extends string>(
+    clusters: readonly (readonly [K, readonly Rect[]])[],
+    anchors: ReadonlyMap<K, Point>,
+    near: number,
+    far: number,
+): Map<K, number> => {
+    const room = Math.abs(far - near) - 2 * LANE_INSET;
+    const gap = clusters.length <= 1 ? 0 : Math.max(2, Math.min(LANE_GAP, room / (clusters.length - 1)));
+    const away = Math.sign(far - near);
+    const travel = (key: K, rects: readonly Rect[]): number => Math.abs(middle(rects, `across`) - (anchors.get(key)?.y ?? 0));
+    const ranked = clusters.toSorted(([a, left], [b, right]) => travel(b, right) - travel(a, left));
+    return new Map(ranked.map(([key], index) => [key, near + away * (LANE_INSET + index * gap)]));
+};
+
 const ORDER = { off: 0, rest: 1, on: 2 } as const satisfies Record<EdgeState, number>;
 
 export const drawMap = (layout: MapLayout, map: ReachMap, lighting: Lighting | undefined, flow: Flow, focusId: string | undefined): MapDrawing => {
@@ -202,13 +225,13 @@ export const drawMap = (layout: MapLayout, map: ReachMap, lighting: Lighting | u
     }
     const doors = sockets(kinds, box, flow, `lead`, DOOR_GAP);
     const ports = sockets(groups, box, flow, `trail`, PORT_GAP);
-    // Each side's spine runs down the middle of its gutter: between the principals' trailing edge and the box, and between
-    // the box and the groups' leading edge.
+    // Each side's lanes fill its gutter outward from the box: between the box and the principals' trailing edge, and
+    // between the box and the groups' leading edge.
     const principalsEnd = Math.max(...kinds.flatMap(([, rects]) => rects.map((rect) => rect.right)), box.left - 48);
     const groupsStart = Math.min(...groups.flatMap(([, rects]) => rects.map((rect) => rect.left)), box.right + 48);
     const edges = [
-        ...entryEdges(layout, map, lighting, doors, (principalsEnd + box.left) / 2),
-        ...reachEdges(layout, map, lighting, ports, (box.right + groupsStart) / 2),
+        ...entryEdges(layout, map, lighting, doors, lanesFor(kinds, doors, box.left, principalsEnd)),
+        ...reachEdges(layout, map, lighting, ports, lanesFor(groups, ports, box.right, groupsStart)),
         ...threadEdges(layout, lighting, focusId, flow),
     ];
     const doorLit = (kind: PrincipalKind): boolean => map.principals.some((principal) => principal.kind === kind && lighting?.principals.has(principal.id) === true);

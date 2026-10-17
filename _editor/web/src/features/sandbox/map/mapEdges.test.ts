@@ -96,3 +96,29 @@ describe(`stacked`, () => {
         expect(drawn.ports.map((port) => port.at)).toEqual([{ x: 300, y: 300 }]);
     });
 });
+
+describe(`lanes`, () => {
+    // Two groups below the box leave from neighbouring ports on its corner; each takes a lane of its own, and the one that
+    // travels farther takes the lane nearer the box, so their runs sit side by side instead of on one line.
+    it(`gives each group its own lane, the farthest nearest the box`, () => {
+        const low: MapLayout = {
+            ...layout,
+            box: rect(200, 0, 200, 100),
+            nodes: new Map([
+                [`cap:github`, { rect: rect(500, 150), group: `services` as const }],
+                [`cap:x-brand`, { rect: rect(500, 300), group: `accounts` as const }],
+            ]),
+            groups: new Map([
+                [`services`, rect(500, 140, 100, 50)],
+                [`accounts`, rect(500, 290, 100, 50)],
+            ]),
+        };
+        const drawn = drawMap(low, map, undefined, `across`, undefined);
+        const laneOf = (key: string): number | undefined => {
+            const d = drawn.edges.find((edge) => edge.key === key)?.d ?? ``;
+            return Number(/V/.test(d) ? d.split(` `).find((part) => part.startsWith(`Q`))?.slice(1) : undefined);
+        };
+        expect(laneOf(`reach:cap:x-brand`)).toBe(406);
+        expect(laneOf(`reach:cap:github`)).toBe(414);
+    });
+});

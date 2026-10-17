@@ -70,7 +70,7 @@ const columns = computed(() => {
     }
     return layout.value.width >= ROOMY_FROM
         ? `grid-cols-[minmax(10rem,13.5rem)_minmax(15rem,1fr)_minmax(12rem,16.5rem)] items-start gap-x-16 gap-y-3`
-        : `grid-cols-[minmax(8.5rem,12rem)_minmax(13rem,1fr)_minmax(10rem,14rem)] items-start gap-x-9 gap-y-3`;
+        : `grid-cols-[minmax(8.5rem,12rem)_minmax(13rem,1fr)_minmax(10rem,14rem)] items-start gap-x-12 gap-y-3`;
 });
 const drawing = computed(() => drawMap(layout.value, map, lighting, flow.value, focus?.kind === `node` ? focus.id : undefined));
 const lines = computed(() => drawing.value.edges.filter((edge) => edge.kind !== `thread`));
