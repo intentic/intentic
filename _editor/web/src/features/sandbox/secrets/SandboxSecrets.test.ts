@@ -218,7 +218,7 @@ it(`keeps the add-secret fields and actions separate, labelled and usable when t
     add.click();
     await nextTick();
 
-    const key = el.querySelector<HTMLInputElement>(`input[spellcheck="false"]:not([type="password"])`)!;
+    const key = el.querySelector<HTMLInputElement>(`input[placeholder="KEY_NAME"]`)!;
     const value = el.querySelector<HTMLInputElement>(`input[type="password"]`)!;
     expect(key.getAttribute(`aria-label`)).toBe(key.getAttribute(`placeholder`));
     expect(value.getAttribute(`aria-label`)).toBe(value.getAttribute(`placeholder`));

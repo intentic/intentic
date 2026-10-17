@@ -167,7 +167,9 @@ describe(`saying something as Opus`, () => {
         const socket = new FakeSocket();
         const audio = fakeAudio();
         const asked: Record<string, string>[] = [];
-        // A decoder that answers a frame of n bytes as 10n samples, the first chunk slower than the second.
+        // Each decode is released by the test, so a busy runner cannot outrun a sleep used as a decode deadline.
+        const firstDecoded = Promise.withResolvers<void>();
+        const secondDecoded = Promise.withResolvers<void>();
         let decodes = 0;
         const player = createSpeechPlayer({
             socketUrl: async (_path, extra = {}) => {
@@ -180,7 +182,7 @@ describe(`saying something as Opus`, () => {
             decoderFor: () => ({
                 decode: async (frame, sampleRate) => {
                     decodes += 1;
-                    await new Promise((resolve) => setTimeout(resolve, decodes === 1 ? 20 : 0));
+                    await (decodes === 1 ? firstDecoded.promise : secondDecoded.promise);
                     return { samples: new Float32Array(frame.byteLength * 10), sampleRate };
                 },
                 close: () => undefined,
@@ -196,11 +198,18 @@ describe(`saying something as Opus`, () => {
         socket.answer({ type: `audio`, id: 1, sampleRate: 24_000, samples: 1200, codec: `opus` });
         socket.answer(new ArrayBuffer(120));
         socket.answer({ type: `done`, id: 1 });
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await settled();
+        expect(decodes).toBe(1);
+        expect(audio.scheduled).toEqual([]);
+        firstDecoded.resolve();
+        await settled();
+        expect(decodes).toBe(2);
+        expect(audio.scheduled.map(({ duration }) => duration)).toEqual([0.1]);
+        secondDecoded.resolve();
+        expect(await end).toBe(`done`);
         // In the order they came, back to back: 0.1 s, then 0.05 s.
         expect(audio.scheduled.map(({ duration }) => duration)).toEqual([0.1, 0.05]);
         expect(audio.scheduled[1]?.at).toBeCloseTo((audio.scheduled[0]?.at ?? 0) + 0.1);
-        expect(await end).toBe(`done`);
     });
 });
 

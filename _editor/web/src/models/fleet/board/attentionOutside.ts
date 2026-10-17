@@ -1,3 +1,4 @@
+import { sandboxRef } from "@intentic/extension-api";
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { computed, type Ref, ref, watch } from "vue";
 import { projectScope, setProjectScope } from "../../../app/projectScope";
@@ -11,7 +12,8 @@ import { attentionHidden } from "./scopeFleet";
 // the tile can say so, the Attention lane can offer it, and a press on the tile can widen it.
 
 // What the shell hands over from where it can read them (the personas are a sandbox query, the address the session's).
-const personasNow = ref<readonly Persona[]>([]);
+const personasNow = sandboxRef<readonly Persona[]>(() => []);
+// allow(module-state): the signed-in session's address is shared across sandboxes, even while their queries change
 const meNow = ref<string | undefined>(undefined);
 // Called from a component's setup, so the copies follow the sources for as long as the shell is up.
 export const trackScopeInputs = (personas: Readonly<Ref<readonly Persona[]>>, me: Readonly<Ref<string | undefined>>): void => {
@@ -37,7 +39,7 @@ export const attentionOutsideProject = computed<number>(() => (projectScope.valu
 
 // Bumped by a press on the Agents tile while the board is already on screen; the board answers it by scrolling to the
 // Attention lane and marking its first card (AgentsView).
-export const attentionAsk = ref(0);
+export const attentionAsk = sandboxRef(() => 0);
 
 // The press on the Agents tile while the board is already open (the router refuses a same-route visit, so it did
 // nothing): widens whatever narrowing hides items that need the reader, then asks the board to show them. Each choice

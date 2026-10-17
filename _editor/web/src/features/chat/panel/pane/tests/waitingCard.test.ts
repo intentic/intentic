@@ -70,6 +70,8 @@ describe(`the press`, () => {
         // Focusable from script only, so Tab still walks the answers rather than stopping on the card.
         expect(plan.getAttribute(`tabindex`)).toBe(`-1`);
         expect(document.activeElement).toBe(plan);
-        expect(rung).toHaveBeenCalledTimes(1);
+        // One glow has two layers: its edge and the wash over the card's ground.
+        expect(rung).toHaveBeenCalledTimes(2);
+        expect(rung.mock.calls.map(([, timing]) => timing.composite)).toEqual([undefined, `add`]);
     });
 });

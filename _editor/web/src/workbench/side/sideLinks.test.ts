@@ -96,7 +96,9 @@ it(`rings the side panel a claimed link opened in, the tab already in front incl
     expect(click(RUN)).toBe(true);
     await painted();
     tabs.remove();
-    expect(rung).toHaveBeenCalledTimes(2);
+    // Each of the two presses lights an edge and an additive wash.
+    expect(rung).toHaveBeenCalledTimes(4);
+    expect(rung.mock.calls.map(([, timing]) => timing.composite)).toEqual([undefined, `add`, undefined, `add`]);
 });
 
 it(`goes to the claiming view's home where there is no side panel`, () => {

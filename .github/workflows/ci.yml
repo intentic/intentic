@@ -34,6 +34,10 @@ on:
         description: Build and smoke-test the Linux desktop artifacts on the desktop runner
         type: boolean
         default: false
+      windows_smoke:
+        description: Build and smoke-test the Windows installer on the Windows desktop runner
+        type: boolean
+        default: false
 
 # Supersede a running pipeline on a pull request; never on main, where the release job must be allowed to
 # finish. This is `interruptible: true` — which every verify job carried and the release deliberately did not.
@@ -1062,7 +1066,18 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
         with:
           lockfile-drift: measure
-      - run: pnpm --filter @intentic/perf exec playwright install --with-deps chromium
+      - name: Install Chromium and its system dependencies
+        shell: bash
+        run: |
+          # A runner can briefly lose its route to the apt mirrors. Retry the complete install so a failed update
+          # with an empty package index does not become a permanent "Unable to locate package" failure.
+          for attempt in 1 2 3; do
+            if pnpm --filter @intentic/perf exec playwright install --with-deps chromium; then
+              exit 0
+            fi
+            [ "$attempt" -lt 3 ] || exit 1
+            sleep "$((attempt * 15))"
+          done
       - run: pnpm perf:browser
 
   # The desktop app's local face, the editor a window on a folder shows (_tools/e2e/local-face): built, then booted in
@@ -1432,9 +1447,10 @@ jobs:
   # What must not run twice is the Windows half, on the one Windows machine: desktop-verify-windows waits for the
   # release and runs only when it released nothing, since on a releasing push the release's own windows-verify runs
   # the installer at the real version on that same machine.
+  # A manual windows_smoke dispatch also builds it on a branch, so installer fixes can be proved before landing.
   desktop-windows-build:
     needs: [changes, preflight, ci-base, ci-desktop]
-    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
+    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || inputs.windows_smoke) && needs.changes.outputs.desktop == 'true' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
     runs-on: [self-hosted, intentic, desktop]
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}-desktop-windows-build

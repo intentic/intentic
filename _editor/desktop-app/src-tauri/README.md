@@ -49,6 +49,9 @@ flowchart LR
   holds the two programs the installer puts beside the app (`externalBin`), `intentic-files` (`pnpm stage:local`) and
   `intentic-ic`, the `ic` CLI under a name nothing on PATH answers to (`pnpm stage:ic`), per target triple. tauri-build refuses to build without them, so `test:rust` and
   `lint:rust` run all three first; a bare `cargo` call does not.
+- **Windows install and removal.** `installer-hooks.nsh` stops this user's app and file server and waits for their
+  exit before Tauri checks for running processes or removes files. Termination is asynchronous; a fixed delay can
+  leave a silent uninstall aborted before it removes Windows' uninstall entry and the terminal command's PATH entry.
 
 ## Key files
 

@@ -38,6 +38,13 @@ beforeEach(() => {
 });
 
 describe(`the Agents tile pressed on the board`, () => {
+    it(`leaves its request to show attention behind on a sandbox switch`, () => {
+        askForAttention();
+        expect(attentionAsk.value).toBe(1);
+        resetSandboxScope();
+        expect(attentionAsk.value).toBe(0);
+    });
+
     it(`says how many sit outside the open project`, () => {
         fleet.value = [card(`a`, `shop`), card(`b`, `api`), card(`c`, `web`)];
         setProjectScope(`shop`);
