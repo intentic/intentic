@@ -34,7 +34,7 @@ const layout: MapLayout = {
     ]),
     nodes: new Map([
         [`cap:github`, { rect: rect(500, 20), group: `services` as const }],
-        [`more:services`, { rect: rect(500, 60), group: `services` as const }],
+        [`bundle:services`, { rect: rect(500, 60), group: `services` as const }],
         [`cap:x-brand`, { rect: rect(500, 120), group: `accounts` as const }],
         [`persona:owen`, { rect: rect(220, 200), group: undefined }],
     ]),
@@ -54,7 +54,7 @@ describe(`side by side`, () => {
             // Sam's invite is not taken up yet: dashed.
             "entry:person:sam@acme.dev": `rest,dashed`,
             "reach:cap:github": `rest`,
-            "reach:more:services": `rest`,
+            "reach:bundle:services": `rest`,
             "reach:cap:x-brand": `rest`,
         });
     });
@@ -65,7 +65,7 @@ describe(`side by side`, () => {
             "entry:person:ada@acme.dev": `off`,
             "entry:person:sam@acme.dev": `on,dashed`,
             "reach:cap:github": `on,dashed`,
-            "reach:more:services": `on,dashed`,
+            "reach:bundle:services": `on,dashed`,
             "reach:cap:x-brand": `on,dashed`,
         });
     });

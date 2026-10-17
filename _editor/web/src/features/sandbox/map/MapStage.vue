@@ -21,28 +21,42 @@ import { useMapLayout } from "./useMapLayout";
 
 const t = useT();
 
-const { map, lighting, focus, pinned, name, ink, personaName } = defineProps<{
+const {
+    map,
+    lighting,
+    focus,
+    pinned,
+    name,
+    personaName,
+    compact = false,
+} = defineProps<{
     map: ReachMap;
     lighting: Lighting | undefined;
     focus: Focus | undefined;
     pinned: Focus | undefined;
     name: string;
-    /** The focus's colour, as a CSS colour: the lit lines and rings wear it. */
-    ink: string;
     personaName: PersonaName;
+    /** One line per way in, one block per group, the secrets folded: the drawing without its fine print. */
+    compact?: boolean;
 }>();
 const emit = defineEmits<{ point: [focus: Focus | undefined]; press: [focus: Focus]; clear: [] }>();
 
 // Side by side from here; below it the three columns would squeeze names to nothing. Roomy from the second: wider gutters
-// for the lines to bend in.
+// for the lines to bend in. Wide from the third, where the columns stop growing and the drawing centres in the page.
 const ACROSS_FROM = 600;
 const ROOMY_FROM = 900;
+const WIDE_FROM = 1240;
 // Two columns of rows within a stacked section from here.
 const PAIRS_FROM = 520;
 
 const stage = ref<HTMLElement>();
 const expanded = shallowRef<ReadonlySet<GroupKey>>(new Set());
-const { layout } = useMapLayout(stage, () => [map, expanded.value]);
+const { layout } = useMapLayout(stage, () => [map, expanded.value, compact]);
+// What was opened in one view means something else in the other: a detailed card's unfolded tail, a compact block opened.
+watch(
+    () => compact,
+    () => (expanded.value = new Set()),
+);
 
 const ready = computed(() => layout.value.width > 0);
 const flow = computed<Flow>(() => (layout.value.width >= ACROSS_FROM ? `across` : `down`));
@@ -50,6 +64,9 @@ const pairs = computed(() => flow.value === `down` && layout.value.width >= PAIR
 const columns = computed(() => {
     if (flow.value === `down`) {
         return `grid-cols-1 gap-y-10`;
+    }
+    if (layout.value.width >= WIDE_FROM) {
+        return `grid-cols-[minmax(11rem,15rem)_minmax(18rem,32rem)_minmax(14rem,20rem)] justify-center items-start gap-x-24 gap-y-3`;
     }
     return layout.value.width >= ROOMY_FROM
         ? `grid-cols-[minmax(10rem,13.5rem)_minmax(15rem,1fr)_minmax(12rem,16.5rem)] items-start gap-x-16 gap-y-3`
@@ -95,9 +112,8 @@ const toggle = (key: GroupKey): void => {
 };
 const principalFocus = (principal: Principal): Focus => ({ kind: `principal`, id: principal.id });
 
-// The lines' resting ink: the theme's strong rule, a touch toward the text so it reads on the card and the canvas alike.
-const LINE = `color-mix(in oklab, var(--color-line-strong) 70%, var(--color-content))`;
-const stroke = (state: `rest` | `on` | `off`): string => (state === `on` ? `var(--map-ink)` : `var(--map-line)`);
+// The lit line wears the focus's stroke, the resting one the theme's rule; both are mixed in SandboxMap.
+const stroke = (state: `rest` | `on` | `off`): string => (state === `on` ? `var(--map-stroke)` : `var(--map-line)`);
 </script>
 
 <template>
@@ -105,7 +121,6 @@ const stroke = (state: `rest` | `on` | `off`): string => (state === `on` ? `var(
         ref="stage"
         class="relative transition-opacity"
         :class="ready ? `opacity-100` : `opacity-0`"
-        :style="{ '--map-ink': ink, '--map-line': LINE }"
         @click.self="emit(`clear`)"
     >
         <!-- Under the cards: a line runs behind every card it passes, never over a name. -->
@@ -119,9 +134,9 @@ const stroke = (state: `rest` | `on` | `off`): string => (state === `on` ? `var(
                     stroke-linecap="round"
                     :path-length="growing ? 1 : undefined"
                     :stroke="stroke(edge.state)"
-                    :stroke-width="edge.state === `on` ? 1.75 : 1.25"
+                    :stroke-width="edge.state === `on` ? 1.5 : 1.15"
                     :stroke-dasharray="edge.dashed ? `5 4` : edge.faint ? `1 4` : undefined"
-                    :opacity="edge.state === `off` ? 0.16 : edge.faint ? 0.55 : 1"
+                    :opacity="edge.state === `off` ? 0.14 : edge.faint ? 0.55 : 1"
                     :style="{ '--map-i': index }"
                     class="transition-[stroke,opacity,stroke-width]"
                 />
@@ -143,7 +158,7 @@ const stroke = (state: `rest` | `on` | `off`): string => (state === `on` ? `var(
                 <h2 v-if="flow === `down`" class="px-1 text-xs font-medium text-muted">{{ t(`sandbox.sandboxMap.whoGetsIn`) }}</h2>
                 <div v-for="cluster in clusters" :key="cluster.kind" class="flex flex-col gap-1.5">
                     <h3 class="px-1 text-2xs text-subtle">{{ cluster.label() }}</h3>
-                    <div class="grid gap-1.5" :class="pairs ? `grid-cols-2` : `grid-cols-1`">
+                    <div class="grid" :class="[pairs ? `grid-cols-2` : `grid-cols-1`, compact ? `gap-1` : `gap-1.5`]">
                         <MapPrincipalRow
                             v-for="principal in cluster.principals"
                             :key="principal.id"
@@ -151,6 +166,7 @@ const stroke = (state: `rest` | `on` | `off`): string => (state === `on` ? `var(
                             :lit="principalLit(principal)"
                             :pinned="pinned?.id === principal.id"
                             :persona-name
+                            :compact
                             @point="(on) => emit(`point`, on ? principalFocus(principal) : undefined)"
                             @press="emit(`press`, principalFocus(principal))"
                         />
@@ -162,11 +178,11 @@ const stroke = (state: `rest` | `on` | `off`): string => (state === `on` ? `var(
                 </p>
             </section>
 
-            <MapBox :map :lighting :pinned :name @point="(next) => emit(`point`, next)" @press="(next) => emit(`press`, next)" />
+            <MapBox :map :lighting :pinned :name :compact @point="(next) => emit(`point`, next)" @press="(next) => emit(`press`, next)" />
 
             <section class="flex min-w-0 flex-col gap-3" :aria-label="t(`sandbox.sandboxMap.whatItReaches`)">
                 <h2 v-if="flow === `down`" class="px-1 text-xs font-medium text-muted">{{ t(`sandbox.sandboxMap.whatItReaches`) }}</h2>
-                <div class="grid items-start gap-3" :class="pairs ? `grid-cols-2` : `grid-cols-1`">
+                <div class="grid items-start" :class="[pairs ? `grid-cols-2` : `grid-cols-1`, compact ? `gap-2` : `gap-3`]">
                     <MapGroupCard
                         v-for="group in map.groups"
                         :key="group.key"
@@ -174,6 +190,7 @@ const stroke = (state: `rest` | `on` | `off`): string => (state === `on` ? `var(
                         :lighting
                         :pinned
                         :expanded="expanded.has(group.key)"
+                        :compact
                         @point="(next) => emit(`point`, next)"
                         @press="(next) => emit(`press`, next)"
                         @toggle="toggle(group.key)"
@@ -193,7 +210,7 @@ const stroke = (state: `rest` | `on` | `off`): string => (state === `on` ? `var(
                 :key="edge.key"
                 :d="edge.d"
                 fill="none"
-                stroke="var(--map-ink)"
+                stroke="var(--map-stroke)"
                 stroke-width="1.5"
                 stroke-dasharray="2 3"
                 stroke-linecap="round"
@@ -206,8 +223,8 @@ const stroke = (state: `rest` | `on` | `off`): string => (state === `on` ? `var(
                 :cy="socket.at.y"
                 r="4"
                 stroke-width="1.5"
-                :fill="socket.state === `on` ? `var(--map-ink)` : `var(--color-card)`"
-                :stroke="socket.state === `on` ? `var(--map-ink)` : `var(--map-line)`"
+                :fill="socket.state === `on` ? `var(--map-stroke)` : `var(--color-card)`"
+                :stroke="socket.state === `on` ? `var(--map-stroke)` : `var(--map-line)`"
                 :opacity="socket.state === `off` ? 0.5 : 1"
                 class="transition-[fill,stroke,opacity]"
             />

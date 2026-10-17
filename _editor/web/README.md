@@ -73,7 +73,7 @@ flowchart LR
   middle is the box, with its areas, personas and secrets. On the right is everything it reaches: services, accounts
   and browsers, machines, other sandboxes, what it publishes, and models. Pointing at a way in lights what it reaches
   and dims the rest. Pointing at a thing lights who reaches it, and threads it to what it is tied to (a persona to its
-  accounts, an area to the personas that live there). A click keeps the focus. Each line is worked out with the rules
+  accounts, an area to the personas that live there). A click keeps the focus. It opens compact, with each outward group one block that counts what it holds (and, under a focus, how many of them the focus reaches) and opens into rows on a click, and the secrets one chip; Detailed draws every row. The choice is kept per device. Each line is worked out with the rules
   the daemon refuses on (`reachModel.ts`): a grant's areas and edit scope, the personas its fence holds
   (`fenceHoldsPersona`), its credential reach, and for someone who only chats or a link's tasks, what their personas
   allow (`personaAllowsCapability`, shared with the daemon through the contract). A connection whose tile is not loaded

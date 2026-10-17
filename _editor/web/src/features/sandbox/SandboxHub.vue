@@ -63,6 +63,10 @@ const DEFAULT = SANDBOX_DEFAULT_SECTION;
 const route = useRoute();
 const openPersona = computed(() => (typeof route.query[`open`] === `string` ? route.query[`open`] : undefined));
 
+// The sections drawn rather than read, which take the page's whole width: the map's three columns and the lines between
+// them use every pixel they get.
+const FULL_WIDTH = [`map`] as const;
+
 // The route these sections live on, and half of the address their long-running work reports under.
 const HUB = `sandbox`;
 
@@ -183,6 +187,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
         :addressable="isGuest"
         :groups="groups"
         :ready="!isLoading"
+        :full-width="FULL_WIDTH"
     >
         <template #default="{ slug }">
             <!-- An organisation's lock draws the section read-only; every personal sandbox passes straight through. -->

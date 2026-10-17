@@ -6962,11 +6962,7 @@
             "someSettingsArentBeing": "Część ustawień nie jest stosowana"
         },
         "sandboxMap": {
-            "lede": "Wszystko, co może wejść do tego sandboxa, i wszystko, do czego sięga, gdy już jest w środku, narysowane z tego, czego sandbox pilnuje.",
-            "hint": "Wskaż osobę, token albo rzecz, by podświetlić jej część. Kliknij, by zostało podświetlone.",
-            "summary": "{ways}, w zasięgu: {things}",
-            "waysIn": "{count} droga wejścia | {count} drogi wejścia | {count} dróg wejścia",
-            "thingsReached": "{count} rzecz | {count} rzeczy | {count} rzeczy",
+            "hint": "Wskaż kogoś albo coś, by podświetlić jego zasięg. Kliknij, by zostało podświetlone.",
             "whoGetsIn": "Kto wchodzi",
             "whatItReaches": "Do czego sięga",
             "theSandbox": "Ten sandbox",
@@ -7034,7 +7030,13 @@
             "openConnection": "Otwórz połączenie",
             "openSecrets": "Otwórz sekrety",
             "openModels": "Otwórz modele",
-            "clear": "Odepnij"
+            "clear": "Odepnij",
+            "viewLabel": "Ile pokazuje mapa",
+            "viewCompact": "Zwięźle",
+            "viewDetailed": "Szczegółowo",
+            "openGroup": "Pokaż każdy z osobna",
+            "foldGroup": "Zwiń",
+            "reachedInBundle": "Coś tutaj osiąga {count} z {total} dróg wejścia: {names}"
         },
         "sandboxNav": {
             "map": "Mapa",

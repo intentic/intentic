@@ -3,7 +3,7 @@ import type { Area } from "@intentic/sandbox-contract/schemas/areas";
 import type { InboundLinkSummary, LinkTerms } from "@intentic/sandbox-contract/schemas/links";
 import type { Member } from "@intentic/sandbox-contract/schemas/members";
 import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
-import { buildReachMap, holdersOf, lightingOf, type Principal, type ReachCapability, type ReachInput, relationsOf } from "./reachModel";
+import { buildReachMap, bundleId, holdersOf, lightingOf, type Principal, type ReachCapability, type ReachInput, relationsOf } from "./reachModel";
 
 // The workspace the cases share: two areas, three personas homed in each and at the root, and a connection of each kind
 // a rule decides differently. Every case asks the map what the daemon would let one principal do.
@@ -277,5 +277,18 @@ describe(`the drawing`, () => {
         expect(maya.principals.get(`person:sam@acme.dev`)).toBe(`use`);
         expect(maya.principals.has(`person:rin@acme.dev`)).toBe(false);
         expect(maya.threads).toEqual([`cap:gmail-support`]);
+    });
+
+    // A folded block stands in for its members: it lights whoever reaches any of them, at the strongest way they do.
+    it(`lights who reaches anything in a block, at their strongest`, () => {
+        const map = buildReachMap(input());
+        const services = lightingOf(map, input(), { kind: `node`, id: bundleId(`services`) });
+        expect(services.nodes.get(bundleId(`services`))).toBe(`self`);
+        expect(services.nodes.get(`cap:github`)).toBe(`related`);
+        expect(services.principals.get(`person:jo@acme.dev`)).toBe(`use`);
+        expect(services.principals.get(`person:sam@acme.dev`)).toBe(`through`);
+        expect(services.principals.has(`person:rin@acme.dev`)).toBe(false);
+        const secrets = lightingOf(map, input(), { kind: `node`, id: bundleId(`secrets`) });
+        expect([...secrets.nodes.keys()]).toEqual([bundleId(`secrets`), `secret:SENTRY_DSN`, `secret:STRIPE_KEY`]);
     });
 });

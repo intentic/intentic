@@ -7346,11 +7346,7 @@
             "someSettingsArentBeing": "Some settings aren't being applied"
         },
         "sandboxMap": {
-            "lede": "Everything that can get into this sandbox, and everything it reaches once inside, drawn from what the sandbox enforces.",
-            "hint": "Point at a person, a token or a thing to light its part. Click to keep it lit.",
-            "summary": "{ways}, {things} reached",
-            "waysIn": "{count} way in | {count} ways in",
-            "thingsReached": "{count} thing | {count} things",
+            "hint": "Point at anyone or anything to light its reach. Click to keep it lit.",
             "whoGetsIn": "Who gets in",
             "whatItReaches": "What it reaches",
             "theSandbox": "This sandbox",
@@ -7418,7 +7414,13 @@
             "openConnection": "Open connection",
             "openSecrets": "Open secrets",
             "openModels": "Open models",
-            "clear": "Unpin"
+            "clear": "Unpin",
+            "viewLabel": "How much the map shows",
+            "viewCompact": "Compact",
+            "viewDetailed": "Detailed",
+            "openGroup": "Show each one",
+            "foldGroup": "Fold back",
+            "reachedInBundle": "{count} of {total} ways in reach something here: {names}"
         },
         "sandboxNav": {
             "map": "Map",

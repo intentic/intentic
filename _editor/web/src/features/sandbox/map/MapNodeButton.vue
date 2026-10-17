@@ -32,15 +32,19 @@ defineEmits<{ point: [on: boolean]; press: [] }>();
 const label = computed(() => nodeLabel(node, areasExist));
 const detail = computed(() => nodeDetail(node));
 const reached = computed(() => lit !== undefined && lit !== `off`);
-const ring = computed(() => {
+// The focus's ink only tints what it lights, mixed into the theme's own rule (SandboxMap sets the mixes): what is out of
+// reach goes dim, so what is in reach needs no more than a hint to stand apart.
+const edge = computed(() => {
     if (lit === `self`) {
-        return `ring-2 ring-(--map-ink) border-transparent`;
+        return `border-(--map-edge-strong) shadow-(--map-halo)`;
     }
     if (lit === `through`) {
-        return `border-dashed border-(--map-ink)`;
+        return `border-dashed border-(--map-edge)`;
     }
-    return reached.value ? `border-(--map-ink)` : `border-line-subtle hover:border-line-strong`;
+    return reached.value ? `border-(--map-edge)` : `border-line-subtle hover:border-line`;
 });
+// A row or a tile's own plate, washed with the ink when it is the focus; a chip keeps the kit's plate.
+const plate = computed(() => (variant === `chip` ? (lit === `self` ? `bg-(--map-wash)` : ``) : lit === `self` ? `bg-(--map-wash)` : `bg-card`));
 const mark = computed(() => (lit === `edit` ? `pencil` : lit === `see` ? `eye` : undefined));
 const markTitle = computed(() => (lit === `edit` ? t(`sandbox.sandboxMap.legendEdits`) : t(`sandbox.sandboxMap.legendSees`)));
 const persona = computed(() => ({ id: node.ref ?? node.id, label: node.label }));
@@ -53,12 +57,13 @@ const glyph = computed(() => (node.icon !== undefined && isIconName(node.icon) ?
         :data-node="node.id"
         :aria-pressed="pinned"
         :title="detail === undefined ? label : `${label}\n${detail}`"
-        class="relative flex min-w-0 items-center border text-left transition-[opacity,border-color,box-shadow,filter] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-link"
+        class="relative flex min-w-0 items-center border text-left transition-[opacity,border-color,box-shadow,filter,background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-link"
         :class="[
-            ring,
+            edge,
+            plate,
             lit === `off` ? `opacity-30 saturate-0` : ``,
-            variant === `row` ? `w-full gap-2 rounded-lg bg-card px-2 py-1` : ``,
-            variant === `tile` ? `w-full gap-2.5 rounded-xl bg-card px-3 py-2.5` : ``,
+            variant === `row` ? `w-full gap-2 rounded-lg px-2 py-1` : ``,
+            variant === `tile` ? `w-full gap-2.5 rounded-xl px-3 py-2.5` : ``,
             // The kit's chip: its plate, radius, hover and touch target; the map only lays its ring over it and tucks the face in.
             variant === `chip` ? `ui-chip max-w-full pl-1` : ``,
             node.kind === `rest` ? `border-dashed` : ``,
@@ -91,7 +96,7 @@ const glyph = computed(() => (node.icon !== undefined && isIconName(node.icon) ?
         <!-- A tile's mark rides its corner, so it takes no width from the name; elsewhere it trails the row. -->
         <span
             v-if="mark !== undefined"
-            class="text-xs text-(--map-ink)"
+            class="text-xs text-(--map-mark)"
             :class="variant === `tile` ? `absolute right-1.5 top-1.5 text-2xs` : `shrink-0`"
             :title="markTitle"
             ><Icon :name="mark"

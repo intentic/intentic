@@ -22,6 +22,7 @@ const {
     defaultSlug,
     addressable = false,
     ready = true,
+    fullWidth = [],
 } = defineProps<{
     title: string;
     description?: string;
@@ -38,6 +39,8 @@ const {
     groups: readonly NavGroup<HubTab>[];
     /** Holds the unknown-slug redirect while the set is still filling in. */
     ready?: boolean;
+    /** Sections that run sideways (a drawing, not a document) and take the whole width instead of the reading measure. */
+    fullWidth?: readonly string[];
 }>();
 
 const route = useRoute();
@@ -138,7 +141,14 @@ watch(
 <template>
     <!-- Wide because the index spends 14rem of it: at the 56rem default the body would be left narrower than it was before the column arrived. -->
     <!-- A phone swaps: the index or one section, never both on screen (see `drill`). -->
-    <SplitView :title="pageTitle" :description="pageDescription" scroll="page" :mobile="drill ? `swap` : `collapse`" :detail-open="!onIndex">
+    <SplitView
+        :title="pageTitle"
+        :description="pageDescription"
+        scroll="page"
+        :width="fullWidth.includes(activeSlug) ? `full` : `wide`"
+        :mobile="drill ? `swap` : `collapse`"
+        :detail-open="!onIndex"
+    >
         <!-- A desktop pane too narrow for the rail keeps the strip. It wraps rather than scrolls: this is the index of everything the hub holds, and a section a reader can't see is a section they won't look for. -->
         <template v-if="!drill" #compact>
             <div class="border-b border-line-subtle pb-2">

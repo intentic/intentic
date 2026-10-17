@@ -6,18 +6,20 @@ import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import { identityHue } from "../../../lib/identityHue";
-import { editPath, editWords, groupLabel, isGround, nodeDetail, nodeLabel, type PersonaName, principalLine } from "./mapWords";
-import { type Focus, holdersOf, type MapNode, type Principal, type ReachMap, reachedIn } from "./reachModel";
+import { editPath, editWords, GROUP_ICONS, groupLabel, isGround, nodeDetail, nodeLabel, type PersonaName, principalLine } from "./mapWords";
+import { bundleId, type Focus, type Lighting, type MapNode, type Principal, type ReachMap } from "./reachModel";
 
-// WHAT THE MAP IS SAYING RIGHT NOW, IN WORDS. Lines and rings show a reach; this says it, so nobody has to count rings
-// to know that Jo's agents may spend two of nine connections, or that nothing that gets in reaches the VPN. With nothing
-// in focus it says how to read the map. It stands above the stage and stays put while the stage scrolls.
+// WHAT THE MAP IS SAYING RIGHT NOW, IN ONE LINE. Lines and edges show a reach; this says it, so nobody has to count them
+// to know that Jo sees the whole workspace and acts only through Maya, or that nothing that gets in reaches the VPN. With
+// nothing in focus it says how to read the map. One line high whatever it says, so a focus never moves the map under the
+// pointer; what does not fit is in its tooltip, and the group blocks carry the counts.
 
 const t = useT();
 
-const { map, focus, pinned, personaName } = defineProps<{
+const { map, focus, lighting, pinned, personaName } = defineProps<{
     map: ReachMap;
     focus: Focus | undefined;
+    lighting: Lighting | undefined;
     pinned: boolean;
     personaName: PersonaName;
 }>();
@@ -26,10 +28,22 @@ defineEmits<{ clear: [] }>();
 const areasExist = computed(() => map.areas.length > 1);
 const principal = computed(() => (focus?.kind === `principal` ? map.principals.find((entry) => entry.id === focus.id) : undefined));
 const node = computed(() => (focus?.kind === `node` ? map.nodes.get(focus.id) : undefined));
+// A folded block in focus: a group, or the box's secrets.
+const bundle = computed(() => {
+    if (focus?.kind !== `node` || !focus.id.startsWith(`bundle:`)) {
+        return undefined;
+    }
+    if (focus.id === bundleId(`secrets`)) {
+        return { label: t(`sandbox.sandboxMap.secrets`), icon: `key` as const, count: map.secrets.length };
+    }
+    const group = map.groups.find((entry) => bundleId(entry.key) === focus.id);
+    return group === undefined ? undefined : { label: groupLabel(group.key), icon: GROUP_ICONS[group.key], count: group.nodes.length };
+});
 
-const wholeWorkspace = (who: Principal, how: `edit` | `see`): boolean => map.areas.every((ground) => who.reach.get(ground.id) === how || (how === `see` && who.reach.get(ground.id) === `edit`));
+const wholeWorkspace = (who: Principal, how: `edit` | `see`): boolean =>
+    map.areas.every((ground) => who.reach.get(ground.id) === how || (how === `see` && who.reach.get(ground.id) === `edit`));
 
-// Where a principal works, in one line: the whole workspace, the areas they edit and the ones they only read, or none.
+// Where a principal works: the whole workspace, the areas they edit and the ones they only read, or none.
 const workspaceLine = (who: Principal): string => {
     if (wholeWorkspace(who, `edit`)) {
         return t(`sandbox.sandboxMap.editsAll`);
@@ -68,84 +82,75 @@ const throughLine = (who: Principal): string | undefined => {
     return t(`sandbox.sandboxMap.onlyThrough`, { personas: formatList(worn) });
 };
 
-const tallies = computed(() => {
+const summary = computed(() => {
     const who = principal.value;
-    return who === undefined ? [] : map.groups.map((group) => ({ key: group.key, label: groupLabel(group.key), lit: reachedIn(who, group.nodes), total: group.nodes.length }));
+    if (who === undefined) {
+        return ``;
+    }
+    const through = throughLine(who);
+    return through === undefined ? workspaceLine(who) : `${workspaceLine(who)}. ${through}`;
 });
-const thingCount = computed(() => map.groups.reduce((sum, group) => sum + group.nodes.length, 0));
 
-const holders = computed(() => (node.value === undefined ? [] : holdersOf(map, node.value.id)));
-const holderNames = computed(() => holders.value.map(({ principal: who }) => (who.self === true ? t(`sandbox.sandboxMap.you`) : who.label)));
+// Who reaches the focused thing, as the lighting already worked it out.
+const holders = computed(() => map.principals.filter((entry) => lighting?.principals.has(entry.id) === true));
+const holderLine = computed(() => {
+    if (holders.value.length === 0) {
+        return t(`sandbox.sandboxMap.reachedByNobody`);
+    }
+    const names = formatList(holders.value.map((who) => (who.self === true ? t(`sandbox.sandboxMap.you`) : who.label)));
+    const counts = { count: holders.value.length, total: map.principals.length, names };
+    return bundle.value === undefined ? t(`sandbox.sandboxMap.reachedBy`, counts) : t(`sandbox.sandboxMap.reachedInBundle`, counts);
+});
 const nodePath = computed(() => (node.value === undefined ? undefined : editPath(node.value)));
 const markOf = (entry: MapNode): string => entry.icon ?? `folder`;
 </script>
 
 <template>
-    <!-- As tall as its fullest state (a name, a line and a row of tallies), so focusing something never moves the map under the pointer. -->
-    <div class="flex min-h-24 items-start gap-3 rounded-xl border border-line-subtle bg-card px-4 py-3" aria-live="polite">
+    <div class="flex h-9 min-w-0 flex-1 items-center gap-2.5" aria-live="polite">
         <template v-if="principal !== undefined">
-            <Avatar v-if="principal.kind === `person`" :size="32" :name="principal.label" :hue="identityHue(principal.label)" />
-            <span v-else class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-overlay text-base text-muted">
-                <Icon :name="principal.kind === `token` ? `key` : `link`" />
-            </span>
-            <div class="flex min-w-0 flex-1 flex-col gap-1.5">
-                <div class="flex min-w-0 flex-wrap items-baseline gap-x-2">
-                    <span class="truncate text-sm font-semibold text-content">{{ principal.label }}</span>
-                    <span class="text-xs text-muted">{{ principalLine(principal, personaName) }}</span>
-                </div>
-                <p class="text-xs text-muted">
-                    {{ workspaceLine(principal) }}<template v-if="throughLine(principal) !== undefined">. {{ throughLine(principal) }}</template>
-                </p>
-                <div v-if="tallies.length > 0" class="flex flex-wrap gap-1.5">
-                    <span
-                        v-for="tally in tallies"
-                        :key="tally.key"
-                        class="rounded-md px-1.5 py-0.5 text-2xs tabular-nums"
-                        :class="tally.lit > 0 ? `text-content ring-1 ring-(--map-ink)` : `text-faint ring-1 ring-line-subtle`"
-                    >
-                        {{ tally.label }} {{ t(`sandbox.sandboxMap.litOf`, { lit: tally.lit, total: tally.total }) }}
-                    </span>
-                </div>
-            </div>
-            <RouterLink to="/sandbox/access" :class="ui.textButton()" class="shrink-0">{{ t(`sandbox.sandboxMap.changeAccess`) }}</RouterLink>
+            <Avatar v-if="principal.kind === `person`" :size="20" :name="principal.label" :hue="identityHue(principal.label)" />
+            <span v-else class="flex size-5 shrink-0 items-center justify-center rounded-md bg-overlay text-2xs text-muted"
+                ><Icon :name="principal.kind === `token` ? `key` : `link`"
+            /></span>
+            <span class="max-w-64 shrink-0 truncate text-sm font-medium text-content">{{ principal.label }}</span>
+            <span class="shrink-0 text-xs text-muted">{{ principalLine(principal, personaName) }}</span>
+            <span class="min-w-0 truncate text-xs text-subtle" :title="summary">{{ summary }}</span>
+            <RouterLink to="/sandbox/access" :class="ui.textButton()" class="ml-auto shrink-0">{{ t(`sandbox.sandboxMap.changeAccess`) }}</RouterLink>
+        </template>
+
+        <template v-else-if="bundle !== undefined">
+            <span class="flex size-5 shrink-0 items-center justify-center rounded-md bg-overlay text-2xs text-muted"><Icon :name="bundle.icon" /></span>
+            <span class="shrink-0 text-sm font-medium text-content">{{ bundle.label }}</span>
+            <span class="shrink-0 text-xs tabular-nums text-muted">{{ bundle.count }}</span>
+            <span class="min-w-0 truncate text-xs text-subtle" :title="holderLine">{{ holderLine }}</span>
         </template>
 
         <template v-else-if="node !== undefined">
-            <PersonaFace v-if="node.kind === `persona`" :persona="{ id: node.ref ?? node.id, label: node.label }" :size="32" />
-            <span v-else-if="node.kind === `model` && node.provider !== undefined" class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-overlay text-base text-content">
+            <PersonaFace v-if="node.kind === `persona`" :persona="{ id: node.ref ?? node.id, label: node.label }" :size="20" />
+            <span v-else-if="node.kind === `model` && node.provider !== undefined" class="flex size-5 shrink-0 items-center justify-center text-sm text-content">
                 <ProviderLogo :provider="node.provider" />
             </span>
-            <BrandMark v-else :size="32" :name="nodeLabel(node, areasExist)" :logo="node.logo" :icon="markOf(node)" />
-            <div class="flex min-w-0 flex-1 flex-col gap-1.5">
-                <div class="flex min-w-0 flex-wrap items-baseline gap-x-2">
-                    <span class="truncate text-sm font-semibold text-content">{{ nodeLabel(node, areasExist) }}</span>
-                    <span v-if="node.state ?? nodeDetail(node)" class="truncate text-xs text-muted">{{ node.state ?? nodeDetail(node) }}</span>
-                </div>
-                <p class="text-xs text-muted">
-                    {{
-                        holders.length === 0
-                            ? t(`sandbox.sandboxMap.reachedByNobody`)
-                            : t(`sandbox.sandboxMap.reachedBy`, { count: holders.length, total: map.principals.length, names: formatList(holderNames) })
-                    }}
-                </p>
-            </div>
-            <RouterLink v-if="nodePath !== undefined" :to="nodePath" :class="ui.textButton()" class="shrink-0">{{ editWords(node) }}</RouterLink>
+            <BrandMark v-else :size="20" :name="nodeLabel(node, areasExist)" :logo="node.logo" :icon="markOf(node)" />
+            <span class="max-w-64 shrink-0 truncate text-sm font-medium text-content">{{ nodeLabel(node, areasExist) }}</span>
+            <span v-if="node.state ?? nodeDetail(node)" class="max-w-48 shrink-0 truncate text-xs text-muted">{{ node.state ?? nodeDetail(node) }}</span>
+            <span class="min-w-0 truncate text-xs text-subtle" :title="holderLine">{{ holderLine }}</span>
+            <RouterLink v-if="nodePath !== undefined" :to="nodePath" :class="ui.textButton()" class="ml-auto shrink-0">{{ editWords(node) }}</RouterLink>
         </template>
 
-        <template v-else>
-            <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-overlay text-base text-muted"><Icon name="sitemap" /></span>
-            <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span class="text-sm font-medium text-content">{{
-                    t(`sandbox.sandboxMap.summary`, {
-                        ways: t(`sandbox.sandboxMap.waysIn`, { count: map.principals.length }, map.principals.length),
-                        things: t(`sandbox.sandboxMap.thingsReached`, { count: thingCount }, thingCount),
-                    })
-                }}</span>
-                <span class="text-xs text-muted">{{ t(`sandbox.sandboxMap.hint`) }}</span>
-            </div>
-        </template>
+        <span v-else class="flex min-w-0 items-center gap-2 text-xs text-muted">
+            <Icon name="sitemap" class="shrink-0" />
+            <span class="truncate">{{ t(`sandbox.sandboxMap.hint`) }}</span>
+        </span>
 
-        <button v-if="pinned" type="button" :class="ui.iconButton()" class="-mr-1.5 -mt-1 shrink-0" :aria-label="t(`sandbox.sandboxMap.clear`)" :title="t(`sandbox.sandboxMap.clear`)" @click="$emit(`clear`)">
+        <button
+            v-if="pinned"
+            type="button"
+            :class="ui.iconButton()"
+            class="shrink-0"
+            :aria-label="t(`sandbox.sandboxMap.clear`)"
+            :title="t(`sandbox.sandboxMap.clear`)"
+            @click="$emit(`clear`)"
+        >
             <Icon name="times" />
         </button>
     </div>

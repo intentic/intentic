@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { SegmentedControl } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
+import { deviceKey, storedValue, storeValue } from "@intentic/ui/storage";
 import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { identityHue } from "../../../lib/identityHue";
@@ -78,14 +80,49 @@ const ink = computed(() => {
         : `var(--color-link)`;
 });
 
+// The focus's ink, mixed into the theme so it tints rather than shouts: a lit card's edge is the theme's rule leaning toward
+// the ink, the focus's own a little further with a soft halo and wash, and a lit line the ink eased toward the card.
+const look = computed(() => ({
+    "--map-ink": ink.value,
+    "--map-line": `color-mix(in oklab, var(--color-line-strong) 70%, var(--color-content))`,
+    "--map-stroke": `color-mix(in oklab, var(--map-ink) 82%, var(--color-card))`,
+    "--map-edge": `color-mix(in oklab, var(--map-ink) 38%, var(--color-line))`,
+    "--map-edge-strong": `color-mix(in oklab, var(--map-ink) 60%, var(--color-line))`,
+    "--map-mark": `color-mix(in oklab, var(--map-ink) 75%, var(--color-muted))`,
+    "--map-wash": `color-mix(in oklab, var(--map-ink) 6%, var(--color-card))`,
+    "--map-halo": `0 0 0 3px color-mix(in oklab, var(--map-ink) 12%, transparent)`,
+}));
+
 const personaName = (id: string): string => map.value.personas.find((card) => card.ref === id)?.label ?? id;
+
+// Compact first: the drawing reads at a glance, and every block opens where its detail is wanted. The reader's choice is
+// kept on this device, as a view preference rather than anything about the sandbox.
+type MapView = `compact` | `detailed`;
+const VIEW_KEY = deviceKey(`intentic.sandboxMap.view`);
+const view = shallowRef<MapView>(storedValue(VIEW_KEY) === `detailed` ? `detailed` : `compact`);
+const setView = (next: MapView): void => {
+    view.value = next;
+    storeValue(VIEW_KEY, next);
+};
+const views = computed(() => [
+    { label: t(`sandbox.sandboxMap.viewCompact`), value: `compact` as const },
+    { label: t(`sandbox.sandboxMap.viewDetailed`), value: `detailed` as const },
+]);
 </script>
 
 <template>
-    <div class="flex flex-col gap-4">
-        <p class="max-w-prose text-sm text-muted">{{ t(`sandbox.sandboxMap.lede`) }}</p>
-        <div class="sticky top-0 z-10 -mx-1 bg-canvas px-1 pb-2 pt-1" :style="{ '--map-ink': ink }">
-            <MapCaption :map :focus :pinned="pinned !== undefined" :persona-name @clear="clear" />
+    <div class="flex flex-col gap-3" :style="look">
+        <!-- One line, kept in view while the drawing scrolls: what the focus means, and how much the drawing shows. -->
+        <div class="sticky top-0 z-10 -mx-1 flex min-w-0 items-center gap-3 bg-canvas px-1 py-1">
+            <MapCaption :map :focus :lighting :pinned="pinned !== undefined" :persona-name @clear="clear" />
+            <SegmentedControl
+                class="shrink-0"
+                size="xs"
+                :model-value="view"
+                :options="views"
+                :aria-label="t(`sandbox.sandboxMap.viewLabel`)"
+                @update:model-value="setView"
+            />
         </div>
         <MapStage
             :map
@@ -93,8 +130,8 @@ const personaName = (id: string): string => map.value.personas.find((card) => ca
             :focus
             :pinned
             :name="active?.name ?? t(`sandbox.sandboxMap.theSandbox`)"
-            :ink
             :persona-name
+            :compact="view === `compact`"
             @point="point"
             @press="press"
             @clear="clear"

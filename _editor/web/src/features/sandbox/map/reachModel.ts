@@ -595,8 +595,6 @@ export const holdersOf = (map: ReachMap, nodeId: string): { readonly principal: 
         return how === undefined ? [] : [{ principal, how }];
     });
 
-/** How many of a group's nodes a principal reaches. */
-export const reachedIn = (principal: Principal, nodes: readonly MapNode[]): number => nodes.filter((node) => principal.reach.has(node.id)).length;
 
 // ---- what a focus lights ----
 
@@ -614,10 +612,39 @@ export interface Lighting {
     readonly threads: readonly string[];
 }
 
+// A block that stands in for many nodes (a folded group, the box's secrets): its id, and the nodes it holds.
+export const bundleId = (key: GroupKey | `secrets`): string => `bundle:${key}`;
+
+const bundleMembers = (map: ReachMap, id: string): readonly MapNode[] =>
+    id === bundleId(`secrets`) ? map.secrets : (map.groups.find((group) => bundleId(group.key) === id)?.nodes ?? []);
+
+// The stronger of two ways to reach: acting through a thing beats only reading it, and both beat reaching it as a persona.
+const STRENGTH = { edit: 3, use: 3, see: 2, through: 1 } as const satisfies Record<ReachHow, number>;
+
+// Who reaches anything a block holds, each at the strongest way they reach any of it.
+const bundleHolders = (map: ReachMap, members: readonly MapNode[]): Map<string, ReachHow> => {
+    const holders = new Map<string, ReachHow>();
+    for (const principal of map.principals) {
+        for (const member of members) {
+            const how = principal.reach.get(member.id);
+            const held = holders.get(principal.id);
+            if (how !== undefined && (held === undefined || STRENGTH[how] > STRENGTH[held])) {
+                holders.set(principal.id, how);
+            }
+        }
+    }
+    return holders;
+};
+
 export const lightingOf = (map: ReachMap, input: RelationInput, focus: Focus): Lighting => {
     if (focus.kind === `principal`) {
         const principal = map.principals.find((entry) => entry.id === focus.id);
         return { principals: new Map([[focus.id, `self`]]), nodes: principal?.reach ?? new Map(), threads: [] };
+    }
+    if (focus.id.startsWith(`bundle:`)) {
+        const members = bundleMembers(map, focus.id);
+        const nodes = new Map<string, ReachHow | `self` | `related`>([[focus.id, `self`], ...members.map((member) => [member.id, `related`] as const)]);
+        return { principals: bundleHolders(map, members), nodes, threads: [] };
     }
     const { lit, threads } = relationsOf(input, focus.id);
     const nodes = new Map<string, ReachHow | `self` | `related`>([...lit].map((id) => [id, id === focus.id ? `self` : `related`]));

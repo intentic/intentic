@@ -96,7 +96,7 @@ const entryEdges = (layout: MapLayout, map: ReachMap, lighting: Lighting | undef
         ];
     });
 
-// A folded group's `more` row stands in for every node it hides: lit when any of them is.
+// A folded group's row, or a whole group drawn as one block, stands in for every node it hides: lit when any of them is.
 const hiddenHow = (map: ReachMap, layout: MapLayout, lighting: Lighting | undefined, group: GroupKey): ReachHow | `self` | `related` | undefined => {
     const nodes = map.groups.find((entry) => entry.key === group)?.nodes ?? [];
     for (const node of nodes) {
@@ -114,7 +114,7 @@ const reachEdges = (layout: MapLayout, map: ReachMap, lighting: Lighting | undef
         if (port === undefined || placed.group === undefined) {
             return [];
         }
-        const how = id.startsWith(`more:`) ? hiddenHow(map, layout, lighting, placed.group) : lighting?.nodes.get(id);
+        const how = id.startsWith(`bundle:`) ? (lighting?.nodes.get(id) ?? hiddenHow(map, layout, lighting, placed.group)) : lighting?.nodes.get(id);
         return [
             {
                 key: `reach:${id}`,
