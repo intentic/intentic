@@ -32,7 +32,7 @@
 # fails on a bump that changes the shape, and the parser reports "could not check" rather than "clean" if one
 # ever does.
 ENV UV_LINK_MODE=copy
-RUN version=0.13.0 \
+RUN version=0.13.1 \
     && ruff_version=0.17.0 \
     && case "$(dpkg --print-architecture)" in \
         amd64) triple=x86_64-unknown-linux-gnu ;; \
