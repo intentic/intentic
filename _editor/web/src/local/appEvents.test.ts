@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import { navigatedPath, openedPath } from "./appEvents";
+import { navigatedPath, openedPath, openingStage } from "./appEvents";
 
 // Pins what a local window reads off the app's `intentic:open`: the entry to open, relative to its folder, or nothing.
 
@@ -25,4 +25,16 @@ test("the app's navigate event names a route of the shell, and anything else nam
         undefined,
         undefined,
     ]);
+});
+
+/* How far the folder's sandbox has come, as the app says it after "Open this folder's sandbox". */
+test("the opening event names a stage the button knows, and anything else names nothing", () => {
+    const event = (detail: unknown): Event => new CustomEvent(`intentic:sandbox-opening`, { detail });
+    expect([
+        openingStage(event({ stage: `starting` })),
+        openingStage(event({ stage: `shown` })),
+        openingStage(event({ stage: `opening` })),
+        openingStage(event(null)),
+        openingStage(new Event(`intentic:sandbox-opening`)),
+    ]).toEqual([`starting`, `shown`, undefined, undefined, undefined]);
 });

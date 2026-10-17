@@ -24,3 +24,14 @@ export const navigatedPath = (event: Event): string | undefined => {
     const detail = NavigateDetail.safeParse(event.detail);
     return detail.success ? detail.data.path : undefined;
 };
+
+const OpeningDetail = z.object({ stage: z.enum([`starting`, `shown`]) });
+
+/** How far an `intentic:sandbox-opening` says the folder's sandbox has come; nothing for any other shape. */
+export const openingStage = (event: Event): `starting` | `shown` | undefined => {
+    if (!(event instanceof CustomEvent)) {
+        return undefined;
+    }
+    const detail = OpeningDetail.safeParse(event.detail);
+    return detail.success ? detail.data.stage : undefined;
+};

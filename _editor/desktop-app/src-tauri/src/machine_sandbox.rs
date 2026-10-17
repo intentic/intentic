@@ -121,6 +121,15 @@ impl Standing {
         )
     }
 
+    /// [`wants_the_reader`](Self::wants_the_reader), asked the moment a sign-in begun on a folder completes
+    /// (`intentic://launcher?to=agent`, windows.rs). Signed out is not a question for the reader then: the record has
+    /// not yet heard who signed in, which the workspace says with the roster a moment later, and the sandbox is made
+    /// right after. Read as one, it sent a reader who had just signed in to This device instead of back to the folder
+    /// they asked about, whose card says how far the sandbox is (2026-10-17).
+    pub fn wants_the_reader_after_sign_in(&self) -> bool {
+        self.wants_the_reader() && *self != Standing::SignedOut
+    }
+
     /// The word the record's `state` is, for comparing two standings by kind.
     fn kind(&self) -> &'static str {
         match self {
@@ -1081,6 +1090,25 @@ fn reader_here(app: &AppHandle) -> bool {
     })
 }
 
+/// The one folder asked into the sandbox, when there is just one: the folder the reader is waiting on.
+fn asked_folder(record: &Record) -> Option<&Folder> {
+    match record.folders.as_slice() {
+        [folder] => Some(folder),
+        _ => None,
+    }
+}
+
+/// Where the "ready" notification opens: the workspace at the folder the reader asked an agent about, when one folder
+/// was, which is where its own button opens too (project.rs `project_path`). It opened at the sandbox's `/work`
+/// around the folder, a sandbox the reader had not asked to look at (2026-10-17).
+fn ready_path(record: &Record) -> Option<String> {
+    let id = record.sandbox_id.as_deref()?;
+    Some(match asked_folder(record) {
+        Some(folder) => crate::project::project_path(id, &folder.name),
+        None => format!("/?sandbox={id}"),
+    })
+}
+
 /// The system's notification for the record's news.
 fn notify(app: &AppHandle, record: &Record) {
     if reader_here(app) {
@@ -1091,11 +1119,11 @@ fn notify(app: &AppHandle, record: &Record) {
         Standing::Ready => (
             NoticeKind::Finished,
             "This computer's sandbox is ready",
-            "Folders you work on with an agent go into it.".to_string(),
-            record
-                .sandbox_id
-                .as_deref()
-                .map(|id| format!("/?sandbox={id}")),
+            match asked_folder(record) {
+                Some(folder) => format!("{} is going into it now.", folder.name),
+                None => "Folders you work on with an agent go into it.".to_string(),
+            },
+            ready_path(record),
         ),
         Standing::Failed { reason } => (
             NoticeKind::Asks,
@@ -2373,6 +2401,52 @@ mod tests {
             made: true,
             ..record(standing)
         }
+    }
+
+    fn asked(name: &str, state: FolderState) -> Folder {
+        Folder {
+            path: format!("C:\\Users\\me\\{name}"),
+            name: name.into(),
+            state,
+            reason: None,
+            status: None,
+        }
+    }
+
+    /// The reader who just signed in on a folder is put back on it, not on This device: the record reads signed out
+    /// until the workspace says who signed in, which comes a moment after the way back is asked for.
+    #[test]
+    fn signed_out_right_after_a_sign_in_is_a_sandbox_on_its_way() {
+        assert!(Standing::SignedOut.wants_the_reader());
+        assert!(!Standing::SignedOut.wants_the_reader_after_sign_in());
+        assert!(!Standing::Ready.wants_the_reader_after_sign_in());
+        assert!(!Standing::Interrupted.wants_the_reader_after_sign_in());
+        // Anything the reader has to answer still takes them to This device, where it is answered.
+        assert!(Standing::NeedsDocker {
+            reason: DockerReason::NotRunning
+        }
+        .wants_the_reader_after_sign_in());
+        assert!(Standing::Stopped.wants_the_reader_after_sign_in());
+        assert!(Standing::Failed {
+            reason: "no".into()
+        }
+        .wants_the_reader_after_sign_in());
+    }
+
+    /// "Ready" opens the folder the reader asked an agent about, inside the sandbox, rather than its `/work`.
+    #[test]
+    fn the_ready_notice_opens_the_one_folder_asked_in() {
+        let mut ready = made(Standing::Ready);
+        assert_eq!(ready_path(&ready).as_deref(), Some("/?sandbox=cm-machine"));
+        ready.folders.push(asked("my-app", FolderState::Attaching));
+        assert_eq!(
+            ready_path(&ready).as_deref(),
+            Some("/?sandbox=cm-machine&project=my-app")
+        );
+        // Two folders: no telling which the reader is waiting on, so the sandbox itself.
+        ready.folders.push(asked("notes", FolderState::Queued));
+        assert_eq!(ready_path(&ready).as_deref(), Some("/?sandbox=cm-machine"));
+        assert_eq!(ready_path(&record(Standing::Ready)), None);
     }
 
     fn facts() -> Facts {

@@ -65,7 +65,8 @@ pub(crate) fn handle_intentic_link(app: &AppHandle, link: &str, source: setup_li
 /// computer's face rather than to the account's sandbox list (auth.rs `complete_path`).
 #[tauri::command]
 fn sign_in(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
-    auth::start(&app, false, window.label() != windows::WORKSPACE)
+    let asked_in = (window.label() != windows::WORKSPACE).then(|| window.label().to_string());
+    auth::start(&app, false, asked_in)
 }
 
 /// What a launch opens onto. This device, in the main window, is for the two things a workspace window cannot

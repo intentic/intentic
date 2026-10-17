@@ -22,7 +22,7 @@ import { isApplePlatform } from "../workbench/commands/keybindings";
 import QuickOpen from "../shell/commands/QuickOpen.vue";
 import { useQuickOpen } from "../workbench/commands/useQuickOpen";
 import { openedPath } from "./appEvents";
-import { useFolderSandbox } from "./folderSandbox";
+import { useFolderSandbox,useSandboxOpening } from "./folderSandbox";
 import { folderDrawn } from "./folderSwitch";
 import LocalBringBack from "./bring-back/LocalBringBack.vue";
 import { useQuietChecks } from "./bring-back/useBringBack";
@@ -125,18 +125,32 @@ const { rootDragging, onRootDragEnter, onRootDragOver, onRootDragLeave, onRootDr
 // went into); otherwise asked for in this window's own dialog and put into this computer's sandbox while the reader keeps
 // working (LocalProject.vue), the button saying how far it is (machineCard.ts `folderButtonOf`).
 const hasSandbox = useFolderSandbox();
-const { machine, folder, ask: askForSandbox, fold } = useLocalProject();
-const sandboxButton = computed(() => folderButtonOf({ hasSandbox: hasSandbox.value, machine: machine.value, folder: folder.value }));
+const { machine, folder, signingIn, ask: askForSandbox, fold } = useLocalProject();
+const sandboxButton = computed(() =>
+    folderButtonOf({ hasSandbox: hasSandbox.value, machine: machine.value, folder: folder.value, signingIn: signingIn.value }),
+);
 // What agents changed there, looked for once the folder is in its sandbox (its first copy done), so Bring back appears
 // when there is something to bring back.
 useQuietChecks(
     () => face !== undefined && face.file === undefined && hasSandbox.value && (folder.value === undefined || folder.value.state === `ready`),
 );
-const sandboxLabel = computed(() => sandboxButton.value.label);
+// The press that opens the sandbox, seen at once: the app looks whether the sandbox is stopped before the workspace goes
+// up, and the button says so from the press on, spinning and locked, until the app says it is up (folderSandbox.ts).
+const { stage: opening, begin: beginOpening } = useSandboxOpening();
+const openingShown = computed(() => opening.value !== undefined && sandboxButton.value.press === `open`);
+const sandboxLabel = computed(() => {
+    if (openingShown.value) {
+        return opening.value === `starting` ? t(`local.localFiles.startingSandbox`) : t(`local.localFiles.openingSandbox`);
+    }
+    return sandboxButton.value.label;
+});
 // What a folder's sandbox IS, which is what the two presses that make or open one are worth explaining. A button under
 // way says how far in its own label, and one carrying the sandbox's next step has the card above it saying why: neither
 // wants a note about keeping a folder in sync.
 const sandboxTip = computed<Tip | undefined>(() => {
+    if (openingShown.value) {
+        return opening.value === `starting` ? { title: t(`local.localFiles.startingSandbox`), note: t(`local.localFiles.startingHint`) } : undefined;
+    }
     switch (sandboxButton.value.press) {
         case `open`:
             return { title: t(`local.localFiles.syncedSandbox`), note: t(`local.localFiles.startsIfStopped`) };
@@ -150,9 +164,14 @@ const router = useRouter();
 const toSandbox = (): void => {
     const press = sandboxButton.value.press;
     switch (press) {
-        // The folder's sandbox, started first if it is stopped (the app's project.rs `open_existing`).
+        // The folder's sandbox, started first if it is stopped (the app's project.rs `open_existing`), the button saying
+        // it is on its way until the app says it is up.
         case `open`:
-            askLocalApp(`sandbox`);
+            // Once is enough: a second press while it opens would only ask the app to look and open it again.
+            if (opening.value === undefined) {
+                beginOpening();
+                askLocalApp(`sandbox`);
+            }
             return;
         // Under way, with nothing to ask of anyone: its card says how far. Already open, the card flashes rather than
         // the press going nowhere.
@@ -389,6 +408,7 @@ onUnmounted(() => {
                     size="small"
                     tier="boring"
                     :label="sandboxLabel"
+                    :loading="openingShown"
                     v-tooltip.top="sandboxTip"
                     @click="toSandbox"
                 />

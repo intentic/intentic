@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Icon, type Tip } from "@intentic/ui";
 import { computed } from "vue";
 import { setProjectScope } from "../../../app/projectScope";
 import { workspaceDir } from "../../../app/workspaceScope";
@@ -6,19 +7,38 @@ import { useT } from "@intentic/ui/i18n";
 
 // Opening a project, which creating one does, narrows the whole workspace to it (the files, the agents, the checks),
 // and a chip in the status strip was the only sign: a new user took the narrowed tree for missing files, pressed the
-// active Files tab again and again, and deleted the project. The tree says so where the rest of the files would be,
-// with the way back to everything beside it. The same clear as the chip's (WorkspaceDirChip.vue).
+// active Files tab again and again, and deleted the project. So the explorer says it too. It used to say it as a card
+// above the first row, in the link colour, and that read as a prompt to press: readers lifted the scope they had just
+// opened and worked from the root (2026-10-17). It now sits at the foot of the explorer, one muted line that is there
+// to be found, not pressed: the project's name and a quiet way back to everything. The same clear as the chip's
+// (WorkspaceDirChip.vue).
 
 const t = useT();
 
 const project = computed(() => (workspaceDir.value === `` ? undefined : workspaceDir.value));
+
+const hint = computed((): Tip => ({
+    title: t(`workspace.workspaceScopeNote.title`),
+    rows: [{ label: t(`workspace.workspaceScopeNote.project`), value: project.value ?? `` }],
+    note: t(`workspace.workspaceScopeNote.showingOnly`),
+}));
 </script>
 
 <template>
-    <p v-if="project" class="mx-2 mb-1 flex flex-wrap items-baseline gap-x-1.5 rounded-md bg-content/5 px-2 py-1 text-2xs text-muted" role="status">
-        <span class="min-w-0 break-words">{{ t(`workspace.workspaceScopeNote.showingOnly`, { project }) }}</span>
-        <button type="button" class="shrink-0 cursor-pointer text-link hover:underline" @click="setProjectScope(undefined)">
+    <div
+        v-if="project"
+        class="flex h-6 shrink-0 items-center gap-1.5 border-t border-line px-2.5 text-2xs text-subtle"
+        role="status"
+        v-tooltip.top="hint"
+    >
+        <Icon name="folder-open" class="shrink-0 text-[0.65rem]" />
+        <span class="min-w-0 flex-1 truncate">{{ t(`workspace.workspaceScopeNote.onlyProject`, { project }) }}</span>
+        <button
+            type="button"
+            class="shrink-0 cursor-pointer rounded-sm px-1 text-muted transition-colors hover:bg-content/5 hover:text-content"
+            @click="setProjectScope(undefined)"
+        >
             {{ t(`workspace.workspaceScopeNote.showEverything`) }}
         </button>
-    </p>
+    </div>
 </template>

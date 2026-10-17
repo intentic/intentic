@@ -11368,8 +11368,11 @@
             "noWorkingCopyTo": "{title} nie ma kopii roboczej do przeglądania"
         },
         "workspaceScopeNote": {
-            "showEverything": "Pokaż wszystkie projekty",
-            "showingOnly": "Widać tylko {project}: jego pliki, agentów i sprawdzenia."
+            "onlyProject": "Tylko {project}",
+            "project": "Projekt",
+            "showEverything": "Pokaż wszystko",
+            "showingOnly": "Pliki, agenci i sprawdzenia pokazują tylko ten projekt.",
+            "title": "Otwarty jeden projekt"
         },
         "workspaceSearchResults": {
             "matchCount": "{count} trafienie | {count} trafienia | {count} trafień",
@@ -11833,6 +11836,9 @@
             "bothWaysWarning": "Zmiany i usunięcia agentów trafią wtedy do tego folderu od razu, bez możliwości wcześniejszego przejrzenia."
         },
         "localFiles": {
+            "openingSandbox": "Otwieranie sandboxa…",
+            "startingSandbox": "Uruchamianie sandboxa…",
+            "startingHint": "Był zatrzymany. Uruchomienie trwa do minuty.",
             "keepsFolderSynced": "Synchronizuje ten folder",
             "reveal": "Pokaż w menedżerze plików",
             "withAgent": "Popracuj nad tym z agentem",
@@ -11952,6 +11958,8 @@
             "readyDetail": "Foldery, nad którymi pracujesz z agentem, trafiają do niego.",
             "signedOut": "Zaloguj się, aby skonfigurować sandbox tego komputera",
             "signedOutDetail": "Intentic utworzy go na tym komputerze zaraz po zalogowaniu.",
+            "signingIn": "Dokończ logowanie w przeglądarce",
+            "signingInDetail": "Sandbox tego komputera powstaje zaraz po zalogowaniu, a to okno pokazuje postęp.",
             "needsDocker": {
                 "notInstalled": "Sandbox tego komputera potrzebuje Dockera",
                 "notRunning": "Sandbox tego komputera czeka na Dockera",
@@ -11993,10 +12001,12 @@
                 "waitingPercent": "Czekam na sandbox tego komputera ({percent}%)",
                 "copying": "Kopiowanie folderu…",
                 "failed": "Nie udało się dodać tego folderu",
-                "setUpComputer": "Przygotuj ten komputer do pracy z agentami"
+                "setUpComputer": "Przygotuj ten komputer do pracy z agentami",
+                "signingIn": "Czekam na zalogowanie…"
             },
             "action": {
                 "signIn": "Zaloguj się",
+                "signInAgain": "Otwórz logowanie ponownie",
                 "startDocker": "Uruchom Dockera",
                 "retry": "Spróbuj ponownie",
                 "log": "Pokaż log",

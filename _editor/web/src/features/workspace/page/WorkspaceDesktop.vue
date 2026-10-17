@@ -1048,10 +1048,11 @@ const includeTip = computed((): Tip => ({
                         @pick="pickRow"
                         @clear="selected = undefined"
                         @cover="(name) => (cover = name)"
-                    >
-                        <template #preamble><WorkspaceScopeNote /></template>
-                    </WorkspaceTree>
+                    />
                 </div>
+                <!-- The open project, said quietly at the explorer's foot rather than above the rows, where it read as a
+                     prompt to lift the scope (WorkspaceScopeNote.vue). -->
+                <WorkspaceScopeNote v-if="layout.sidebarPanel.value === 'files'" />
                 <!-- Root drop hint over the whole panel; files mode only, since review/history aren't drop targets. -->
                 <!-- A folder row shows its own inset ring instead of this one. -->
                 <div

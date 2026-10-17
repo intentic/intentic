@@ -411,11 +411,44 @@ pub(crate) fn folder_name(path: &Path) -> String {
 /// opens on (the web's router/sandboxArrival.ts reads `project`), so the reader lands in the folder they asked about
 /// rather than in the `/work` around it, where a project's sandbox keeps its own state. The owner's first project
 /// opened on that `/work`, which read as "a sandbox in the parent of the folder I was viewing" (2026-10-05).
-fn show_project(app: &AppHandle, project: &Project) {
-    match &project.sandbox_id {
-        Some(id) => crate::windows::show_workspace_at(app, Some(&project_path(id, &project.dir))),
-        None => crate::windows::show_workspace(app),
+///
+/// Asked from a window (`asked_in`), the workspace takes that window's place as the card's own Open does (commands.rs
+/// `workspace_open`, windows.rs `show_workspace_from`): the reader sees the window they pressed in change what it
+/// shows. This press used to open the workspace in the main window's frame and leave a folder window standing behind
+/// it, while the card's Open, the same ask, replaced it (2026-10-17). The window hears `shown` first, so a close its
+/// unsaved edits hold leaves its button at rest rather than still opening.
+fn show_project(app: &AppHandle, asked_in: Option<&str>, project: &Project) {
+    let path = project
+        .sandbox_id
+        .as_deref()
+        .map(|id| project_path(id, &project.dir));
+    tell_opening(app, asked_in, "shown");
+    match asked_in.and_then(|label| app.get_webview_window(label)) {
+        Some(window) => crate::windows::show_workspace_from(app, path.as_deref(), &window),
+        None => crate::windows::show_workspace_at(app, path.as_deref()),
     }
+}
+
+/// What the window that asked for its folder's sandbox hears while it comes up (the web's local/folderSandbox.ts):
+/// `starting` while a stopped sandbox is started first, `shown` as the workspace goes up. Its button says "Opening"
+/// from the press on and holds it until then; a window that is gone hears nothing, and needs to.
+fn tell_opening(app: &AppHandle, asked_in: Option<&str>, stage: &str) {
+    if let Some(window) = asked_in.and_then(|label| app.get_webview_window(label)) {
+        let _ = window.eval(opening_event(stage));
+    }
+}
+
+fn opening_event(stage: &str) -> String {
+    let detail = serde_json::json!({ "stage": stage });
+    format!("window.dispatchEvent(new CustomEvent('intentic:sandbox-opening', {{ detail: {detail} }}));")
+}
+
+/// Whether `slug` is this computer's own sandbox and the app last found it running. The app keeps watch on that one
+/// (machine_sandbox.rs, re-read every few minutes while it is ready), so a press on a folder in it need not wait on a
+/// listing of its own before the workspace goes up.
+fn known_running(record: &crate::machine_sandbox::Record, slug: &str) -> bool {
+    record.slug.as_deref() == Some(slug)
+        && record.standing == crate::machine_sandbox::Standing::Ready
 }
 
 /// The workspace's address for a project's sandbox: the sandbox, and its folder to open on.
@@ -436,26 +469,45 @@ fn stopped_in(rows: &[serde_json::Value], slug: &str) -> bool {
 
 /// The project's sandbox, started first when this machine has it stopped: a stopped sandbox is a workspace that
 /// never answers, and the workspace has no way to start one. Off the calling thread, since a start can take a
-/// minute (one with a shape saved for its next restart is recreated with it, `ic sandbox start`).
-fn open_existing(app: &AppHandle, project: &Project) {
+/// minute (one with a shape saved for its next restart is recreated with it, `ic sandbox start`). `asked_in` is the
+/// window that pressed, which is told how far it has come and whose place the workspace takes ([`show_project`]).
+///
+/// The listing that finds out is `ic sandbox list`, a second or two of Docker calls, which every press waited on with
+/// nothing on screen moving (2026-10-17). This computer's own sandbox, which the app already watches, goes up at once
+/// when the app last found it running; the listing still runs behind it, to start one stopped since that look.
+fn open_existing(app: &AppHandle, asked_in: Option<&str>, project: &Project) {
     let Some(slug) = project.slug.clone() else {
-        show_project(app, project);
+        show_project(app, asked_in, project);
         return;
     };
+    let shown = known_running(&crate::machine_sandbox::status(app), &slug);
+    if shown {
+        show_project(app, asked_in, project);
+    }
     let app = app.clone();
     let project = project.clone();
+    let asked_in = asked_in.map(str::to_owned);
     tauri::async_runtime::spawn_blocking(move || {
         let version = crate::commands::VERSION;
         let host = crate::scripts::Host::current();
         let listed = crate::scripts::ic_listing(&app, crate::commands::list_script(host, version));
         if listed.is_ok_and(|rows| stopped_in(&rows, &slug)) {
+            if !shown {
+                tell_opening(&app, asked_in.as_deref(), "starting");
+            }
             let started = crate::commands::power_script(&slug, "start", host, version)
                 .and_then(|run| crate::scripts::run(&app, &format!("power:{slug}"), run));
             if let Err(error) = started {
                 eprintln!("could not start {slug}: {error}");
             }
+            // The app's own look had it running: it looks again now rather than in a few minutes.
+            if shown {
+                crate::machine_sandbox::kick();
+            }
         }
-        show_project(&app, &project);
+        if !shown {
+            show_project(&app, asked_in.as_deref(), &project);
+        }
     });
 }
 
@@ -581,7 +633,7 @@ fn refuse(app: &AppHandle, root: &Path, why: &Refusal) {
 /// too much in the system's own look, and then took the reader to a page of the workspace to wait on (2026-10-05).
 pub fn start(app: &AppHandle, label: &str, root: PathBuf) {
     if let Some(project) = live_project_of(app, &root) {
-        open_existing(app, &project);
+        open_existing(app, Some(label), &project);
         return;
     }
     if let Some(window) = app.get_webview_window(label) {
@@ -737,7 +789,7 @@ pub async fn project_attach(
         return Err(DOCUMENT.to_string());
     };
     if let Some(project) = live_project_of(&app, &root) {
-        open_existing(&app, &project);
+        open_existing(&app, Some(window.label()), &project);
         return Ok(Attached::Opened);
     }
     // Remembered against a sandbox that is gone: its folder goes into this computer's, once the old one lets go of it.
@@ -773,7 +825,7 @@ pub fn attach_named(
     alternatives: &[String],
 ) -> Result<Attached, String> {
     if let Some(existing) = live_project_of(app, root) {
-        open_existing(app, &existing);
+        open_existing(app, None, &existing);
         return Ok(Attached::Opened);
     }
     let stale = project_of(app, root).is_some();
@@ -2326,6 +2378,35 @@ mod tests {
         assert!(!stopped_in(&rows, "web"));
         assert!(!stopped_in(&rows, "odd"));
         assert!(!stopped_in(&rows, "elsewhere"));
+    }
+
+    #[test]
+    fn only_this_computers_sandbox_found_running_skips_the_listing() {
+        use crate::machine_sandbox::{Record, Standing};
+        let ready = Record {
+            standing: Standing::Ready,
+            slug: Some("ada-local".to_string()),
+            ..Record::default()
+        };
+        assert!(known_running(&ready, "ada-local"));
+        // Another sandbox on this machine is not one the app watches: its state is the listing's to say.
+        assert!(!known_running(&ready, "acme-shop"));
+        // Stopped, or anything short of ready, is started (or waited on) before the workspace goes up.
+        for standing in [Standing::Stopped, Standing::SignedOut] {
+            let record = Record {
+                standing,
+                ..ready.clone()
+            };
+            assert!(!known_running(&record, "ada-local"));
+        }
+    }
+
+    #[test]
+    fn the_window_that_asked_hears_how_far_its_sandbox_has_come() {
+        assert_eq!(
+            opening_event("starting"),
+            r#"window.dispatchEvent(new CustomEvent('intentic:sandbox-opening', { detail: {"stage":"starting"} }));"#
+        );
     }
 
     #[test]

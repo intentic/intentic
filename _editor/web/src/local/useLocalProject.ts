@@ -2,8 +2,15 @@ import { errorMessage } from "@intentic/base/errors";
 import { projectDirCandidates, projectDirNameFor } from "@intentic/sandbox-contract/ids/project-dir";
 import { computed, ref, watch } from "vue";
 import { askLocalApp } from "../app/environments/local";
-import { localHost, type LocalFolderSandbox, type LocalMachineSandbox, type LocalProjectPreview } from "../app/environments/localHost";
+import {
+    localHost,
+    type LocalFolderSandbox,
+    type LocalMachineSandbox,
+    type LocalProjectHost,
+    type LocalProjectPreview,
+} from "../app/environments/localHost";
 import { machineCardOf } from "./machineCard";
+import { useSandboxOpening } from "./folderSandbox";
 
 // "WORK ON THIS WITH AN AGENT", as this window asks it: its own dialog first (LocalProjectDialog.vue), and then the
 // folder put in line for this computer's own sandbox, which the app makes after sign-in and keeps (its machine_sandbox.rs).
@@ -30,6 +37,17 @@ const minimized = ref(false);
 const justReady = ref(false);
 // allow(module-state): the one card this window shows.
 const folderJustReady = ref(false);
+// The reader sent to the browser from this window to sign in for this computer's sandbox: the card says to finish
+// there, not to sign in again, until the app hears who signed in, or the sign-in runs out as the app's does (auth.rs
+// `ATTEMPT_TTL`) and the card asks again.
+// allow(module-state): the one sign-in this window's card asks for.
+const signingIn = ref(false);
+const SIGNING_IN_FOR_MS = 3 * 60_000;
+let signingInUntil: ReturnType<typeof setTimeout> | undefined;
+// This window's own dialog put its folder in line: once the folder is in, the window takes the reader into its sandbox,
+// which is what they asked for, rather than leaving them to find the way there (2026-10-17).
+// allow(module-state): one folder per window, so one ask about it.
+const askedHere = ref(false);
 
 const host = () => localHost().project;
 
@@ -37,14 +55,29 @@ const machine = computed<LocalMachineSandbox | undefined>(() => host()?.machine.
 const folder = computed<LocalFolderSandbox | undefined>(() => host()?.folder.value);
 
 /** The card this window carries, while it carries one. */
-const card = computed(() => machineCardOf({ machine: machine.value, folder: folder.value, justReady: justReady.value, folderJustReady: folderJustReady.value }));
+const card = computed(() =>
+    machineCardOf({
+        machine: machine.value,
+        folder: folder.value,
+        justReady: justReady.value,
+        folderJustReady: folderJustReady.value,
+        signingIn: signingIn.value,
+    }),
+);
 
 // How long "ready" stays on the card: long enough to be seen by a reader who looks up, not long enough to be in the way.
+// A folder this window asked for, ready while the reader was away, keeps its card until they press it or put it away.
 const READY_FOR_MS = 12_000;
-const flash = (shown: typeof justReady): void => {
+const flash = (shown: typeof justReady, held = false): void => {
     shown.value = true;
-    setTimeout(() => (shown.value = false), READY_FOR_MS);
+    if (!held) {
+        setTimeout(() => (shown.value = false), READY_FOR_MS);
+    }
 };
+
+// The reader is looking at this window: the one a move into the sandbox can be made in without taking them from
+// something else.
+const readerHere = (): boolean => document.visibilityState === `visible` && document.hasFocus();
 
 // A fold is remembered for what the card showed when it was folded, in every window of the app (they share the
 // storage): the same news is not unfolded again in the next window opened, and new news is.
@@ -85,11 +118,26 @@ const watchCard = (): void => {
         },
     );
     watch(
+        () => machine.value?.state,
+        (now) => {
+            if (now !== `signedOut`) {
+                stopSigningIn();
+            }
+        },
+    );
+    watch(
         () => folder.value?.state,
         (now, before) => {
-            if (now === `ready` && before !== undefined && before !== `ready`) {
-                flash(folderJustReady);
+            if (now !== `ready` || before === undefined || before === `ready`) {
+                return;
             }
+            const asked = askedHere.value;
+            askedHere.value = false;
+            if (asked && readerHere()) {
+                void open();
+                return;
+            }
+            flash(folderJustReady, asked);
         },
     );
     watch(
@@ -147,7 +195,8 @@ const attach = async (): Promise<`pcSetup` | undefined> => {
     try {
         // Its own name, or, taken already, its parent's in front of it (`code-app`) rather than a number.
         const named = projectDirNameFor(asked.name);
-        await project.attach({ project: named, alternatives: projectDirCandidates(asked.path).filter((name) => name !== named) });
+        const started = await project.attach({ project: named, alternatives: projectDirCandidates(asked.path).filter((name) => name !== named) });
+        askedHere.value = started === `queued`;
         fold(false);
         dialogOpen.value = false;
         const pc = localHost().onboarding?.check.value;
@@ -156,7 +205,7 @@ const attach = async (): Promise<`pcSetup` | undefined> => {
             return `pcSetup`;
         }
         if (asked.machine.state === `signedOut`) {
-            await project.act(`signIn`);
+            await signInFor(project);
         }
     } catch (error) {
         failure.value = errorMessage(error);
@@ -214,8 +263,44 @@ const retryFolder = (): Promise<void> =>
         }
     });
 
-/** The folder's sandbox, opened on the folder. */
-const open = (): Promise<void> => pressed(async () => host()?.open());
+/** The folder's sandbox, opened on the folder; the folder's own button says it is opening until it is up. */
+const open = (): Promise<void> =>
+    pressed(async () => {
+        const opening = useSandboxOpening();
+        opening.begin();
+        try {
+            await host()?.open();
+        } finally {
+            opening.settle();
+        }
+    });
+
+function stopSigningIn(): void {
+    clearTimeout(signingInUntil);
+    signingIn.value = false;
+}
+
+// The app's sign-in, in the browser, said on the card from the press on.
+async function signInFor(project: LocalProjectHost): Promise<void> {
+    clearTimeout(signingInUntil);
+    signingIn.value = true;
+    signingInUntil = setTimeout(stopSigningIn, SIGNING_IN_FOR_MS);
+    try {
+        await project.act(`signIn`);
+    } catch (error) {
+        stopSigningIn();
+        throw error;
+    }
+}
+
+/** Sign in for this computer's sandbox, from the card or the folder's button. */
+const signIn = (): Promise<void> =>
+    pressed(async () => {
+        const project = host();
+        if (project !== undefined) {
+            await signInFor(project);
+        }
+    });
 
 /** Puts a "ready" card away before its moment is over. */
 const dismiss = (): void => {
@@ -241,6 +326,8 @@ export const useLocalProject = () => {
         fold,
         retryFolder,
         open,
+        signIn,
+        signingIn,
         dismiss,
         pressed,
         actionFailure,

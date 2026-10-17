@@ -149,6 +149,10 @@ export const LOCAL_NAVIGATE_EVENT = `intentic:navigate`;
 // This window's folder has its own sandbox now (the app's project.rs `remember`): the way to an agent becomes the way to
 // that sandbox, without a reload (local/folderSandbox.ts).
 export const LOCAL_SANDBOX_EVENT = `intentic:sandbox`;
+// How the folder's sandbox, asked for by `sandbox`, is coming up (the app's project.rs `open_existing`), as
+// `detail.stage`: `starting` when it was stopped and is being started first, `shown` once the workspace is on screen.
+// The folder's button holds its "Opening" until then (local/folderSandbox.ts).
+export const LOCAL_SANDBOX_OPENING_EVENT = `intentic:sandbox-opening`;
 // The app asking this window to put up its folder's sandbox dialog (`sandbox` asked by link for a folder with none).
 export const LOCAL_PROJECT_ASK_EVENT = `intentic:project-ask`;
 // This window pointed at another folder (the folder menu, an empty folder's offers): the folder's face, as `detail`.

@@ -21,7 +21,7 @@ const isAppVerb = (action: MachineCardAction): action is LocalMachineAction => A
  */
 export const runMachineAction = (action: MachineCardAction, go: (path: string) => void): Promise<void> | undefined => {
     const project = localHost().project;
-    const { retryFolder, open, pressed } = useLocalProject();
+    const { retryFolder, open, signIn, pressed } = useLocalProject();
     if (action === `details`) {
         if (project !== undefined) {
             go(project.detailsPath);
@@ -33,6 +33,10 @@ export const runMachineAction = (action: MachineCardAction, go: (path: string) =
     }
     if (action === `retryFolder`) {
         return retryFolder();
+    }
+    // Said on the card from the press on, so the reader is told to finish in the browser rather than asked again.
+    if (action === `signIn` || action === `signInAgain`) {
+        return signIn();
     }
     if (project !== undefined && isAppVerb(action)) {
         return pressed(() => project.act(action));

@@ -4732,6 +4732,9 @@
             "bothWaysWarning": "Agents' edits and deletions will then reach this folder immediately, with nothing to review first."
         },
         "localFiles": {
+            "openingSandbox": "Opening sandbox…",
+            "startingSandbox": "Starting sandbox…",
+            "startingHint": "It was stopped. Starting takes up to a minute.",
             "keepsFolderSynced": "Keeps this folder synced",
             "startsIfStopped": "Starts it if stopped",
             "syncedSandbox": "Synced sandbox",
@@ -4851,6 +4854,8 @@
             "readyDetail": "Folders you work on with an agent go into it.",
             "signedOut": "Sign in to set up this computer's sandbox",
             "signedOutDetail": "Intentic makes it right after you sign in, on this computer.",
+            "signingIn": "Finish signing in in your browser",
+            "signingInDetail": "This computer's sandbox is set up as soon as you're signed in, and this window shows how far it is.",
             "needsDocker": {
                 "notInstalled": "This computer's sandbox needs Docker",
                 "notRunning": "This computer's sandbox is waiting for Docker",
@@ -4892,10 +4897,12 @@
                 "waitingPercent": "Waiting for this computer's sandbox ({percent}%)",
                 "copying": "Copying your folder…",
                 "failed": "Couldn't add this folder",
-                "setUpComputer": "Set this computer up for agents"
+                "setUpComputer": "Set this computer up for agents",
+                "signingIn": "Waiting for you to sign in…"
             },
             "action": {
                 "signIn": "Sign in",
+                "signInAgain": "Open sign-in again",
                 "startDocker": "Start Docker",
                 "retry": "Try again",
                 "log": "Show log",
@@ -11800,8 +11807,11 @@
             "noWorkingCopyTo": "{title} has no working copy to browse"
         },
         "workspaceScopeNote": {
-            "showEverything": "Show every project",
-            "showingOnly": "Showing {project} only: its files, agents and checks."
+            "onlyProject": "{project} only",
+            "project": "Project",
+            "showEverything": "Show all",
+            "showingOnly": "Files, agents and checks show this project only.",
+            "title": "One project open"
         },
         "workspaceSearchResults": {
             "matchCount": "{count} match | {count} matches",

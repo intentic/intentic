@@ -18,10 +18,10 @@ struct PendingAttempt {
     /// a detail of it: reusing a plain attempt for a switch press re-opens the page that auto-completed as the
     /// account the reader just rejected.
     switch_account: bool,
-    /// Whether the press that asked for this sign-in happened in a local window — a folder's "Work on this with an
-    /// agent", whose whole point is that folder. A detail rather than part of the attempt's identity: a second press
-    /// writes it (see [`came_from`]), because where the reader ends up is where they last asked from.
-    from_local: bool,
+    /// The local window whose press asked for this sign-in — a folder's "Work on this with an agent", whose whole point
+    /// is that folder — or none for the workspace's own. A detail rather than part of the attempt's identity: a second
+    /// press writes it (see [`came_from`]), because where the reader ends up is where they last asked from.
+    asked_in: Option<String>,
     started_at: Instant,
 }
 
@@ -53,11 +53,21 @@ impl PendingAuth {
     /// Where the reader last pressed sign-in, written onto the attempt in flight. A press in a folder's window and a
     /// press in the workspace ask for the same page; only the way back differs, so this is the one thing a reused
     /// attempt takes from the press that reused it.
-    fn came_from(&self, from_local: bool) {
+    fn came_from(&self, asked_in: Option<String>) {
         if let Some(attempt) = self.0.lock().unwrap().as_mut() {
-            attempt.from_local = from_local;
+            attempt.asked_in = asked_in;
         }
     }
+}
+
+/// The local window the last completed sign-in was asked from, kept for the page's way back to it
+/// (`intentic://launcher?to=agent`, windows.rs), which arrives once the page has redeemed the session. Without it the
+/// way back was always the main window, whichever folder window had asked.
+static ASKED_IN: Mutex<Option<String>> = Mutex::new(None);
+
+/// The window the last completed sign-in was asked from, once: the way back takes it.
+pub fn take_asked_in() -> Option<String> {
+    ASKED_IN.lock().unwrap().take()
 }
 
 fn open_browser(app: &AppHandle, url: &str) -> Result<(), String> {
@@ -67,10 +77,14 @@ fn open_browser(app: &AppHandle, url: &str) -> Result<(), String> {
 }
 
 /* Open the sign-in page in the default browser — and open it EVERY time, which is the whole subtlety here. */
-pub fn start(app: &AppHandle, switch_account: bool, from_local: bool) -> Result<(), String> {
+pub fn start(
+    app: &AppHandle,
+    switch_account: bool,
+    asked_in: Option<String>,
+) -> Result<(), String> {
     let pending = app.state::<PendingAuth>();
     if let Some(url) = pending.live_url(switch_account) {
-        pending.came_from(from_local);
+        pending.came_from(asked_in);
         return open_browser(app, &url);
     }
     let mut slot = pending.0.lock().unwrap();
@@ -93,7 +107,7 @@ pub fn start(app: &AppHandle, switch_account: bool, from_local: bool) -> Result<
         verifier,
         url: url.clone(),
         switch_account,
-        from_local,
+        asked_in,
         started_at: Instant::now(),
     });
     drop(slot);
@@ -127,8 +141,9 @@ pub fn complete(app: &AppHandle, args: &crate::setup_link::AuthArgs) {
         &args.handoff,
         &attempt.verifier,
         args.profile.as_deref(),
-        attempt.from_local,
+        attempt.asked_in.is_some(),
     );
+    *ASKED_IN.lock().unwrap() = attempt.asked_in;
     // The profile decides the page's scheme before it paints (web index.html), so the app's own faces can
     // be drawn in that light from here on rather than waiting for the page to announce it.
     if let Some(mode) = mode_of_profile(args.profile.as_deref()) {
@@ -186,18 +201,18 @@ mod tests {
             verifier: "verifier".into(),
             url: url.into(),
             switch_account,
-            from_local: false,
+            asked_in: None,
             started_at: Instant::now() - age,
         })))
     }
 
-    fn origin_of(pending: &PendingAuth) -> Option<bool> {
+    fn origin_of(pending: &PendingAuth) -> Option<Option<String>> {
         pending
             .0
             .lock()
             .unwrap()
             .as_ref()
-            .map(|attempt| attempt.from_local)
+            .map(|attempt| attempt.asked_in.clone())
     }
 
     #[test]
@@ -265,13 +280,13 @@ mod tests {
             Duration::from_secs(5),
             "https://app.intentic.dev/desktop-auth?state=a&challenge=b",
         );
-        assert_eq!(origin_of(&pending), Some(false));
-        pending.came_from(true);
-        assert_eq!(origin_of(&pending), Some(true));
-        pending.came_from(false);
-        assert_eq!(origin_of(&pending), Some(false));
+        assert_eq!(origin_of(&pending), Some(None));
+        pending.came_from(Some("files-2".to_string()));
+        assert_eq!(origin_of(&pending), Some(Some("files-2".to_string())));
+        pending.came_from(None);
+        assert_eq!(origin_of(&pending), Some(None));
         // Nothing in flight: nothing to write on, and no panic for writing it.
-        PendingAuth::default().came_from(true);
+        PendingAuth::default().came_from(Some("main".to_string()));
     }
 
     #[test]

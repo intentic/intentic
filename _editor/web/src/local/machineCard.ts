@@ -13,6 +13,8 @@ import { stageHeadline } from "./projectWords";
 export type MachineCardAction =
     // The app's own verbs (the host's `act`).
     | `signIn`
+    // The same sign-in, its page opened again: the reader was sent to the browser already, and may have lost the tab.
+    | `signInAgain`
     | `startDocker`
     | `retry`
     | `log`
@@ -54,6 +56,8 @@ export interface CardFacts {
     readonly justReady: boolean;
     /** This window's folder finished going in moments ago, while this window watched. */
     readonly folderJustReady: boolean;
+    /** This window sent the reader to the browser to sign in, and the app has not heard who signed in yet. */
+    readonly signingIn?: boolean;
 }
 
 // The house of this computer's sandbox stands with its lights on once it answers: moving in is a folder's own copy.
@@ -121,13 +125,28 @@ const folderCard = (folder: LocalFolderSandbox, justIn: boolean): MachineCard | 
 };
 
 // This computer's sandbox while it is not ready, and for a moment once it is.
-const sandboxCard = (machine: LocalMachineSandbox, folder: LocalFolderSandbox | undefined, justReady: boolean): MachineCard | undefined => {
+const sandboxCard = (machine: LocalMachineSandbox, folder: LocalFolderSandbox | undefined, justReady: boolean, signingIn = false): MachineCard | undefined => {
     switch (machine.state) {
         case `ready`:
             return justReady
                 ? card({ about: `machine`, tone: `ready`, stage: MACHINE_TOP, title: t(`local.machine.ready`), detail: t(`local.machine.readyDetail`), actions: [] }, `ready`)
                 : undefined;
         case `signedOut`:
+            // Sent to the browser from here: the card says to finish there, not to sign in again, and stays on its way
+            // through the moment after, before the app has heard who signed in (2026-10-17: it said "Sign in" all along).
+            if (signingIn) {
+                return card(
+                    {
+                        about: `machine`,
+                        tone: `working`,
+                        stage: `plan`,
+                        title: t(`local.machine.signingIn`),
+                        detail: t(`local.machine.signingInDetail`),
+                        actions: [`signInAgain`],
+                    },
+                    `signingIn`,
+                );
+            }
             // Nothing is under way before sign-in: said only to a reader whose folder waits for it.
             return machine.waiting > 0 || folder?.state === `queued`
                 ? card(
@@ -215,7 +234,7 @@ export const machineCardOf = (facts: CardFacts): MachineCard | undefined => {
             return own;
         }
     }
-    const shown = sandboxCard(machine, folder, facts.justReady);
+    const shown = sandboxCard(machine, folder, facts.justReady, facts.signingIn);
     // A folder waiting for it says so under whatever the sandbox is doing.
     return shown !== undefined && folder?.state === `queued` && machine.state !== `ready`
         ? { ...shown, folderNote: t(`local.machine.folderWaits`, { name: folder.name }) }
@@ -240,36 +259,44 @@ export interface FolderButton {
 const pressLabel = (action: MachineCardAction): string =>
     action === `details` ? t(`local.machine.button.setUpComputer`) : t(`local.machine.action.${action === `retryFolder` ? `retry` : action}`);
 
+// The folder on its way in, not there yet: what its button says about how far, or the one step it is stopped on.
+const onItsWayButton = (machine: LocalMachineSandbox | undefined, folder: LocalFolderSandbox, signingIn: boolean): FolderButton => {
+    // On its way through the browser's sign-in: the button says where the reader's part of it is.
+    if (machine?.state === `signedOut` && signingIn) {
+        return { label: t(`local.machine.button.signingIn`), busy: true, press: `card` };
+    }
+    if (machine?.state === `ready`) {
+        return { label: t(`local.machine.button.copying`), busy: true, press: `card` };
+    }
+    // The sandbox stopped on something only the reader can do (this PC's own setup, Docker, a sign-in): the button IS
+    // that thing. It used to say it was waiting and, on a press, unfold a card that was already on screen — a word that
+    // blamed the machine for a wait that was the reader's, and a press that did nothing.
+    const stop = machine === undefined ? undefined : sandboxCard(machine, folder, false);
+    const next = stop === undefined || stop.tone === `working` ? undefined : stop.actions[0];
+    if (next !== undefined) {
+        return { label: pressLabel(next), busy: false, press: next };
+    }
+    // Under way with nothing to ask of anyone: how far it is, and the card for the rest.
+    return {
+        label: machine?.state === `creating` ? t(`local.machine.button.waitingPercent`, { percent: machine.percent }) : t(`local.machine.button.waiting`),
+        busy: true,
+        press: `card`,
+    };
+};
+
 export const folderButtonOf = (facts: {
     readonly hasSandbox: boolean;
     readonly machine: LocalMachineSandbox | undefined;
     readonly folder: LocalFolderSandbox | undefined;
+    /** The reader is signing in, in the browser, from this window (useLocalProject.ts). */
+    readonly signingIn?: boolean;
 }): FolderButton => {
     const { machine, folder } = facts;
     if (folder?.state === `failed`) {
         return { label: t(`local.machine.button.failed`), busy: false, press: `card` };
     }
     if (folder !== undefined && folder.state !== `ready`) {
-        if (machine?.state !== `ready`) {
-            // The sandbox stopped on something only the reader can do (this PC's own setup, Docker, a sign-in): the
-            // button IS that thing. It used to say it was waiting and, on a press, unfold a card that was already on
-            // screen — a word that blamed the machine for a wait that was the reader's, and a press that did nothing.
-            const stop = machine === undefined ? undefined : sandboxCard(machine, folder, false);
-            const next = stop === undefined || stop.tone === `working` ? undefined : stop.actions[0];
-            if (next !== undefined) {
-                return { label: pressLabel(next), busy: false, press: next };
-            }
-            // Under way with nothing to ask of anyone: how far it is, and the card for the rest.
-            return {
-                label:
-                    machine?.state === `creating`
-                        ? t(`local.machine.button.waitingPercent`, { percent: machine.percent })
-                        : t(`local.machine.button.waiting`),
-                busy: true,
-                press: `card`,
-            };
-        }
-        return { label: t(`local.machine.button.copying`), busy: true, press: `card` };
+        return onItsWayButton(machine, folder, facts.signingIn === true);
     }
     if (facts.hasSandbox || folder?.state === `ready`) {
         return { label: t(`local.localFiles.openSandbox`), busy: false, press: `open` };

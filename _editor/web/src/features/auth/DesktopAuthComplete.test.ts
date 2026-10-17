@@ -9,7 +9,13 @@ import * as actualVueRouter from "vue-router";
 
 // Mounting reads matchMedia (ui) and window.env (environment.ts) at module scope; see Setup.test.ts.
 
-const replace = jest.fn();
+// The workspace opened as the router opens it: `useRoute()` follows the router, so once it lands, the query is the
+// workspace's own and the handoff's is gone. The links already sent are noted against it, so the order is pinned too.
+const replace = jest.fn(async (_path: string) => {
+    delete query.back;
+    sentBeforeWorkspace ??= [...heard];
+});
+let sentBeforeWorkspace: string[] | undefined;
 
 /** What the app points this page at (auth.rs `complete_path`); `back` rides a sign-in begun in a folder's window. */
 interface CompleteQuery {
@@ -55,7 +61,8 @@ const verify = jest.fn(async () => new Response(`{}`, { status: 200 }));
 const heard: string[] = [];
 
 beforeEach(() => {
-    replace.mockReset();
+    replace.mockClear();
+    sentBeforeWorkspace = undefined;
     refresh.mockClear();
     adoptIdToken.mockReset().mockReturnValue(true);
     redeem.mockReset();
@@ -104,7 +111,10 @@ it(`opens the workspace on the session alone for an account with no Google token
 
 // The report this came from: "Work on this with an agent" on a folder asked for a sign-in, and the reader came back to
 // the account's sandbox list with nothing on screen about that folder. The workspace still has to mount — it is what
-// tells the app who signed in and which sandboxes the account has — and then the reader goes back where they asked.
+// tells the app who signed in and which sandboxes the account has — behind the folder the reader is handed back to.
+// The second report: the page read `back` after the workspace had opened, when the query was no longer the handoff's,
+// so the link never went and the reader was left on the account's first sandbox (2026-10-17). The mocked router now
+// drops the query as the real one does.
 it(`hands the reader back to this computer when the sign-in began in a folder's window`, async () => {
     redeem.mockResolvedValue({ ott: `ott-1` });
     query.back = `agent`;
@@ -113,6 +123,8 @@ it(`hands the reader back to this computer when the sign-in began in a folder's 
 
     expect(replace).toHaveBeenCalledWith(`/`);
     expect(heard).toEqual([`intentic://launcher?to=agent`]);
+    // Before the workspace opens on a sandbox of its own choosing, not after.
+    expect(sentBeforeWorkspace).toEqual([`intentic://launcher?to=agent`]);
 });
 
 it(`stays in the workspace for a sign-in that began there`, async () => {

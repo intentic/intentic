@@ -72,6 +72,25 @@ describe(`the card of this computer's sandbox`, () => {
         expect(machineCardOf(facts(at({ state: `signedOut` }), folderAt(`queued`)))).toMatchObject({ actions: [`signIn`] });
     });
 
+    // The reader is in the browser signing in: the card says to finish there, and offers the page again, not a sign-in.
+    it(`says to finish signing in while the browser has it, rather than asking again`, () => {
+        expect(machineCardOf(facts(at({ state: `signedOut` }), folderAt(`queued`), { signingIn: true }))).toMatchObject({
+            title: `Finish signing in in your browser`,
+            tone: `working`,
+            actions: [`signInAgain`],
+            key: `signingIn`,
+        });
+        expect(folderButtonOf({ hasSandbox: false, machine: at({ state: `signedOut` }), folder: folderAt(`queued`), signingIn: true })).toEqual({
+            label: `Waiting for you to sign in…`,
+            busy: true,
+            press: `card`,
+        });
+        // Once the app has heard who signed in, the sandbox's own progress says the rest.
+        expect(machineCardOf(facts(at({ state: `creating`, phase: undefined, step: undefined, percent: 5 }), folderAt(`queued`), { signingIn: true }))?.key).toBe(
+            `creating`,
+        );
+    });
+
     it(`says the folder waiting in this window under whatever the sandbox is doing`, () => {
         const card = machineCardOf(facts(at({ state: `creating`, phase: undefined, step: undefined, percent: 5 }), folderAt(`queued`)));
         expect(card?.folderNote).toBe(`shop goes in as soon as it's ready.`);

@@ -18,11 +18,14 @@ import { useT } from "@intentic/ui/i18n";
 // 3. Adopt the Google ID token into the shared cache, so the first daemon call gets a session that renews silently.
 //    An account with no Google sign-in carries none: its daemon sessions come from the platform's identity assertions,
 //    which this webview asks for with the session step 2 gave it.
-// 4. `back=agent` (auth.rs `complete_path`): the sign-in began on a folder of this computer, not here. The workspace
-//    still has to mount — it is what tells the app who signed in and which sandboxes the account has
-//    (`announceDesktopRoster`) — and then the reader is handed back to that folder's own window. Without this step a
-//    reader who pressed "Work on this with an agent" ended up on the account's sandbox list, with nothing on screen
-//    about the folder they asked about and no sign that anything had been started for it.
+// 4. `back=agent` (auth.rs `complete_path`): the sign-in began on a folder of this computer, not here. The reader is
+//    handed back to that folder's own window first, and the workspace then mounts behind it — it is what tells the app
+//    who signed in and which sandboxes the account has (`announceDesktopRoster`), which is what this computer's
+//    sandbox is made for. Without this step a reader who pressed "Work on this with an agent" ended up on the account's
+//    sandbox list, with nothing on screen about the folder they asked about and no sign that anything had been started
+//    for it. `back` is read before the workspace is opened: `useRoute()` follows the router, so after the replace the
+//    query was the workspace's, the link was never sent, and the reader stayed on whichever sandbox the workspace
+//    opened on, the account's first, while this computer's was still being made (2026-10-17).
 // A failure is terminal for this link; retry means signing in again, not reloading the link.
 
 const t = useT();
@@ -37,6 +40,7 @@ const error = ref<NoticeModel | undefined>(undefined);
 const complete = async (): Promise<void> => {
     const handoff = route.query[`handoff`];
     const verifier = route.query[`verifier`];
+    const backToFolder = route.query[`back`] === `agent`;
     if (typeof handoff !== `string` || handoff === `` || typeof verifier !== `string` || verifier === ``) {
         error.value = noticeOf(t(`auth.desktopAuthComplete.linkIncomplete`));
         return;
@@ -59,10 +63,10 @@ const complete = async (): Promise<void> => {
             return;
         }
         await refresh();
-        await router.replace(`/`);
-        if (route.query[`back`] === `agent`) {
+        if (backToFolder) {
             openAgentOnThisComputer();
         }
+        await router.replace(`/`);
     } catch (err) {
         error.value = noticeFrom(err, t(`auth.desktopAuthComplete.couldntFinish`));
     }

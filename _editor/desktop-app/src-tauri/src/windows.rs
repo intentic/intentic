@@ -726,6 +726,34 @@ fn show_home_at(app: &AppHandle, route: Option<&str>, keyboard: Keyboard) {
     }
 }
 
+/// The window a sign-in begun on a folder was asked from, in front again (auth.rs `take_asked_in`), in the place of
+/// the workspace that sign-in put up to redeem the session: the main window at its folder, or a folder window of its
+/// own raised, with the main window's face back where the workspace stood. A window gone since, or none named, is the
+/// main window's folder, which is where this way back always went (2026-10-17: a folder window that asked was left
+/// behind the workspace, and the main window came forward on a different folder).
+fn show_folder_that_asked(app: &AppHandle, asked_in: Option<&str>) {
+    app.state::<AppState>().remember_last_face(Face::Home);
+    let asked = asked_in
+        .filter(|label| is_folder_window(label))
+        .and_then(|label| app.get_webview_window(label));
+    let Some(asked) = asked else {
+        show_home_at(app, Some(FILES_ROUTE), Keyboard::Take);
+        return;
+    };
+    match app.get_webview_window(HOME) {
+        Some(_) => show_home_at(app, None, Keyboard::Leave),
+        None => {
+            if let Some(workspace) = app.get_webview_window(WORKSPACE) {
+                let _ = workspace.hide();
+                crate::shown::tell(&workspace, false);
+            }
+        }
+    }
+    let _ = asked.unminimize();
+    let _ = asked.show();
+    let _ = asked.set_focus();
+}
+
 /// The face this app was last used through, as a bare launch and the tray's "Open Intentic" open it.
 pub fn show_last_face(app: &AppHandle) {
     match app.state::<AppState>().last_face() {
@@ -2231,7 +2259,7 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         }
         // Asked for by link rather than by a window's press: the workspace's own road back in, so it ends there.
         Some(Link::SignIn { switch_account }) => {
-            if let Err(error) = crate::auth::start(app, switch_account, false) {
+            if let Err(error) = crate::auth::start(app, switch_account, None) {
                 eprintln!("{error}");
             }
         }
@@ -2257,18 +2285,20 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         }) => show_device(app),
         // The way back from a sign-in that began on a folder (auth.rs `complete_path`): the folder asked for an agent,
         // so the reader is put down wherever that is standing right now — This device while this computer's sandbox is
-        // stopped on them, which is where its card is answered, and the folder itself while it is coming up by itself.
+        // stopped on them, which is where its card is answered, and the folder that asked while it is coming up by
+        // itself, its card saying how far. Signed out is the second: the page sends this before the workspace has
+        // said who signed in, so the record cannot know yet (`wants_the_reader_after_sign_in`).
         Some(Link::Launcher {
             to: LauncherTo::Agent,
         }) => {
+            let asked_in = crate::auth::take_asked_in();
             if crate::machine_sandbox::status(app)
                 .standing
-                .wants_the_reader()
+                .wants_the_reader_after_sign_in()
             {
-                show_device(app);
+                show_home_route(app, DEVICE_ROUTE);
             } else {
-                app.state::<AppState>().remember_last_face(Face::Home);
-                show_home_at(app, Some(FILES_ROUTE), Keyboard::Take);
+                show_folder_that_asked(app, asked_in.as_deref());
             }
         }
         // The setup page took this sandbox to a machine of ours: the main window stops the install it runs for it, if it
