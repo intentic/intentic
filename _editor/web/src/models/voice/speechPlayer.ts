@@ -201,11 +201,14 @@ export const createSpeechPlayer = (overrides: Partial<SpeechPlayerDeps> = {}): S
         }
         clearTimeout(playing.endTimer);
         const left = Math.max(0, playing.playUntil - audio.currentTime);
-        playing.endTimer = setTimeout(() => {
-            if (current === playing) {
-                finish(`done`);
-            }
-        }, left * 1000 + 50);
+        playing.endTimer = setTimeout(
+            () => {
+                if (current === playing) {
+                    finish(`done`);
+                }
+            },
+            left * 1000 + 50,
+        );
     };
 
     const play = (playing: Current, samples: Float32Array, sampleRate: number): void => {
@@ -237,8 +240,14 @@ export const createSpeechPlayer = (overrides: Partial<SpeechPlayerDeps> = {}): S
     const playOpus = (playing: Current, frame: Uint8Array, sampleRate: number): void => {
         const decoder = (playing.decoder ??= deps.decoderFor());
         playing.decoding = (playing.decoding ?? Promise.resolve())
-            .then(async () => decoder.decode(frame, sampleRate))
-            .then((decoded) => (current === playing ? play(playing, decoded.samples, decoded.sampleRate) : undefined))
+            .then(async () => {
+                if (current === playing) {
+                    const decoded = await decoder.decode(frame, sampleRate);
+                    if (current === playing) {
+                        play(playing, decoded.samples, decoded.sampleRate);
+                    }
+                }
+            })
             // allow(silent-catch): a chunk that will not decode is a gap in the speech, not its end; the rest plays on
             .catch(() => undefined);
     };
@@ -282,6 +291,9 @@ export const createSpeechPlayer = (overrides: Partial<SpeechPlayerDeps> = {}): S
             case `done`:
                 // After whatever is still being decoded: until then, the end of the audio is not known.
                 void (playing.decoding ?? Promise.resolve()).then(() => {
+                    if (current !== playing) {
+                        return;
+                    }
                     playing.finished = true;
                     if (playing.playUntil === 0) {
                         finish(`done`);

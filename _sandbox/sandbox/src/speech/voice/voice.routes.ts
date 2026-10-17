@@ -17,7 +17,7 @@ import { defineRawRoutes, type RawRouteTable } from "../../http/raw-route-server
 import { opt } from "../../opt.js";
 import type { VoiceChunk } from "@intentic/speech/voice/cloud-voices";
 import { paced, pcm16, resampled } from "@intentic/speech/voice/voice-audio";
-import { opusAvailable, opusEncoder } from "@intentic/speech/opus";
+import { opusAvailable, opusChunks } from "@intentic/speech/opus";
 import { type SpeakRequest, VoiceUnprovisionedError } from "@intentic/speech/voice/voice";
 import { parseJsonOr } from "@intentic/base/json";
 
@@ -96,20 +96,19 @@ interface AudioOut {
 }
 
 // A socket's chunks as it sends them: s16le PCM, or for a socket that asked (`codec=opus`, which the editor asks only
-// where the hello named it) each chunk's Opus packets, one Opus stream per utterance. Utterances are spoken one at a
-// time, so a new id is a new stream.
-const audioFor = (url: string): ((id: number, chunk: VoiceChunk) => AudioOut) => {
+// where the hello named it) Opus packets with partial packets carried across chunks, one stream per utterance.
+const audioFor = (url: string): ((id: number, chunks: AsyncIterable<VoiceChunk>) => AsyncIterable<AudioOut>) => {
     const opus = new URL(url).searchParams.get("codec") === "opus" && opusAvailable();
-    let utterance: { readonly id: number; readonly encode: ReturnType<typeof opusEncoder> } | undefined;
-    return (id, chunk) => {
+    return async function* (id, chunks) {
         if (!opus) {
-            return { header: { type: "audio", id, sampleRate: chunk.sampleRate, samples: chunk.samples.length }, frame: pcm16(chunk.samples) };
+            for await (const chunk of chunks) {
+                yield { header: { type: "audio", id, sampleRate: chunk.sampleRate, samples: chunk.samples.length }, frame: pcm16(chunk.samples) };
+            }
+            return;
         }
-        if (utterance?.id !== id) {
-            utterance = { id, encode: opusEncoder() };
+        for await (const packed of opusChunks(chunks)) {
+            yield { header: { type: "audio", id, sampleRate: packed.sampleRate, samples: packed.samples, codec: "opus" }, frame: packed.frame };
         }
-        const packed = utterance.encode(chunk.samples, chunk.sampleRate);
-        return { header: { type: "audio", id, sampleRate: packed.sampleRate, samples: packed.samples, codec: "opus" }, frame: packed.frame };
     };
 };
 
@@ -152,11 +151,10 @@ export const createVoiceStreamRoute = (services: VoiceStreamDeps) =>
                         spoken: (words) => send(ws, { type: "spoken", id, ...words }),
                         notice: (said) => send(ws, { type: "notice", id, message: said }),
                     });
-                    for await (const chunk of paced(speech, signal)) {
+                    for await (const { header, frame } of audio(id, paced(speech, signal))) {
                         if (signal.aborted || closed) {
                             break;
                         }
-                        const { header, frame } = audio(id, chunk);
                         send(ws, header);
                         ws.send(frame);
                     }

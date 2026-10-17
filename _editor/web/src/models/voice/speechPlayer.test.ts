@@ -99,6 +99,70 @@ const pcm = (count: number): ArrayBuffer => new ArrayBuffer(count * 2);
 // Both ends speak Opus: the socket asks for it, each Opus chunk is decoded in the order it came (a later one decoding
 // faster still plays later), and the utterance settles only after its last chunk has been decoded and played.
 describe(`saying something as Opus`, () => {
+    it(`does not start queued decodes after the utterance is stopped`, async () => {
+        const socket = new FakeSocket();
+        const decoded: number[] = [];
+        const player = createSpeechPlayer({
+            socketUrl: async () => `ws://sandbox/speech/say`,
+            openSocket: () => socket,
+            audioContext: () => fakeAudio().context,
+            opus: async () => true,
+            decoderFor: () => ({
+                decode: async (frame, sampleRate) => {
+                    decoded.push(frame.byteLength);
+                    return { samples: new Float32Array(480), sampleRate };
+                },
+                close: () => undefined,
+            }),
+        });
+        const end = player.say(`One.`, { key: `a` });
+        await settled();
+        socket.open();
+        await settled();
+        socket.answer({ type: `audio`, id: 1, sampleRate: 24_000, samples: 480, codec: `opus` });
+        socket.answer(new ArrayBuffer(40));
+        player.stop();
+        expect(await end).toBe(`stopped`);
+        await settled();
+        expect(decoded).toEqual([]);
+    });
+
+    it(`keeps the next utterance playing when stopping the previous one cancels its pending decode`, async () => {
+        const socket = new FakeSocket();
+        const audio = fakeAudio();
+        let cancelDecode: () => void = () => undefined;
+        const player = createSpeechPlayer({
+            socketUrl: async () => `ws://sandbox/speech/say`,
+            openSocket: () => socket,
+            audioContext: () => audio.context,
+            opus: async () => true,
+            decoderFor: () => ({
+                decode: () =>
+                    new Promise((_resolve, reject) => {
+                        cancelDecode = () => reject(new Error(`decoder closed`));
+                    }),
+                close: () => cancelDecode(),
+            }),
+        });
+        const first = player.say(`One.`, { key: `a` });
+        await settled();
+        socket.open();
+        await settled();
+        socket.answer({ type: `audio`, id: 1, sampleRate: 24_000, samples: 480, codec: `opus` });
+        socket.answer(new ArrayBuffer(40));
+        socket.answer({ type: `done`, id: 1 });
+        await settled();
+
+        const second = player.say(`Two.`, { key: `b` });
+        expect(await first).toBe(`stopped`);
+        await settled();
+        expect(player.speaking.value).toBe(`b`);
+        expect(player.state.value).toBe(`preparing`);
+        expect(socket.sent).toContainEqual({ type: `say`, id: 2, text: `Two.`, as: `plain` });
+        player.stop();
+        expect(await second).toBe(`stopped`);
+    });
+
     it(`asks for Opus, plays each decoded chunk in order, and settles after the last`, async () => {
         const socket = new FakeSocket();
         const audio = fakeAudio();

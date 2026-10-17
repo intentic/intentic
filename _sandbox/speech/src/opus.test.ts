@@ -1,5 +1,5 @@
 import { opusPackets } from "@intentic/sandbox-contract/schemas/voice";
-import { opusAvailable, opusDecoder, opusEncoder, voiceCodecs } from "./opus.js";
+import { opusAvailable, opusChunks, opusDecoder, opusEncoder, voiceCodecs } from "./opus.js";
 
 // A voice's chunks out as Opus packets and the microphone's packets in, through libopus: about a tenth of the PCM's
 // bytes, back to audio that is the same speech.
@@ -38,4 +38,48 @@ test("a voice at a rate Opus does not take is resampled to 24 kHz, and a chunk s
     expect(chunk.sampleRate).toBe(24_000);
     // 1 s and a bit at 24 kHz: 50 whole packets and one padded.
     expect(opusPackets(chunk.frame)).toHaveLength(51);
+});
+
+test("streaming chunks leave as soon as a packet is whole, and the final partial packet is sent", async () => {
+    const samples = tone(24_000, 1);
+    let received = 0;
+    async function* source() {
+        for (const part of [samples.subarray(0, 100), samples.subarray(100, 480), samples.subarray(480, 481)]) {
+            received += 1;
+            yield { samples: part, sampleRate: 24_000 };
+        }
+    }
+    const chunks = opusChunks(source());
+    const first = await chunks.next();
+    if (first.done) {
+        throw new Error("the full packet was never sent");
+    }
+    expect(received).toBe(2);
+    expect(first.value.samples).toBe(480);
+    expect(first.value.sampleRate).toBe(24_000);
+    const last = await chunks.next();
+    if (last.done) {
+        throw new Error("the partial packet was never sent");
+    }
+    expect(last.value.samples).toBe(1);
+    expect(last.value.sampleRate).toBe(24_000);
+    const decode = opusDecoder(24_000);
+    expect(opusPackets(first.value.frame).reduce((total, packet) => total + decode(packet).length, 0)).toBe(480);
+    expect(opusPackets(last.value.frame).reduce((total, packet) => total + decode(packet).length, 0)).toBe(480);
+    expect((await chunks.next()).done).toBe(true);
+});
+
+test("a rate change sends the previous voice's partial packet before the new voice's audio", async () => {
+    async function* source() {
+        yield { samples: tone(24_000, 1).subarray(0, 100), sampleRate: 24_000 };
+        yield { samples: tone(16_000, 1).subarray(0, 320), sampleRate: 16_000 };
+    }
+    const chunks = [];
+    for await (const chunk of opusChunks(source())) {
+        chunks.push({ sampleRate: chunk.sampleRate, samples: chunk.samples, packets: opusPackets(chunk.frame).length });
+    }
+    expect(chunks).toEqual([
+        { sampleRate: 24_000, samples: 100, packets: 1 },
+        { sampleRate: 16_000, samples: 320, packets: 1 },
+    ]);
 });

@@ -84,6 +84,40 @@ describe(`a phrase's encoder`, () => {
 });
 
 describe(`an utterance's decoder`, () => {
+    it(`recovers from a failed chunk and discards its partial audio before decoding the next`, async () => {
+        const original = globalThis.AudioDecoder;
+        let fail = true;
+        class FailingDecoder extends FakeDecoder {
+            override async flush(): Promise<void> {
+                await super.flush();
+                if (fail) {
+                    fail = false;
+                    this.state = `closed`;
+                    throw new Error(`decoding failed`);
+                }
+            }
+            override close(): void {
+                if (this.state === `closed`) {
+                    throw new Error(`already closed`);
+                }
+                super.close();
+            }
+        }
+        Object.assign(globalThis, { AudioDecoder: FailingDecoder });
+        const decoder = utteranceDecoder();
+        try {
+            const frame = framedOpus([new Uint8Array(40)]);
+            await expect(decoder.decode(frame, 24_000)).rejects.toThrow(`decoding failed`);
+            const decoded = await decoder.decode(frame, 24_000);
+            expect(decoded.sampleRate).toBe(48_000);
+            expect(decoded.samples.length).toBe(480);
+            expect(decoded.samples.every((sample) => sample === 0.25)).toBe(true);
+        } finally {
+            decoder.close();
+            Object.assign(globalThis, { AudioDecoder: original });
+        }
+    });
+
     it(`decodes a chunk's packets to one run of samples, at the rate the decoder gave`, async () => {
         const decoder = utteranceDecoder();
         const frame = framedOpus([new Uint8Array(40), new Uint8Array(38), new Uint8Array(41)]);

@@ -27,7 +27,7 @@ const fakeVoice = (): FakeVoice => {
     const asked: SpeakRequest[] = [];
     const voice: Voice = {
         voices: async () => ({ voices: [], defaults: {}, provisioned: true }),
-        async *speak (request: SpeakRequest, signal: AbortSignal, events?: SpeakEvents): AsyncGenerator<VoiceChunk> {
+        async *speak(request: SpeakRequest, signal: AbortSignal, events?: SpeakEvents): AsyncGenerator<VoiceChunk> {
             asked.push(request);
             events?.spoken?.({ text: request.text, lang: "en", voice: "kokoro/af_heart" });
             for (const sentence of request.text.split(". ")) {
@@ -111,8 +111,11 @@ test("an utterance comes back as its words, a header before each frame of audio,
 test("a socket opened with codec=opus hears each chunk as Opus packets that decode back to it", async () => {
     const voice: Voice = {
         ...fakeVoice().voice,
-        async *speak () {
-            yield { samples: Float32Array.from({ length: 24_000 }, (_, index) => 0.4 * Math.sin((2 * Math.PI * 180 * index) / 24_000)), sampleRate: 24_000 };
+        async *speak() {
+            yield {
+                samples: Float32Array.from({ length: 24_000 }, (_, index) => 0.4 * Math.sin((2 * Math.PI * 180 * index) / 24_000)),
+                sampleRate: 24_000,
+            };
         },
     };
     const wire = await stand(voice, "?codec=opus");
@@ -124,6 +127,31 @@ test("a socket opened with codec=opus hears each chunk as Opus packets that deco
         expect(frame.byteLength).toBeLessThan((24_000 * 2) / 8);
         const decode = opusDecoder(24_000);
         expect(opusPackets(frame).reduce((total, packet) => total + decode(packet).length, 0)).toBe(24_000);
+    } finally {
+        wire.close();
+    }
+});
+
+test("Opus keeps a cloud voice's duration across network chunks shorter than whole packets", async () => {
+    const voice: Voice = {
+        ...fakeVoice().voice,
+        async *speak() {
+            const samples = Float32Array.from({ length: 4800 }, (_, index) => 0.4 * Math.sin((2 * Math.PI * 180 * index) / 24_000));
+            for (let at = 0; at < samples.length; at += 1024) {
+                yield { samples: samples.subarray(at, at + 1024), sampleRate: 24_000 };
+            }
+        },
+    };
+    const wire = await stand(voice, "?codec=opus");
+    try {
+        wire.socket.send(JSON.stringify({ type: "say", id: 5, text: "Hello" }));
+        await waitFor(() => expect(wire.heard.at(-1)).toEqual({ type: "done", id: 5 }));
+        const decode = opusDecoder(24_000);
+        const samples = wire.frames.reduce(
+            (total, frame) => total + opusPackets(frame).reduce((count, packet) => count + decode(packet).length, 0),
+            0,
+        );
+        expect(samples).toBe(4800);
     } finally {
         wire.close();
     }

@@ -115,11 +115,19 @@ export const utteranceDecoder = (): UtteranceDecoder => {
     let rate = 0;
     let timestamp = 0;
     const decoded: AudioData[] = [];
+    const close = (): void => {
+        if (decoder !== undefined && decoder.state !== `closed`) {
+            decoder.close();
+        }
+        for (const data of decoded.splice(0)) {
+            data.close();
+        }
+    };
     const opened = (sampleRate: number): AudioDecoder => {
         if (decoder !== undefined && decoder.state === `configured` && rate === sampleRate) {
             return decoder;
         }
-        decoder?.close();
+        close();
         rate = sampleRate;
         const next = new AudioDecoder({ output: (data) => decoded.push(data), error: () => undefined });
         next.configure({ codec: `opus`, sampleRate, numberOfChannels: 1 });
@@ -148,10 +156,6 @@ export const utteranceDecoder = (): UtteranceDecoder => {
             }
             return { samples, sampleRate: outRate };
         },
-        close: () => {
-            if (decoder !== undefined && decoder.state !== `closed`) {
-                decoder.close();
-            }
-        },
+        close,
     };
 };

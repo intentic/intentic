@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import { framedOpus } from "@intentic/sandbox-contract/schemas/voice";
 import type { OpusEncoder } from "mediaplex";
+import type { VoiceChunk } from "./voice/cloud-voices.js";
 import { resampled } from "./voice/voice-audio.js";
 import { pcm16Samples } from "./wav.js";
 
@@ -78,8 +79,8 @@ export interface OpusChunk {
 
 /**
  * One utterance's encoder: each chunk of a voice's samples as Opus packets, one stream per sample rate so a reply that
- * falls back to another voice mid-way starts a fresh one. The last packet of a chunk is padded with silence to a whole
- * 20 ms, a gap no listener hears between two sentences.
+ * falls back to another voice mid-way starts a fresh one. The last packet is padded with silence to a whole 20 ms;
+ * opusChunks carries partial packets across streaming chunks so only the end of a stream needs padding.
  */
 export const opusEncoder = (): ((samples: Float32Array, sampleRate: number) => OpusChunk) => {
     let current: { readonly rate: number; readonly encoder: OpusEncoder } | undefined;
@@ -104,3 +105,33 @@ export const opusEncoder = (): ((samples: Float32Array, sampleRate: number) => O
         return { sampleRate: rate, samples: pcm.length, frame: framedOpus(packets) };
     };
 };
+
+/** A voice stream as Opus: network chunks can end mid-packet, so their remaining samples wait for the next chunk. */
+export async function* opusChunks(chunks: AsyncIterable<VoiceChunk>): AsyncGenerator<OpusChunk> {
+    const encode = opusEncoder();
+    let pending: VoiceChunk | undefined;
+    for await (const chunk of chunks) {
+        const rate = OPUS_RATES.has(chunk.sampleRate) ? chunk.sampleRate : OUT_RATE;
+        if (pending !== undefined && pending.sampleRate !== rate) {
+            yield encode(pending.samples, pending.sampleRate);
+            pending = undefined;
+        }
+        const samples = resampled(chunk.samples, chunk.sampleRate, rate);
+        let pcm = samples;
+        if (pending !== undefined) {
+            pcm = new Float32Array(pending.samples.length + samples.length);
+            pcm.set(pending.samples);
+            pcm.set(samples, pending.samples.length);
+        }
+        const frame = rate / FRAMES_PER_SECOND;
+        const whole = pcm.length - (pcm.length % frame);
+        if (whole > 0) {
+            yield encode(pcm.subarray(0, whole), rate);
+        }
+        // Copy the tail, so a few pending samples never retain a whole sentence's buffer.
+        pending = whole < pcm.length ? { samples: pcm.slice(whole), sampleRate: rate } : undefined;
+    }
+    if (pending !== undefined) {
+        yield encode(pending.samples, pending.sampleRate);
+    }
+}
