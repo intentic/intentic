@@ -6420,7 +6420,6 @@
         },
         "workspaceDesktop": {
             "anywhere": "En cualquier lugar",
-            "clearEsc": "Borrar (Esc)",
             "closeAll": "Cerrar todo",
             "closeAllTabs": "Cerrar todas las pestañas",
             "closeOtherTabs": "Cerrar las demás pestañas",

@@ -68,12 +68,21 @@ flowchart LR
   trash never will), the window is told the move may still happen, which the folder then shows as any change.
 - **Search** (`search.ts`) reads the folder as it is now, with no index: `find` matches lines by pattern, word and
   case, `files` ranks paths as quick-open does, and every other mode runs as `find`. It walks as the explorer does
-  (ignored folders and `.gitignore` left out unless asked), skips binaries and files over 2 MiB, and stops at 20,000
-  files, 2,000 lines or 3 seconds, saying so; the clock is read before every line, so no long file holds it past its
-  budget. A pattern that repeats a group which itself repeats (`(a+)+`) could backtrack for minutes on one line and
-  hold every window of the app meanwhile, so it is refused (400) with a word to search for the text as typed.
-  `resolve` answers a written path when it is there, else the one file whose path ends that way, and nothing when
-  two could, or when the walk stopped before seeing the whole folder.
+  (ignored folders and the folder's own `.gitignore` files left out unless asked, nothing above the folder read, a
+  version history never), skips binaries and files over 2 MiB, and stops at 100,000 files, 5,000 lines or 15
+  seconds, saying which. **Ripgrep answers** (`search-rg.ts`), run where the files are (`ripgrep.ts`): a folder in a
+  WSL distro (`\\wsl.localhost\<distro>\…`) by a Linux rg inside that distro (`wsl.exe -d <distro> --cd <path>
+  --exec <rg>`), every other folder by this computer's own. Across the share every file is a round trip: a
+  repository of 10,745 files took 37 s to read from Windows and 0.13 s from inside its distro (2026-10-17). The app
+  ships both rgs (`--search-tools`, staged by `stage-local-files.sh`); without them the rg on PATH answers, and with
+  none at all the folder is read here (`search-read.ts`), the clock read before every line so no long file holds it
+  past its budget. Patterns are rg's, as the sandbox's search reads them; one rg cannot read is asked again as plain
+  text and the answer says so. Read here, a pattern that repeats a group which itself repeats (`(a+)+`) could
+  backtrack for minutes on one line and hold every window of the app meanwhile, so it is refused (400) with a word
+  to search for the text as typed. A later page is a slice of the answer its first page found (the cursor names it),
+  never a second search. A search the editor lets go of (a newer keystroke) stops its rg. `resolve` answers a
+  written path when it is there, else the one file whose path ends that way, and nothing when two could, or when
+  the walk stopped before seeing the whole folder.
 - **A document's text** for the quick look (`derived.ts`) is rendered by fileq's own readers in memory and kept in
   the app's cache (`--derived-cache`, `derived` beside `--cache` by default), keyed by the file's real path, size,
   time and the reader's version. Nothing is ever written into the folder. Reading it never renders it; asking to does,
@@ -118,6 +127,8 @@ This process writes:
 - [src/control.ts](src/control.ts) — every line the app and this process say to each other.
 - [src/server.ts](src/server.ts) — the host, origin and token gates, handoff grants, and each grant's handler table.
 - [src/procedures.ts](src/procedures.ts) — the contract's procedures a folder window reads, and the empty answers.
+- [src/search.ts](src/search.ts) — search and `resolve`: which engine answers, the bounds, the pages.
+- [src/ripgrep.ts](src/ripgrep.ts) — where rg runs for a folder: inside its WSL distro, or this computer's own.
 - [src/paths.ts](src/paths.ts) — where a path may resolve: lexically, then by its real path.
 - [src/tree-verbs.ts](src/tree-verbs.ts) — new folder, move, copy, and the delete that goes to the system's trash.
 
@@ -126,5 +137,5 @@ This process writes:
 ```sh
 pnpm --filter @intentic/local-files test
 pnpm --filter @intentic/local-files build          # dist/cli.js, bundled by bun
-bash _tools/scripts/desktop/stage-local-files.sh   # the compiled binary the desktop app bundles
+bash _tools/scripts/desktop/stage-local-files.sh   # the compiled binary the desktop app bundles, and its ripgrep
 ```

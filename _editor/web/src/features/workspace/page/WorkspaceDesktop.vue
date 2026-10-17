@@ -41,7 +41,6 @@ import { useUploadQueue } from "../files/upload/useUploadQueue";
 import { useWorkspaceRoute } from "../health/useWorkspaceRoute";
 import { useExplorerSearch } from "../search/useExplorerSearch";
 import type { SearchScope } from "../../../models/workspace/search/useWorkspaceSearch";
-import { matchToggles } from "../../../models/workspace/search/useSearchOptions";
 import CloseGuardDialog from "../tabs/CloseGuardDialog.vue";
 import { useCloseGuard } from "../tabs/useCloseGuard";
 import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
@@ -62,6 +61,7 @@ import SavePanel from "../changes/save/SavePanel.vue";
 import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
 import WorkspaceScopeNote from "../explorer/WorkspaceScopeNote.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
+import ExplorerSearchBar from "../search/ExplorerSearchBar.vue";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
 import WorkspaceTree from "../explorer/WorkspaceTree.vue";
 import HomeCoverPicker from "../home/HomeCoverPicker.vue";
@@ -138,7 +138,8 @@ const sidebarModeOptions = computed(() => [
 ]);
 
 // State for the search box; the funnel beside it holds what the list leaves out (tree's Name, search's text).
-const { filter, scope: searchScope, contentMode, textMode, options: search, results, clear: clearFilter } = useExplorerSearch();
+const explorerSearch = useExplorerSearch();
+const { filter, scope: searchScope, contentMode, results, clear: clearFilter } = explorerSearch;
 const {
     groups: searchGroups,
     total: searchTotal,
@@ -384,10 +385,9 @@ const sidebarSeamWidth = computed<number>({
     set: (px) => layout.setSidebarWidth(toAppPx(px)),
 });
 
-// Explorer filters live behind one funnel menu instead of competing toolbar chips. Rows follow the active
-// scope, since Name filters the tree while Text/Smart reach the daemon's own match list.
-// The persona lens filters the list to what a persona's own reach would show, checked against the real tree
-// rather than the card's text. A radio group (one at a time); "Nobody" is the off state.
+// The workspace's own rows in the search bar's funnel (ExplorerSearchBar.vue): the persona lens filters the list to what
+// a persona's own reach would show, checked against the real tree rather than the card's text. A radio group (one at a
+// time); "Nobody" is the off state.
 const personaLensItems = computed<MenuItem[]>(() =>
     personas.value.length === 0
         ? []
@@ -408,40 +408,6 @@ const personaLensItems = computed<MenuItem[]>(() =>
                   ],
               },
           ],
-);
-
-const filterMenu = ref<{ show: (event: Event) => void }>();
-const filterMenuItems = computed<MenuItem[]>(() =>
-    contentMode.value
-        ? [
-              {
-                  label: t(`workspace.workspaceDesktop.searchIgnoredFiles`),
-                  checked: search.includeIgnored.value,
-                  command: () => (search.includeIgnored.value = !search.includeIgnored.value),
-              },
-          ]
-        : [
-              {
-                  label: t(`workspace.workspaceDesktop.showIgnoredFiles`),
-                  checked: layout.showIgnored.value,
-                  command: () => layout.toggleShowIgnored(),
-              },
-              { label: t(`workspace.workspaceDesktop.hideTests`), checked: layout.hideTests.value, command: () => layout.toggleHideTests() },
-              {
-                  label: t(`workspace.workspaceDesktop.hideTechnicalFiles`),
-                  checked: layout.hideTechnical.value,
-                  command: () => layout.toggleHideTechnical(),
-              },
-              ...personaLensItems.value,
-          ],
-);
-// Lit whenever the list isn't the default one, so a missing spec or a search into node_modules never reads as
-// the workspace itself changing. The technical switch is a maker's default, so it lights only when it disagrees with
-// the audience.
-const filtersActive = computed(() =>
-    contentMode.value
-        ? search.includeIgnored.value
-        : layout.showIgnored.value || layout.hideTests.value || layout.hideTechnical.value !== maker.value || lensPersonaId.value !== undefined,
 );
 
 // The lens's folder list rides a tooltip on the already-lit funnel, not a separate stripe (whose folder names
@@ -600,7 +566,7 @@ const closeAllTabs = (): void => {
         requestClose(new Set(allTabs.value.map((tab) => tab.id)));
     }
 };
-const filterInput = ref<HTMLInputElement>();
+const searchBar = ref<InstanceType<typeof ExplorerSearchBar>>();
 // Reveals the Files sidebar with focus in the search input, selecting any previous query. Plain find keeps
 // the last scope; Search in Files forces text scope.
 const focusSearch = (scope?: "name" | SearchScope): void => {
@@ -610,10 +576,7 @@ const focusSearch = (scope?: "name" | SearchScope): void => {
     if (scope !== undefined) {
         searchScope.value = scope;
     }
-    void nextTick(() => {
-        filterInput.value?.focus();
-        filterInput.value?.select();
-    });
+    void nextTick(() => searchBar.value?.focus());
 };
 // Alt+PageDown/PageUp cycle the strip with wrap-around.
 const cycleTab = (delta: number): void => {
@@ -808,15 +771,6 @@ const homeTooltip = computed((): Tip => ({
     note: t(`workspace.workspaceDesktop.tabsStayOpen`),
 }));
 // The include field's grammar as three samples and what each matches, rather than a sentence about commas.
-const includeTip = computed((): Tip => ({
-    title: t(`workspace.words.filesToInclude`),
-    rows: [
-        { label: `package.json`, value: t(`workspace.workspaceDesktop.anywhere`) },
-        { label: `./src`, value: t(`workspace.workspaceDesktop.fromRoot`) },
-        { label: `!dist`, value: t(`workspace.workspaceDesktop.excluded`) },
-    ],
-    note: t(`workspace.workspaceDesktop.commaSeparated`),
-}));
 </script>
 
 <template>
@@ -885,103 +839,16 @@ const includeTip = computed((): Tip => ({
                     <ReviewPanel v-else @open-diff="openDiff" />
                 </template>
                 <HistoryPanel v-else-if="layout.sidebarPanel.value === 'history'" @open-diff="openDiff" />
-                <!-- One `filter` ref across three scopes; the Aa/ab/.* switches apply only to the text scope, which has a pattern. -->
-                <div v-if="layout.sidebarPanel.value === 'files'" class="flex shrink-0 flex-col gap-1 p-1.5">
-                    <div class="relative">
-                        <Icon
-                            class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-2xs text-subtle"
-                            aria-hidden="true"
-                            :name="contentMode && (searching || searchPending) ? `spinner` : `search`"
-                            :spin="contentMode && (searching || searchPending)"
-                        />
-                        <input
-                            ref="filterInput"
-                            v-model="filter"
-                            type="text"
-                            :placeholder="contentMode ? t(`workspace.words.searchInFiles`) : t(`workspace.workspaceDesktop.filterFiles`)"
-                            class="ui-field-box ui-field-sm w-full min-w-0 pl-7"
-                            :class="textMode ? `pr-[4.75rem]` : `pr-7`"
-                            @keydown.esc="clearFilter"
-                        />
-                        <div class="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
-                            <!-- Same three switches, same order, as the editor this models. -->
-                            <template v-if="textMode">
-                                <button
-                                    v-for="toggle in matchToggles()"
-                                    :key="toggle.label"
-                                    type="button"
-                                    :class="
-                                        ui.iconButton(
-                                            { size: `xs`, tone: `subtle` },
-                                            `font-mono text-3xs leading-none`,
-                                            toggle.state.value ? `bg-primary-600/20 text-link` : ``,
-                                        )
-                                    "
-                                    :aria-pressed="toggle.state.value"
-                                    v-tooltip.bottom="toggle.title"
-                                    :aria-label="toggle.title"
-                                    @mousedown.prevent
-                                    @click="toggle.state.value = !toggle.state.value"
-                                >
-                                    {{ toggle.label }}
-                                </button>
-                            </template>
-                            <button
-                                v-if="filter"
-                                type="button"
-                                class="flex items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                                v-tooltip.bottom="{ title: t(`ui.action.clear`), keys: t(`ui.keys.esc`) }"
-                                :aria-label="t(`ui.action.clearFilter`)"
-                                @click="clearFilter"
-                            >
-                                <Icon name="times" />
-                            </button>
-                        </div>
-                    </div>
-                    <!-- Files-to-include glob (VSCode grammar), its own field since it's typed, not toggled; content search only. -->
-                    <div v-if="contentMode" class="relative">
-                        <Icon
-                            class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-2xs text-subtle"
-                            aria-hidden="true"
-                            name="folder"
-                        />
-                        <input
-                            v-model="search.include.value"
-                            type="text"
-                            :placeholder="t(`workspace.words.filesToIncludeE`)"
-                            class="ui-field-box ui-field-sm w-full min-w-0 pr-2 pl-7"
-                            :aria-label="t(`workspace.words.filesToInclude`)"
-                            v-tooltip.bottom="includeTip"
-                            @keydown.esc="search.include.value = ``"
-                        />
-                    </div>
-                    <div class="flex items-center gap-1">
-                        <SegmentedControl
-                            v-model="searchScope"
-                            size="xs"
-                            :options="[
-                                { label: t(`shared.name`), value: `name`, title: t(`workspace.workspaceDesktop.scopeNameHint`) },
-                                { label: t(`workspace.words.text`), value: `text`, title: t(`workspace.workspaceDesktop.scopeTextHint`) },
-                                {
-                                    label: t(`workspace.workspaceDesktop.smart`),
-                                    value: `smart`,
-                                    title: t(`workspace.workspaceDesktop.scopeSmartHint`),
-                                },
-                            ]"
-                        />
-                        <span class="flex-1"></span>
-                        <!-- This control reports which files the workspace list omits. -->
-                        <button
-                            type="button"
-                            class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 transition-colors"
-                            :class="filtersActive ? 'bg-primary-600/15 text-link' : 'text-muted hover:text-content'"
-                            aria-haspopup="menu"
-                            :aria-label="t(`workspace.words.filterWhatExplorerLists`)"
-                            v-tooltip.bottom="lensTip ?? t(`workspace.words.filter`)"
-                            @click="filterMenu?.show($event)"
-                        >
-                            <Icon name="filter" class="text-xs" />
-                        </button>
+                <!-- The search box over the Files list, the same one a folder of this computer shows (ExplorerSearchBar.vue). -->
+                <ExplorerSearchBar
+                    v-if="layout.sidebarPanel.value === 'files'"
+                    ref="searchBar"
+                    :search="explorerSearch"
+                    :tree-filters="personaLensItems"
+                    :tree-filtered="lensPersonaId !== undefined"
+                    :filter-tip="lensTip"
+                >
+                    <template #tools>
                         <!-- One file read in every folder: the tree then lists folders alone, and the page beside it reads them. -->
                         <HomeCoverPicker v-if="!contentMode" compact :cover="cover" @choose="(name) => (cover = name)" @drop="cover = undefined" />
                         <!-- Root's own codebase health: root is a repo (ensureRootRepo) with no tree row, so this lives on the toolbar. -->
@@ -1008,8 +875,8 @@ const includeTip = computed((): Tip => ({
                         >
                             <Icon name="collapse-all" class="text-xs" />
                         </button>
-                    </div>
-                </div>
+                    </template>
+                </ExplorerSearchBar>
                 <!-- Both lists window against a scroller of their own, so neither grows a row per file in the workspace. -->
                 <div v-if="layout.sidebarPanel.value === 'files' && contentMode" class="min-h-0 flex-1">
                     <WorkspaceSearchResults
@@ -1175,7 +1042,6 @@ const includeTip = computed((): Tip => ({
         <!-- Right-click tab menu, plus the confirm shown before a bulk close discards unsaved edits. -->
         <ContextMenu ref="tabMenu" :model="tabMenuItems" :min-width="13" />
         <!-- The explorer toolbar's funnel, opened by a left click rather than a row's right click. -->
-        <ContextMenu ref="filterMenu" :model="filterMenuItems" :min-width="11" />
         <CloseGuardDialog :open="askingToClose" :question="closeQuestion" @cancel="keepOpen" @confirm="closeAnyway" />
         <!-- Opened by a directory row's person icon: who works there, and how to add one. Mounted here, not the tree. -->
         <DirectoryPersonas v-model="personaDir" />

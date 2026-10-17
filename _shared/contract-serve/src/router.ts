@@ -31,8 +31,15 @@ export class Frames<T> {
 // A handler's answer: its procedure's output, with a stream's frames pushed rather than iterated.
 type Answer<T> = T extends AsyncIteratorObject<infer F, unknown, void> ? Frames<F> : T;
 
+// What a handler knows of the request beside its input: `signal` aborts when the asker lets go of the answer (a search
+// a newer keystroke replaced), so work still under way for it can stop.
+export interface ProcedureCall {
+    readonly signal: AbortSignal;
+}
+
 export type ProcedureHandler<G extends SandboxGroup, P extends SandboxProcedure<G>> = (
     input: SandboxHandlerInput<G, P>,
+    call: ProcedureCall,
 ) => Answer<SandboxHandlerOutput<G, P>> | Promise<Answer<SandboxHandlerOutput<G, P>>>;
 
 // A stand-in's half of the contract: a handler for each procedure it serves, held to that procedure's types.
@@ -90,8 +97,10 @@ const inputOf = async (group: string, name: string, request: Request, url: URL, 
 };
 
 // The one untyped seam: a handler found by the route's name, its input already parsed by the schema its type names.
-const handlerOf = (procedures: FixtureRouter, group: string, name: string): ((input: never) => unknown) | undefined =>
-    (procedures as Readonly<Record<string, Readonly<Record<string, ((input: never) => unknown) | undefined>> | undefined>>)[group]?.[name];
+const handlerOf = (procedures: FixtureRouter, group: string, name: string): ((input: never, call: ProcedureCall) => unknown) | undefined =>
+    (procedures as Readonly<Record<string, Readonly<Record<string, ((input: never, call: ProcedureCall) => unknown) | undefined>> | undefined>>)[group]?.[
+        name
+    ];
 
 const answerOf = async (procedures: FixtureRouter, raw: RawRoutes, request: Request, url: URL): Promise<Response | undefined> => {
     const route = sandboxRouteFor(request.method, url.pathname);
@@ -107,7 +116,7 @@ const answerOf = async (procedures: FixtureRouter, raw: RawRoutes, request: Requ
     if (handler === undefined) {
         return undefined;
     }
-    const answer = await handler((await inputOf(group, name, request, url, params)) as never);
+    const answer = await handler((await inputOf(group, name, request, url, params)) as never, { signal: request.signal });
     return answer instanceof Frames ? eventStream(request, answer.start) : json(answer);
 };
 

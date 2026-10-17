@@ -12,9 +12,9 @@ import EditorPane from "../features/workspace/files/EditorPane.vue";
 import { supportsRoute } from "../client/sandbox/useDaemonRoutes";
 import { useSandbox } from "../client/sandbox/useSandbox";
 import { HOISTED_CONTEXT } from "../features/workspace/files/viewerChrome";
+import ExplorerSearchBar from "../features/workspace/search/ExplorerSearchBar.vue";
 import WorkspaceSearchResults from "../features/workspace/search/WorkspaceSearchResults.vue";
-import { matchToggles } from "../models/workspace/search/useSearchOptions";
-import { type SearchScope, useWorkspaceSearch } from "../models/workspace/search/useWorkspaceSearch";
+import { useExplorerSearch } from "../features/workspace/search/useExplorerSearch";
 import CloseGuardDialog from "../features/workspace/tabs/CloseGuardDialog.vue";
 import { useCloseGuard } from "../features/workspace/tabs/useCloseGuard";
 import { useWorkspaceTabs } from "../models/workspace/tabs/useWorkspaceTabs";
@@ -44,7 +44,7 @@ const face = localFace();
 // The viewers (images, PDF, Office, EPUB) are extensions; this is the host that activates them for this window.
 useExtensionHost();
 
-const { listingOf, hiddenIn, keepListed, hasSnapshot, error, isLoading, busy } = useWorkspaceTree();
+const { listingOf, hiddenIn, keepListed, hasSnapshot, error, isLoading, busy, expanded, collapseAll } = useWorkspaceTree();
 const tree = computed(() => listingOf(``) ?? []);
 keepListed(() => ``);
 const rootHidden = computed(() => hiddenIn(``));
@@ -196,13 +196,14 @@ const askActive = (): void => {
     }
 };
 
-// --- Finding things: a file by name (the palette), the folder's text (the search above the tree) ----------------------
+// --- Finding things: a file by name (the palette), the folder's files and text (the search above the tree) ------------
 const { isOpen: paletteOpen } = useQuickOpen();
 const openKept = (path: string): void => openFile(path, `keep`);
 
-// The folder's text, answered in place of the tree while a query stands; the same search the workspace's explorer runs.
-const query = ref(``);
-const searchShown = computed(() => query.value.trim() !== ``);
+// The workspace explorer's own search (ExplorerSearchBar.vue): Name filters the tree, Text searches the folder's files
+// and shows its matches in the tree's place. The same box, the same switches and the same answer as in a sandbox.
+const explorerSearch = useExplorerSearch();
+const { filter, scope, contentMode, results, clear: clearSearch } = explorerSearch;
 const {
     groups: searchGroups,
     total: searchTotal,
@@ -215,20 +216,22 @@ const {
     loadMore: searchLoadMore,
     error: searchError,
     note: searchNote,
-} = useWorkspaceSearch(query, ref<SearchScope>(`text`), searchShown);
-const searchInput = ref<HTMLInputElement>();
-const focusSearch = async (): Promise<void> => {
+} = results;
+const searchBar = ref<InstanceType<typeof ExplorerSearchBar>>();
+// Into the search box, the folder's text asked for by name (Ctrl/Cmd+Shift+F) switching it to Text.
+const focusSearch = async (asked?: `text`): Promise<void> => {
     treeShown.value = true;
+    if (asked !== undefined) {
+        scope.value = asked;
+    }
     await nextTick();
-    searchInput.value?.focus();
-    searchInput.value?.select();
+    searchBar.value?.focus();
 };
-// Back to the tree.
-const clearSearch = (): void => {
-    query.value = ``;
-};
-// Enter in the field opens the first match, at its line.
+// Enter in the field opens the first match, at its line; filtering by name has none to open.
 const openFirstMatch = (): void => {
+    if (!contentMode.value) {
+        return;
+    }
     const [group] = searchGroups.value;
     const [hit] = group?.hits ?? [];
     if (group !== undefined && hit !== undefined) {
@@ -241,7 +244,7 @@ const CHORD_ACTIONS = {
     "find-file": () => {
         paletteOpen.value = true;
     },
-    "search-text": () => void focusSearch(),
+    "search-text": () => void focusSearch(`text`),
     // Exactly what the active tab's × does, the question about its unsaved edits included.
     "close-tab": () => {
         if (activeId.value !== null) {
@@ -309,59 +312,25 @@ onUnmounted(() => {
                     <Icon name="external-link" class="text-sm" />
                 </button>
             </div>
-            <!-- The folder's text (Ctrl/Cmd+Shift+F): matches take the tree's place while a query stands, and Esc brings it back. -->
-            <div class="relative m-1.5 shrink-0">
-                <Icon
-                    class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-2xs text-subtle"
-                    aria-hidden="true"
-                    :name="searchShown && (searching || searchPending) ? `spinner` : `search`"
-                    :spin="searchShown && (searching || searchPending)"
-                />
-                <input
-                    ref="searchInput"
-                    v-model="query"
-                    type="text"
-                    :placeholder="t(`workspace.words.searchInFiles`)"
-                    :aria-label="t(`workspace.words.searchInFiles`)"
-                    class="ui-field-box ui-field-sm w-full min-w-0 pl-7 pr-[5.25rem]"
-                    @keydown.esc="clearSearch"
-                    @keydown.enter.prevent="openFirstMatch"
-                />
-                <div class="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
-                    <!-- The workspace's own three switches, in its order: they are one setting, wherever it is searched from. -->
+            <!-- The workspace's search box (Ctrl/Cmd+Shift+F for Text): matches take the tree's place, and Esc brings it back. -->
+            <ExplorerSearchBar ref="searchBar" :search="explorerSearch" @submit="openFirstMatch">
+                <template #tools>
+                    <!-- Collapse every open folder; inert while a filter forces matches open or nothing is open. -->
                     <button
-                        v-for="toggle in matchToggles()"
-                        :key="toggle.label"
+                        v-if="!contentMode"
                         type="button"
-                        :class="
-                            ui.iconButton(
-                                { size: `xs`, tone: `subtle` },
-                                `font-mono text-3xs leading-none`,
-                                toggle.state.value ? `bg-primary-600/20 text-link` : ``,
-                            )
-                        "
-                        :aria-pressed="toggle.state.value"
-                        v-tooltip.bottom="toggle.title"
-                        :aria-label="toggle.title"
-                        @mousedown.prevent
-                        @click="toggle.state.value = !toggle.state.value"
+                        :class="ui.iconButton({ size: `xs` }, `shrink-0 hover:bg-transparent`)"
+                        :disabled="filter.trim() !== '' || expanded.size === 0"
+                        v-tooltip.bottom="t(`workspace.workspaceDesktop.collapseAll`)"
+                        :aria-label="t(`workspace.workspaceDesktop.collapseAllFolders`)"
+                        @click="collapseAll"
                     >
-                        {{ toggle.label }}
+                        <Icon name="collapse-all" class="text-xs" />
                     </button>
-                    <button
-                        v-if="searchShown"
-                        type="button"
-                        class="flex items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                        v-tooltip.bottom="t(`workspace.workspaceDesktop.clearEsc`)"
-                        :aria-label="t(`ui.action.clear`)"
-                        @click="clearSearch"
-                    >
-                        <Icon name="times" />
-                    </button>
-                </div>
-            </div>
+                </template>
+            </ExplorerSearchBar>
             <p v-if="error" class="px-3 py-2 text-2xs text-danger">{{ error }}</p>
-            <div v-if="searchShown" class="min-h-0 flex-1" @keydown.esc="clearSearch">
+            <div v-if="contentMode" class="min-h-0 flex-1" @keydown.esc="clearSearch">
                 <WorkspaceSearchResults
                     :groups="searchGroups"
                     :total="searchTotal"
@@ -373,7 +342,7 @@ onUnmounted(() => {
                     :loading-more="searchLoadingMore"
                     :error="searchError"
                     :note="searchNote"
-                    :query="query"
+                    :query="filter"
                     @open-match="openAtLine"
                     @load-more="searchLoadMore"
                 />
@@ -390,6 +359,7 @@ onUnmounted(() => {
                     :tree="tree"
                     root-dir=""
                     :root-hidden="rootHidden"
+                    :filter="filter"
                     :selected-path="selected ?? null"
                     @open-file="openFile"
                     @open-directory="openDirectory"

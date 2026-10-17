@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import type { IgnoreScope } from "@intentic/workspace-ignore";
 import { within } from "./paths.js";
+import type { Cut } from "./search-hits.js";
 import { scopeAt } from "./walk.js";
 
 // The files a search or a lookup reads, found the way the explorer finds them (walk.ts): breadth first, a folder's
@@ -32,8 +33,8 @@ export interface SweepBounds {
 
 export interface Swept {
     readonly files: readonly SweptFile[];
-    // Stopped by a bound before the folder was all looked at.
-    readonly cut: boolean;
+    // The bound that stopped the walk before the folder was all looked at, if one did.
+    readonly cut?: Cut | undefined;
 }
 
 interface Folder {
@@ -88,7 +89,7 @@ export const sweep = async (root: string, bounds: SweepBounds): Promise<Swept> =
     const start = await scopeAt(root, bounds.dir);
     const startAbs = await quietly(realpath(join(root, ...bounds.dir)));
     if (start === undefined || startAbs === undefined || !within(root, startAbs) || (start.ignored && !bounds.includeIgnored)) {
-        return { files: [], cut: false };
+        return { files: [] };
     }
     const files: SweptFile[] = [];
     let level: Folder[] = [{ abs: startAbs, rel: bounds.dir.join(`/`), scope: start.scope }];
@@ -96,7 +97,7 @@ export const sweep = async (root: string, bounds: SweepBounds): Promise<Swept> =
         const next: Folder[] = [];
         for (const folder of level) {
             if (files.length >= bounds.maxFiles || bounds.over()) {
-                return { files: files.slice(0, bounds.maxFiles), cut: true };
+                return { files: files.slice(0, bounds.maxFiles), cut: files.length >= bounds.maxFiles ? `files` : `time` };
             }
             // breadth first by design: a level lists before the next, under one bound
             const found = await listed(root, folder, bounds);
@@ -105,5 +106,5 @@ export const sweep = async (root: string, bounds: SweepBounds): Promise<Swept> =
         }
         level = next;
     }
-    return { files: files.slice(0, bounds.maxFiles), cut: files.length > bounds.maxFiles };
+    return { files: files.slice(0, bounds.maxFiles), cut: files.length > bounds.maxFiles ? `files` : undefined };
 };

@@ -168,14 +168,20 @@ fn spawn(app: &AppHandle, port: Option<u16>) -> Result<(Child, ChildStdin, Child
         .app_cache_dir()
         .map_err(|error| Trouble::NotStarted(format!("no cache folder for this app: {error}")))?
         .join("office");
+    let resources = || {
+        paths.resource_dir().map_err(|error| {
+            Trouble::NotStarted(format!("no resource folder for this app: {error}"))
+        })
+    };
     let page = match std::env::var_os("INTENTIC_OFFICE_PAGE") {
         Some(page) => PathBuf::from(page),
-        None => paths
-            .resource_dir()
-            .map_err(|error| {
-                Trouble::NotStarted(format!("no resource folder for this app: {error}"))
-            })?
-            .join("onlyoffice-page"),
+        None => resources()?.join("onlyoffice-page"),
+    };
+    // The ripgrep a folder's search runs (stage-local-files.sh `stage_search`); a dev build names its own, or leaves
+    // the sidecar to the one on PATH.
+    let search_tools = match std::env::var_os("INTENTIC_SEARCH_TOOLS") {
+        Some(tools) => PathBuf::from(tools),
+        None => resources()?.join("search"),
     };
     let mut command = Command::new(sidecar_binary()?);
     command.arg("serve");
@@ -187,6 +193,8 @@ fn spawn(app: &AppHandle, port: Option<u16>) -> Result<(Child, ChildStdin, Child
         .arg(&cache)
         .arg("--office-page")
         .arg(&page)
+        .arg("--search-tools")
+        .arg(&search_tools)
         .arg("--port")
         .arg(port.unwrap_or(0).to_string())
         .stdin(Stdio::piped())

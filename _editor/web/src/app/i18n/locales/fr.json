@@ -6340,7 +6340,6 @@
         },
         "workspaceDesktop": {
             "anywhere": "Partout",
-            "clearEsc": "Effacer (Échap)",
             "closeAll": "Tout fermer",
             "closeAllTabs": "Fermer tous les onglets",
             "closeOtherTabs": "Fermer les autres onglets",

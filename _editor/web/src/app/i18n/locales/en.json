@@ -11706,7 +11706,6 @@
         },
         "workspaceDesktop": {
             "anywhere": "Anywhere",
-            "clearEsc": "Clear (Esc)",
             "closeAll": "Close All",
             "closeAllTabs": "Close All Tabs",
             "closeOtherTabs": "Close Other Tabs",

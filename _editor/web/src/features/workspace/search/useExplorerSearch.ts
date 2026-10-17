@@ -29,3 +29,11 @@ export const useExplorerSearch = () => {
         },
     };
 };
+
+export type ExplorerSearch = ReturnType<typeof useExplorerSearch>;
+
+// What a search box reads of it (ExplorerSearchBar.vue): the query, its scope and switches, and whether an answer is on
+// its way.
+export type ExplorerSearchBox = Pick<ExplorerSearch, `filter` | `scope` | `contentMode` | `textMode` | `options` | `clear`> & {
+    readonly results: Pick<ExplorerSearch[`results`], `searching` | `pending`>;
+};

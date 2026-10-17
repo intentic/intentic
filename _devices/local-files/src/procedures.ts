@@ -7,6 +7,7 @@ import type { DerivedTexts } from "./derived.js";
 import type { Grant } from "./grants.js";
 import { readWindow } from "./files.js";
 import { resolveExisting, within } from "./paths.js";
+import type { Ripgrep } from "./ripgrep.js";
 import { resolveIn, searchFolder } from "./search.js";
 import { type Ask, treeVerbsFor } from "./tree-verbs.js";
 import { listChildren, walkTree } from "./walk.js";
@@ -65,6 +66,8 @@ export interface ProcedureContext {
     readonly ask: Ask;
     // Documents' text for the quick look, kept in the app's cache.
     readonly derived: DerivedTexts;
+    // What searches a folder and lists its files, where this computer has it (ripgrep.ts); without it they are read here.
+    readonly rg?: Ripgrep | undefined;
 }
 
 // What the hello frame says this side is: a folder, answering exactly these routes. The editor offers only what is
@@ -135,8 +138,9 @@ const answersFor = (grant: Grant, context: ProcedureContext) =>
                 const window = resolved.kind === `found` ? await readWindow(resolved.abs, offset, limit) : undefined;
                 return window === undefined ? { present: false as const, path } : { present: true as const, path, shared: true, ...window };
             },
-            search: (query) => searchFolder(grant.root, query),
-            resolve: ({ path, agent }) => (agent === undefined ? resolveIn(grant.root, path) : refuse(NO_CONVERSATIONS, 404)),
+            search: (query, { signal }) => searchFolder(grant.root, query, { rg: context.rg, signal }),
+            resolve: ({ path, agent }, { signal }) =>
+                agent === undefined ? resolveIn(grant.root, path, { rg: context.rg, signal }) : refuse(NO_CONVERSATIONS, 404),
             derived: ({ path }) => context.derived.read(grant.root, path),
             derive: ({ path }) => context.derived.derive(grant.root, path),
             ...treeVerbsFor(grant, context.ask),

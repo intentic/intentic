@@ -825,7 +825,10 @@ triple into `src-tauri/binaries/` (gitignored), which every cargo command agains
 bundle:
 
 - `intentic-files`, the local windows' file server, compiled with bun by
-  [stage-local-files.sh](../../_tools/scripts/desktop/stage-local-files.sh) (`pnpm stage:local`).
+  [stage-local-files.sh](../../_tools/scripts/desktop/stage-local-files.sh) (`pnpm stage:local`). The same script
+  stages the ripgrep its search runs into `src-tauri/binaries/search/`, which `resources` carry and `sidecar.rs` names
+  to it (`--search-tools`; `INTENTIC_SEARCH_TOOLS` overrides): rg 15.2.0, checked against GitHub's sha256 for each
+  asset, and on Windows a static Linux rg beside `rg.exe`, which runs inside a WSL distro for a folder that lives there.
 - `intentic-ic`, the `ic` CLI every script the app runs installs (as `ic`, in `~/.intentic/ic/bin`), staged by
   [stage-desktop-ic.sh](../../_tools/scripts/desktop/stage-desktop-ic.sh) (`pnpm stage:ic`). A release stages the
   binaries `build-ic.sh --version <v>` made for the GitHub Release (release.yml's `ic-build` job hands them to both

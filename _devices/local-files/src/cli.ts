@@ -9,6 +9,7 @@ import { controlChannel } from "./channel.js";
 import { controlLine, type ControlEvent } from "./control.js";
 import { DerivedTexts } from "./derived.js";
 import { Grants } from "./grants.js";
+import { ripgrepWith, searchToolsIn } from "./ripgrep.js";
 import { createLocalFilesServer, unhurried } from "./server.js";
 import { Watches } from "./watch.js";
 
@@ -16,6 +17,7 @@ import { Watches } from "./watch.js";
 // says which on stdout, and serves the folders the app grants on stdin until that stdin closes.
 //
 //   intentic-files serve --origin tauri://localhost --cache <dir> --office-page <dir> [--derived-cache <dir>]
+//                        [--search-tools <dir>]
 //   intentic-files version
 
 declare const INTENTIC_AGENT_VERSION: string | undefined;
@@ -39,11 +41,15 @@ const serveFolders = async (argv: readonly string[]): Promise<void> => {
             cache: { type: `string` },
             "office-page": { type: `string` },
             "derived-cache": { type: `string` },
+            // The ripgrep the app ships (ripgrep.ts); without it the one on PATH, and without that the folder is read here.
+            "search-tools": { type: `string` },
             port: { type: `string`, default: `0` },
         },
     });
     if (values.cache === undefined || values[`office-page`] === undefined) {
-        log(`usage: intentic-files serve --origin <app origin>... --cache <dir> --office-page <dir> [--derived-cache <dir>] [--port <n>]`);
+        log(
+            `usage: intentic-files serve --origin <app origin>... --cache <dir> --office-page <dir> [--derived-cache <dir>] [--search-tools <dir>] [--port <n>]`,
+        );
         process.exit(2);
     }
     const grants = new Grants();
@@ -51,10 +57,13 @@ const serveFolders = async (argv: readonly string[]): Promise<void> => {
     const office = createLocalOffice({ cacheDir: values.cache, pageDir: values[`office-page`], log });
     // Beside the office cache the app names (`<app cache>/office`), unless it names one of its own.
     const derived = new DerivedTexts({ dir: values[`derived-cache`] ?? join(dirname(values.cache), `derived`), log });
+    const tools = searchToolsIn(values[`search-tools`]);
+    log(`search: ${tools.native ?? `no ripgrep here`}${tools.linux === undefined ? `` : `, ${tools.linux} for WSL folders`}`);
+    const rg = tools.native === undefined && tools.linux === undefined ? undefined : ripgrepWith(tools);
     const server = createLocalFilesServer({
         grants,
         office,
-        context: { watches: new Watches(log), build: `local-files-${VERSION}`, startedAt: Date.now(), ask: (verb, path) => asks.ask(verb, path), derived },
+        context: { watches: new Watches(log), build: `local-files-${VERSION}`, startedAt: Date.now(), ask: (verb, path) => asks.ask(verb, path), derived, rg },
         origins: new Set(values.origin),
         log,
     });

@@ -1,10 +1,22 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveIn, SEARCH_BOUNDS, type SearchQuery, searchFolder } from "../search.js";
+import { type Ripgrep, ripgrepWith, searchToolsIn } from "../ripgrep.js";
+import { resolveIn, SEARCH_BOUNDS, type SearchOptions, type SearchQuery, searchFolder } from "../search.js";
 
 // Search and the lookup of a written path, over a real folder: what is read and what is left alone (ignored folders, a
-// version history, binaries, a link out), how a line and its matches come back, and where a search stops.
+// version history, binaries, a link out), how a line and its matches come back, and where a search stops. Every case
+// runs twice, once by the rg on this machine's PATH and once read here, since a folder is searched by whichever this
+// computer has, and the two must answer alike.
+
+const onPath = searchToolsIn(undefined);
+if (onPath.native === undefined) {
+    throw new Error(`these cases need ripgrep (rg) on PATH`);
+}
+const ENGINES: { readonly engine: string; readonly rg: Ripgrep | undefined }[] = [
+    { engine: `ripgrep`, rg: ripgrepWith(onPath) },
+    { engine: `read here`, rg: undefined },
+];
 
 let base: string;
 let root: string;
@@ -33,99 +45,193 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(base, { recursive: true, force: true }));
 
-const find = (query: string, options: Omit<SearchQuery, `query`> = {}) => searchFolder(root, { query, mode: `find`, ...options });
-const paths = async (query: string, options: Omit<SearchQuery, `query`> = {}): Promise<string[]> =>
-    (await find(query, options)).groups.map((group) => group.path);
+const CURSOR = /^[\w-]+\.\d+$/;
 
-describe(`a text search`, () => {
-    it(`finds every line, most matches first, and reads nothing ignored, locked, binary or outside`, async () => {
-        const found = await find(`hello`);
-        expect(found).toMatchObject({ mode: `find`, total: 5, files: 3, shown: 5, truncated: false, freshness: { state: `fresh` } });
-        expect(found.groups.map((group) => [group.path, group.hits.map((hit) => hit.line)])).toEqual([
-            [`docs/guide.md`, [2, 3]],
-            [`src/app.ts`, [1, 2]],
-            [`src/util/strings.ts`, [2]],
-        ]);
-        expect(found.groups[0]?.hits[1]).toEqual({
-            line: 3,
-            text: `hello again, hello`,
-            spans: [
-                { start: 0, end: 5 },
-                { start: 13, end: 18 },
-            ],
-            tags: [{ kind: `text` }],
+// The asks every case makes, of one engine; `root` is read when they run, after beforeEach has made it.
+const asksOf = (rg: Ripgrep | undefined) => {
+    const search = (query: SearchQuery, options: SearchOptions = {}) => searchFolder(root, query, { rg, ...options });
+    const find = (query: string, options: Omit<SearchQuery, `query`> = {}) => search({ query, mode: `find`, ...options });
+    const paths = async (query: string, options: Omit<SearchQuery, `query`> = {}): Promise<string[]> =>
+        (await find(query, options)).groups.map((group) => group.path);
+    const resolve = (reference: string, options: SearchOptions = {}) => resolveIn(root, reference, { rg, ...options });
+    return { search, find, paths, resolve };
+};
+
+for (const { engine, rg } of ENGINES) {
+    const { search, find, paths, resolve } = asksOf(rg);
+
+    describe(`${engine}: a text search`, () => {
+        it(`finds every line, most matches first, and reads nothing ignored, locked, binary or outside`, async () => {
+            const found = await find(`hello`);
+            expect(found).toMatchObject({ mode: `find`, total: 5, files: 3, shown: 5, truncated: false, freshness: { state: `fresh` } });
+            expect(found.groups.map((group) => [group.path, group.hits.map((hit) => hit.line)])).toEqual([
+                [`docs/guide.md`, [2, 3]],
+                [`src/app.ts`, [1, 2]],
+                [`src/util/strings.ts`, [2]],
+            ]);
+            expect(found.groups[0]?.hits[1]).toEqual({
+                line: 3,
+                text: `hello again, hello`,
+                spans: [
+                    { start: 0, end: 5 },
+                    { start: 13, end: 18 },
+                ],
+                tags: [{ kind: `text` }],
+            });
+        });
+
+        // Offsets count characters as the page slices them, not the bytes on disk.
+        it(`spans a match by character, past letters that take more than a byte`, async () => {
+            expect((await find(`brûlée`)).groups[0]?.hits[0]).toMatchObject({ line: 1, text: `Crème brûlée`, spans: [{ start: 6, end: 12 }] });
+        });
+
+        it(`honours case, whole words and plain text as the search box asks`, async () => {
+            expect(await paths(`Hello`, { caseSensitive: true })).toEqual([`docs/guide.md`, `src/app.ts`]);
+            expect(await paths(`hello`, { word: true })).toEqual([`docs/guide.md`, `src/app.ts`]);
+            expect(await paths(`\${name}`, { literal: true })).toEqual([`src/app.ts`]);
+            expect(await paths(`h.llo_w`)).toEqual([`src/util/strings.ts`]);
+        });
+
+        // A pattern this engine cannot read is still a question: it is asked as plain text, and the answer says so.
+        it(`searches a pattern it cannot read as plain text, and says it did`, async () => {
+            const found = await find(`(name`);
+            expect(found.groups.map((group) => group.path)).toEqual([`src/app.ts`]);
+            expect(found.note).toBe(`The query isn't a pattern this search reads, so it was searched as plain text.`);
+        });
+
+        it(`looks inside ignored folders when asked, and never inside a version history`, async () => {
+            expect(await paths(`hello from`, { includeIgnored: true })).toEqual([`build/out.js`, `node_modules/pkg/index.js`]);
+        });
+
+        it(`narrows to a folder and to the files to include`, async () => {
+            expect(await paths(`hello`, { dir: `src` })).toEqual([`src/app.ts`, `src/util/strings.ts`]);
+            expect(await paths(`hello`, { include: `*.md` })).toEqual([`docs/guide.md`]);
+            expect(await paths(`hello`, { include: `!docs` })).toEqual([`src/app.ts`, `src/util/strings.ts`]);
+            expect(await paths(`hello`, { dir: `../` })).toEqual([]);
+        });
+
+        it(`pages by file, and hands back where the next page starts`, async () => {
+            const first = await find(`hello`, { limit: 2 });
+            expect([first.groups.map((group) => group.path), first.shown, first.truncated]).toEqual([[`docs/guide.md`, `src/app.ts`], 4, true]);
+            expect(first.cursor).toMatch(CURSOR);
+            const next = await find(`hello`, { limit: 2, after: first.cursor });
+            expect([next.groups.map((group) => group.path), next.cursor, next.truncated, next.total]).toEqual([
+                [`src/util/strings.ts`],
+                undefined,
+                false,
+                5,
+            ]);
+        });
+
+        // A later page is a slice of the answer the first page found: a file changed in between moves nothing between pages.
+        it(`pages through the answer its first page found, and searches again for a cursor it no longer holds`, async () => {
+            const first = await find(`hello`, { limit: 1 });
+            writeFileSync(join(root, `docs`, `guide.md`), `nothing to see\n`);
+            const next = await find(`hello`, { limit: 1, after: first.cursor });
+            expect([first.groups[0]?.path, next.groups[0]?.path, next.total]).toEqual([`docs/guide.md`, `src/app.ts`, 5]);
+            // A bare offset, as an editor from before this cursor sends it, searches the folder as it is now.
+            expect((await find(`hello`, { limit: 1, after: `1` })).groups.map((group) => group.path)).toEqual([`src/util/strings.ts`]);
+            await expect(find(`hello`, { after: `x.y` })).rejects.toMatchObject({ status: 400 });
+        });
+
+        // Read here, a pattern that backtracks without end would hold every window of the app while it ran on one line; rg
+        // reads every pattern in time linear in the text, so it has none to refuse.
+        it(`refuses a pattern that could backtrack without end only where it would`, async () => {
+            if (rg === undefined) {
+                await expect(find(`(a+)+$`)).rejects.toMatchObject({
+                    status: 400,
+                    message: `This pattern could take too long to search. Simplify it, or search for the text as typed.`,
+                });
+            } else {
+                expect((await find(`(a+)+$`)).groups).toEqual([]);
+            }
+            expect((await find(`(a+)+$`, { literal: true })).groups).toEqual([]);
+        });
+
+        // A bound that stops the search makes every count a floor, and the answer says which bound and how to get the rest.
+        it(`says when it stopped at the matching lines it keeps`, async () => {
+            const found = await search({ query: `hello` }, { bounds: { ...SEARCH_BOUNDS, hits: 2 } });
+            expect(found).toMatchObject({
+                truncated: true,
+                partial: true,
+                note: `Stopped at the first 2 matching lines. Narrow the search to see the rest.`,
+            });
+            expect(found.total).toBeGreaterThanOrEqual(2);
         });
     });
 
-    // Offsets count characters as the page slices them, not the bytes on disk.
-    it(`spans a match by character, past letters that take more than a byte`, async () => {
-        expect((await find(`brûlée`)).groups[0]?.hits[0]).toMatchObject({ line: 1, text: `Crème brûlée`, spans: [{ start: 6, end: 12 }] });
-    });
-
-    it(`honours case, whole words and plain text as the search box asks`, async () => {
-        expect(await paths(`Hello`, { caseSensitive: true })).toEqual([`docs/guide.md`, `src/app.ts`]);
-        expect(await paths(`hello`, { word: true })).toEqual([`docs/guide.md`, `src/app.ts`]);
-        expect(await paths(`\${name}`, { literal: true })).toEqual([`src/app.ts`]);
-        expect(await paths(`h.llo_w`)).toEqual([`src/util/strings.ts`]);
-    });
-
-    // A pattern this engine cannot read is still a question: it is asked as plain text, and the answer says so.
-    it(`searches a pattern it cannot read as plain text, and says it did`, async () => {
-        const found = await find(`(name`);
-        expect(found.groups.map((group) => group.path)).toEqual([`src/app.ts`]);
-        expect(found.note).toBe(`The query isn't a pattern this search reads, so it was searched as plain text.`);
-    });
-
-    it(`looks inside ignored folders when asked, and never inside a version history`, async () => {
-        expect(await paths(`hello from`, { includeIgnored: true })).toEqual([`build/out.js`, `node_modules/pkg/index.js`]);
-    });
-
-    it(`narrows to a folder and to the files to include`, async () => {
-        expect(await paths(`hello`, { dir: `src` })).toEqual([`src/app.ts`, `src/util/strings.ts`]);
-        expect(await paths(`hello`, { include: `*.md` })).toEqual([`docs/guide.md`]);
-        expect(await paths(`hello`, { include: `!docs` })).toEqual([`src/app.ts`, `src/util/strings.ts`]);
-        expect(await paths(`hello`, { dir: `../` })).toEqual([]);
-    });
-
-    it(`pages by file, and hands back where the next page starts`, async () => {
-        const first = await find(`hello`, { limit: 2 });
-        expect([first.groups.map((group) => group.path), first.shown, first.cursor, first.truncated]).toEqual([
-            [`docs/guide.md`, `src/app.ts`],
-            4,
-            `2`,
-            true,
-        ]);
-        const next = await find(`hello`, { limit: 2, after: first.cursor });
-        expect([next.groups.map((group) => group.path), next.cursor, next.truncated, next.total]).toEqual([
-            [`src/util/strings.ts`],
-            undefined,
-            false,
-            5,
-        ]);
-    });
-
-    // A pattern that backtracks without end would hold every window of the app while it ran on one line.
-    it(`refuses a pattern that could backtrack without end, and searches the same text as typed`, async () => {
-        await expect(find(`(a+)+$`)).rejects.toMatchObject({
-            status: 400,
-            message: `This pattern could take too long to search. Simplify it, or search for the text as typed.`,
+    describe(`${engine}: a file-name search`, () => {
+        // The same scorer as quick-open's: a name that holds the query beats a folder that does.
+        it(`ranks a match in a file's own name first`, async () => {
+            const found = await search({ query: `util`, mode: `files` });
+            expect(found.groups.map((group) => group.path)).toEqual([`docs/util-notes.md`, `src/util/strings.ts`]);
+            expect(found).toMatchObject({ mode: `files`, total: 2, files: 2 });
+            expect(found.groups[0]?.hits).toEqual([
+                { line: 1, text: `docs/util-notes.md`, spans: [], tags: [{ kind: `fuzzy`, score: found.groups[0]?.score }] },
+            ]);
         });
-        expect((await find(`(a+)+$`, { literal: true })).groups).toEqual([]);
+
+        it(`runs any other mode as a text search`, async () => {
+            expect((await search({ query: `hello again`, mode: `sym` })).mode).toBe(`find`);
+        });
+
+        it(`lists only what the explorer lists, and everything when asked`, async () => {
+            expect((await search({ query: `out.js`, mode: `files` })).groups.map((group) => group.path)).toEqual([]);
+            expect((await search({ query: `out.js`, mode: `files`, includeIgnored: true })).groups.map((group) => group.path)).toEqual([
+                `build/out.js`,
+            ]);
+        });
     });
 
-    // A clock that moves a millisecond each time it is read: the budget runs out on a count of reads, not on a race.
+    describe(`${engine}: resolveIn`, () => {
+        it(`answers a path that is there as written`, async () => {
+            expect(await resolve(`src/app.ts`)).toEqual({ path: `src/app.ts` });
+            expect(await resolve(join(root, `docs`, `guide.md`))).toEqual({ path: `docs/guide.md` });
+        });
+
+        it(`finds the one file a path's ending or a bare name means`, async () => {
+            expect(await resolve(`packages/web/src/util/strings.ts`)).toEqual({ path: `src/util/strings.ts` });
+            expect(await resolve(`strings.ts`)).toEqual({ path: `src/util/strings.ts` });
+            expect(await resolve(`blog/index.md`)).toEqual({ path: `blog/index.md` });
+        });
+
+        // The walk stopped before the folder was all looked at: here the twin past where it stopped is real.
+        it(`resolves nothing by name when the walk was cut short, but still what is there as written`, async () => {
+            mkdirSync(join(root, `vendor`, `lib`, `text`), { recursive: true });
+            writeFileSync(join(root, `vendor`, `lib`, `text`, `strings.ts`), `export {};\n`);
+            expect(await resolve(`strings.ts`, { bounds: { ...SEARCH_BOUNDS, scanned: 1 } })).toEqual({});
+            expect(await resolve(`src/util/strings.ts`, { bounds: { ...SEARCH_BOUNDS, scanned: 1 } })).toEqual({ path: `src/util/strings.ts` });
+            expect(await resolve(`util/strings.ts`)).toEqual({ path: `src/util/strings.ts` });
+        });
+
+        // Two files end that way: a guess would be a link to the wrong one.
+        it(`resolves nothing that two files could mean, or that nothing means`, async () => {
+            expect(await resolve(`index.md`)).toEqual({});
+            expect(await resolve(`gone.md`)).toEqual({});
+            expect(await resolve(`out.js`)).toEqual({});
+        });
+    });
+}
+
+// The search read here, by its own clock: a clock that moves a millisecond each time it is read, so the budget runs out
+// on a count of reads, not on a race.
+describe(`read here`, () => {
     it(`stops inside a long file when the budget runs out, rather than at its end`, async () => {
         mkdirSync(join(root, `long`));
         writeFileSync(join(root, `long`, `log.txt`), `${`x\n`.repeat(1_000)}needle\n`);
         let tick = 0;
-        const found = await searchFolder(root, { query: `needle`, dir: `long` }, { ...SEARCH_BOUNDS, budgetMs: 50, now: () => tick++ });
-        expect(found).toMatchObject({ files: 0, truncated: true, partial: true });
-        expect(await paths(`needle`, { dir: `long` })).toEqual([`long/log.txt`]);
+        const found = await searchFolder(root, { query: `needle`, dir: `long` }, { bounds: { ...SEARCH_BOUNDS, budgetMs: 50, now: () => tick++ } });
+        expect(found).toMatchObject({
+            files: 0,
+            truncated: true,
+            partial: true,
+            note: `Stopped after 0 seconds: the folder is slow to read from here. Narrow it to a folder or a file pattern.`,
+        });
+        expect((await searchFolder(root, { query: `needle`, dir: `long` })).groups.map((group) => group.path)).toEqual([`long/log.txt`]);
     });
 
-    // A bound that stops the search makes every count a floor, and the answer says how to get the rest.
-    it(`says when a bound stopped it`, async () => {
-        const found = await searchFolder(root, { query: `hello` }, { ...SEARCH_BOUNDS, scanned: 2 });
+    it(`says when the folder held more files than one search reads`, async () => {
+        const found = await searchFolder(root, { query: `hello` }, { bounds: { ...SEARCH_BOUNDS, scanned: 2 } });
         // The first two files the walk meets are the top level's own, neither of which says hello.
         expect(found).toMatchObject({
             files: 0,
@@ -134,49 +240,11 @@ describe(`a text search`, () => {
             note: `Stopped early: the folder is larger than one search reads. Narrow it to a folder or a file pattern.`,
         });
     });
-});
 
-describe(`a file-name search`, () => {
-    // The same scorer as quick-open's: a name that holds the query beats a folder that does.
-    it(`ranks a match in a file's own name first`, async () => {
-        const found = await searchFolder(root, { query: `util`, mode: `files` });
-        expect(found.groups.map((group) => group.path)).toEqual([`docs/util-notes.md`, `src/util/strings.ts`]);
-        expect(found).toMatchObject({ mode: `files`, total: 2, files: 2 });
-        expect(found.groups[0]?.hits).toEqual([
-            { line: 1, text: `docs/util-notes.md`, spans: [], tags: [{ kind: `fuzzy`, score: found.groups[0]?.score }] },
-        ]);
-    });
-
-    it(`runs any other mode as a text search`, async () => {
-        expect((await searchFolder(root, { query: `hello again`, mode: `sym` })).mode).toBe(`find`);
-    });
-});
-
-describe(`resolveIn`, () => {
-    it(`answers a path that is there as written`, async () => {
-        expect(await resolveIn(root, `src/app.ts`)).toEqual({ path: `src/app.ts` });
-        expect(await resolveIn(root, join(root, `docs`, `guide.md`))).toEqual({ path: `docs/guide.md` });
-    });
-
-    it(`finds the one file a path's ending or a bare name means`, async () => {
-        expect(await resolveIn(root, `packages/web/src/util/strings.ts`)).toEqual({ path: `src/util/strings.ts` });
-        expect(await resolveIn(root, `strings.ts`)).toEqual({ path: `src/util/strings.ts` });
-        expect(await resolveIn(root, `blog/index.md`)).toEqual({ path: `blog/index.md` });
-    });
-
-    // The walk stopped before the folder was all looked at: here the twin past where it stopped is real.
-    it(`resolves nothing by name when the walk was cut short, but still what is there as written`, async () => {
-        mkdirSync(join(root, `vendor`, `lib`, `text`), { recursive: true });
-        writeFileSync(join(root, `vendor`, `lib`, `text`, `strings.ts`), `export {};\n`);
-        expect(await resolveIn(root, `strings.ts`, { ...SEARCH_BOUNDS, scanned: 1 })).toEqual({});
-        expect(await resolveIn(root, `src/util/strings.ts`, { ...SEARCH_BOUNDS, scanned: 1 })).toEqual({ path: `src/util/strings.ts` });
-        expect(await resolveIn(root, `util/strings.ts`)).toEqual({ path: `src/util/strings.ts` });
-    });
-
-    // Two files end that way: a guess would be a link to the wrong one.
-    it(`resolves nothing that two files could mean, or that nothing means`, async () => {
-        expect(await resolveIn(root, `index.md`)).toEqual({});
-        expect(await resolveIn(root, `gone.md`)).toEqual({});
-        expect(await resolveIn(root, `out.js`)).toEqual({});
+    // An rg that is not there (an app that shipped none, a distro's route refused) is the folder read here instead.
+    it(`answers when the ripgrep it was handed cannot run`, async () => {
+        const missing = ripgrepWith({ native: join(base, `no-rg-here`) });
+        expect((await searchFolder(root, { query: `hello` }, { rg: missing })).files).toBe(3);
+        expect(await resolveIn(root, `strings.ts`, { rg: missing })).toEqual({ path: `src/util/strings.ts` });
     });
 });
