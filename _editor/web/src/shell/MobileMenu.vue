@@ -41,6 +41,8 @@ import { pushMenuRow } from "./pushMenuRow";
 import MenuRow from "./MenuRow.vue";
 import GettingStartedList from "../features/gettingStarted/GettingStartedList.vue";
 import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
+import CommunityInvite from "../features/community/CommunityInvite.vue";
+import { useCommunityInvite } from "../features/community/useCommunityInvite";
 import RailIcon from "./rail/RailIcon.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -50,6 +52,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 const tour = useGettingStarted();
+const invite = useCommunityInvite();
 
 interface SectionRow {
     // Groups by railBands, so this page's sections match the desktop rail's runs.
@@ -280,12 +283,15 @@ const logout = async (): Promise<void> => {
             </MenuRow>
         </RowGroup>
 
+        <!-- The community ask, as the desktop account menu has it: once, after the loop, on the visit it is first seen. -->
+        <CommunityInvite v-if="invite.note.value" place="phone-note" />
         <!-- Account: identity and the actions the desktop avatar popover holds. -->
         <RowGroup :label="t(`shell.words.account`)" class="pb-4">
             <MenuRow v-if="tour.reopenable.value" icon="circle" :title="t(`gettingStarted.panel.show`)" plain @press="tour.show()" />
             <Row lead="face" :title="user?.email" :description="user?.name ?? undefined">
                 <template #lead="{ mark }"><Avatar :size="mark" :src="user?.image" /></template>
             </Row>
+            <MenuRow icon="discord" :title="t(`community.row`)" data-test="community-row" @press="invite.open(`phone-menu`)" />
             <MenuRow v-action="logout" icon="sign-out" :title="t(`shell.words.signOut`)" />
         </RowGroup>
     </div>

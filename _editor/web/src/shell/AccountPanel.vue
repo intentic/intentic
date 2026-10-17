@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { errorMessage } from "@intentic/base/errors";
 import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
+import CommunityInvite from "../features/community/CommunityInvite.vue";
+import { useCommunityInvite } from "../features/community/useCommunityInvite";
 import type { Disposable } from "@intentic/extension-api";
 import { AnchoredOverlay, Avatar, browserOwnsClick, Notice, StatusBadge, useHoverMenu, vAction } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -32,7 +34,9 @@ const { planBadge } = useHostedPlan();
 // Settings has no rail tile; this control lights up like one, matching on the route and any sub-path.
 const onSettings = computed(() => route.path === `/settings` || route.path.startsWith(`/settings/`));
 
-const accountHint = computed(() => t(`shell.words.account`));
+// The community invitation (features/community): a quiet dot here while an ask waits unseen in this menu, never more.
+const invite = useCommunityInvite();
+const accountHint = computed(() => (invite.dot.value ? t(`community.dot`) : t(`shell.words.account`)));
 
 // AnchoredOverlay, not PrimeVue's Popover: shares the one overlay that measures against its anchor's window.
 const trigger = ref<HTMLButtonElement | null>(null);
@@ -96,23 +100,42 @@ const reopenTour = (): void => {
 
 // The other half of this popover is a place (Settings, a destination like any other); this half is the one thing the
 // account menu does, registered here so the palette runs the same flow rather than a second copy of it.
-let command: Disposable | undefined;
+// The community's door sits in this menu too, so the palette reaches it from wherever the reader is.
+let commands: Disposable[] = [];
 
 onMounted(() => {
-    command = registerCommand({
-        owner: `builtin`,
-        command: `account.signOut`,
-        title: t(`shell.accountPanel.signOut2`),
-        category: ACCOUNT,
-        icon: `sign-out`,
-        handler: logout,
-    });
+    commands = [
+        registerCommand({
+            owner: `builtin`,
+            command: `account.signOut`,
+            title: t(`shell.accountPanel.signOut2`),
+            category: ACCOUNT,
+            icon: `sign-out`,
+            handler: logout,
+        }),
+        registerCommand({
+            owner: `builtin`,
+            command: `account.joinCommunity`,
+            title: t(`community.command`),
+            category: ACCOUNT,
+            icon: `discord`,
+            handler: () => invite.open(`palette`),
+        }),
+    ];
 });
 
 onUnmounted(() => {
-    command?.dispose();
-    command = undefined;
+    for (const command of commands) {
+        command.dispose();
+    }
+    commands = [];
 });
+
+// The plain row is a link like the note's Join: the reader found their own way in, which answers the ask too.
+const communityPressed = (): void => {
+    open.value = false;
+    invite.answer(`menu`, `joined`);
+};
 </script>
 
 <template>
@@ -141,6 +164,12 @@ onUnmounted(() => {
             />
             <Icon name="user" v-else class="text-base" />
         </button>
+        <span
+            v-if="invite.dot.value"
+            class="pointer-events-none absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-accent ring-2 ring-canvas"
+            aria-hidden="true"
+            data-test="community-dot"
+        ></span>
     </div>
 
     <!-- No tooltip on the avatar: resting there opens this panel, on the side a tooltip would take, and its first row
@@ -179,6 +208,9 @@ onUnmounted(() => {
 
             <div class="my-1 border-t border-line-subtle"></div>
 
+            <!-- The community ask, on the visit it is first seen on and only after the reader has been round the loop. -->
+            <CommunityInvite v-if="invite.note.value" place="menu-note" class="m-1 mb-2" />
+
             <!-- Only while it is put away and still a first run: the way back to a checklist the rail no longer shows. -->
             <button
                 v-if="tour.reopenable.value"
@@ -200,6 +232,19 @@ onUnmounted(() => {
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="cog" class="text-base text-muted" /></span>
                 {{ t(`shared.settings`) }}
             </RouterLink>
+            <a
+                :href="invite.url"
+                target="_blank"
+                rel="noopener"
+                data-menu-row
+                data-test="community-row"
+                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"
+                @click="communityPressed"
+            >
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="discord" class="text-base text-muted" /></span>
+                <span class="min-w-0 flex-1 truncate">{{ t(`community.row`) }}</span>
+                <Icon name="external-link" class="shrink-0 text-2xs text-subtle" />
+            </a>
             <button
                 type="button"
                 data-menu-row

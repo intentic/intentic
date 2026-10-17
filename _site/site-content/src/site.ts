@@ -1,4 +1,4 @@
-import { PLATFORM_SITE_ORIGIN, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
+import { COMMUNITY_DISCORD_URL, PLATFORM_SITE_ORIGIN, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 
 // Re-exported from the shared origin table; the site is a reader, not the owner (APP_URL feeds CORS).
 export const SITE_URL = PLATFORM_SITE_ORIGIN;
@@ -22,8 +22,8 @@ export const githubUrl = "https://github.com/intentic/intentic";
 export const githubIssuesUrl = "https://github.com/intentic/intentic/issues";
 export const githubReleasesUrl = "https://github.com/intentic/intentic/releases";
 
-// Questions go here, bugs to Issues. Permanent, non-expiring invite: Discord has no stable /channels/ URL.
-export const discordUrl = "https://discord.gg/3veuzYp32T";
+// Questions go here, bugs to Issues. The editor invites people to the same server (@intentic/constants).
+export const discordUrl = COMMUNITY_DISCORD_URL;
 
 // Shared by two consumers (the /about/ + landing chips, and the Person schema's `sameAs`); not in about.ts.
 export const githubProfileUrl = "https://github.com/radarsu";

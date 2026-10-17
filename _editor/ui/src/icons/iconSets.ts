@@ -58,6 +58,7 @@ export const ICONS = {
     database: OBJECT_GLYPHS[`database`],
     deployments: NAVIGATION_GLYPHS[`deployments`],
     desktop: OBJECT_GLYPHS[`desktop`],
+    discord: BRAND_GLYPHS[`discord`],
     download: ACTION_GLYPHS[`download`],
     ellipsis: NAVIGATION_GLYPHS[`ellipsis`],
     envelope: OBJECT_GLYPHS[`envelope`],

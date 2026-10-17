@@ -12129,5 +12129,17 @@
         "ring": {
             "label": "Getting started, {settled} of {total} done"
         }
+    },
+    "community": {
+        "row": "Community on Discord",
+        "note": {
+            "title": "Come talk to us on Discord",
+            "line": "intentic is early and built by a small team. Tell us what got in your way and what you wish it did. It helps us decide what to build next."
+        },
+        "finishedLine": "intentic is still young, and we'd be glad to hear how this went. Questions, rough edges and ideas are all welcome on our Discord.",
+        "join": "Join the Discord",
+        "noThanks": "No thanks",
+        "command": "Join the community on Discord",
+        "dot": "Account, with a note from the intentic team"
     }
 }

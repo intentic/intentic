@@ -21,6 +21,18 @@ jest.mock(`../client/auth/useAccount`, () => ({ useAccount: () => account }));
 jest.mock(`../models/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ planBadge: ref(undefined) }) }));
 jest.mock(`../features/gettingStarted/useGettingStarted`, () => ({ useGettingStarted: () => ({ reopenable: ref(false), show: async () => undefined }) }));
 jest.mock(`../workbench/commands/useCommands`, () => ({ registerCommand: () => ({ dispose: () => undefined }) }));
+// The community invitation's state, held here so a case can say whether an ask is waiting (its rules are
+// features/community/communityInvite.test.ts).
+const invite = {
+    url: `https://discord.gg/example`,
+    dot: ref(false),
+    note: ref(false),
+    onFinished: ref(false),
+    seen: jest.fn(),
+    answer: jest.fn(),
+    open: jest.fn(),
+};
+jest.mock(`../features/community/useCommunityInvite`, () => ({ useCommunityInvite: () => invite }));
 
 const { default: AccountPanel } = await import("./AccountPanel.vue");
 
@@ -31,6 +43,10 @@ afterEach(() => {
     el?.remove();
     app = undefined;
     signOut.mockReset();
+    invite.dot.value = false;
+    invite.note.value = false;
+    invite.seen.mockReset();
+    invite.answer.mockReset();
 });
 
 // The press settles a few ticks after it lands. Microtasks only: the overlay's own timers are not this test's business.
@@ -63,6 +79,8 @@ const mountPanel = async (): Promise<void> => {
     await settle();
 };
 
+const found = (test: string): HTMLElement | null => document.body.querySelector<HTMLElement>(`[data-test="${test}"]`);
+
 const pressSignOut = async (): Promise<void> => {
     // The menu's last row, and its only button among them: Settings is a link.
     const row = [...document.body.querySelectorAll<HTMLButtonElement>(`button[data-menu-row]`)].at(-1);
@@ -88,4 +106,30 @@ test(`a sign-out that went through says nothing`, async () => {
     await mountPanel();
     await pressSignOut();
     expect([signOut.mock.calls.length, failure()]).toEqual([1, undefined]);
+});
+
+// The community's door is in this menu for everyone; the ask itself only when one is waiting, and then quietly.
+test(`the menu always holds the community link, opening outside the app`, async () => {
+    await mountPanel();
+    const row = found(`community-row`);
+    expect([row?.getAttribute(`href`), row?.getAttribute(`target`), found(`community-invite`), found(`community-dot`)]).toEqual([
+        invite.url,
+        `_blank`,
+        null,
+        null,
+    ]);
+});
+
+test(`a press on the plain row counts as joining, so nothing asks again`, async () => {
+    await mountPanel();
+    found(`community-row`)?.addEventListener(`click`, (event) => event.preventDefault());
+    found(`community-row`)?.click();
+    expect(invite.answer.mock.calls).toEqual([[`menu`, `joined`]]);
+});
+
+test(`a waiting ask wears a dot on the avatar and reads as a note inside the menu, said seen once drawn`, async () => {
+    invite.dot.value = true;
+    invite.note.value = true;
+    await mountPanel();
+    expect([found(`community-dot`) !== null, found(`community-invite`) !== null, invite.seen.mock.calls]).toEqual([true, true, [[`menu-note`]]]);
 });

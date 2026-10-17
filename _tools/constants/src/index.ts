@@ -82,6 +82,10 @@ export const PLATFORM_WEB_ORIGIN = "https://app.intentic.dev";
 // Public site origin; also where install one-liners (`curl ... | sh`) fetch their script from.
 export const PLATFORM_SITE_ORIGIN = "https://intentic.dev";
 
+// The community server's permanent, non-expiring invite: questions and feedback go here, bugs to GitHub Issues. One
+// value for the site's links and the editor's invitation, since Discord has no stable /channels/ address to fall back on.
+export const COMMUNITY_DISCORD_URL = "https://discord.gg/3veuzYp32T";
+
 // One table for what three places once hand-typed separately: `path` is what a one-liner fetches, `file` is the asset
 // under INSTALL_SCRIPTS_DIR. /rebuild and /update deliberately share one file.
 export const INSTALL_SCRIPTS_DIR = "_site/site/public/scripts";

@@ -32,6 +32,7 @@ declare module "vue-i18n" {
         readonly capabilities: AppMessages["capabilities"];
         readonly chat: AppMessages["chat"];
         readonly common: AppMessages["common"];
+        readonly community: AppMessages["community"];
         readonly connect: AppMessages["connect"];
         readonly desktop: AppMessages["desktop"];
         readonly "extension-host": AppMessages["extension-host"];

@@ -12129,5 +12129,17 @@
         "ring": {
             "label": "Pierwsze kroki, {settled} z {total} gotowe"
         }
+    },
+    "community": {
+        "row": "Społeczność na Discordzie",
+        "note": {
+            "title": "Porozmawiaj z nami na Discordzie",
+            "line": "intentic jest na wczesnym etapie i tworzy go mały zespół. Napisz nam, co Ci przeszkadzało i czego Ci brakuje. To pomaga nam zdecydować, co budować dalej."
+        },
+        "finishedLine": "intentic jest jeszcze młody i chętnie usłyszymy, jak Ci poszło. Pytania, niedoróbki i pomysły są mile widziane na naszym Discordzie.",
+        "join": "Dołącz do Discorda",
+        "noThanks": "Nie, dziękuję",
+        "command": "Dołącz do społeczności na Discordzie",
+        "dot": "Konto, z wiadomością od zespołu intentic"
     }
 }

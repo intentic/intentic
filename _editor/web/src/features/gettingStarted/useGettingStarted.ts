@@ -6,6 +6,7 @@ import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { useRole } from "../../client/sandbox/useRole";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 import { archived, loadArchived, registry, rosterHeard } from "../../models/fleet/useAgents-registry";
+import { pastFirstDays, workLanded } from "../../models/fleet/fleetHistory";
 import { acpProviders, endpointProviders } from "../../models/providers/providerCatalog";
 import { refreshConnections } from "../../models/conversations/accounts/useChat-accounts";
 import { accessKnown, firstReadyProvider, providerReady } from "../../models/providers/access";
@@ -45,9 +46,6 @@ const landedInWindow = sandboxRef(() => false);
 
 let instance: GettingStarted | undefined;
 
-// How long a sandbox counts as new: an agent quiet for longer than this was not started on its first run.
-const FIRST_DAYS_MS = 7 * 24 * 60 * 60_000;
-
 const ownModelReady = (): boolean =>
     [...NATIVE_PROVIDERS, ...endpointProviders.value.map((entry) => entry.id), ...acpProviders.value.map((entry) => entry.id)].some(
         (provider) => !isTrialProvider(provider) && providerReady(provider),
@@ -59,7 +57,7 @@ const create = (): GettingStarted => {
     // The shared tree, under the very entry the explorer reads it through, so this asks nothing the workspace does not.
     const { query: tree } = useSandboxQuery({ queryKey: sharedWorkspaceTreeKey(), queryFn: () => sandboxRpc.workspace.tree({}) });
 
-    const landedHere = (): boolean => registry.value.some((agent) => agent.status === `landed` || (agent.landedPresence?.landed ?? 0) > 0);
+    const landedHere = (): boolean => workLanded(registry.value);
     const facts = computed<StepFacts>(() => {
         const rosterKnown = rosterHeard.value && (archiveChecked.value || landedHere());
         const filed = archived.value.length > 0;
@@ -72,7 +70,7 @@ const create = (): GettingStarted => {
             land: rosterKnown ? landedHere() || filed : undefined,
             runnable: accessKnown.value ? firstReadyProvider() !== undefined : undefined,
             ready: registry.value.some((agent) => agent.status === `ready` && agent.archivedAt === undefined),
-            established: registry.value.some((agent) => Date.now() - agent.updatedAt > FIRST_DAYS_MS),
+            established: pastFirstDays(registry.value, Date.now()),
         };
     });
     // Until the sandbox has said what this person chose, the list holds still rather than flashing up and away.

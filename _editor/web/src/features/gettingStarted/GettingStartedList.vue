@@ -9,10 +9,14 @@ import { useRouter } from "vue-router";
 import { SKIPPABLE, type StepId, type StepState } from "../tour/steps";
 import { skipWords, stepWords } from "../tour/tourCopy";
 import { useGettingStarted } from "./useGettingStarted";
+import CommunityInvite from "../community/CommunityInvite.vue";
+import { useCommunityInvite } from "../community/useCommunityInvite";
 
 const t = useT();
 const router = useRouter();
 const tour = useGettingStarted();
+// The finished list is the moment the reader has been round the whole loop: the one place the first run asks them in.
+const invite = useCommunityInvite();
 
 // `fill` for a page that gives it the width (a phone's Menu); a popover's list keeps its own.
 const { fill = false } = defineProps<{ fill?: boolean }>();
@@ -75,6 +79,7 @@ const hide = (): void => {
                 </template>
             </Row>
         </RowGroup>
+        <CommunityInvite v-if="tour.finished.value && invite.onFinished.value" place="finished" look="inline" class="mx-1" />
         <div class="flex items-center justify-end px-1 pb-1">
             <Button v-if="tour.finished.value" size="small" @click="hide">{{ t(`gettingStarted.panel.done`) }}</Button>
             <button v-else type="button" :class="ui.textButton({ tone: 'quiet', size: 'xs' })" @click="hide">

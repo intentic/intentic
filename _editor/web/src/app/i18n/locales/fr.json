@@ -6674,5 +6674,17 @@
         "ring": {
             "label": "Premiers pas, {settled} sur {total} faits"
         }
+    },
+    "community": {
+        "row": "Communauté sur Discord",
+        "note": {
+            "title": "Venez nous parler sur Discord",
+            "line": "intentic est jeune et construit par une petite équipe. Dites-nous ce qui vous a gêné et ce que vous aimeriez qu'il fasse. Cela nous aide à choisir quoi construire ensuite."
+        },
+        "finishedLine": "intentic est encore jeune, et nous serions heureux de savoir comment ça s'est passé. Questions, points de friction et idées sont les bienvenus sur notre Discord.",
+        "join": "Rejoindre le Discord",
+        "noThanks": "Non merci",
+        "command": "Rejoindre la communauté sur Discord",
+        "dot": "Compte, avec un mot de l'équipe intentic"
     }
 }

@@ -6720,5 +6720,17 @@
         "ring": {
             "label": "Erste Schritte, {settled} von {total} erledigt"
         }
+    },
+    "community": {
+        "row": "Community auf Discord",
+        "note": {
+            "title": "Sprechen Sie mit uns auf Discord",
+            "line": "intentic ist noch jung und wird von einem kleinen Team gebaut. Erzählen Sie uns, was Sie aufgehalten hat und was Sie sich wünschen. Das hilft uns zu entscheiden, was wir als Nächstes bauen."
+        },
+        "finishedLine": "intentic ist noch jung, und wir würden gern hören, wie es für Sie lief. Fragen, Ecken und Kanten und Ideen sind auf unserem Discord willkommen.",
+        "join": "Discord beitreten",
+        "noThanks": "Nein, danke",
+        "command": "Der Community auf Discord beitreten",
+        "dot": "Konto, mit einer Nachricht vom intentic-Team"
     }
 }
