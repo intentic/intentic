@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { type CredentialReach, REACHABLE_CREDENTIAL_KINDS } from "@intentic/sandbox-contract/schemas/members";
-import { BrandMark, SegmentedControl, SkeletonRows, ui } from "@intentic/ui";
-import Checkbox from "primevue/checkbox";
+import { BrandMark, SegmentedControl, SkeletonRows } from "@intentic/ui";
 import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { capabilitiesKey, fetchCapabilities } from "../../../models/capabilities/useCapabilities";
 import { capabilityTile } from "../../../models/capabilities/tiles";
 import { useExtensions } from "../../../models/extensions/useExtensions";
-import { type ReachDraft, toggledReach } from "./accessGrant";
+import type { ReachDraft } from "./accessGrant";
+import MultiPick from "./pick/MultiPick.vue";
+import type { PickEntry, PickOption, PickSection } from "./pick/multiPick";
 import { useT } from "@intentic/ui/i18n";
 
-// WHAT ONE PERSON'S ASSISTANTS MAY SPEND: every connected account and stored secret, or the ones ticked here. Enforced
+// WHAT ONE PERSON'S ASSISTANTS MAY SPEND: every connected account and stored secret, or the ones picked here. Enforced
 // by the sandbox, not told to the model: what is left out is never loaded into their conversations and every exit
 // that would spend it refuses (the daemon's secrets/credential-reach.ts). Only the kinds a reach can actually hold
 // back are listed; the rest (Docker, a VPN, a local model) have no credential to withhold, so they are named once
@@ -39,6 +40,7 @@ const accounts = computed(() =>
         const tile = capabilityTile(capability, extensions.value);
         return {
             id: capability.id,
+            family: tile?.name,
             service: tile === undefined || tile.name.toLowerCase() === capability.id.toLowerCase() ? undefined : tile.name,
             logo: tile?.logo,
             icon: tile?.icon,
@@ -66,10 +68,56 @@ const MODES = computed(() => [
 const pickMode = (next: Mode): void => emit(`change`, next === `all` ? `all` : { capabilities: [], secrets: [] });
 
 const picked = computed<CredentialReach>(() => (reach === `all` ? { capabilities: [], secrets: [] } : reach));
-const toggle = (kind: `capabilities` | `secrets`, subject: string, on: boolean): void => emit(`change`, toggledReach(picked.value, kind, subject, on));
-const everyOne = (): void =>
-    emit(`change`, { capabilities: accounts.value.map((account) => account.id), secrets: [...secrets.value] });
-const noneOf = (): void => emit(`change`, { capabilities: [], secrets: [] });
+
+// One list for the picker, so a connection and a secret of the same name stay two things: each value says its kind.
+const CONNECTION = `c:`;
+const SECRET = `s:`;
+const pickedValues = computed(() => [
+    ...picked.value.capabilities.map((id) => `${CONNECTION}${id}`),
+    ...picked.value.secrets.map((name) => `${SECRET}${name}`),
+]);
+const fromValues = (values: readonly string[]): CredentialReach => ({
+    capabilities: values.filter((value) => value.startsWith(CONNECTION)).map((value) => value.slice(CONNECTION.length)),
+    secrets: values.filter((value) => value.startsWith(SECRET)).map((value) => value.slice(SECRET.length)),
+});
+const change = (values: readonly string[]): void => emit(`change`, fromValues(values));
+
+// Accounts of one service sit together as a family the owner can hand over whole (every Reddit account, every
+// identity), in the place the first of them was connected; a service with one account is a row like any other.
+const sections = computed<PickSection[]>(() => {
+    const families = new Map<string, PickOption[]>();
+    for (const account of accounts.value) {
+        if (account.family !== undefined) {
+            families.set(account.family, [...(families.get(account.family) ?? []), { value: `${CONNECTION}${account.id}`, label: account.id, note: account.service }]);
+        }
+    }
+    const placed = new Set<string>();
+    const entries = accounts.value.flatMap((account): PickEntry[] => {
+        const members = account.family === undefined ? undefined : families.get(account.family);
+        if (account.family === undefined || members === undefined || members.length < 2) {
+            return [{ value: `${CONNECTION}${account.id}`, label: account.id, note: account.service }];
+        }
+        if (placed.has(account.family)) {
+            return [];
+        }
+        placed.add(account.family);
+        return [{ family: account.family, label: account.family, lead: `${CONNECTION}${account.id}`, options: members }];
+    });
+    return [
+        ...(entries.length > 0 ? [{ key: `connections`, label: t(`sandbox.sandboxAccess.reachAccounts`), icon: `link` as const, entries }] : []),
+        ...(secrets.value.length > 0
+            ? [
+                  {
+                      key: `secrets`,
+                      label: t(`sandbox.sandboxAccess.reachSecrets`),
+                      icon: `key` as const,
+                      entries: secrets.value.map((name) => ({ value: `${SECRET}${name}`, label: name, mono: true })),
+                  },
+              ]
+            : []),
+    ];
+});
+const byValue = computed(() => new Map(accounts.value.map((account) => [`${CONNECTION}${account.id}`, account])));
 </script>
 
 <template>
@@ -82,66 +130,29 @@ const noneOf = (): void => emit(`change`, { capabilities: [], secrets: [] });
         <template v-if="mode === `some`">
             <div v-if="reading" role="status" aria-busy="true"><SkeletonRows :rows="3" /></div>
             <p v-else-if="accounts.length === 0 && secrets.length === 0" class="text-sm text-muted">{{ t(`sandbox.sandboxAccess.reachNothingConnected`) }}</p>
-            <template v-else>
-                <div class="flex items-center gap-3">
-                    <span class="text-xs text-muted">{{
-                        t(`sandbox.sandboxAccess.reachPickedCount`, { picked: picked.capabilities.length + picked.secrets.length, total: accounts.length + secrets.length })
-                    }}</span>
-                    <span class="ml-auto flex items-center gap-3">
-                        <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" :disabled="disabled" @click="everyOne">
-                            {{ t(`sandbox.sandboxAccess.selectAll`) }}
-                        </button>
-                        <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" :disabled="disabled" @click="noneOf">
-                            {{ t(`ui.action.clear`) }}
-                        </button>
+            <MultiPick
+                v-else
+                :sections="sections"
+                :picked="pickedValues"
+                :search-label="t(`sandbox.sandboxAccess.reachSearch`)"
+                :aria-label="t(`sandbox.sandboxAccess.reachSection`)"
+                tally
+                :disabled="disabled"
+                @change="change"
+            >
+                <template #mark="{ value, size }">
+                    <BrandMark
+                        v-if="byValue.has(value)"
+                        :size="size"
+                        :name="byValue.get(value)?.family ?? byValue.get(value)?.id ?? value"
+                        :logo="byValue.get(value)?.logo"
+                        :icon="byValue.get(value)?.icon"
+                    />
+                    <span v-else class="flex shrink-0 items-center justify-center text-subtle" :style="{ width: `${size}px`, height: `${size}px` }">
+                        <Icon name="key" class="text-2xs" />
                     </span>
-                </div>
-
-                <div v-if="accounts.length > 0" class="flex flex-col gap-1">
-                    <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`sandbox.sandboxAccess.reachAccounts`) }}</span>
-                    <div class="-mx-2.5 flex flex-col gap-0.5">
-                        <label
-                            v-for="account in accounts"
-                            :key="account.id"
-                            class="ui-row-select flex cursor-pointer items-center gap-3 rounded-lg px-2.5 py-1.5"
-                            :class="{ 'ui-row-select-on': picked.capabilities.includes(account.id), 'pointer-events-none opacity-60': disabled }"
-                        >
-                            <Checkbox
-                                :model-value="picked.capabilities.includes(account.id)"
-                                binary
-                                size="small"
-                                :disabled="disabled"
-                                @update:model-value="(on: unknown) => toggle(`capabilities`, account.id, on === true)"
-                            />
-                            <BrandMark :size="22" :name="account.service ?? account.id" :logo="account.logo" :icon="account.icon" />
-                            <span class="min-w-0 flex-1 truncate text-sm text-content">{{ account.id }}</span>
-                            <span v-if="account.service" class="shrink-0 text-xs text-subtle">{{ account.service }}</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div v-if="secrets.length > 0" class="flex flex-col gap-1">
-                    <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`sandbox.sandboxAccess.reachSecrets`) }}</span>
-                    <div class="-mx-2.5 flex flex-col gap-0.5">
-                        <label
-                            v-for="name in secrets"
-                            :key="name"
-                            class="ui-row-select flex cursor-pointer items-center gap-3 rounded-lg px-2.5 py-1.5"
-                            :class="{ 'ui-row-select-on': picked.secrets.includes(name), 'pointer-events-none opacity-60': disabled }"
-                        >
-                            <Checkbox
-                                :model-value="picked.secrets.includes(name)"
-                                binary
-                                size="small"
-                                :disabled="disabled"
-                                @update:model-value="(on: unknown) => toggle(`secrets`, name, on === true)"
-                            />
-                            <span class="flex size-5.5 shrink-0 items-center justify-center text-subtle"><Icon name="key" class="text-xs" /></span>
-                            <span class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ name }}</span>
-                        </label>
-                    </div>
-                </div>
-            </template>
+                </template>
+            </MultiPick>
         </template>
 
         <p v-if="alwaysShared.length > 0" class="text-xs text-subtle">

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { SegmentedControl } from "@intentic/ui";
-import Checkbox from "primevue/checkbox";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useAreas } from "../areas/useAreas";
+import MultiPick from "./pick/MultiPick.vue";
+import type { PickSection } from "./pick/multiPick";
 import { usePersonaReach } from "./usePersonaReach";
 import { useT } from "@intentic/ui/i18n";
 
@@ -41,9 +42,19 @@ const reachOf = (id: string): string => {
     return names.length === 0 ? t(`sandbox.sandboxAccess.areaNoAssistant`) : names.join(`, `);
 };
 
-const toggle = (id: string, on: boolean): void => {
-    emit(`change`, on ? [...new Set([...held.value, id])] : held.value.filter((area) => area !== id));
-};
+// Each area with its folders, and for a chat who works there.
+const sections = computed<PickSection[]>(() => [
+    {
+        key: `areas`,
+        entries: areas.value.map((area) => ({
+            value: area.id,
+            label: area.label ?? area.id,
+            detail: area.folders.join(`, `),
+            note: chat ? reachOf(area.id) : undefined,
+            noteIcon: chat ? (`comments` as const) : undefined,
+        })),
+    },
+]);
 </script>
 
 <template>
@@ -60,30 +71,16 @@ const toggle = (id: string, on: boolean): void => {
                 :class="{ 'pointer-events-none opacity-60': disabled }"
                 @update:model-value="pickScope"
             />
-            <!-- Ticks on rows, not chips: each area is read with its folders, and for a chat with who works there. -->
-            <div v-if="scope === `some`" class="-mx-2.5 flex flex-col gap-0.5" role="group" :aria-label="t(`sandbox.sandboxAccess.seeSection`)">
-                <label
-                    v-for="area in areas"
-                    :key="area.id"
-                    class="ui-row-select flex cursor-pointer items-center gap-3 rounded-lg px-2.5 py-1.5"
-                    :class="{ 'ui-row-select-on': held.includes(area.id), 'pointer-events-none opacity-60': disabled }"
-                >
-                    <Checkbox
-                        :model-value="held.includes(area.id)"
-                        binary
-                        size="small"
-                        :disabled="disabled"
-                        @update:model-value="(on: unknown) => toggle(area.id, on === true)"
-                    />
-                    <span class="flex min-w-0 flex-1 items-baseline gap-2">
-                        <span class="text-sm text-content">{{ area.label ?? area.id }}</span>
-                        <span class="truncate font-mono text-2xs text-subtle">{{ area.folders.join(`, `) }}</span>
-                    </span>
-                    <span v-if="chat" class="inline-flex shrink-0 items-center gap-1 text-xs text-muted">
-                        <Icon name="comments" class="text-2xs" />{{ reachOf(area.id) }}
-                    </span>
-                </label>
-            </div>
+            <!-- A tick per row while the areas are few; past that, the picks as chips and a search for the rest. -->
+            <MultiPick
+                v-if="scope === `some`"
+                :sections="sections"
+                :picked="held"
+                :search-label="t(`sandbox.sandboxAccess.areaSearch`)"
+                :aria-label="t(`sandbox.sandboxAccess.seeSection`)"
+                :disabled="disabled"
+                @change="(next) => emit(`change`, next)"
+            />
 
             <!-- What the pick hands over. Guidance stays quiet until a pick is actually wrong. -->
             <p v-if="nobodyAnywhere" class="text-xs text-muted">

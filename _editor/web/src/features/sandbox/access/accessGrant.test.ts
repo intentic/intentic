@@ -1,4 +1,4 @@
-import { type AccessDraft, accessWord, draftGrant, draftOf, draftProblem, emailSignInByDefault, newPerson, toggledReach } from "./accessGrant";
+import { type AccessDraft, accessWord, draftGrant, draftOf, draftProblem, emailSignInByDefault, newPerson } from "./accessGrant";
 
 const draft = (over: Partial<AccessDraft> = {}): AccessDraft => ({ ...newPerson(`ana@corp.example`), ...over });
 
@@ -92,14 +92,5 @@ describe(`emailSignInByDefault`, () => {
         expect(emailSignInByDefault(at(`gmail.com.example`))).toBe(true);
         expect(emailSignInByDefault(at(`gmail.com`))).toBe(false);
         expect(emailSignInByDefault(` ${at(`GoogleMail.com`)} `)).toBe(false);
-    });
-});
-
-describe(`toggledReach`, () => {
-    it(`adds a subject once and takes it off again, leaving the other kind alone`, () => {
-        const start = { capabilities: [`github`], secrets: [`DATABASE_URL`] };
-        expect(toggledReach(start, `capabilities`, `fly`, true)).toEqual({ capabilities: [`github`, `fly`], secrets: [`DATABASE_URL`] });
-        expect(toggledReach(start, `capabilities`, `github`, true)).toEqual(start);
-        expect(toggledReach(start, `secrets`, `DATABASE_URL`, false)).toEqual({ capabilities: [`github`], secrets: [] });
     });
 });

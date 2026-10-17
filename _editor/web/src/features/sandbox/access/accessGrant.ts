@@ -102,9 +102,3 @@ export const drivesAgents = (agents: AgentAccess): boolean => agents !== `off`;
 // Whether an invite lets its address sign in with an email code by default: yes, except for an address Google itself
 // holds, whose owner has Google's sign-in and needs no second road the owner did not ask for.
 export const emailSignInByDefault = (email: string): boolean => !googleMailbox(email);
-
-/** A reach with one subject switched on or off, keeping the order it was picked in. */
-export const toggledReach = (reach: CredentialReach, kind: `capabilities` | `secrets`, subject: string, on: boolean): CredentialReach => {
-    const held = reach[kind].filter((entry) => entry !== subject);
-    return { ...reach, [kind]: on ? [...held, subject] : held };
-};
