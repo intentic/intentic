@@ -11,6 +11,17 @@
         "directory": "_sandbox/speech"
     },
     "exports": {
+        "./opus": {
+            "types": "./dist/opus.d.ts",
+            "import": {
+                "@intentic/src": "./src/opus.ts",
+                "default": "./dist/opus.js"
+            },
+            "require": {
+                "@intentic/src": "./src/opus.ts",
+                "default": "./dist/opus.js"
+            }
+        },
         "./transcribe": {
             "types": "./dist/transcribe.d.ts",
             "import": {
@@ -77,6 +88,7 @@
     "dependencies": {
         "@intentic/base": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
+        "mediaplex": "catalog:",
         "sherpa-onnx-node": "catalog:",
         "tslib": "catalog:"
     },

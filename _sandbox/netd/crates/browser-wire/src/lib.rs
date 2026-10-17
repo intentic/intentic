@@ -199,6 +199,11 @@ pub enum TerminalServerMessage {
         reason: Option<String>,
     },
     Pong,
+    /// Every binary message after this one is the pane's bytes deflated, for a browser that asked with `deflate=1` in
+    /// the socket's query: its unpacked length (4 bytes, big-endian), then raw deflate (RFC 1951) through a sync flush,
+    /// all of one socket's messages one deflate stream. Sent first, before any pane bytes; a browser that never sees it
+    /// reads binary messages as the raw bytes they always were, which is what an older netd sends whatever was asked.
+    Deflate,
 }
 
 #[cfg(test)]

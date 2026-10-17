@@ -17,6 +17,7 @@ import { defineRawRoutes, type RawRouteTable } from "../../http/raw-route-server
 import { opt } from "../../opt.js";
 import type { VoiceChunk } from "@intentic/speech/voice/cloud-voices";
 import { paced, pcm16, resampled } from "@intentic/speech/voice/voice-audio";
+import { opusAvailable, opusEncoder } from "@intentic/speech/opus";
 import { type SpeakRequest, VoiceUnprovisionedError } from "@intentic/speech/voice/voice";
 import { parseJsonOr } from "@intentic/base/json";
 
@@ -88,8 +89,33 @@ export const createVoiceRoute = (services: VoiceRoutesDeps): RawRouteTable<"GET 
 
 export type VoiceStreamDeps = Pick<Services, "voice" | "auth" | "wsTickets" | "logger">;
 
+// One chunk as the socket sends it: a header, and the binary frame after it.
+interface AudioOut {
+    readonly header: VoiceServerMessage;
+    readonly frame: Uint8Array<ArrayBuffer>;
+}
+
+// A socket's chunks as it sends them: s16le PCM, or for a socket that asked (`codec=opus`, which the editor asks only
+// where the hello named it) each chunk's Opus packets, one Opus stream per utterance. Utterances are spoken one at a
+// time, so a new id is a new stream.
+const audioFor = (url: string): ((id: number, chunk: VoiceChunk) => AudioOut) => {
+    const opus = new URL(url).searchParams.get("codec") === "opus" && opusAvailable();
+    let utterance: { readonly id: number; readonly encode: ReturnType<typeof opusEncoder> } | undefined;
+    return (id, chunk) => {
+        if (!opus) {
+            return { header: { type: "audio", id, sampleRate: chunk.sampleRate, samples: chunk.samples.length }, frame: pcm16(chunk.samples) };
+        }
+        if (utterance?.id !== id) {
+            utterance = { id, encode: opusEncoder() };
+        }
+        const packed = utterance.encode(chunk.samples, chunk.sampleRate);
+        return { header: { type: "audio", id, sampleRate: packed.sampleRate, samples: packed.samples, codec: "opus" }, frame: packed.frame };
+    };
+};
+
 export const createVoiceStreamRoute = (services: VoiceStreamDeps) =>
     upgradeWebSocket((c) => {
+        const audio = audioFor(c.req.url);
         let closed = false;
         // Utterances are said one at a time, in the order they were asked.
         let queue: Promise<void> = Promise.resolve();
@@ -130,8 +156,9 @@ export const createVoiceStreamRoute = (services: VoiceStreamDeps) =>
                         if (signal.aborted || closed) {
                             break;
                         }
-                        send(ws, { type: "audio", id, sampleRate: chunk.sampleRate, samples: chunk.samples.length });
-                        ws.send(pcm16(chunk.samples));
+                        const { header, frame } = audio(id, chunk);
+                        send(ws, header);
+                        ws.send(frame);
                     }
                     if (!signal.aborted) {
                         send(ws, { type: "done", id });

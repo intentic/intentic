@@ -8,7 +8,7 @@ import {
     DEVICE_FEATURE_BACKGROUND_PREPARE,
     type DeviceFeature,
 } from "@intentic/sandbox-contract/schemas/hosts";
-import { archToken, download, exe, osToken, releaseAssetUrl } from "../../release.js";
+import { archToken, downloadAsset, exe, osToken, releaseAssetUrl } from "../../release.js";
 import { verifyReleaseFiles } from "../../release/release-verify.js";
 import { MACHINE_VERSION } from "../../version.js";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
@@ -187,7 +187,7 @@ const ensureForFile = checkPerIcFile(icSignature, async () => {
         staleNote = undefined;
         return true;
     }
-    staleNote = await fetchIc(target, installed, MACHINE_VERSION, { download, verify: verifyIc, warn });
+    staleNote = await fetchIc(target, installed, MACHINE_VERSION, { download: downloadAsset, verify: verifyIc, warn });
     return staleNote === undefined;
 });
 export const ensureCurrentIc = (): Promise<void> => ensureForFile();

@@ -15,7 +15,7 @@ const DEFLATED = /^\/system\/[^/]+\/connect$/u;
 // frame shrinking to a quarter and staying at three quarters. Level 6 deflates 50-100 MB/s, well above any link a peer
 // is on; frames under the threshold leave as they are. ws bounds what a frame inflates to by maxPayload, as it bounds an
 // unencoded one.
-const PEER_DEFLATE = { threshold: 1024, zlibDeflateOptions: { level: 6 } } as const;
+export const PEER_DEFLATE = { threshold: 1024, zlibDeflateOptions: { level: 6 } } as const;
 
 export class PeerDeflateServer extends WebSocketServer {
     constructor() {

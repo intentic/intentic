@@ -215,6 +215,17 @@
                 "default": "./dist/held.js"
             }
         },
+        "./image-fit": {
+            "types": "./dist/image-fit.d.ts",
+            "import": {
+                "@intentic/src": "./src/image-fit.ts",
+                "default": "./dist/image-fit.js"
+            },
+            "require": {
+                "@intentic/src": "./src/image-fit.ts",
+                "default": "./dist/image-fit.js"
+            }
+        },
         "./fs": {
             "types": "./dist/node/fs.d.ts",
             "import": {

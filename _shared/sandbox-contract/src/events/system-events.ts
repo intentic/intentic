@@ -61,6 +61,9 @@ export const HelloSchema = z.object({
     // The codings `POST /workspace/upload` and `POST /workspace/upload-archive` decode a request body from
     // (`Content-Encoding`). Absent means a daemon that writes whatever bytes arrive, so the browser sends them plain.
     uploadEncodings: z.array(z.string()).optional(),
+    // The codings the voice sockets speak besides PCM when asked (`codec=opus`, schemas/voice.ts). Absent or empty: PCM
+    // only, which is every daemon from before the field and one whose Opus binding did not load.
+    voiceCodecs: z.array(z.string()).optional(),
     // `<version>:<newest mtime of the compiled tree>`, as every release since 1.0.0 sends it. The version at its head
     // is what the browser holds against the oldest daemon it supports (state/daemon-floor.ts), so it stays first.
     build: z.string().optional(),

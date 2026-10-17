@@ -150,12 +150,23 @@ ic_fetch() {
         ic_fix="check the network, then run the same command again."
         ic_refused=""
         ic_arrived=""
+        # ic_download <asset> <file>: the asset into <file>, by the .gz copy each release publishes beside it (under half
+        # the bytes) where gzip can unpack it, else by the asset itself, which every release from before the copies
+        # answers for. What lands is checked against the asset's own line in SHA256SUMS either way.
+        ic_download() {
+            if command -v gzip >/dev/null 2>&1 && curl -fsL "${ic_base}/$1.gz" -o "$2.gz" 2>/dev/null && gzip -dc "$2.gz" >"$2" 2>/dev/null; then
+                rm -f "$2.gz"
+                return 0
+            fi
+            rm -f "$2.gz"
+            curl -fsL "${ic_base}/$1" -o "$2" 2>/dev/null
+        }
         # curl's own sentence would land on the live line; the stop below says the same thing in this page's words. The
         # carried copy is not checked against SHA256SUMS: it is a file on this device, not a download, and the network
         # the check needs is what the copy is there to do without.
         if ic_carried; then
             ic_arrived=1
-        elif curl -fsL "${ic_base}/ic-${os}-${arch}" -o "${dest}.tmp" 2>/dev/null; then
+        elif ic_download "ic-${os}-${arch}" "${dest}.tmp"; then
             if ic_checked "${dest}.tmp" "ic-${os}-${arch}"; then
                 ic_arrived=1
             else

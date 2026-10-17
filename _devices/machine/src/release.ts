@@ -1,8 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { createWriteStream, type WriteStream } from "node:fs";
+import { createReadStream, createWriteStream, type WriteStream } from "node:fs";
 import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { pipeline } from "node:stream/promises";
+import { createGunzip } from "node:zlib";
 import { livePidRecord, WINDOWS_LAUNCH_STUB } from "@intentic/local-agent";
 import { binDir, upgradeLockPath } from "./config.js";
 
@@ -84,6 +86,9 @@ const fileSize = async (path: string): Promise<number> => {
     }
 };
 
+// A URL that answered 404: for a release asset's .gz copy, a release from before the copies were published.
+class AssetMissingError extends Error {}
+
 // 416 is a range past the end (the caller decides), 206 continues the file, 200 is the whole file again.
 const openDownload = async (
     url: string,
@@ -92,6 +97,9 @@ const openDownload = async (
     const response = await fetch(url, have > 0 ? { headers: { range: `bytes=${have}-` } } : {});
     if (response.status === 416 && have > 0) {
         return undefined;
+    }
+    if (response.status === 404) {
+        throw new AssetMissingError(`not found (404): ${url}`);
     }
     if (!response.ok || response.body === null) {
         throw new Error(`download failed (${response.status}): ${url}`);
@@ -145,6 +153,32 @@ export const download = async (url: string, dest: string, options: DownloadOptio
     await drainInto(file, stream.body, stream.appending ? have : 0, stream.total, options.onProgress);
 };
 
+/**
+ * A release binary into `dest`: by the `.gz` copy each release publishes beside it (gzip -9, under half the bytes: 42 of
+ * the agent's 92 MB) where there is one, else by the binary itself, which a release from before the copies answers
+ * with. The copy downloads to `<dest>.gz`, resumable under `resume` like the binary, and is unpacked into `dest` once
+ * whole; `onProgress` counts the bytes that cross. Whatever verifies `dest` afterwards checks the binary's own sum.
+ */
+export const downloadAsset = async (url: string, dest: string, options: DownloadOptions = {}): Promise<void> => {
+    const packed = `${dest}.gz`;
+    try {
+        await download(`${url}.gz`, packed, options);
+    } catch (error) {
+        if (!(error instanceof AssetMissingError)) {
+            throw error;
+        }
+        await rm(packed, { force: true });
+        await download(url, dest, options);
+        return;
+    }
+    try {
+        await pipeline(createReadStream(packed), createGunzip(), createWriteStream(dest));
+    } finally {
+        // A copy that does not unpack is no better resumed: the next attempt starts it over.
+        await rm(packed, { force: true });
+    }
+};
+
 // Every binary replacement is renames, since Windows renames a running executable but never overwrites it; no source moves nothing.
 export const renameIfPresent = async (from: string, to: string): Promise<void> => {
     await rename(from, to).catch((error: NodeJS.ErrnoException) => {
@@ -158,7 +192,12 @@ export const renameIfPresent = async (from: string, to: string): Promise<void> =
 // So does `.previous`: it is what undoes an update whose agent keeps crashing, and only that agent's trial drops it
 // (agent-trial.ts), once it has run for ten minutes. Each pattern names its program, so the keyring's files
 // (`intentic-keyring*`, `intentic-askpass*`, its own `.previous` among them) never match: they are `keyring upgrade`'s.
-const LEFTOVER = [/^intentic-machine(?:\.exe)?\.old$/, /^intentic-launch\.exe\.(?:old|tmp)$/, /^mutagen(?:\.exe)?\.old$/, /^mutagen\.tar\.gz$/];
+const LEFTOVER = [
+    /^intentic-machine(?:\.exe)?\.old$/,
+    /^intentic-launch\.exe\.(?:old|tmp(?:\.gz)?)$/,
+    /^mutagen(?:\.exe)?\.old$/,
+    /^mutagen\.tar\.gz$/,
+];
 
 export const isLeftover = (name: string): boolean => LEFTOVER.some((pattern) => pattern.test(name));
 

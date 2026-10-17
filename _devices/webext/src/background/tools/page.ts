@@ -18,6 +18,7 @@ import {
 import { APPROVAL_HOLD_MS, assertRunning, assertScope, needsConfirm, RefusedError } from "../policy.js";
 import { store } from "../store.js";
 import { type TargetTab, targetTab } from "./tab-access.js";
+import { fitCapture } from "./fit-capture.js";
 
 // Each page tool: get a permitted tab, run something in it, return the fresh page state so the model never has to
 // guess whether an action landed. Every action also flashes a banner in the tab; a failed banner must never fail
@@ -227,5 +228,5 @@ export const screenshot = async (): Promise<{ data: string; mimeType: string }> 
     }
     const dataUrl = await chrome.tabs.captureVisibleTab(target.windowId, { format: "png" });
     announce(tab.id, `The agent took a screenshot`);
-    return { data: dataUrl.replace(/^data:image\/png;base64,/, ""), mimeType: "image/png" };
+    return { data: await fitCapture(dataUrl), mimeType: "image/png" };
 };

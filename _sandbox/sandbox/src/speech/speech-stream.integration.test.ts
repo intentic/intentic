@@ -12,6 +12,8 @@ import { createPerfTracker } from "../system/resources/perf.js";
 import { testConfig } from "../env.config.testing.js";
 import { createSpeechStreamRoute } from "./speech.routes.js";
 import type { Speech } from "@intentic/speech/transcribe";
+import { opusEncoder } from "@intentic/speech/opus";
+import { opusPackets } from "@intentic/sandbox-contract/schemas/voice";
 
 /* The composer's live dictation wire over a real socket, with the models faked: a phrase streams in as s16le frames
    between `begin` and `end`, running guesses come back while it is spoken, one final per ended phrase comes back in
@@ -113,6 +115,34 @@ test("each ended phrase comes back once, in order, heard as far as the composer 
         ]);
         expect(finals(wire.said).every((message) => message.decodeMs >= 0)).toBe(true);
         expect(fake.heard.every(({ locale }) => locale === "pl-PL")).toBe(true);
+    } finally {
+        wire.close();
+    }
+});
+
+// A socket opened with `codec=opus` (what the editor asks where the hello names it) takes one 20 ms Opus packet per
+// binary frame, and hears the phrase as the 16 kHz samples it decodes to.
+test("a phrase streamed as Opus packets is heard as the samples they decode to, trimmed to what the composer kept", async () => {
+    const fake = fakeSpeech();
+    const wire = await stand(fake.speech, "lang=pl-PL&codec=opus");
+    try {
+        await waitFor(() => expect(wire.said[0]).toEqual({ type: "status", status: READY }));
+        const speech = Float32Array.from({ length: 16_000 }, (_, index) => 0.3 * Math.sin((2 * Math.PI * 200 * index) / 16_000));
+        const packets = opusPackets(opusEncoder()(speech, 16_000).frame);
+        expect(packets).toHaveLength(50);
+        wire.socket.send(JSON.stringify({ type: "begin", id: 1 }));
+        for (const packet of packets) {
+            wire.socket.send(packet);
+        }
+        wire.socket.send(JSON.stringify({ type: "end", id: 1, keep: 15_000 }));
+        await waitFor(() => expect(finals(wire.said).map(({ id, text }) => ({ id, text }))).toEqual([{ id: 1, text: "heard 15000" }]));
+        // Every packet reached the phrase whole: 50 packets of 320 samples.
+        wire.socket.send(JSON.stringify({ type: "begin", id: 2 }));
+        for (const packet of packets) {
+            wire.socket.send(packet);
+        }
+        wire.socket.send(JSON.stringify({ type: "end", id: 2, keep: 20_000 }));
+        await waitFor(() => expect(finals(wire.said).at(-1)?.text).toBe("heard 16000"));
     } finally {
         wire.close();
     }

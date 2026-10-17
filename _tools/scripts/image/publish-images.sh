@@ -135,9 +135,16 @@ publish() {
             fi
         done
     done
+    # zstd layers for the sandbox image (ZSTD=1): smaller to pull and quicker to unpack than gzip, which every update
+    # of every host waits on. force-compression recompresses the base image's gzip layers too, so a pull is zstd
+    # throughout. Docker reads zstd from Engine 23.0, and ic tells an older engine to update before it pulls
+    # (_sandbox/ic/src/docker.rs, too_old_to_unpack). Level 9 is klauspost's "better" encoder: built once per release,
+    # pulled by every host.
     local output=--push
     if [ "$PUSH" = "0" ]; then
         output=--load
+    elif [ "${ZSTD:-0}" = "1" ]; then
+        output="--output=type=registry,oci-mediatypes=true,compression=zstd,compression-level=9,force-compression=true"
     fi
     registry_retry docker buildx build -f "$dockerfile" "${tag_args[@]}" "${cache_args[@]}" \
         --cache-to "type=inline" \
@@ -153,8 +160,8 @@ case " $IMAGES " in
         # is the minimal image under `core-` prefixed tags. Composed fresh here so the published bytes always
         # come from the checked-in pack files.
         node "$root/_tools/scripts/image/compose-image-dockerfile.mjs" standard > "$root/.image-out/Dockerfile.standard"
-        publish sandbox "$root/.image-out/Dockerfile.standard" "$root" --build-context "trees=$root/.image-out"
-        TAG_PREFIX="core-" publish sandbox "$root/_sandbox/sandbox/Dockerfile" "$root" --build-context "trees=$root/.image-out"
+        ZSTD=1 publish sandbox "$root/.image-out/Dockerfile.standard" "$root" --build-context "trees=$root/.image-out"
+        ZSTD=1 TAG_PREFIX="core-" publish sandbox "$root/_sandbox/sandbox/Dockerfile" "$root" --build-context "trees=$root/.image-out"
         ;;
 esac
 case " $IMAGES " in

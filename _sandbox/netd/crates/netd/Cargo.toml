@@ -12,6 +12,7 @@ path = "src/main.rs"
 anyhow.workspace = true
 browser-wire.workspace = true
 bytes.workspace = true
+flate2.workspace = true
 netd-wire.workspace = true
 futures-util.workspace = true
 http.workspace = true

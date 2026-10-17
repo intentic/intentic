@@ -114,6 +114,73 @@ describe(`on the live stream`, () => {
         link.close();
     });
 
+    // Both ends speak Opus: the socket asks for it, and each phrase's packets (which an encoder hands back later, as
+    // WebCodecs does) leave after its begin and before its end, and never interleave with the next phrase's.
+    it(`asks for Opus where both ends speak it, and keeps each phrase's packets between its begin and its end`, async () => {
+        const sockets: FakeSocket[] = [];
+        const { said, events } = recorder();
+        // An encoder that turns each push into one packet of a tenth of its PCM size, a tick later.
+        const encoderFor: SpeechLinkDeps[`encoderFor`] = (send) => {
+            const held: ArrayBuffer[] = [];
+            let started = false;
+            let pending = Promise.resolve();
+            return {
+                push: (pushed) => {
+                    pending = pending.then(async () => {
+                        await new Promise((resolve) => setTimeout(resolve, 1));
+                        const packet = new ArrayBuffer(pushed.length / 5);
+                        if (started) {
+                            send(packet);
+                        } else {
+                            held.push(packet);
+                        }
+                    });
+                },
+                start: () => {
+                    started = true;
+                    for (const packet of held.splice(0)) {
+                        send(packet);
+                    }
+                },
+                finish: async () => pending,
+                close: () => undefined,
+            };
+        };
+        const link = openSpeechLink(`en`, events, {
+            timing: FAST,
+            opus: async () => true,
+            encoderFor,
+            socketUrl: async (path, extra) => `ws://daemon${path}?${new URLSearchParams(extra).toString()}`,
+            openSocket: (url) => {
+                expect(url).toBe(`ws://daemon/speech/stream?lang=en&codec=opus`);
+                const socket = new FakeSocket();
+                sockets.push(socket);
+                return asSocket(socket);
+            },
+        });
+        await waitFor(() => expect(sockets).toHaveLength(1));
+        const socket = sockets[0]!;
+        socket.open();
+        await waitFor(() => expect(said).toContainEqual([`transport`, `stream`]));
+        link.begin(0, samples(4800));
+        link.audio(0, samples(1600));
+        link.end(0, samples(5000));
+        link.begin(1, samples(800));
+        link.end(1, samples(800));
+        await waitFor(() => expect(socket.sent).toHaveLength(7));
+        // Packets are a fifth of the samples' count in bytes: a tenth of the PCM's.
+        expect(socket.sent).toEqual([
+            { type: `begin`, id: 0 },
+            960,
+            320,
+            { type: `end`, id: 0, keep: 5000 },
+            { type: `begin`, id: 1 },
+            160,
+            { type: `end`, id: 1, keep: 800 },
+        ]);
+        link.close();
+    });
+
     it(`says the sandbox cannot hear when the daemon reports no runtime`, async () => {
         const socket = new FakeSocket();
         const { said, events } = recorder();

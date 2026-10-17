@@ -53,6 +53,7 @@ import { framedEvent, framedMetrics, framedSubagents } from "../auth/fleet-scope
 import { frameBacklog } from "../seams/frame-backlog.js";
 import { callerFence } from "../areas/area-scope.js";
 import { UPLOAD_ENCODINGS } from "../http/request-body.js";
+import { voiceCodecs } from "@intentic/speech/opus";
 
 // A project sandbox's folder, for the hello: withheld from a caller whose fence does not reach it, as a fenced stream
 // withholds any repository's name (auth/fleet-scope.ts).
@@ -62,7 +63,7 @@ const shownProjectDir = (config: Services["config"], fence: Fence): { readonly p
 };
 
 // The stream's first frame: workspace identity (a wipe/recreate gets a new one), the route/shape surface this build
-// implements, the codings its uploads decode, the build id for cache invalidation, boot progress, and the project folder
+// implements, the codings its uploads decode and its voice sockets speak, the build id for cache invalidation, boot progress, and the project folder
 // the browser opens on.
 const helloFrame = async (services: Services, fence: Fence): Promise<Hello> => ({
     kind: "hello",
@@ -72,6 +73,7 @@ const helloFrame = async (services: Services, fence: Fence): Promise<Hello> => (
     rawRoutes: [...RAW_ROUTE_NAMES],
     rawFingerprints: { ...rawRouteFingerprints() },
     uploadEncodings: [...UPLOAD_ENCODINGS],
+    voiceCodecs: voiceCodecs(),
     build: buildId(),
     boot: services.boot.progress(),
     ...shownProjectDir(services.config, fence),

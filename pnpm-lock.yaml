@@ -3101,6 +3101,9 @@ importers:
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../../_shared/sandbox-contract
+      mediaplex:
+        specifier: 'catalog:'
+        version: 1.0.0
       sherpa-onnx-node:
         specifier: 'catalog:'
         version: 1.13.8

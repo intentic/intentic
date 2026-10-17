@@ -1,7 +1,7 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { WebSocket } from "ws";
-import { PeerDeflateServer } from "../peer-deflate.js";
+import { PEER_DEFLATE, PeerDeflateServer } from "../peer-deflate.js";
 
 // Run under Node by peer-deflate.integration.test.ts: Bun's own `ws` never negotiates an extension, so what this
 // server agrees to is only observable on the runtime the daemon ships on. Prints, per path, the extensions the client
@@ -21,7 +21,8 @@ const { port } = server.address() as AddressInfo;
 const frame = JSON.stringify({ result: { content: [{ type: "text", text: "const value = 1;\n".repeat(20_000) }] } });
 
 const probe = async (path: string): Promise<{ extensions: string; whole: boolean }> => {
-    const client = new WebSocket(`ws://127.0.0.1:${String(port)}${path}`);
+    // Dialled as a runner dials its parent (runners/runner-link.ts), so both directions are deflated.
+    const client = new WebSocket(`ws://127.0.0.1:${String(port)}${path}`, { perMessageDeflate: PEER_DEFLATE });
     await new Promise((resolve, reject) => {
         client.once("open", resolve);
         client.once("error", reject);

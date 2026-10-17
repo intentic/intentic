@@ -12,7 +12,8 @@ import { redeemTicket } from "../auth/tokens/ws-tickets.js";
 import { readBoundedBytes } from "../http/bounded-body.js";
 import { defineRawRoutes, type RawRouteTable } from "../http/raw-route-server.js";
 import { MAX_UTTERANCE_WAV_BYTES, type Speech, SpeechModelNotReadyError, SpeechUnprovisionedError } from "@intentic/speech/transcribe";
-import { pcm16Samples, WavFormatError, wavSamples } from "@intentic/speech/wav";
+import { pcm16Samples, SPEECH_SAMPLE_RATE, WavFormatError, wavSamples } from "@intentic/speech/wav";
+import { opusAvailable, opusDecoder } from "@intentic/speech/opus";
 import { parseJsonOr } from "@intentic/base/json";
 
 // Audio in, words out, off oRPC since audio doesn't fit its JSON contract.
@@ -122,7 +123,35 @@ interface Phrase {
     guessing: boolean;
     // The last guess sent, so a pause that changes nothing sends nothing.
     guessed: string;
+    // A binary frame as samples: 16 kHz s16le, or on a socket opened with `codec=opus` one 20 ms Opus packet, decoded
+    // by this phrase's own decoder (@intentic/speech/opus).
+    readonly samplesOf: (frame: Uint8Array) => Float32Array;
 }
+
+// What a stream's address asks: its language; `guesses=0`, finals alone (the wake listener's), so no decode is spent on a
+// running guess nobody reads; and `codec=opus`, asked only where the hello named it (voiceCodecs), under which each
+// binary frame is one 20 ms Opus packet for its phrase's own decoder rather than 16 kHz s16le.
+const streamAsks = (url: string) => {
+    const asked = new URL(url).searchParams;
+    const opus = asked.get("codec") === "opus" && opusAvailable();
+    return {
+        locale: asked.get("lang") ?? undefined,
+        guesses: asked.get("guesses") !== "0",
+        samplesOf: (): Phrase["samplesOf"] => (opus ? opusDecoder(SPEECH_SAMPLE_RATE) : pcm16Samples),
+    };
+};
+
+// A phrase just begun, its frames read through `samplesOf`.
+const begun = (id: number, samplesOf: Phrase["samplesOf"]): Phrase => ({
+    id,
+    chunks: [],
+    length: 0,
+    guessedLength: 0,
+    guessedAt: 0,
+    guessing: false,
+    guessed: "",
+    samplesOf,
+});
 
 const joined = (phrase: Phrase, keep = phrase.length): Float32Array => {
     const out = new Float32Array(Math.min(keep, phrase.length));
@@ -147,9 +176,7 @@ export type SpeechStreamDeps = Pick<Services, "speech" | "auth" | "wsTickets" | 
 
 export const createSpeechStreamRoute = (services: SpeechStreamDeps) =>
     upgradeWebSocket((c) => {
-        const locale = new URL(c.req.url).searchParams.get("lang") ?? undefined;
-        // `guesses=0`: finals alone (the wake listener's), so no decode is spent on a running guess nobody reads.
-        const guesses = new URL(c.req.url).searchParams.get("guesses") !== "0";
+        const { locale, guesses, samplesOf } = streamAsks(c.req.url);
         const speech: Speech = services.speech;
         let closed = false;
         let phrase: Phrase | undefined;
@@ -247,7 +274,7 @@ export const createSpeechStreamRoute = (services: SpeechStreamDeps) =>
                 const bytes = binaryFrame(event.data);
                 if (bytes !== undefined) {
                     if (phrase !== undefined && phrase.length < MAX_SPEECH_SAMPLES) {
-                        const samples = pcm16Samples(bytes).subarray(0, MAX_SPEECH_SAMPLES - phrase.length);
+                        const samples = phrase.samplesOf(bytes).subarray(0, MAX_SPEECH_SAMPLES - phrase.length);
                         phrase.chunks.push(samples);
                         phrase.length += samples.length;
                     }
@@ -263,7 +290,7 @@ export const createSpeechStreamRoute = (services: SpeechStreamDeps) =>
                     return;
                 }
                 if (message.data.type === "begin") {
-                    phrase = { id: message.data.id, chunks: [], length: 0, guessedLength: 0, guessedAt: 0, guessing: false, guessed: "" };
+                    phrase = begun(message.data.id, samplesOf());
                     return;
                 }
                 const current = phrase;

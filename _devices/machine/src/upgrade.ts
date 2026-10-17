@@ -8,7 +8,7 @@ import {
     agentAssetName,
     agentAssetUrl,
     agentPath,
-    download,
+    downloadAsset,
     launcherAssetName,
     launcherAssetUrl,
     launcherPath,
@@ -218,8 +218,9 @@ export const runUpgrade = async (exec: UpgradeExec, target: string, installed: s
     return await restartOnto(exec, pieces, target, installed, log);
 };
 
-// Part files of any other release: nothing else would ever remove a stale one, and one of this release is resumed.
-const stagedRelease = (name: string): string => name.slice(name.lastIndexOf(".new"));
+// Part files of any other release: nothing else would ever remove a stale one, and one of this release is resumed, its
+// .gz copy included (release.ts downloadAsset).
+const stagedRelease = (name: string): string => name.slice(name.lastIndexOf(".new")).replace(/\.gz$/u, "");
 const sweepStaged = async (keep: string): Promise<void> => {
     const prefixes = [`${basename(agentPath)}.new`, `${basename(launcherPath)}.new`];
     const stale = (await readdir(binDir).catch(() => [])).filter(
@@ -251,7 +252,7 @@ export const realUpgradeExec = (
 ): UpgradeExec => ({
     fetchTo: async (url, dest) => {
         await sweepStaged(dest);
-        await download(url, dest, { resume: true, onProgress: downloadProgress(log) });
+        await downloadAsset(url, dest, { resume: true, onProgress: downloadProgress(log) });
         await chmod(dest, 0o755);
     },
     verify: async (version, files) => {

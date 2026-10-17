@@ -5,6 +5,7 @@ import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
 import { sandboxRaw } from "../../client/sandbox/sandboxRaw";
 import { liveSocket, type LiveTiming, webSocketChannel } from "../../client/session/liveSocket";
 import { socketUrl } from "../../client/sandbox/streams/wsTicket";
+import { type PhraseEncoder, phraseEncoder, voiceOpus } from "./opusVoice";
 import { pcm16Of, wavOf16k } from "./voiceAudio";
 
 // The composer's wire to the sandbox's speech engine, one per press. Phrases are handed over as they are spoken: on the
@@ -63,6 +64,9 @@ export interface SpeechLinkDeps {
     readonly pollMs: number;
     // The live socket's clock. Someone is speaking while it redials, so its first rung is short.
     readonly timing: Partial<LiveTiming>;
+    // Whether to ask the stream for Opus (both ends speak it), and the encoder a phrase's packets come out of.
+    readonly opus: () => Promise<boolean>;
+    readonly encoderFor: (send: (packet: ArrayBuffer) => void) => PhraseEncoder;
 }
 
 const DEFAULT_DEPS: SpeechLinkDeps = {
@@ -71,10 +75,114 @@ const DEFAULT_DEPS: SpeechLinkDeps = {
     raw: sandboxRaw,
     pollMs: 2500,
     timing: { retryMs: 250, maxRetryMs: 8000 },
+    opus: voiceOpus,
+    encoderFor: phraseEncoder,
 };
 
 // What goes out on the stream: the protocol's messages as JSON, and a phrase's audio as the bytes themselves.
 type StreamOut = SpeechClientMessage | ArrayBuffer;
+
+// What a stream's address asks: its language, finals alone for the wake listener, and Opus where both ends speak it.
+type StreamAsk = { lang: string; guesses?: `0`; codec?: `opus` };
+
+// How a stream socket's ops become its frames.
+interface Framer {
+    readonly apply: (op: Op) => void;
+    readonly close: () => void;
+}
+
+// The ops as a PCM socket frames them: each phrase's audio as 16 kHz s16le, between its begin and its end.
+const pcmFramer = (send: (out: StreamOut) => void): Framer => ({
+    apply: (op) => {
+        switch (op.kind) {
+            case `begin`:
+                send({ type: `begin`, id: op.id });
+                send(pcm16Of(op.samples));
+                return;
+            case `audio`:
+                send(pcm16Of(op.samples));
+                return;
+            case `end`:
+                send({ type: `end`, id: op.id, keep: op.samples.length });
+                return;
+            case `drop`:
+                send({ type: `drop`, id: op.id });
+                return;
+        }
+    },
+    close: () => undefined,
+});
+
+// The stream socket's address, and whether it asks for Opus: asked afresh on every dial, since the hello may change.
+const streamAddress = async (
+    deps: SpeechLinkDeps,
+    lang: string,
+    guesses: boolean,
+): Promise<{ readonly url: string | undefined; readonly opus: boolean }> => {
+    const opus = await deps.opus();
+    const asked: StreamAsk = { lang };
+    if (!guesses) {
+        asked.guesses = `0`;
+    }
+    if (opus) {
+        asked.codec = `opus`;
+    }
+    // allow(silent-catch): A socket address that cannot be had is the undefined below, which falls back to posting each phrase over HTTP.
+    return { url: await deps.socketUrl(`/speech/stream`, asked).catch(() => undefined), opus };
+};
+
+// The ops as an Opus socket frames them (opusVoice.ts): one encoder per phrase, and every send in one chain, so a
+// phrase's packets leave after its begin (the encoder holds them until `start`) and its end after its last packet.
+const opusFramer = (send: (out: StreamOut) => void, encoderFor: SpeechLinkDeps["encoderFor"]): Framer => {
+    let chain: Promise<void> = Promise.resolve();
+    let encoding: { readonly id: number; readonly encoder: PhraseEncoder } | undefined;
+    const inTurn = (work: () => void | Promise<void>): void => {
+        // allow(silent-catch): a send that throws is a socket already gone, whose drop fails the phrases in flight
+        chain = chain.then(work).catch(() => undefined);
+    };
+    const release = (id: number): PhraseEncoder | undefined => {
+        const held = encoding?.id === id ? encoding.encoder : undefined;
+        if (held !== undefined) {
+            encoding = undefined;
+        }
+        return held;
+    };
+    return {
+        apply: (op: Op): void => {
+            switch (op.kind) {
+                case `begin`: {
+                    encoding?.encoder.close();
+                    const encoder = encoderFor((packet) => send(packet));
+                    encoding = { id: op.id, encoder };
+                    inTurn(() => {
+                        send({ type: `begin`, id: op.id });
+                        encoder.start();
+                    });
+                    encoder.push(op.samples);
+                    return;
+                }
+                case `audio`:
+                    if (encoding?.id === op.id) {
+                        encoding.encoder.push(op.samples);
+                    }
+                    return;
+                case `end`: {
+                    const ended = release(op.id);
+                    inTurn(async () => {
+                        await ended?.finish();
+                        send({ type: `end`, id: op.id, keep: op.samples.length });
+                    });
+                    return;
+                }
+                case `drop`:
+                    release(op.id)?.close();
+                    inTurn(() => send({ type: `drop`, id: op.id }));
+                    return;
+            }
+        },
+        close: () => encoding?.encoder.close(),
+    };
+};
 
 // What the daemon says on the stream, one text frame at a time. A frame that is not JSON, or not one of its messages, is
 // ignored.
@@ -266,13 +374,22 @@ export const openSpeechLink = (
         }
     };
 
+    // Whether the socket dialled last asked for Opus, and the framer of the one open.
+    let opusSocket = false;
+    let framer: Framer | undefined;
+
     // The stream: the daemon hears, guesses and reports; this only frames what the segmenter says.
     const live = liveSocket<string, StreamOut>({
-        // allow(silent-catch): A socket address that cannot be had is the undefined below, which falls back to posting each phrase over HTTP.
-        mint: () => deps.socketUrl(`/speech/stream`, options.guesses === false ? { lang, guesses: `0` } : { lang }).catch(() => undefined),
+        mint: async () => {
+            const minted = await streamAddress(deps, lang, options.guesses !== false);
+            opusSocket = minted.opus;
+            return minted.url;
+        },
         open: webSocketChannel<StreamOut>({ text: (text) => heard(text, events, inFlight), binary: () => undefined }, deps.openSocket),
         onOpen: () => {
             up = true;
+            framer?.close();
+            framer = opusSocket ? opusFramer((out) => live.send(out), deps.encoderFor) : pcmFramer((out) => live.send(out));
             settle(stream, `stream`);
         },
         onUnreachable: () => fallBack(),
@@ -298,30 +415,21 @@ export const openSpeechLink = (
 
     const stream: Transport = {
         apply: (op) => {
-            if (!live.isOpen()) {
+            if (!live.isOpen() || framer === undefined) {
                 if (op.kind === `end`) {
                     events.failed(op.id, `phrase`);
                 }
                 return;
             }
-            switch (op.kind) {
-                case `begin`:
-                    live.send({ type: `begin`, id: op.id });
-                    live.send(pcm16Of(op.samples));
-                    return;
-                case `audio`:
-                    live.send(pcm16Of(op.samples));
-                    return;
-                case `end`:
-                    inFlight.add(op.id);
-                    live.send({ type: `end`, id: op.id, keep: op.samples.length });
-                    return;
-                case `drop`:
-                    live.send({ type: `drop`, id: op.id });
-                    return;
+            if (op.kind === `end`) {
+                inFlight.add(op.id);
             }
+            framer.apply(op);
         },
-        close: () => live.dispose(),
+        close: () => {
+            framer?.close();
+            live.dispose();
+        },
     };
 
     const fallBack = (): void => {

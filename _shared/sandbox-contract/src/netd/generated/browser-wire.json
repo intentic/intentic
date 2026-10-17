@@ -152,6 +152,19 @@
             "type"
           ],
           "type": "object"
+        },
+        {
+          "description": "Every binary message after this one is the pane's bytes deflated, for a browser that asked with `deflate=1` in\nthe socket's query: its unpacked length (4 bytes, big-endian), then raw deflate (RFC 1951) through a sync flush,\nall of one socket's messages one deflate stream. Sent first, before any pane bytes; a browser that never sees it\nreads binary messages as the raw bytes they always were, which is what an older netd sends whatever was asked.",
+          "properties": {
+            "type": {
+              "const": "deflate",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
         }
       ],
       "title": "TerminalServerMessage"

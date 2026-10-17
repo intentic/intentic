@@ -13,7 +13,7 @@ describe(`the builder script`, () => {
         expect(script).toContain(`timeout "$${BUILD_ENV.timeoutSeconds}" buildctl`);
         expect(script).toContain(`--local context=${BUILD_PATHS.context}`);
         expect(script).toContain(`--local dockerfile=${BUILD_PATHS.context}`);
-        expect(script).toContain(`type=image,name=$${BUILD_ENV.image},push=true`);
+        expect(script).toContain(`type=image,name=$${BUILD_ENV.image},push=true,oci-mediatypes=true,compression=zstd,compression-level=3`);
         expect(script).toContain(`--export-cache "type=registry,ref=$${BUILD_ENV.cache},mode=min"`);
         expect(script).toContain(`--import-cache "type=registry,ref=$${BUILD_ENV.cache}"`);
         expect(script).toContain(`--metadata-file ${BUILD_PATHS.metadata}`);

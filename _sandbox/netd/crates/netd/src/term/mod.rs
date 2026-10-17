@@ -4,6 +4,7 @@
 //! as the same upgrade.
 
 mod control;
+mod deflate;
 mod hub;
 mod screen;
 
@@ -269,15 +270,22 @@ impl Terminals {
                 let (cols, rows) = size_of(query);
                 let viewer = self.hubs.join(&session, &argv, cols, rows);
                 let controls = viewer.controls();
-                pump(socket, &viewer.outbox, Some(controls), &seat, || {
-                    viewer.resync();
-                })
+                pump(
+                    socket,
+                    &viewer.outbox,
+                    Some(controls),
+                    &seat,
+                    deflate::asked(query),
+                    || {
+                        viewer.resync();
+                    },
+                )
                 .await;
             }
             Feed::Log { path } => {
                 let outbox = Arc::new(Outbox::live());
                 let following = tokio::spawn(follow(path, outbox.clone()));
-                pump(socket, &outbox, None, &seat, || {}).await;
+                pump(socket, &outbox, None, &seat, deflate::asked(query), || {}).await;
                 following.abort();
             }
         }
@@ -328,12 +336,14 @@ where
     let _ = tokio::time::timeout(CLOSE_PATIENCE, socket.close()).await;
 }
 
-// Writes what the outbox holds, one coalesced binary frame at a time, and everything the socket itself must say.
+// Writes what the outbox holds, one coalesced binary frame at a time, and everything the socket itself must say. With
+// `deflate` (the browser asked, deflate.rs) the frames go out deflated, announced first.
 async fn pump<T, E>(
     socket: T,
     outbox: &Outbox,
     controls: Option<Controls>,
     seat: &Seat,
+    deflate: bool,
     resync: impl Fn(),
 ) where
     T: Sink<Message, Error = E> + Stream<Item = Result<Message, E>> + Send + 'static,
@@ -352,8 +362,17 @@ async fn pump<T, E>(
     ));
     let mut listening =
         tokio::time::interval_at(tokio::time::Instant::now() + LISTEN_EVERY, LISTEN_EVERY);
+    let mut deflater = deflate.then(deflate::Deflater::new);
     // Endless output never reaches the select at the bottom, so the revocation is looked at on every frame.
     let serving = async {
+        if deflater.is_some()
+            && sink
+                .send(text(&TerminalServerMessage::Deflate))
+                .await
+                .is_err()
+        {
+            return;
+        }
         while !revocation.revoked() {
             match outbox.take(FRAME_MAX) {
                 Taken::Grid(cols, rows) => {
@@ -367,7 +386,11 @@ async fn pump<T, E>(
                     continue;
                 }
                 Taken::Bytes(bytes) => {
-                    if sink.send(Message::Binary(bytes)).await.is_err() {
+                    let message = match deflater.as_mut() {
+                        Some(deflater) => Bytes::from(deflater.message(&bytes)),
+                        None => bytes,
+                    };
+                    if sink.send(Message::Binary(message)).await.is_err() {
                         break;
                     }
                     continue;
@@ -588,7 +611,7 @@ mod tests {
         controls: Option<Controls>,
         seat: Seat,
     ) -> JoinHandle<()> {
-        tokio::spawn(async move { pump(socket, &outbox, controls, &seat, || {}).await })
+        tokio::spawn(async move { pump(socket, &outbox, controls, &seat, false, || {}).await })
     }
 
     // The browser's frames, as the socket's stream; `landing` runs as each is handed over.

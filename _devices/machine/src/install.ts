@@ -12,7 +12,7 @@ import { adoptRunningDistros } from "./environments/commands.js";
 import { launchUpgrade, UPGRADE_ENV, upgradeHereToMachine } from "./environments/machine-upgrade.js";
 import { machineId } from "./machine-id.js";
 import { runningAsInstalledAgent } from "./installed.js";
-import { agentPath, download, launcherAssetName, launcherAssetUrl, launcherPath } from "./release.js";
+import { agentPath, downloadAsset, launcherAssetName, launcherAssetUrl, launcherPath } from "./release.js";
 import { verifyReleaseFiles } from "./release/release-verify.js";
 import { type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
 import { MACHINE_VERSION } from "./version.js";
@@ -153,7 +153,7 @@ const ensureWindowsLauncher = async (out: Log): Promise<void> => {
     const staged = `${launcherPath}.tmp`;
     try {
         await rm(staged, { force: true });
-        await download(launcherAssetUrl(MACHINE_VERSION), staged);
+        await downloadAsset(launcherAssetUrl(MACHINE_VERSION), staged);
         await verifyReleaseFiles(MACHINE_VERSION, [{ name: launcherAssetName(), path: staged }]);
         await renameOver(staged, launcherPath);
     } catch (error) {

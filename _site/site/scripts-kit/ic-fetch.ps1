@@ -134,7 +134,21 @@ function Get-IntenticIc {
             # Named .exe so it can be started for the probe below; only a checked, probed download replaces the installed ic.
             $IcNew = "$IcDir\ic.download.exe"
             try {
-                Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile $IcNew -ErrorAction Stop
+                # By the .gz copy the release publishes beside ic (scripts-kit/gzip.ps1), else by ic itself: a release from
+                # before the copies answers 404 for it, and so does a server that serves only ic (IC_URL).
+                $IcPacked = $false
+                try {
+                    Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe.gz" -OutFile "$IcNew.gz" -ErrorAction Stop
+                    Expand-IntenticGzip -Source "$IcNew.gz" -Destination $IcNew
+                    $IcPacked = $true
+                } catch {
+                    $IcPacked = $false
+                } finally {
+                    Remove-Item -Force "$IcNew.gz" -ErrorAction SilentlyContinue
+                }
+                if (-not $IcPacked) {
+                    Invoke-WebRequest -UseBasicParsing -Uri "$IcBase/ic-windows-amd64.exe" -OutFile $IcNew -ErrorAction Stop
+                }
                 $IcRefusal = Get-IntenticChecksumRefusal $IcNew 'ic-windows-amd64.exe' $IcBase
                 if ($IcRefusal) {
                     $IcRefused = $true

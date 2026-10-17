@@ -8,6 +8,7 @@ import {
 } from "@intentic/sandbox-contract/schemas/voice";
 import { type Ref, shallowRef } from "vue";
 import { socketUrl } from "../../client/sandbox/streams/wsTicket";
+import { type UtteranceDecoder, utteranceDecoder, voiceOpus } from "./opusVoice";
 
 // The editor's one voice: text goes to the sandbox's speech engine (GET /speech/say, schemas/voice.ts) and its audio
 // comes back a sentence at a time, played in order as it arrives. One player for the whole page, since two replies
@@ -78,17 +79,61 @@ export interface PlayerAudio {
     createBufferSource(): PlayerSource;
 }
 
-/** The seams a test replaces: the socket and the speaker. */
+/** The seams a test replaces: the socket, the speaker, and whether and how audio arrives as Opus (opusVoice.ts). */
 export interface SpeechPlayerDeps {
-    readonly socketUrl: (path: string) => Promise<string | undefined>;
+    readonly socketUrl: (path: string, extra?: Record<string, string>) => Promise<string | undefined>;
     readonly openSocket: (url: string) => PlayerSocket;
     readonly audioContext: () => PlayerAudio;
+    readonly opus: () => Promise<boolean>;
+    readonly decoderFor: () => UtteranceDecoder;
 }
 
 const DEFAULT_DEPS: SpeechPlayerDeps = {
-    socketUrl: (path) => socketUrl(path),
+    socketUrl: (path, extra) => socketUrl(path, extra),
     openSocket: (url) => new WebSocket(url),
     audioContext: () => new AudioContext(),
+    opus: voiceOpus,
+    decoderFor: utteranceDecoder,
+};
+
+// The player's socket: asked for Opus where both ends speak it (opusVoice.ts), again on every dial, since the hello may
+// have changed. `adopt` has it the moment it exists, so a close before it opens is still the player's to hear (`lost`).
+const dialPlayer = async (
+    deps: SpeechPlayerDeps,
+    onMessage: (event: MessageEvent) => void,
+    adopt: (socket: PlayerSocket) => void,
+    lost: (socket: PlayerSocket) => void,
+): Promise<PlayerSocket | undefined> => {
+    const opus = await deps.opus();
+    // allow(silent-catch): no address to dial is the same answer as an unreachable sandbox, which `say` reports in words
+    const url = await deps.socketUrl(`/speech/say`, opus ? { codec: `opus` } : {}).catch(() => undefined);
+    if (url === undefined) {
+        return undefined;
+    }
+    const opened = deps.openSocket(url);
+    opened.binaryType = `arraybuffer`;
+    opened.addEventListener(`message`, onMessage);
+    opened.addEventListener(`close`, () => lost(opened));
+    adopt(opened);
+    await new Promise<void>((resolve) => {
+        if (opened.readyState === WebSocket.OPEN) {
+            resolve();
+            return;
+        }
+        opened.addEventListener(`open`, () => resolve(), { once: true });
+        opened.addEventListener(`close`, () => resolve(), { once: true });
+    });
+    return opened.readyState === WebSocket.OPEN ? opened : undefined;
+};
+
+// A frame of mono s16le PCM as samples.
+const pcmSamples = (bytes: ArrayBuffer): Float32Array => {
+    const view = new DataView(bytes);
+    const samples = new Float32Array(Math.floor(bytes.byteLength / 2));
+    for (let index = 0; index < samples.length; index += 1) {
+        samples[index] = view.getInt16(index * 2, true) / 32_768;
+    }
+    return samples;
 };
 
 // Audio is scheduled this far ahead of now, so the first sentence does not start mid-sample and a late chunk does not
@@ -101,7 +146,10 @@ interface Current {
     readonly onSpoken?: ((text: string) => void) | undefined;
     readonly settle: (end: SpeechEnd) => void;
     // The audio header waiting for its binary frame.
-    header?: { readonly sampleRate: number; readonly samples: number } | undefined;
+    header?: { readonly sampleRate: number; readonly samples: number; readonly opus: boolean } | undefined;
+    // An Opus utterance's decoder, and the decoding its frames wait on in turn, so chunks play in the order they came.
+    decoder?: UtteranceDecoder | undefined;
+    decoding?: Promise<void> | undefined;
     // When the last scheduled sample ends, on the audio clock.
     playUntil: number;
     sources: PlayerSource[];
@@ -132,6 +180,7 @@ export const createSpeechPlayer = (overrides: Partial<SpeechPlayerDeps> = {}): S
         }
         current = undefined;
         clearTimeout(ending.endTimer);
+        ending.decoder?.close();
         for (const source of ending.sources) {
             try {
                 source.stop();
@@ -159,20 +208,12 @@ export const createSpeechPlayer = (overrides: Partial<SpeechPlayerDeps> = {}): S
         }, left * 1000 + 50);
     };
 
-    const play = (playing: Current, bytes: ArrayBuffer, sampleRate: number): void => {
-        if (audio === undefined) {
+    const play = (playing: Current, samples: Float32Array, sampleRate: number): void => {
+        if (audio === undefined || samples.length === 0) {
             return;
         }
-        const view = new DataView(bytes);
-        const count = Math.floor(bytes.byteLength / 2);
-        if (count === 0) {
-            return;
-        }
-        const buffer = audio.createBuffer(1, count, sampleRate);
-        const channel = buffer.getChannelData(0);
-        for (let index = 0; index < count; index += 1) {
-            channel[index] = view.getInt16(index * 2, true) / 32_768;
-        }
+        const buffer = audio.createBuffer(1, samples.length, sampleRate);
+        buffer.getChannelData(0).set(samples);
         const source = audio.createBufferSource();
         source.buffer = buffer;
         source.connect(audio.destination);
@@ -192,13 +233,27 @@ export const createSpeechPlayer = (overrides: Partial<SpeechPlayerDeps> = {}): S
         settleWhenPlayed(playing);
     };
 
+    // An Opus chunk, decoded in turn behind the utterance's earlier chunks and played if the utterance is still on.
+    const playOpus = (playing: Current, frame: Uint8Array, sampleRate: number): void => {
+        const decoder = (playing.decoder ??= deps.decoderFor());
+        playing.decoding = (playing.decoding ?? Promise.resolve())
+            .then(async () => decoder.decode(frame, sampleRate))
+            .then((decoded) => (current === playing ? play(playing, decoded.samples, decoded.sampleRate) : undefined))
+            // allow(silent-catch): a chunk that will not decode is a gap in the speech, not its end; the rest plays on
+            .catch(() => undefined);
+    };
+
     const onMessage = (event: MessageEvent): void => {
         const playing = current;
         if (event.data instanceof ArrayBuffer) {
             if (playing?.header !== undefined) {
-                const { sampleRate } = playing.header;
+                const { sampleRate, opus } = playing.header;
                 playing.header = undefined;
-                play(playing, event.data, sampleRate);
+                if (opus) {
+                    playOpus(playing, new Uint8Array(event.data), sampleRate);
+                } else {
+                    play(playing, pcmSamples(event.data), sampleRate);
+                }
             }
             return;
         }
@@ -219,18 +274,21 @@ export const createSpeechPlayer = (overrides: Partial<SpeechPlayerDeps> = {}): S
                 playing.onSpoken?.(said.text);
                 return;
             case `audio`:
-                playing.header = { sampleRate: said.sampleRate, samples: said.samples };
+                playing.header = { sampleRate: said.sampleRate, samples: said.samples, opus: said.codec === `opus` };
                 return;
             case `notice`:
                 notice.value = said.message;
                 return;
             case `done`:
-                playing.finished = true;
-                if (playing.playUntil === 0) {
-                    finish(`done`);
-                } else {
-                    settleWhenPlayed(playing);
-                }
+                // After whatever is still being decoded: until then, the end of the audio is not known.
+                void (playing.decoding ?? Promise.resolve()).then(() => {
+                    playing.finished = true;
+                    if (playing.playUntil === 0) {
+                        finish(`done`);
+                    } else {
+                        settleWhenPlayed(playing);
+                    }
+                });
                 return;
             case `error`:
                 notice.value = said.message;
@@ -243,35 +301,19 @@ export const createSpeechPlayer = (overrides: Partial<SpeechPlayerDeps> = {}): S
         if (socket !== undefined && socket.readyState <= WebSocket.OPEN) {
             return Promise.resolve(socket);
         }
-        opening ??= (async () => {
-            // allow(silent-catch): no address to dial is the same answer as an unreachable sandbox, which `say` reports in words
-            const url = await deps.socketUrl(`/speech/say`).catch(() => undefined);
-            if (url === undefined) {
-                return undefined;
-            }
-            const opened = deps.openSocket(url);
-            opened.binaryType = `arraybuffer`;
-            opened.addEventListener(`message`, onMessage);
-            opened.addEventListener(`close`, () => {
-                if (socket === opened) {
-                    socket = undefined;
-                    if (current !== undefined) {
-                        notice.value = `The sandbox stopped answering.`;
-                        finish(`failed`);
-                    }
-                }
-            });
+        const adopt = (opened: PlayerSocket): void => {
             socket = opened;
-            await new Promise<void>((resolve) => {
-                if (opened.readyState === WebSocket.OPEN) {
-                    resolve();
-                    return;
+        };
+        const lost = (closedSocket: PlayerSocket): void => {
+            if (socket === closedSocket) {
+                socket = undefined;
+                if (current !== undefined) {
+                    notice.value = `The sandbox stopped answering.`;
+                    finish(`failed`);
                 }
-                opened.addEventListener(`open`, () => resolve(), { once: true });
-                opened.addEventListener(`close`, () => resolve(), { once: true });
-            });
-            return opened.readyState === WebSocket.OPEN ? opened : undefined;
-        })().finally(() => {
+            }
+        };
+        opening ??= dialPlayer(deps, onMessage, adopt, lost).finally(() => {
             opening = undefined;
         });
         return opening;

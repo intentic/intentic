@@ -85,6 +85,8 @@ const standing = () => {
         socketUrl: async () => `ws://sandbox/speech/say`,
         openSocket: () => socket,
         audioContext: () => audio.context,
+        opus: async () => false,
+        decoderFor: () => ({ decode: async () => ({ samples: new Float32Array(), sampleRate: 24_000 }), close: () => undefined }),
     };
     return { player: createSpeechPlayer(deps), socket, audio };
 };
@@ -93,6 +95,50 @@ const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 // `count` samples of mono s16le.
 const pcm = (count: number): ArrayBuffer => new ArrayBuffer(count * 2);
+
+// Both ends speak Opus: the socket asks for it, each Opus chunk is decoded in the order it came (a later one decoding
+// faster still plays later), and the utterance settles only after its last chunk has been decoded and played.
+describe(`saying something as Opus`, () => {
+    it(`asks for Opus, plays each decoded chunk in order, and settles after the last`, async () => {
+        const socket = new FakeSocket();
+        const audio = fakeAudio();
+        const asked: Record<string, string>[] = [];
+        // A decoder that answers a frame of n bytes as 10n samples, the first chunk slower than the second.
+        let decodes = 0;
+        const player = createSpeechPlayer({
+            socketUrl: async (_path, extra = {}) => {
+                asked.push(extra);
+                return `ws://sandbox/speech/say`;
+            },
+            openSocket: () => socket,
+            audioContext: () => audio.context,
+            opus: async () => true,
+            decoderFor: () => ({
+                decode: async (frame, sampleRate) => {
+                    decodes += 1;
+                    await new Promise((resolve) => setTimeout(resolve, decodes === 1 ? 20 : 0));
+                    return { samples: new Float32Array(frame.byteLength * 10), sampleRate };
+                },
+                close: () => undefined,
+            }),
+        });
+        const end = player.say(`Hello. There.`, { key: `read:2` });
+        await settled();
+        socket.open();
+        await settled();
+        expect(asked).toEqual([{ codec: `opus` }]);
+        socket.answer({ type: `audio`, id: 1, sampleRate: 24_000, samples: 2400, codec: `opus` });
+        socket.answer(new ArrayBuffer(240));
+        socket.answer({ type: `audio`, id: 1, sampleRate: 24_000, samples: 1200, codec: `opus` });
+        socket.answer(new ArrayBuffer(120));
+        socket.answer({ type: `done`, id: 1 });
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        // In the order they came, back to back: 0.1 s, then 0.05 s.
+        expect(audio.scheduled.map(({ duration }) => duration)).toEqual([0.1, 0.05]);
+        expect(audio.scheduled[1]?.at).toBeCloseTo((audio.scheduled[0]?.at ?? 0) + 0.1);
+        expect(await end).toBe(`done`);
+    });
+});
 
 describe(`saying something`, () => {
     it(`asks for it once the socket is open, and plays its audio back to back as it arrives`, async () => {

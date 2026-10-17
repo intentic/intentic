@@ -68,6 +68,10 @@ fi
 # complete set.
 bash "$DIR/../desktop/build-desktop.sh" "$VERSION" --assemble "$PREBUILT_WINDOWS_DESKTOP_DIR"
 
+# A gzip -9 copy beside every binary a device downloads (under half the bytes; the downloaders ask for it first and fall
+# back to the binary), written before the sums so SHA256SUMS lists the copies too.
+node "$DIR/release-compress.mjs"
+
 # The release's SHA256SUMS, over every asset the Release attaches (the one build-desktop.sh just wrote covers only the
 # installers), and SHA256SUMS.sig, the updater key's signature over it, which agents check before they replace
 # themselves or ic. Both land in the desktop dist-bin, so publish-github.sh uploads them and the attestation covers them.

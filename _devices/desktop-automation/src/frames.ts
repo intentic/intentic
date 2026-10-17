@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { crop, decodePng, downscale, encodePng } from "./png.js";
+import { fitSize, type ImageLimits, MODEL_IMAGE_LIMITS } from "@intentic/base/image-fit";
 import { type Desktop, DesktopError, type Point, type Rect } from "./types.js";
 
 /* What an agent is shown of a screen and how its answers find their way back. A screen is captured at its own
@@ -8,20 +9,8 @@ import { type Desktop, DesktopError, type Point, type Rect } from "./types.js";
    id; a point is read in the frame it was taken from and mapped back to desktop pixels here, so a zoomed-in
    region, a 4K monitor and a 1366×768 laptop all answer in the same terms. */
 
-export interface ImageLimits {
-    // The longest edge an image may have.
-    readonly maxEdge: number;
-    // Its area. Claude reads about 1.15 megapixels whole; a 16:9 frame meets the edge first, a 16:10 one the area.
-    readonly maxPixels: number;
-}
-
-export const MODEL_IMAGE_LIMITS = { maxEdge: 1456, maxPixels: 1_150_000 } satisfies ImageLimits;
-
-// The size a `width`×`height` capture is shown at: shrunk to fit both limits, never enlarged.
-export const fitSize = (width: number, height: number, limits: ImageLimits = MODEL_IMAGE_LIMITS) => {
-    const scale = Math.min(1, limits.maxEdge / Math.max(width, height), Math.sqrt(limits.maxPixels / (width * height)));
-    return { width: Math.max(1, Math.floor(width * scale)), height: Math.max(1, Math.floor(height * scale)) };
-};
+// The limits and the fit, shared with the Chrome extension's captures (@intentic/base/image-fit).
+export { fitSize, type ImageLimits, MODEL_IMAGE_LIMITS } from "@intentic/base/image-fit";
 
 export interface Frame {
     readonly id: string;

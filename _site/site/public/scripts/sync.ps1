@@ -321,6 +321,36 @@ function Invoke-IntenticScript {
 }
 # <<< end of generated kit.ps1
 
+# >>> generated from _site/site/scripts-kit/gzip.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# The .gz copy a release publishes beside each binary, unpacked: under half the bytes cross the network (42 of the agent's
+# 93 MB), and .NET's GZipStream, which Windows PowerShell 5.1 has too, is all it takes. The binary is checked against
+# the release's SHA256SUMS line for the binary itself, so the copy changes how many bytes arrive and nothing about
+# which bytes are trusted.
+function Expand-IntenticGzip {
+    param([string]$Source, [string]$Destination)
+    $in = $null
+    $gzip = $null
+    $out = $null
+    try {
+        $in = [System.IO.File]::OpenRead($Source)
+        $gzip = New-Object System.IO.Compression.GZipStream($in, [System.IO.Compression.CompressionMode]::Decompress)
+        $out = [System.IO.File]::Create($Destination)
+        $gzip.CopyTo($out)
+    } finally {
+        if ($null -ne $out) { $out.Close() }
+        if ($null -ne $gzip) { $gzip.Close() }
+        if ($null -ne $in) { $in.Close() }
+    }
+}
+
+# Whether a failed request was a 404: what a release from before the copies answers for one, and the signal to fetch
+# the binary itself instead. A .NET method's failure arrives wrapped, so the WebException is looked for.
+function Test-IntenticMissing($Failure) {
+    while ($null -ne $Failure -and -not ($Failure -is [System.Net.WebException])) { $Failure = $Failure.InnerException }
+    return ($null -ne $Failure -and $null -ne $Failure.Response -and [int]$Failure.Response.StatusCode -eq 404)
+}
+# <<< end of generated gzip.ps1
+
 # >>> generated from _site/site/scripts-kit/redeem.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
 # Assert-IntenticCode <host> <code>: the command's own shape, checked before anything is downloaded, so a mangled one
 # fails in a second. The code itself is spent later (below), after the steps that need none of what it stands for.
@@ -564,6 +594,38 @@ function Copy-IntenticFile {
     return $false
 }
 
+# By the .gz copy the release publishes beside the binary, resumed like the binary and unpacked once whole
+# (scripts-kit/gzip.ps1): $true when $Part is the unpacked agent. $false sends the caller to the binary itself, which
+# is what a release from before the copies has (its .gz answers 404), what a copy that does not unpack falls back to,
+# and what a partial of the binary already here resumes.
+function Get-IntenticPackedAgent {
+    param([string]$Url, [string]$Part)
+    if (Test-Path $Part) { return $false }
+    $packed = "$Part.gz"
+    Suspend-IntenticLine
+    try {
+        $null = Copy-IntenticFile -Uri "$Url.gz" -Path $packed
+    } catch {
+        Resume-IntenticLine
+        if (Test-IntenticMissing $_.Exception) {
+            Remove-Item -Force -ErrorAction SilentlyContinue $packed
+            return $false
+        }
+        Stop-Intentic 'intentic-machine could not be downloaded.' "the download stopped before it finished ($($_.Exception.Message)); what arrived is kept, and running the same command again resumes it." 'check the network, then run the same command again.'
+    }
+    Resume-IntenticLine
+    $unpacked = $true
+    try {
+        Expand-IntenticGzip -Source $packed -Destination $Part
+    } catch {
+        $unpacked = $false
+        Remove-Item -Force -ErrorAction SilentlyContinue $Part
+    } finally {
+        Remove-Item -Force -ErrorAction SilentlyContinue $packed
+    }
+    return $unpacked
+}
+
 # Put a first agent at $Dest. Everything past this - keeping it current, PATH, the launcher stub - is the
 # agent's own `setup`.
 function Install-IntenticAgent {
@@ -593,12 +655,13 @@ function Install-IntenticAgent {
     # A partial from another release is bytes that can never be finished.
     $leaf = Split-Path $Dest -Leaf
     Get-ChildItem -Path (Split-Path $Dest) -Filter "$leaf.part*" -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -ne $part } |
+        Where-Object { $_.FullName -ne $part -and $_.FullName -ne "$part.gz" } |
         ForEach-Object { Remove-Item -Force -ErrorAction SilentlyContinue $_.FullName }
     $named = if ($published) { " $published" } else { '' }
     Write-IntenticStep '' "downloading intentic-machine$named..." "Download intentic-machine$named"
     $attempt = 0
-    while ($true) {
+    $packedAgent = Get-IntenticPackedAgent -Url $url -Part $part
+    while (-not $packedAgent) {
         $attempt++
         # Copy-IntenticFile draws its own percentage, so the live line steps aside while it runs.
         Suspend-IntenticLine

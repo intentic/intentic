@@ -64,9 +64,9 @@ agent_fetch() {
             url="${releases}/latest/download/intentic-machine-${os}-${arch}"
             part="${dest}.part"
         fi
-        # A partial from another release is bytes that can never be finished.
+        # A partial from another release is bytes that can never be finished; this release's, either kind, is resumed.
         for stale in "${dest}".part*; do
-            [ "$stale" = "$part" ] || rm -f "$stale"
+            [ "$stale" = "$part" ] || [ "$stale" = "${part}.gz" ] || rm -f "$stale"
         done
         kit_step "" "downloading intentic-machine${published:+ }${published}…" "Download intentic-machine${published:+ }${published}"
         # curl's own bar only where a person is watching; a pipe (the desktop app, `ic`) gets silence and the line above.
@@ -75,11 +75,38 @@ agent_fetch() {
             meter="--progress-bar"
             kit_suspend
         fi
-        # shellcheck disable=SC2086 # $meter is one deliberate word, chosen just above.
-        if ! curl --fail --location --show-error $meter --retry 3 --retry-delay 2 --continue-at - \
-            --output "$part" "$url"; then
-            kit_stop "intentic-machine could not be downloaded." "the download stopped before it finished; what arrived is kept, and running the same command again resumes it." "check the network, then run the same command again."
+        # By the .gz copy the release publishes beside the binary (42 of the Linux agent's 92 MB), resumed like the binary
+        # and unpacked once whole. A release from before the copies answers 404 for it (curl's 22), and so does any
+        # error page; then the binary itself is downloaded, as it is on a device with no gzip or an unpacked partial.
+        packed=22
+        if command -v gzip >/dev/null 2>&1 && [ ! -s "$part" ]; then
+            # shellcheck disable=SC2086 # $meter is one deliberate word, chosen just above.
+            if curl --fail --location $meter --retry 3 --retry-delay 2 --continue-at - --output "${part}.gz" "${url}.gz"; then
+                packed=0
+            else
+                packed=$?
+            fi
         fi
+        case "$packed" in
+            0)
+                if ! gzip -dc "${part}.gz" >"$part" 2>/dev/null; then
+                    rm -f "$part" "${part}.gz"
+                    kit_stop "intentic-machine could not be installed." "what downloaded is not a working program: a captive portal, a cut-off download, or the wrong architecture." "check the network, then run the same command again."
+                fi
+                rm -f "${part}.gz"
+                ;;
+            22)
+                rm -f "${part}.gz"
+                # shellcheck disable=SC2086 # $meter is one deliberate word, chosen just above.
+                if ! curl --fail --location --show-error $meter --retry 3 --retry-delay 2 --continue-at - \
+                    --output "$part" "$url"; then
+                    kit_stop "intentic-machine could not be downloaded." "the download stopped before it finished; what arrived is kept, and running the same command again resumes it." "check the network, then run the same command again."
+                fi
+                ;;
+            *)
+                kit_stop "intentic-machine could not be downloaded." "the download stopped before it finished; what arrived is kept, and running the same command again resumes it." "check the network, then run the same command again."
+                ;;
+        esac
         kit_resume
         chmod +x "$part"
         case "$(agent_version "$part")" in

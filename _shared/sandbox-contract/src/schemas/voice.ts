@@ -159,7 +159,13 @@ export const VoiceServerMessageSchema = z.discriminatedUnion("type", [
         type: z.literal("audio"),
         id: z.number(),
         sampleRate: z.number(),
-        samples: z.number().describe("How many mono s16le samples the binary frame right after this one holds."),
+        samples: z.number().describe("How many mono samples the binary frame right after this one holds, as s16le or once decoded."),
+        codec: z
+            .literal("opus")
+            .optional()
+            .describe(
+                "Absent: the frame is s16le PCM. `opus`, only for a socket opened with `codec=opus`: the frame is the chunk's Opus packets, each a big-endian 16-bit length then the packet (opusPackets), one Opus stream per utterance and sample rate.",
+            ),
     }),
     z.object({ type: z.literal("done"), id: z.number() }),
     z.object({
@@ -170,3 +176,36 @@ export const VoiceServerMessageSchema = z.discriminatedUnion("type", [
     z.object({ type: z.literal("error"), id: z.number().optional(), message: z.string() }),
 ]);
 export type VoiceServerMessage = z.infer<typeof VoiceServerMessageSchema>;
+
+// Opus on the voice sockets, for a client that asks with `codec=opus` where the daemon's /events hello names it among
+// `voiceCodecs`: about a tenth of PCM's bytes (24 kbit/s for 16 kHz speech against 256, 33 for 24 kHz against 384).
+// `/speech/stream` takes one 20 ms packet per binary frame; `/speech/say` sends each chunk's packets in one frame, framed
+// by these two. A client that asks nothing is sent PCM, and an older daemon that ignores the ask sends PCM too.
+
+/** Packets as one frame: each a big-endian 16-bit length, then the packet. */
+export const framedOpus = (packets: readonly Uint8Array[]): Uint8Array<ArrayBuffer> => {
+    const frame = new Uint8Array(packets.reduce((total, packet) => total + 2 + packet.byteLength, 0));
+    const view = new DataView(frame.buffer);
+    let at = 0;
+    for (const packet of packets) {
+        view.setUint16(at, packet.byteLength);
+        frame.set(packet, at + 2);
+        at += 2 + packet.byteLength;
+    }
+    return frame;
+};
+
+/** The packets of a frame framedOpus made; a frame cut short ends at its last whole packet. */
+export const opusPackets = (frame: Uint8Array): Uint8Array[] => {
+    const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
+    const packets: Uint8Array[] = [];
+    for (let at = 0; at + 2 <= frame.byteLength;) {
+        const length = view.getUint16(at);
+        if (at + 2 + length > frame.byteLength) {
+            break;
+        }
+        packets.push(frame.subarray(at + 2, at + 2 + length));
+        at += 2 + length;
+    }
+    return packets;
+};

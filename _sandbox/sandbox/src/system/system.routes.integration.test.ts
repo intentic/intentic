@@ -378,6 +378,7 @@ test("events: a project sandbox's hello names its folder, workspace-relative, an
         "rawRoutes",
         "rawFingerprints",
         "uploadEncodings",
+        "voiceCodecs",
         "build",
         "boot",
     ]);

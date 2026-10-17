@@ -12,7 +12,7 @@ import { DEV_VERSION } from "@intentic/sandbox-contract/state/versions";
 import type { KeyringRefusalCode } from "@intentic/sandbox-contract/schemas/keyring";
 import { KEYRING_AUTOSTART, KEYRING_SESSION_AUTOSTART } from "../autostart/autostart.js";
 import { binDir } from "../config.js";
-import { askpassPath, download, keyringAssetName, keyringPath, releaseAssetUrl, renameIfPresent } from "../release.js";
+import { askpassPath, downloadAsset, keyringAssetName, keyringPath, releaseAssetUrl, renameIfPresent } from "../release.js";
 import { verifyReleaseFiles } from "../release/release-verify.js";
 import { KeyringCliError } from "./flags.js";
 
@@ -87,7 +87,10 @@ const stagingOf = (version: string): string => `${keyringPath}.new-${version}`;
 const sweepStaged = async (keep: string): Promise<void> => {
     const prefix = `${basename(keyringPath)}.new-`;
     // allow(silent-catch): no bin folder yet holds no part files
-    const stale = (await readdir(binDir).catch(() => [])).filter((name) => name.startsWith(prefix) && join(binDir, name) !== keep);
+    // This release's .gz copy is kept too: it is the part a cut-short download resumes (release.ts downloadAsset).
+    const stale = (await readdir(binDir).catch(() => [])).filter(
+        (name) => name.startsWith(prefix) && join(binDir, name) !== keep && join(binDir, name) !== `${keep}.gz`,
+    );
     // allow(silent-catch): a part file that will not go is swept by the next download
     await Promise.all(stale.map(async (name) => await rm(join(binDir, name), { force: true }).catch(() => undefined)));
 };
@@ -119,7 +122,7 @@ export const stageKeyring = async (version: string, log: Log): Promise<string> =
     await sweepStaged(staged);
     log(`Downloading intentic-keyring ${version}…`);
     try {
-        await download(releaseAssetUrl(version, keyringAssetName()), staged, { resume: true });
+        await downloadAsset(releaseAssetUrl(version, keyringAssetName()), staged, { resume: true });
     } catch (error) {
         throw new KeyringCliError(
             "failed",

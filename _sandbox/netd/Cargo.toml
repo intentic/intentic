@@ -10,6 +10,8 @@ publish = false
 [workspace.dependencies]
 anyhow = "1"
 bytes = "1"
+# Raw deflate for a terminal's pane bytes (crates/netd/src/term/deflate.rs), on the pure-Rust backend: no C toolchain.
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 http = "1"
 http-body-util = "0.1"

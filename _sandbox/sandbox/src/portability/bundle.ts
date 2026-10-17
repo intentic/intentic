@@ -2,7 +2,6 @@ import { mkdtemp, open, readdir, readlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { pipeline, Readable } from "node:stream";
-import { createGzip } from "node:zlib";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { BundleManifest } from "@intentic/sandbox-contract/state/definition";
 import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract/state/history-state";
@@ -15,9 +14,10 @@ import { conversationsDbPath } from "../store/conversations-db.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { carries, historyMayContain, historyPortability, IGNORE_SCOPE_EXCLUSIONS, workspaceMayContain, workspacePortability } from "./classify.js";
 import { deriveDefinition, sweepVaults } from "../definition/definition.js";
+import { levelledGzip } from "./bundle-gzip.js";
 import { webStream } from "@intentic/base/web-stream";
 
-// Packs a gzipped tar of the sandbox's two volumes, driven by the state manifests so adding a store is what adds it to
+// Packs a gzipped tar of the sandbox's two volumes (already-compressed files stored, the rest deflated: bundle-gzip.ts), driven by the state manifests so adding a store is what adds it to
 // the bundle.
 // - intentic-bundle.json: the manifest, written first so a reader knows the shape before the bytes
 // - workspace/…: /work, minus ignored junk and minus what the manifests mark identity/derived/secret
@@ -71,8 +71,13 @@ const packTree = async (
     packer: Pack,
     root: string,
     prefix: string,
-    // Two questions, not one: `carry` decides a file, `enter` whether to look inside a directory.
-    decide: { readonly carry: (relPath: string) => boolean; readonly enter: (relPath: string) => boolean },
+    // Two questions, not one: `carry` decides a file, `enter` whether to look inside a directory. `packing` hears each
+    // file's entry name before it is packed (the gzip's level follows it, bundle-gzip.ts).
+    decide: {
+        readonly carry: (relPath: string) => boolean;
+        readonly enter: (relPath: string) => boolean;
+        readonly packing: (name: string) => Promise<void>;
+    },
     scope?: IgnoreScope,
 ): Promise<{ files: number; bytes: number }> => {
     let files = 0;
@@ -110,6 +115,7 @@ const packTree = async (
                 // Sockets, fifos and device nodes have no meaning on the other side of a restore.
                 continue;
             }
+            await decide.packing(`${prefix}${relPath}`);
             const packed = await packFile(packer, `${prefix}${relPath}`, absPath);
             if (packed === undefined) {
                 continue;
@@ -188,7 +194,7 @@ const sourceBlocks = (
 // manifests. `now` is injected so the manifest is deterministic under test.
 export const packBundle = (services: Services, options: { readonly secrets: boolean; readonly now: number }): ReadableStream<Uint8Array> => {
     const packer = pack();
-    const gzip = createGzip();
+    const { gzip, packing } = levelledGzip();
     // The error itself reaches the reader through gzip, which pipeline destroys with it.
     pipeline(packer, gzip, () => undefined);
 
@@ -234,6 +240,7 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
                 {
                     carry: (relPath) => carries(workspacePortability(relPath), options.secrets),
                     enter: (relPath) => workspaceMayContain(relPath, options.secrets),
+                    packing,
                 },
                 await createIgnoreScope().descend(services.workspace.root, ""),
             );
@@ -256,9 +263,11 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
                 {
                     carry: (relPath) => !relPath.startsWith(database) && carries(historyPortability(relPath), options.secrets),
                     enter: (relPath) => historyMayContain(relPath, options.secrets),
+                    packing,
                 },
                 await createIgnoreScope().descend(services.config.historyRoot, ""),
             );
+            await packing(`history/${database}`);
             await packSnapshot(packer, `history/${database}`, services.conversationsDb);
             packer.finalize();
         } catch (error) {

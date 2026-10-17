@@ -278,6 +278,58 @@ async fn an_attach_replays_the_pane_then_streams_its_bytes_intact() {
     );
 }
 
+// A browser that can inflate asks with `deflate=1`: it hears so before any pane byte, and every binary message after is
+// one length-prefixed piece of a single deflate stream that unpacks, message by message, to the same bytes a raw socket
+// gets, in fewer bytes than those.
+#[tokio::test]
+async fn a_socket_that_asks_for_deflate_hears_so_first_and_its_pane_bytes_inflate_intact() {
+    let server = Server::start("deflate").await;
+    server.session("deflate", 80, 24).await;
+    let (_harness, daemon) = started("term-deflate", &server).await;
+    let mut socket = open(
+        daemon,
+        "plan=tmux&session=deflate&cols=80&rows=24&deflate=1",
+    )
+    .await;
+    let first = tokio::time::timeout(PATIENCE, socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(first, Message::text(r#"{"type":"deflate"}"#));
+
+    type_in(
+        &mut socket,
+        "printf 'h\\303\\251llo \\033[31mred\\033[0m\\n'\r",
+    )
+    .await;
+    let mut inflate = flate2::Decompress::new(false);
+    let (mut text, mut crossed, mut unpacked) = (String::new(), 0, 0);
+    let deadline = tokio::time::Instant::now() + PATIENCE;
+    while !text.contains("\x1b[31mred") {
+        match tokio::time::timeout_at(deadline, socket.next())
+            .await
+            .unwrap()
+        {
+            Some(Ok(Message::Binary(message))) => {
+                let length = u32::from_be_bytes(message[..4].try_into().unwrap()) as usize;
+                let mut out = Vec::with_capacity(length);
+                inflate
+                    .decompress_vec(&message[4..], &mut out, flate2::FlushDecompress::Sync)
+                    .unwrap();
+                assert_eq!(out.len(), length, "a message unpacks to the length it gave");
+                crossed += message.len();
+                unpacked += length;
+                text.push_str(&String::from_utf8_lossy(&out));
+            }
+            Some(Ok(_)) => {}
+            other => panic!("the socket ended: {other:?}"),
+        }
+    }
+    assert!(text.contains("h\u{e9}llo \x1b[31mred\x1b[0m"), "{text:?}");
+    assert!(crossed < unpacked, "{crossed} bytes crossed for {unpacked}");
+}
+
 #[tokio::test]
 async fn viewers_of_one_session_share_one_control_client() {
     let server = Server::start("shared").await;

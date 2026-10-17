@@ -23,6 +23,12 @@ export const BUILD_ENV = {
     secret: `INTENTIC_BUILD_SECRET`,
 } as const;
 
+// The overlay's own layers as zstd, which Fly's machines pull and unpack faster than gzip (Fly measured 5-20% smaller
+// and up to 40% quicker to decompress, and compresses its own builds this way by default). Only the layers this build
+// writes: the base image's are pushed as they were published, since recompressing gigabytes on every build would cost
+// more than it saves.
+const LAYER_COMPRESSION = `oci-mediatypes=true,compression=zstd,compression-level=3`;
+
 // Log bytes kept in the report: enough for a failed apt/compile, small enough for a row.
 export const LOG_TAIL_BYTES = 64 * 1024;
 
@@ -72,7 +78,7 @@ export const buildScript = (): string =>
         `        --frontend dockerfile.v0 \\`,
         `        --local context=${BUILD_PATHS.context} \\`,
         `        --local dockerfile=${BUILD_PATHS.context} \\`,
-        `        --output "type=image,name=$${BUILD_ENV.image},push=true" \\`,
+        `        --output "type=image,name=$${BUILD_ENV.image},push=true,${LAYER_COMPRESSION}" \\`,
         `        --export-cache "type=registry,ref=$${BUILD_ENV.cache},mode=min" \\`,
         `        --import-cache "type=registry,ref=$${BUILD_ENV.cache}" \\`,
         `        --metadata-file ${BUILD_PATHS.metadata}`,

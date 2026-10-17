@@ -1,3 +1,4 @@
+import { constants, createDeflateRaw } from "node:zlib";
 import { StreamSocket } from "./streamSocket";
 import { type ChannelEvents, socketChannel } from "./terminalChannel";
 
@@ -134,6 +135,66 @@ const until = async (condition: () => boolean): Promise<void> => {
 };
 
 const REQUEST = { host: `sandbox-abcdef012345.sbx.test`, path: `/system/terminal`, query: `ticket=t&session=main` };
+
+// netd's deflated pane bytes (netd term/deflate.rs): one raw deflate stream for the socket, each message its unpacked
+// length (4 bytes, big-endian) then the stream's bytes through a sync flush.
+const deflating = (): ((raw: string) => Promise<Uint8Array>) => {
+    const stream = createDeflateRaw();
+    const out: Buffer[] = [];
+    stream.on(`data`, (chunk: Buffer) => out.push(chunk));
+    return async (raw) => {
+        const bytes = utf8.encode(raw);
+        stream.write(bytes);
+        // one stream, flushed in order
+        await new Promise<void>((resolve) => stream.flush(constants.Z_SYNC_FLUSH, () => resolve()));
+        // one stream, drained in order
+        await new Promise((resolve) => setImmediate(resolve));
+        const length = new Uint8Array(4);
+        new DataView(length.buffer).setUint32(0, bytes.length);
+        return joined(length, ...out.splice(0));
+    };
+};
+
+describe(`a terminal whose netd deflates its pane bytes`, () => {
+    it(`unpacks each message whole, in order with the messages and the close between them`, async () => {
+        const { opening, far } = streamPair();
+        const { log, events, closed } = recorded();
+        socketChannel(new StreamSocket(opening, REQUEST), events);
+        const { head } = await upgradeOf(far);
+        const deflate = deflating();
+        const prompt = `\u001b[32muser@sandbox\u001b[0m:~$ `;
+        const first = await deflate(prompt);
+        const second = await deflate(prompt);
+        // The second leans on the first as its dictionary.
+        expect(second.length).toBeLessThan(first.length);
+        await far.answer.write(
+            joined(
+                await switching(head),
+                serverFrame(1, utf8.encode(`{"type":"deflate"}`)),
+                serverFrame(2, first),
+                serverFrame(1, utf8.encode(`{"type":"grid","cols":120,"rows":40}`)),
+                serverFrame(2, second),
+                closeFrame(1000, `bye`),
+            ),
+        );
+        await closed;
+        expect(log).toEqual([`open`, `pane ${prompt}`, `message grid`, `pane ${prompt}`, `closed 1000 bye`]);
+    });
+
+    it(`ends the socket on a message that does not unpack to the length it gave`, async () => {
+        const { opening, far } = streamPair();
+        const { log, events } = recorded();
+        socketChannel(new StreamSocket(opening, REQUEST), events);
+        const { head, frames } = await upgradeOf(far);
+        const lying = await deflating()(`hello`);
+        new DataView(lying.buffer).setUint32(0, 2);
+        await far.answer.write(joined(await switching(head), serverFrame(1, utf8.encode(`{"type":"deflate"}`)), serverFrame(2, lying)));
+        // The channel closes its end: a close frame goes out, nothing reached the pane, and the redial will start afresh.
+        expect((await frames())?.opcode).toBe(8);
+        await until(() => log.length === 2);
+        expect(log).toEqual([`open`, `closed 1005 `]);
+    });
+});
 
 describe(`a terminal on a WebTransport stream`, () => {
     it(`opens as a WebSocket, then carries netd's messages and its own, masked, until netd closes it`, async () => {

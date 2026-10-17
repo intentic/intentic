@@ -2,7 +2,8 @@ import { once } from "node:events";
 import { createAdaptorServer, type WebSocketServerLike } from "@hono/node-server";
 import { unstubbed } from "@intentic/testing";
 import { waitFor } from "@intentic/testing/bun";
-import { type VoiceServerMessage, VoiceServerMessageSchema } from "@intentic/sandbox-contract/schemas/voice";
+import { opusPackets, type VoiceServerMessage, VoiceServerMessageSchema } from "@intentic/sandbox-contract/schemas/voice";
+import { opusDecoder } from "@intentic/speech/opus";
 import { Hono } from "hono";
 import { WebSocket, WebSocketServer } from "ws";
 import { z } from "zod";
@@ -48,7 +49,7 @@ const byteLengthOf = (data: Buffer | ArrayBuffer | Buffer[]): number =>
 
 type Heard = VoiceServerMessage | { readonly type: "bytes"; readonly length: number };
 
-const stand = async (voice: Voice) => {
+const stand = async (voice: Voice, query = "") => {
     // No auth: the loopback daemon, which takes no ticket.
     const services = unstubbed<Parameters<typeof createVoiceStreamRoute>[0]>("services", {
         voice,
@@ -64,15 +65,20 @@ const stand = async (voice: Voice) => {
     await once(server, "listening");
     const { port } = z.object({ port: z.number() }).parse(server.address());
     const heard: Heard[] = [];
-    const socket = new WebSocket(`ws://127.0.0.1:${port}/speech/say`);
+    const frames: Uint8Array[] = [];
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/speech/say${query}`);
     socket.on("message", (data, binary) => {
-        // A binary frame is the audio a header announced; only its length is checked here.
+        // A binary frame is the audio a header announced; its length is checked here, and its bytes kept to decode.
         heard.push(binary ? { type: "bytes", length: byteLengthOf(data) } : VoiceServerMessageSchema.parse(JSON.parse(String(data))));
+        if (binary) {
+            frames.push(data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(Buffer.concat(Array.isArray(data) ? data : [data])));
+        }
     });
     await once(socket, "open");
     return {
         socket,
         heard,
+        frames,
         close: () => {
             socket.close();
             server.close();
@@ -95,6 +101,29 @@ test("an utterance comes back as its words, a header before each frame of audio,
             { type: "done", id: 1 },
         ]);
         expect(fake.asked[0]).toMatchObject({ as: "reply", asked: "Fix it", conversationId: "c-9" });
+    } finally {
+        wire.close();
+    }
+});
+
+// A player that asks with `codec=opus` (the editor does where the hello names it) hears each chunk as its Opus packets,
+// a twelfth of the PCM, which decode back to the chunk padded out to whole 20 ms packets.
+test("a socket opened with codec=opus hears each chunk as Opus packets that decode back to it", async () => {
+    const voice: Voice = {
+        ...fakeVoice().voice,
+        async *speak () {
+            yield { samples: Float32Array.from({ length: 24_000 }, (_, index) => 0.4 * Math.sin((2 * Math.PI * 180 * index) / 24_000)), sampleRate: 24_000 };
+        },
+    };
+    const wire = await stand(voice, "?codec=opus");
+    try {
+        wire.socket.send(JSON.stringify({ type: "say", id: 4, text: "Hello" }));
+        await waitFor(() => expect(wire.heard.at(-1)).toEqual({ type: "done", id: 4 }));
+        expect(wire.heard[0]).toEqual({ type: "audio", id: 4, sampleRate: 24_000, samples: 24_000, codec: "opus" });
+        const frame = wire.frames[0] ?? new Uint8Array();
+        expect(frame.byteLength).toBeLessThan((24_000 * 2) / 8);
+        const decode = opusDecoder(24_000);
+        expect(opusPackets(frame).reduce((total, packet) => total + decode(packet).length, 0)).toBe(24_000);
     } finally {
         wire.close();
     }

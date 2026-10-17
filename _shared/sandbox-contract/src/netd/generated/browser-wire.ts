@@ -54,7 +54,7 @@ export type TerminalClientMessage = { "type": "input", data: string, } | { "type
 /**
  * What a terminal socket sends as JSON text; the pane's own bytes travel as binary messages.
  */
-export type TerminalServerMessage = { "type": "grid", cols: number, rows: number, } | { "type": "exit", code: number, reason?: string, } | { "type": "pong" };
+export type TerminalServerMessage = { "type": "grid", cols: number, rows: number, } | { "type": "exit", code: number, reason?: string, } | { "type": "pong" } | { "type": "deflate" };
 
 /**
  * Where netd's tunnel stands.

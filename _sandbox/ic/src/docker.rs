@@ -1042,6 +1042,15 @@ pub fn pull(image: &str, log: &Log) -> std::result::Result<(), PullStop> {
             return Err(stop);
         }
     }
+    let server = try_capture(&[
+        "version",
+        "--format",
+        "{{.Server.Platform.Name}}|{{.Server.Version}}",
+    ]);
+    if let Some(stop) = server.and_then(|server| too_old_to_unpack(image, &server)) {
+        log.write(stop.what.as_bytes());
+        return Err(stop);
+    }
     pull_retrying(
         image,
         &mut || pull_once(image, log),
@@ -1049,6 +1058,31 @@ pub fn pull(image: &str, log: &Log) -> std::result::Result<(), PullStop> {
         &mut |wait| std::thread::sleep(std::time::Duration::from_secs(wait)),
         &mut || quiet(&["logout", "ghcr.io"]),
     )
+}
+
+/// The oldest Docker Engine that unpacks zstd layers (moby#41759, first released in 23.0). The sandbox image is published
+/// with zstd layers (publish-images.sh): smaller to pull and quicker to unpack than gzip. An older engine downloads each
+/// layer and then refuses it with a media-type error that reads like a broken network, so it is told before the download.
+const ZSTD_ENGINE_MAJOR: u32 = 23;
+
+/// A pull of the sandbox image refused before it starts, on a Docker Engine too old to unpack its zstd layers. `server`
+/// is `docker version`'s `<platform name>|<version>`. Podman reads zstd whatever its own version numbers say, and an
+/// engine that does not say what it is is let through to try. Pure.
+fn too_old_to_unpack(image: &str, server: &str) -> Option<PullStop> {
+    let (platform, version) = server.split_once('|')?;
+    if !image.starts_with("ghcr.io/intentic/sandbox") || platform.to_lowercase().contains("podman")
+    {
+        return None;
+    }
+    let major: u32 = version.trim().split('.').next()?.parse().ok()?;
+    (major < ZSTD_ENGINE_MAJOR).then(|| PullStop {
+        what: format!(
+            "Docker Engine {} on this device cannot unpack {image}: its layers are zstd-compressed, which Docker reads from version {ZSTD_ENGINE_MAJOR}.0 on.",
+            version.trim()
+        ),
+        remedy: "Update Docker to 23 or newer, then re-run: Docker Desktop updates itself from its own menu; on Linux a distribution's docker.io package can be years behind, and Docker's own packages (https://docs.docker.com/engine/install/) are current.".to_string(),
+        words: None,
+    })
 }
 
 /// The attempts [`pull`] makes, over the four things it does to the machine (pull once, look for a local copy, wait,
@@ -1280,9 +1314,37 @@ fn pull_once(image: &str, log: &Log) -> Result<Streamed> {
 mod tests {
     use super::{
         docker_last_words, gone_engine, gone_stop, mount_source_format, pull_refusal,
-        pull_retrying, pull_stop, refusal_of, wrong_container_platform, PullRefusal, Streamed,
+        pull_retrying, pull_stop, refusal_of, too_old_to_unpack, wrong_container_platform,
+        PullRefusal, Streamed,
     };
     use crate::engine::Kind;
+    #[test]
+    fn a_docker_engine_older_than_23_is_told_to_update_before_it_downloads_a_zstd_sandbox_image() {
+        let image = "ghcr.io/intentic/sandbox:stable";
+        let stop =
+            too_old_to_unpack(image, "Docker Engine - Community|20.10.24+dfsg1").expect("refused");
+        assert!(
+            stop.what.contains("Docker Engine 20.10.24+dfsg1"),
+            "{}",
+            stop.what
+        );
+        assert!(stop.remedy.contains("23 or newer"), "{}", stop.remedy);
+        for current in [
+            "Docker Engine - Community|23.0.0",
+            "Docker Desktop 4.82.0 (123)|29.9.0",
+        ] {
+            assert!(too_old_to_unpack(image, current).is_none(), "{current}");
+        }
+        // Podman reads zstd whatever its version says; another image is not ours to judge; an unreadable answer tries.
+        assert!(too_old_to_unpack(image, "Podman Engine|4.9.3").is_none());
+        assert!(too_old_to_unpack(
+            "docker.io/library/alpine:3",
+            "Docker Engine - Community|20.10.5"
+        )
+        .is_none());
+        assert!(too_old_to_unpack(image, "Docker Engine - Community|").is_none());
+        assert!(too_old_to_unpack(image, "nonsense").is_none());
+    }
 
     #[test]
     fn a_mount_is_named_the_way_docker_run_takes_it_back() {

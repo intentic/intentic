@@ -42,8 +42,10 @@ const OPEN = 1;
 // Structural interface a browser's WebSocket, node's global one, and a test's fake all satisfy without a cast.
 export interface SocketLike {
     readonly readyState: number;
-/* `message` is here for the watchdog alone, which needs no more than the fact that one arrived. */
-    addEventListener(type: "open" | "close" | "error" | "message", listener: (event: { readonly code?: number }) => void): void;
+/* `message` is here for the watchdog alone, which needs no more than the fact that one arrived. Two signatures, so a
+   socket typing its listeners per event (ws's) satisfies it as well as one with a single listener type. */
+    addEventListener(type: "close", listener: (event: { readonly code?: number }) => void): void;
+    addEventListener(type: "open" | "error" | "message", listener: () => void): void;
     send(data: string): void;
     close(code?: number, reason?: string): void;
 }

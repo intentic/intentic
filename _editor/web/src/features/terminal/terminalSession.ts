@@ -14,7 +14,7 @@ import { useEndpoint } from "../../client/endpoint/useEndpoint";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { liveSocket, type LiveSocket } from "../../client/session/liveSocket";
 import { socketAddress } from "../../client/sandbox/streams/wsTicket";
-import { type ChannelEvents, type TerminalChannel, socketChannel } from "./channel/terminalChannel";
+import { type ChannelEvents, readsDeflate, socketChannel, type TerminalChannel } from "./channel/terminalChannel";
 import { StreamSocket } from "./channel/streamSocket";
 import { editKeyBytes } from "./terminalEditKeys";
 import { registerFilePathLinks } from "./links/terminalFileLinks";
@@ -104,13 +104,19 @@ const attachRenderer = (s: TerminalSession): void => {
     }
 };
 
-// What the daemon plans the attach from: the session, its grid and its directory.
-const terminalParams = (s: Omit<TerminalSession, "live">): Record<string, string> => ({
-    session: s.name,
-    cols: String(s.requestedGrid.cols),
-    rows: String(s.requestedGrid.rows),
-    ...(s.cwd === undefined ? {} : { cwd: s.cwd }),
-});
+// What the daemon plans the attach from: the session, its grid and its directory; and, where this browser can read
+// them, deflated pane bytes (channel/terminalChannel.ts), which an older netd ignores the ask for and sends raw.
+type TerminalParams = { session: string; cols: string; rows: string; cwd?: string; deflate?: `1` };
+const terminalParams = (s: Omit<TerminalSession, "live">): TerminalParams => {
+    const params: TerminalParams = { session: s.name, cols: String(s.requestedGrid.cols), rows: String(s.requestedGrid.rows) };
+    if (s.cwd !== undefined) {
+        params.cwd = s.cwd;
+    }
+    if (readsDeflate()) {
+        params.deflate = `1`;
+    }
+    return params;
+};
 
 // Whether the address terminals open on is an edge that declared WebTransport: the sandbox row says what its edge
 // serves, and a loopback shortcut is no edge at all, so it declares nothing.

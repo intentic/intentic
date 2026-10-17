@@ -22,6 +22,7 @@ import { daemonRebuilt, dropSandboxLocalState, sandboxQueryPredicate, workspaceR
 import { setDaemonBoot } from "../../../client/sandbox/useDaemonBoot";
 import { setDaemonRoutes } from "../../../client/sandbox/useDaemonRoutes";
 import { setUploadEncodings } from "../../../client/sandbox/daemon/uploadEncodings";
+import { setVoiceCodecs } from "../../../client/sandbox/daemon/voiceCodecs";
 import { setDaemonVersion } from "../../../client/sandbox/daemon/useDaemonVersion";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 
@@ -97,6 +98,8 @@ const applyHello = (event: Extract<SystemEvent, { kind: `hello` }>, sandboxId: s
     setDaemonRoutes(event.routes, event.shapes, event.surface, { rawRoutes: event.rawRoutes, rawFingerprints: event.rawFingerprints });
     // Whether an upload may go gzipped: only to a daemon that names the coding.
     setUploadEncodings(event.uploadEncodings);
+    // Whether the voice sockets may speak Opus: only to a daemon that names it.
+    setVoiceCodecs(event.voiceCodecs);
     // Which release answers, held against the oldest this app supports: below it, one page says so (SandboxGate).
     setDaemonVersion(event.build, event.surface);
     // Daemon boot state, needed before other daemon queries are allowed to fire this tick.
