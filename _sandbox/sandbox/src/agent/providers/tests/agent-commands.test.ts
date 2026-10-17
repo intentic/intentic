@@ -1,4 +1,4 @@
-import { isUnknownSlashCommand, localCommandText, recordCommands, resetCommands, unknownCommandName } from "../agent-commands.js";
+import { isUnknownSlashCommand, localCommandText, publishedCommandOf, recordCommands, resetCommands, unknownCommandName } from "../agent-commands.js";
 
 beforeEach(() => {
     resetCommands();
@@ -52,6 +52,21 @@ test("an unlearned command list stands the guard down rather than guessing", () 
     expect(isUnknownSlashCommand("claude", "/workspace view forgets the tree")).toBe(false);
     publish();
     expect(isUnknownSlashCommand("codex", "/workspace view forgets the tree")).toBe(false);
+});
+
+// The mark the harness sends a command's words ahead of the notes by: only a name the provider published, never a
+// guess, so prose and an unlearned list go on exactly as before.
+test("a published command is named by the prompt it opens; prose, a typo and an unlearned list name none", () => {
+    expect(publishedCommandOf("claude", "/compact")).toBeUndefined();
+    publish();
+    expect(publishedCommandOf("claude", "/compact")).toBe("compact");
+    expect(publishedCommandOf("claude", "  /review 4821 please")).toBe("review");
+    expect(publishedCommandOf("claude", "/iq:iq where is the parser")).toBe("iq:iq");
+    expect(publishedCommandOf("claude", "/compct")).toBeUndefined();
+    expect(publishedCommandOf("claude", "/etc/hosts is stale")).toBeUndefined();
+    expect(publishedCommandOf("claude", "/")).toBeUndefined();
+    expect(publishedCommandOf("claude", "run /compact later")).toBeUndefined();
+    expect(publishedCommandOf("codex", "/compact")).toBeUndefined();
 });
 
 test("local command output is unwrapped from the tag the transcript stores it under", () => {

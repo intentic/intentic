@@ -529,6 +529,25 @@ test("publishes the thread's enabled skills and sends a picked command as a stru
     });
 });
 
+// Every worktree turn carries a note in front of the words, so a name read from the prompt's start never resolved.
+test("a picked command resolves behind the daemon's notes, which stay in the text ahead of its arguments", async () => {
+    const appServer = fakeAppServer(
+        [{ method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed", error: null } } }],
+        { skills: SKILLS },
+    );
+    const notes = "## Where this turn's files live\n\nUse relative paths.";
+
+    await collect(createCodexAppServerRunner(appServer.connector)({ ...turn(), prompt: `${notes}\n\n---\n\n/release patch please` }));
+
+    expect(appServer.requests.find((call) => call.method === "turn/start")?.params).toMatchObject({
+        input: [
+            { type: "skill", name: "release", path: "/workspace/repo/.codex/skills/release" },
+            { type: "text", text: `${notes}\n\n---\n\npatch please`, text_elements: [] },
+            { type: "localImage", path: "/workspace/reference.png" },
+        ],
+    });
+});
+
 test("prose that merely starts with a slash is sent verbatim", async () => {
     const appServer = fakeAppServer(
         [{ method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed", error: null } } }],

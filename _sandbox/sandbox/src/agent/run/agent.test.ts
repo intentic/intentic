@@ -304,6 +304,33 @@ test("a new session is titled with the user's words, never the daemon's notes, a
     expect(Object.keys(captured.at(-1) ?? {})).not.toContain("title");
 });
 
+// The CLI parses a slash command only at the very start of the message, and the notes in front made it prose: the
+// command's words go first and alone, and the notes ride the prompt hook, which the CLI runs for a command it expands.
+test("a slash command's turn sends its words alone and says the notes through the prompt hook", async () => {
+    const sent: unknown[] = [];
+    const captured: Options[] = [];
+    const capture: QueryFn = async function* (args) {
+        sent.push(args.prompt);
+        captured.push(args.options);
+        // SAFETY: a bare success result is all the stream reads to end the turn; its other fields are never consulted.
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+    const prompt = composeWirePrompt([LANDING_CHECKS_NOTE], "/code-review high");
+
+    await collect({ ...request, spec: { ...request.spec, prompt, command: "code-review" } }, capture);
+    expect(sent.at(-1)).toBe("/code-review high");
+    const hook = captured.at(-1)?.hooks?.UserPromptSubmit?.at(-1)?.hooks[0];
+    const input = { hook_event_name: "UserPromptSubmit" as const, prompt: "/code-review high", session_id: "s", transcript_path: "", cwd: "" };
+    expect(await hook?.(input, undefined, { signal: new AbortController().signal })).toEqual({
+        hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: LANDING_CHECKS_NOTE.text },
+    });
+
+    // Prose keeps its notes in front, as ever, and no prompt hook is wired for it.
+    await collect({ ...request, spec: { ...request.spec, prompt } }, capture);
+    expect(sent.at(-1)).toBe(prompt);
+    expect(captured.at(-1)?.hooks?.UserPromptSubmit).toBeUndefined();
+});
+
 // Compares against the ambient env, not undefined: a turn's env spreads `{...process.env, …}`.
 const ambient = (name: string): string | undefined => process.env[name];
 

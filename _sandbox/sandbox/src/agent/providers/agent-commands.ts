@@ -16,17 +16,29 @@ export function commandsOf(provider: AgentProvider): readonly AgentCommand[] {
     return published.get(provider) ?? [];
 }
 
+// The command name a `/`-leading prompt opens with: everything up to the first whitespace. Trimmed first, since the
+// CLI's own parse is at least as forgiving of leading whitespace. Undefined when the prompt does not open with `/`.
+const leadingName = (prompt: string): string | undefined => {
+    const text = prompt.trimStart();
+    return text.startsWith("/") ? (text.slice(1).split(/\s/, 1)[0] ?? "") : undefined;
+};
+
 // Whether the CLI will read this prompt as an unknown slash command and silently discard it without replying. An empty
 // list means "not learned yet", never "no commands": treated as false so a real command is never mistaken for prose.
 export function isUnknownSlashCommand(provider: AgentProvider, prompt: string): boolean {
     const known = commandsOf(provider);
-    // Trimmed first: the CLI's own parse is at least as forgiving of leading whitespace.
-    const text = prompt.trimStart();
-    if (known.length === 0 || !text.startsWith("/")) {
+    const name = leadingName(prompt);
+    if (known.length === 0 || name === undefined) {
         return false;
     }
-    const name = text.slice(1).split(/\s/, 1)[0] ?? "";
     return name.length > 0 && !known.some((command) => command.name === name);
+}
+
+// The published command this prompt opens with, by name; undefined for prose, and for every prompt while the provider's
+// list is still unlearned, so the turn goes on exactly as it did before the list existed.
+export function publishedCommandOf(provider: AgentProvider, prompt: string): string | undefined {
+    const name = leadingName(prompt);
+    return name === undefined || name === "" ? undefined : commandsOf(provider).find((command) => command.name === name)?.name;
 }
 
 // Unwraps a CLI-answered command's text from the <local-command-stdout> tag the transcript stores it under.

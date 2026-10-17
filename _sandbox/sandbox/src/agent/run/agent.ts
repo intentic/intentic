@@ -63,6 +63,7 @@ import { readClaudeUsage } from "../providers/claude/claude-usage.js";
 import { routedEndpointOf } from "../providers/routed-refusal.js";
 import { defaultQuery, promptInput, type QueryFn, streamSdk, type TurnPosture } from "./sdk-stream.js";
 import { checklistCloseHooks } from "./checklist-close.js";
+import { commandNotesHooks, commandWire } from "./command-turn.js";
 import { turnCheckHooks } from "./turn-checks.js";
 import { settingsHookChangeHooks } from "./harness/settings-hook-gate.js";
 import { checklistSeedOf } from "./task-store.js";
@@ -452,6 +453,14 @@ const policyBoundaryHooks = (policy: HarnessRequest["policy"]): ReturnType<typeo
     policy.allowedTools === undefined ? {} : toolAllowlistHooks(policy.allowedTools),
 ];
 
+// The harness's own asks of the session. A checklist about to be left open is said back once, since the board reads that
+// list to tell a finished session from one that stopped short. A slash command's turn sends its words alone, so the
+// CLI runs the command, and the notes cut from in front of them are said through the prompt hook (command-turn.ts).
+const sessionHooks = (spec: HarnessRequest["spec"]) => [
+    checklistCloseHooks({ sessionStore: spec.sessionStore }),
+    commandNotesHooks(commandWire(spec).notes),
+];
+
 // Base SDK options for the turn.
 const baseOptions = (
     request: HarnessRequest,
@@ -543,9 +552,8 @@ const baseOptions = (
                 // bypassPermissions.
                 hasRules(request.policy.actionRules) ? outboundGuardHooks(request.policy.actionRules) : {},
                 ...policyBoundaryHooks(request.policy),
-                // The harness's own ask: a checklist about to be left open is said back once, since
-                // the board reads that list to tell a finished session from one that stopped short.
-                checklistCloseHooks({ sessionStore: request.spec.sessionStore }),
+                // The harness's own asks of the session: an open checklist said back, a slash command's notes said apart.
+                ...sessionHooks(request.spec),
                 // The repositories' own `turn` checks, once, as an isolated turn is about to stop: what they found in its
                 // change is said back, and the model fixes it or says why not. Nothing waits on them.
                 turnCheckHooks(request.hooks.turnChecks, ownWorktree(request.spec.isolation)),
@@ -1007,7 +1015,7 @@ export async function* runAgent(
                       return false;
                   }
                   redelivered = true;
-                  return steering.push(request.spec.prompt);
+                  return steering.push(commandWire(request.spec).prompt);
               };
 
     // Linked here and not where the controller is made: nothing reads it before the SDK starts on the next line (a turn
@@ -1018,7 +1026,7 @@ export async function* runAgent(
         try {
             for await (const event of streamSdk({
                 queryFn,
-                prompt: promptInput(request.spec.prompt, request.spec.steering),
+                prompt: promptInput(commandWire(request.spec).prompt, request.spec.steering),
                 options,
                 cwd: request.spec.cwd,
                 tmuxEnabled,

@@ -11,7 +11,7 @@ import { standing } from "../../../rules/rules.js";
 import { offloadRunEnabled } from "../../../offload/offload-prefix.js";
 import { armPlan, type TurnArmPlan, type TurnContext } from "../../providers/adapter.js";
 import type { HarnessCredential, TurnPolicy, TurnSpec, TurnTools } from "../../providers/agent-request.js";
-import { isUnknownSlashCommand } from "../../providers/agent-commands.js";
+import { isUnknownSlashCommand, publishedCommandOf } from "../../providers/agent-commands.js";
 import {
     type HarnessCredentialDeps,
     type HarnessCredentials,
@@ -79,12 +79,14 @@ const harnessMounts = (deps: HarnessPlanDeps, input: RoutedAgentTurn, granted: r
     ]);
 
 // The user's message with the attachment note folded in. A leading `/` naming no real command would otherwise be
-// silently discarded by the CLI, so a note keeps the user's words in front of the model, last so `/` still leads.
-const wordsOf = (input: RoutedAgentTurn, context: TurnContext): Pick<TurnSpec, "prompt" | "notes"> => {
+// silently discarded by the CLI, so a note keeps the user's words in front of the model, last so `/` still leads. One
+// naming a published command is marked, so the harness sends it ahead of the notes and the CLI runs it (agent.ts).
+const wordsOf = (input: RoutedAgentTurn, context: TurnContext): Pick<TurnSpec, "prompt" | "notes" | "command"> => {
     const { prompt: typed, notes } = context.base.spec;
     const prompt = context.attachmentPaths.length > 0 ? withAttachmentNote(typed, [...context.attachmentPaths]) : typed;
     const literalSlash = isUnknownSlashCommand(input.agent, prompt);
-    return { prompt, ...opt("notes", literalSlash ? [...(notes ?? []), LITERAL_SLASH_NOTE] : notes) };
+    const command = publishedCommandOf(input.agent, prompt);
+    return { prompt, ...opt("notes", literalSlash ? [...(notes ?? []), LITERAL_SLASH_NOTE] : notes), ...opt("command", command) };
 };
 
 // A routed turn pins the endpoint's mapped model; a native Claude turn may go fast, and falls back to the daemon-wide

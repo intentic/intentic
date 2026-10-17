@@ -88,9 +88,13 @@ const preambleEnd = (text: string): number | undefined => {
 };
 
 // The restore-side inverse of the builder: the user's own words, with the daemon's notes taken back off.
-export const stripTurnPreamble = (text: string): string => {
+export const stripTurnPreamble = (text: string): string => splitTurnPreamble(text).words;
+
+// The same cut, both halves kept: the notes as one block (empty when there are none) and the user's words after the
+// separator. For a runtime that must send the words on their own, a slash command which only parses at the very start.
+export const splitTurnPreamble = (text: string): { readonly notes: string; readonly words: string } => {
     const end = preambleEnd(text);
-    return end === undefined ? text : text.slice(end + SEPARATOR.length);
+    return end === undefined ? { notes: "", words: text } : { notes: text.slice(0, end), words: text.slice(end + SEPARATOR.length) };
 };
 
 // Splits on the note openings themselves — the only marker there is, found rather than assumed since assembly order is
