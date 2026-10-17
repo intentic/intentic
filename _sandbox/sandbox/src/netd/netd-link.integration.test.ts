@@ -151,9 +151,16 @@ test("a question of Node's netd refuses or never answers settles as nulls, withi
     }
     socket.write(toNode({ kind: "refused", id: sent.id, message: "no feed" }));
     expect(await refused).toEqual([null]);
-    const started = Date.now();
-    expect(await link.sync(["/b", "/c"])).toEqual([null, null]);
-    expect(Date.now() - started).toBeGreaterThanOrEqual(90);
+    // Still waiting at half its patience, read on the timer clock its patience runs on: a wall-clock span measured
+    // around it read 83 ms for a 100 ms patience on a loaded runner, the loop's clock lagging the wall's.
+    const unanswered = link.sync(["/b", "/c"]);
+    let settled = false;
+    void unanswered.then(() => {
+        settled = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(settled).toBe(false);
+    expect(await unanswered).toEqual([null, null]);
     link.close();
 });
 

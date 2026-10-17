@@ -2,7 +2,8 @@
 // project: the chip in the status strip was the only sign the whole workspace had narrowed to it. The note then said so
 // as a card above the rows in the link colour, which readers pressed by reflex; it is now one quiet line, no link colour.
 import "@intentic/testing/dom";
-import { type App, computed, createApp, h, nextTick, ref } from "vue";
+import type { Tip } from "@intentic/ui";
+import { type App, computed, createApp, type DirectiveBinding, h, nextTick, ref } from "vue";
 
 const scope = ref(``);
 jest.mock(`../../../../app/workspaceScope`, () => ({ workspaceDir: computed(() => scope.value) }));
@@ -12,10 +13,17 @@ jest.mock(`../../../../app/projectScope`, () => ({ setProjectScope: (project: st
 const { default: WorkspaceScopeNote } = await import("../WorkspaceScopeNote.vue");
 
 let app: App | undefined;
+// The line's hover card as the tooltip directive is handed it: where the whole sentence the line used to spell now lives.
+let hint: Tip | undefined;
 const mount = async (): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(WorkspaceScopeNote) });
+    app.directive(`tooltip`, {
+        mounted: (_el: HTMLElement, binding: DirectiveBinding<Tip>) => {
+            hint = binding.value;
+        },
+    });
     app.mount(el);
     await nextTick();
     return el;
@@ -23,6 +31,7 @@ const mount = async (): Promise<HTMLElement> => {
 
 afterEach(() => {
     scope.value = ``;
+    hint = undefined;
     setProjectScope.mockReset();
     app?.unmount();
     app = undefined;
@@ -34,6 +43,11 @@ it(`says the tree shows one project only, and lifts it on a press`, async () => 
     const el = await mount();
 
     expect(el.textContent).toContain(`cerberus only`);
+    expect(hint).toEqual({
+        title: `One project open`,
+        rows: [{ label: `Project`, value: `cerberus` }],
+        note: `Files, agents and checks show this project only.`,
+    });
     const button = el.querySelector(`button`);
     expect(button?.textContent?.trim()).toBe(`Show all`);
     button?.click();
