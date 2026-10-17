@@ -4951,8 +4951,14 @@
             "data": "Données",
             "keybindings": "Raccourcis clavier",
             "profile": "Profil",
-            "tokens": "Jetons",
-            "voice": "Voix"
+            "tokens": "Jetons d'API",
+            "voice": "Voix",
+            "notificationsVoice": "Notifications et voix"
+        },
+        "group": {
+            "account": "Compte",
+            "preferences": "Préférences",
+            "developer": "Développeur"
         },
         "settingsBilling": {
             "activating": "Activation…",

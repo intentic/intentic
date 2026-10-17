@@ -22,6 +22,7 @@ jest.mock(`./SettingsAppearance.vue`, () => stub(`appearance`));
 jest.mock(`./SettingsNotifications.vue`, () => stub(`notifications`));
 jest.mock(`./SettingsKeybindings.vue`, () => stub(`keybindings`));
 jest.mock(`./SettingsData.vue`, () => stub(`data`));
+jest.mock(`./SettingsVoice.vue`, () => stub(`voice`));
 
 const { default: SettingsHub } = await import("./SettingsHub.vue");
 

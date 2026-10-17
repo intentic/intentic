@@ -60,6 +60,8 @@ it(`registers one destination per sandbox section and per settings section`, () 
     for (const section of settingsSections(true)) {
         expect(ids(), `Settings ▸ ${section.label} has no command`).toContain(`view.settings.${section.slug}`);
     }
+    // A page drawn at the foot of another keeps its own name: "Voice" still finds the wake word.
+    expect(commands.value.find((entry) => entry.command === `view.settings.voice`)).toMatchObject({ category: `Settings`, title: `Voice` });
     app.unmount();
 });
 

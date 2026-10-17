@@ -9244,9 +9244,15 @@
             "keybindings": "Skróty klawiszowe",
             "notifications": "Powiadomienia",
             "profile": "Profil",
-            "tokens": "Tokeny",
+            "tokens": "Tokeny API",
             "voice": "Głos",
-            "organisation": "Organizacja"
+            "organisation": "Organizacja",
+            "notificationsVoice": "Powiadomienia i głos"
+        },
+        "group": {
+            "account": "Konto",
+            "preferences": "Preferencje",
+            "developer": "Dla programistów"
         },
         "settingsBilling": {
             "activating": "Aktywowanie…",

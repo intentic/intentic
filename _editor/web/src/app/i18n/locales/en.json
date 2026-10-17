@@ -9665,12 +9665,18 @@
             "appearance": "Appearance",
             "billing": "Billing",
             "data": "Data",
-            "keybindings": "Keybindings",
+            "keybindings": "Keyboard shortcuts",
             "notifications": "Notifications",
             "profile": "Profile",
-            "tokens": "Tokens",
+            "tokens": "API tokens",
             "voice": "Voice",
-            "organisation": "Organisation"
+            "organisation": "Organisation",
+            "notificationsVoice": "Notifications & voice"
+        },
+        "group": {
+            "account": "Account",
+            "preferences": "Preferences",
+            "developer": "Developer"
         },
         "settingsBilling": {
             "activating": "Activating…",

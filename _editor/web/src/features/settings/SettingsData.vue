@@ -11,6 +11,7 @@ import { useAuth } from "../../client/auth/useAuth";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useOperation } from "../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
+import { settingsPartPath } from "./settingsNav";
 
 const t = useT();
 
@@ -35,7 +36,7 @@ const deleteInWorkspace = async (): Promise<void> => {
         failed: t(`settings.settingsData.workspaceNotOpened`),
         // The workspace window opening is the answer.
         quiet: true,
-        task: () => localHost().openWorkspace(`/settings/data`),
+        task: () => localHost().openWorkspace(settingsPartPath(`data`)),
     });
 };
 

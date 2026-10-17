@@ -4954,7 +4954,13 @@
             "keybindings": "Tastenkürzel",
             "notifications": "Benachrichtigungen",
             "profile": "Profil",
-            "voice": "Stimme"
+            "voice": "Stimme",
+            "notificationsVoice": "Benachrichtigungen & Stimme"
+        },
+        "group": {
+            "account": "Konto",
+            "preferences": "Präferenzen",
+            "developer": "Entwickler"
         },
         "settingsBilling": {
             "activating": "Wird aktiviert…",

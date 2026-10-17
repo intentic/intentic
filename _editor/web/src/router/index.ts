@@ -27,6 +27,7 @@ import { retryOnEntry } from "../client/auth/platformRetry";
 import { arriveOnSandbox, type SandboxArrivalRoute } from "./sandboxArrival";
 import { openOnProject } from "../app/projectScope";
 import { setupRedirect } from "./setupGate";
+import { SETTINGS_DEFAULT_SECTION, settingsPartHosts } from "../features/settings/settingsNav";
 import { normalizeDaemonUrl } from "../lib/daemonUrl";
 import { ownsMissingSandboxes } from "../client/directory/deviceDirectory";
 import { signInAt } from "../lib/routes/signIn";
@@ -403,6 +404,7 @@ const routes: RouteRecordRaw[] = [
             // The sandbox's own desktop was a view of its own until it became a tab of Browsers (2026-10-08).
             { path: `desktop`, redirect: browsersPath({ kind: `desktop` }) },
             { path: `ext/:ext/:key?`, name: `extension`, component: asyncView(() => import(`../features/extensions/ExtensionHost.vue`)) },
+            ...settingsPartRoutes(),
             {
                 path: `settings/:tab?`,
                 name: `settings`,
@@ -489,6 +491,7 @@ const localRoutes = (): RouteRecordRaw[] => [
                     component: asyncView(view.load),
                 }),
             ),
+            ...settingsPartRoutes(),
             {
                 path: `settings/:tab?`,
                 name: `settings`,
@@ -500,6 +503,15 @@ const localRoutes = (): RouteRecordRaw[] => [
     },
     { path: `/:pathMatch(.*)*`, redirect: `/workspace` },
 ];
+
+// Voice and Data were Settings rows of their own until 2026-10-17; each is drawn at the foot of another section now
+// (settingsNav.ts `within`), so its old address opens that section at the part's anchor.
+function settingsPartRoutes(): RouteRecordRaw[] {
+    return settingsPartHosts().map(({ part, host }) => ({
+        path: `settings/${part}`,
+        redirect: (to) => ({ name: `settings`, params: { tab: host === SETTINGS_DEFAULT_SECTION ? undefined : host }, query: to.query, hash: `#${part}` }),
+    }));
+}
 
 export const router = createRouter({
     // The build's own base, not vue-router's default (`<base href>` or `/`): otherwise a path-prefixed build resolves

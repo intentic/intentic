@@ -12,7 +12,7 @@ import { sandboxKeyAllowed, sandboxSectionPath, sandboxSections } from "../../mo
 import { useRole } from "../../client/sandbox/useRole";
 import { useOrgPolicy } from "../../features/organisations/useOrgPolicy";
 import { useHostedPlan } from "../../models/hosted-plan/useHostedPlan";
-import { settingsSectionPath, settingsSections } from "../../features/settings/settingsNav";
+import { settingsDestinations } from "../../features/settings/settingsNav";
 import { GO_TO, SANDBOX, SETTINGS } from "../../workbench/commands/categories";
 import { registerCommand } from "../../workbench/commands/useCommands";
 import { t } from "@intentic/ui/i18n";
@@ -115,13 +115,13 @@ export function useNavigationCommands(): void {
         { command: `sandbox.add`, title: t(`shell.useNavigationCommands.add`), category: SANDBOX, icon: `plus`, to: `/setup` },
     ]);
 
-    const settingsDestinations = computed<readonly NavCommand[]>(() =>
-        settingsSections(planOffered.value).map((section) => ({
-            command: `view.settings.${section.slug}`,
-            title: section.label,
+    const settingsPlaces = computed<readonly NavCommand[]>(() =>
+        settingsDestinations(planOffered.value).map((place) => ({
+            command: `view.settings.${place.slug}`,
+            title: place.label,
             category: SETTINGS,
-            icon: section.icon,
-            to: settingsSectionPath(section.slug),
+            icon: place.icon,
+            to: place.path,
         })),
     );
 
@@ -129,7 +129,7 @@ export function useNavigationCommands(): void {
         ...shellSections.value,
         ...extensionSections.value,
         ...sandboxDestinations.value,
-        ...settingsDestinations.value,
+        ...settingsPlaces.value,
     ]);
 
     let disposables: readonly Disposable[] = [];

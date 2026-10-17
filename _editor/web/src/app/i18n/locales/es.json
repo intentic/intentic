@@ -4973,7 +4973,13 @@
             "keybindings": "Atajos de teclado",
             "notifications": "Notificaciones",
             "profile": "Perfil",
-            "voice": "Voz"
+            "voice": "Voz",
+            "notificationsVoice": "Notificaciones y voz"
+        },
+        "group": {
+            "account": "Cuenta",
+            "preferences": "Preferencias",
+            "developer": "Desarrollo"
         },
         "settingsBilling": {
             "activating": "Activando…",
