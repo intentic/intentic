@@ -228,7 +228,8 @@
         "sandboxRestartsOntoNewest": "El sandbox se reinicia sobre la imagen más reciente y no está disponible mientras eso ocurre: segundos si la actualización ya está descargada, unos minutos si no. Sus archivos se conservan."
     },
     "searchBar": {
-        "matchCase": "Distinguir mayúsculas"
+        "matchCase": "Distinguir mayúsculas",
+        "search": "Buscar"
     },
     "stepSection": {
         "done": "{title}: listo"

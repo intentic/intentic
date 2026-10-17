@@ -321,7 +321,8 @@
     },
     "searchBar": {
         "aa": "Aa",
-        "matchCase": "Match case"
+        "matchCase": "Match case",
+        "search": "Search"
     },
     "stepSection": {
         "done": "{title}: done"

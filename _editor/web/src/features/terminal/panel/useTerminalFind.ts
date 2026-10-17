@@ -24,7 +24,8 @@ export interface TerminalFindHost {
 export const useTerminalFind = ({ activeName, sessionOf }: TerminalFindHost) => {
     const finding = ref(false);
     const findQuery = ref(``);
-    const findInput = ref<HTMLInputElement>();
+    // The find bar's field (a SearchBar), which takes the caret with the last query selected so typing replaces it.
+    const findInput = ref<{ focus: (select?: boolean) => void }>();
     // Undefined until a query has run.
     const findResults = ref<{ index: number; count: number } | undefined>(undefined);
     // The session whose highlights are up and whose results are bound, so a tab switch clears one before painting the next.
@@ -78,8 +79,7 @@ export const useTerminalFind = ({ activeName, sessionOf }: TerminalFindHost) => 
         }
         finding.value = true;
         void nextTick(() => {
-            findInput.value?.focus();
-            findInput.value?.select();
+            findInput.value?.focus(true);
         });
         if (findQuery.value !== ``) {
             runFind(true);

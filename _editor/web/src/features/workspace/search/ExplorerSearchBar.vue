@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ContextMenu, Icon, SegmentedControl, type Tip, ui } from "@intentic/ui";
+import { ContextMenu, Icon, SearchBar, SegmentedControl, type Tip } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, ref } from "vue";
+import { computed, ref, useTemplateRef } from "vue";
 import { useAudience } from "../../../app/useAudience";
 import { folderSurface } from "../../../client/sandbox/useDaemonRoutes";
 import { matchToggles } from "../../../models/workspace/search/useSearchOptions";
@@ -93,81 +93,56 @@ const includeTip = computed(
     }),
 );
 
-const input = ref<HTMLInputElement>();
+const bar = useTemplateRef<InstanceType<typeof SearchBar>>(`bar`);
 defineExpose({
     // Into the field with what it holds selected, so typing replaces the last query.
-    focus: (): void => {
-        input.value?.focus();
-        input.value?.select();
-    },
+    focus: (): void => bar.value?.focus(true),
 });
 </script>
 
 <template>
     <!-- One `filter` across three scopes; the Aa/ab/.* switches apply only to the text scope, which has a pattern. -->
-    <div class="flex shrink-0 flex-col gap-1 p-1.5">
-        <div class="relative">
-            <Icon
-                class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-2xs text-subtle"
-                aria-hidden="true"
-                :name="contentMode && (search.results.searching.value || search.results.pending.value) ? `spinner` : `search`"
-                :spin="contentMode && (search.results.searching.value || search.results.pending.value)"
-            />
-            <input
-                ref="input"
-                v-model="filter"
-                type="text"
-                :placeholder="contentMode ? t(`workspace.words.searchInFiles`) : t(`workspace.workspaceDesktop.filterFiles`)"
-                :aria-label="contentMode ? t(`workspace.words.searchInFiles`) : t(`workspace.workspaceDesktop.filterFiles`)"
-                class="ui-field-box ui-field-sm w-full min-w-0 pl-7"
-                :class="textMode ? `pr-[4.75rem]` : `pr-7`"
-                @keydown.esc="clear"
-                @keydown.enter.prevent="emit(`submit`)"
-            />
-            <div class="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
-                <!-- Same three switches, same order, as the editor this models. -->
-                <template v-if="textMode">
-                    <button
-                        v-for="toggle in matchToggles()"
-                        :key="toggle.label"
-                        type="button"
-                        :class="
-                            ui.iconButton({ size: `xs`, tone: `subtle` }, `font-mono text-3xs leading-none`, toggle.state.value ? `bg-primary-600/20 text-link` : ``)
-                        "
-                        :aria-pressed="toggle.state.value"
-                        v-tooltip.bottom="toggle.title"
-                        :aria-label="toggle.title"
-                        @mousedown.prevent
-                        @click="toggle.state.value = !toggle.state.value"
-                    >
-                        {{ toggle.label }}
-                    </button>
-                </template>
+    <div class="flex shrink-0 flex-col gap-1.5 p-1.5">
+        <SearchBar
+            ref="bar"
+            v-model="filter"
+            variant="field"
+            dense
+            clearable
+            :busy="contentMode && (search.results.searching.value || search.results.pending.value)"
+            :placeholder="contentMode ? t(`workspace.words.searchInFiles`) : t(`workspace.workspaceDesktop.filterFiles`)"
+            :aria-label="contentMode ? t(`workspace.words.searchInFiles`) : t(`workspace.workspaceDesktop.filterFiles`)"
+            @clear="clear"
+            @keydown.enter.prevent="emit(`submit`)"
+        >
+            <!-- Same three switches, same order, as the editor this models. -->
+            <template v-if="textMode" #controls>
                 <button
-                    v-if="filter"
+                    v-for="toggle in matchToggles()"
+                    :key="toggle.label"
                     type="button"
-                    class="flex items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                    v-tooltip.bottom="{ title: t(`ui.action.clear`), keys: t(`ui.keys.esc`) }"
-                    :aria-label="t(`ui.action.clearFilter`)"
-                    @click="clear"
+                    class="ui-search-toggle"
+                    :aria-pressed="toggle.state.value"
+                    v-tooltip.bottom="toggle.title"
+                    :aria-label="toggle.title"
+                    @click="toggle.state.value = !toggle.state.value"
                 >
-                    <Icon name="times" />
+                    {{ toggle.label }}
                 </button>
-            </div>
-        </div>
+            </template>
+        </SearchBar>
         <!-- Files-to-include glob (VSCode grammar), its own field since it's typed, not toggled; content search only. -->
-        <div v-if="contentMode" class="relative">
-            <Icon class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-2xs text-subtle" aria-hidden="true" name="folder" />
-            <input
-                v-model="options.include.value"
-                type="text"
-                :placeholder="t(`workspace.words.filesToIncludeE`)"
-                class="ui-field-box ui-field-sm w-full min-w-0 pr-2 pl-7"
-                :aria-label="t(`workspace.words.filesToInclude`)"
-                v-tooltip.bottom="includeTip"
-                @keydown.esc="options.include.value = ``"
-            />
-        </div>
+        <SearchBar
+            v-if="contentMode"
+            v-model="options.include.value"
+            variant="field"
+            dense
+            clearable
+            icon="folder"
+            :placeholder="t(`workspace.words.filesToIncludeE`)"
+            :aria-label="t(`workspace.words.filesToInclude`)"
+            v-tooltip.bottom="includeTip"
+        />
         <div class="flex items-center gap-1">
             <SegmentedControl v-model="scope" size="xs" :options="scopes" />
             <span class="flex-1"></span>

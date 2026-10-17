@@ -9,14 +9,14 @@ const t = useT();
 const {
     placeholder,
     busy = false,
-    clearable = false,
+    clearable = true,
 } = defineProps<{
     placeholder?: string;
     /** Shown at the field's trailing edge while a query is active: "how much did I just narrow this to". */
     count?: number;
     /** The answer is in flight: for a bar whose list is fetched rather than filtered in the page. */
     busy?: boolean;
-    /** Offer a clear affordance, and let Escape take the query back. */
+    /** Offer a clear affordance, and let Escape take the query back. On unless a caller's own Escape means something else. */
     clearable?: boolean;
     /** Names the field for assistive tech, where "Filter…" in a placeholder does not say WHAT is being filtered. */
     ariaLabel?: string;
@@ -28,18 +28,17 @@ const query = defineModel<string>({ required: true });
 <template>
     <div class="flex flex-wrap items-center gap-2">
         <!-- 14rem before the controls beside it wrap to a line of their own: narrower, a phone's 16px field showed "Name, publishe…" of its placeholder and none of what was typed past it. -->
-        <div class="ui-search-row flex h-8 min-w-[min(100%,14rem)] flex-1 items-center overflow-hidden rounded-md border border-line bg-canvas">
-            <SearchBar
-                v-model="query"
-                :placeholder="placeholder ?? t(`ui.action.filter`)"
-                :busy="busy"
-                :clearable="clearable"
-                :aria-label="ariaLabel"
-                class="min-w-0 flex-1 border-b-0"
-            />
-            <span v-if="count !== undefined && query.trim() !== ``" class="shrink-0 pr-2.5 text-2xs tabular-nums text-subtle">{{ count }}</span>
-        </div>
-        <div v-if="$slots[`controls`]" class="flex h-8 items-center gap-2 rounded-md border border-line bg-canvas px-1">
+        <SearchBar
+            v-model="query"
+            variant="field"
+            :placeholder="placeholder ?? t(`ui.action.filter`)"
+            :busy="busy"
+            :clearable="clearable"
+            :count="count"
+            :aria-label="ariaLabel"
+            class="min-w-[min(100%,14rem)] flex-1"
+        />
+        <div v-if="$slots[`controls`]" class="flex h-8 items-center gap-1 rounded-md bg-content/[0.055] px-1 max-md:h-10">
             <slot name="controls" />
         </div>
         <slot name="actions" />

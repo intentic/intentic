@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ui, CopyButton, Icon, Notice, noticeOf } from "@intentic/extension-ui";
+import { Button, ui, CopyButton, Icon, Notice, noticeOf, SearchBar } from "@intentic/extension-ui";
 import { computed, nextTick, ref } from "vue";
 import AutomationFields from "./AutomationFields.vue";
 import { host } from "./host";
@@ -57,7 +57,7 @@ const template = computed(() =>
 // doesn't push the fields down the page.
 const recipesOpen = ref(false);
 const recipeFilter = ref(``);
-const recipeFilterInput = ref<HTMLInputElement>();
+const recipeFilterInput = ref<InstanceType<typeof SearchBar>>();
 // After creating an event or Visitor chat automation the panel stays on this id to show what to paste.
 const savedId = ref<string | undefined>(undefined);
 const submitError = ref<string | undefined>(undefined);
@@ -188,11 +188,14 @@ const finish = (id: string): void => {
                     class="absolute right-0 top-full z-20 mt-1.5 flex w-pop-lg flex-col gap-2 rounded-lg border border-line-strong bg-canvas p-2 shadow-2xl"
                     @keydown.escape.stop.prevent="recipesOpen = false"
                 >
-                    <input
+                    <SearchBar
                         ref="recipeFilterInput"
                         v-model="recipeFilter"
+                        variant="field"
+                        dense
+                        clearable
                         :placeholder="t(`automationComposer.filterTemplates`)"
-                        :class="ui.input({ size: `sm` })"
+                        :aria-label="t(`automationComposer.filterTemplates`)"
                         @keydown.enter.prevent="pickFirstMatch"
                     />
                     <div class="@container flex max-h-panel flex-col gap-2 overflow-y-auto">

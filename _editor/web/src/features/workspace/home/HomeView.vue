@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
-import { ContextMenu, formatCount, SegmentedControl, SkeletonSnapshot, useHoverIntent, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
+import { ContextMenu, formatCount, SearchBar, SegmentedControl, SkeletonSnapshot, useHoverIntent, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { localFace } from "../../../app/environments/local";
@@ -78,6 +78,10 @@ const results = computed(() => {
           )
         : nameMatches(query.value, homeDir.value, children.value ?? [], (folder) => listingOf(folder.path), shows);
 });
+// How many tiles the query found, said inside the field; a capped count says it is one.
+const resultCount = computed(() =>
+    querying.value && !searching.value ? `${formatCount(results.value.length)}${results.value.length >= RESULTS_CAP ? `+` : ``}` : undefined,
+);
 // The folder each result sits in, for the line under its name; "" (the open folder itself) draws nothing.
 const whereByPath = computed(() => new Map(results.value.map((result) => [result.entry.path, result.where])));
 const clearQuery = (): void => {
@@ -91,13 +95,10 @@ const placeholder = computed(() =>
           ? t(`workspace.homeView.smartSearch`)
           : t(`workspace.homeView.filterNames`),
 );
-const queryField = ref<HTMLInputElement>();
-// The field owns its keys; Escape hands the home back, Enter lands on the first result so the next Enter opens it.
+const queryField = ref<InstanceType<typeof SearchBar>>();
+// The field owns its keys; Escape (the field's own clear) hands the home back, Enter lands on the first result so the
+// next Enter opens it.
 const onFieldKey = (event: KeyboardEvent): void => {
-    if (event.key === `Escape`) {
-        clearQuery();
-        return;
-    }
     if (event.key === `Enter`) {
         void focusTile(0);
     }
@@ -532,38 +533,24 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     :aria-label="t(`workspace.homeView.groupFiles`)"
                     @click.stop
                 />
-                <span v-if="search !== undefined && querying && !searching" class="text-2xs tabular-nums text-subtle"
-                    >{{ formatCount(results.length) }}{{ results.length >= RESULTS_CAP ? "+" : "" }}</span
-                >
-                <!-- The sidebar's query, here too; the placeholder names the scope the sidebar set, since it may be closed. -->
-                <div v-if="search !== undefined" class="relative">
-                    <Icon
-                        class="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-2xs text-subtle"
-                        aria-hidden="true"
-                        :name="searching ? `spinner` : `search`"
-                        :spin="searching"
-                    />
-                    <input
+                <!-- The sidebar's query, here too; the placeholder names the scope the sidebar set, since it may be closed. The
+                     wrapper keeps a press on the field's box from reaching the tiles' own click and context menu. -->
+                <span v-if="search !== undefined" class="contents" @click.stop @contextmenu.stop>
+                    <SearchBar
                         ref="queryField"
                         v-model="query"
-                        type="text"
+                        variant="field"
+                        dense
+                        clearable
+                        :busy="searching"
+                        :count="resultCount"
                         :placeholder="placeholder"
                         :aria-label="placeholder"
-                        class="ui-field-box ui-field-sm w-44 min-w-0 pr-6 pl-7"
+                        class="w-52"
                         @keydown.stop="onFieldKey"
-                        @click.stop
-                        @contextmenu.stop
+                        @clear="clearQuery"
                     />
-                    <button
-                        v-if="query"
-                        type="button"
-                        class="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                        :aria-label="t(`ui.action.clearFilter`)"
-                        @click.stop="clearQuery"
-                    >
-                        <Icon name="times" />
-                    </button>
-                </div>
+                </span>
             </div>
             <HomeCoverPicker :cover="cover" :class="covering ? `ml-auto` : `ml-2`" @choose="showCover" @drop="dropCover" />
         </nav>

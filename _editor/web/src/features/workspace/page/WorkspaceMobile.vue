@@ -10,6 +10,7 @@ import {
     type NoticeModel,
     NoticeStack,
     PullToRefresh,
+    SearchBar,
     SegmentedControl,
     SkeletonSnapshot,
     toneHover,
@@ -433,21 +434,16 @@ const onPick = (event: Event): void => {
             <template v-else>
                 <!-- Search: name filters the current directory instantly; content searches the daemon. -->
                 <div class="flex shrink-0 items-center gap-1.5 px-2 py-1.5">
-                    <div class="relative min-w-0 flex-1">
-                        <Icon
-                            class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-2xs text-subtle"
-                            aria-hidden="true"
-                            :name="contentMode && (searching || searchPending) ? `spinner` : `search`"
-                            :spin="contentMode && (searching || searchPending)"
-                        />
-                        <input
-                            v-model="filter"
-                            type="search"
-                            :placeholder="contentMode ? t(`workspace.words.searchInFiles`) : t(`ui.action.filter`)"
-                            class="ui-field-box w-full min-w-0 pl-8 pr-3"
-                            @keydown.esc="clearFilter"
-                        />
-                    </div>
+                    <SearchBar
+                        v-model="filter"
+                        variant="field"
+                        clearable
+                        :busy="contentMode && (searching || searchPending)"
+                        :placeholder="contentMode ? t(`workspace.words.searchInFiles`) : t(`ui.action.filter`)"
+                        :aria-label="contentMode ? t(`workspace.words.searchInFiles`) : t(`ui.action.filter`)"
+                        class="min-w-0 flex-1"
+                        @clear="clearFilter"
+                    />
                     <SegmentedControl
                         v-model="searchScope"
                         size="xs"
@@ -460,20 +456,14 @@ const onPick = (event: Event): void => {
                 </div>
                 <!-- Files-to-include glob (VSCode grammar), the desktop field's twin, full width: a phone row is the only room. -->
                 <div v-if="contentMode" class="shrink-0 px-2 pb-1.5">
-                    <div class="relative">
-                        <Icon
-                            class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-2xs text-subtle"
-                            aria-hidden="true"
-                            name="folder"
-                        />
-                        <input
-                            v-model="search.include.value"
-                            type="search"
-                            :placeholder="t(`workspace.words.filesToIncludeE`)"
-                            :aria-label="t(`workspace.words.filesToInclude`)"
-                            class="ui-field-box w-full min-w-0 pl-8 pr-3"
-                        />
-                    </div>
+                    <SearchBar
+                        v-model="search.include.value"
+                        variant="field"
+                        clearable
+                        icon="folder"
+                        :placeholder="t(`workspace.words.filesToIncludeE`)"
+                        :aria-label="t(`workspace.words.filesToInclude`)"
+                    />
                 </div>
                 <!-- Same switches as the desktop field: the three change what a pattern means, Ignored changes what's searched. -->
                 <div v-if="contentMode" class="flex shrink-0 items-center gap-1.5 px-2 pb-1.5">

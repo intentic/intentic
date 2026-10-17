@@ -65,4 +65,12 @@
         outline: 2px solid var(--color-primary-500);
         outline-offset: -2px;
     }
+
+/* FOCUS GIVEN FOR A SCREEN READER, NOT FOR THE EYE: a region a script moves the caret to (a search answer's card, which
+   is not a control and is never on the tab order) so assistive tech lands where the page just took the reader. What it
+   shows instead is the "here it is" glow (motion/flash.ts), which fades; a ring left standing round it read as a stray
+   box drawn over the page. */
+    [data-quiet-focus]:focus-visible {
+        outline: none;
+    }
 }

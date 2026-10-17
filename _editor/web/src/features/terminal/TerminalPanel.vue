@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ContextMenu, EmptyState, formatCount, Icon, Modal, ResizeSeam, type Tip, toneTint, ui, useDevice } from "@intentic/ui";
+import { Button, ContextMenu, EmptyState, formatCount, Icon, Modal, ResizeSeam, SearchBar, type Tip, toneTint, ui, useDevice } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -282,14 +282,14 @@ watch(
                 class="absolute top-1 right-4 z-10 flex items-center gap-1 rounded-md border border-line bg-card px-1.5 py-1 shadow-md"
                 @keydown.esc.prevent="closeFind"
             >
-                <Icon name="search" class="text-2xs text-muted" />
-                <input
+                <SearchBar
                     ref="findInput"
                     v-model="findQuery"
-                    type="text"
+                    variant="field"
+                    dense
                     :placeholder="t(`terminal.terminalPanel.find`)"
                     :aria-label="t(`terminal.terminalPanel.findInTerminal`)"
-                    class="ui-field-box ui-field-sm w-44"
+                    class="w-52"
                     @input="runFind(true)"
                     @keydown.enter.exact.prevent="findNext"
                     @keydown.shift.enter.prevent="findPrevious"

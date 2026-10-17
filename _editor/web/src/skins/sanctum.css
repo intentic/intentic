@@ -284,21 +284,48 @@
 /* Picker triggers are fields even when rendered as buttons. */
     [data-skin="sanctum"] button:not(.ui-field-box):focus-visible,
     [data-skin="sanctum"] a:focus-visible,
-    [data-skin="sanctum"] [tabindex]:focus-visible {
+    [data-skin="sanctum"] [tabindex]:not([data-quiet-focus]):focus-visible {
         outline: 2px solid var(--sanctum-gold);
         outline-offset: -2px;
         box-shadow: inset 0 0 0 1px rgba(229, 196, 137, 0.3);
     }
 
-    /* Search bands span the panel as one recessed channel. */
-    [data-skin="sanctum"] .ui-search-row {
+    /* A search is a channel cut into the stone: the field a rounded recess with a faint rim, the band one channel across its panel. */
+    [data-skin="sanctum"] .ui-search {
+        --ui-search-fill: var(--sanctum-cut);
+        --ui-search-fill-hover: color-mix(in oklab, var(--sanctum-gold) 4%, var(--sanctum-cut));
+        --ui-search-fill-focus: color-mix(in oklab, var(--sanctum-gold) 8%, var(--sanctum-cut));
+        border-color: var(--sanctum-rule);
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+    }
+
+    [data-skin="sanctum"] .ui-search:hover {
+        border-color: var(--sanctum-rule-strong);
+    }
+
+    [data-skin="sanctum"] .ui-search-band {
         background-color: var(--sanctum-cut);
         box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
     }
-/* FOCUS IS THE CHANNEL WARMING, not a line under it. */
-    [data-skin="sanctum"] .ui-search-row:focus-within {
-        background-color: color-mix(in oklab, var(--sanctum-gold) 9%, var(--sanctum-cut));
-        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+
+/* FOCUS IS THE CHANNEL WARMING and its rim catching the light, not a line under it. */
+    [data-skin="sanctum"] .ui-search:focus-within {
+        border-color: color-mix(in oklab, var(--sanctum-gold) 70%, transparent);
+    }
+
+    [data-skin="sanctum"] .ui-search-band:focus-within {
+        background-color: color-mix(in oklab, var(--sanctum-gold) 6%, var(--sanctum-cut));
+    }
+
+    [data-skin="sanctum"] .ui-search:focus-within .ui-search-icon,
+    [data-skin="sanctum"] .ui-search-band:focus-within .ui-search-icon {
+        color: var(--sanctum-gold);
+    }
+
+    [data-skin="sanctum"] .ui-keycap {
+        border-color: var(--sanctum-rule-strong);
+        background-color: color-mix(in oklab, var(--sanctum-gold) 6%, var(--color-card));
+        color: color-mix(in oklab, var(--sanctum-gold) 70%, var(--color-muted));
     }
 
 /* A BUTTON IS A CUT PLATE, AND IT HAS TO LOOK CUT. */

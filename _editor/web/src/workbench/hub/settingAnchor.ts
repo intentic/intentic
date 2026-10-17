@@ -4,11 +4,15 @@ import { flashElement, lessMotion } from "@intentic/ui/motion";
 // carries `data-setting="<id>"` in its page's template. The router's own scroll cannot do the landing: a hub page reads
 // its settings before it draws its cards, and a page's category (`?section=`) swaps which cards are drawn at all, so the
 // card is usually not there yet when the route settles. This waits for it, a bounded while, then brings it to the middle
-// of the pane, rings it (the app's "here it is" ring, @intentic/ui/motion flash.ts) and gives it focus, so a screen
-// reader lands where the eye does.
+// of the pane, lights it (the app's "here it is" glow, @intentic/ui/motion flash.ts) and gives it focus, so a screen
+// reader lands where the eye does. That focus is QUIET (`data-quiet-focus`, base.css): the glow is what the eye is shown,
+// and a focus ring left standing round a card that is not a control read as a stray box drawn over the page.
 
 /** The attribute a card is marked with; a plain attribute, so it rides any element and any component's root. */
 export const SETTING_ATTRIBUTE = `data-setting`;
+// Focus given for assistive tech, drawn without a ring (base.css): only on a card this module made focusable, never on
+// one that is a control of its own and keeps the ring a keyboard user steers by.
+const QUIET_FOCUS = `data-quiet-focus`;
 
 // Long enough for a page to read its settings over a slow link, short enough that a card this reader is not drawn
 // (a stale link) does not leave a watcher behind for the rest of the visit.
@@ -18,8 +22,7 @@ const ARRIVAL_DEADLINE_MS = 4_000;
 const findSetting = (id: string): HTMLElement | null => document.querySelector<HTMLElement>(`[${SETTING_ATTRIBUTE}="${id}"]`);
 
 // A card's rounded surface rather than the card's whole box: a <RowGroup>'s root holds its label above the surface, and a
-// square ring round both reads as a box drawn round two things. A headline row, or a card with no surface, is ringed as
-// it stands.
+// glow round both reads as a box drawn round two things. A headline row, or a card with no surface, is lit as it stands.
 const ringOf = (card: HTMLElement): HTMLElement => card.querySelector<HTMLElement>(`:scope > .rounded-xl`) ?? card;
 
 // How long a landed card is kept in view while its page settles. A hub page draws its cards as each one's read answers,
@@ -62,7 +65,7 @@ const bringIntoView = (card: HTMLElement, scroller: Element, behavior: ScrollBeh
 };
 
 // Brings the card back into view each frame its place moves, until the page has settled or the reader takes over:
-// a reader who has started scrolling has said where they want to be. The ring starts again where the card comes back to,
+// a reader who has started scrolling has said where they want to be. The glow starts again where the card comes back to,
 // since the one it had played out where nobody could see it.
 const holdInView = (card: HTMLElement, scroller: Element): void => {
     let place = placeIn(card, scroller);
@@ -98,6 +101,7 @@ const land = (card: HTMLElement): void => {
     // and without one of its own, so the scroll below is the only one.
     if (!card.hasAttribute(`tabindex`)) {
         card.setAttribute(`tabindex`, `-1`);
+        card.setAttribute(QUIET_FOCUS, ``);
     }
     card.focus({ preventScroll: true });
     const scroller = scrollerOf(card);

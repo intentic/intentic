@@ -321,7 +321,8 @@
     },
     "searchBar": {
         "aa": "Aa",
-        "matchCase": "Uwzględniaj wielkość liter"
+        "matchCase": "Uwzględniaj wielkość liter",
+        "search": "Szukaj"
     },
     "stepSection": {
         "done": "{title}: gotowe"

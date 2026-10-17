@@ -1,6 +1,6 @@
 <!-- The cover control: a button offering a file name to read in every folder, or, once one is chosen, a chip naming it (on the home), or the same button lit (in the explorer's toolbar). -->
 <script setup lang="ts">
-import { type IconName, iconForEntry, ResponsiveOverlay, type Tip, ui, useListNavigation } from "@intentic/ui";
+import { type IconName, iconForEntry, ResponsiveOverlay, SearchBar, type Tip, ui, useListNavigation } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, ref, watch } from "vue";
 import { useLayout } from "../../../workbench/window/useLayout";
@@ -26,7 +26,7 @@ const layout = useLayout();
 
 const open = ref(false);
 const anchor = ref<HTMLElement>();
-const field = ref<HTMLInputElement>();
+const field = ref<InstanceType<typeof SearchBar>>();
 const query = ref(``);
 
 // Enough to show what a codebase is made of without scrolling; typing reaches the rest.
@@ -167,15 +167,13 @@ const onFieldKey = (event: KeyboardEvent): void => {
         </span>
 
         <ResponsiveOverlay v-model="open" :anchor="anchor" side="bottom" cross="end" :header="t(`workspace.homeCover.choose`)" panel-class="w-72 p-1">
-            <input
+            <SearchBar
                 ref="field"
                 v-model="query"
-                type="text"
+                variant="field"
+                dense
                 :placeholder="t(`workspace.homeCover.typeName`)"
                 :aria-label="t(`workspace.homeCover.typeName`)"
-                class="ui-field-box ui-field-sm w-full"
-                spellcheck="false"
-                autocomplete="off"
                 @keydown="onFieldKey"
             />
             <p class="px-2 pt-2 pb-1 text-2xs text-subtle">{{ t(`workspace.homeCover.choose`) }}</p>

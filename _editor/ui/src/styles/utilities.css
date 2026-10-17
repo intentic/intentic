@@ -287,19 +287,142 @@
     }
 }
 
-/* Search rows share the filter-field layout. */
+/* THE SEARCH FIELD (SearchBar.vue), in its two dresses. A search is not a form field: it is the first thing on a column or
+   a popover, read before anything in the list below it, and a framed white box there is the loudest thing on screen. So
+   it is a SOFT FILLED TROUGH at rest, with no edge to draw; it becomes the brightest surface on the page, with one crisp
+   accent edge, only while it has the caret. No ring is painted outside the border box (a column clips it) and no thick
+   inset band crowds the words: the edge is one pixel, and the change of ground says the rest. */
 @layer components {
-    .ui-search-row {
-        transition: background-color var(--motion-hover);
+    .ui-search {
+        --ui-search-fill: color-mix(in srgb, var(--color-content) 5.5%, transparent);
+        --ui-search-fill-hover: color-mix(in srgb, var(--color-content) 8%, transparent);
+        --ui-search-fill-focus: var(--color-card);
+        --ui-search-edge-focus: var(--ui-field-focus-line);
+        border: 1px solid transparent;
+        border-radius: var(--radius-md);
+        background-color: var(--ui-search-fill);
+        cursor: text;
+        transition:
+            background-color var(--motion-hover),
+            border-color var(--motion-hover),
+            box-shadow var(--motion-hover);
     }
 
-    .ui-search-row:focus-within {
-        background-color: color-mix(in srgb, var(--color-primary-500) 8%, transparent);
+    .ui-search:hover {
+        background-color: var(--ui-search-fill-hover);
     }
 
-/* A row inside a row is one assembly, so only the outer one takes the tint: FilterBar wraps the bar in a box that also holds the result count. */
-    .ui-search-row .ui-search-row:focus-within {
-        background-color: transparent;
+    .ui-search:focus-within {
+        border-color: var(--ui-search-edge-focus);
+        background-color: var(--ui-search-fill-focus);
+    }
+
+/* THE BAND: a popover's or a palette's first row, spanning it edge to edge. The popover is the frame and its divider the
+   edge, so focus draws nothing new here: a band in an open popover always has the caret, and a tint that is always on
+   says nothing. The magnifier lighting is enough. */
+    .ui-search-band {
+        border-bottom: 1px solid var(--color-line);
+        cursor: text;
+    }
+
+/* The magnifier is the field's pilot light: quiet at rest, lit while the field has the caret. */
+    .ui-search-icon {
+        color: var(--color-subtle);
+        transition: color var(--motion-hover);
+    }
+
+    .ui-search:focus-within .ui-search-icon,
+    .ui-search-band:focus-within .ui-search-icon {
+        color: var(--color-content);
+    }
+
+/* A SWITCH INSIDE THE FIELD (Aa, ab, .*): a small square that fills with the accent while it is on. */
+    .ui-search-toggle {
+        display: inline-flex;
+        height: 1.375rem;
+        min-width: 1.5rem;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--radius-sm);
+        padding-inline: 0.25rem;
+        font-family: var(--font-mono);
+        font-size: var(--text-3xs);
+        line-height: 1;
+        color: var(--color-subtle);
+        transition:
+            background-color var(--motion-hover),
+            color var(--motion-hover);
+    }
+
+    .ui-search-toggle:hover {
+        background-color: color-mix(in srgb, var(--color-content) 8%, transparent);
+        color: var(--color-content);
+    }
+
+    .ui-search-toggle[aria-pressed="true"] {
+        background-color: color-mix(in srgb, var(--color-primary-500) 18%, transparent);
+        color: var(--color-link);
+    }
+
+/* THE CLEAR CHIP: the round ⓧ every platform's search draws, so it reads as "empty this" before anyone hovers it. */
+    .ui-search-clear {
+        display: inline-flex;
+        width: 1.125rem;
+        height: 1.125rem;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        border-radius: 9999px;
+        background-color: color-mix(in srgb, var(--color-content) 12%, transparent);
+        font-size: 0.5rem;
+        color: var(--color-muted);
+        transition:
+            background-color var(--motion-hover),
+            color var(--motion-hover);
+    }
+
+    .ui-search-band .ui-search-clear,
+    .ui-search .ui-search-clear {
+        margin-inline-end: 0.25rem;
+    }
+
+    .ui-search-clear:hover {
+        background-color: color-mix(in srgb, var(--color-content) 22%, transparent);
+        color: var(--color-content);
+    }
+
+/* A PHONE'S FINGER NEEDS THE CHIP'S TARGET, not its look: the press area grows to 32px round the 18px mark. */
+    @media (pointer: coarse) {
+        .ui-search-clear {
+            position: relative;
+        }
+
+        .ui-search-clear::after {
+            content: "";
+            position: absolute;
+            inset: -0.4375rem;
+        }
+    }
+
+/* A KEYCAP, drawn as a key: a raised face with a heavier lower lip, so a single `/` reads as "press this" rather than as
+   punctuation in a box. Sans, not mono: a key's legend is printed in the keyboard's face, not the terminal's. */
+    .ui-keycap {
+        display: inline-flex;
+        height: 1.125rem;
+        min-width: 1.125rem;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--color-line);
+        border-bottom-width: 2px;
+        border-radius: var(--radius-sm);
+        background-color: var(--color-card);
+        padding-inline: 0.3125rem;
+        font-family: var(--font-sans);
+        font-size: var(--text-3xs);
+        font-weight: 600;
+        line-height: 1;
+        color: var(--color-muted);
     }
 }
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { personaBoundsWords } from "../../../models/sandbox/personas/personaBounds";
-import { Button, ui, FACE_SIZES, Modal, Notice, type NoticeModel, PersonaFace, StatusBadge } from "@intentic/ui";
+import { Button, ui, FACE_SIZES, Modal, Notice, type NoticeModel, PersonaFace, SearchBar, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useCapabilities } from "../../../models/capabilities/useCapabilities";
@@ -252,10 +252,11 @@ const submit = async (): Promise<void> => {
 
                 <!-- Rows styled like the ones above on purpose — same kind of thing, one folder along. -->
                 <template v-if="mode === `existing`">
-                    <input
+                    <SearchBar
                         v-if="filterable"
                         v-model="filter"
-                        :class="ui.input('w-full')"
+                        variant="field"
+                        clearable
                         :placeholder="t(`workspace.directoryPersonas.findPersona`)"
                         :aria-label="t(`workspace.directoryPersonas.findPersona2`)"
                     />

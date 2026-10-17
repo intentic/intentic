@@ -211,6 +211,9 @@ const PARTS = [`Jobs`, `Instructions`, `Tools`, `Finishing`].map((label) => ({ l
 const part = ref(`Jobs`);
 const picked = ref<string | undefined>(`sonnet`);
 const query = ref(``);
+const denseQuery = ref(`needle`);
+const bandQuery = ref(``);
+const matchCase = ref(false);
 const filter = ref(``);
 const prose = ref(`A paragraph typed into the writing field.`);
 // Three renames side by side: one that saves, one with nothing to write to, one that always refuses, so the
@@ -882,12 +885,27 @@ const pickedTier = ref(`collaborator`);
                         </div>
                     </div>
                     <div class="flex flex-col gap-1">
-                        <span class="ui-field-label">SearchBar</span>
-                        <SearchBar v-model="query" placeholder="Filter files…" />
+                        <span class="ui-field-label">SearchBar · field, `/` shortcut</span>
+                        <SearchBar v-model="query" variant="field" shortcut="/" clearable :count="query === `` ? undefined : 7" placeholder="Search settings" />
                     </div>
                     <div class="flex flex-col gap-1">
-                        <span class="ui-field-label">FilterBar</span>
-                        <FilterBar v-model="filter" placeholder="Filter…" :count="7" />
+                        <span class="ui-field-label">SearchBar · dense, switches, busy</span>
+                        <SearchBar v-model="denseQuery" v-model:match-case="matchCase" variant="field" dense clearable busy placeholder="Search in files…" />
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <span class="ui-field-label">SearchBar · panel band</span>
+                        <div class="overflow-hidden rounded-lg border border-line bg-canvas">
+                            <SearchBar v-model="bandQuery" clearable placeholder="Search models…" />
+                            <p class="px-3 py-2 text-2xs text-subtle">The popover's first row: its frame is the popover's.</p>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <span class="ui-field-label">FilterBar · count, controls</span>
+                        <FilterBar v-model="filter" placeholder="Filter…" :count="7">
+                            <template #controls>
+                                <Picker v-model="pickedTier" :options="PICKER_HINTED" variant="ghost" aria-label="Access tier" />
+                            </template>
+                        </FilterBar>
                     </div>
                     <!-- What the options ARE picks the variant: a filter is pills; the parts of a page are tabs, and in a bar, xs ones whose line is its foot. -->
                     <div class="flex flex-col gap-2">

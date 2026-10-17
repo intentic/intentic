@@ -37,7 +37,6 @@
         "checkout2": "Checkout",
         "checkout3": "Checkout {local}",
         "cherryPick": "Cherry Pick…",
-        "clearFilter": "Clear filter",
         "commit": "Commit",
         "conflicted": "{conflicted} conflicted",
         "copyCommitHash": "Copy Commit Hash",

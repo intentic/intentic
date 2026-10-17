@@ -214,7 +214,8 @@
         "sandboxRestartsOntoNewest": "Le sandbox redémarre sur l'image la plus récente et reste indisponible pendant ce temps : quelques secondes si la mise à jour est déjà téléchargée, quelques minutes sinon. Ses fichiers sont conservés."
     },
     "searchBar": {
-        "matchCase": "Respecter la casse"
+        "matchCase": "Respecter la casse",
+        "search": "Rechercher"
     },
     "stepSection": {
         "done": "{title} : terminé"

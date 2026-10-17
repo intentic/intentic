@@ -224,7 +224,8 @@
         "sandboxRestartsOntoNewest": "Die Sandbox startet auf dem neuesten Image neu und ist währenddessen nicht verfügbar — Sekunden, wenn das Update schon heruntergeladen ist, sonst ein paar Minuten. Ihre Dateien bleiben erhalten."
     },
     "searchBar": {
-        "matchCase": "Groß-/Kleinschreibung beachten"
+        "matchCase": "Groß-/Kleinschreibung beachten",
+        "search": "Suchen"
     },
     "stepSection": {
         "done": "{title}: fertig"

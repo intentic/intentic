@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, ui } from "@intentic/ui";
+import { Icon, SearchBar, ui } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
@@ -119,13 +119,15 @@ const uncommitted = computed(() => props.conversation.isolated.value && byId(NAM
                     <span class="truncate text-subtle">{{ t(`chat.sendLater.afterAgentNote`) }}</span>
                 </p>
             </div>
-            <input
+            <SearchBar
                 v-if="targets.length >= FILTER_FROM"
                 v-model="filter"
-                type="search"
+                variant="field"
+                dense
+                clearable
                 :placeholder="t(`chat.sendLater.filter`)"
                 :aria-label="t(`chat.sendLater.filter`)"
-                :class="[ui.input({ size: `sm` }), `mx-2.5 mb-1`]"
+                class="mx-2.5 mb-1"
             />
             <p v-if="targets.length === 0" class="px-2.5 py-1.5 text-2xs text-subtle">{{ t(`chat.sendLater.noAgents`) }}</p>
             <div

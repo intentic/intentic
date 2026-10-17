@@ -9,11 +9,11 @@ import {
     type MenuItem,
     Modal,
     Notice,
+    SearchBar,
     SegmentedControl,
     SkeletonSnapshot,
     timeAgo,
     toneWash,
-    ui,
     useLoadingReveal,
     vAction,
     vSkeletonSource,
@@ -538,26 +538,15 @@ const runPending = async (): Promise<void> => {
             <span class="ui-status-pill shrink-0 bg-overlay text-2xs text-muted">{{
                 searching ? t(`gitHistoryTab.of`, { count: matched.length, count2: commits.length }) : commits.length
             }}</span>
-            <div class="relative min-w-0 flex-1 max-w-44">
-                <Icon name="search" class="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-2xs text-subtle" aria-hidden="true" />
-                <input
-                    v-model="search"
-                    type="text"
-                    :placeholder="t(`gitHistoryTab.filterCommits`)"
-                    :aria-label="t(`gitHistoryTab.filterCommitsByMessage`)"
-                    :class="ui.input({ size: `sm` }, 'w-full min-w-0 pl-7', search ? 'pr-7' : 'pr-2')"
-                    @keydown.esc="search = ''"
-                />
-                <button
-                    v-if="search"
-                    type="button"
-                    class="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                    :aria-label="t(`gitHistoryTab.clearFilter`)"
-                    @click="search = ''"
-                >
-                    <Icon name="times" />
-                </button>
-            </div>
+            <SearchBar
+                v-model="search"
+                variant="field"
+                dense
+                clearable
+                :placeholder="t(`gitHistoryTab.filterCommits`)"
+                :aria-label="t(`gitHistoryTab.filterCommitsByMessage`)"
+                class="min-w-0 max-w-52 flex-1"
+            />
             <!-- Names the action it would undo; absent for a fresh branch, detached HEAD, or a halted op that aborts instead. -->
             <Button
                 v-if="undo.label.value"

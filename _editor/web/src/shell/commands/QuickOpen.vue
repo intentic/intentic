@@ -102,9 +102,9 @@ const onShow = async (): Promise<void> => {
         <div>
             <h2 :id="titleId" class="sr-only">{{ label }}</h2>
             <!-- field-bare: the search is the panel's top band, not a boxed field — the panel border and this divider are already its frame. -->
-            <div class="ui-search-row relative border-b border-line">
+            <div class="ui-search-band relative">
                 <Icon
-                    class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-subtle"
+                    class="ui-search-icon pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm"
                     aria-hidden="true"
                     :name="searching || pending ? `spinner` : `search`"
                     :spin="searching || pending"

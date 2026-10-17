@@ -33,7 +33,6 @@
         "changedFiles": "{count} archivo cambiado | {count} archivos cambiados",
         "checkout3": "Checkout de {local}",
         "cherryPick": "Cherry pick…",
-        "clearFilter": "Vaciar el filtro",
         "conflicted": "{conflicted} en conflicto",
         "copyCommitHash": "Copiar el hash del commit",
         "copyCommitSubject": "Copiar el asunto del commit",
