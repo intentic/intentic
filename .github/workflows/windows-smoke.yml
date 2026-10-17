@@ -190,15 +190,6 @@ jobs:
         env:
           KEEP_INSTALLED: ${{ inputs.deep }}
 
-      - name: Diagnose silent uninstall
-        if: ${{ failure() }}
-        shell: pwsh
-        run: |
-          $trace = Join-Path $env:TEMP 'intentic-uninstall-trace.log'
-          if (Test-Path -LiteralPath $trace) { Get-Content -LiteralPath $trace }
-          Get-Process -Name 'intentic-desktop','intentic-files','msedgewebview2','uninstall','Un_A' -ErrorAction SilentlyContinue |
-            Select-Object Id,ProcessName,Path | Format-Table -AutoSize
-
       # TIER 2 — runs the connect.ps1 the INSTALLER put on this machine, with the direct-token path that needs
       # no Cloudflare and no platform, and waits for the sandbox daemon to answer. Reading those scripts from
       # the source tree would test a file no user ever runs. It pulls the sandbox image, which is why this is
