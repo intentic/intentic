@@ -53,6 +53,15 @@ Var IntenticReinstall
   Pop $0
 !macroend
 
+; Temporary CI trace for the silent uninstall's early return.
+!macro INTENTIC_UNINSTALL_TRACE TEXT
+  Push $9
+  FileOpen $9 "$TEMP\intentic-uninstall-trace.log" a
+  FileWrite $9 "${TEXT}$\r$\n"
+  FileClose $9
+  Pop $9
+!macroend
+
 ; WHY AN UNINSTALL HOOK AT ALL — this app is meant to be running when you uninstall it.
 ;
 ; The tray is where Intentic lives once its window is closed (windows.rs, `apply_close`), so the ordinary
@@ -103,6 +112,8 @@ Var IntenticReinstall
 ; a reader who ticked "Delete app data" on the uninstaller's page: they asked for a clean slate, and get Tauri's full
 ; removal of the app's own files, but still not a question about the agent, which is no part of the app's data.
 !macro NSIS_HOOK_PREUNINSTALL
+  Delete "$TEMP\intentic-uninstall-trace.log"
+  !insertmacro INTENTIC_UNINSTALL_TRACE "preuninstall: instdir=$INSTDIR exedir=$EXEDIR update=$UpdateMode"
   StrCpy $IntenticReinstall 0
   ${If} ${FileExists} "$EXEDIR\${MAINBINARYNAME}.exe"
     StrCpy $IntenticReinstall 1
@@ -111,6 +122,7 @@ Var IntenticReinstall
     ${EndIf}
   ${EndIf}
   !insertmacro INTENTIC_STOP_PROCESSES
+  !insertmacro INTENTIC_UNINSTALL_TRACE "process stop complete: update=$UpdateMode reinstall=$IntenticReinstall"
   StrCpy $IntenticAgentKept 0
   ${If} $UpdateMode <> 1
     ${If} ${FileExists} "$PROFILE\.intentic\machine\bin\intentic-machine.exe"
@@ -161,8 +173,20 @@ Var IntenticReinstall
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "Intentic"
     ; The Explorer menu's package, while its DLL is still here to remove it (an update keeps it: the install that
     ; follows re-registers only what changed, and asks nothing). Removing it also ends the surrogate holding the DLL.
+    !insertmacro INTENTIC_UNINSTALL_TRACE "unregistering Explorer menu"
     !insertmacro INTENTIC_REGSVR32 "/s /u /n /i:quiet"
+    !insertmacro INTENTIC_UNINSTALL_TRACE "Explorer menu unregister returned $0"
   ${EndIf}
+  !insertmacro RestartManager_StartSession $R0
+  !insertmacro INTENTIC_UNINSTALL_TRACE "Restart Manager session=$R0 result=$0"
+  ${If} $R0 != ""
+    !insertmacro RestartManager_RegisterFile $R0 "$INSTDIR\${MAINBINARYNAME}.exe"
+    !insertmacro INTENTIC_UNINSTALL_TRACE "Restart Manager registered app: result=$0"
+    System::Call 'RSTRTMGR::RmGetList(p R0, *i .r1, *i .r2, p 0, *i .r3) i .r0'
+    !insertmacro INTENTIC_UNINSTALL_TRACE "Restart Manager list: result=$0 needed=$1 count=$2 reboot=$3"
+    !insertmacro RestartManager_EndSession $R0
+  ${EndIf}
+  !insertmacro INTENTIC_UNINSTALL_TRACE "preuninstall complete"
 !macroend
 
 ; ...AND THE SAME PROBLEM ON THE WAY IN, which arrived with the app updating itself in the background.
@@ -311,11 +335,13 @@ Var IntenticReinstall
 ; sandboxes went with the app, when every container is still in Docker and keeps its data. Only where `ic` is installed,
 ; which is every PC a sandbox was set up on; never on an update, a passive or a silent uninstall.
 !macro NSIS_HOOK_POSTUNINSTALL
+  !insertmacro INTENTIC_UNINSTALL_TRACE "postuninstall entered"
   DeleteRegKey HKCU "Software\Classes\Directory\shell\Intentic"
   DeleteRegKey HKCU "Software\Classes\Directory\Background\shell\Intentic"
   ; The terminal command's folder is gone (INTENTIC_CLI_PATH), so is its PATH entry. On an update too: the install that
   ; follows puts it back, under whatever folder it installs to.
   !insertmacro INTENTIC_CLI_PATH remove
+  !insertmacro INTENTIC_UNINSTALL_TRACE "PATH removal returned $0"
   ; Copies of the menu's DLL an earlier update stepped aside from (INTENTIC_EXPLORER_MENU_STEP_ASIDE).
   Delete "$INSTDIR\intentic_explorer_menu.dll.*.old"
   ${If} $UpdateMode <> 1
