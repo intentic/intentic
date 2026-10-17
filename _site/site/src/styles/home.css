@@ -702,7 +702,7 @@ html:not([data-variant="desk"]) .home .headline .display {
 .home .final-heading span {
     display: block;
 }
-/* The forever rule is a separate gold underline. */
+/* The forever rule is an ember underline, a flourish under the closing word rather than a tab mark: ember is ornament. */
 .home .final-forever {
     position: relative;
     width: fit-content;

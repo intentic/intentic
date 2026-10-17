@@ -9668,6 +9668,7 @@
             },
             "look": {
                 "colour": "Color",
+                "colourSanctumHint": "In Sanctum, highlights stay gold and this color only tints the stone.",
                 "group": "Look",
                 "iconRail": "Icon rail",
                 "language": "Language",

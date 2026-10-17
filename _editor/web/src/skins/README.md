@@ -21,6 +21,10 @@ flowchart LR
 - `index.html` runs the same rule in its pre-paint script, so the attribute is in place before the bundle loads
   and there is no flash of the plain look. Anything that needs a fixed look, such as a profile link or the
   screenshot tooling, writes `ui-skin` and `ui-color-scheme` before boot.
+- Sanctum's accent is its gold. It restates the whole `--color-primary-*` ramp, with 500 as the house gold and
+  300 as the bright gold, so every selection, tab, check, toggle, focus ring and the Send button share that one
+  metal (the rule is "One signal colour" in [../../../ui/README.md](../../../ui/README.md)). The colour picked in
+  Appearance still tints the stone through the neutral ramp, and its row says so while Sanctum is on.
 - A new skin needs its name in `Skin` and `isSkin`, a stylesheet scoped to its attribute, a line in the
   pre-paint script, and a place on the theme row.
 

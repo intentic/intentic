@@ -1,8 +1,31 @@
 /* Sanctum skin for the app's IDE-like shell, using the site's design vocabulary. */
 
-/* Navigation rows and session cards share the same gold selection edge. */
+/* THE ACCENT IS GOLD. One signal colour per look (README, "One signal colour"): every mark that says where you are, what
+   is picked or on, where focus sits, or which button does the thing wears the accent ramp, and in this skin that ramp is
+   the metal rather than the picked colour. Replacing the ramp, not the roles, is the point: a component that names a step
+   (`border-b-primary-500` under a tab, `text-accent` on a check, `bg-primary-600/15` on a pressed toggle) used to stay
+   orange beside a gold row, because only the roles were ever re-pointed. 500 is the house gold and 300 its bright form,
+   to the digit; the steps between and below keep the app ramp's lightness ladder, so its legibility promises still hold.
+   The picked colour still tints the stone (the neutral ramp), so the Appearance row says the marks stay gold. Ember is
+   the brand's ornament here (the wordmark, the lotus), never a state. `:root` in the selector because styles.css states
+   the selection edge on `:root`, which a bare attribute would only tie with. */
 :root[data-skin="sanctum"] {
-    --color-selection-edge: color-mix(in srgb, var(--sanctum-gold) 60%, transparent);
+    --color-primary-0: oklch(97% 0.012 84);
+    --color-primary-50: oklch(95.5% 0.02 84);
+    --color-primary-100: oklch(92.5% 0.035 83);
+    --color-primary-200: oklch(88% 0.06 82);
+    --color-primary-300: var(--sanctum-gold-bright);
+    --color-primary-400: oklch(78% 0.094 80);
+    --color-primary-500: var(--sanctum-gold);
+    --color-primary-600: oklch(66% 0.1 77);
+    --color-primary-700: oklch(58% 0.095 75);
+    --color-primary-800: oklch(50% 0.085 73);
+    --color-primary-900: oklch(43% 0.072 71);
+    --color-primary-950: oklch(33% 0.055 69);
+
+    /* Navigation rows and session cards: the tab's own gold, at full strength. It was this gold at 60%, which beside the
+       underline of the tab strip in the same pane read as a second, duller metal. */
+    --color-selection-edge: var(--sanctum-gold);
 }
 
 /* TIER 0 · THE STONE The surface ramp in warm ash. */

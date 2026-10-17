@@ -247,13 +247,13 @@ const currentPath = Astro.url.pathname;
     .mobile-nav-link.current,
     .mobile-nav-link.current:hover,
     .mobile-nav-link.current:focus-visible {
-        border-left-color: var(--color-primary-500);
-        color: var(--color-primary-400);
+        border-left-color: var(--color-accent);
+        color: var(--color-content);
     }
     .mobile-nav-link.current .mobile-nav-icon,
     .mobile-nav-link.current:hover .mobile-nav-icon,
     .mobile-nav-link.current:focus-visible .mobile-nav-icon {
-        color: var(--color-primary-400);
+        color: var(--color-gold-bright);
     }
 
     .mobile-subnav-label {
@@ -283,9 +283,13 @@ const currentPath = Astro.url.pathname;
     }
 
 /* A heading is an accordion trigger, not a destination, so it takes no rule — the same split the bar makes. */
-    .mobile-nav-heading:hover,
-    .mobile-nav-heading.active {
+    .mobile-nav-heading:hover {
         color: var(--color-primary-400);
+    }
+    /* The group you are in is state, so the accent's bright metal, the bar's own answer for its current section. */
+    .mobile-nav-heading.active,
+    .mobile-nav-heading.active:hover {
+        color: var(--color-gold-bright);
     }
 
     .mobile-chevron {

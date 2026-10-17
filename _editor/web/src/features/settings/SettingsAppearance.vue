@@ -211,7 +211,14 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 </template>
             </Row>
             <!-- wide-control lets this wrap to a second line in a narrow pane rather than stretch the row. -->
-            <Row data-setting="accent-colour" icon="palette" :title="t(`settings.appearance.look.colour`)" wide-control>
+            <!-- Sanctum's accent ramp is its gold (skins/sanctum.css), so there the pick reaches only the stone: said, or the picker looks broken. -->
+            <Row
+                data-setting="accent-colour"
+                icon="palette"
+                :title="t(`settings.appearance.look.colour`)"
+                :description="skin === `sanctum` ? t(`settings.appearance.look.colourSanctumHint`) : undefined"
+                wide-control
+            >
                 <template #control>
                     <ColorPicker :model-value="accent" size="sm" class="justify-end" @update:model-value="setAccent" />
                 </template>

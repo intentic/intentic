@@ -167,7 +167,10 @@
             const rows = results.querySelectorAll<HTMLElement>("[data-hit]");
             rows.forEach((row, index) => {
                 const active = index === cursor;
+                // The hover's fill alone said nothing a hover does not: the accent's edge is what says "Enter opens this
+                // one", the app's picked row drawn the same way. A shadow, so the edge takes no room from the text.
                 row.classList.toggle("bg-overlay", active);
+                row.classList.toggle("shadow-[inset_2px_0_0_var(--color-accent)]", active);
                 row.setAttribute("aria-selected", String(active));
                 if (active) {row.scrollIntoView({ block: "nearest" });}
             });

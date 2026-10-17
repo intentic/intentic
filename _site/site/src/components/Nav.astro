@@ -477,10 +477,17 @@ const currentPath = Astro.url.pathname;
             color 0.2s ease,
             opacity 0.2s ease;
     }
+    /* The pointer warms a link to ember, the site's hover; the section you are in is state, so it wears the accent and
+       keeps it under the pointer (_editor/ui/README.md, "One signal colour"). They used to be one rule, so the current section
+       looked exactly like a hovered one. */
     .bar-link:hover,
-    .bar-link.active,
     .menu[data-open] .menu-trigger {
         color: var(--color-primary-400);
+        opacity: 1;
+    }
+    .bar-link.active,
+    .bar-link.active:hover {
+        color: var(--color-gold-bright);
         opacity: 1;
     }
     .chev {
@@ -696,17 +703,15 @@ const currentPath = Astro.url.pathname;
         color: var(--color-subtle);
     }
 
-    /* Current rows keep their state while hovered. */
+    /* Current rows keep their state while hovered: the accent's edge, the bright metal on the glyph, and the label in the
+       full ink it already has. The app's own nav row, mark for mark. */
     .menu-item.current {
-        border-left-color: var(--color-primary-500);
+        border-left-color: var(--color-accent);
     }
     .menu-item.current .menu-item-icon,
     .menu-item.current:hover .menu-item-icon,
     .menu-item.current:focus-visible .menu-item-icon {
-        color: var(--color-primary-400);
-    }
-    .menu-item.current .menu-item-label {
-        color: var(--color-primary-400);
+        color: var(--color-gold-bright);
     }
 
     .menu-action {

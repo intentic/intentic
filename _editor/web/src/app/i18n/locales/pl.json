@@ -9244,6 +9244,7 @@
             },
             "look": {
                 "colour": "Kolor",
+                "colourSanctumHint": "W Sanctum wyróżnienia pozostają złote, a ten kolor tylko zabarwia kamień.",
                 "group": "Wygląd",
                 "iconRail": "Pasek ikon",
                 "language": "Język",

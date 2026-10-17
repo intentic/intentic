@@ -15,6 +15,10 @@
 /* The site uses gold and bright-gold metal tones. */
     --color-gold: #c9a05c;
     --color-gold-bright: #e5c489;
+/* THE ONE SIGNAL COLOUR (_editor/ui/README.md): where you are, what is picked or on, where focus is. It is the gold, and
+   the app's Sanctum accent is the same gold, so a tab or a current row looks the same here and in the product. The
+   ember ramp below is ornament and the pointer's warmth, never a state. */
+    --color-accent: var(--color-gold);
 
 /* The ember ramp. */
     --color-primary-200: #fbdcb8;
@@ -114,10 +118,10 @@ html[data-variant="desk"] {
        the stone ever was. This is that stone's own mid stop, flat: the colour without the picture. */
     --role-display-ink: #ab8c6c;
 
-    /* Selection, and the search palette's hit highlight: the same ember wash at the same weight. */
-    --role-selection: rgba(224, 123, 39, 0.32);
-    --role-mark-fill: rgba(224, 123, 39, 0.28);
-    /* An ember hairline: the border a live/selected thing wears. */
+    /* Selection, and the search palette's hit highlight: the accent's wash at the same weight, as the app's Sanctum draws both. */
+    --role-selection: rgba(201, 160, 92, 0.32);
+    --role-mark-fill: rgba(201, 160, 92, 0.28);
+    /* An ember hairline: the border a live part of a figure wears. */
     --role-ember-line: rgba(224, 123, 39, 0.3);
     --role-ember-line-strong: rgba(224, 123, 39, 0.5);
     /* What a live panel in a figure throws: a halo, not a shadow. */
@@ -156,12 +160,12 @@ html[data-variant="desk"] {
     --role-figure-doorway: rgba(9, 7, 5, 0.82);
     --role-figure-halo: rgba(224, 123, 39, 0.18);
     --role-playground-fill: rgba(8, 6, 4, 0.5);
-    --role-playground-tab: linear-gradient(180deg, rgba(224, 123, 39, 0.22), rgba(224, 123, 39, 0.08));
-    --role-playground-tab-on: linear-gradient(180deg, rgba(224, 123, 39, 0.34), rgba(224, 123, 39, 0.14));
+    --role-playground-tab: linear-gradient(180deg, rgba(201, 160, 92, 0.2), rgba(201, 160, 92, 0.07));
+    --role-playground-tab-on: linear-gradient(180deg, rgba(201, 160, 92, 0.32), rgba(201, 160, 92, 0.12));
     /* The strip the worker un-hides when something is down. */
     --role-notice-ground: rgba(31, 23, 16, 0.96);
 
-    /* The bar's hover sweep, and the ember rule under the home page's active tab. */
+    /* The ember sweep a nav row takes under the pointer or focus (`.nav-wash`). */
     --role-nav-wash: linear-gradient(90deg, rgba(224, 123, 39, 0.13) 0%, rgba(224, 123, 39, 0.05) 34%, transparent 72%);
     --role-nav-sheet: #1f1710;
     --role-nav-sheet-wash: radial-gradient(130% 120% at 50% 8%, rgba(52, 38, 24, 0.28) 0%, rgba(22, 16, 10, 0.12) 62%, rgba(9, 6, 4, 0.34) 100%);
@@ -191,7 +195,7 @@ html[data-variant="desk"] {
     --role-plate-well-veil: 0.4;
 
     /* The home page's own furniture: the stage's frame shadow, the veil over the demo figure that lifts its play
-       button, the hero's subtitle, the ember rule under a live tab, and the plate's foot. */
+       button, the hero's subtitle, the ember rule under the closing "forever", and the plate's foot. */
     --role-stage-shadow: 0 2px 0 rgba(201, 160, 92, 0.06), 0 0 2.5rem 0.4rem rgba(0, 0, 0, 0.6), 0 2rem 4.5rem -0.8rem rgba(0, 0, 0, 0.9);
     --role-play-veil: rgba(10, 7, 5, 0.06);
     --role-play-veil-on: rgba(10, 7, 5, 0.42);
@@ -259,6 +263,12 @@ html[data-variant="desk"] {
     }
     ::selection {
         background: var(--role-selection);
+    }
+    /* Focus is the accent too. The site had no ring of its own, so most of it showed the browser's ring, which belongs
+       to no palette. Zero specificity, so a component's own focus (the bronze button's inked rim, a figure's tab) wins. */
+    :where(a, button, summary, input, select, textarea, [tabindex]):focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
     }
 }
 
@@ -984,9 +994,10 @@ html[data-variant="desk"] {
         border: 0;
         border-top: 1px solid var(--color-line);
     }
+    /* The bright rule, not the full gold: a 2px edge in the accent is the mark of the current row in the rail beside it. */
     .docs-body blockquote {
         margin: 1.5rem 0;
-        border-left: 2px solid var(--color-gold);
+        border-left: 2px solid var(--color-line-bright);
         padding: 0.25rem 0 0.25rem 1.25rem;
         color: var(--color-muted);
     }

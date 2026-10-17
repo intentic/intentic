@@ -185,8 +185,10 @@ const { section, prev, next } = bookNeighbours(book, pageId);
         }
 
         if (links.size > 0) {
-            const ACTIVE = ["border-primary-500", "text-content"];
-            const IDLE = ["border-line", "text-subtle"];
+            const ACTIVE = ["border-accent", "text-content"];
+            // Transparent, as DocsToc renders it and DocsLayout restores it: a hairline here left a gold edge on every
+            // row the reader had already scrolled past.
+            const IDLE = ["border-transparent", "text-subtle"];
             const visible = new Set<string>();
             let current = "";
 

@@ -62,6 +62,9 @@ html[data-variant="desk"] {
        is brand-800 exactly because that is the app's own `--role-link`. */
     --color-gold: var(--desk-brand-900);
     --color-gold-bright: var(--desk-brand-800);
+    /* The one signal colour stays the mark step it was before it had a name, the ember's 500, which is the app's light
+       accent: gold in daylight is the quieter label above, too dark to read as a lit mark. */
+    --color-accent: var(--color-primary-500);
 
     /* THE EMBER RAMP INVERTS. On the dark skin a lower step is lighter and so more prominent; on paper prominence is
        darkness, so the ramp runs the other way. 400 is the text accent and lands on the app's link step; 500 is the

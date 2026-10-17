@@ -352,7 +352,7 @@ const glyph = (paths: string, size = 14) =>
     }
     .sb-tab:focus-visible,
     .sb-play:focus-visible {
-        outline: 2px solid var(--color-primary-400);
+        outline: 2px solid var(--color-accent);
         outline-offset: 2px;
     }
     .sb-tab-num {
@@ -370,17 +370,19 @@ const glyph = (paths: string, size = 14) =>
         right: 0;
         bottom: 0;
         height: 2px;
-        background: var(--color-primary-500);
+        background: var(--color-accent);
         transform: scaleX(0);
         transform-origin: left;
     }
+    /* The pressed tab is state, so it wears the accent (_editor/ui/README.md, "One signal colour"); the layer it lights in
+       the figure below keeps its ember, which is the drawing's glow rather than a control's. */
     .sb-tab[aria-pressed="true"] {
-        border-color: var(--role-ember-line-strong);
-        background: var(--role-figure-row-on);
+        border-color: color-mix(in oklab, var(--color-accent) 70%, transparent);
+        background: color-mix(in oklab, var(--color-accent) 10%, transparent);
         color: var(--color-content);
     }
     .sb-tab[aria-pressed="true"] .sb-tab-num {
-        color: var(--color-primary-400);
+        color: var(--color-gold-bright);
     }
     .sb-tab[aria-pressed="true"] .sb-tab-bar {
         animation: sb-progress var(--sb-beat) linear forwards;

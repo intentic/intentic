@@ -4946,6 +4946,7 @@
             },
             "look": {
                 "colour": "Couleur",
+                "colourSanctumHint": "Dans Sanctum, les mises en évidence restent dorées et cette couleur ne teinte que la pierre.",
                 "group": "Apparence",
                 "iconRail": "Rail d'icônes",
                 "language": "Langue",

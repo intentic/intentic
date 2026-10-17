@@ -55,6 +55,17 @@ flowchart LR
   `DisclosureRow` uses `ui-row-open` for one quiet surface behind its header and details. Handwritten expanded rows
   use the same class; `ui-row-select-on` is reserved for selection. The translucent `--ui-row-open-wash` token uses
   the theme's text color at 3%, preserving the enclosing surface and its texture rather than painting over them.
+- **One signal colour.** Each look has one colour for emphasis, and it is the accent ramp (`primary-*`, `text-accent`,
+  `primary-fill`). That colour marks where you are (the current nav row's edge, the active tab's underline, the
+  current rail tile, the current outline entry), what is picked or on (a check, a picked row, an on chip or toggle, a
+  ticked box, the effort rungs), where focus is, and the primary action (Send). Light and Dark use the colour picked
+  in Appearance, orange by default. Sanctum replaces the whole accent ramp with its gold (`skins/sanctum.css`), so a
+  component that names `primary-500` is gold there without a rule of its own. The site and the entry screens use the
+  same gold. Ember, the site's orange, is decoration in those looks (the wordmark, the lotus, the full stop, a
+  figure's glow, the warmth a site link takes under the pointer). It never marks a state. Status meanings get the status colours (`success`, `warning`, `danger`, `info`), never the
+  accent. The mark carries the state: 2px for a row edge or a tab, 1px for an outline entry. The label next to it can
+  get brighter, but it never changes hue. A new emphasis uses the accent ramp. Don't add a second colour for it, and
+  don't write a skin rule for one component.
 - **Motion.** One module, `src/motion/` (`@intentic/ui/motion`), with its stylesheet `src/styles/motion.css`.
   Appearance's Animations row (`useMotion`: System, On or Off) writes `data-motion="reduced"` on `<html>` when
   motion is off, or when it is left at System and the OS asks for less. Under that attribute every duration token is

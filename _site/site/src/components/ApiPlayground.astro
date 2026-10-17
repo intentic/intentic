@@ -435,7 +435,7 @@ const { payload } = Astro.props;
     }
     .api-input:focus-visible {
         outline: none;
-        border-color: var(--color-primary-600);
+        border-color: var(--color-accent);
     }
     .api-body {
         resize: vertical;
@@ -448,15 +448,16 @@ const { payload } = Astro.props;
         gap: 0.6rem;
         padding: 0 0.9rem 0.9rem;
     }
-    /* Send uses a full border so it aligns with Reset. */
+    /* Send uses a full border so it aligns with Reset. It is the page's one action, so it wears the accent
+       (_editor/ui/README.md, "One signal colour"), the gold the site's own primary buttons are cast in. */
     .api-send {
         padding: 0.4rem 1.1rem;
-        border: 1px solid var(--color-primary-600);
+        border: 1px solid var(--color-accent);
         background: var(--role-playground-tab);
         font-family: var(--font-mark);
         font-size: 0.8125rem;
         font-weight: var(--font-weight-semibold);
-        color: var(--color-primary-200);
+        color: var(--color-gold-bright);
         cursor: pointer;
         transition:
             background 0.15s ease,
@@ -464,7 +465,7 @@ const { payload } = Astro.props;
     }
     .api-send:hover {
         background: var(--role-playground-tab-on);
-        color: var(--color-primary-200);
+        color: var(--color-content);
     }
     .api-reset {
         padding: 0.4rem 0.8rem;

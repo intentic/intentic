@@ -36,16 +36,17 @@
     --color-content: var(--ink);
     --color-muted: var(--ink-muted);
     --color-subtle: var(--ink-subtle);
-/* A link is gold, not the picked accent: on this ground the accent is the one colour being saved for the thing you press. */
+/* A link is gold, not the picked accent: nobody has picked anything yet on an entry screen. */
     --color-link: var(--gold-bright);
 /* The statuses, warmed a step toward the page so a green tick does not arrive from another design. */
     --color-success: oklch(72% 0.12 148);
     --color-warning: oklch(78% 0.14 82);
     --color-danger: oklch(68% 0.17 30);
     --color-info: oklch(76% 0.09 75);
-/* THE ONE PLACE THE EMBER IS SPENT ON A CONTROL: a ticked box, a filled radio. */
-    --color-primary-fill: var(--ember);
-    --color-primary-fill-hover: #ef8f3c;
+/* A TICKED BOX, A FILLED RADIO, A FOCUS RING ARE GOLD: the app's one signal colour (_editor/ui/README.md), which on the
+   site's ground is the metal. Ember is this page's ornament (the full stop, the arrival halo), never a state. */
+    --color-primary-fill: var(--gold);
+    --color-primary-fill-hover: var(--gold-bright);
     --color-fill-content: #1a0f06;
 
     position: relative;
@@ -532,7 +533,7 @@ html[data-frameless] .entry {
         border-color: transparent;
     }
 
-/* THE TICKED BOX — the third and last place the ember is spent on this page. */
+/* THE TICKED BOX — the signal fill, gold here and the ember's step in daylight (the light block below). */
     .entry .p-checkbox-box {
         background: #0b0805;
         border-color: var(--rule-strong);
@@ -541,8 +542,8 @@ html[data-frameless] .entry {
         border-color: var(--gold);
     }
     .entry .p-checkbox-checked .p-checkbox-box {
-        background: var(--ember);
-        border-color: var(--ember);
+        background: var(--color-primary-fill);
+        border-color: var(--color-primary-fill);
     }
     .entry .p-checkbox-icon {
         color: #1a0f06;
@@ -593,6 +594,8 @@ html:not([data-mode="dark"]) .entry {
     --color-warning: var(--role-warning);
     --color-danger: var(--role-danger);
     --color-info: var(--role-info);
+    /* Gold does not survive daylight, so the signal fill becomes the app's light accent, the ember's step. */
+    --color-primary-fill: var(--color-brand-700);
     --color-primary-fill-hover: var(--color-brand-800);
     --color-fill-content: var(--role-fill-content);
 
@@ -683,8 +686,8 @@ html:not([data-mode="dark"]) .entry-frame {
         background: color-mix(in oklab, var(--color-brand-600) 10%, transparent);
     }
 
-    /* An unticked box is paper with a rule round it; a ticked one carries the ember and a white mark. The paper is
-       scoped to the unticked box: written for every box, it outranked the dark block's ticked ember, and a ticked box
+    /* An unticked box is paper with a rule round it; a ticked one carries the signal fill and a white mark. The paper is
+       scoped to the unticked box: written for every box, it outranked the dark block's ticked fill, and a ticked box
        drew a white mark on white, read as unticked by a reader who pressed it seven times on /setup. */
     html:not([data-mode="dark"]) .entry .p-checkbox:not(.p-checkbox-checked) .p-checkbox-box {
         background: var(--plate);

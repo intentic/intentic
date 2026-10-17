@@ -4967,6 +4967,7 @@
             },
             "look": {
                 "colour": "Color",
+                "colourSanctumHint": "En Sanctum, los resaltados siguen siendo dorados y este color solo tiñe la piedra.",
                 "group": "Aspecto",
                 "iconRail": "Barra de iconos",
                 "language": "Idioma",
