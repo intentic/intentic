@@ -78,6 +78,15 @@ dependencies {
     implementation("androidx.activity:activity:1.13.0")
     implementation("com.squareup.okhttp3:okhttp:5.5.0")
 
+    // Wear OS. One APK serves phones and watches: on a watch it shows a round screen, a tile that pauses the agent and an
+    // ongoing-activity chip on the watch face; on a phone it sends a watch's pairing code on to the watch beside it.
+    implementation("androidx.wear.tiles:tiles:1.6.2")
+    implementation("androidx.wear.protolayout:protolayout:1.4.2")
+    implementation("androidx.wear:wear-ongoing:1.1.0")
+    implementation("androidx.wear:wear-remote-interactions:1.2.0")
+    implementation("com.google.android.gms:play-services-wearable:20.0.1")
+    implementation("androidx.concurrent:concurrent-futures:1.3.0")
+
     // Optional wake-up push; initialized from BuildConfig only when its four properties are set.
     implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
     implementation("com.google.firebase:firebase-messaging")

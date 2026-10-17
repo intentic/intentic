@@ -1,0 +1,105 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Footer from "../../components/Footer.astro";
+import Nav from "../../components/Nav.astro";
+
+/* INTENTIC DEVICE ON WEAR OS: the same app as /phone/, on a watch. Where the Wear OS watch card's install link and its
+   QR code's fallback both lead. A watch has no browser and no camera, so the page leads with the two things that are
+   different: how the app gets onto the watch, and how the pairing code reaches it. */
+
+const steps = [
+    {
+        title: "Add your watch in the sandbox",
+        body: "Open Capabilities, add a Wear OS watch and choose what the agent may do there. A QR code appears.",
+    },
+    {
+        title: "Put the app on the watch",
+        body: "A watch has no browser. Turn on wireless debugging on the watch and install the app from a computer, or let your agent do it through a computer you connected to your sandbox.",
+    },
+    {
+        title: "Scan the code with your phone",
+        body: "A watch has no camera. Scan the code with the phone the watch is paired with: Intentic Device on the phone sends it to the watch, which shows the sandbox and asks you to confirm.",
+    },
+];
+
+const promises = [
+    "The watch connects out to your sandbox. Nothing is opened on your network.",
+    "An icon on the watch face shows whenever the agent is connected, and a tile beside it pauses the agent.",
+    "The agent only works in the apps you allow on the watch itself.",
+    "Every action is listed in the app's activity log.",
+];
+---
+
+<BaseLayout breadcrumbs={[{ name: "Intentic Device for Wear OS", path: "/watch/" }]}>
+    <Nav />
+    <main class="flex-1">
+        <section class="below-bar mx-auto max-w-5xl px-6 pb-16">
+            <h1 class="display text-4xl font-semibold max-sm:text-3xl">Let your agent work on your watch</h1>
+            <p class="mt-4 max-w-copy text-lg text-muted">
+                Intentic Device connects your Wear OS watch to your sandbox, the way it connects a phone. The agent can see the watch's screen,
+                read its tiles and use the apps you allow: useful when you build a watch app, or when something lives only on your wrist.
+            </p>
+
+            <div class="mt-10 flex flex-wrap items-center gap-4">
+                <a href="/watch/apk" data-download-cta class="btn btn-primary">Download the APK</a>
+                <span class="text-xs text-subtle">Wear OS 3 or newer · the same .apk as the phone app, signed by intentic</span>
+            </div>
+
+            <ol class="mt-12 grid gap-6 sm:grid-cols-3">
+                {
+                    steps.map((step, at) => (
+                        <li class="flex flex-col gap-2">
+                            <span class="text-xs font-semibold text-subtle">Step {at + 1}</span>
+                            <h2 class="text-base font-semibold text-content">{step.title}</h2>
+                            <p class="text-sm text-muted">{step.body}</p>
+                        </li>
+                    ))
+                }
+            </ol>
+        </section>
+
+        <section class="mx-auto max-w-5xl px-6 pb-16">
+            <h2 class="text-lg font-semibold text-content">Installing it from a computer</h2>
+            <ol class="mt-3 flex max-w-copy list-decimal flex-col gap-2 pl-5 text-sm text-muted">
+                <li>
+                    On the watch, open Settings, then System, then About, then Versions, and tap Build number seven times. Developer options
+                    appear under Settings.
+                </li>
+                <li>
+                    In Developer options turn on <strong class="text-content">ADB debugging</strong> and
+                    <strong class="text-content">Wireless debugging</strong>, then choose <strong class="text-content">Pair new device</strong>.
+                    The watch and the computer have to be on the same Wi-Fi network. Keep the watch on its charger with Wi-Fi on: a watch turns
+                    Wi-Fi off to save its battery.
+                </li>
+                <li>
+                    On the computer, with Android's platform tools installed: <code>adb pair &lt;ip&gt;:&lt;port&gt; &lt;code&gt;</code> with what
+                    the watch shows, then <code>adb connect &lt;ip&gt;:&lt;port&gt;</code> and
+                    <code>adb install intentic-device.apk</code>.
+                </li>
+            </ol>
+            <p class="mt-3 max-w-copy text-sm text-muted">
+                If that computer is connected to your sandbox, your agent can do the installing for you once the watch is paired with the
+                computer for wireless debugging: ask it to install Intentic Device on your watch.
+            </p>
+        </section>
+
+        <section class="mx-auto max-w-5xl px-6 pb-16">
+            <div class="border border-line bg-surface p-6">
+                <h2 class="text-lg font-semibold text-content">You stay in charge of the watch</h2>
+                <ul class="mt-3 grid gap-x-10 gap-y-2 sm:grid-cols-2">
+                    {promises.map((promise) => <li class="max-w-copy text-sm text-muted">{promise}</li>)}
+                </ul>
+            </div>
+        </section>
+
+        <section class="mx-auto max-w-5xl px-6 pb-24">
+            <h2 class="text-lg font-semibold text-content">What a watch does not hand over</h2>
+            <p class="mt-3 max-w-copy text-sm text-muted">
+                Wear OS has no folder picker and no screen for notification access, so on a watch the agent reads no files and no
+                notifications. Codes and messages arrive on your phone anyway: connect the phone too if the agent needs them. Tapping and
+                typing on the watch uses its accessibility service, which you switch on in the watch's Settings, under Accessibility.
+            </p>
+        </section>
+    </main>
+    <Footer />
+</BaseLayout>

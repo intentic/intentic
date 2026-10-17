@@ -5,7 +5,9 @@
     "version": "1.0.0",
     "category": "connections",
     "logo": "android",
-    "engines": { "intentic": "^2.0.0" },
+    "engines": {
+        "intentic": "^2.0.0"
+    },
     "contributes": {
         "capabilities": [
             {
@@ -29,6 +31,28 @@
                 },
                 "fields": [],
                 "skill": "skills/android/SKILL.md"
+            },
+            {
+                "id": "wearos",
+                "kind": "phone",
+                "install": "https://intentic.dev/watch",
+                "catalog": {
+                    "name": "Wear OS watch",
+                    "logo": "wearos",
+                    "description": "Your own Wear OS watch: its screen, tiles and the apps you allow.",
+                    "category": "devices",
+                    "hint": "For what only your watch has: a watch app you are building or testing, a tile, something on your wrist. The watch shows when the agent is connected, and you can pause it from its Intentic tile. It has no folders and no notification access to hand over.",
+                    "guide": {
+                        "steps": [
+                            "Add the watch here: a QR code appears straight away, and `Connect` on its card brings it back later.",
+                            "Install Intentic Device on the watch: intentic.dev/watch says how (a watch has no browser, so it goes on from a computer, or your agent can install it through one).",
+                            "A watch has no camera: scan the code with the phone the watch is paired with. Intentic Device on that phone sends it to the watch, which asks you before it pairs.",
+                            "Choose on the watch which apps the agent may use. Pause it from the Intentic tile, or revoke it from this card, at any time."
+                        ]
+                    }
+                },
+                "fields": [],
+                "skill": "skills/wearos/SKILL.md"
             }
         ]
     }

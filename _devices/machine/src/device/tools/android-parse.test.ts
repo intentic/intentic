@@ -7,7 +7,10 @@ import {
     chooseDevice,
     describeElement,
     findAdb,
+    focusedWindow,
+    formOf,
     inputTextCommand,
+    isWatchAppList,
     keyEventFor,
     NO_DEVICE,
     parseAdbDevices,
@@ -195,4 +198,29 @@ test("what a phone command would lose is named; reading and ordinary work name n
     ]) {
         expect(androidDestructive(harmless), harmless).toEqual([]);
     }
+});
+
+test("what kind of device it is, from the characteristics its build declares; anything not named is a phone", () => {
+    expect(formOf("emulator,nosdcard,watch")).toBe("watch");
+    expect(formOf("nosdcard,watch")).toBe("watch");
+    expect(formOf("tablet")).toBe("tablet");
+    expect(formOf("tv")).toBe("tv");
+    expect(formOf("automotive,nosdcard")).toBe("automotive");
+    expect(formOf("nosdcard")).toBe("phone");
+    expect(formOf("default")).toBe("phone");
+    expect(formOf("")).toBe("phone");
+});
+
+test("the window in front, and whether it is a watch's app list that Home would toggle back from", () => {
+    const front = (component: string): string => `  mCurrentFocus=Window{5ba44b4 u0 ${component}}\n`;
+    const appList = "com.google.android.wearable.sysui/com.google.android.clockwork.sysui.experiences.globallauncher.AllAppsLauncherActivity";
+    const recents = "com.google.android.wearable.sysui/com.google.android.clockwork.sysui.experiences.globallauncher.RecentsActivity";
+    const face = "com.google.android.wearable.sysui/com.google.android.wearable.sysui.mainui.activity.SysUiActivity";
+    expect(focusedWindow(front(appList))).toBe(appList);
+    expect(focusedWindow("  mCurrentFocus=null\n")).toBeUndefined();
+    expect(focusedWindow("")).toBeUndefined();
+    expect(isWatchAppList(focusedWindow(front(appList)))).toBe(true);
+    expect(isWatchAppList(focusedWindow(front(recents)))).toBe(false);
+    expect(isWatchAppList(focusedWindow(front(face)))).toBe(false);
+    expect(isWatchAppList(undefined)).toBe(false);
 });

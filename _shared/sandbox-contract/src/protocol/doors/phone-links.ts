@@ -18,6 +18,10 @@ const PAIRING_PREFIX = "ixp1_";
 // that offers it. The code rides the fragment, which no server ever receives, so no access log holds a live pairing.
 export const PHONE_PAIR_LINK = "https://intentic.dev/phone/pair";
 
+// A watch has no camera to scan with, so its code is scanned by the phone beside it: this link opens Intentic Device on
+// that phone, which sends the code on to the watch instead of pairing itself. The code inside is the same.
+export const WATCH_PAIR_LINK = "https://intentic.dev/watch/pair";
+
 const base64url = (value: string): string => btoa(value).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 
 export const phonePairingCode = (pairing: { readonly url: string; readonly token: string }): string =>
@@ -26,12 +30,17 @@ export const phonePairingCode = (pairing: { readonly url: string; readonly token
 export const phonePairingLink = (pairing: { readonly url: string; readonly token: string }): string =>
     `${PHONE_PAIR_LINK}#${phonePairingCode(pairing)}`;
 
+export const watchPairingLink = (pairing: { readonly url: string; readonly token: string }): string =>
+    `${WATCH_PAIR_LINK}#${phonePairingCode(pairing)}`;
+
 // The phone's side, and the editor's for a pasted code; undefined for anything not one of ours. Accepts the bare code
-// or the whole link, since a person may paste either.
+// or the whole link (a phone's or a watch's), since a person may paste either.
 export const parsePhonePairingCode = (input: string): { readonly url: string; readonly token: string } | undefined => {
     const trimmed = input.trim();
     // The site serves the page with a trailing slash, so a link copied out of the browser may carry one.
-    const linked = [`${PHONE_PAIR_LINK}#`, `${PHONE_PAIR_LINK}/#`].find((prefix) => trimmed.startsWith(prefix));
+    const linked = [`${PHONE_PAIR_LINK}#`, `${PHONE_PAIR_LINK}/#`, `${WATCH_PAIR_LINK}#`, `${WATCH_PAIR_LINK}/#`].find((prefix) =>
+        trimmed.startsWith(prefix),
+    );
     const code = linked === undefined ? trimmed : trimmed.slice(linked.length);
     if (!code.startsWith(PAIRING_PREFIX)) {
         return undefined;

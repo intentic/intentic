@@ -1,5 +1,6 @@
 import type { PhoneSummary } from "@intentic/sandbox-contract/schemas/phone";
 import { t } from "@intentic/ui/i18n";
+import { phoneSystem } from "../../../../models/capabilities/connections";
 
 // One phone as the Devices board lists it: whether the agent can reach it now, and what it is. A phone is asleep most
 // of the time, so asleep is a calm state when the sandbox can wake it, and a warning only when it cannot.
@@ -41,7 +42,7 @@ export const phoneRowOf = (phone: PhoneSummary): PhoneRow => {
                   : `unreachable`;
     const tone: PhoneTone = state === `connected` ? `success` : state === `asleep` ? `neutral` : `warning`;
     const detail = [
-        facts === undefined ? `` : `${facts.device} · Android ${facts.android}`,
+        facts === undefined ? `` : phoneSystem(facts),
         facts?.battery === undefined
             ? ``
             : facts.battery.charging

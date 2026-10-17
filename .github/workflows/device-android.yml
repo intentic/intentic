@@ -1,4 +1,6 @@
-# Intentic Device, the Android app that connects a phone to a sandbox (_devices/android).
+# Intentic Device, the Android app that connects a phone or a Wear OS watch to a sandbox (_devices/android). One APK serves
+# both: on a watch it shows a watch's screen and pause tile, so there is no separate watch build to publish, and
+# intentic.dev/watch/apk hands over the same asset as /phone/apk.
 #
 #   build    every push and pull request that touches it: the unit tests of both flavors (they read the contract's
 #            golden wire, _shared/sandbox-contract/golden/phone-wire.json, so a change there runs them too) and a

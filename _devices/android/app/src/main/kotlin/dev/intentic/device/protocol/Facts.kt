@@ -26,6 +26,8 @@ data class PhoneSnapshot(
     /** The Firebase token, when Firebase is configured and Google Play services gave one; absent otherwise. */
     val fcmToken: String?,
     val features: List<String>,
+    /** "watch" on Wear OS; null on a phone, which is what a sandbox reads when the field is absent. */
+    val form: String? = null,
 )
 
 object FactsJson {
@@ -45,6 +47,7 @@ object FactsJson {
             )
             .put("folders", JSONArray(snapshot.folders.map { JSONObject().put("name", it.name).put("writable", it.writable) }))
             .put("apps", JSONArray(snapshot.apps.map { JSONObject().put("package", it.pkg).put("label", it.label).put("mode", it.mode.key) }))
+        snapshot.form?.let { facts.put("form", it) }
         snapshot.battery?.let { facts.put("battery", JSONObject().put("level", it.level.coerceIn(0, 100)).put("charging", it.charging)) }
         if (!snapshot.fcmToken.isNullOrEmpty()) {
             facts.put("wake", JSONObject().put("fcm", snapshot.fcmToken))

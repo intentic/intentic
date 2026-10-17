@@ -157,7 +157,7 @@ const pairing = useCapabilityPairing({ hosts, browsers, phones, contributionOf, 
 const { profileVisible, profileCapability, profileLabel, profileMode, openBrowser, startAgentLogin, openPairing, removePairedAccess } = pairing;
 const { connectVisible, connectId, connectPlatform, connectPermissions, connectUnnamed, onHostConnected, onHostRenamed } = pairing;
 const { browserConnectVisible, browserConnectId, browserInstall, browserPermissions, onBrowserExtConnected, handOff } = pairing;
-const { phoneConnectVisible, phoneConnectId, phoneInstall, phonePermissions, onPhoneConnected } = pairing;
+const { phoneConnectVisible, phoneConnectId, phoneInstall, phonePermissions, phonePlatform, onPhoneConnected } = pairing;
 const { submit, submitting, failure: saveFailure } = useCapabilitySubmit({
     selected,
     editing,
@@ -815,6 +815,7 @@ onBeforeUnmount(() => {
                 :id="phoneConnectId"
                 :install="phoneInstall"
                 :permissions="phonePermissions"
+                :platform="phonePlatform"
                 @connected="onPhoneConnected"
             />
 

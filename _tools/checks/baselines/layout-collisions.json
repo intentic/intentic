@@ -7,6 +7,10 @@
     },
     "_extensions/connectors": 1,
     "_extensions/devices": 1,
+    "_extensions/phones": {
+        "count": 1,
+        "why": "one SKILL.md per phone family's skill folder (android, wearos): the file name the skill loader reads"
+    },
     "_extensions/social": 1,
     "_extensions/viewers": 1,
     "_platform/prisma": 1,

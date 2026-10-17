@@ -8,7 +8,15 @@ import type { PhoneSummary } from "@intentic/sandbox-contract/schemas/phone";
 import type { VpnLink } from "@intentic/sandbox-contract/schemas/vpn";
 import type { WebExtSummary } from "@intentic/sandbox-contract/schemas/webext";
 import type { CapabilityConnection, CapabilityConnectionGroup } from "../connect/CapabilityConnections.vue";
-import { type ConnectionState, connectionFacts, connectionState, netdiskFacts, sidesAwakeWithoutIt, vpnFacts } from "../../../models/capabilities/connections";
+import {
+    type ConnectionState,
+    connectionFacts,
+    connectionState,
+    netdiskFacts,
+    phoneSystem,
+    sidesAwakeWithoutIt,
+    vpnFacts,
+} from "../../../models/capabilities/connections";
 import { type DeviceConnection, sameMachineNote } from "./deviceConnections";
 import { categoryLabel, entryName } from "../../../models/capabilities/catalogCopy";
 import type { CatalogTile } from "./slices";
@@ -43,7 +51,7 @@ export const liveState = (entry: CapabilityCatalogEntry, instance: CapabilitySum
         entry.kind === `device` ? sidesAwakeWithoutIt(sources.host(instance.id)) : [],
     );
 
-// A phone names itself and its Android release, and says when it cannot be woken yet: asleep is its usual state, so
+// A phone names itself and its Android release (a watch, its Wear OS), and says when it cannot be woken yet: asleep is its usual state, so
 // "can't be woken" is the one thing worth the owner's attention.
 export const phoneFacts = (instance: CapabilitySummary, sources: ConnectionSources): string => {
     const phone = sources.phone(instance.id);
@@ -56,7 +64,7 @@ export const phoneFacts = (instance: CapabilitySummary, sources: ConnectionSourc
             : phone.wake === `register`
               ? t(`capabilities.connections.wakeNotSetUp`)
               : t(`capabilities.connections.answersWhileAppOpen`);
-    return [`${phone.facts.device} · Android ${phone.facts.android}`, phone.facts.paused ? t(`capabilities.connections.pausedOnPhone`) : ``, wake]
+    return [phoneSystem(phone.facts), phone.facts.paused ? t(`capabilities.connections.pausedOnPhone`) : ``, wake]
         .filter((fact) => fact !== ``)
         .join(` · `);
 };

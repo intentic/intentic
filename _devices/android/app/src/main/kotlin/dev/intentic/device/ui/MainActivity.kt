@@ -59,6 +59,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // A watch has a screen of its own; the launcher and every notification still open this one.
+        if (Graph.watch) {
+            startActivity(Intent(this, WatchActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP))
+            finish()
+            return
+        }
         title = "Intentic Device"
         ui = Ui(this)
         content = ui.column().apply { setPadding(ui.dp(16), ui.dp(8), ui.dp(16), ui.dp(32)) }

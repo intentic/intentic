@@ -116,8 +116,8 @@ export const stateNote = (state: string): string | undefined => {
 const named = (device: AndroidDevice): string => (device.model === undefined ? device.serial : `${device.serial} (${device.model})`);
 
 export const NO_DEVICE =
-    "No Android phone is attached to this computer. Plug it in by USB with USB debugging on (Settings > Developer options), " +
-    "or for wireless debugging pair it once with `adb pair <ip>:<pairing port>` and the code the phone shows, then `adb connect <ip>:<port>`.";
+    "No Android phone or watch is attached to this computer. Plug a phone in by USB with USB debugging on (Settings > Developer options), " +
+    "or for wireless debugging (a watch's only way) pair it once with `adb pair <ip>:<pairing port>` and the code it shows, then `adb connect <ip>:<port>`.";
 
 // The one device the call is about: the named serial, or the only one attached. Several attached and none named is
 // refused, since acting on the wrong phone is the one mistake nothing here can see.
@@ -160,6 +160,35 @@ export const parseWmSize = (output: string): ScreenSize | undefined => {
 
 // The natural size turned to the rotation the screen is in: a quarter turn swaps the sides.
 export const rotated = (size: ScreenSize, rotation: number): ScreenSize => (rotation % 2 === 1 ? { width: size.height, height: size.width } : size);
+
+// --- what kind of device it is -----------------------------------------------------------------------------------------
+
+// What the device is to the person holding it. A watch is driven differently from a phone: its lists turn with the
+// crown, Home goes back and forth between the watch face and the app list, its side button opens the recent apps, and
+// its screen dims within seconds.
+export type AndroidForm = "phone" | "watch" | "tablet" | "tv" | "automotive";
+
+// `getprop ro.build.characteristics`: a comma list the build declares itself by ("emulator,nosdcard,watch",
+// "tablet", "nosdcard"). A phone declares nothing in particular, so anything not named here is a phone.
+export const formOf = (characteristics: string): AndroidForm => {
+    const words = new Set(
+        characteristics
+            .toLowerCase()
+            .split(",")
+            .map((word) => word.trim()),
+    );
+    return (["watch", "tv", "automotive", "tablet"] as const).find((form) => words.has(form)) ?? "phone";
+};
+
+// The window in front, from `dumpsys window`'s mCurrentFocus line: "com.google.android.wearable.sysui/
+// com.google.android.clockwork.sysui.experiences.globallauncher.AllAppsLauncherActivity". Undefined when no line says.
+export const focusedWindow = (dumpsysWindow: string): string | undefined => /mCurrentFocus=Window\{\S+ \S+ ([^}\s]+)\}/.exec(dumpsysWindow)?.[1];
+
+// Wear OS's app list, which Home opens from the watch face: Home pressed there goes back to the watch face, so going
+// home on a watch is pressing Home once more when this is what came to the front. Its recent apps live beside it in the
+// same launcher, and are not it.
+export const isWatchAppList = (focused: string | undefined): boolean =>
+    focused !== undefined && /launcher/i.test(focused) && !/recents/i.test(focused);
 
 // --- uiautomator dump --------------------------------------------------------------------------------------------------
 

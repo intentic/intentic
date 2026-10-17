@@ -1112,7 +1112,12 @@
             "qrLabel": "Code d'appairage pour l'appareil photo du téléphone",
             "scanWithCamera": "Pointez l'appareil photo du téléphone vers le code et ouvrez le lien affiché. Le code fonctionne une fois et expire au bout d'environ dix minutes. Cette fenêtre se met à jour d'elle-même quand le téléphone se connecte.",
             "cantScan": "Impossible de le scanner ? Afficher le code à coller dans l'app",
-            "onlyWhatYouAllow": ", et seulement dans les apps et dossiers que vous autorisez sur le téléphone lui-même. C'est le téléphone qui l'applique, pas ce sandbox. Mettez-le en pause depuis les réglages rapides du téléphone, ou révoquez-le ici, et il s'arrête aussitôt."
+            "onlyWhatYouAllow": ", et seulement dans les apps et dossiers que vous autorisez sur le téléphone lui-même. C'est le téléphone qui l'applique, pas ce sandbox. Mettez-le en pause depuis les réglages rapides du téléphone, ou révoquez-le ici, et il s'arrête aussitôt.",
+            "watchIntro": "Installez Intentic Device sur la montre Wear OS à connecter, puis scannez ce code avec l'appareil photo du téléphone associé à la montre. Intentic Device sur ce téléphone envoie le code à la montre, qui vous demande confirmation avant de s'associer. La montre se connecte à ce sandbox uniquement quand l'agent en a besoin et peut être mise en pause depuis sa carte Intentic. Rien n'est ouvert sur votre réseau.",
+            "watchOpenOnThisPhone": "Envoyer à ma montre",
+            "watchQrLabel": "Code d'association pour le téléphone à côté de la montre",
+            "watchScanWithPhone": "Une montre n'a pas d'appareil photo : pointez celui de votre téléphone vers le code et ouvrez le lien affiché. Intentic Device sur le téléphone propose de l'envoyer à la montre. Le code ne sert qu'une fois et expire au bout d'environ dix minutes. Cette fenêtre se met à jour d'elle-même quand la montre se connecte.",
+            "watchOnlyWhatYouAllow": ", et seulement dans les applications que vous autorisez sur la montre elle-même. C'est la montre qui l'applique, pas ce sandbox. Mettez-le en pause depuis la carte Intentic de la montre, ou révoquez-le ici, et il s'arrête immédiatement."
         },
         "words": {
             "access": "Accès",

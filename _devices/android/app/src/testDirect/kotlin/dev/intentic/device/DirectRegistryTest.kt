@@ -22,6 +22,13 @@ class DirectRegistryTest {
     }
 
     @Test
+    fun `on a watch the folder and notification tools are not listed, since Wear OS has nothing to grant them with`() {
+        val watch = FakePhone()
+        val listed = Registry.tools(watch.deps, Distribution.tools(watch.deps), watch = true).map { it.name }
+        assertEquals(listOf("describe", "screenshot", "open", "apps", "ask_access", "clipboard", "ui_elements", "ui_act", "device"), listed)
+    }
+
+    @Test
     fun `the direct build reports the touch feature, no bound service until the person switches it on, and an updater`() {
         assertEquals(listOf("touch"), Distribution.features)
         assertFalse(Distribution.accessibilityBound())

@@ -25,6 +25,7 @@ class DeviceFacts(
     private val folders: FolderStore,
     private val allowList: AppAllowList,
     private val notices: NoticeLog,
+    private val form: Form = Form.PHONE,
 ) {
     fun json(): JSONObject = FactsJson.of(snapshot())
 
@@ -39,20 +40,25 @@ class DeviceFacts(
             accessibility = Distribution.accessibilityBound(),
             // True only while notification access is switched on and Android has connected the listener.
             notifications = notices.connected,
-            screenCapture = ScreenCapture.mode(Distribution.accessibilityBound(), Build.VERSION.SDK_INT),
+            screenCapture = ScreenCapture.mode(Distribution.accessibilityBound(), Build.VERSION.SDK_INT, form == Form.WATCH),
             folders = folders.all(),
             apps = allowList.all(),
             battery = battery(),
             fcmToken = if (FirebaseSupport.configured) settings.fcmToken else null,
-            features = listOf("screenshot", "files", "apps", "clipboard", "notifications") + Distribution.features,
+            features = commonFeatures(form) + Distribution.features,
+            form = if (form == Form.WATCH) form.key else null,
         )
+
+    /** The tool families every build answers here: a watch has no folders and no notification access to read with. */
+    private fun commonFeatures(form: Form): List<String> =
+        if (form == Form.WATCH) listOf("screenshot", "apps", "clipboard") else listOf("screenshot", "files", "apps", "clipboard", "notifications")
 
     /** "Google Pixel 8": the maker and the model, without saying the maker twice. */
     private fun deviceName(): String {
         val maker = Build.MANUFACTURER.orEmpty().trim()
         val model = Build.MODEL.orEmpty().trim()
         return when {
-            model.isEmpty() -> maker.ifEmpty { "Android phone" }
+            model.isEmpty() -> maker.ifEmpty { if (form == Form.WATCH) "Wear OS watch" else "Android phone" }
             maker.isEmpty() || model.startsWith(maker, ignoreCase = true) -> model
             else -> maker.replaceFirstChar { it.titlecase(Locale.ROOT) } + " " + model
         }

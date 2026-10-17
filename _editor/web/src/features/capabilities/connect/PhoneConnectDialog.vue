@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { phonePairingCode, phonePairingLink } from "@intentic/sandbox-contract/protocol/doors/phone-links";
+import { phonePairingCode, phonePairingLink, watchPairingLink } from "@intentic/sandbox-contract/protocol/doors/phone-links";
 import { Button, Code, Modal, Notice, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { renderSVG } from "uqr";
@@ -12,10 +12,11 @@ import { registerWakeOnce, type WakeOutcome } from "./phoneWake";
 // app on its pairing screen (or the page offering the app, on a phone without it). On the phone itself the same link
 // is a button. The code is drawn here, in the page: it carries a live pairing token, so it never goes to a QR service.
 // Once the phone checks in, the dialog makes it wakeable (phoneWake.ts), so the agent can reach it while it sleeps.
+// A Wear OS watch has no camera: its code is a watch link, scanned by the phone beside it, whose app sends it on.
 
 const t = useT();
 
-const props = defineProps<{ visible: boolean; id: string; install: string; permissions: string }>();
+const props = defineProps<{ visible: boolean; id: string; install: string; permissions: string; platform?: string }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "connected"): void }>();
 
 const { peerFor, pairToken, minting, error, rosterNotice, connect, refresh, close } = usePeerConnect(PHONE_DOOR);
@@ -28,7 +29,8 @@ const pairing = computed(() => {
     const url = daemonUrl.value ?? ``;
     return url === `` || pairToken.value === undefined ? undefined : { url, token: pairToken.value };
 });
-const link = computed(() => (pairing.value === undefined ? `` : phonePairingLink(pairing.value)));
+const forWatch = computed(() => props.platform === `wearos`);
+const link = computed(() => (pairing.value === undefined ? `` : forWatch.value ? watchPairingLink(pairing.value) : phonePairingLink(pairing.value)));
 const code = computed(() => (pairing.value === undefined ? `` : phonePairingCode(pairing.value)));
 // Drawn as an SVG string from the link alone, black on white whatever the theme: a camera reads dark-on-light, and a
 // code drawn light-on-dark in dark mode is one many phones will not scan.
@@ -73,7 +75,7 @@ watch(online, (isOnline) => {
         :open="visible"
         size="lg"
         :header="t(`capabilities.words.connect`, { id })"
-        :description="t(`capabilities.phoneConnectDialog.intro`)"
+        :description="forWatch ? t(`capabilities.phoneConnectDialog.watchIntro`) : t(`capabilities.phoneConnectDialog.intro`)"
         @update:open="emit(`update:visible`, $event)"
     >
         <div class="flex flex-col gap-4">
@@ -103,19 +105,28 @@ watch(online, (isOnline) => {
                 <a v-if="install !== ``" :href="install" target="_blank" rel="noreferrer" class="underline">{{
                     t(`capabilities.phoneConnectDialog.getApp`)
                 }}</a>
-                <!-- On the phone itself there is nothing to scan: the same link opens the app. -->
+                <!-- On the phone itself there is nothing to scan: the same link opens the app (which, for a watch, sends it on). -->
                 <a v-if="mobile" :href="link" class="self-start">
-                    <Button :label="t(`capabilities.phoneConnectDialog.openOnThisPhone`)" size="small" />
+                    <Button
+                        :label="
+                            forWatch
+                                ? t(`capabilities.phoneConnectDialog.watchOpenOnThisPhone`)
+                                : t(`capabilities.phoneConnectDialog.openOnThisPhone`)
+                        "
+                        size="small"
+                    />
                 </a>
                 <div v-else class="flex flex-wrap items-center gap-4">
                     <!-- eslint-disable-next-line vue/no-v-html -- an SVG drawn here from the link alone, no outside markup -->
                     <div
                         class="size-48 shrink-0 rounded-md bg-white p-1 [&>svg]:size-full"
                         role="img"
-                        :aria-label="t(`capabilities.phoneConnectDialog.qrLabel`)"
+                        :aria-label="forWatch ? t(`capabilities.phoneConnectDialog.watchQrLabel`) : t(`capabilities.phoneConnectDialog.qrLabel`)"
                         v-html="qr"
                     />
-                    <p class="min-w-48 flex-1 text-2xs text-subtle">{{ t(`capabilities.phoneConnectDialog.scanWithCamera`) }}</p>
+                    <p class="min-w-48 flex-1 text-2xs text-subtle">
+                        {{ forWatch ? t(`capabilities.phoneConnectDialog.watchScanWithPhone`) : t(`capabilities.phoneConnectDialog.scanWithCamera`) }}
+                    </p>
                 </div>
                 <button type="button" class="self-start text-2xs text-muted underline" @click="showCode = !showCode">
                     {{ t(`capabilities.phoneConnectDialog.cantScan`) }}
@@ -126,7 +137,7 @@ watch(online, (isOnline) => {
             <!-- What connecting grants, as the dialog's closing footnote: on its own ground, not boxed as a second card. -->
             <p class="text-2xs text-muted">
                 {{ t(`capabilities.words.onceConnectedAgentMay`) }} <b>{{ permissions }}</b
-                >{{ t(`capabilities.phoneConnectDialog.onlyWhatYouAllow`) }}
+                >{{ forWatch ? t(`capabilities.phoneConnectDialog.watchOnlyWhatYouAllow`) : t(`capabilities.phoneConnectDialog.onlyWhatYouAllow`) }}
             </p>
         </div>
 

@@ -16,6 +16,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import dev.intentic.device.Graph
 import dev.intentic.device.tools.FrameMath
+import dev.intentic.device.tools.ScreenCapture
 import dev.intentic.device.tools.ScreenPort
 import dev.intentic.device.tools.Shot
 import dev.intentic.device.tools.ToolFailed
@@ -30,7 +31,7 @@ import java.io.ByteArrayOutputStream
  * The session ends when the owner pauses, the link closes, the owner stops it from the notification or Android's own
  * indicator, or fifteen minutes pass without a screenshot.
  */
-class ScreenSession(private val context: Context) : ScreenPort {
+class ScreenSession(private val context: Context, private val watch: Boolean = false) : ScreenPort {
     private class Size(val width: Int, val height: Int) {
         override fun equals(other: Any?): Boolean = other is Size && other.width == width && other.height == height
 
@@ -53,6 +54,9 @@ class ScreenSession(private val context: Context) : ScreenPort {
     fun isActive(): Boolean = active
 
     override fun askToShare() {
+        if (watch) {
+            throw ToolFailed(ScreenCapture.WATCH_NEEDS_TOUCH)
+        }
         Graph.notifier.askToShareScreen()
     }
 

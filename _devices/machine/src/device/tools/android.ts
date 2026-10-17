@@ -15,13 +15,17 @@ import {
     adbMissing,
     type AndroidDevice,
     AndroidError,
+    type AndroidForm,
     type AndroidHierarchy,
     androidDestructive,
     assertNoLockoutCommand,
     chooseDevice,
     describeElement,
     findAdb,
+    focusedWindow,
+    formOf,
     inputTextCommand,
+    isWatchAppList,
     keyEventFor,
     MAX_SHOWN,
     NO_DEVICE,
@@ -123,10 +127,13 @@ const MAX_UNCHANGED = 2;
 
 const clip = (text: string): CollectedOutput => clipText(text, MAX_OUTPUT);
 
-// What one phone has shown the agent: its screenshots as frames, and the refs of its newest element listing.
+// What one phone has shown the agent: its screenshots as frames, the refs of its newest element listing, and what kind
+// of device it said it is. The kind is kept with the model it was read from, since an emulator's serial is handed to
+// whichever emulator starts next.
 interface PhoneView {
     readonly frames: FrameLog;
     elements: ReadonlyMap<string, PhoneElement> | undefined;
+    form: { readonly of: string; readonly form: AndroidForm } | undefined;
 }
 
 // The phone a call is about, ready, with the adb that reaches it and what it has shown so far.
@@ -174,15 +181,34 @@ const listDevices = async (run: AdbRunner): Promise<AndroidDevice[]> => {
     return parseAdbDevices(output.stdout.toString("utf8"));
 };
 
+const viewOf = (context: AndroidContext, serial: string): PhoneView => {
+    let view = context.views.get(serial);
+    if (view === undefined) {
+        view = { frames: new FrameLog(), elements: undefined, form: undefined };
+        context.views.set(serial, view);
+    }
+    return view;
+};
+
 const phoneOf = async (context: AndroidContext, serial: string | undefined): Promise<Phone> => {
     const run = adbOf(context);
     const device = chooseDevice(await listDevices(run), serial);
-    let view = context.views.get(device.serial);
-    if (view === undefined) {
-        view = { frames: new FrameLog(), elements: undefined };
-        context.views.set(device.serial, view);
+    return { run, device, view: viewOf(context, device.serial) };
+};
+
+// Which device a serial names now, as adb lists it: what a remembered kind is checked against.
+const identityOf = (device: AndroidDevice): string => `${device.product ?? ""}/${device.model ?? ""}`;
+
+// What kind of device the phone is, read once and remembered while the same device answers to its serial.
+const formOfPhone = async (phone: Phone): Promise<AndroidForm> => {
+    const known = phone.view.form;
+    if (known !== undefined && known.of === identityOf(phone.device)) {
+        return known.form;
     }
-    return { run, device, view };
+    // allow(silent-catch): a build that will not say what it is reads as a phone, which is how every phone was driven before watches were told apart.
+    const form = formOf(await shellOn(phone, "getprop ro.build.characteristics").catch(() => ""));
+    phone.view.form = { of: identityOf(phone.device), form };
+    return form;
 };
 
 // A command for the phone's own shell; one that fails is a failure of the call, with what the phone said.
@@ -388,16 +414,19 @@ export interface AndroidActInput {
     readonly ms?: number | undefined;
 }
 
-// What one action sends to the phone's shell, and the words that say it was done.
+// What one action sends to the phone's shell, and the words that say it was done. `home` asks for the watch's second
+// look: Home pressed on a watch may have opened its app list rather than left it.
 interface PhoneInput {
     readonly command: string;
     readonly said: string;
+    readonly home?: boolean;
 }
 
 const NAVIGATION = new Map<AndroidAction, PhoneInput>([
     ["back", { command: "input keyevent KEYCODE_BACK", said: "Pressed Back." }],
     ["home", { command: "input keyevent KEYCODE_HOME", said: "Pressed Home." }],
-    ["recents", { command: "input keyevent KEYCODE_APP_SWITCH", said: "Opened the recent apps." }],
+    // Said as pressed, not as opened: a device with no recent-apps screen (a watch, a TV) takes the key and does nothing.
+    ["recents", { command: "input keyevent KEYCODE_APP_SWITCH", said: "Pressed Recents." }],
 ]);
 
 // How far one scroll moves and how close to the edges it may start: far enough to move a list by most of a screen,
@@ -448,6 +477,9 @@ const elementFor = ({ device, view }: Phone, ref: string): PhoneElement => {
             : `"${ref}" is not in the latest list of ${named(device)}'s elements (e1 to e${view.elements.size}). List them again if the screen changed.`,
     );
 };
+
+// Whether the call names a place on the screen at all, an element or a coordinate.
+const pointNamed = (input: AndroidActInput): boolean => (input.element !== undefined && input.element !== "") || input.coordinate !== undefined;
 
 // Where a pointer action lands, in the phone's own pixels, and how it is said back; undefined when the call names
 // neither an element nor a coordinate.
@@ -509,6 +541,56 @@ const scrollInput = async (phone: Phone, input: AndroidActInput): Promise<PhoneI
     };
 };
 
+// --- a watch's own controls ----------------------------------------------------------------------------------------------
+
+// One turn of the crown, in the rotary encoder's scroll units: one unit moves Wear OS's own lists about a quarter of a
+// round 454-pixel screen, so two are the half-screen reach a phone's scroll swipe has. Positive scrolls toward the top.
+const CROWN_UNITS = 2;
+
+// Before input on a watch whose screen has dimmed to its ambient face or gone off: a touch there only wakes it, so the
+// tap would be lost. KEYCODE_WAKEUP turns it on without locking anything, and does nothing to a screen already on; the
+// word printed is how the answer says the screen was woken.
+const WAKE_IF_DIM =
+    'case "$(dumpsys power | grep mWakefulness=)" in *=Awake*) ;; *) input keyevent KEYCODE_WAKEUP && echo woke && sleep 0.5 ;; esac; ';
+
+// A vertical scroll with nowhere named turns the crown, as the person would: Wear OS's lists follow it, and it never
+// starts on the screen's edge, where a swipe goes back. A scroll at an element or a coordinate swipes there, as on a phone.
+const crownInput = (input: AndroidActInput): PhoneInput | undefined => {
+    const direction = input.direction ?? "down";
+    if ((direction !== "up" && direction !== "down") || pointNamed(input)) {
+        return undefined;
+    }
+    const times = Math.min(Math.max(1, Math.round(input.amount ?? 1)), MAX_SCROLLS);
+    const turn = `input rotaryencoder scroll --axis SCROLL,${direction === "up" ? CROWN_UNITS : -CROWN_UNITS}`;
+    return {
+        command: Array.from({ length: times }, () => turn).join(" && "),
+        said: `Turned the crown to scroll ${direction}${times > 1 ? ` ${times} times` : ""}.`,
+    };
+};
+
+// The watch's sides of the navigation keys: Home ends on the watch face, Recents is the side button, a scroll is the crown.
+const watchInput = (input: AndroidActInput): PhoneInput | undefined => {
+    if (input.action === "home") {
+        return { command: "input keyevent KEYCODE_HOME", said: "Went to the watch face.", home: true };
+    }
+    if (input.action === "recents") {
+        // The side button opens the recent apps, and pressed with them open goes back to the last app.
+        return { command: "input keyevent KEYCODE_STEM_PRIMARY", said: "Pressed the side button, which opens the recent apps." };
+    }
+    return input.action === "scroll" ? crownInput(input) : undefined;
+};
+
+// Home on a watch goes back and forth between the watch face and its app list; pressed again on the list, it lands on
+// the face whichever it started from.
+const homeToWatchFace = async (context: AndroidContext, phone: Phone): Promise<void> => {
+    await context.deps.settle();
+    // allow(silent-catch): a focus that cannot be read leaves the watch where the one press put it, which the confirming screenshot shows.
+    const focused = focusedWindow(await shellOn(phone, "dumpsys window | grep mCurrentFocus=").catch(() => ""));
+    if (isWatchAppList(focused)) {
+        await shellOn(phone, "input keyevent KEYCODE_HOME", INPUT_MS);
+    }
+};
+
 const requireText = (input: AndroidActInput): string => {
     if (input.text === undefined || input.text === "") {
         throw new AndroidError(
@@ -539,10 +621,18 @@ const act = async (context: AndroidContext, input: AndroidActInput, scopes: Devi
     assertScope(scopes, "control");
     const keyboard = keyboardInput(input, scopes);
     const phone = await phoneOf(context, input.serial);
-    const sent = keyboard ?? (input.action === "scroll" ? await scrollInput(phone, input) : pointerInput(phone, input));
+    const watch = (await formOfPhone(phone)) === "watch";
+    const sent =
+        (watch ? watchInput(input) : undefined) ??
+        keyboard ??
+        (input.action === "scroll" ? await scrollInput(phone, input) : pointerInput(phone, input));
     await context.deps.indicator().control(calling.getStore());
-    await shellOn(phone, sent.command, INPUT_MS);
-    return await confirmingLook(context, sent.said, phone, scopes);
+    const answered = await shellOn(phone, `${watch ? WAKE_IF_DIM : ""}${sent.command}`, INPUT_MS);
+    if (sent.home === true) {
+        await homeToWatchFace(context, phone);
+    }
+    const woke = watch && /^woke$/m.test(answered) ? " The watch's screen had dimmed, so it was woken first." : "";
+    return await confirmingLook(context, `${sent.said}${woke}`, phone, scopes);
 };
 
 // --- the shell, installs and the log ---------------------------------------------------------------------------------------
@@ -687,6 +777,7 @@ const logcat = async (context: AndroidContext, input: LogcatInput, scopes: Devic
 
 // One attached device as the listing shows it: what adb said, and for a ready one what the phone says about itself.
 interface ListedDevice extends AndroidDevice {
+    readonly form: AndroidForm | undefined;
     readonly ready: boolean;
     readonly note: string | undefined;
     readonly androidVersion: string | undefined;
@@ -697,16 +788,20 @@ interface ListedDevice extends AndroidDevice {
 const describeDevice = async (run: AdbRunner, device: AndroidDevice): Promise<ListedDevice> => {
     const note = stateNote(device.state);
     if (note !== undefined) {
-        return { ...device, ready: false, note, androidVersion: undefined, sdk: undefined, screen: undefined };
+        return { ...device, form: undefined, ready: false, note, androidVersion: undefined, sdk: undefined, screen: undefined };
     }
-    const props = await run(["-s", device.serial, "shell", "getprop ro.build.version.release; getprop ro.build.version.sdk; wm size"], QUICK_MS)
+    const props = await run(
+        ["-s", device.serial, "shell", "getprop ro.build.version.release; getprop ro.build.version.sdk; getprop ro.build.characteristics; wm size"],
+        QUICK_MS,
+    )
         .then((output) => (output.code === 0 ? output.stdout.toString("utf8") : ""))
         // allow(silent-catch): a listing still names a device whose properties cannot be read; its version and screen read as unknown.
         .catch(() => "");
-    const [release = "", sdk = ""] = props.split(/\r?\n/).map((line) => line.trim());
+    const [release = "", sdk = "", characteristics = ""] = props.split(/\r?\n/).map((line) => line.trim());
     const screen = parseWmSize(props);
     return {
         ...device,
+        form: props === "" ? undefined : formOf(characteristics),
         ready: true,
         note: undefined,
         androidVersion: release === "" ? undefined : release,
@@ -723,6 +818,12 @@ const listAttached = async (context: AndroidContext, scopes: DeviceScopes): Prom
         return NO_DEVICE;
     }
     const described = await Promise.all(devices.map(async (device) => await describeDevice(run, device)));
+    // What each said it is is remembered, so acting on it next needs no second look.
+    for (const device of described) {
+        if (device.form !== undefined) {
+            viewOf(context, device.serial).form = { of: identityOf(device), form: device.form };
+        }
+    }
     const ready = described.filter((device) => device.ready).length;
     const head =
         devices.length === 1

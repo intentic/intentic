@@ -1109,7 +1109,12 @@
             "qrLabel": "Kopplungscode für die Kamera des Telefons",
             "scanWithCamera": "Richten Sie die Kamera des Telefons auf den Code und öffnen Sie den angezeigten Link. Der Code gilt einmal und läuft nach etwa zehn Minuten ab. Dieses Fenster aktualisiert sich von selbst, sobald das Telefon verbunden ist.",
             "cantScan": "Scannen klappt nicht? Code zum Einfügen in die App anzeigen",
-            "onlyWhatYouAllow": ", und nur in den Apps und Ordnern, die Sie auf dem Telefon selbst erlauben. Das setzt das Telefon durch, nicht diese Sandbox. Pausieren Sie es in den Schnelleinstellungen des Telefons oder widerrufen Sie es hier, und es hört sofort auf."
+            "onlyWhatYouAllow": ", und nur in den Apps und Ordnern, die Sie auf dem Telefon selbst erlauben. Das setzt das Telefon durch, nicht diese Sandbox. Pausieren Sie es in den Schnelleinstellungen des Telefons oder widerrufen Sie es hier, und es hört sofort auf.",
+            "watchIntro": "Installiere Intentic Device auf der Wear-OS-Uhr, die du verbinden möchtest, und scanne diesen Code mit der Kamera des Telefons, mit dem die Uhr gekoppelt ist. Intentic Device auf diesem Telefon schickt den Code an die Uhr, und die Uhr fragt dich, bevor sie sich verbindet. Die Uhr verbindet sich nur mit dieser Sandbox, solange der Agent sie braucht, und lässt sich über ihre Intentic-Kachel pausieren. In deinem Netzwerk wird nichts geöffnet.",
+            "watchOpenOnThisPhone": "An meine Uhr senden",
+            "watchQrLabel": "Kopplungscode für das Telefon neben der Uhr",
+            "watchScanWithPhone": "Eine Uhr hat keine Kamera: Richte die Kamera deines Telefons auf den Code und öffne den angezeigten Link. Intentic Device auf dem Telefon bietet an, ihn an die Uhr zu senden. Der Code funktioniert einmal und läuft nach etwa zehn Minuten ab. Dieses Fenster aktualisiert sich von selbst, wenn die Uhr verbunden ist.",
+            "watchOnlyWhatYouAllow": ", und nur in den Apps, die du auf der Uhr selbst erlaubst. Das setzt die Uhr durch, nicht diese Sandbox. Pausiere ihn über die Intentic-Kachel der Uhr oder widerrufe ihn hier, dann hört er sofort auf."
         },
         "words": {
             "access": "Zugriff",

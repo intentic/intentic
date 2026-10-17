@@ -1,0 +1,50 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import Footer from "../../../components/Footer.astro";
+import Nav from "../../../components/Nav.astro";
+
+/* WHERE A WATCH'S PAIRING CODE LANDS WHEN THE PHONE'S APP DID NOT OPEN IT. A watch has no camera, so its card's QR code
+   is scanned by the phone beside it: a link to this page with the code in its fragment, which no server ever receives.
+   Android opens Intentic Device for it when the app is installed and its link verified, and the app sends the code on to
+   the watch. Otherwise the phone's browser shows this page, which hands the code to the app by its own scheme, or says
+   where to get the app. The code never leaves the browser. */
+---
+
+<BaseLayout breadcrumbs={[{ name: "Intentic Device for Wear OS", path: "/watch/" }, { name: "Pair", path: "/watch/pair/" }]} noindex>
+    <Nav />
+    <main class="flex-1">
+        <section class="below-bar mx-auto max-w-3xl px-6 pb-24">
+            <h1 class="display text-3xl font-semibold">Connect your watch</h1>
+            <p id="pair-has-code" class="mt-4 hidden max-w-copy text-lg text-muted">
+                This link carries a one-time code for a Wear OS watch. Open it in Intentic Device on this phone, and it sends the code to the
+                watch paired with the phone. The watch then asks you before it connects.
+            </p>
+            <p id="pair-no-code" class="mt-4 max-w-copy text-lg text-muted">
+                This page opens a watch's pairing code in Intentic Device on your phone. Scan the QR code on your watch's card in the sandbox
+                with your phone to get one.
+            </p>
+            <div class="mt-8 flex flex-wrap items-center gap-4">
+                <a id="pair-open" href="/watch/" class="btn btn-primary hidden">Send to my watch</a>
+                <a href="/phone/apk" data-download-cta class="text-sm text-link hover:underline">No Intentic Device on this phone? Download it</a>
+            </div>
+            <p class="mt-6 max-w-copy text-xs text-subtle">
+                The watch needs Intentic Device too: <a href="/watch/" class="text-link hover:underline">how to put it on a watch</a>. The code
+                works once and expires about ten minutes after it was made. If it has expired, press Connect on the watch's card again for a
+                fresh one.
+            </p>
+        </section>
+    </main>
+    <Footer />
+</BaseLayout>
+
+<script>
+    // The code is the fragment; hand it to the app's own scheme as a watch's code. Nothing here sends it anywhere.
+    const code = window.location.hash.slice(1);
+    if (code.startsWith("ixp1_")) {
+        const open = document.getElementById("pair-open");
+        open?.setAttribute("href", `intentic-device://watch#${code}`);
+        open?.classList.remove("hidden");
+        document.getElementById("pair-has-code")?.classList.remove("hidden");
+        document.getElementById("pair-no-code")?.classList.add("hidden");
+    }
+</script>

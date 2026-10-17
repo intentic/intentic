@@ -1538,7 +1538,12 @@
             "qrLabel": "Kod parowania dla aparatu telefonu",
             "scanWithCamera": "Skieruj aparat telefonu na kod i otwórz pokazany link. Kod działa raz i wygasa po około dziesięciu minutach. To okno odświeży się samo, gdy telefon się połączy.",
             "cantScan": "Nie da się zeskanować? Pokaż kod do wklejenia w aplikacji",
-            "onlyWhatYouAllow": ", i tylko w aplikacjach i folderach, na które pozwolisz na samym telefonie. Pilnuje tego telefon, nie ten sandbox. Wstrzymaj go z szybkich ustawień telefonu albo cofnij dostęp tutaj, a zatrzyma się natychmiast."
+            "onlyWhatYouAllow": ", i tylko w aplikacjach i folderach, na które pozwolisz na samym telefonie. Pilnuje tego telefon, nie ten sandbox. Wstrzymaj go z szybkich ustawień telefonu albo cofnij dostęp tutaj, a zatrzyma się natychmiast.",
+            "watchIntro": "Zainstaluj Intentic Device na zegarku z Wear OS, który chcesz połączyć, a potem zeskanuj ten kod aparatem telefonu sparowanego z zegarkiem. Intentic Device na tym telefonie wyśle kod do zegarka, a zegarek zapyta cię, zanim się połączy. Zegarek łączy się z tym sandboxem tylko wtedy, gdy agent go potrzebuje, i można go wstrzymać z jego kafelka Intentic. Nic nie zostaje otwarte w twojej sieci.",
+            "watchOpenOnThisPhone": "Wyślij do mojego zegarka",
+            "watchQrLabel": "Kod parowania dla telefonu obok zegarka",
+            "watchScanWithPhone": "Zegarek nie ma aparatu: skieruj aparat telefonu na kod i otwórz pokazany link. Intentic Device na telefonie zaproponuje wysłanie go do zegarka. Kod działa raz i wygasa po około dziesięciu minutach. To okno odświeży się samo, gdy zegarek się połączy.",
+            "watchOnlyWhatYouAllow": ", i tylko w aplikacjach, na które pozwolisz na samym zegarku. To pilnuje zegarek, nie ten sandbox. Wstrzymaj go z kafelka Intentic na zegarku albo cofnij dostęp tutaj, a zatrzyma się natychmiast."
         },
         "words": {
             "access": "Dostęp",

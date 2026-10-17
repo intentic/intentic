@@ -1119,7 +1119,12 @@
             "qrLabel": "Código de emparejamiento para la cámara del teléfono",
             "scanWithCamera": "Apunta la cámara del teléfono al código y abre el enlace que muestra. El código funciona una vez y caduca en unos diez minutos. Esta ventana se actualiza sola cuando el teléfono se conecta.",
             "cantScan": "¿No puedes escanearlo? Muestra el código para pegarlo en la app",
-            "onlyWhatYouAllow": ", y solo en las apps y carpetas que permitas en el propio teléfono. Eso lo hace cumplir el teléfono, no este sandbox. Páusalo desde los ajustes rápidos del teléfono, o revócalo aquí, y se detiene al instante."
+            "onlyWhatYouAllow": ", y solo en las apps y carpetas que permitas en el propio teléfono. Eso lo hace cumplir el teléfono, no este sandbox. Páusalo desde los ajustes rápidos del teléfono, o revócalo aquí, y se detiene al instante.",
+            "watchIntro": "Instala Intentic Device en el reloj Wear OS que quieres conectar y escanea este código con la cámara del teléfono vinculado al reloj. Intentic Device en ese teléfono envía el código al reloj, y el reloj te pregunta antes de vincularse. El reloj se conecta a este sandbox solo mientras el agente lo necesita y se puede pausar desde su tarjeta Intentic. No se abre nada en tu red.",
+            "watchOpenOnThisPhone": "Enviar a mi reloj",
+            "watchQrLabel": "Código de vinculación para el teléfono junto al reloj",
+            "watchScanWithPhone": "Un reloj no tiene cámara: apunta la cámara del teléfono al código y abre el enlace que muestra. Intentic Device en el teléfono ofrece enviarlo al reloj. El código funciona una vez y caduca en unos diez minutos. Esta ventana se actualiza sola cuando el reloj se conecta.",
+            "watchOnlyWhatYouAllow": ", y solo en las apps que permitas en el propio reloj. Eso lo hace cumplir el reloj, no este sandbox. Páusalo desde la tarjeta Intentic del reloj, o revócalo aquí, y se detiene al instante."
         },
         "words": {
             "access": "Acceso",

@@ -5,4 +5,12 @@
         <item name="colorPrimaryDark">@color/ink_dark</item>
         <item name="colorAccent">@color/accent</item>
     </style>
+
+    <!-- A watch: no action bar on a screen that small, and black, which is what an OLED watch face around it is. -->
+    <style name="Theme.IntenticDevice.Watch" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">@color/ink</item>
+        <item name="colorPrimaryDark">@color/ink_dark</item>
+        <item name="colorAccent">@color/accent</item>
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
 </resources>

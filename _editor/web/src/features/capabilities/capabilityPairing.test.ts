@@ -290,6 +290,16 @@ describe(`a pending add`, () => {
     });
 });
 
+it(`a Wear OS watch's Connect opens the same dialog knowing it is a watch, whose code the phone beside it scans`, () => {
+    const { pair } = pairing();
+    const watch = connection(`wrist`, `phone`, { platform: `wearos`, screen: `on`, control: `off`, apps: `on` });
+    const WEAROS: CapabilityCatalogEntry = { id: `wearos`, name: `Wear OS watch`, kind: `phone`, category: `devices`, description: ``, fields: [] };
+    pair.openPairing(WEAROS, watch);
+    expect(pair.phoneConnectVisible.value).toBe(true);
+    expect(pair.phoneConnectId.value).toBe(`wrist`);
+    expect(pair.phonePlatform.value).toBe(`wearos`);
+});
+
 it(`a phone's Connect opens the phone dialog with its install link and grant, and its revoke reaches the phone roster`, async () => {
     const { state, pair } = pairing();
     const pixel = connection(`pixel`, `phone`, { platform: `android`, screen: `on`, control: `on`, apps: `on`, files: `off` });
@@ -304,6 +314,7 @@ it(`a phone's Connect opens the phone dialog with its install link and grant, an
     pair.openPairing(ANDROID, pixel);
     expect(pair.phoneConnectVisible.value).toBe(true);
     expect(pair.phoneConnectId.value).toBe(`pixel`);
+    expect(pair.phonePlatform.value).toBe(`android`);
     expect(pair.phonePermissions.value).toBe(`see the screen, tap, swipe and type in the apps you allow, open apps and links`);
     expect(pair.connectVisible.value).toBe(false);
     await pair.removePairedAccess(ANDROID, `pixel`);

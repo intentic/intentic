@@ -5,6 +5,7 @@ import dev.intentic.device.protocol.Enrollment
 import dev.intentic.device.protocol.PhoneWire
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -36,6 +37,22 @@ class PhoneWireTest {
         assertEquals(pairing, PhoneWire.parsePairingCode("intentic-device://pair/#$bare"))
         assertNull(PhoneWire.parsePairingCode("https://intentic.dev/phone/pair/#ixb1_abc"))
         assertNull(PhoneWire.parsePairingCode("https://intentic.dev/phone/pair"))
+    }
+
+    @Test
+    fun `a watch card's link carries the same code, and the phone opens it on the watch as a link that pairs the watch`() {
+        val pairing = PhoneWire.Pairing("https://sandbox-abc.sbx.intentic.dev", "one-time")
+        val bare = code(pairing.url, pairing.token)
+        val watchLink = "${PhoneWire.WATCH_PAIR_LINK}#$bare"
+        assertEquals(pairing, PhoneWire.parsePairingCode(watchLink))
+        assertTrue(PhoneWire.isWatchLink(watchLink))
+        assertTrue(PhoneWire.isWatchLink("https://intentic.dev/watch/pair/#$bare"))
+        assertTrue(PhoneWire.isWatchLink("intentic-device://watch#$bare"))
+        assertFalse(PhoneWire.isWatchLink(link(pairing.url, pairing.token)))
+        assertFalse(PhoneWire.isWatchLink("intentic-device://pair#$bare"))
+        assertFalse(PhoneWire.isWatchLink(bare))
+        assertEquals("intentic-device://pair#$bare", PhoneWire.pairHereLink(watchLink))
+        assertEquals(pairing, PhoneWire.parsePairingCode(PhoneWire.pairHereLink(watchLink)))
     }
 
     @Test

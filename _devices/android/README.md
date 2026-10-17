@@ -1,6 +1,6 @@
 # android
 
-Intentic Device (`dev.intentic.device`), the Android app that connects a person's own phone to their sandbox, so the agent can work on it within the switches they set on the card and on the phone.
+Intentic Device (`dev.intentic.device`), the Android app that connects a person's own phone or Wear OS watch to their sandbox, so the agent can work on it within the switches they set on the card and on the device.
 
 ```mermaid
 flowchart LR
@@ -49,6 +49,21 @@ flowchart LR
   `ui_act` and `device` (touch and type), and its own updater. `play` carries neither: Google Play forbids an AI agent
   acting through the accessibility service, so there it reads the screen through MediaProjection (the person approves
   sharing once per session) and offers no touch tools. Facts report the flavor as `build`.
+- **Wear OS.** The same APK runs on a watch (`Form`, from `FEATURE_WATCH`), the Wear OS watch card's far end. There:
+  - `WatchActivity` replaces `MainActivity`: a round, crown-scrolled screen with pairing, pause, access, apps and unpair.
+  - The folder and notification tools are not listed and `facts.form` is `"watch"`: Wear OS has no document picker and
+    no notification-access screen.
+  - Pausing is `PauseWearTile`, a tile beside the watch face (there are no Quick Settings tiles), and the connected
+    notice carries an ongoing activity, so the agent's icon shows on the watch face.
+  - Screenshots need the touch service: Wear OS has no screen-sharing dialog, so without it `screenCapture` is
+    `"none"` and a screenshot says where to switch the service on. Settings ▸ Accessibility lists it (on Wear OS 5 under
+    its class name) and an app installed over adb is not held back as a restricted setting.
+  - Touch never acts in Wear OS's own settings and system packages, beside the phone's.
+  - Pairing: a watch has no camera. The card's code is an `intentic.dev/watch/pair` link the phone beside the watch
+    scans; `PairActivity` on the phone sends it on (`WatchHandoff`, Wear OS's `RemoteActivityHelper`) as
+    `intentic-device://pair#…`, which the watch opens on its own `PairActivity` and asks its wearer. A computer can open
+    the same link on the watch over adb.
+  - A watch has no browser either, so the app goes on over adb (`adb install`, or the agent's `android_install`).
 - **Activity log.** Every tool call is appended to a JSONL log in app storage (text arguments cut to 40 characters),
   and the app shows the last 100.
 - **Updater** (direct only, `update/`). On launch and once a day it reads
@@ -78,7 +93,8 @@ flowchart LR
 - [app/src/main/kotlin/dev/intentic/device/policy/Gate.kt](app/src/main/kotlin/dev/intentic/device/policy/Gate.kt) — the one place a tool call is allowed or refused.
 - [app/src/main/kotlin/dev/intentic/device/tools/](app/src/main/kotlin/dev/intentic/device/tools/) — the tools both flavors share, and their registry.
 - [app/src/direct/kotlin/dev/intentic/device/touch/](app/src/direct/kotlin/dev/intentic/device/touch/) — the accessibility service, `ui_elements`, `ui_act`, `device`, the confirm rules.
-- [app/src/main/AndroidManifest.xml](app/src/main/AndroidManifest.xml) — the pairing intent filters, services, the pause tile.
+- [app/src/main/AndroidManifest.xml](app/src/main/AndroidManifest.xml) — the pairing intent filters, services, the pause tiles.
+- [app/src/main/kotlin/dev/intentic/device/wear/](app/src/main/kotlin/dev/intentic/device/wear/) — the watch's pause tile and the phone's hand-off of a watch's pairing code.
 
 ## Commands
 

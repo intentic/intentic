@@ -6,15 +6,19 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import dev.intentic.device.Graph
+import dev.intentic.device.R
 import java.text.DateFormat
 import java.util.Date
 
-/** What the agent did on this phone, newest first: the last 100 things. */
+/** What the agent did on this phone or watch, newest first: the last 100 things. */
 class ActivityLogActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        if (Graph.watch) {
+            setTheme(R.style.Theme_IntenticDevice_Watch)
+        }
         super.onCreate(savedInstanceState)
         title = "Activity"
-        val ui = Ui(this)
+        val ui = Ui(this, compact = Graph.watch)
         val content = ui.column().apply { setPadding(ui.dp(16), ui.dp(8), ui.dp(16), ui.dp(16)) }
         val entries = Graph.log.last()
         if (entries.isEmpty()) {
@@ -30,6 +34,10 @@ class ActivityLogActivity : AppCompatActivity() {
                 "${format.format(Date(entry.time))}\n${entry.tool} ${entry.args.orEmpty()}\n${entry.text}"
             }
             content.addView(ui.mono(text))
+        }
+        if (Graph.watch) {
+            setContentView(ui.watchScreen(this, content).also { it.requestFocus() })
+            return
         }
         val scroll = ScrollView(this).apply { addView(content) }
         setContentView(scroll)

@@ -24,6 +24,14 @@ test(`a connected phone is green and says what it is and how charged`, () => {
     });
 });
 
+test(`a Wear OS watch says so, with the Android release it runs on`, () => {
+    const watch = { ...facts(), device: `Google Pixel Watch 3`, android: `14`, form: `watch` };
+    expect(phoneRowOf(phone({ id: `wrist`, platform: `wearos`, online: true, lastSeen: 1, facts: watch }))).toMatchObject({
+        platform: `wearos`,
+        detail: `Google Pixel Watch 3 · Wear OS (Android 14) · battery 81% charging`,
+    });
+});
+
 test(`asleep is calm when the sandbox can wake it, and a warning with the way out when it cannot`, () => {
     expect(phoneRowOf(phone({ lastSeen: 1, facts: facts() }))).toMatchObject({ state: `asleep`, tone: `neutral` });
     expect(phoneRowOf(phone({ lastSeen: 1, facts: facts(), wake: `register` }))).toMatchObject({

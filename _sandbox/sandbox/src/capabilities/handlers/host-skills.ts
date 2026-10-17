@@ -40,9 +40,9 @@ the ones you need). Then:
 | \`mcp__\${id}__browser_click\` / \`browser_fill\` / \`browser_key\` | Act on the page by ref. |
 | \`mcp__\${id}__browser_tabs\` | List the browser's tabs, or switch to one. |
 | \`mcp__\${id}__device\` | Use the mouse and keyboard: click (a coordinate or an element ref), type, press a chord, scroll, drag. |
-| \`mcp__\${id}__android_devices\` | The Android phones attached to this machine over adb (USB or wireless debugging): serial, state, model, Android version, screen size. |
-| \`mcp__\${id}__android_ui_elements\` | The phone screen's controls from its accessibility dump, each with a ref like \`e12\`; \`query\` finds one. |
-| \`mcp__\${id}__android_act\` | Touch the phone: tap, long_press or swipe at a ref or a coordinate, type, press a key, back, home, recents, scroll. |
+| \`mcp__\${id}__android_devices\` | The Android phones and Wear OS watches attached to this machine over adb (USB or wireless debugging): serial, state, model, form (phone, watch, tablet…), Android version, screen size. |
+| \`mcp__\${id}__android_ui_elements\` | The phone or watch screen's controls from its accessibility dump, each with a ref like \`e12\`; \`query\` finds one. |
+| \`mcp__\${id}__android_act\` | Touch the phone or watch: tap, long_press or swipe at a ref or a coordinate, type, press a key, back, home, recents, scroll. |
 | \`mcp__\${id}__android_screenshot\` | The phone's screen as an image with an id (\`phone-…\`), apart from the desktop's screenshots. |
 | \`mcp__\${id}__android_shell\` | Run a command in the phone's own shell (\`adb shell\`): \`am start\`, \`pm list packages\`, \`dumpsys\`. |
 | \`mcp__\${id}__android_install\` | Install an APK from this machine onto the phone. |
@@ -291,7 +291,28 @@ Things to know:
   using.
 - **Prefer a command when there is one.** \`am start -n <package>/<activity>\` opens an app exactly, \`pm list packages\`
   lists them, \`dumpsys\` reads state, and \`android_logcat\` shows why an app crashed. Use the screen for what has no
-  command.`;
+  command.
+
+## A Wear OS watch on this machine
+
+A Wear OS watch is driven by the same \`android_*\` tools, and \`android_devices\` says \`"form": "watch"\` for it. A
+watch has no USB debugging to speak of, so it is reached over wireless debugging:
+
+- **Connecting it.** On the watch, Settings > System > About > Versions: tap Build number seven times. Then Settings >
+  Developer options: ADB debugging on, Wireless debugging on, Pair new device. \`adb pair <ip>:<pairing port> <code>\` and
+  \`adb connect <ip>:<port>\` follow as for a phone, with the code the watch shows; the watch and this machine have to be on
+  the same Wi-Fi network.
+- **It drops off.** A watch turns its Wi-Fi off while its phone is near over Bluetooth, and adb then reads it as
+  offline. Ask the person to leave it on its charger, or to set its Wi-Fi to stay on, and connect again.
+- **Its controls, as \`android_act\` drives them.** \`scroll\` up or down turns the crown (a scroll at an element or a
+  coordinate swipes there instead). \`home\` always ends on the watch face, though Home itself goes back and forth
+  between the face and the app list. \`recents\` presses the side button. A screen that has dimmed is woken before any
+  input, and the answer says so.
+- **Its gestures**, for \`swipe\`: from the left edge to the right goes back; on the watch face, left opens the tiles,
+  up the notifications, down quick settings. Tiles are read like any screen, with \`android_ui_elements\`.
+- **Links open on the phone.** An https link opened on the watch hands off to the paired phone; open an app on the
+  watch itself with \`am start\` or from its app list.
+- **A phone and a watch attached together** are two devices: pass \`serial\` to every call.`;
 
 // (2026-10-13) The section a device on Intentic OS adds (_os/README.md): the box boots straight into Intentic, and the
 // sandbox reading this may be the one that looks after it. Only for a machine whose facts say so (DeviceFacts.intenticOs),

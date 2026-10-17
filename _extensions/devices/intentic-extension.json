@@ -16,7 +16,7 @@
                     "icon": "desktop",
                     "description": "Your Windows PC, shell, files, screen.",
                     "category": "devices",
-                    "hint": "The name is how you both refer to it (\"check the logs on my-laptop\"). Adding hands you a one-liner to run there.",
+                    "hint": "The name is how you both refer to it (\"check the logs on my-laptop\"). Adding hands you a one-liner to run there. An Android phone or Wear OS watch plugged into it, or paired over wireless debugging, is driven through it too.",
                     "guide": {
                         "steps": [
                             "Add the device here: a one-time command appears straight away, and `Connect` on its card brings it back later.",
@@ -37,7 +37,7 @@
                     "logo": "linux",
                     "description": "Your Linux PC, shell, files, desktop.",
                     "category": "devices",
-                    "hint": "The name is how you both refer to it (\"run the tests on my-desktop\"). Adding hands you a one-liner to run there.",
+                    "hint": "The name is how you both refer to it (\"run the tests on my-desktop\"). Adding hands you a one-liner to run there. An Android phone or Wear OS watch plugged into it, or paired over wireless debugging, is driven through it too.",
                     "guide": {
                         "steps": [
                             "Add the device here: a one-time command appears straight away, and `Connect` on its card brings it back later.",

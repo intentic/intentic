@@ -1580,7 +1580,12 @@
             "qrLabel": "Pairing code for the phone's camera",
             "scanWithCamera": "Point the phone's camera at the code and open the link it shows. The code works once and expires in about ten minutes. This window updates by itself when the phone connects.",
             "cantScan": "Can't scan it? Show the code to paste into the app",
-            "onlyWhatYouAllow": ", and only in the apps and folders you allow on the phone itself. The phone enforces that part, not this sandbox. Pause it from the phone's Quick Settings, or Revoke here, and it stops immediately."
+            "onlyWhatYouAllow": ", and only in the apps and folders you allow on the phone itself. The phone enforces that part, not this sandbox. Pause it from the phone's Quick Settings, or Revoke here, and it stops immediately.",
+            "watchIntro": "Install Intentic Device on the Wear OS watch you want to connect, then scan this code with the camera of the phone the watch is paired with. Intentic Device on that phone sends the code to the watch, and the watch asks you before it pairs. The watch connects out to this sandbox only while the agent needs it and can be paused from its Intentic tile. Nothing is opened on your network.",
+            "watchOpenOnThisPhone": "Send to my watch",
+            "watchQrLabel": "Pairing code for the phone beside the watch",
+            "watchScanWithPhone": "A watch has no camera: point your phone's camera at the code and open the link it shows. Intentic Device on the phone offers to send it to the watch. The code works once and expires in about ten minutes. This window updates by itself when the watch connects.",
+            "watchOnlyWhatYouAllow": ", and only in the apps you allow on the watch itself. The watch enforces that part, not this sandbox. Pause it from the watch's Intentic tile, or Revoke here, and it stops immediately."
         },
         "words": {
             "access": "Access",

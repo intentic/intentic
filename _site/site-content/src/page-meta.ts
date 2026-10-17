@@ -59,6 +59,13 @@ export const pageMeta: Record<string, PageMeta> = {
             "Connect your own Android phone to your intentic sandbox. The agent sees the screen and works in the apps and folders you allow, and you can pause it from Quick Settings.",
         datePublished: "2026-10-05",
     },
+    // The watch's own page: a watch has no browser, so it leads with how the app gets onto one.
+    "/watch/": {
+        title: "Intentic Device on Wear OS: let your agent work on your watch",
+        description:
+            "Connect your own Wear OS watch to your intentic sandbox. The agent sees the screen and works in the apps you allow, and you can pause it from a tile beside the watch face.",
+        datePublished: "2026-10-17",
+    },
     "/download/": {
         title: "Download Intentic for Windows and Linux",
         description:

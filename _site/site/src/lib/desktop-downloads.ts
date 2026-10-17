@@ -47,6 +47,9 @@ export const DESKTOP_ROUTES: Record<string, DesktopRoute> = {
     // Intentic Device, the Android app that connects a phone to a sandbox: the direct-download build, the one that can
     // tap and type (Google Play forbids that to an AI agent). Not a desktop build, but the same vanity-path mechanics.
     "/phone/apk": { staged: "intentic-device.apk", asset: (v) => `intentic-device-${v}.apk` },
+    // The same APK runs on a Wear OS watch, where it shows a watch's screen; a watch has no browser, so this path is
+    // what a computer that installs it over adb fetches.
+    "/watch/apk": { staged: "intentic-device.apk", asset: (v) => `intentic-device-${v}.apk` },
 };
 
 /** A tray with an arrow into it. The neutral stand-in, shown until a platform is recognised. */

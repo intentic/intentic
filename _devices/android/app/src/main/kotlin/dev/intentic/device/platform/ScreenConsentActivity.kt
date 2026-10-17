@@ -1,6 +1,7 @@
 package dev.intentic.device.platform
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
@@ -41,7 +42,14 @@ class ScreenConsentActivity : ComponentActivity() {
         }
         if (savedInstanceState == null) {
             val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            consent.launch(manager.createScreenCaptureIntent())
+            try {
+                consent.launch(manager.createScreenCaptureIntent())
+            } catch (error: ActivityNotFoundException) {
+                // A device with no screen-sharing dialog at all, as a Wear OS watch is.
+                Graph.log.event("This device has no screen-sharing prompt")
+                Toast.makeText(this, "This device cannot share its screen this way.", Toast.LENGTH_LONG).show()
+                finish()
+            }
         }
     }
 }

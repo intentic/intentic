@@ -15,6 +15,7 @@ import dev.intentic.device.platform.AndroidApps
 import dev.intentic.device.platform.AndroidClipboard
 import dev.intentic.device.platform.Awake
 import dev.intentic.device.platform.DeviceFacts
+import dev.intentic.device.platform.Form
 import dev.intentic.device.platform.KeystoreKey
 import dev.intentic.device.platform.Notifier
 import dev.intentic.device.platform.SafFiles
@@ -38,6 +39,7 @@ import dev.intentic.device.tools.LogNotices
 import dev.intentic.device.tools.NoticeLog
 import dev.intentic.device.tools.Registry
 import dev.intentic.device.tools.ToolDeps
+import dev.intentic.device.wear.PauseWearTile
 import java.io.File
 import java.net.URI
 import java.util.concurrent.CopyOnWriteArrayList
@@ -94,11 +96,17 @@ object Graph {
     lateinit var notices: NoticeLog
         private set
     val frames = FrameLog()
+
+    /** A phone or a Wear OS watch: what the screens show and which tools are answered. */
+    var form: Form = Form.PHONE
+        private set
+    val watch: Boolean get() = form == Form.WATCH
     lateinit var link: LinkController
         private set
 
     fun init(application: Application) {
         app = application
+        form = Form.of(application)
         val kv = PrefsKeyValue(application.getSharedPreferences("intentic_device", Context.MODE_PRIVATE))
         settings = Settings(kv)
         pairings = PairingStore(kv, AesGcmBox { KeystoreKey.get() })
@@ -107,19 +115,19 @@ object Graph {
         allowList = AppAllowList(kv)
         requests = AccessRequests(kv)
         log = ActivityLog(File(application.filesDir, "activity.jsonl"))
-        notifier = Notifier(application)
+        notifier = Notifier(application, watch)
         awake = Awake(application)
         apps = AndroidApps(application, requests, notifier)
-        screen = ScreenSession(application)
+        screen = ScreenSession(application, watch)
         notices = NoticeLog(application.packageName)
 
-        val facts = DeviceFacts(application, settings, folders, allowList, notices)
+        val facts = DeviceFacts(application, settings, folders, allowList, notices, form)
         val deps = ToolDeps(
             facts::json, scopes::current, Distribution.screen(screen), frames, apps, allowList, folders,
             SafFiles(application), AndroidClipboard(application), LogNotices(notices),
         )
         val gate = Gate(scopes::current, { settings.paused }, { notifier.noticeVisible() })
-        val mcp = McpServer(Registry.tools(deps, Distribution.tools(deps)), gate, log, BuildConfig.VERSION_NAME) { link.activity() }
+        val mcp = McpServer(Registry.tools(deps, Distribution.tools(deps), watch), gate, log, BuildConfig.VERSION_NAME) { link.activity() }
         val rpc = JsonRpcPeer(PhonePeer(facts::json, scopes, mcp))
         link = LinkController(
             host = AndroidLinkHost(application),
@@ -132,6 +140,10 @@ object Graph {
             },
             worker = Executors.newCachedThreadPool { runnable -> Thread(runnable, "intentic-call").apply { isDaemon = true } },
         )
+        if (watch) {
+            // The pause tile beside the watch face shows the switch as it is now.
+            changes.add { PauseWearTile.refresh(application) }
+        }
         settings.onPauseChanged { paused ->
             log.event(if (paused) "The agent was paused" else "The agent was resumed")
             if (paused) {

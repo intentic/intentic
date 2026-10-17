@@ -8,6 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.app.NotificationCompat
+import androidx.wear.ongoing.OngoingActivity
+import androidx.wear.ongoing.Status
 import dev.intentic.device.R
 import dev.intentic.device.link.ControlReceiver
 import dev.intentic.device.link.LinkState
@@ -22,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * to allow an app. Each of the asking ones is the only way its action happens: Android does not let a background
  * service start an activity, and nothing is shared, opened or allowed until the owner taps.
  */
-class Notifier(private val context: Context) {
+class Notifier(private val context: Context, private val watch: Boolean = false) {
     private val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private val openCounter = AtomicInteger(0)
 
@@ -85,6 +87,16 @@ class Notifier(private val context: Context) {
             builder.addAction(NotificationCompat.Action.Builder(0, "Resume", control(ControlReceiver.ACTION_RESUME)).setAuthenticationRequired(true).build())
         } else {
             builder.addAction(NotificationCompat.Action.Builder(0, "Pause", control(ControlReceiver.ACTION_PAUSE)).build())
+        }
+        if (watch) {
+            // A watch shows an ongoing notification only in its list; an ongoing activity also puts the agent's icon on the
+            // watch face and in the launcher's Recents, one tap from the app and its Pause button.
+            OngoingActivity.Builder(context, ID_LINK, builder)
+                .setStaticIcon(R.drawable.ic_stat_agent)
+                .setTouchIntent(openApp())
+                .setStatus(Status.Builder().addTemplate(title).build())
+                .build()
+                .apply(context)
         }
         return builder.build()
     }

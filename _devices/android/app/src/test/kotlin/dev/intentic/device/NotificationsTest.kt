@@ -137,6 +137,9 @@ class ScreenCaptureAndFramesTest {
         assertEquals("accessibility", ScreenCapture.mode(accessibilityBound = true, sdk = 36))
         assertEquals("consent", ScreenCapture.mode(accessibilityBound = true, sdk = 29))
         assertEquals("consent", ScreenCapture.mode(accessibilityBound = false, sdk = 36))
+        // A watch has no screen-sharing dialog: without the touch service there is no way to take one.
+        assertEquals("none", ScreenCapture.mode(accessibilityBound = false, sdk = 34, watch = true))
+        assertEquals("accessibility", ScreenCapture.mode(accessibilityBound = true, sdk = 34, watch = true))
     }
 
     @Test

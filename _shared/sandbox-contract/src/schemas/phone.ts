@@ -62,6 +62,9 @@ export const PhoneFactsSchema = z.object({
     sdk: z.number().int(),
     // "direct" (downloaded from intentic.dev, can touch and type) or "play" (the store build, which cannot).
     build: z.string(),
+    // What kind of Android device answered: "watch" for Wear OS, which has no folders and no notification access to
+    // give; absent from an app older than this field, which is a phone. A string, so a newer app's "tablet" still reads.
+    form: z.string().optional(),
     // The pause tile on the phone; true means every tool refuses and says the person paused it.
     paused: z.boolean(),
     // What the person has switched on in Android's own settings for this app.

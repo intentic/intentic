@@ -94,11 +94,14 @@ test("removing a phone revokes it and forgets the channel that could wake it", a
     expect(forgotten).toEqual(["my-pixel"]);
 });
 
-test("the one contributed phone family names where its app comes from", async () => {
+test("each contributed phone family, an Android phone and a Wear OS watch, names where its app comes from", async () => {
     const registry = await contributionRegistry(host);
     const entries = [...registry.values()].filter((entry) => entry.spec.kind === "phone");
-    expect(entries.map((entry) => entry.spec.id)).toEqual(["android"]);
-    expect(entries[0]?.spec.kind === "phone" && entries[0].spec.install).toBe("https://intentic.dev/phone");
+    expect(entries.map((entry) => entry.spec.id)).toEqual(["android", "wearos"]);
+    expect(entries.map((entry) => (entry.spec.kind === "phone" ? entry.spec.install : undefined))).toEqual([
+        "https://intentic.dev/phone",
+        "https://intentic.dev/watch",
+    ]);
 });
 
 test("echoConfig renders every switch back and a phone holds no manifest secret", () => {

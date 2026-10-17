@@ -68,6 +68,11 @@ class AppPolicy(
             "com.android.packageinstaller",
             "com.google.android.packageinstaller",
             "com.android.vending",
+            // Wear OS keeps its settings and its system screens in packages of its own.
+            "com.google.android.apps.wearable.settings",
+            "com.google.android.apps.wearable.systemui",
+            "com.google.android.wearable.sysui",
+            "com.google.android.wearable.app",
         )
     }
 }

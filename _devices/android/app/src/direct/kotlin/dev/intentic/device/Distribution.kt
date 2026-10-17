@@ -50,6 +50,10 @@ object Distribution {
             TouchService::class.java.name,
         )
         val bound = accessibilityBound()
+        if (Graph.watch) {
+            watchAccessRows(activity, ui, content, bound, enabled)
+            return
+        }
         val text = when {
             bound -> "Touch and type (accessibility service): on. Your agent can read the screen and tap, swipe and type in the apps you allowed, when \"Tap, swipe and type\" is on for this phone's card in your sandbox. Pause it from Quick Settings."
             enabled -> "Touch and type (accessibility service): switched on, waiting for Android to start it."
@@ -60,4 +64,24 @@ object Distribution {
             AccessRows.restrictedSettings(activity, ui, content)
         }
     }
+
+    /** The same row on a watch: stacked, short, and with the way in that a watch's own settings offer. */
+    private fun watchAccessRows(activity: Activity, ui: Ui, content: LinearLayout, bound: Boolean, enabled: Boolean) {
+        content.addView(
+            ui.body(
+                when {
+                    bound -> "Touch and type: on, in the apps you allowed. Pause it from the Intentic tile."
+                    enabled -> "Touch and type: switched on, waiting for Wear OS to start it."
+                    else -> "Touch and type: off. Your agent can still see the screen when you allow it."
+                },
+            ),
+        )
+        content.addView(ui.button(if (bound || enabled) "Change" else "Switch on") { activity.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) })
+        if (!bound && !enabled) {
+            content.addView(ui.body(WATCH_TOUCH_HELP, muted = true))
+        }
+    }
+
+    private const val WATCH_TOUCH_HELP =
+        "In Settings, Accessibility, switch on the touch service, which Wear OS may list as dev.intentic.device.touch.TouchService, and confirm."
 }

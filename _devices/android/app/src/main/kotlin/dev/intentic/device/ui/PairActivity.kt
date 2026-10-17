@@ -10,38 +10,54 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import dev.intentic.device.Graph
+import dev.intentic.device.R
 import dev.intentic.device.link.OkHttpSockets
 import dev.intentic.device.protocol.EnrollResult
 import dev.intentic.device.protocol.Enrollment
 import dev.intentic.device.protocol.PhoneWire
 import dev.intentic.device.store.Pairing
+import dev.intentic.device.wear.WatchHandoff
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 
 /**
- * Pairs this phone with a sandbox. It opens from the pairing link or QR code (intentic.dev/phone/pair, or
+ * Pairs this phone or watch with a sandbox. It opens from the pairing link or QR code (intentic.dev/phone/pair, or
  * intentic-device://pair, with the code in the fragment) or from a pasted code. Nothing is sent until the owner has read the
- * sandbox's address and tapped the button: a link anyone can send must not be able to pair the phone by being opened.
+ * sandbox's address and tapped the button: a link anyone can send must not be able to pair the device by being opened.
+ *
+ * A watch card's link (intentic.dev/watch/pair, or intentic-device://watch) opened on a phone pairs nothing here: the phone
+ * sends the code on to a watch connected to it ([WatchHandoff]), and the watch asks its wearer on this same screen.
  */
 class PairActivity : AppCompatActivity() {
     private lateinit var ui: Ui
     private lateinit var content: LinearLayout
     private var pending: PhoneWire.Pairing? = null
+    private var pendingCode: String? = null
+    private var forWatch = false
+    private var watches: List<WatchHandoff.Watch>? = null
     private var message: String? = null
     private var enrolling = false
+    private val noun = Graph.form.noun
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        if (Graph.watch) {
+            setTheme(R.style.Theme_IntenticDevice_Watch)
+        }
         super.onCreate(savedInstanceState)
-        title = "Pair this phone"
-        ui = Ui(this)
+        title = "Pair this $noun"
+        ui = Ui(this, compact = Graph.watch)
         content = ui.column().apply { setPadding(ui.dp(16), ui.dp(8), ui.dp(16), ui.dp(24)) }
-        val scroll = ScrollView(this).apply { addView(content) }
-        setContentView(scroll)
-        ViewCompat.setOnApplyWindowInsetsListener(scroll) { view, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            view.setPadding(bars.left, 0, bars.right, bars.bottom)
-            insets
+        if (Graph.watch) {
+            setContentView(ui.watchScreen(this, content).also { it.requestFocus() })
+        } else {
+            val scroll = ScrollView(this).apply { addView(content) }
+            setContentView(scroll)
+            ViewCompat.setOnApplyWindowInsetsListener(scroll) { view, insets ->
+                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+                view.setPadding(bars.left, 0, bars.right, bars.bottom)
+                insets
+            }
         }
         read(intent)
         render()
@@ -59,29 +75,55 @@ class PairActivity : AppCompatActivity() {
         val link = from.dataString ?: return
         val parsed = PhoneWire.parsePairingCode(link)
         pending = parsed
-        message = if (parsed == null) "That link is not a pairing code this app can read. Copy a fresh one from your sandbox's phone card." else null
+        pendingCode = parsed?.let { PhoneWire.bareCode(link) }
+        // On a watch every code pairs the watch itself, whichever link it came by.
+        forWatch = parsed != null && !Graph.watch && PhoneWire.isWatchLink(link)
+        message = if (parsed == null) "That link is not a pairing code this app can read. Copy a fresh one from your sandbox's $noun card." else null
+        if (forWatch) {
+            watches = null
+            WatchHandoff.watches(this) { found, why ->
+                watches = found
+                if (why != null) {
+                    message = why
+                }
+                render()
+            }
+        }
     }
 
     private fun render() {
         content.removeAllViews()
         val existing = Graph.pairings.get()
         val found = pending
-        content.addView(ui.title("Pair this phone"))
-        content.addView(ui.body("Your sandbox shows a pairing code or a QR code on the phone's card. Scan the QR code with the camera, or paste the code or link here."))
+        if (forWatch && found != null) {
+            renderHandoff(found)
+            return
+        }
+        content.addView(ui.title("Pair this $noun"))
+        if (Graph.watch) {
+            // Once a code has arrived the question is all a watch's screen has room for.
+            if (found == null) {
+                content.addView(ui.body("Scan the QR code on your watch's card in the sandbox with your phone: Intentic Device on the phone sends it here. Or paste the code."))
+            }
+        } else {
+            content.addView(ui.body("Your sandbox shows a pairing code or a QR code on the phone's card. Scan the QR code with the camera, or paste the code or link here."))
+        }
         message?.let { content.addView(ui.body(it)) }
 
         if (found != null) {
             val host = Graph.hostOf(found.url)
             content.addView(ui.heading("Pair with this sandbox?"))
-            content.addView(ui.body(found.url))
+            // An address has no spaces to wrap at; on a round watch it may break after its dots instead of running off the edge.
+            content.addView(ui.body(if (Graph.watch) found.url.replace(".", ".\u200B") else found.url))
             if (!found.url.startsWith("https://")) {
                 content.addView(ui.body("This address does not use https, so what it sends would not be private. This app only pairs with https sandboxes."))
             } else {
-                content.addView(ui.body("Only continue if this is your own sandbox. Once paired, your agent there can use this phone only as far as you allow, and you can pause or unpair at any time.", muted = true))
+                content.addView(ui.body("Only continue if this is your own sandbox. Once paired, your agent there can use this $noun only as far as you allow, and you can pause or unpair at any time.", muted = true))
                 if (existing != null) {
                     content.addView(ui.body("This replaces your current pairing with ${Graph.hostOf(existing.sandboxUrl)}."))
                 }
-                val pair = ui.button(if (enrolling) "Pairing..." else "Pair with $host") { enroll(found) }
+                val label = if (Graph.watch) host.replace(".", ".\u200B") else host
+                val pair = ui.button(if (enrolling) "Pairing..." else "Pair with $label") { enroll(found) }
                 pair.isEnabled = !enrolling
                 content.addView(pair)
             }
@@ -101,12 +143,39 @@ class PairActivity : AppCompatActivity() {
             content.addView(ui.button("Continue") {
                 val parsed = PhoneWire.parsePairingCode(paste.text.toString())
                 pending = parsed
-                message = if (parsed == null) "That is not a pairing code. It starts with ixp1_ and comes from your sandbox's phone card." else null
+                message = if (parsed == null) "That is not a pairing code. It starts with ixp1_ and comes from your sandbox's $noun card." else null
                 render()
             })
             if (existing != null) {
                 content.addView(ui.body("Already paired with ${Graph.hostOf(existing.sandboxUrl)}. A new pairing replaces it, after you confirm.", muted = true))
             }
+        }
+    }
+
+    /** A watch card's code, opened on this phone: offer to send it to each connected watch, and pair nothing here. */
+    private fun renderHandoff(found: PhoneWire.Pairing) {
+        content.addView(ui.title("Send to your watch"))
+        content.addView(ui.body("This code is for a Wear OS watch, to pair it with ${found.url}. A watch has no camera, so this phone sends the code to it. This phone does not pair itself."))
+        message?.let { content.addView(ui.body(it)) }
+        val listed = watches
+        when {
+            listed == null -> content.addView(ui.body("Looking for watches connected to this phone...", muted = true))
+            listed.isEmpty() -> content.addView(ui.body("No watch is connected to this phone right now. Check it is on and paired in the Wear OS app, then open the link again."))
+            else -> for (watch in listed) {
+                content.addView(ui.button("Send to ${watch.name}") { send(watch) })
+            }
+        }
+        content.addView(ui.body("The watch shows the sandbox's address and asks you there before it pairs. Install Intentic Device on the watch first: intentic.dev/watch.", muted = true))
+        content.addView(ui.button("Cancel") { finish() })
+    }
+
+    private fun send(watch: WatchHandoff.Watch) {
+        val code = pendingCode ?: return
+        message = "Sending to ${watch.name}..."
+        render()
+        WatchHandoff.send(this, watch, code) { failure ->
+            message = failure ?: "Sent. Look at ${watch.name}: it shows the sandbox's address and asks you to confirm."
+            render()
         }
     }
 
@@ -131,7 +200,8 @@ class PairActivity : AppCompatActivity() {
                     is EnrollResult.Enrolled -> {
                         Graph.pair(Pairing(found.url, result.id, result.token))
                         Graph.connect(this)
-                        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                        val home = if (Graph.watch) WatchActivity::class.java else MainActivity::class.java
+                        startActivity(Intent(this, home).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
                         finish()
                     }
                     is EnrollResult.Refused -> {

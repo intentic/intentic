@@ -2,6 +2,7 @@ import { capabilityEffects } from "@intentic/capability-catalog";
 import type { CapabilityKind, CapabilityState, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import { HOST_NATIVE_ENVIRONMENT, type HostSummary } from "@intentic/sandbox-contract/schemas/hosts";
 import type { NetdiskLink } from "@intentic/sandbox-contract/schemas/netdisk";
+import type { PhoneFacts } from "@intentic/sandbox-contract/schemas/phone";
 import type { VpnLink } from "@intentic/sandbox-contract/schemas/vpn";
 import type { StatusVariant } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
@@ -128,6 +129,11 @@ export const browserGrants = (instance: CapabilitySummary): string => {
 };
 
 // What a phone's switches add up to, read off the same effects the tile renders.
+// How a connected phone names itself and its system: "Google Pixel 8 · Android 16", or for a Wear OS watch "Google
+// Pixel Watch 3 · Wear OS (Android 14)", since a watch's Android release is not the Wear OS version people know it by.
+export const phoneSystem = (facts: Pick<PhoneFacts, `device` | `android` | `form`>): string =>
+    facts.form === `watch` ? `${facts.device} · Wear OS (Android ${facts.android})` : `${facts.device} · Android ${facts.android}`;
+
 export const phoneGrants = (instance: CapabilitySummary): string => {
     const phone = capabilityEffects({ kind: instance.kind, id: instance.id, config: instance.config }).find((effect) => effect.kind === `own-phone`);
     const grants = phone === undefined ? [] : phone.grants;

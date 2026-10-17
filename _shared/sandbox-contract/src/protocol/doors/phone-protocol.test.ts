@@ -4,7 +4,7 @@ import { packageRoot } from "@intentic/constants/node";
 import { OkSchema } from "../../schemas/shared.js";
 import { PhoneFactsSchema, PhoneScopesSchema } from "../../schemas/phone.js";
 import { PHONE_ERROR, PhoneHelloSchema, PhoneRequestSchema, PhoneResponseSchema } from "./phone-protocol.js";
-import { parsePhonePairingCode, phoneConnectUrl, phoneEnrollUrl, phonePairingCode, phonePairingLink } from "./phone-links.js";
+import { parsePhonePairingCode, phoneConnectUrl, phoneEnrollUrl, phonePairingCode, phonePairingLink, watchPairingLink } from "./phone-links.js";
 
 // The phone door's wire as examples, spelled once here: golden/phone-wire.json is this file's `wire` as JSON, and both
 // far ends test against it — the daemon's JSON-RPC link (_sandbox/sandbox/src/phones/json-rpc-link.test.ts) sends
@@ -121,6 +121,13 @@ test("a pairing round-trips as a code and as the link the QR carries", () => {
     expect(parsePhonePairingCode(phonePairingLink(pairing))).toEqual(pairing);
     expect(phonePairingLink(pairing).startsWith("https://intentic.dev/phone/pair#ixp1_")).toBe(true);
     expect(parsePhonePairingCode(phonePairingLink(pairing).replace("/pair#", "/pair/#"))).toEqual(pairing);
+});
+
+test("a watch's link carries the same code, under the path its phone hands on", () => {
+    const pairing = { url: "https://sandbox-abc.sbx.intentic.dev", token: "one-time" };
+    expect(watchPairingLink(pairing)).toBe(`https://intentic.dev/watch/pair#${phonePairingCode(pairing)}`);
+    expect(parsePhonePairingCode(watchPairingLink(pairing))).toEqual(pairing);
+    expect(parsePhonePairingCode(watchPairingLink(pairing).replace("/pair#", "/pair/#"))).toEqual(pairing);
 });
 
 test("a code that is not ours, or carries no usable url or token, is refused rather than attempted", () => {

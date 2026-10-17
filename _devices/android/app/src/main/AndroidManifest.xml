@@ -41,6 +41,12 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.IntenticDevice">
 
+        <!-- On a Wear OS watch the app works on its own: it dials the sandbox itself, over the watch's Wi-Fi or its phone's
+             Bluetooth link, and needs no app on the phone except to receive its pairing code. -->
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="true" />
+
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
@@ -63,18 +69,26 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="https"
-                    android:host="intentic.dev"
-                    android:pathPrefix="/phone/pair" />
+                    android:host="intentic.dev" />
+                <data android:pathPrefix="/phone/pair" />
+                <!-- A watch card's code, scanned by the phone beside the watch: sent on to the watch, never redeemed here. -->
+                <data android:pathPrefix="/watch/pair" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="intentic-device"
-                    android:host="pair" />
+                <data android:scheme="intentic-device" />
+                <data android:host="pair" />
+                <data android:host="watch" />
             </intent-filter>
         </activity>
+
+        <!-- The watch's own screen; MainActivity hands over to it on Wear OS. -->
+        <activity
+            android:name=".ui.WatchActivity"
+            android:exported="false"
+            android:launchMode="singleTop" />
 
         <activity
             android:name=".ui.ActivityLogActivity"
@@ -113,6 +127,21 @@
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
+        </service>
+
+        <!-- The watch's pause switch, a tile beside the watch face (Wear OS has no Quick Settings tiles). A phone never binds it. -->
+        <service
+            android:name=".wear.PauseWearTile"
+            android:exported="true"
+            android:icon="@drawable/ic_tile"
+            android:label="@string/tile_label"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+            <meta-data
+                android:name="androidx.wear.tiles.PREVIEW"
+                android:resource="@drawable/ic_tile" />
         </service>
 
         <!-- Notification access, which only the person can switch on in Android's settings. It records what other apps post, for

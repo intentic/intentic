@@ -59,6 +59,25 @@ export interface PairingHost {
     readonly error: Ref<NoticeModel | null>;
 }
 
+// A phone of the user's own pairs by a code its camera scans, or a link opened on it; a Wear OS watch (`platform`
+// `wearos`) by a code the phone beside it scans and sends on.
+const usePhoneConnect = (contributionOf: ContributionOf) => {
+    const phoneConnectVisible = ref(false);
+    const phoneConnectId = ref(``);
+    const phoneInstall = ref(``);
+    const phonePermissions = ref(``);
+    const phonePlatform = ref(``);
+    const openPhoneConnect = (instance: CapabilitySummary): void => {
+        const contribution = contributionFor(contributionOf, instance.kind, instance.config);
+        phoneConnectId.value = instance.id;
+        phonePlatform.value = String(instance.config[`platform`] ?? `android`);
+        phoneInstall.value = (contribution?.kind === `phone` ? contribution.install : undefined) ?? ``;
+        phonePermissions.value = phoneGrants(instance);
+        phoneConnectVisible.value = true;
+    };
+    return { phoneConnectVisible, phoneConnectId, phoneInstall, phonePermissions, phonePlatform, openPhoneConnect };
+};
+
 export const useCapabilityPairing = ({ hosts, browsers, phones, contributionOf, refetch, error }: PairingHost) => {
     // The live-browser window, a signed-in session rather than a token, opened on one connection: a tile holds several.
     const profileVisible = ref(false);
@@ -102,18 +121,7 @@ export const useCapabilityPairing = ({ hosts, browsers, phones, contributionOf, 
         browserConnectVisible.value = true;
     };
 
-    // A phone of the user's own pairs by a code its camera scans, or a link opened on it.
-    const phoneConnectVisible = ref(false);
-    const phoneConnectId = ref(``);
-    const phoneInstall = ref(``);
-    const phonePermissions = ref(``);
-    const openPhoneConnect = (instance: CapabilitySummary): void => {
-        const contribution = contributionFor(contributionOf, instance.kind, instance.config);
-        phoneConnectId.value = instance.id;
-        phoneInstall.value = (contribution?.kind === `phone` ? contribution.install : undefined) ?? ``;
-        phonePermissions.value = phoneGrants(instance);
-        phoneConnectVisible.value = true;
-    };
+    const { openPhoneConnect, ...phoneConnect } = usePhoneConnect(contributionOf);
 
     return {
         profileVisible,
@@ -130,10 +138,7 @@ export const useCapabilityPairing = ({ hosts, browsers, phones, contributionOf, 
         browserConnectId,
         browserInstall,
         browserPermissions,
-        phoneConnectVisible,
-        phoneConnectId,
-        phoneInstall,
-        phonePermissions,
+        ...phoneConnect,
         // An ACP agent's interactive sign-in: starts loginCommand in the capability's job session and opens its terminal.
         startAgentLogin: async (id: string): Promise<void> => {
             try {

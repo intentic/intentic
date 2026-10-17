@@ -75,8 +75,11 @@ const harness = (
     return phone;
 };
 
-// What was sent to the phone itself: every call but the device listing.
-const sent = (phone: Harness): string[] => phone.calls.filter((call) => call !== "devices -l");
+// What the first action on a device reads once, to know whether it is a watch.
+const FORM_READ = "shell getprop ro.build.characteristics";
+
+// What was sent to the phone itself: every call but the device listing and that one look at what kind it is.
+const sent = (phone: Harness): string[] => phone.calls.filter((call) => call !== "devices -l" && !call.endsWith(FORM_READ));
 
 // Each block of a tool's answer as text, an image as "<image>".
 const texts = (result: Record<string, unknown>): string[] => {
@@ -116,8 +119,8 @@ test("every tool asks for its switch before adb is even looked for", async () =>
 test("android_devices lists each phone with its Android version and screen, and what to do about one not ready", async () => {
     const phone = harness({
         respond: (args) =>
-            args.join(" ").endsWith("getprop ro.build.version.release; getprop ro.build.version.sdk; wm size")
-                ? { stdout: Buffer.from("14\n34\nPhysical size: 1080x2400\n") }
+            args.join(" ").endsWith("getprop ro.build.version.release; getprop ro.build.version.sdk; getprop ro.build.characteristics; wm size")
+                ? { stdout: Buffer.from("14\n34\nnosdcard\nPhysical size: 1080x2400\n") }
                 : undefined,
     });
     phone.devices = TWO_PHONES;
@@ -131,6 +134,7 @@ test("android_devices lists each phone with its Android version and screen, and 
             model: "SM G991B",
             product: "o1sxxx",
             transport: "usb",
+            form: "phone",
             ready: true,
             androidVersion: "14",
             sdk: 34,
@@ -211,7 +215,7 @@ test("an action that changed the screen answers with the new screenshot", async 
     // Driven but not watched: no screenshot, and no capture either.
     const before = phone.calls.length;
     expect(texts(await phone.android.act({ action: "recents" }, scopes({ screen: "off" })))).toEqual([
-        'Opened the recent apps. (No screenshot: "See the screen" is off for this device.)',
+        'Pressed Recents. (No screenshot: "See the screen" is off for this device.)',
     ]);
     expect(phone.calls.slice(before)).toEqual(["devices -l", `-s ${SERIAL} shell input keyevent KEYCODE_APP_SWITCH`]);
 });
@@ -292,6 +296,118 @@ test("typed text is sent so the phone types exactly it, and what it cannot type 
     expect(phone.calls.length).toBe(before);
     await phone.android.act({ action: "key", text: "Return" }, scopes({ screen: "off" }));
     expect(sent(phone).at(-1)).toBe(`-s ${SERIAL} shell input keyevent KEYCODE_ENTER`);
+});
+
+const WATCH = "emulator-5554";
+const ONE_WATCH = `List of devices attached\n${WATCH}          device product:sdk_gwear_x86_64 model:sdk_gwear_x86_64 device:emu64xa transport_id:1\n`;
+const WATCH_FACE = "com.google.android.wearable.sysui/com.google.android.wearable.sysui.mainui.activity.SysUiActivity";
+const APP_LIST = "com.google.android.wearable.sysui/com.google.android.clockwork.sysui.experiences.globallauncher.AllAppsLauncherActivity";
+// What every input on a watch starts with: a screen that has dimmed is woken before it is touched.
+const WAKE = 'case "$(dumpsys power | grep mWakefulness=)" in *=Awake*) ;; *) input keyevent KEYCODE_WAKEUP && echo woke && sleep 0.5 ;; esac; ';
+
+// A round Wear OS watch: it says it is one, its screen is 454 pixels across, and Home toggles between its face and its
+// app list, so what is in front after a press is whatever `front.now` holds then.
+const watchHarness = (options: { front?: string; dim?: boolean } = {}): Harness & { front: { now: string } } => {
+    const front = { now: options.front ?? WATCH_FACE };
+    const watch = harness({
+        respond: (args) => {
+            const joined = args.join(" ");
+            if (joined.endsWith(FORM_READ)) {
+                return { stdout: Buffer.from("emulator,nosdcard,watch\n") };
+            }
+            if (joined.endsWith("getprop ro.build.characteristics; wm size")) {
+                return { stdout: Buffer.from("14\n34\nemulator,nosdcard,watch\nPhysical size: 454x454\n") };
+            }
+            if (joined.endsWith("exec-out screencap -p")) {
+                return { stdout: phonePng(454, 454, 40) };
+            }
+            if (joined.endsWith("dumpsys window | grep mCurrentFocus=")) {
+                return { stdout: Buffer.from(`  mCurrentFocus=Window{5ba44b4 u0 ${front.now}}\n`) };
+            }
+            if (joined.includes(WAKE) && options.dim === true) {
+                return { stdout: Buffer.from("woke\n") };
+            }
+            return undefined;
+        },
+    });
+    watch.devices = ONE_WATCH;
+    return Object.assign(watch, { front });
+};
+
+test("android_devices says a watch is one, and acting on it then needs no second look at what it is", async () => {
+    const watch = watchHarness();
+    const listed = await watch.android.devices(scopes());
+    expect(JSON.parse(listed.split("\n").slice(1).join("\n"))).toEqual([
+        expect.objectContaining({ serial: WATCH, transport: "emulator", form: "watch", ready: true, screen: "454×454" }),
+    ]);
+    const before = watch.calls.length;
+    await watch.android.act({ action: "back" }, scopes({ screen: "off" }));
+    expect(watch.calls.slice(before)).toEqual(["devices -l", `-s ${WATCH} shell ${WAKE}input keyevent KEYCODE_BACK`]);
+});
+
+test("on a watch a scroll turns the crown, Recents is the side button, and a dimmed screen is woken first", async () => {
+    const watch = watchHarness();
+    expect(texts(await watch.android.act({ action: "scroll" }, scopes({ screen: "off" })))).toEqual([
+        'Turned the crown to scroll down. (No screenshot: "See the screen" is off for this device.)',
+    ]);
+    // Read once, on the first action, then remembered.
+    expect(watch.calls.filter((call) => call.endsWith(FORM_READ))).toHaveLength(1);
+    expect(sent(watch).at(-1)).toBe(`-s ${WATCH} shell ${WAKE}input rotaryencoder scroll --axis SCROLL,-2`);
+    await watch.android.act({ action: "scroll", direction: "up", amount: 2 }, scopes({ screen: "off" }));
+    expect(sent(watch).at(-1)).toBe(
+        `-s ${WATCH} shell ${WAKE}input rotaryencoder scroll --axis SCROLL,2 && input rotaryencoder scroll --axis SCROLL,2`,
+    );
+    // Sideways, or at a place named on the screen, it is still a swipe.
+    await watch.android.screenshot(undefined, scopes());
+    await watch.android.act({ action: "scroll", direction: "left" }, scopes({ screen: "off" }));
+    expect(sent(watch).at(-1)).toMatch(new RegExp(`^-s ${WATCH} shell .*input swipe \\d+ 227 \\d+ 227 400$`));
+    await watch.android.act({ action: "scroll", coordinate: [227, 227] }, scopes({ screen: "off" }));
+    expect(sent(watch).at(-1)).toMatch(new RegExp(`^-s ${WATCH} shell .*input swipe 227 \\d+ 227 \\d+ 400$`));
+    expect(texts(await watch.android.act({ action: "recents" }, scopes({ screen: "off" })))).toEqual([
+        'Pressed the side button, which opens the recent apps. (No screenshot: "See the screen" is off for this device.)',
+    ]);
+    expect(sent(watch).at(-1)).toBe(`-s ${WATCH} shell ${WAKE}input keyevent KEYCODE_STEM_PRIMARY`);
+    const dim = watchHarness({ dim: true });
+    expect(texts(await dim.android.act({ action: "key", text: "ENTER" }, scopes({ screen: "off" })))).toEqual([
+        'Pressed KEYCODE_ENTER. The watch\'s screen had dimmed, so it was woken first. (No screenshot: "See the screen" is off for this device.)',
+    ]);
+});
+
+test("Home on a watch lands on the watch face whether it started on the face, in an app, or on the app list", async () => {
+    // From the face, one press opens the app list: it is pressed once more.
+    const fromFace = watchHarness();
+    fromFace.front.now = APP_LIST;
+    expect(texts(await fromFace.android.act({ action: "home" }, scopes({ screen: "off" })))).toEqual([
+        'Went to the watch face. (No screenshot: "See the screen" is off for this device.)',
+    ]);
+    expect(sent(fromFace)).toEqual([
+        `-s ${WATCH} shell ${WAKE}input keyevent KEYCODE_HOME`,
+        `-s ${WATCH} shell dumpsys window | grep mCurrentFocus=`,
+        `-s ${WATCH} shell input keyevent KEYCODE_HOME`,
+    ]);
+    // From an app or the app list, one press already lands there.
+    const fromApp = watchHarness({ front: WATCH_FACE });
+    await fromApp.android.act({ action: "home" }, scopes({ screen: "off" }));
+    expect(sent(fromApp)).toEqual([`-s ${WATCH} shell ${WAKE}input keyevent KEYCODE_HOME`, `-s ${WATCH} shell dumpsys window | grep mCurrentFocus=`]);
+});
+
+test("a phone is driven as it always was, and a serial handed to another device is looked at afresh", async () => {
+    const phone = harness();
+    await phone.android.act({ action: "scroll" }, scopes({ screen: "off" }));
+    await phone.android.act({ action: "home" }, scopes({ screen: "off" }));
+    expect(sent(phone)).toEqual([
+        `-s ${SERIAL} exec-out screencap -p`,
+        `-s ${SERIAL} shell input swipe 540 1740 540 660 400`,
+        `-s ${SERIAL} shell input keyevent KEYCODE_HOME`,
+    ]);
+    expect(phone.calls.filter((call) => call.endsWith(FORM_READ))).toHaveLength(1);
+    // The same emulator serial, now a watch: what it is is read again.
+    const watch = watchHarness();
+    watch.devices = ONE_PHONE.replace(SERIAL, WATCH);
+    await watch.android.act({ action: "back" }, scopes({ screen: "off" }));
+    watch.devices = ONE_WATCH;
+    await watch.android.act({ action: "back" }, scopes({ screen: "off" }));
+    expect(watch.calls.filter((call) => call.endsWith(FORM_READ))).toHaveLength(2);
 });
 
 test("input is refused while the person at the computer has paused the agent", async () => {

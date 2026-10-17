@@ -21,8 +21,18 @@ object PhoneWire {
     const val PAIR_HEADER = "x-intentic-pair"
     const val PAIR_LINK = "https://intentic.dev/phone/pair"
 
+    /**
+     * A Wear OS watch card's link. A watch has no camera, so the phone beside it scans this: the app on the phone sends the
+     * code on to the watch and does not pair itself. The code inside is the same as a phone's.
+     */
+    const val WATCH_PAIR_LINK = "https://intentic.dev/watch/pair"
+
     /** The custom scheme the intentic.dev fallback page hands off to when App Link verification has not happened yet. */
     const val PAIR_SCHEME = "intentic-device"
+
+    /** `intentic-device://pair#…` pairs the device that opens it; `intentic-device://watch#…` is a watch's code, on a phone. */
+    const val PAIR_HOST = "pair"
+    const val WATCH_HOST = "watch"
     private const val PAIRING_PREFIX = "ixp1_"
 
     /** The four JSON-RPC methods the sandbox may call. */
@@ -82,8 +92,7 @@ object PhoneWire {
      * `intentic-device://pair#ixp1_...`. Null for anything not one of ours.
      */
     fun parsePairingCode(input: String): Pairing? {
-        val trimmed = input.trim()
-        val code = if (trimmed.contains('#')) trimmed.substringAfter('#') else trimmed
+        val code = bareCode(input)
         if (!code.startsWith(PAIRING_PREFIX)) {
             return null
         }
@@ -100,4 +109,19 @@ object PhoneWire {
             null
         }
     }
+
+    /** The code alone, from a bare code or from a link that carries it in its fragment. */
+    fun bareCode(input: String): String {
+        val trimmed = input.trim()
+        return if (trimmed.contains('#')) trimmed.substringAfter('#') else trimmed
+    }
+
+    /** Whether a link is a watch card's, to be sent on to a watch rather than redeemed by the phone that opened it. */
+    fun isWatchLink(input: String): Boolean {
+        val trimmed = input.trim()
+        return trimmed.startsWith("$WATCH_PAIR_LINK#") || trimmed.startsWith("$WATCH_PAIR_LINK/#") || trimmed.startsWith("$PAIR_SCHEME://$WATCH_HOST")
+    }
+
+    /** What the phone opens on the watch: the link that pairs the device it is opened on, with the same code. */
+    fun pairHereLink(code: String): String = "$PAIR_SCHEME://$PAIR_HOST#${bareCode(code)}"
 }
