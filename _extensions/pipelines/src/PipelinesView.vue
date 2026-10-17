@@ -158,14 +158,16 @@ const boards = computed(
 );
 const boardOf = (standing: RepoStanding): RepoBoard => boards.value.get(standing.repo.repo) ?? { incidents: [], rest: standing.runs };
 
-// One row's whole binding, so a row inside an incident and one below it can never be drawn from different facts.
-const rowProps = (run: PipelineRun) => ({
+// One row's whole binding, so a row inside an incident and one below it can never be drawn from different facts. A
+// row inside an incident is failing now by the daemon's word, so it never claims a later commit superseded it: that
+// commit passed a different workflow.
+const rowProps = (run: PipelineRun, covered = false) => ({
     run,
     busy: busy.value,
     starting: starting.value,
     recurring: recurringFor(run),
     open: open.value.has(run),
-    superseded: superseded.value.get(run),
+    superseded: covered ? undefined : superseded.value.get(run),
     autoOpen: autoOpen.value.has(run),
     fix: fixByRun.value.get(run),
     branchFix: branchFixFor(run),
@@ -365,25 +367,30 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                                 </a>
                             </template>
 
-                            <!-- First in its group: each failing main line as one incident, holding the runs it is about. -->
-                            <MainFailureBanner
-                                v-for="incident in boardOf(standing).incidents"
-                                :key="`${incident.view.failure.repo}:${incident.view.failure.branch}`"
-                                :view="incident.view"
-                                :covered="incident.covered"
-                                :busy="busy"
-                                :starting="starting"
-                                @fix="fixRun"
-                            >
-                                <PipelineRunRow
-                                    v-for="run in incident.covered"
-                                    :key="actionKey(run)"
-                                    v-bind="rowProps(run)"
-                                    @rerun="act($event, rerun)"
-                                    @cancel="act($event, cancel)"
+                            <!-- Above the group's runs, a card each: every failing main line as one incident, holding the runs
+                                 it is about. In the group's `lead`, not its list, so it never reads as one more run. -->
+                            <template v-if="boardOf(standing).incidents.length > 0" #lead>
+                                <MainFailureBanner
+                                    v-for="incident in boardOf(standing).incidents"
+                                    :key="`${incident.view.failure.repo}:${incident.view.failure.branch}`"
+                                    :view="incident.view"
+                                    :covered="incident.covered"
+                                    :runs="standing.runs"
+                                    :repo="standing.repo"
+                                    :busy="busy"
+                                    :starting="starting"
                                     @fix="fixRun"
-                                />
-                            </MainFailureBanner>
+                                >
+                                    <PipelineRunRow
+                                        v-for="run in incident.covered"
+                                        :key="actionKey(run)"
+                                        v-bind="rowProps(run, true)"
+                                        @rerun="act($event, rerun)"
+                                        @cancel="act($event, cancel)"
+                                        @fix="fixRun"
+                                    />
+                                </MainFailureBanner>
+                            </template>
 
                             <!-- Everyone sees warnings; only maintainers see the signing recipe. -->
                             <Notice v-if="standing.repo.hookWarning" tone="warning" class="px-4 py-2.5 break-words">

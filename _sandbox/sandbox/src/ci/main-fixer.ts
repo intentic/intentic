@@ -788,6 +788,13 @@ export const mainFailures = async (services: Services): Promise<CiMainFailure[]>
             since: streak.since,
             runId: streak.runId,
             jobs: streak.findings.map(({ text }) => text),
+            // Which workflow each job fails in, and its newest failed run: the banner names a scheduled one a push does
+            // not run, whose run the board may not list. Empty for a failure kept before workflows were told apart.
+            workflows: Object.entries(streak.workflows).map(([name, runId]) => ({
+                name,
+                runId,
+                jobs: streak.findings.filter((finding) => finding.source === name).map(({ text }) => text),
+            })),
             ...opt("fixer", fixerOf(streak)),
             ...opt("decision", decision),
         };

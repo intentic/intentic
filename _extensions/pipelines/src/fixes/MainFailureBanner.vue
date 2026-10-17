@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FixResume } from "@intentic/sandbox-contract/state/fix-attempt-plan";
-import type { MainFailureHandBack, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import type { CiRepo, MainFailureHandBack, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import {
     type AgentRunAttempt,
     AgentRunButton,
@@ -12,13 +12,16 @@ import {
     formatDayMonthTime,
     formatTimestamp,
     Icon,
+    toneDot,
+    toneFill,
     toneInk,
-    toneTint,
+    tonePlate,
+    toneRim,
     useAgentRunPick,
 } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, onUpdated, ref } from "vue";
 import { host } from "../host";
-import { handBackOf, jobsAtAGlance, type MainFailureStory, type MainFailureView, offersFix, storyOf } from "./mainFailures";
+import { failingWorkflowsOf, handBackOf, jobsAtAGlance, type MainFailureStory, type MainFailureView, offersFix, storyOf } from "./mainFailures";
 import { t } from "../i18n.js";
 
 // A FAILING MAIN LINE AS ONE INCIDENT: a header that says what broke and what happens next, and under it, joined to it by
@@ -26,15 +29,25 @@ import { t } from "../i18n.js";
 // inferring it from a strip above a list in time order. It is also the ONE place the fix is pressed: the rows inside
 // offer none (leadsRows), since every press on main goes to the same agent anyway.
 //
-// The header is two lines. The first: the branch, since when and which jobs, and on the right who has it (a pill that
-// opens the agent) and the one press. The second: one sentence (storyOf) on where the fix stands and the reader's move,
-// read off the agent's live stance, so "Fix landed" comes with "commit and push it" rather than an agent "on it". Never
-// the daemon's sentence, never a turn's error: those live in the fix agent's conversation, one click away.
+// It is a card of its own above the repository's run list (RowGroup's `lead`), not the list's first row: a rim, a bar
+// down its edge, a square plate where rows have round status glyphs, and a filled header. Drawn as a row it read as one
+// more run, and on a board of green rows that is how "main is failing" got lost.
+//
+// The header says three things. What fails: the branch and since when, then each failing workflow by name with its jobs
+// and a link to its failing run (failingWorkflowsOf), since a nightly that fails while every CI run passes is otherwise a
+// banner over a board with nothing red on it. Who has it: a pill that opens the agent, and the one press. And one
+// sentence (storyOf) on where the fix stands and the reader's move, read off the agent's live stance, so "Fix landed"
+// comes with "commit and push it" rather than an agent "on it". Never the daemon's sentence, never a turn's error: those
+// live in the fix agent's conversation, one click away.
 
 const props = defineProps<{
     view: MainFailureView;
     // The runs drawn inside this block (coveredRuns), the view's rows in the default slot; read here for the sentence.
     covered: readonly PipelineRun[];
+    // Every run the board lists for the repository, and the repository itself: a failing workflow's run is linked from
+    // the board's row when it has one, else from the forge's own address for it.
+    runs: readonly PipelineRun[];
+    repo: CiRepo | undefined;
     // The action the view has in flight, by run key; the press here shares the run rows' lock.
     busy: string | undefined;
     // The run whose fix press is out, by run key: the press then names its wait, as the run row's does.
@@ -48,10 +61,15 @@ const api = host();
 
 const failure = computed(() => props.view.failure);
 const jobs = computed(() => jobsAtAGlance(failure.value.jobs));
-const jobsLine = computed(() => {
-    const { shown, folded } = jobs.value;
+const jobsLineOf = (names: readonly string[]): string => {
+    const { shown, folded } = jobsAtAGlance(names);
     return [shown.join(`, `), ...(folded.length > 0 ? [t(`mainFailure.moreJobs`, { count: folded.length })] : [])].join(` `);
-});
+};
+const jobsLine = computed(() => jobsLineOf(failure.value.jobs));
+// Each workflow failing, by name, with its jobs and its run. Empty from a daemon that does not say, which leaves the
+// flat job list.
+const workflows = computed(() => failingWorkflowsOf(failure.value, props.runs, props.repo));
+const workflowNames = computed(() => workflows.value.filter((workflow) => workflow.named).map((workflow) => workflow.name));
 
 // The fixer's newest attempt when the fleet has it, else the conversation the failure names, which the chat can still
 // open from the archive.
@@ -84,13 +102,21 @@ const STORY = {
     ready: () => t(`mainFailure.story.ready`),
     landed: () => t(`mainFailure.story.landed`, { branch: failure.value.branch }),
     proving: () => t(`mainFailure.story.proving`, { branch: failure.value.branch }),
+    pushed: () =>
+        workflowNames.value.length === 0
+            ? t(`mainFailure.story.pushedUnnamed`, { branch: failure.value.branch })
+            : t(
+                  `mainFailure.story.pushed`,
+                  { branch: failure.value.branch, workflows: workflowNames.value.join(`, `), count: workflowNames.value.length },
+                  workflowNames.value.length,
+              ),
     waiting: () => t(`mainFailure.story.waiting`),
     ended: () => t(`mainFailure.story.ended`),
     waits: () => t(`mainFailure.story.waits`, { reason: handBack.value }),
     reported: () => t(`mainFailure.story.reported`),
     unassigned: () => t(`mainFailure.story.unassigned`),
 } as const satisfies Readonly<Record<MainFailureStory, () => string>>;
-const story = computed(() => STORY[storyOf(props.view, props.covered)]());
+const story = computed(() => STORY[storyOf(props.view, props.covered, props.runs)]());
 
 // Who has it, as one pill: the agent's live stance while it works (the run rows' own look), "Needs you" once it is
 // handed back, and the way into the agent whenever there is one. Undefined before anybody is on it.
@@ -215,27 +241,72 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <!-- One faint danger wash over the header and the runs inside: the block reads as one incident, not as one more row. -->
+    <!-- A card of its own above the run list: rim, a bar down its edge and a filled header, so it reads as the branch's
+         alarm rather than one more run. The covered runs below its header keep the card's plain fill. -->
     <section
         ref="root"
         :data-main-failure="`${failure.repo}:${failure.branch}`"
         :data-state="view.state"
         :aria-label="t(`mainFailure.title`, { branch: failure.branch })"
-        :class="toneTint(`danger`, `soft`, `relative`)"
+        :class="toneRim(`danger`, `strong`, `relative overflow-hidden rounded-xl border bg-card shadow-sm`)"
     >
-        <div class="flex flex-col gap-1 py-3 pr-3 pl-4">
-            <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-                <!-- What fails, since when, and which jobs. `flex-auto`, not `flex-1`: sized by its words, so a narrow pane wraps
-                     the pill and press onto their own line instead of squeezing the branch name to nothing under them. -->
-                <div class="flex min-w-0 flex-auto items-center gap-2">
-                    <Icon data-lane-head name="exclamation-circle" class="shrink-0 text-base text-danger" />
-                    <span class="shrink-0 text-base font-semibold text-content">{{ t(`mainFailure.title`, { branch: failure.branch }) }}</span>
-                    <span class="min-w-0 truncate text-xs text-subtle">
-                        <span v-tooltip.top="formatTimestamp(failure.since)">{{ t(`mainFailure.since`, { when: since }) }}</span>
-                        <template v-if="jobs.shown.length > 0">
-                            · <span :aria-label="t(`mainFailure.failingJobs`)" v-tooltip.top="failure.jobs.join(`, `)">{{ jobsLine }}</span>
-                        </template>
+        <span aria-hidden="true" :class="toneDot(`danger`, `absolute inset-y-0 left-0 w-1`)" />
+
+        <div :class="toneFill(`danger`, `strong`, `flex flex-col gap-2 py-3.5 pr-3 pl-4`)">
+            <div class="flex min-w-0 flex-wrap items-start gap-x-4 gap-y-2">
+                <!-- What fails, since when, and in which workflows. `flex-auto`, not `flex-1`: sized by its words, so a narrow
+                     pane wraps the pill and press onto their own line instead of squeezing the branch name to nothing. -->
+                <div class="flex min-w-0 flex-auto items-start gap-3">
+                    <!-- A square plate where every run row has a round glyph: the lane starts here. -->
+                    <span data-lane-head :class="tonePlate(`danger`, `flex size-8 shrink-0 items-center justify-center rounded-lg`)">
+                        <Icon name="exclamation-circle" class="text-sm" />
                     </span>
+                    <div class="flex min-w-0 flex-col gap-0.5">
+                        <div class="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                            <span class="text-base font-semibold text-content">{{ t(`mainFailure.title`, { branch: failure.branch }) }}</span>
+                            <span class="text-xs text-subtle" v-tooltip.top="formatTimestamp(failure.since)">{{
+                                t(`mainFailure.since`, { when: since })
+                            }}</span>
+                        </div>
+
+                        <!-- Each workflow failing, linked to its failing run: the one place the reader learns a nightly fails
+                             while every push passes, and the way to its run when the list below does not hold it. -->
+                        <div
+                            v-if="workflows.length > 0"
+                            data-workflows
+                            class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+                            :aria-label="t(`mainFailure.failingJobs`)"
+                        >
+                            <a
+                                v-for="workflow in workflows"
+                                :key="workflow.name"
+                                :href="workflow.url"
+                                target="_blank"
+                                rel="noopener"
+                                class="group inline-flex min-w-0 items-center gap-1.5 hover:text-link"
+                                v-tooltip.top="{
+                                    title: t(`mainFailure.openRun`),
+                                    tone: `danger`,
+                                    rows: [
+                                        { label: t(`tip.run`), value: `#${workflow.runId}` },
+                                        { label: t(`mainFailure.failingJobs`), value: workflow.jobs.join(`, `) },
+                                    ],
+                                    note: workflow.listed ? undefined : t(`mainFailure.runNotListed`),
+                                }"
+                            >
+                                <span v-if="workflow.named" class="shrink-0 font-semibold text-content group-hover:text-link">{{ workflow.name }}</span>
+                                <span class="min-w-0 truncate font-mono text-muted group-hover:text-link">{{ jobsLineOf(workflow.jobs) }}</span>
+                                <Icon name="external-link" class="shrink-0 text-2xs text-subtle group-hover:text-link" />
+                            </a>
+                        </div>
+                        <span
+                            v-else-if="jobs.shown.length > 0"
+                            class="min-w-0 truncate font-mono text-xs text-muted"
+                            :aria-label="t(`mainFailure.failingJobs`)"
+                            v-tooltip.top="failure.jobs.join(`, `)"
+                            >{{ jobsLine }}</span
+                        >
+                    </div>
                 </div>
 
                 <!-- Who has it, and the one press. -->
@@ -245,7 +316,7 @@ onBeforeUnmount(() => {
                         v-if="pill !== undefined"
                         v-bind="pill.link ? fixerLink : {}"
                         data-fixer
-                        class="ui-chip inline-flex shrink-0 items-center gap-1.5 rounded px-2 py-1 text-xs font-medium"
+                        class="ui-chip inline-flex shrink-0 items-center gap-1.5 rounded bg-card px-2 py-1 text-xs font-medium"
                         :class="[pill.ink, pill.link ? pill.chip : `border-line`]"
                         v-tooltip.top="
                             pill.link
@@ -272,12 +343,12 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- Where the fix stands and the reader's move, aligned under the title. -->
-            <p data-story class="pl-6 text-sm text-muted">{{ story }}</p>
+            <p data-story class="pl-11 text-sm text-content">{{ story }}</p>
         </div>
 
         <!-- The runs this incident speaks for, indented off the lane; hairlines between them start where they do, so none
              crosses the lane. -->
-        <div v-if="covered.length > 0" class="ml-8 divide-y divide-line-subtle">
+        <div v-if="covered.length > 0" :class="toneRim(`danger`, `soft`, `ml-10 divide-y divide-line-subtle border-t`)">
             <slot />
         </div>
 

@@ -55,6 +55,11 @@ provideRowFlushInline(onDialog);
                 <slot name="actions" />
             </div>
         </div>
+        <!-- Something about the whole group that is none of its rows (a failing branch's incident card), drawn on its own
+             between the label and the rows, so it cannot be read as one more row of the list. -->
+        <div v-if="$slots[`lead`]" class="mb-3 flex flex-col gap-3">
+            <slot name="lead" />
+        </div>
         <!-- Equal rows: each child stretches to the tallest and centres what it holds by `align-content`, which a <Row> (a
              wrapping flex line) and a plain block child (a note, a skeleton) both answer, without being made a column. The one
              column is `minmax(0,1fr)`, not the implicit `auto`, so a row's widest control can never widen the card past its

@@ -17,13 +17,19 @@ flowchart LR
   repositories, ranks them by how loudly they ask (`src/repoStandings.ts`) and draws each run's jobs as a layered graph
   (`src/graph/pipelineDag.ts`). A GitHub run is drawn the way GitHub's own run page draws it: the same columns, cards and
   order, with every job the workflow declares, including the ones the run has not reported yet or never ran.
-- A failing main-line branch is one incident block at the head of its repository's runs
-  (`src/fixes/MainFailureBanner.vue`). Its header says the branch, since when and which jobs, who has it (a pill that
-  opens the agent) and the one press, then one sentence on where the fix stands and the reader's move, read off the
-  agent's live stance (`storyOf`): working, waiting on you, ready to review, landed ("commit and push it: the next run on
-  main shows whether it worked"), being measured by a run that started after it landed, or handed back with a two-word
-  reason from the contract's `MainFailureHandBack`. Under the header sit the runs it is about (`coveredRuns`: the
-  branch's failures nothing has passed since, and its runs still going), indented and joined to the header's glyph by a
+- A failing main-line branch is one incident card above its repository's runs (`src/fixes/MainFailureBanner.vue`, in
+  `RowGroup`'s `lead` slot rather than its list), drawn so it cannot pass for one more run: a danger rim, a bar down its
+  edge, a filled header and a square plate where rows have round status glyphs. Its header says the branch and since
+  when, then each failing workflow by name with its jobs and a link to its failing run (`failingWorkflowsOf`, from the
+  contract's `workflows`), whether or not the board lists that run: the daemon keeps a failure per workflow, so a
+  nightly that fails while every CI run passes keeps main failing over a board of green rows, and the card is where the
+  reader learns which. Then who has it (a pill that opens the agent) and the one press, then one sentence on where the
+  fix stands and the reader's move, read off the agent's live stance (`storyOf`): working, waiting on you, ready to
+  review, landed ("commit and push it: the next run on main shows whether it worked"), being measured by a run that
+  started after it landed, pushed (a run on the branch passed since it landed, so what still fails is a workflow that
+  push did not run), or handed back with a two-word reason from the contract's `MainFailureHandBack`. Under the header
+  sit the runs it is about (`coveredRuns`: the branch's failures nothing has passed since, the ones the daemon names
+  failing whatever passed on a later commit, and its runs still going), indented and joined to the header's plate by a
   drawn lane, a trunk with an elbow into each run's status glyph, measured from where they sit so it survives a row
   opening into its job graph. Every other run follows in time order. It never shows the daemon's sentence or a turn's
   error: those are in the agent's conversation. The agent is joined by the id the failure names (`fixer`), never by a

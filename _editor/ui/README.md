@@ -50,7 +50,8 @@ flowchart LR
   paper, where the `primary-500` it replaced was 2.4:1. `<Button>` takes `tier` (`loud`,
   `accent`, `boring`, `quiet`) and `tone` rather than PrimeVue's `severity`/`text` (`src/components/primitives/button.ts`).
   `RowGroup equal-rows` aligns simple settings rows to the tallest row on desktop; leave it off groups with drawers
-  or below-row content. On phones, rows grow with their own content. `ColorPicker size="sm"` fits a settings row.
+  or below-row content. `RowGroup`'s `lead` slot holds something about the whole group that is none of its rows (the
+  Pipelines board's failing-branch card), drawn between the label and the rows so it never reads as one more row. On phones, rows grow with their own content. `ColorPicker size="sm"` fits a settings row.
   `DisclosureRow` uses `ui-row-open` for one quiet surface behind its header and details. Handwritten expanded rows
   use the same class; `ui-row-select-on` is reserved for selection. The translucent `--ui-row-open-wash` token uses
   the theme's text color at 3%, preserving the enclosing surface and its texture rather than painting over them.

@@ -264,6 +264,7 @@ test("a run's failed jobs are parked while it goes on, and its finish starts one
             since: expect.any(Number),
             runId: 41,
             jobs: ["verify-core", "lint"],
+            workflows: [{ name: "CI", runId: 41, jobs: ["verify-core", "lint"] }],
             fixer: FIXER,
             decision: expect.objectContaining({ kind: "fix-up", conversationId: FIXER }),
         },
@@ -367,9 +368,15 @@ test("a later pass of every workflow that failed ends the streak, and another wo
 
     await runFinished(services, run(44, "success", { workflow: "Scorecard" }), fetchFn);
     expect(Object.keys((await failure())?.workflows ?? {})).toEqual(["CI", "CodeQL"]);
+    // The board is told which workflow each job fails in, so a pass of CI is not read as main passing.
+    expect((await mainFailures(services))[0]?.workflows).toEqual([
+        { name: "CI", runId: 41, jobs: ["verify-core"] },
+        { name: "CodeQL", runId: 43, jobs: ["analyze"] },
+    ]);
     await runFinished(services, run(45, "success"), fetchFn);
     expect(await failure()).toMatchObject({ workflows: { CodeQL: 43 } });
     expect((await failure())?.findings.map(({ text }) => text)).toEqual(["analyze"]);
+    expect((await mainFailures(services))[0]?.workflows).toEqual([{ name: "CodeQL", runId: 43, jobs: ["analyze"] }]);
 
     await runFinished(services, run(46, "success", { workflow: "CodeQL" }), fetchFn);
     expect(await failure()).toBeUndefined();

@@ -164,12 +164,27 @@ export type MainFailureDecision = z.infer<typeof MainFailureDecisionSchema>;
 
 // A main-line branch while its CI fails, as the daemon's one fix agent on it sees it (ci/main-fixer.ts): from the first
 // job that failed until a later run of every workflow that failed on it passes, whatever else failed along the way.
+// One workflow failing on a main-line branch, where a push starts several (GitHub): a later run of it passing takes it
+// off the failure, so a pass of any other says nothing of it. A scheduled one (a nightly) is the case that needs
+// spelling out: a push does not run it, and the board's own runs may all pass while it still fails.
+export const CiMainFailureWorkflowSchema = z.object({
+    name: z.string().describe("The workflow, by the name the forge gives it. `ci` on a forge that runs one pipeline per commit."),
+    runId: z.number().describe("Its newest run that failed."),
+    jobs: z.array(z.string()).describe("Its jobs failing now, by name."),
+});
+export type CiMainFailureWorkflow = z.infer<typeof CiMainFailureWorkflowSchema>;
 export const CiMainFailureSchema = z.object({
     repo: z.string().describe("Which workspace repository."),
     branch: z.string().describe("Which main-line branch."),
     since: z.number().describe("When its first job failed, in milliseconds."),
     runId: z.number().describe("The newest run that failed on it."),
     jobs: z.array(z.string()).describe("The jobs failing on it now, by name: the newest failed run's failures, and any that failed since."),
+    workflows: z
+        .array(CiMainFailureWorkflowSchema)
+        .optional()
+        .describe(
+            "Each workflow failing on it, in the order they began failing, with its newest failed run and its jobs: the branch passes again only once a later run of every one of them passes. Absent from a daemon from before workflows were told apart.",
+        ),
     fixer: z
         .string()
         .optional()

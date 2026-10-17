@@ -125,7 +125,8 @@ const ciRuns = (now: number): PipelineRun[] => [
 // failed `web`'s main at its unit job, and the sandbox put one fix agent on it there and then (ci/main-fixer.ts); the
 // next push to main failed too, and went to the same agent, which is working on both. On `api`, main has been failing
 // test:integration for most of an hour: its fix agent read the logs, found the failure outside the code and finished
-// without changing anything, so it waits for you.
+// without changing anything, so it waits for you. `web`'s Nightly failed its Safari e2e job in between, in a run the
+// board does not list: a push does not run it, so the banner names it and links its run.
 const mainFailureRuns = (now: number): PipelineRun[] => [
     {
         repo: `web`,
@@ -183,7 +184,11 @@ const mainFailures = (now: number): CiMainFailure[] => [
         branch: `main`,
         since: now - minutes(32),
         runId: 4_822,
-        jobs: [`typecheck`, `unit`],
+        jobs: [`typecheck`, `unit`, `e2e / safari`],
+        workflows: [
+            { name: `CI`, runId: 4_822, jobs: [`typecheck`, `unit`] },
+            { name: `Nightly`, runId: 4_819, jobs: [`e2e / safari`] },
+        ],
         fixer: WEB_MAIN_FIXER_ID,
         decision: {
             kind: `fix-up`,
@@ -198,6 +203,7 @@ const mainFailures = (now: number): CiMainFailure[] => [
         since: now - minutes(51),
         runId: 90_314,
         jobs: [`test:integration`],
+        workflows: [{ name: `ci`, runId: 90_314, jobs: [`test:integration`] }],
         fixer: API_MAIN_FIXER_ID,
         decision: {
             kind: `spent`,

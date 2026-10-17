@@ -206,6 +206,7 @@ test("the runs list answers each failing main-line branch as a failure, with its
             since: 1,
             runId: RUN_ID,
             jobs: ["onboarding"],
+            workflows: [{ name: "CI", runId: RUN_ID, jobs: ["onboarding"] }],
             fixer: "ci-fix-web-40",
             decision: {
                 kind: "spent",

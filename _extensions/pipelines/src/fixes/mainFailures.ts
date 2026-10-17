@@ -1,5 +1,5 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import { type CiMainFailure, isPipelineInFlight, type MainFailureHandBack, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import { type CiMainFailure, type CiRepo, isPipelineInFlight, type MainFailureHandBack, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { type FixStance, fixStance } from "@intentic/sandbox-contract/state/fix-stance";
 import { latestFixAttempt } from "@intentic/sandbox-contract/ids/conversation-ids";
 
@@ -77,28 +77,90 @@ export const offersFix = (view: Pick<MainFailureView, "state" | "run">): boolean
 // banner with neither (its run has left the board, and nobody is on it) leaves the rows theirs.
 export const leadsRows = (view: Pick<MainFailureView, "state" | "run">): boolean => view.state === `fixing` || offersFix(view);
 
+// The runs the daemon names as failing now: each failing workflow's newest failed run. Its word outranks the board's
+// "superseded", which is per commit: a later commit whose CI passed says nothing of a nightly that does not run on a push,
+// and the board would otherwise file the nightly's failure away as history while the banner says main still fails.
+const namedRuns = (failure: Pick<CiMainFailure, "workflows">): ReadonlySet<number> =>
+    new Set((failure.workflows ?? []).map((workflow) => workflow.runId));
+
 // The runs a failing main line speaks for, which the board draws inside its block, joined to its header by a drawn
 // lane: the branch's failures that nothing has passed since (a superseded one is history, and stays with the other
-// runs), and the runs on it still going, since a push after the fix is how it gets measured. In the board's own order.
+// runs) and the ones the daemon names failing whatever passed after them, and the runs on it still going, since a push
+// after the fix is how it gets measured. In the board's own order.
 export const coveredRuns = (
-    failure: Pick<CiMainFailure, "repo" | "branch">,
+    failure: Pick<CiMainFailure, "repo" | "branch" | "workflows">,
     runs: readonly PipelineRun[],
     superseded: ReadonlyMap<PipelineRun, PipelineRun>,
-): PipelineRun[] =>
-    runs.filter(
+): PipelineRun[] => {
+    const named = namedRuns(failure);
+    return runs.filter(
         (run) =>
             run.repo === failure.repo &&
             run.branch === failure.branch &&
-            ((run.status === `failed` && !superseded.has(run)) || isPipelineInFlight(run.status)),
+            ((run.status === `failed` && (named.has(run.runId) || !superseded.has(run))) || isPipelineInFlight(run.status)),
     );
+};
+
+// One workflow failing on the branch, as the banner names it: which, its jobs, and the way to its failing run, whether
+// the board lists that run or not. A scheduled workflow's run is often older than every run listed, which is how a
+// board of green rows sits under "main is failing".
+export interface FailingWorkflow {
+    readonly name: string;
+    // Spelled only where a push starts several pipelines (GitHub); a GitLab commit's one pipeline needs no name.
+    readonly named: boolean;
+    readonly runId: number;
+    readonly jobs: readonly string[];
+    // The run's page: the listed run's own link, else built from the repository's.
+    readonly url: string | undefined;
+    // Whether the board lists the run, so the reader is told when the one failing is not among the rows.
+    readonly listed: boolean;
+}
+
+// A run's page when the board does not list it, on each forge's own path.
+const runPage = (repo: Pick<CiRepo, "host" | "url">, runId: number): string =>
+    repo.host === `github` ? `${repo.url}/actions/runs/${runId}` : `${repo.url}/-/pipelines/${runId}`;
+
+// Each workflow failing on the branch, in the order they began failing. Empty from a daemon that does not say, which
+// leaves the banner its flat list of jobs.
+export const failingWorkflowsOf = (
+    failure: Pick<CiMainFailure, "repo" | "workflows">,
+    runs: readonly PipelineRun[],
+    repo: Pick<CiRepo, "host" | "url"> | undefined,
+): FailingWorkflow[] =>
+    (failure.workflows ?? []).map((workflow) => {
+        const run = runs.find((candidate) => candidate.repo === failure.repo && candidate.runId === workflow.runId);
+        return {
+            name: workflow.name,
+            named: repo?.host !== `gitlab`,
+            runId: workflow.runId,
+            jobs: workflow.jobs,
+            url: run?.url ?? (repo === undefined ? undefined : runPage(repo, workflow.runId)),
+            listed: run !== undefined,
+        };
+    });
 
 // What the block's one sentence says: the state the failure is in, in the reader's terms, and the move it asks for. While
 // the agent has it, its live stance decides, since "an agent is on it" is the wrong sentence once the fix is written or
 // landed. A landed fix is measured by the next push (main-fixer.ts: the owner commits and pushes it), so a run that
-// started after it landed is that measurement under way.
-export type MainFailureStory = `working` | `needsYou` | `ready` | `landed` | `proving` | `waiting` | `ended` | Exclude<MainFailureState, `fixing`>;
+// started after it landed is that measurement under way. A run on the branch that PASSED since it landed means the
+// push happened and the failure still stands: what fails is a workflow that push did not run or fix (a nightly), and
+// "commit and push it" would send the reader to do again what is done.
+export type MainFailureStory =
+    | `working`
+    | `needsYou`
+    | `ready`
+    | `landed`
+    | `proving`
+    | `pushed`
+    | `waiting`
+    | `ended`
+    | Exclude<MainFailureState, `fixing`>;
 
-export const storyOf = (view: Pick<MainFailureView, "state" | "stance" | "fixer">, covered: readonly PipelineRun[]): MainFailureStory => {
+export const storyOf = (
+    view: Pick<MainFailureView, "state" | "stance" | "fixer"> & { readonly failure: Pick<CiMainFailure, "repo" | "branch"> },
+    covered: readonly PipelineRun[],
+    runs: readonly PipelineRun[] = [],
+): MainFailureStory => {
     if (view.state !== `fixing`) {
         return view.state;
     }
@@ -109,7 +171,14 @@ export const storyOf = (view: Pick<MainFailureView, "state" | "stance" | "fixer"
             return `ready`;
         case `landed`: {
             const landedAt = view.fixer?.updatedAt ?? Number.POSITIVE_INFINITY;
-            return covered.some((run) => isPipelineInFlight(run.status) && run.createdAt > landedAt) ? `proving` : `landed`;
+            if (covered.some((run) => isPipelineInFlight(run.status) && run.createdAt > landedAt)) {
+                return `proving`;
+            }
+            const passedSince = runs.some(
+                (run) =>
+                    run.repo === view.failure.repo && run.branch === view.failure.branch && run.status === `success` && run.createdAt > landedAt,
+            );
+            return passedSince ? `pushed` : `landed`;
         }
         case `waiting`:
             return `waiting`;

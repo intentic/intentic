@@ -4,6 +4,7 @@ import { ciFixConversationId, fixAttemptId } from "@intentic/sandbox-contract/id
 import { fixStance } from "@intentic/sandbox-contract/state/fix-stance";
 import {
     coveredRuns,
+    failingWorkflowsOf,
     handBackOf,
     jobsAtAGlance,
     leadsRows,
@@ -175,15 +176,60 @@ describe(`coveredRuns`, () => {
         expect(coveredRuns(failing(), runs, new Map([[history, passed]]))).toEqual([going, newest, older]);
     });
 
+    // A nightly's failure sits on a commit whose later neighbours passed CI: the board's per-commit "superseded" files it
+    // away, while the daemon, which tracks each workflow apart, still says main fails in it.
+    it(`keeps a failure the daemon names inside the block, whatever passed on a later commit`, () => {
+        const nightly = pipelineRun({ runId: 30, workflow: `Nightly` });
+        const ciPassed = pipelineRun({ runId: 31, status: `success` });
+        const oldCi = pipelineRun({ runId: 29 });
+        const named = failing({ workflows: [{ name: `Nightly`, runId: 30, jobs: [`smoke`] }] });
+        const superseded = new Map([
+            [nightly, ciPassed],
+            [oldCi, ciPassed],
+        ]);
+        expect(coveredRuns(named, [ciPassed, nightly, oldCi], superseded)).toEqual([nightly]);
+        expect(coveredRuns(failing(), [ciPassed, nightly, oldCi], superseded)).toEqual([]);
+    });
+
     it(`covers nothing when the board no longer lists the branch's runs`, () => {
         expect(coveredRuns(failing(), [pipelineRun({ runId: 9, branch: `feat/x` })], new Map())).toEqual([]);
+    });
+});
+
+describe(`failingWorkflowsOf`, () => {
+    const repo = { host: `github` as const, url: `https://github.com/acme/web` };
+    const workflows = [
+        { name: `Nightly`, runId: 30, jobs: [`desktop-windows / smoke`] },
+        { name: `CI`, runId: 52, jobs: [`changes`] },
+    ];
+
+    it(`names each workflow with its jobs, linked to the listed run or, off the board, to the forge's page for it`, () => {
+        const listed = pipelineRun({ runId: 52, url: `https://github.com/acme/web/actions/runs/52` });
+        expect(failingWorkflowsOf(failing({ workflows }), [listed], repo)).toEqual([
+            {
+                name: `Nightly`,
+                named: true,
+                runId: 30,
+                jobs: [`desktop-windows / smoke`],
+                url: `https://github.com/acme/web/actions/runs/30`,
+                listed: false,
+            },
+            { name: `CI`, named: true, runId: 52, jobs: [`changes`], url: listed.url, listed: true },
+        ]);
+    });
+
+    it(`does not spell GitLab's one pipeline, and is nothing from a daemon that does not say`, () => {
+        const gitlab = { host: `gitlab` as const, url: `https://gitlab.com/acme/api` };
+        const [one] = failingWorkflowsOf(failing({ workflows: [{ name: `ci`, runId: 7, jobs: [`test`] }] }), [], gitlab);
+        expect(one).toMatchObject({ named: false, url: `https://gitlab.com/acme/api/-/pipelines/7` });
+        expect(failingWorkflowsOf(failing(), [], repo)).toEqual([]);
     });
 });
 
 describe(`storyOf`, () => {
     const fixing = (status: AgentSummary["status"], over: Partial<AgentSummary> = {}) => {
         const fixer = agentCard(`ci-fix-web-41`, { status, updatedAt: NOW - 5 * MINUTE, ...over });
-        return { state: `fixing` as const, fixer, stance: fixStance(fixer) };
+        return { state: `fixing` as const, fixer, stance: fixStance(fixer), failure: failing() };
     };
 
     it(`follows the agent's live stance while it has the failure, not the fact that one was sent`, () => {
@@ -192,7 +238,7 @@ describe(`storyOf`, () => {
         expect(storyOf(fixing(`landed`), [])).toBe(`landed`);
         expect(storyOf(fixing(`awaiting`, { attention: { ...agentCard(`x`).attention, question: true } }), [])).toBe(`needsYou`);
         expect(storyOf(fixing(`stopped`), [])).toBe(`ended`);
-        expect(storyOf({ state: `fixing`, fixer: undefined, stance: undefined }, [])).toBe(`working`);
+        expect(storyOf({ state: `fixing`, fixer: undefined, stance: undefined, failure: failing() }, [])).toBe(`working`);
     });
 
     it(`calls a landed fix measured once a run starts after it landed, and only then`, () => {
@@ -202,8 +248,24 @@ describe(`storyOf`, () => {
         expect(storyOf(fixing(`landed`), [after, before])).toBe(`proving`);
     });
 
+    // The fix went out and the push's own runs passed, yet main still fails: what fails is a workflow that push did not
+    // run, and "commit and push it" would send the reader to do again what is done.
+    it(`calls a landed fix pushed once a run on the branch passed after it landed`, () => {
+        const passedAfter = pipelineRun({ runId: 53, status: `success`, createdAt: NOW - 4 * MINUTE });
+        const passedBefore = pipelineRun({ runId: 50, status: `success`, createdAt: NOW - 6 * MINUTE });
+        const otherBranch = pipelineRun({ runId: 54, status: `success`, branch: `feat/x`, createdAt: NOW - 3 * MINUTE });
+        expect(storyOf(fixing(`landed`), [], [passedBefore, otherBranch])).toBe(`landed`);
+        expect(storyOf(fixing(`landed`), [], [passedAfter, passedBefore])).toBe(`pushed`);
+        const measuring = pipelineRun({ runId: 55, status: `running`, createdAt: NOW - 2 * MINUTE });
+        expect(storyOf(fixing(`landed`), [measuring], [measuring, passedAfter])).toBe(`proving`);
+    });
+
     it(`is the failure's own state once nobody is working on it`, () => {
         const states = [`waits`, `reported`, `unassigned`] as const;
-        expect(states.map((state) => storyOf({ state, fixer: undefined, stance: undefined }, []))).toEqual([`waits`, `reported`, `unassigned`]);
+        expect(states.map((state) => storyOf({ state, fixer: undefined, stance: undefined, failure: failing() }, []))).toEqual([
+            `waits`,
+            `reported`,
+            `unassigned`,
+        ]);
     });
 });
