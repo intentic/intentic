@@ -1375,10 +1375,7 @@
                 "swapped": "Ausgelagert",
                 "title": "Speicher knapp",
                 "used": "Belegt"
-            },
-            "startNewChat": "Neuen Chat starten",
-            "startNewChatTitle": "Erneutes Senden würde genauso abgelehnt",
-            "startNewChatNote": "Die Einrichtung dieser Unterhaltung kann hier nicht laufen. Ein neuer Chat öffnet sich mit Ihrer Nachricht im Eingabefeld."
+            }
         },
         "chatJobRow": {
             "ended": "Beendet nach {elapsed}",
@@ -2225,10 +2222,6 @@
                 "goOn": "Sprich weiter…",
                 "listeningDetail": "Hört auf diesem Gerät auf „{word}“. Klicke, um eine Stunde zu pausieren."
             }
-        },
-        "sandboxNotice": {
-            "undeliveredDeterministic": "{message} Ihre Nachricht wurde nicht zugestellt, und erneutes Senden würde genauso abgelehnt. Starten Sie einen neuen Chat, um weiterzumachen.",
-            "agentDomainRefused": "Die Arbeitsbereich-Einrichtung dieser Unterhaltung kann hier nicht laufen."
         }
     },
     "common": {

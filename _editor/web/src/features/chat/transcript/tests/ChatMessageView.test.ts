@@ -50,8 +50,6 @@ const queueHold: QueueHold = { paused: undefined };
 const resume = jest.fn(async () => undefined);
 // The conversation's ask that the sandbox run a turn it kept, which is what a press on a sandbox-kept refusal is.
 const resendKept = jest.fn(async () => undefined);
-// A new chat opened with words in its composer: the way on from a refusal no resend would clear.
-const composeAgent = jest.fn();
 const beginEdit = jest.fn();
 // The one path every card's answer takes (CardReplies.reply), read back from the one the pane holds.
 const reply = jest.fn(async () => true);
@@ -189,7 +187,6 @@ jest.mock("../../../../models/workspace/files/openFileRef", () => ({ openFileRef
 jest.mock("../../../../models/terminal/portPreview", () => ({ openLoopbackPreview }));
 jest.mock("../../../../models/changes/useHistory", () => ({ restoreSnapshot: jest.fn(), invalidateWorkspace: jest.fn() }));
 jest.mock("../../tools/toolGrouping", () => ({ groupConsecutiveTools: () => [] }));
-jest.mock("../../../../models/fleet/agentActions", () => ({ composeAgent }));
 jest.mock("../../composer/ChatAttachmentStrip.vue", () => ({ default: { render: () => undefined } }));
 jest.mock("../ChatTodoList.vue", () => ({ default: { render: () => undefined } }));
 jest.mock("../../tools/ChatToolCard.vue", () => ({ default: { render: () => undefined } }));
@@ -318,7 +315,6 @@ beforeEach(() => {
     queueHold.paused = undefined;
     resume.mockClear();
     resendKept.mockClear();
-    composeAgent.mockClear();
     reply.mockClear();
     beginEdit.mockClear();
     resizers.length = 0;
@@ -1707,30 +1703,6 @@ describe(`a low-memory hold`, () => {
             .click();
 
         expect(resendKept).toHaveBeenCalledWith({ text: withFile.text, attachments: [{ name: `plan.md`, path: `notes/plan.md` }] });
-    });
-
-    // A kept turn under a refusal latched on the conversation offered "Send again", and every press met the same wall.
-    it(`offers a new chat, not a resend, for a kept turn every resend would meet the same way`, () => {
-        const said = `Agent request placement does not match its admitted execution context.`;
-        const asked: ChatMessage = { id: 20, role: `user`, text: `Carry the parser fix`, run: `run-3` };
-        const row: ChatMessage = {
-            id: 21,
-            role: `notice`,
-            text: `${said} Your message was not delivered, and sending it again would be refused the same way. Start a new chat to carry on.`,
-            sandboxHeld: true,
-            noticeCode: { code: `undelivered`, params: { message: said, error: `agent-domain-refused`, deterministic: true } },
-            run: `run-3`,
-        };
-        pane.messages = [asked, row];
-        const element = mount(row);
-
-        expect(element.textContent).toContain(`sending it again would be refused the same way`);
-        expect(buttons(element).map((button) => button.textContent?.trim())).not.toContain(`Send again`);
-        buttons(element)
-            .find((button) => button.textContent?.trim() === `Start a new chat`)!
-            .click();
-
-        expect([composeAgent.mock.calls, resendKept.mock.calls.length]).toEqual([[[asked.text]], 0]);
     });
 
     it(`withdraws both presses with nothing held to send, or a turn already running`, () => {

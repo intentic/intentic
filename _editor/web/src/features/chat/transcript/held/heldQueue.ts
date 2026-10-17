@@ -1,6 +1,4 @@
 import { basename } from "@intentic/ui/path";
-import { sandboxNoticeOf } from "@intentic/sandbox-contract/events/sandbox-notice";
-import { isDeterministicRefusal } from "@intentic/sandbox-contract/policy/deterministic-refusals";
 import { computed } from "vue";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
@@ -66,19 +64,7 @@ export const useHeldQueue = () => {
         const said = notice.value?.text ?? cardMemory.value?.text;
         return said === undefined ? undefined : memoryReading(said);
     });
-    // A refusal whose cause is latched on the conversation itself (DETERMINISTIC_REFUSALS: its persona, its start folder),
-    // read off the refusal's own row while it stands, else off the board's card: sent again it is refused the same way.
-    const deterministic = computed(() => {
-        if (!held.value || reason.value !== `refused`) {
-            return false;
-        }
-        const said = lastSaid(messages.value);
-        const row = said === undefined ? undefined : sandboxNoticeOf(said);
-        const error = row?.code === `undelivered` || row?.code === `kept` ? row.params.error : undefined;
-        const code = error ?? lastFailure.value?.code;
-        return isDeterministicRefusal(code);
-    });
-    return { held, notice, reason, detail, deterministic };
+    return { held, notice, reason, detail };
 };
 
 /**
@@ -88,26 +74,13 @@ export const useHeldQueue = () => {
 export const useKeptTurn = (message: () => ChatMessage) => {
     const { conversation, streaming, messages } = usePaneView();
     const waiting = computed(() => !streaming.value && message().sandboxHeld === true && standing(messages.value, message()));
-    // The kept turn's own message: the person's row of the same run, above this notice.
-    const keptOf = (): ChatMessage | undefined => messages.value.findLast((entry) => entry.run === message().run && entry.role === `user`);
     const send = (): Promise<void> => {
-        const kept = keptOf();
+        const row = message();
+        const kept = messages.value.findLast((entry) => entry.run === row.run && entry.role === `user`);
         return conversation.value.turn.resendKept({
             text: kept?.text ?? ``,
             attachments: (kept?.attachments ?? []).map((path) => ({ name: basename(path), path })),
         });
     };
-    return { waiting, send, words: (): string => keptOf()?.text ?? `` };
-};
-
-/**
- * A turn the sandbox kept under a refusal latched on the conversation (DETERMINISTIC_REFUSALS): its row offers the
- * held line's new chat rather than a resend, which would be refused the same way (transcript-fold's heldRow).
- */
-export const keptForGood = (message: ChatMessage): boolean => {
-    if (message.role !== `notice` || message.sandboxHeld !== true) {
-        return false;
-    }
-    const notice = sandboxNoticeOf(message);
-    return notice?.code === `undelivered` && notice.params.deterministic === true;
+    return { waiting, send };
 };

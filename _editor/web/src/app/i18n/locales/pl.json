@@ -2878,10 +2878,7 @@
             "sendNowTimeNote": "Wyjdzie teraz zamiast o swojej porze.",
             "sendAt": "Wyślij o {when}",
             "sendIn": "Wyślij za {when}",
-            "sendAtTitle": "Wyślij, gdy limit się odnowi",
-            "startNewChat": "Rozpocznij nowy czat",
-            "startNewChatTitle": "Ponowne wysłanie zostałoby odrzucone tak samo",
-            "startNewChatNote": "Konfiguracja tej rozmowy nie może tu działać. Nowy czat otworzy się z Twoją wiadomością w polu tekstowym."
+            "sendAtTitle": "Wyślij, gdy limit się odnowi"
         },
         "sandboxNotice": {
             "compacted": "Kontekst został skrócony, żeby zwolnić miejsce.",
@@ -2901,12 +2898,10 @@
             "reconnect": "{message} Połącz konto ponownie, żeby wrócić do tej rozmowy.",
             "undelivered": "{message} Twoja wiadomość nie została dostarczona: czeka, aż wyślesz ją ponownie.",
             "undeliveredUnattended": "{message} Nic się nie uruchomiło i nic nie czeka: ten przebieg ruszył sam, więc nie ma wiadomości do ponownego wysłania.",
-            "undeliveredDeterministic": "{message} Twoja wiadomość nie została dostarczona, a ponowne wysłanie zostałoby odrzucone tak samo. Rozpocznij nowy czat, żeby kontynuować.",
             "kept": "{message} Nic jeszcze nie ruszyło: wiadomość powyżej czeka tutaj, żeby wysłać ją ponownie, gdy to się wyjaśni.",
             "keptMemory": "{message} Nic jeszcze nie ruszyło: wiadomość powyżej czeka tutaj, a wysłanie jej mimo to ją uruchomi.",
             "memoryHeld": "{message} Twoja wiadomość czeka: wyślij ją ponownie, żeby mimo to zacząć.",
             "agentBusy": "Ten agent już wykonuje turę, poczekaj, aż skończy.",
-            "agentDomainRefused": "Konfiguracja przestrzeni roboczej tej rozmowy nie może tu działać.",
             "memoryLow": "Pamięć sandboxa się kończy.",
             "memoryLowShare": "Pamięć sandboxa się kończy ({share}).",
             "turnRunning": "W tej rozmowie trwa już tura.",

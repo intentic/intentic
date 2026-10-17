@@ -539,7 +539,7 @@
         "count": 221,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/chat/transcript/ChatMessageView.vue": 659,
+    "_editor/web/src/features/chat/transcript/ChatMessageView.vue": 656,
     "_editor/web/src/features/chat/transcript/pages/ChatPageFrame.vue#act#cognitive": {
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
@@ -3324,7 +3324,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/text/transcript-fold.ts": {
-        "count": 1007,
+        "count": 1002,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/text/transcript-fold.ts#apply#cognitive": {

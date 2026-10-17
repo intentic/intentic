@@ -5,7 +5,6 @@ import { IconStub } from "@intentic/ui/testing";
 import { type App, computed, createApp, type Directive, h, nextTick, ref } from "vue";
 import { NO_ATTENTION } from "../../../../models/agent-status/agentStatus-lanes";
 import type { AgentStanding } from "../../../../models/agent-status/agentStatus-standing";
-import { noticeCode } from "@intentic/sandbox-contract/events/sandbox-notice";
 import { conversationView, PANE_VIEW } from "../../../../models/conversations/panel/useChat-view";
 import { Conversation } from "../../../../models/conversations/session/conversation";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
@@ -53,10 +52,6 @@ jest.mock("../../../../client/sandbox/useSandbox", () => ({
     ...useSandboxOriginal,
     useSandbox: () => ({ ...realUseSandbox(), reachable: computed(() => true) }),
 }));
-
-// The new chat a latched refusal offers instead of a resend: what it is opened with is the assertion.
-const composeAgent = jest.fn((_prompt: string) => undefined);
-jest.mock("../../../../models/fleet/agentActions", () => ({ composeAgent }));
 
 const { default: ChatHeldMessages } = await import("./ChatHeldMessages.vue");
 
@@ -148,7 +143,6 @@ const settled = async (): Promise<void> => {
 
 afterEach(() => {
     memoryOverride.value = undefined;
-    composeAgent.mockClear();
     setBreakPolicy.mockClear();
     app?.unmount();
     app = undefined;
@@ -505,52 +499,5 @@ describe(`messages booked each on its own`, () => {
         ]);
         pressNamed(element, `Send now`)[0]!.click();
         expect(resume.mock.calls).toEqual([[[`m1`]]]);
-    });
-});
-
-// A refusal latched on the conversation itself (agent-domain-refused: its persona's start folder) is refused the same
-// way on every resend, so the line's press is a new chat carrying the held words, never Send again.
-describe(`a message held by a refusal no resend can clear`, () => {
-    const DOMAIN_MESSAGE = `Agent request placement does not match its admitted execution context.`;
-    const domainRow: ChatMessage = {
-        id: 3,
-        role: `notice`,
-        text: `${DOMAIN_MESSAGE} Your message was not delivered, and sending it again would be refused the same way. Start a new chat to carry on.`,
-        noticeCode: noticeCode({ code: `undelivered`, params: { message: DOMAIN_MESSAGE, error: `agent-domain-refused`, deterministic: true } }),
-    };
-
-    it(`offers a new chat with the held words instead of sending it again`, async () => {
-        const chat = chatHolding({ items: [held(), held({ id: `m2`, text: `And the badge too.`, attachments: [] })], paused: `refused` }, [...SENT, domainRow]);
-        const resume = jest.spyOn(chat.turn, `resume`).mockResolvedValue(undefined);
-        const element = mount(chat);
-        await nextTick();
-
-        expect(statusLine(element)).toBe(`Not sent · Refused before it ran`);
-        expect(pressNamed(element, `Send again`)).toHaveLength(0);
-        const [fresh] = pressNamed(element, `Start a new chat`);
-        expect(tips.get(fresh!)).toEqual({
-            title: `Sending it again would be refused the same way`,
-            note: `This conversation's setup cannot run here. A new chat opens with your message in its composer.`,
-        });
-        fresh!.click();
-
-        expect(composeAgent.mock.calls).toEqual([[`We should be consistent and always use the same icon for "attention".\n\nAnd the badge too.`]]);
-        expect(resume).not.toHaveBeenCalled();
-    });
-
-    // Opened after the refusal's row is gone, the board's card still names the code.
-    it(`still offers the new chat from the board's card once the row is gone`, async () => {
-        const element = mount(chatHolding({ items: [held()], paused: `refused` }, SENT), {}, { failureCode: `agent-domain-refused`, failure: DOMAIN_MESSAGE });
-        await nextTick();
-        expect(pressNamed(element, `Start a new chat`)).toHaveLength(1);
-        expect(pressNamed(element, `Send again`)).toHaveLength(0);
-    });
-
-    // Only a person's words go into the new composer: a message the sandbox or an agent queued was never theirs to send.
-    it(`opens the new chat empty when only someone else's message is held`, async () => {
-        const element = mount(chatHolding({ items: [held({ voice: `agent` })], paused: `refused` }, [...SENT, domainRow]));
-        await nextTick();
-        pressNamed(element, `Start a new chat`)[0]!.click();
-        expect(composeAgent.mock.calls).toEqual([[``]]);
     });
 });

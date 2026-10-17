@@ -2878,10 +2878,7 @@
             "sendNowTimeNote": "It goes now rather than at its time.",
             "sendAt": "Send at {when}",
             "sendIn": "Send in {when}",
-            "sendAtTitle": "Send when the allowance reopens",
-            "startNewChat": "Start a new chat",
-            "startNewChatTitle": "Sending it again would be refused the same way",
-            "startNewChatNote": "This conversation's setup cannot run here. A new chat opens with your message in its composer."
+            "sendAtTitle": "Send when the allowance reopens"
         },
         "sandboxNotice": {
             "compacted": "Context compacted to free up space.",
@@ -2901,12 +2898,10 @@
             "reconnect": "{message} Reconnect the account to pick this conversation back up.",
             "undelivered": "{message} Your message was not delivered: it is held for you to send again.",
             "undeliveredUnattended": "{message} Nothing ran, and nothing is held: this run started on its own, so there is no message waiting to be sent again.",
-            "undeliveredDeterministic": "{message} Your message was not delivered, and sending it again would be refused the same way. Start a new chat to carry on.",
             "kept": "{message} Nothing has run yet: the message above is kept here to send again once that is sorted.",
             "keptMemory": "{message} Nothing has run yet: the message above is kept here, and sending it anyway starts it.",
             "memoryHeld": "{message} Your message is held: send it again to start anyway.",
             "agentBusy": "This agent is already running a turn, wait for it to finish.",
-            "agentDomainRefused": "This conversation's workspace setup cannot run here.",
             "memoryLow": "Sandbox memory is low.",
             "memoryLowShare": "Sandbox memory is low ({share}).",
             "turnRunning": "A turn is already running in this conversation.",

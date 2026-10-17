@@ -16,7 +16,6 @@ import { keptWarmLine, keptWarmNotice } from "../schemas/keep-warm.js";
 import { handedOffLine, handedOffNotice } from "../schemas/providers/handoff.js";
 import { isLandConflict } from "../events/land-conflict.js";
 import { turnedAwayCode } from "../policy/turned-away.js";
-import { isDeterministicRefusal } from "../policy/deterministic-refusals.js";
 import { undeliveredRow } from "../events/undelivered.js";
 import { mentionedPathTokens } from "./mentions.js";
 import { unspokenPromptRow } from "../events/agent-words.js";
@@ -210,11 +209,7 @@ const memoryPress = (event: Extract<AgentEvent, { kind: "error" }>): "sendAnyway
 const heldRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow => {
     const unattended = event.unattended === true;
     const memory = event.code === "sandbox-memory-low";
-    const deterministic = isDeterministicRefusal(event.code);
     const said = failureOf(event);
-    if (event.held !== undefined && !unattended && deterministic) {
-        return undeliveredRow(event.message, said, { unattended, deterministic, kept: true });
-    }
     if (event.held !== undefined && !unattended) {
         return {
             role: "notice",
@@ -227,7 +222,7 @@ const heldRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow =
         };
     }
     if (!memory || unattended) {
-        return undeliveredRow(event.message, said, { unattended, deterministic, kept: false });
+        return undeliveredRow(said, unattended);
     }
     return {
         role: "notice",

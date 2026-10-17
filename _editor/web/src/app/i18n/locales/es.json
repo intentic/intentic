@@ -1384,10 +1384,7 @@
                 "swapped": "En swap",
                 "title": "Poca memoria",
                 "used": "Usada"
-            },
-            "startNewChat": "Empezar un chat nuevo",
-            "startNewChatTitle": "Enviarlo de nuevo se rechazaría igual",
-            "startNewChatNote": "La configuración de esta conversación no puede ejecutarse aquí. Se abre un chat nuevo con tu mensaje en el cuadro de texto."
+            }
         },
         "chatJobRow": {
             "ended": "Se detuvo tras {elapsed}",
@@ -2234,10 +2231,6 @@
                 "goOn": "Sigue…",
                 "listeningDetail": "Escuchando «{word}» en este dispositivo. Haz clic para pausar una hora."
             }
-        },
-        "sandboxNotice": {
-            "undeliveredDeterministic": "{message} Tu mensaje no se entregó, y enviarlo de nuevo se rechazaría igual. Empieza un chat nuevo para continuar.",
-            "agentDomainRefused": "La configuración del espacio de trabajo de esta conversación no puede ejecutarse aquí."
         }
     },
     "common": {

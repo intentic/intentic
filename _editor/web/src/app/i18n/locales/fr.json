@@ -1377,10 +1377,7 @@
                 "swapped": "En swap",
                 "title": "Mémoire faible",
                 "used": "Utilisée"
-            },
-            "startNewChat": "Démarrer un nouveau chat",
-            "startNewChatTitle": "Le renvoyer serait refusé de la même façon",
-            "startNewChatNote": "La configuration de cette conversation ne peut pas s’exécuter ici. Un nouveau chat s’ouvre avec votre message dans la zone de saisie."
+            }
         },
         "chatJobRow": {
             "ended": "Arrêté après {elapsed}",
@@ -2225,10 +2222,6 @@
                 "goOn": "Continuez…",
                 "listeningDetail": "Écoute « {word} » sur cet appareil. Cliquez pour mettre en pause une heure."
             }
-        },
-        "sandboxNotice": {
-            "undeliveredDeterministic": "{message} Votre message n’a pas été remis, et le renvoyer serait refusé de la même façon. Démarrez un nouveau chat pour continuer.",
-            "agentDomainRefused": "La configuration de l’espace de travail de cette conversation ne peut pas s’exécuter ici."
         }
     },
     "common": {

@@ -39,12 +39,11 @@ import ChatTurnAsides from "./asides/ChatTurnAsides.vue";
 import ChatTurnStatus from "./ChatTurnStatus.vue";
 import NoticeDepsInstall from "./notices/NoticeDepsInstall.vue";
 import NoticeFailureDetails from "./notices/NoticeFailureDetails.vue";
-import NoticeFreshChat from "./notices/NoticeFreshChat.vue";
 import NoticeHeld from "./notices/NoticeHeld.vue";
 import NoticeLandHold from "./notices/NoticeLandHold.vue";
 import NoticeMemory from "./notices/NoticeMemory.vue";
 import NoticeWatchStop from "./notices/NoticeWatchStop.vue";
-import { isMemoryHold, keptForGood } from "./held/heldQueue";
+import { isMemoryHold } from "./held/heldQueue";
 import { noticeFailure, noticeLine } from "../../../models/conversations/transcript/sandboxNotice";
 import { useAudience } from "../../../app/useAudience";
 import { useT } from "@intentic/ui/i18n";
@@ -108,16 +107,14 @@ const card = computed(() => REQUEST_FIELDS.find((field) => props.message[field] 
 
 // The follow-up each notice action offers; each decides for itself whether it still stands. A low-memory hold is not
 // here: it draws its whole row (NoticeMemory), since its sentence is the sandbox's numbers and belongs a hover away.
-const NOTICE_ACTIONS: Readonly<Record<Exclude<NonNullable<ChatMessage["noticeAction"]>, `sendAnyway` | `sandboxMemory`> | `freshChat`, Component>> = {
+const NOTICE_ACTIONS: Readonly<Record<Exclude<NonNullable<ChatMessage["noticeAction"]>, `sendAnyway` | `sandboxMemory`>, Component>> = {
     landHold: NoticeLandHold,
     depsInstall: NoticeDepsInstall,
     watchStop: NoticeWatchStop,
     sendAgain: NoticeHeld,
-    freshChat: NoticeFreshChat,
 };
 const noticeAction = computed(() => {
-    // A kept turn refused for good names no action (the sandbox promises no resend): the chat's own way on is a new chat.
-    const action = keptForGood(props.message) ? `freshChat` : props.message.noticeAction;
+    const action = props.message.noticeAction;
     return action === undefined || action === `sendAnyway` || action === `sandboxMemory` ? undefined : NOTICE_ACTIONS[action];
 });
 

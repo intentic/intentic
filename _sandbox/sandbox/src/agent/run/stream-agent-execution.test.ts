@@ -421,7 +421,8 @@ test("a coded session-probe refusal is not swallowed as permission to resume", a
     expect(turn.operations).toEqual(["policy", "environment", "repo-sync", "session-probe"]);
     expect(turn.planned).toEqual([]);
     expect(turn.ran).toEqual([]);
-    expect(turn.warnings).toEqual([]);
+    // Only the refusal's own line (stream-agent.ts runTurn), never the probe-failure warning an ordinary failure gets.
+    expect(turn.warnings).toEqual([[expect.objectContaining({ err: expect.any(AgentDomainRefusedError) }), "agent-domain-refused: turn refused before it ran"]]);
     expectReleased(turn);
 });
 
