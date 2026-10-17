@@ -50,7 +50,6 @@ import {
     copyAgentIgnored,
     deleteEntry,
     fileDiff,
-    gitChanges,
     PUBLISH_REFUSAL,
     readFile,
     resolveReference,
@@ -61,6 +60,7 @@ import {
     workspaceChildren,
     workspaceTree,
 } from "../fixture/workspace";
+import { commit, discard, gitChanges, stage, unstage } from "./gitIndex";
 import { demoMode, demoQuiet, deskEdition, freshEdition } from "../mode";
 import { HANDOVER_TEXT, HANDOVER_TEXT_BEFORE } from "../fixture/document";
 import { DEMO_CATALOGS, DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND, DEMO_TRANSLATOR_ACCOUNTS } from "./accounts";
@@ -262,11 +262,15 @@ export const procedures = {
         changes: () => gitChanges(),
         fileDiff: ({ repo, path }) => fileDiff(repo, path),
         branches: () => ({ branches: [{ name: `main`, current: true, ahead: 0, behind: 0, at: STARTED_AT }], remotes: [] }),
-        commit: () => refuse(`This is the demo workspace: commits need a real repository.`),
+        // Index moves and commits are simulated for the page load (daemon/gitIndex.ts); there is no log to show them in.
+        stage: ({ repo, ...target }) => stage(repo, target),
+        unstage: ({ repo, ...target }) => unstage(repo, target),
+        commit: ({ repo, stage: stageFirst }) => commit(repo, stageFirst),
+        discard: ({ repo, ...target }) => discard(repo, target),
         push: () => refuse(`This is the demo workspace: there is no remote to push to.`),
         // Where each repo lives online, matched against the registry for the publish path picker.
         remoteRepos: () => ({ repos: [...REMOTE_REPOS] }),
-        // Refused like commit and push: there is no remote to publish to.
+        // Refused like push: there is no remote to publish to.
         publishFile: () => PUBLISH_REFUSAL,
     },
     diff: {

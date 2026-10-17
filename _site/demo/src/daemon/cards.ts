@@ -2,6 +2,7 @@ import type { AgentSearchResult, AgentSummary } from "@intentic/sandbox-contract
 import { isTurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { SandboxHandlerInput } from "@intentic/sandbox-contract/protocol/procedure-types";
 import { refuse } from "@intentic/contract-serve";
+import { reopen } from "./gitIndex";
 import { landAgentDelta, landedPaths, sessions } from "../fixture/workspace";
 import { agentAnswer, broadcastRoster, listeners, OWNER, patchAgent, roster } from "./roster";
 import { releaseAfter } from "./queue";
@@ -26,6 +27,7 @@ export const land = (id: string): ReturnType<typeof landAgentDelta> => {
         attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
     });
     const paths = landedPaths(id);
+    reopen(paths);
     for (const listener of listeners) {
         listener({ kind: `workspaceChanged`, paths });
     }

@@ -156,6 +156,21 @@ const required = <T>(value: T | undefined, what: string): T => {
     return value;
 };
 
+// The git area's inputs: stage and take back the same file, commit it, throw away another.
+const GIT_SAMPLES: Samples[`git`] = {
+    repos: undefined,
+    changes: undefined,
+    fileDiff: { repo: `web`, path: `src/lib/checkout.ts`, side: `unstaged` },
+    branches: { repo: `web` },
+    stage: { repo: `web`, paths: [`src/lib/checkout.ts`] },
+    unstage: { repo: `web`, paths: [`src/lib/checkout.ts`] },
+    commit: { repo: `web`, message: `smoke`, stage: { paths: [`src/lib/checkout.ts`] } },
+    discard: { repo: `web`, paths: [`tests/checkout.spec.ts`] },
+    push: { repo: `web` },
+    remoteRepos: undefined,
+    publishFile: { repo: `web`, path: `README.md`, content: `smoke`, message: `smoke` },
+};
+
 // Ids and records come from the fixture itself, so a renamed id moves the inputs with it.
 const samplesOf = (
     { fleet, automations, ci, workflows, loops, devices, approvals }: Awaited<ReturnType<typeof fixturesOf>>,
@@ -250,16 +265,7 @@ const samplesOf = (
             health: { repo: `web` },
             search: { query: `checkout` },
         },
-        git: {
-            repos: undefined,
-            changes: undefined,
-            fileDiff: { repo: `web`, path: `src/lib/checkout.ts`, side: `unstaged` },
-            branches: { repo: `web` },
-            commit: { repo: `web`, message: `smoke` },
-            push: { repo: `web` },
-            remoteRepos: undefined,
-            publishFile: { repo: `web`, path: `README.md`, content: `smoke`, message: `smoke` },
-        },
+        git: GIT_SAMPLES,
         diff: {
             derived: { source: `working`, repo: `web`, side: `unstaged`, path: `drop/handover.docx` },
         },
@@ -536,7 +542,10 @@ const main = async (): Promise<number> => {
     const { daemon } = await loaded<Daemon>(out, `daemon`);
     const { procedures } = await loaded<typeof import("../src/daemon/procedures.ts")>(out, `procedures`);
     const { servedProcedures } = await loaded<typeof import("@intentic/contract-serve")>(out, `router`);
-    const contract: Contract = { ...(await loaded<Contract>(out, `contract`)), requestPathFor: (await loaded<Contract>(out, `routes`)).requestPathFor };
+    const contract: Contract = {
+        ...(await loaded<Contract>(out, `contract`)),
+        requestPathFor: (await loaded<Contract>(out, `routes`)).requestPathFor,
+    };
     const samples = samplesOf(await fixturesOf(out), Date.now());
     const sent = Object.entries(samples).flatMap(([group, inputs]) =>
         Object.entries(inputs).map(([name, input]) => ({ name: `${group}.${name}`, input })),

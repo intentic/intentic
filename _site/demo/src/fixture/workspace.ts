@@ -179,7 +179,8 @@ const CONFLICTS: Record<string, LandConflict[]> = {
 // Which agents have landed; flips their rows into the main tree's Changes list.
 const landedAgents = new Set<string>();
 
-export const gitChanges = (): GitChanges => {
+/** The tree's uncommitted work before the index moves this page load made (daemon/gitIndex.ts applies those). */
+export const worktreeChanges = (): GitChanges => {
     // Copy per read: a land's additions don't mutate the base for the next read.
     const repos = structuredClone(BASE_CHANGES);
     for (const agentId of landedAgents) {
