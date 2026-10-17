@@ -1,6 +1,7 @@
 import { type Logger, pino } from "pino";
 import { createCiFailureLog } from "./ci-failure-log.js";
-import { CiRateLimited } from "../providers.js";
+import { refusedFetchError } from "@intentic/testing/real-failures";
+import { CiRateLimited, CiRefused } from "../forge-refusals.js";
 
 const capturing = (): { logger: Logger; lines: Record<string, unknown>[] } => {
     const lines: Record<string, unknown>[] = [];
@@ -8,7 +9,7 @@ const capturing = (): { logger: Logger; lines: Record<string, unknown>[] } => {
     return { logger, lines };
 };
 
-const refused = (): Error => new Error("list runs of acme/web failed (401): Bad credentials");
+const refused = (): Error => new CiRefused("list runs of acme/web", 401, "Bad credentials");
 
 test("the same refusal every pass is one line, with its status and no stack, until it changes", () => {
     const { logger, lines } = capturing();
@@ -20,7 +21,7 @@ test("the same refusal every pass is one line, with its status and no stack, unt
     expect(lines[0]).toMatchObject({ level: 40, repo: "web", status: 401, message: "ci: poll failed" });
     expect(lines[0]?.["err"]).toBeUndefined();
     // A different failure is news at once.
-    log.failed("web", new Error("list runs of acme/web failed (502): Bad gateway"));
+    log.failed("web", new CiRefused("list runs of acme/web", 502, "Bad gateway"));
     expect(lines).toHaveLength(2);
     expect(lines[1]).toMatchObject({ status: 502 });
 });
@@ -50,10 +51,11 @@ test("a long outage repeats hourly with the count it folded, and recovery is one
     expect(lines[2]).toMatchObject({ level: 30, repo: "web", after: "401", message: "ci: poll works again" });
 });
 
-test("a network failure or a spent limit is said in words; only an unexpected error keeps its stack", () => {
+test("a network failure or a spent limit is said in words; only an unexpected error keeps its stack", async () => {
     const { logger, lines } = capturing();
     const log = createCiFailureLog(logger, "ci: poll failed", "ci: poll works again", () => 0);
-    log.failed("a", Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }) }));
+    const network = await refusedFetchError();
+    log.failed("a", network);
     log.failed("b", new CiRateLimited("api.github.com", 0));
     log.failed("c", new TypeError("Cannot read properties of undefined (reading 'id')"));
     expect(lines.map((line) => [line["repo"], line["err"] !== undefined])).toEqual([
@@ -61,5 +63,5 @@ test("a network failure or a spent limit is said in words; only an unexpected er
         ["b", false],
         ["c", true],
     ]);
-    expect(lines[0]).toMatchObject({ reason: "fetch failed" });
+    expect(lines[0]).toMatchObject({ reason: network.message });
 });

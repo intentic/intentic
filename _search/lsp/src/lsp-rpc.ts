@@ -8,6 +8,18 @@ interface Pending {
     reject: (error: Error) => void;
 }
 
+// A request the language server answered with a JSON-RPC error, keeping its `code` (-32601 MethodNotFound, -32801
+// ContentModified, …) for a caller to branch on rather than the server's sentence.
+class LspResponseError extends Error {
+    constructor(
+        message: string,
+        readonly code: number | undefined,
+    ) {
+        super(message);
+        this.name = "LspResponseError";
+    }
+}
+
 export class LspSession {
     private readonly child: ChildProcess;
     private readonly pending = new Map<number, Pending>();
@@ -65,9 +77,9 @@ export class LspSession {
                 return;
             }
             this.pending.delete(id);
-            const error = message["error"] as { message?: string } | undefined;
+            const error = message["error"] as { message?: string; code?: number } | undefined;
             if (error !== undefined) {
-                pending.reject(new Error(error.message ?? "the language server declined the request"));
+                pending.reject(new LspResponseError(error.message ?? "the language server declined the request", error.code));
             } else {
                 pending.resolve(message["result"]);
             }

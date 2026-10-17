@@ -2,7 +2,9 @@ import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
+import { exitCodeOf } from "@intentic/base/errors";
 import { gitHeaderEnv } from "@intentic/base/git";
+import { untranslatedEnv } from "@intentic/base/process";
 import { type RunnerSync, runnerGitUrl, runnerIncomingRef } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { AgentWorktrees } from "../conversations/worktrees/worktrees.js";
 import { repoGitDir } from "../workspace/layout/git-layout.js";
@@ -32,15 +34,28 @@ export const gitEnv = (identity: RunnerIdentity): NodeJS.ProcessEnv => ({
     GIT_TERMINAL_PROMPT: "0",
 });
 
+// Untranslated, so a failure thrown up to the turn reads the same whatever locale the runner's machine has.
 const git = async (identity: RunnerIdentity, cwd: string, args: string[]): Promise<string> => {
-    const { stdout } = await execFileAsync("git", args, { cwd, env: gitEnv(identity), maxBuffer: 64 * 1024 * 1024 });
+    const { stdout } = await execFileAsync("git", args, { cwd, env: untranslatedEnv(gitEnv(identity)), maxBuffer: 64 * 1024 * 1024 });
     return stdout.trim();
 };
 
-// git's refusal for a ref the remote does not have; every other fetch failure is a failure to learn the answer.
-const isMissingRemoteRef = (error: unknown): boolean => {
-    const stderr = typeof error === "object" && error !== null ? (error as { stderr?: unknown }).stderr : undefined;
-    return typeof stderr === "string" && stderr.includes("couldn't find remote ref");
+// Whether a failed fetch of `ref` failed because the parent has no such ref, asked of the parent's own listing:
+// `ls-remote --exit-code` exits 2 when nothing matches. A malformed name matches nothing either, so it must first be one
+// a ref can have. Any other answer (a listed ref, an unreachable parent) is a failure to learn, and fails the sync.
+const parentLacks = async (identity: RunnerIdentity, cwd: string, url: string, ref: string): Promise<boolean> => {
+    try {
+        await git(identity, cwd, ["check-ref-format", ref]);
+    } catch {
+        // allow(silent-catch): a malformed name is not an absent branch; the fetch's own refusal is what fails the sync.
+        return false;
+    }
+    try {
+        await git(identity, cwd, ["ls-remote", "--exit-code", url, ref]);
+        return false;
+    } catch (error) {
+        return exitCodeOf(error) === 2;
+    }
 };
 
 // The working dir a composition entry means locally; "" is the workspace root itself.
@@ -74,8 +89,8 @@ export const syncFromParent = async (deps: RunnerSyncDeps, identity: RunnerIdent
         // failure fails the sync, since the parent hard-resets onto what comes back and main lacks the earlier turns.
         const fetched = await git(identity, workingDir, ["fetch", "--no-tags", url, `+refs/heads/${input.branch}:${PARENT_TURN_REF}`])
             .then(() => true)
-            .catch((error: unknown) => {
-                if (isMissingRemoteRef(error)) {
+            .catch(async (error: unknown) => {
+                if (await parentLacks(identity, workingDir, url, `refs/heads/${input.branch}`)) {
                     return false;
                 }
                 throw error;

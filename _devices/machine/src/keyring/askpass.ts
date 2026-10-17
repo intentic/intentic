@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { runBounded } from "@intentic/base/process";
+import { PS_UTF8_OUTPUT } from "@intentic/desktop-automation";
 import { homeDir } from "@intentic/local-agent";
 import { z } from "zod";
 import { askpassPath } from "../release.js";
@@ -110,9 +111,11 @@ const WindowsVariablesSchema = z
     })
     .pipe(z.record(z.string(), z.string().nullable()));
 
+// Asked in UTF-8 (PS_UTF8_OUTPUT): under a profile with a Polish letter in its name the values are paths that hold one,
+// and read in the console's code page they never equalled what this file writes, so status and removal missed them.
 const readWindows = async (): Promise<AskpassVariables> => {
     const listing = await powershell(
-        `$v = [ordered]@{}; ${ASKPASS_VARIABLES.map((name) => `$v[${psQuoted(name)}] = [Environment]::GetEnvironmentVariable(${psQuoted(name)}, 'User')`).join("; ")}; $v | ConvertTo-Json -Compress`,
+        `${PS_UTF8_OUTPUT}$v = [ordered]@{}; ${ASKPASS_VARIABLES.map((name) => `$v[${psQuoted(name)}] = [Environment]::GetEnvironmentVariable(${psQuoted(name)}, 'User')`).join("; ")}; $v | ConvertTo-Json -Compress`,
     );
     const parsed = WindowsVariablesSchema.safeParse(listing);
     const variables: AskpassVariables = {};

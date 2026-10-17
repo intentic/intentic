@@ -132,7 +132,7 @@ const essV2 = async (certificate: Party): Promise<Attribute> =>
 const contentInfo = (signed: SignedData): Uint8Array => new Uint8Array(new ContentInfo({ contentType: "1.2.840.113549.1.7.2", content: signed.toSchema(true) }).toSchema().toBER(false));
 
 // An RFC 3161 token over `imprinted`, signed by `tsa`.
-const timestampToken = async (imprinted: Uint8Array, tsa: Party, time = new Date()): Promise<Uint8Array> => {
+export const timestampToken = async (imprinted: Uint8Array, tsa: Party, time = new Date()): Promise<Uint8Array> => {
     const info = new TSTInfo({
         version: 1,
         policy: "1.2.3.4.1",

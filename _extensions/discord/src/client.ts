@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import { type Channel, Client, DiscordAPIError, GatewayIntentBits, Partials } from "discord.js";
+import { type Channel, Client, DiscordAPIError, DiscordjsError, DiscordjsErrorCodes, GatewayIntentBits, Partials } from "discord.js";
 
 export interface DiscordConnectorConfig {
     readonly provider: string;
@@ -91,14 +91,21 @@ export const releaseDiscordClient = (token: string, consumer: Consumer): void =>
     slots.delete(token);
 };
 
+// The gateway closing on a token (4004) or on a privileged intent (4014) reaches login as @discordjs/ws's plain Error,
+// with no code and no close code on it, so only its words say which.
+// allow(dependency-text): @discordjs/ws; any other wording is passed on as it came, still fatal.
+const gatewayRefused = (message: string, refusal: "token" | "intents"): boolean =>
+    refusal === "token" ? /^Authentication failed$/.test(message) : /disallowed intents/i.test(message);
+
 // Map discord.js login rejections onto messages a user can act on. Both are FATAL: retrying with the same
-// token/portal state can never succeed.
+// token/portal state can never succeed. A token REST refuses (401) is discord.js's own coded error.
 const loginFailure = (error: unknown): Error => {
     const message = errorMessage(error);
-    if (/token/i.test(message)) {
+    const code = error instanceof DiscordjsError ? error.code : undefined;
+    if (code === DiscordjsErrorCodes.TokenInvalid || gatewayRefused(message, "token")) {
         return new Error("Discord rejected the bot token: check the capability's botToken");
     }
-    if (/intent/i.test(message)) {
+    if (code === DiscordjsErrorCodes.DisallowedIntents || gatewayRefused(message, "intents")) {
         return new Error("Discord refused the gateway intents: enable the Message Content privileged intent (Developer Portal → Bot)");
     }
     return error instanceof Error ? error : new Error(message);

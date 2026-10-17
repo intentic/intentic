@@ -38,11 +38,36 @@ const running = async (session: SshSession): Promise<boolean> => {
     return result.stdout.trim() === CONTAINER;
 };
 
-// A registered runner writes /data/.runner recording its bound instance; missing or mismatched means it must
-// re-register.
+// A registered runner writes /data/.runner, JSON whose `address` is the instance it registered with (`--instance`, as
+// given); missing or mismatched means it must re-register.
+const Registration = z.object({ address: z.string() });
+
+// One instance however it is spelled: URL normalises scheme and host case, and a trailing slash is not another instance.
+const normalisedUrl = (value: string): string => (URL.canParse(value) ? new URL(value).href : value).replace(/\/+$/, "");
+
+const registrationOf = (text: string): z.infer<typeof Registration> | undefined => {
+    try {
+        const parsed = Registration.safeParse(JSON.parse(text));
+        return parsed.success ? parsed.data : undefined;
+    } catch {
+        // allow(silent-catch): a file that is not JSON is no registration this can read, which the caller throws.
+        return undefined;
+    }
+};
+
 const registeredTo = async (session: SshSession, instanceUrl: string): Promise<boolean> => {
     const result = await session.exec(`docker exec ${CONTAINER} cat /data/.runner 2>/dev/null || true`);
-    return result.stdout.includes(instanceUrl);
+    const text = result.stdout.trim();
+    if (text === "") {
+        return false;
+    }
+    const registration = registrationOf(text);
+    // Re-registering recreates the runner, killing the CI job it may be running: a file this cannot read is said, not
+    // taken for a registration elsewhere. Its contents hold the runner's token, so they are not quoted.
+    if (registration === undefined) {
+        throw new Error(`forgejo-runner: /data/.runner in ${CONTAINER} is not the JSON registration act_runner writes (no "address"); remove it to re-register`);
+    }
+    return normalisedUrl(registration.address) === normalisedUrl(instanceUrl);
 };
 
 // Runner image is the container's create-time reference; job image lives in config.yaml's label line, read back

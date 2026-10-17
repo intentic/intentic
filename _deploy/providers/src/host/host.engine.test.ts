@@ -7,7 +7,9 @@ import { createHostProvider } from "./host.js";
 const reachable: SshExecutor = {
     connect: async () => ({
         exec: async (command) =>
-            command.includes("docker") ? { stdout: "24.0.0", stderr: "", code: 0 } : { stdout: "10.0.0.5\n", stderr: "", code: 0 },
+            command.includes("docker")
+                ? { stdout: "24.0.0", stderr: "", code: 0 }
+                : { stdout: '[{"dst":"1.1.1.1","gateway":"10.0.0.1","dev":"eth0","prefsrc":"10.0.0.5","flags":[],"uid":0,"cache":[]}]\n', stderr: "", code: 0 },
         dispose: async () => {},
     }),
 };

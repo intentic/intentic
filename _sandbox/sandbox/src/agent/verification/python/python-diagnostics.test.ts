@@ -2,36 +2,57 @@ import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { droppedRules, pyrightErrors, ruffFindings } from "./python-diagnostics.js";
 
 // Two parsers between this daemon and a tool it does not own: a payload neither can understand must read as unchecked,
-// never as clean. Ruff's fixtures are its real output (`ruff check --isolated --select E9,F821 --output-format
-// concise`), covering both spellings it emits.
+// never as clean. Ruff's fixture is its real output (ruff 0.17.0, `ruff check --isolated --select E9,F821
+// --output-format json` over a file with a syntax error and one with an undefined name), trimmed to the fields read;
+// python-diagnostics.integration.test.ts runs the real ruff.
 
 const asIs = (file: string): string => file;
 
-test("ruff's two diagnostic spellings both parse, and the prose around them does not", () => {
-    const findings = ruffFindings(
-        [
-            "main.py:1:7: invalid-syntax: Expected a parameter or the end of the parameter list",
-            "main.py:2:12: F821 Undefined name `undefined_name`",
-            "Found 2 errors.",
-            "",
-        ].join("\n"),
-        `${WORKSPACE_ROOT}/app`,
-        asIs,
-    );
+const RUFF_JSON = JSON.stringify([
+    {
+        cell: null,
+        code: "invalid-syntax",
+        filename: `${WORKSPACE_ROOT}/app/bad.py`,
+        location: { column: 7, row: 1 },
+        message: "Expected a parameter or the end of the parameter list",
+        name: "invalid-syntax",
+        severity: "error",
+    },
+    {
+        code: "F821",
+        filename: `${WORKSPACE_ROOT}/app/und.py`,
+        location: { column: 7, row: 1 },
+        message: "Undefined name `undefined_name`",
+        name: "undefined-name",
+        severity: "error",
+    },
+]);
 
-    expect(findings).toEqual([
-        { code: "invalid-syntax", text: "/work/app/main.py:1:7: error invalid-syntax: Expected a parameter or the end of the parameter list" },
-        { code: "F821", text: "/work/app/main.py:2:12: error F821: Undefined name `undefined_name`" },
+test("ruff's JSON reads as one finding per diagnostic, a syntax error kept by its code", () => {
+    expect(ruffFindings(RUFF_JSON, `${WORKSPACE_ROOT}/app`, asIs)).toEqual([
+        { code: "invalid-syntax", text: "/work/app/bad.py:1:7: error invalid-syntax: Expected a parameter or the end of the parameter list" },
+        { code: "F821", text: "/work/app/und.py:1:7: error F821: Undefined name `undefined_name`" },
     ]);
+    expect(ruffFindings("[]", `${WORKSPACE_ROOT}/app`, asIs)).toEqual([]);
+});
+
+test("an older ruff's null code is a syntax error", () => {
+    const old = JSON.stringify([{ code: null, filename: `${WORKSPACE_ROOT}/app/bad.py`, location: { row: 2, column: 1 }, message: "SyntaxError: Unexpected token" }]);
+    expect(ruffFindings(old, `${WORKSPACE_ROOT}/app`, asIs)?.map((finding) => finding.code)).toEqual(["invalid-syntax"]);
+});
+
+test("an answer that is not ruff's JSON is not checked, never clean", () => {
+    for (const unreadable of ["main.py:1:7: invalid-syntax: Expected a parameter", "Found 2 errors.", "", '{"diagnostics": []}', '[{"code": "F821"}]']) {
+        expect(ruffFindings(unreadable, `${WORKSPACE_ROOT}/app`, asIs)).toBeUndefined();
+    }
 });
 
 test("a relative path is resolved against the run's own directory before it is reported in the agent's names", () => {
     // Both halves of the path gap: ruff names files where it ran; an uncheckpointed checker sits in the worktree.
-    const findings = ruffFindings("deep/main.py:2:12: F821 Undefined name `x`", `${HISTORY_ROOT}/worktrees/c1/app`, (file) =>
-        file.replace(`${HISTORY_ROOT}/worktrees/c1`, WORKSPACE_ROOT),
-    );
+    const relative = JSON.stringify([{ code: "F821", filename: "deep/main.py", location: { row: 2, column: 12 }, message: "Undefined name `x`" }]);
+    const findings = ruffFindings(relative, `${HISTORY_ROOT}/worktrees/c1/app`, (file) => file.replace(`${HISTORY_ROOT}/worktrees/c1`, WORKSPACE_ROOT));
 
-    expect(findings.map((finding) => finding.text)).toEqual(["/work/app/deep/main.py:2:12: error F821: Undefined name `x`"]);
+    expect(findings?.map((finding) => finding.text)).toEqual(["/work/app/deep/main.py:2:12: error F821: Undefined name `x`"]);
 });
 
 // One payload covering every case: error shown, warning not, position moved zero-based to one-based.

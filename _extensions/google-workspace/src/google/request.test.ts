@@ -30,19 +30,42 @@ describe("retryDelay", () => {
 describe("googleError", () => {
     const at = (service: string): string => `https://${service}.googleapis.com/v1/whatever`;
 
+    // Google's 403 bodies as its APIs send them: an AIP-193 ErrorInfo in `details`, the v1 `errors` beside it.
+    const refusal = (message: string, reason: string, legacy: string) => ({
+        error: {
+            code: 403,
+            message,
+            errors: [{ message, domain: "global", reason: legacy }],
+            status: "PERMISSION_DENIED",
+            details: [{ "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason, domain: "googleapis.com", metadata: { service: "gmail.googleapis.com" } }],
+        },
+    });
+    const DISABLED = "Gmail API has not been used in project 12345 before or it is disabled. Enable it by visiting the console then retry.";
+    const SCOPES = "Request had insufficient authentication scopes.";
+
     /* A disabled API needs a console instruction, not Google's raw error. */
     it("turns a disabled API into the instruction that enables it", () => {
-        const error = googleError(403, at("gmail"), {
-            error: { message: "Gmail API has not been used in project 12345 before or it is disabled." },
-        });
+        const error = googleError(403, at("gmail"), refusal(DISABLED, "SERVICE_DISABLED", "accessNotConfigured"));
         expect(error.message).toContain("console.cloud.google.com");
         expect(error.message).toContain("Gmail API");
     });
 
     it("explains an insufficient-scope refusal as a consent that was too narrow", () => {
-        const error = googleError(403, at("calendar"), { error: { message: "Request had insufficient authentication scopes." } });
+        const error = googleError(403, at("calendar"), refusal(SCOPES, "ACCESS_TOKEN_SCOPE_INSUFFICIENT", "insufficientPermissions"));
         expect(error.message).toMatch(/approved for narrower scopes/);
         expect(error.message).toMatch(/domain-wide delegation/);
+    });
+
+    it("reads the refusal's reason, not its sentence", () => {
+        expect(googleError(403, at("gmail"), refusal("Reworded.", "SERVICE_DISABLED", "accessNotConfigured")).message).toContain("Enable Gmail API");
+        expect(googleError(403, at("gmail"), { error: { message: "Reworded.", errors: [{ reason: "insufficientPermissions" }] } }).message).toMatch(/narrower scopes/);
+        // The bearer challenge (RFC 6750) says it on its own.
+        expect(googleError(403, at("gmail"), { error: { message: "Reworded." } }, 'Bearer realm="https://accounts.google.com/", error="insufficient_scope", scope="https://www.googleapis.com/auth/gmail.modify"').message).toMatch(
+            /narrower scopes/,
+        );
+        // A refusal whose reason is another one is relayed as Google phrased it, whatever its words.
+        const sharing = googleError(403, at("drive"), refusal("The user has insufficient permission for this file; it is disabled for sharing.", "PERMISSION_DENIED", "insufficientFilePermissions"));
+        expect(sharing.message).toBe("The user has insufficient permission for this file; it is disabled for sharing.");
     });
 
     it("suggests the two things a 404 actually means", () => {

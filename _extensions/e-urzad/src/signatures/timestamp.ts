@@ -54,6 +54,13 @@ const tstInfoOf = (signed: SignedData): TSTInfo => {
     return TSTInfo.fromBER(value);
 };
 
+const COVERS_OTHER_BYTES = "the time-stamp does not cover these bytes";
+
+// A token whose TSTInfo no longer matches what the TSA signed. PKI.js says so only in words, under the code (15) it
+// shares with a malformed TSTInfo and any failure inside the check; a missing message-digest attribute is code 10.
+// allow(dependency-text): pkijs SignedData.verify; any other wording is shown as the reason and the time-stamp not checked.
+const altered = (error: SignedDataVerifyError): boolean => error.code === 15 && /TSTInfo verification is failed|Message digest doesn't match/i.test(error.message);
+
 // One token, checked against the exact bytes it should have stamped (a signature value, a document's signed ranges, a
 // canonicalised XML element). `imprinted` undefined means the stamped bytes could not be reconstructed here: the time is
 // reported, the imprint is not claimed.
@@ -76,6 +83,11 @@ export const verifyTimestamp = async (
         return { kind, time, integrity: "not-checked", detail: "the stamped bytes could not be reconstructed here, so the imprint was not compared", tsa: tsaName(undefined, info), trust: trustSkipped("the time-stamp was not verified") };
     }
     try {
+        // PKI.js's own imprint check, asked on its own so a token over other bytes is told by its answer rather than by
+        // the words of what the combined check below throws for it.
+        if (!(await info.verify({ data: toArrayBuffer(imprinted) }))) {
+            return { kind, time, integrity: "invalid", detail: COVERS_OTHER_BYTES, tsa: tsaName(undefined, info), trust: trustSkipped("the time-stamp did not verify") };
+        }
         const result = await signed.verify({ signer: 0, data: toArrayBuffer(imprinted), checkChain: false, extendedMode: true });
         const signer = result.signerCertificate ?? undefined;
         const verdict: TrustFacts = signer === undefined ? trustSkipped("the time-stamp carries no TSA certificate") : await trust.evaluate(signer, bundleOf(signed), info.genTime, "timestamp");
@@ -88,8 +100,8 @@ export const verifyTimestamp = async (
             trust: verdict,
         };
     } catch (error) {
-        const reason = error instanceof SignedDataVerifyError ? error.message : error instanceof Error ? error.message : "verification failed";
-        const imprintBroken = /TSTInfo verification is failed|digest/i.test(reason);
-        return { kind, time, integrity: imprintBroken ? "invalid" : "not-checked", detail: imprintBroken ? "the time-stamp does not cover these bytes" : reason, tsa: tsaName(undefined, info), trust: trustSkipped("the time-stamp did not verify") };
+        const reason = error instanceof Error ? error.message : "verification failed";
+        const imprintBroken = error instanceof SignedDataVerifyError && altered(error);
+        return { kind, time, integrity: imprintBroken ? "invalid" : "not-checked", detail: imprintBroken ? COVERS_OTHER_BYTES : reason, tsa: tsaName(undefined, info), trust: trustSkipped("the time-stamp did not verify") };
     }
 };

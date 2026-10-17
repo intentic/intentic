@@ -195,6 +195,30 @@ test("pullRemote replays diverged local commits onto upstream, keeping uncommitt
     expect(await sh(clone, "status", "--porcelain")).toBe("M a.txt");
 });
 
+// git 2.53 made `git replay` update the refs itself and print nothing; `replay.refAction=update` asks the same of any git
+// that knows the key. The pull must still read the printed tip, or the branch moves under an index left at the old one.
+test("pullRemote reads replay's printed tip even where config asks replay to update refs itself", async () => {
+    const { clone, origin } = await cloned();
+    await sh(clone, "config", "replay.refAction", "update");
+    const push = await upstreamPusher(origin);
+    await commit(clone, "local.txt", "local");
+    await push("d.txt", "four");
+    const printed: string[] = [];
+    const git: GitRunner = async (dir, args, env) => {
+        const result = await defaultGit(dir, args, env);
+        if (args.includes("replay")) {
+            printed.push(result.stdout);
+        }
+        return result;
+    };
+
+    expect(await pullRemote(clone, AUTHOR, git)).toEqual({ ok: true });
+
+    expect(printed.join("")).toMatch(/^update refs\/heads\/main [0-9a-f]{40} [0-9a-f]{40}$/m);
+    expect(await sh(clone, "log", "--format=%s", "-3")).toBe("local\nfour\none");
+    expect(await sh(clone, "status", "--porcelain")).toBe("");
+});
+
 test("pullRemote leaves branch and tree as they were when a local commit conflicts with upstream", async () => {
     const { clone, origin } = await cloned();
     const push = await upstreamPusher(origin);

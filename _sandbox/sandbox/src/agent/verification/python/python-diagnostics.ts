@@ -1,6 +1,7 @@
 import { access, constants } from "node:fs/promises";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import type { CheckPlacement } from "@intentic/lsp/client";
+import { z } from "zod";
 import { runCheck } from "../../../workload/run-check.js";
 import { onPath } from "../../../image/on-path.js";
 import type { DiagAnswer, DiagRequest } from "../agent-diagnostics.js";
@@ -62,8 +63,16 @@ export const interpreterNear = async (file: string): Promise<string | undefined>
     }
 };
 
-// ruff's concise format, path:line:col: CODE message, both spellings; anything else is dropped, not a finding.
-const RUFF_LINE = /^(?<file>.+?):(?<line>\d+):(?<column>\d+): (?<code>[A-Za-z0-9-]+):? (?<message>.*)$/;
+// ruff's `--output-format json`, the machine format it documents, read by schema rather than by line: the concise text
+// format moved its code separator once already (`F821 msg` vs `invalid-syntax: msg`), and a line the reader no longer
+// recognized dropped as no finding, so every file read clean. Older ruff writes a syntax error's code as null.
+const RuffDiagnosticSchema = z.object({
+    code: z.string().nullable(),
+    filename: z.string(),
+    location: z.object({ row: z.number(), column: z.number() }),
+    message: z.string(),
+});
+const RuffOutputSchema = z.array(RuffDiagnosticSchema);
 
 // A file that does not PARSE: ruff reports these whatever is selected, and they are the one finding that makes
 // asking a type-checker afterwards pointless.
@@ -75,17 +84,26 @@ export interface RuffFinding {
     readonly text: string;
 }
 
-// `cwd` isn't decoration: ruff prints paths relative to where it ran, so they're resolved back here before `named` maps
-// them onto the agent's own names.
-export const ruffFindings = (stdout: string, cwd: string, named: (file: string) => string): RuffFinding[] =>
-    stdout
-        .split("\n")
-        .map((line) => RUFF_LINE.exec(line.trim())?.groups)
-        .filter((groups): groups is Record<string, string> => groups !== undefined)
-        .map((groups) => ({
-            code: groups["code"]!,
-            text: `${named(resolvePath(cwd, groups["file"]!))}:${groups["line"]!}:${groups["column"]!}: error ${groups["code"]!}: ${groups["message"]!}`,
-        }));
+// Undefined for an answer that is not ruff's JSON (a banner, a renamed field, a kill mid-write): read as not checked,
+// never as an empty clean list. `cwd` resolves a relative filename, which ruff has printed before; `named` maps the
+// path onto the agent's own names.
+export const ruffFindings = (stdout: string, cwd: string, named: (file: string) => string): RuffFinding[] | undefined => {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(stdout);
+    } catch {
+        // allow(silent-catch): an answer that is not JSON is the "not checked" this returns, never an empty clean list.
+        return undefined;
+    }
+    const diagnostics = RuffOutputSchema.safeParse(parsed);
+    if (!diagnostics.success) {
+        return undefined;
+    }
+    return diagnostics.data.map(({ code, filename, location, message }) => {
+        const shownCode = code ?? SYNTAX_CODE;
+        return { code: shownCode, text: `${named(resolvePath(cwd, filename))}:${location.row}:${location.column}: error ${shownCode}: ${message}` };
+    });
+};
 
 // Reads pyright's `--outputjson` defensively: any shape it doesn't recognize (a renamed field, a banner, a kill
 // mid-write) becomes undefined, read as not checked, never as an empty clean list. Positions are zero-based in the
@@ -173,7 +191,7 @@ const gateFindings = async (
     if (!(await onPath("ruff"))) {
         return undefined;
     }
-    const args = ["check", "--isolated", "--no-cache", "--quiet", "--color", "never", "--select", "E9,F821", "--output-format", "concise", file];
+    const args = ["check", "--isolated", "--no-cache", "--quiet", "--color", "never", "--select", "E9,F821", "--output-format", "json", file];
     const outcome = await run("ruff", args, cwd, placement);
     return outcome.answered ? ruffFindings(outcome.stdout, cwd, named) : undefined;
 };

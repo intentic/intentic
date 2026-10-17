@@ -40,7 +40,9 @@ export const requireAuthWhenReachable = (config: Config): void => {
 // from inside the signal's listener. When the peer's socket closed first, the send throws there, out of anyone's reach,
 // and surfaced as an "uncaught exception" at error, stack and all, 29 times in five days. Nothing is lost: the call it
 // would cancel is already over, and the socket that closed is the peer's own business (its heartbeat, its redial).
+// oRPC throws a bare Error there, with no name or code to read, so its exact words and its frames are what is left.
 export const isAbandonedPeerSend = (error: unknown): error is Error =>
+    // allow(dependency-text): oRPC 1.x's websocket link (@orpc/client/websocket); an unmatched wording is logged at error with its stack, as any escaped fault.
     error instanceof Error && error.message === "Cannot send message, WebSocket is not open." && (error.stack ?? "").includes("@orpc/");
 
 // What reached the process's last-resort handlers: a real fault at error with its stack, the known oRPC race at debug.

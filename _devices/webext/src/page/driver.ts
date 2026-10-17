@@ -216,12 +216,64 @@ export const describeRef = (ref: string, pin?: string): RefDescription => {
     const text = ((el as HTMLElement).innerText ?? el.textContent ?? el.getAttribute("value") ?? el.getAttribute("aria-label") ?? "")
         .trim()
         .slice(0, 120);
-    // Credential check is scoped to the nearest enclosing form/dialog/section, not page-wide.
-    const scope = el.closest("form, dialog, [role='dialog'], [role='form'], section, article, main");
+    // Credential check is scoped to the nearest enclosing form/dialog/section, not page-wide, and to the form a control
+    // names with `form=` from outside it. The markup says it in any language: a card number is `autocomplete="cc-…"`.
+    const named = el.getAttribute("form");
+    const scopes = [el.closest("form, dialog, [role='dialog'], [role='form'], section, article, main"), named === null ? null : document.getElementById(named)];
     const credentials = 'input[type="password"], input[autocomplete*="cc-"], input[name*="card" i], input[autocomplete="one-time-code"]';
-    const money = /\b(pay|buy|checkout|order|purchase|donate|transfer|withdraw|subscribe|send money)\b/i;
-    const destructive = /\b(delete|remove|deactivate|close account|revoke|wipe|erase|uninstall|terminate)\b/i;
-    const sensitive = (scope !== null && scope.querySelector(credentials) !== null) || money.test(text) || destructive.test(text);
+    // What the element says, including what an icon button or an <input type=submit> says only in its attributes.
+    const button = el.matches('input[type="submit" i], input[type="button" i], input[type="image" i]');
+    const said = [text, el.getAttribute("aria-label"), el.getAttribute("title"), button ? el.getAttribute("value") : null, button ? el.getAttribute("alt") : null]
+        .filter((part) => part !== null)
+        .join(" ");
+    // Words, in English and in Polish (the owner's own UI language), each starting at a word's edge. Polish stems stay
+    // open at the end so every inflection matches (zapłać, zapłacić, zapłata). `\b` is ASCII-only even under /u, so a
+    // Polish letter would read as an edge; the edges are spelled as "no letter or digit" instead.
+    // allow(dependency-text): pages' own button wording; an unmatched one is clicked unasked, so the lists err broad.
+    const edge = (words: string): RegExp => new RegExp(`(?<![\\p{L}\\p{N}])(?:${words})`, "iu");
+    const money = edge(
+        [
+            "(?:pay|buy|checkout|order|purchase|donate|transfer|withdraw|subscribe|send money)(?![\\p{L}\\p{N}])",
+            // zapłać, opłać, wpłać, wypłać, dopłać, płacę; płatność, płatny; zapłata, wpłata, wypłata.
+            "(?:za|o|do|w|wy)?pła[cć]",
+            "(?:za|o|do|w|wy)pla[cć]",
+            "płatn",
+            "(?:za|w|wy)płat",
+            // kup, kupuję, kupić, zakup, dokup, wykup; not a kupon (coupon).
+            "(?:za|do|wy)?kup(?!on)",
+            // zamów, zamówienie, zamawiam.
+            "zam[óo]w",
+            "zamaw",
+            "przele[wj]",
+            "subskry[bp]",
+            "darowizn",
+            "wesprz",
+            "doład",
+            "pieni[ąa]dz",
+            "pieni[ęe]dz",
+            "do\\s+kasy",
+        ].join("|"),
+    );
+    const destructive = edge(
+        [
+            "(?:delete|remove|deactivate|close account|revoke|wipe|erase|uninstall|terminate)(?![\\p{L}\\p{N}])",
+            // usuń, usunąć, usuwam, usunięcie.
+            "usu[nńw]",
+            "s?kas(?:uj|ow)",
+            "dezaktyw",
+            "unieważ",
+            "uniewaz",
+            "wyczy[śs]",
+            "wyma[żz]",
+            "odinstal",
+            "opróżn",
+            // Only with what they end: a bare "Zamknij", "Anuluj", "Cofnij" or "Zakończ" closes a dialog or a wizard.
+            "zamk\\p{L}*\\s+kont",
+            "(?:cofn|odbier|odebr)\\p{L}*\\s+dostęp",
+            "(?:zakończ|anuluj|wypowi|rozwiąż)\\p{L}*\\s+(?:subskrypc|członkostw|umow|abonament|kont|plan)",
+        ].join("|"),
+    );
+    const sensitive = scopes.some((scope) => scope !== null && scope.querySelector(credentials) !== null) || money.test(said) || destructive.test(said);
     return { ok: true, role: el.tagName.toLowerCase(), name: text, sensitive };
 };
 

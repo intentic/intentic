@@ -9,6 +9,7 @@ import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import type { PendingAction } from "../laneDrop";
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
+import { BAD_OBJECT } from "../../fleet/tests/gitFailures";
 import { IconStub } from "@intentic/ui/testing";
 
 // Import chain reads browser globals at import time; setup keeps the device desktop for the drill-in affordance.
@@ -642,8 +643,7 @@ it(`drills in to the review on a double-click`, () => {
 
 // TABULARIUM's lands failed on a checkout git no longer recognised, and its card sat in Finished with a check mark (B6).
 it(`says a broken land in plain words, keeping git's own sentence for the hover`, () => {
-    const failure = `Command failed: git --no-optional-locks -C /work/tabularium diff c011c54 3e03077 fatal: bad object 3e03077`;
-    const el = mount({ ...ready(`error`), failure });
+    const el = mount({ ...ready(`error`), failure: BAD_OBJECT });
     expect(el.textContent).toContain(`Couldn't land: this agent's copy lost its link to your workspace's history`);
     expect(el.textContent).not.toContain(`Command failed`);
     expect(el.querySelector(`.ui-status-pill`)?.textContent?.trim()).toBe(`Couldn't land`);

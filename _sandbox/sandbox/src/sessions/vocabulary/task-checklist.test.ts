@@ -102,3 +102,13 @@ test("an empty seed is no seed: nothing renders and nothing is adoptable", () =>
     expect(list.seed([])).toBeUndefined();
     expect(list.updated({ taskId: "1", status: "completed" })).toBeUndefined();
 });
+
+// The structured output outranks the text; the text stays the fallback for a CLI that sends none.
+test("a create's and a list's structured output is read before their text", () => {
+    const list = new TaskChecklist();
+    list.created("t1", { subject: "Gamma one" });
+    expect(list.resolved("t1", "reworded beyond recognition", { task: { id: "4" } })).toEqual([{ content: "Gamma one", status: "pending" }]);
+    expect(list.updated({ taskId: "4", status: "completed" })).toEqual([{ content: "Gamma one", status: "completed" }]);
+    expect(list.listed("reworded", { tasks: [] })).toEqual([]);
+    expect(list.listed("reworded", { task: { id: "4" } })).toBeUndefined();
+});

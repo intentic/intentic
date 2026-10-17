@@ -1,4 +1,4 @@
-import { Certificate, CertificateChainValidationEngine } from "pkijs";
+import { Certificate, CertificateChainValidationEngine, ChainValidationCode, ChainValidationError } from "pkijs";
 import { derOf, validAt } from "../certificate.js";
 import { digest, hex } from "../engine.js";
 import { TRUST_NOT_CHECKED, type TrustFacts } from "../report.js";
@@ -40,6 +40,14 @@ const expectedType = (purpose: "signer" | "timestamp"): string => (purpose === "
 
 const typeName = (type: string): string => type.split("/Svctype/")[1] ?? type;
 
+// PKI.js's codes for "no path reaches a trusted certificate", as opposed to a path that does and fails a check on the way.
+const NO_PATH = new Set<number>([ChainValidationCode.noPath, ChainValidationCode.noValidPath]);
+
+const noPathFound = (result: { readonly resultCode: number; readonly resultMessage: string }): boolean =>
+    NO_PATH.has(result.resultCode) ||
+    // allow(dependency-text): pkijs; its path builder throws a code-less Error at a certificate with no known issuer, read as `unknown`, so only its words say "no path"; any other wording reports chain-invalid with PKI.js's message.
+    (result.resultCode === ChainValidationCode.unknown && /No valid certificate paths/i.test(result.resultMessage));
+
 const anchoredAt = (anchor: Anchor, checkDate: Date, purpose: "signer" | "timestamp", base: Pick<TrustFacts, "revocation" | "checkedAt" | "trustedList">): TrustFacts => {
     const status = statusAt(anchor.service, checkDate) ?? "no status at that time";
     const wanted = anchor.service.type === expectedType(purpose);
@@ -71,11 +79,16 @@ export const trustListEvaluator = (cache: TrustCache | undefined): TrustEvaluato
                     : { ...base, status: "chain-invalid", detail: `the certificate is on the trusted list but not valid at ${checkDate.toISOString()}` };
             }
             const engine = new CertificateChainValidationEngine({ trustedCerts: [...known.values()].map((anchor) => anchor.certificate), certs: [certificate, ...bundle], checkDate });
-            const result = await engine.verify().catch((cause: unknown) => ({ result: false, resultMessage: cause instanceof Error ? cause.message : "path building failed", certificatePath: undefined }));
+            const result = await engine.verify().catch((cause: unknown) => ({
+                result: false,
+                resultCode: cause instanceof ChainValidationError ? cause.code : ChainValidationCode.unknown,
+                resultMessage: cause instanceof Error ? cause.message : "path building failed",
+                certificatePath: undefined,
+            }));
             const path = result.certificatePath ?? [];
             const top = path.at(-1);
             if (!result.result || top === undefined) {
-                const noPath = /No valid certificate paths/i.test(result.resultMessage);
+                const noPath = noPathFound(result);
                 return {
                     ...base,
                     status: noPath ? "not-anchored" : "chain-invalid",

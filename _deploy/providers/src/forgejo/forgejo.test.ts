@@ -12,6 +12,8 @@ interface FakeOpts {
     readonly gitToken?: string;
     readonly packagesToken?: string;
     readonly adminExists?: boolean;
+    // What `admin user create` fails with on stderr, for a create Forgejo refuses.
+    readonly adminRefusal?: string;
     readonly runFails?: boolean;
     readonly image?: string;
 }
@@ -45,8 +47,12 @@ const fakeSsh = (opts: FakeOpts = {}): { executor: SshExecutor; commands: string
             if (command.includes("docker run")) {
                 return res("id", opts.runFails ? 1 : 0);
             }
+            if (command.includes("admin user list --admin")) {
+                // tabwriter-aligned, as Forgejo prints it.
+                return res(`ID   Username Email                 IsActive\n${opts.adminExists ? "1    admin    admin@git.example.com true\n" : ""}`);
+            }
             if (command.includes("admin user create")) {
-                return opts.adminExists ? { stdout: "", stderr: "user already exists", code: 1 } : res("ok");
+                return opts.adminRefusal === undefined ? res("ok") : { stdout: "", stderr: opts.adminRefusal, code: 1 };
             }
             return res("");
         },
@@ -166,9 +172,19 @@ test("apply runs forgejo with INSTALL_LOCK + the stamp label, bootstraps admin, 
     expect(ssh.commands.some((c) => c.includes("generate-access-token") && c.includes("--scopes write:package,read:package"))).toBe(true);
 });
 
-test("apply tolerates the admin user already existing", async () => {
+test("apply tolerates the admin user already existing, and does not try to create it again", async () => {
     const ssh = fakeSsh({ healthy: true, token: "tok-123", gitToken: "gtok-456", packagesToken: "ptok-789", adminExists: true });
-    await expect(createForgejoProvider(ssh.executor).apply(inputs, undefined, ctx())).resolves.toBeDefined();
+    await expect(createForgejoProvider(ssh.executor).apply(inputs, undefined, ctx())).resolves.toMatchObject({ runnerToken: "tok-123" });
+    expect(ssh.commands.some((c) => c.includes("admin user create"))).toBe(false);
+});
+
+test("an admin create refused for anything but the user existing is thrown", async () => {
+    const tokens = { healthy: true, token: "tok-123", gitToken: "gtok-456", packagesToken: "ptok-789" };
+    // A list this cannot read still meets the user existing; an e-mail already in use is not that.
+    const exists = fakeSsh({ ...tokens, adminRefusal: "Command error: CreateUser: user already exists [name: admin]" });
+    await expect(createForgejoProvider(exists.executor).apply(inputs, undefined, ctx())).resolves.toMatchObject({ runnerToken: "tok-123" });
+    const emailTaken = fakeSsh({ ...tokens, adminRefusal: "Command error: CreateUser: e-mail already in use [email: admin@git.example.com]" });
+    await expect(createForgejoProvider(emailTaken.executor).apply(inputs, undefined, ctx())).rejects.toThrow(/failed to create forgejo admin.*e-mail already in use/);
 });
 
 test("apply throws when docker run exits non-zero", async () => {

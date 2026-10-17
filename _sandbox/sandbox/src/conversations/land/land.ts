@@ -1,7 +1,7 @@
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { errorMessage, stderrOf, undefinedIfMissing } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
 import type { AgentSpan, LandConflict, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract/schemas/agents";
 import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
@@ -72,7 +72,7 @@ const refusal = async (main: string, patch: string, direction: "forward" | "reve
         await git(main, ["apply", "--check", ...(direction === "reverse" ? ["--reverse"] : []), patch]);
         return undefined;
     } catch (error) {
-        return stderrOf(error);
+        return gitSaid(error);
     }
 };
 
@@ -80,9 +80,9 @@ const applies = async (main: string, patch: string, direction: "forward" | "reve
     (await refusal(main, patch, direction, git)) === undefined;
 
 // What git said, off the runner's rejection; the message itself when the throw carries no stderr.
-const stderrOf = (error: unknown): string => {
-    const stderr = (error as { stderr?: unknown }).stderr;
-    return typeof stderr === "string" && stderr !== "" ? stderr : errorMessage(error);
+const gitSaid = (error: unknown): string => {
+    const stderr = stderrOf(error);
+    return stderr !== undefined && stderr !== "" ? stderr : errorMessage(error);
 };
 
 // Diff written straight to a file, never held as a string, since a giant patch would blow the git runner's output
@@ -122,6 +122,7 @@ const deltaChangeOf = (change: GitChange): DeltaChange => ({
 
 // How `git apply` names the file a refusal or a failed write is about, one line each, the path as the capture. A line
 // none of these place is scanned for a known path instead, so an unknown wording still names what it names.
+// allow(dependency-text): git apply, run untranslated by the base runner; a refusal naming nothing placeable is probed change by change (probeEach), a failed write naming nothing is rethrown.
 const REFUSAL_LINES: readonly RegExp[] = [
     /^error: patch failed: (.+):\d+$/,
     /^error: (.+): (?:patch does not apply|already exists in (?:working directory|index)|does not (?:exist|match) in index|No such file or directory|wrong type|has type \d+, expected \d+)$/,
@@ -144,6 +145,7 @@ const boundedAt = (line: string, path: string, at: number): boolean => {
 
 // The changes a refusal names, matched by any of their paths (a rename is named on either leg). Empty when the message
 // held nothing this reader could place, which callers treat as unknown, never as nothing.
+// allow(dependency-text): git apply's stderr (REFUSAL_LINES, then its `error:` verdict lines); unplaced reads as unknown, as above.
 const changesNamedIn = (stderr: string, byPath: ReadonlyMap<string, DeltaChange>): Set<DeltaChange> => {
     const named = new Set<DeltaChange>();
     for (const line of stderr.split("\n")) {
@@ -433,7 +435,7 @@ const refusedWrite = async (write: RepoLandWrite, error: unknown, git: GitRunner
         write.kind === "subset"
             ? write.changes
             : parseNameStatusZ((await git(write.main, ["diff", "--name-status", "-z", "-M", write.from, write.tip])).stdout).map(deltaChangeOf);
-    const named = changesNamedIn(stderrOf(error), changesByPath(changes));
+    const named = changesNamedIn(gitSaid(error), changesByPath(changes));
     if (named.size === 0) {
         throw error;
     }

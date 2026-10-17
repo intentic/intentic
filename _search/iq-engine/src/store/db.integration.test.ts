@@ -2,8 +2,9 @@ import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import type { Row } from "@intentic/base/sqlite";
-import { compactIndex, openIndex } from "./db.js";
+import { compactIndex, isIndexBusy, openIndex } from "./db.js";
 
 const dirs: string[] = [];
 
@@ -54,3 +55,35 @@ test("opening an index creates the index dir, and no empty spool beside it", asy
         db.close();
     }
 });
+
+// A held write lock is told from corruption by SQLite's own result code, provoked here for real: a second connection
+// that will not wait meets the first one's open write transaction. A lock read as corruption would delete the index.
+test("a write lock another connection holds reads as busy; a broken statement does not", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "iq-db-"));
+    dirs.push(dir);
+    const db = openIndex(dir, "write");
+    const other = new DatabaseSync(join(dir, "index.db"));
+    try {
+        other.exec("PRAGMA busy_timeout = 0");
+        db.run("BEGIN IMMEDIATE");
+        const locked = thrownBy(() => other.exec("BEGIN IMMEDIATE"));
+        db.run("ROLLBACK");
+        expect(isIndexBusy(locked)).toBe(true);
+        expect(isIndexBusy(thrownBy(() => other.exec("SELEC 1")))).toBe(false);
+        expect(isIndexBusy(new Error("schema 6 != 7"))).toBe(false);
+    } finally {
+        other.close();
+        db.close();
+    }
+});
+
+const thrownBy = (run: () => void): Error => {
+    try {
+        run();
+    } catch (error) {
+        if (error instanceof Error) {
+            return error;
+        }
+    }
+    throw new Error("expected an Error thrown");
+};

@@ -1,5 +1,6 @@
 import { Parse } from "xadesjs";
 import { CryptoConfig, SignedXml, X509Certificate, XmlCanonicalizer } from "xmldsigjs";
+import { z } from "zod";
 import { certificateFacts, derOf, parseCertificate } from "./certificate.js";
 import { descendants, isElement } from "./dom.js";
 import { causeText, digest, hashNameOf, sameBytes, toArrayBuffer } from "./engine.js";
@@ -144,6 +145,24 @@ interface Checked {
     readonly detail: string;
 }
 
+// xml-core's XmlError (what xmldsigjs throws; not an Error subclass) by its XE code, which its message prints as
+// XMLJS00nn: METHOD_NOT_SUPPORTED, CRYPTOGRAPHIC_UNKNOWN_TRANSFORM, ALGORITHM_NOT_SUPPORTED, KEY_INFO_CLAUSE_NOT_SUPPORTED
+// are something this verifier does not implement. CRYPTOGRAPHIC is every other failure, a wrong digest included.
+const XmlCoreError = z.object({ prefix: z.literal("XMLJS"), code: z.number().int(), message: z.string() });
+const XE_UNIMPLEMENTED = new Set([6, 15, 16, 19]);
+const XE_CRYPTOGRAPHIC = 13;
+
+// Whether a failure is something not implemented here (the signature is then not judged) rather than one that fails.
+const unimplemented = (cause: unknown): boolean => {
+    const xml = XmlCoreError.safeParse(cause);
+    if (!xml.success) {
+        // WebCrypto refuses a key or an algorithm it does not implement by the DOMException's name.
+        return cause instanceof DOMException && cause.name === "NotSupportedError";
+    }
+    // allow(dependency-text): xmldsigjs; an unresolvable reference and an unsupported hash or KeyValue come only as CRYPTOGRAPHIC with their words, and any other wording is judged a failing signature.
+    return XE_UNIMPLEMENTED.has(xml.data.code) || (xml.data.code === XE_CRYPTOGRAPHIC && /Cannot get object by reference|Unsupported/i.test(xml.data.message));
+};
+
 const checkSignature = async (document: Document, signature: Element, certificate: Uint8Array, input: XmlInput, references: readonly ReferenceFacts[]): Promise<Checked> => {
     const outside = references.filter(external);
     if (outside.length > 1) {
@@ -160,7 +179,7 @@ const checkSignature = async (document: Document, signature: Element, certificat
         signed.LoadXml(signature);
     } catch (cause) {
         const reason = causeText(cause);
-        return /Unknown transform|not supported|Unsupported/i.test(reason)
+        return unimplemented(cause)
             ? { integrity: "not-checked", detail: `the signature uses something this verifier does not implement: ${reason}` }
             : { integrity: "invalid", detail: `the signature's structure is broken: ${reason}` };
     }
@@ -178,7 +197,7 @@ const checkSignature = async (document: Document, signature: Element, certificat
             : { integrity: "invalid", detail: "the signature value does not match: the signed content or the signature changed" };
     } catch (cause) {
         const reason = causeText(cause);
-        return /Unknown transform|not supported|Unsupported|Cannot get object by reference/i.test(reason)
+        return unimplemented(cause)
             ? { integrity: "not-checked", detail: `the signature could not be checked here: ${reason}` }
             : { integrity: "invalid", detail: `the signature does not verify: ${reason}` };
     }

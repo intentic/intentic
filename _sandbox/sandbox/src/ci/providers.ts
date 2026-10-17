@@ -1,8 +1,8 @@
 import { isPipelineInFlight, type PipelineJob, type PipelineRun, type PipelineStatus } from "@intentic/sandbox-contract/schemas/ci";
 import { githubHeaders } from "../capabilities/cli/git-access.js";
-import { retryAfterMs } from "@intentic/base/async";
 import { BoundedMap, type CachedAsync, cachedAsync } from "@intentic/base/held";
 import { plainText } from "@intentic/base/plain-text";
+import { CiRateLimited, throwOn } from "./forge-refusals.js";
 import type { CiProject } from "./projects.js";
 import { z } from "zod";
 import { remoteWorkflow, resolveRun, type RunJob, workflowCalls } from "./workflowGraph.js";
@@ -65,60 +65,6 @@ export interface ForgeRepository {
     readonly path: string;
     readonly defaultBranch?: string | undefined;
 }
-
-/** The forge refused because the token's API rate limit is spent, not because of anything about the request: nothing
- *  on this account is asked again until `until` (epoch ms). Every caller shares one token with the agents' own `gh`. */
-export class CiRateLimited extends Error {
-    constructor(
-        what: string,
-        readonly until: number,
-    ) {
-        super(`${what} is rate-limited until ${new Date(until).toISOString()}`);
-        this.name = "CiRateLimited";
-    }
-}
-
-// How long to hold off when a forge says its limit is spent but not until when.
-const RATE_LIMIT_FALLBACK_MS = 60_000;
-
-// When a refusal is a spent rate limit, the moment it lifts. GitHub says it with a 403 or a 429: X-RateLimit-Remaining 0
-// for the primary limit, Retry-After or the body's own words for the secondary one; any other 403 is about the token or
-// the repository. GitLab says it with a 429 and RateLimit-Reset.
-const rateLimitLifts = (response: Response, body: string, now: number): number | undefined => {
-    if (response.status !== 403 && response.status !== 429) {
-        return undefined;
-    }
-    const headers = response.headers;
-    const retryAfter = headers.get("retry-after");
-    if (
-        response.status === 403 &&
-        (headers.get("x-ratelimit-remaining") ?? headers.get("ratelimit-remaining")) !== "0" &&
-        retryAfter === null &&
-        !/rate limit|abuse detection/i.test(body)
-    ) {
-        return undefined;
-    }
-    const wait = retryAfterMs(retryAfter, { now });
-    if (wait !== undefined) {
-        return now + wait;
-    }
-    const reset = Number(headers.get("x-ratelimit-reset") ?? headers.get("ratelimit-reset") ?? Number.NaN);
-    return Number.isFinite(reset) && reset > 0 ? reset * 1000 : now + RATE_LIMIT_FALLBACK_MS;
-};
-
-const BODY_TAIL = 300;
-
-const throwOn = async (response: Response, what: string): Promise<Response> => {
-    if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        const lifts = rateLimitLifts(response, body, Date.now());
-        if (lifts !== undefined) {
-            throw new CiRateLimited(what, lifts);
-        }
-        throw new Error(`${what} failed (${response.status}): ${body.slice(0, BODY_TAIL)}`);
-    }
-    return response;
-};
 
 const json = async <T>(response: Response, what: string): Promise<T> => (await throwOn(response, what)).json() as Promise<T>;
 

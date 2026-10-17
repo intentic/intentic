@@ -8,6 +8,7 @@ import { agentStandingMeta, agentStatusMeta, activityLine, currentAction } from 
 import { type AgentStanding, awaitingUser, blocked, heardByParent, type ClientAgentStatus, conflictIsYours, standingFrom, memoryHeld, onlyOwnerCanAnswer, promptHeldJob, scheduledSend, scheduledCount, turnInFlight, unregistered, watching } from "../../../../models/agent-status/agentStatus-standing";
 import { limitBack, limitCorner, limitCountdown, memoryCorner, promptLine, selfStart, selfStartTicks, sendCorner, watchLine } from "../../../../models/agent-status/agentStatus-clock";
 import { landedAway, landedDelivery } from "../agentStatus-land";
+import { BAD_OBJECT, CORRUPT_PATCH, MISSING_PATCH, PATCH_CLASH, UNKNOWN_REVISION } from "./gitFailures";
 
 // No mocks: agentStatus is a pure-function leaf, apart from the fleet store's chain through useChat and the router.
 const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
@@ -771,17 +772,19 @@ describe("a land that broke", () => {
     const broke = (failure: string): AgentStanding => ({ status: `error`, attention: none, failure });
 
     it("names a checkout that lost its history instead of quoting git", () => {
-        const card = broke(
-            `Command failed: git --no-optional-locks -C /work/tabularium diff --output=/tmp/x c011c54 3e03077 fatal: bad object 3e03077`,
-        );
-        expect(landFailure(card)).toBe(`this agent's copy lost its link to your workspace's history`);
-        expect(attentionReason(card)).toBe(`Couldn't land`);
-        expect(laneOf(card)).toBe(`attention`);
+        for (const failure of [BAD_OBJECT, UNKNOWN_REVISION]) {
+            expect(landFailure(broke(failure))).toBe(`this agent's copy lost its link to your workspace's history`);
+        }
+        expect(attentionReason(broke(BAD_OBJECT))).toBe(`Couldn't land`);
+        expect(laneOf(broke(BAD_OBJECT))).toBe(`attention`);
     });
 
-    it("falls back to git's own last line, and to a plain sentence when git said nothing", () => {
-        expect(landFailure(broke(`Command failed: git apply --check x.patch fatal: corrupt patch at line 12`))).toBe(`corrupt patch at line 12`);
-        expect(landFailure(broke(`Command failed: git apply --check x.patch`))).toBe(`git refused to carry its work into your files`);
+    // Real execFile messages run over several lines, and `apply` says `error:` where most verbs say `fatal:`.
+    it("falls back to git's last verdict line, and to a plain sentence when git said nothing", () => {
+        expect(landFailure(broke(CORRUPT_PATCH))).toBe(`corrupt patch at line 7`);
+        expect(landFailure(broke(PATCH_CLASH))).toBe(`a.txt: patch does not apply`);
+        expect(landFailure(broke(MISSING_PATCH))).toBe(`can't open patch '/tmp/gitcap/missing.patch': No such file or directory`);
+        expect(landFailure(broke(`Command failed: git apply --check x.patch\n`))).toBe(`git refused to carry its work into your files`);
     });
 
     // The sandbox keeps a broken land on the card until one goes through: the next turn clears the turn's failure, and the
@@ -797,9 +800,7 @@ describe("a land that broke", () => {
         expect(laneOf(lost)).toBe(`attention`);
         expect(laneOf({ ...lost, status: `landed` })).toBe(`attention`);
         // Git's own words go through the same reading as a turn's; anything else is said as it came.
-        expect(landFailure({ ...lost, landFailure: { reason: `Command failed: git apply x.patch fatal: corrupt patch at line 3`, at: 1 } })).toBe(
-            `corrupt patch at line 3`,
-        );
+        expect(landFailure({ ...lost, landFailure: { reason: CORRUPT_PATCH, at: 1 } })).toBe(`corrupt patch at line 7`);
         expect(landFailure({ ...lost, landFailure: { reason: `ENOSPC: no space left on device`, at: 1 } })).toBe(`ENOSPC: no space left on device`);
         // A turn or a land under way ends in a land of its own: nothing to say until it does.
         expect(landFailure({ ...lost, status: `running` })).toBeUndefined();
@@ -812,7 +813,7 @@ describe("a land that broke", () => {
     it("leaves every other failure, and a spent allowance, to read as it did", () => {
         expect(landFailure(broke(`The model is overloaded.`))).toBeUndefined();
         expect(attentionReason(broke(`The model is overloaded.`))).toBe(`Error`);
-        expect(landFailure({ status: `idle`, attention: none, failure: `Command failed: git diff fatal: bad object 1` })).toBeUndefined();
+        expect(landFailure({ status: `idle`, attention: none, failure: BAD_OBJECT })).toBeUndefined();
         expect(landFailure({ status: `error`, attention: none, failureCode: `rate_limit`, failure: `Command failed: git x` })).toBeUndefined();
     });
 });

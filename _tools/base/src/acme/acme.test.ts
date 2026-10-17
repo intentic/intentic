@@ -1,4 +1,5 @@
 import { createHash, createPublicKey, generateKeyPairSync, type JsonWebKey, verify } from "node:crypto";
+import { refusedFetchError } from "@intentic/testing/real-failures";
 import { obtainCertificate, PROVIDER_SETTLE_MS } from "./acme.js";
 import type { TxtLookup } from "./authoritative-dns.js";
 
@@ -16,8 +17,8 @@ interface Seen {
 }
 
 // Walks an order from new-account to certificate; `authzStatus` drives the validation outcome, `nonceFailures` makes
-// the first N posts answer badNonce.
-const fakeCa = (opts: { authzStatus?: () => string; nonceFailures?: number } = {}) => {
+// the first N posts answer badNonce (or `refusal`, a 400 problem document of another type).
+const fakeCa = (opts: { authzStatus?: () => string; nonceFailures?: number; refusal?: { readonly type: string; readonly detail: string } } = {}) => {
     const seen: Seen[] = [];
     const issuedNonces = new Set<string>();
     const spent = new Set<string>();
@@ -64,7 +65,7 @@ const fakeCa = (opts: { authzStatus?: () => string; nonceFailures?: number } = {
 
         if (remainingNonceFailures > 0) {
             remainingNonceFailures -= 1;
-            return respond({ type: "urn:ietf:params:acme:error:badNonce", detail: "stale" }, { status: 400 });
+            return respond(opts.refusal ?? { type: "urn:ietf:params:acme:error:badNonce", detail: "stale" }, { status: 400 });
         }
         if (url.endsWith("/new-account")) {
             return respond({ status: "valid" }, { status: 201, location: "https://ca.test/account/1" });
@@ -201,6 +202,12 @@ it("retries a badNonce once with the fresh nonce, the way a CA expects", async (
     expect(accountAttempts[0]?.header["nonce"]).not.toBe(accountAttempts[1]?.header["nonce"]);
 });
 
+it("retries by the problem's type alone: another refusal that mentions badNonce is the CA's answer", async () => {
+    const ca = fakeCa({ nonceFailures: 1, refusal: { type: "urn:ietf:params:acme:error:malformed", detail: "JWS carries no nonce, so no badNonce check was made" } });
+    await expect(run(ca)).rejects.toThrowError(/ACME account registration failed: JWS carries no nonce/);
+    expect(ca.seen.filter((request) => request.url.endsWith("/new-account"))).toHaveLength(1);
+});
+
 it("fails with the CA's own reason when validation is refused, and still cleans up", async () => {
     const remove = jest.fn(async () => undefined);
     await expect(run(fakeCa({ authzStatus: () => "invalid" }), { remove })).rejects.toThrowError(/no TXT record found/);
@@ -291,11 +298,12 @@ describe("when this host cannot see the zone's nameservers", () => {
 
 it("re-sends a request that never reached the CA", async () => {
     const ca = fakeCa();
+    const refused = await refusedFetchError();
     let failures = 2;
     const flaky = (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
         if (failures > 0) {
             failures -= 1;
-            throw new TypeError("fetch failed");
+            throw refused;
         }
         return ca.fetchImpl(input, init);
     }) as typeof fetch;
@@ -304,10 +312,11 @@ it("re-sends a request that never reached the CA", async () => {
 });
 
 it("gives up on a transport that never comes back, rather than retrying forever", async () => {
+    const refused = await refusedFetchError();
     const dead = (async () => {
-        throw new TypeError("fetch failed");
+        throw refused;
     }) as unknown as typeof fetch;
-    await expect(run({ ...fakeCa(), fetchImpl: dead })).rejects.toThrowError("fetch failed");
+    await expect(run({ ...fakeCa(), fetchImpl: dead })).rejects.toBe(refused);
 });
 
 it("lets an HTTP error status through untouched: that is the CA answering, not a lost connection", async () => {

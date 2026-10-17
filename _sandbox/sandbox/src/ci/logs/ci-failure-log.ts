@@ -1,22 +1,15 @@
-import { errnoCode, errorMessage } from "@intentic/base/errors";
+import { errorMessage, isFetchNetworkFailure, networkCodeOf } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import { createRepeatGate } from "../../logs/repeat-gate.js";
-import { CiRateLimited } from "../providers.js";
+import { CiRateLimited, CiRefused } from "../forge-refusals.js";
 
 // The CI loops (the runs backfill, the poll, the webhook reconcile) call the forge for every mapped repo every few
 // minutes, so one revoked token wrote the same `401 Bad credentials` warn, stack and all, about a thousand times in five
 // days. Each loop logs through one of these: the first failure of a repo and every change of what it fails with, then
 // one line an hour while it lasts, and one line when it works again.
 
-// The forge's HTTP status, as providers.ts words a refusal: `<what> failed (401): <body tail>`.
-export const vendorStatusOf = (error: unknown): number | undefined => {
-    const status = /\((\d{3})\)/.exec(errorMessage(error))?.[1];
-    return status === undefined ? undefined : Number(status);
-};
-
-// The errno under a failed fetch (`ECONNREFUSED`, `ENOTFOUND`): undici hangs it on the error's cause.
-const networkCodeOf = (error: unknown): string | undefined =>
-    errnoCode(error) ?? (error instanceof Error ? errnoCode((error as { cause?: unknown }).cause) : undefined);
+// The forge's HTTP status, off the refusal providers.ts throws for it.
+export const vendorStatusOf = (error: unknown): number | undefined => (error instanceof CiRefused ? error.status : undefined);
 
 // What a line says of the failure. A forge's answer or a network that did not carry the request is fully said by its
 // status or message, and its stack points into fetch; only something else (a bug in the parsing) keeps the stack.
@@ -25,7 +18,7 @@ const failureFields = (error: unknown): Record<string, unknown> => {
     if (status !== undefined) {
         return { status, reason: errorMessage(error) };
     }
-    if (error instanceof CiRateLimited || networkCodeOf(error) !== undefined || errorMessage(error).startsWith("fetch failed")) {
+    if (error instanceof CiRateLimited || networkCodeOf(error) !== undefined || isFetchNetworkFailure(error)) {
         return { reason: errorMessage(error) };
     }
     return { err: error };

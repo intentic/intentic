@@ -4,6 +4,8 @@ import { existsSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { promisify } from "node:util";
 import { sleep } from "../async.js";
+import { stderrOf } from "../errors.js";
+import { untranslatedEnv } from "../node/untranslated-env.js";
 import type { ForkRequest, ForkResponse } from "./forker.js";
 import { clearStaleLock } from "./locks.js";
 
@@ -35,16 +37,13 @@ const MAX_GIT_OUTPUT = 16 * 1024 * 1024;
 const LOCK_CONTENTION = /index\.lock.*File exists|Unable to create.*\.lock/i;
 const RETRY_ATTEMPTS = 6;
 
-const isLockContention = (error: unknown): boolean => {
-    const stderr = (error as { stderr?: unknown }).stderr;
-    return typeof stderr === "string" && LOCK_CONTENTION.test(stderr);
-};
+// Read in English whatever the caller's locale, since every git this runner starts runs untranslated (runForked).
+const isLockContention = (error: unknown): boolean => LOCK_CONTENTION.test(stderrOf(error) ?? "");
 
 // Whether the lock git refused on was stale and is gone now.
 const clearedStaleLock = async (dir: string, error: unknown): Promise<boolean> => {
-    const stderr = String((error as { stderr?: unknown }).stderr);
     // allow(silent-catch): a lock that cannot be read or removed stays, and git's own error surfaces as it always did.
-    return (await clearStaleLock(dir, stderr).catch(() => undefined)) !== undefined;
+    return (await clearStaleLock(dir, stderrOf(error) ?? "").catch(() => undefined)) !== undefined;
 };
 
 // Runs a git subcommand in `dir`; injectable so callers are testable without a real repo, shared with the CLI's adopt.
@@ -59,7 +58,11 @@ export type GitRunner = (
 // it. No lock retry (a read takes no lock) and no forker (one-off interactive read, not the per-poll case it
 // optimizes).
 export const gitBytes = async (dir: string, args: readonly string[], maxBytes: number): Promise<Buffer> => {
-    const { stdout } = await exec("git", [...GIT_GLOBAL_ARGS, "-C", dir, ...literalPathspecs(args)], { maxBuffer: maxBytes, encoding: "buffer" });
+    const { stdout } = await exec("git", [...GIT_GLOBAL_ARGS, "-C", dir, ...literalPathspecs(args)], {
+        maxBuffer: maxBytes,
+        encoding: "buffer",
+        env: untranslatedEnv(process.env),
+    });
     return stdout;
 };
 
@@ -212,6 +215,9 @@ interface ForkedOptions {
     readonly cwd?: string;
     // Merged over the process's own environment, never in place of it.
     readonly env?: Readonly<Record<string, string>>;
+    // Messages pinned to gettext's C locale (untranslatedEnv), for a command whose stderr is read rather than only
+    // shown: every git, never tmux, whose server would hand the pin on to every shell it starts.
+    readonly untranslated?: boolean;
 }
 
 // What every command this runner starts carries that the process's own environment must not: the sandbox daemon's ssh
@@ -226,7 +232,8 @@ const runForked = async (command: string, args: readonly string[], options: Fork
     // Merged, not replaced: execFile's `env` replaces the whole environment, and git needs PATH/HOME too. Always sent,
     // since the forker's own environment is this process's as it was at fork time, and a variable the process has
     // dropped since (netd's sockets, once the daemon's netd door has them) must not reach what it runs.
-    const resolved = { ...process.env, ...ownEnv, ...options.env };
+    const merged = { ...process.env, ...ownEnv, ...options.env };
+    const resolved = options.untranslated === true ? untranslatedEnv(merged) : merged;
     const limits = {
         maxBuffer: options.maxBuffer,
         ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
@@ -272,7 +279,8 @@ const runGitSlotted = async (
     bulk: boolean,
     unbounded: boolean,
 ): Promise<GitRun> => {
-    const options = { maxBuffer: MAX_GIT_OUTPUT, ...(env !== undefined ? { env } : {}) };
+    // Untranslated: git's refusals are classified by their English words (LOCK_CONTENTION, @intentic/sandbox's git.ts).
+    const options = { maxBuffer: MAX_GIT_OUTPUT, untranslated: true, ...(env !== undefined ? { env } : {}) };
     if (!bulk || unbounded) {
         return await runForked(command, args, options);
     }

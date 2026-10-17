@@ -1,29 +1,27 @@
 import { readlink } from "node:fs/promises";
-import { errnoCode } from "@intentic/base/errors";
+import { errnoCode, stderrOf } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import { forkedExec } from "@intentic/base/git";
 import { CONTAINER_SECRET_ENV } from "../env.config.js";
 import { DAEMON_GEN_ENV, DAEMON_ONLY_ENV, WORKLOAD_ENV } from "../seams/workload-stamp.js";
 
-// What tmux printed on its way out, when a failed exec carried it.
-const stderrOf = (error: unknown): string | undefined => {
-    const stderr = typeof error === "object" && error !== null ? (error as { stderr?: unknown }).stderr : undefined;
-    return typeof stderr === "string" ? stderr : undefined;
-};
-
 // tmux's answer for "no sessions exist": no binary, no socket, nothing listening on it, or a server holding no session.
 // The last is the daemon's own normal state between boot and the first terminal (pinTmuxServer keeps an emptied server
 // alive), and tmux 3.5a answers every lookup there, `list-panes -a` and an exact `-t =name` alike, with "no current
 // target". Any other failure left the question unanswered and must not read as "nothing is running".
+// tmux exits 1 for every failure and has no message catalogue, so its English stderr is the only thing that tells these
+// apart; the two phrasebooks below are the one place this daemon reads it.
 export const isNoTmuxServer = (error: unknown): boolean => {
     if (errnoCode(error) === "ENOENT") {
         return true;
     }
+    // allow(dependency-text): tmux 3.5a; an unmatched wording is a failed question, rethrown by every caller, never "nothing is running".
     return /no server running on |error connecting to .* \(No such file or directory\)|^no current target$/m.test(stderrOf(error) ?? "");
 };
 
 // tmux's answer for a lookup by name that found nothing: no server at all (above), or a running server without that
 // session or window, which 3.5a reports as "can't find window: <name>" even for a `-t =session` lookup.
+// allow(dependency-text): tmux 3.5a; an unmatched wording is a failed lookup, rethrown, never a target that is gone.
 export const isNoTmuxTarget = (error: unknown): boolean => isNoTmuxServer(error) || /^can't find (session|window)/m.test(stderrOf(error) ?? "");
 
 // A tmux client that finds no server forks one, keeping the forker's mount namespace for every pane it holds; an

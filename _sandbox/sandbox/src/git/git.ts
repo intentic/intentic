@@ -1,4 +1,4 @@
-import { errorMessage } from "@intentic/base/errors";
+import { errorMessage, stderrOf } from "@intentic/base/errors";
 import type { PushRefusal } from "@intentic/sandbox-contract/schemas/git/git";
 import { GIT_GLOBAL_ARGS, type GitRunner, literalPathspecs } from "@intentic/base/git";
 import type { TerminalRunner } from "../terminal/terminal-run.js";
@@ -30,8 +30,8 @@ const COMMITLINT_FINDING = /^✖\s+(.+\[[a-z-]+\])$/;
 // One line for the panel: prefers git's own stderr over execFile's message, then the last verdict line (not the last
 // line, which can be a wrapped advice fragment) or the last non-empty line.
 export const gitFailureReason = (error: unknown, fallback: string): string => {
-    const stderr = (error as { stderr?: unknown }).stderr;
-    return gitVerdictLine(typeof stderr === "string" && stderr.trim() !== "" ? stderr : errorMessage(error), fallback);
+    const stderr = stderrOf(error);
+    return gitVerdictLine(stderr !== undefined && stderr.trim() !== "" ? stderr : errorMessage(error), fallback);
 };
 
 // The same reading for text with no exception object: the combined stdout/stderr tail a terminal run hands back

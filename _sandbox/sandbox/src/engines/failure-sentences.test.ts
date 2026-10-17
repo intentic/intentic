@@ -4,6 +4,7 @@ import {
     isDeclinedAnswer,
     isEntitlementRefusalText,
     isFailureSentence,
+    isModelRefusalText,
     isSelfIdentityAnswer,
     isToolCallStandIn,
     isUnsentParameterRefusalText,
@@ -32,6 +33,26 @@ test("reads a spent plan in a routed provider's own words, whichever prefix the 
     expect(isAuthFailureText(KIMI_403)).toBe(true);
     expect(mentionsSpentAllowance(KIMI_403)).toBe(true);
     expect(mentionsSpentAllowance("API Error: 429 quota exceeded for this project")).toBe(true);
+});
+
+// A quota is spent only when the sentence says so: Google's sign-in error asks for a "quota project", and a full disk
+// is "Disk quota exceeded"; read as a spent plan, either filed a refusal against an account that was fine.
+test("reads a spent quota in its vendors' shapes, and no other mention of a quota", () => {
+    for (const spent of [
+        "429 RESOURCE_EXHAUSTED: You exceeded your current quota for gemini models",
+        "Individual quota reached. Please try again later.",
+        "Monthly quota exceeded",
+        '{"error":{"code":"insufficient_quota","message":"Check your plan and billing details."}}',
+    ]) {
+        expect(mentionsSpentAllowance(spent), spent).toBe(true);
+    }
+    for (const fine of [
+        "Your application is authenticating by using local Application Default Credentials. The aiplatform.googleapis.com API requires a quota project, which is not set by default.",
+        "EDQUOT: Disk quota exceeded, write 'out.log'",
+        "set the quota project with gcloud auth application-default set-quota-project",
+    ]) {
+        expect(mentionsSpentAllowance(fine), fine).toBe(false);
+    }
 });
 
 // A dead credential says nothing about an allowance; it must still read as a reconnect.
@@ -215,4 +236,28 @@ test("does not read other length refusals as a session past its window", () => {
         false,
     );
     expect(isContextOverflowText(KIMI_403)).toBe(false);
+});
+
+// A refused model costs the chat its pinned model, so a clause any tool says ("does not exist", "did you mean") counts
+// only in a sentence about a model.
+test("reads a vendor refusing the model, and not a tool saying the same clause about something else", () => {
+    for (const refused of [
+        "Model not found: grok-9. Did you mean grok-4?",
+        "The model gpt-5.1-mini does not exist or your team does not have access to it.",
+        "The model `gpt-5-foo` does not exist or you do not have access to it.",
+        "no such model: kimi-k9",
+    ]) {
+        expect(isModelRefusalText(refused), refused).toBe(true);
+    }
+    for (const other of [
+        "ENOENT: src/main.ts does not exist",
+        "Unknown command: /reveiw. Did you mean /review?",
+        "You do not have access to this repository.",
+        "Model metadata for `gpt-5.6-sol` not found. Defaulting to fallback metadata; this can degrade performance.",
+        "The file you asked for does not exist. The model will try another path.",
+    ]) {
+        expect(isModelRefusalText(other), other).toBe(false);
+    }
+    // A runtime's own vendor sentence rides in beside the shared ones.
+    expect(isModelRefusalText("Model unavailable: xai/grok-retired", /model unavailable/i)).toBe(true);
 });

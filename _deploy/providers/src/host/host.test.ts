@@ -1,9 +1,18 @@
 import type { SshExecutor, SshResult, SshSession, SshTarget } from "../core/ssh.js";
 import { createHostProvider } from "./host.js";
 
+// What iproute2 answers `route get` with: JSON from `ip -j`, else one line whose words around `src` vary with the route.
+const ROUTE_JSON = '[{"dst":"1.1.1.1","gateway":"10.0.0.1","dev":"eth0","prefsrc":"10.0.0.5","flags":[],"uid":0,"cache":[]}]\n';
+const ROUTE_VIA = "1.1.1.1 via 10.0.0.1 dev eth0 src 10.0.0.5 uid 0 \\    cache \n";
+const ROUTE_ON_LINK = "1.1.1.1 dev eth0 src 10.0.0.5 uid 0 \\    cache \n";
+const ROUTE_POLICY = "1.1.1.1 via 10.0.0.1 dev eth0 table 100 src 10.0.0.5 uid 0 \\    cache \n";
+
 // A Docker-ready host: docker version succeeds, the route command yields the internal ip.
-const dockerReady = (command: string): SshResult =>
-    command.includes("docker") ? { stdout: "24.0.0", stderr: "", code: 0 } : { stdout: "10.0.0.5\n", stderr: "", code: 0 };
+const dockerReadyWith =
+    (route: string) =>
+    (command: string): SshResult =>
+        command.includes("docker") ? { stdout: "24.0.0", stderr: "", code: 0 } : { stdout: route, stderr: "", code: 0 };
+const dockerReady = dockerReadyWith(ROUTE_JSON);
 
 const sessionFrom = (respond: (command: string) => SshResult): SshSession => ({
     exec: async (command) => respond(command),
@@ -45,8 +54,20 @@ test("read returns undefined and logs when the host is unreachable", async () =>
     expect(logs.some((message) => message.includes("not reachable"))).toBe(true);
 });
 
+test("the internal ip is the route's source address, in JSON or in any shape of the one-line answer", async () => {
+    for (const route of [ROUTE_JSON, ROUTE_VIA, ROUTE_ON_LINK, ROUTE_POLICY]) {
+        expect(await createHostProvider(reachable(dockerReadyWith(route))).read(inputs, ctx())).toEqual({ outputs: { internalIp: "10.0.0.5", publicIp: "203.0.113.10" } });
+    }
+});
+
+test("an answer with no IPv4 source address fails loudly instead of becoming the internal ip", async () => {
+    for (const route of ["1.1.1.1 via 10.0.0.1 dev eth0 uid 0\n", '[{"dst":"1.1.1.1","dev":"eth0"}]', "1.1.1.1 dev eth0 src fe80::1\n", ""]) {
+        await expect(createHostProvider(reachable(dockerReadyWith(route))).read(inputs, ctx())).rejects.toThrow(/no IPv4 source address/);
+    }
+});
+
 const noDocker = (command: string): SshResult =>
-    command.includes("docker") ? { stdout: "", stderr: "docker: command not found", code: 127 } : { stdout: "10.0.0.5", stderr: "", code: 0 };
+    command.includes("docker") ? { stdout: "", stderr: "docker: command not found", code: 127 } : { stdout: ROUTE_JSON, stderr: "", code: 0 };
 
 test("read propagates (does not swallow) a missing Docker", async () => {
     const provider = createHostProvider(reachable(noDocker));

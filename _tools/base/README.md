@@ -72,14 +72,19 @@ flowchart LR
   await (a module's load, an exit hook, a CLI's synchronous path): Node's `spawnSync` timeout signals only the direct
   child, so these give the command its own group and end the rest of it once spawnSync returns from a deadline or a
   full buffer. A run that hands over the person's own terminal (`stdio: "inherit"`) stays on `spawnSync`, so Ctrl-C
-  reaches it.
+  reaches it. `untranslatedEnv` is the environment for a program whose output is parsed: messages in gettext's C
+  locale, every other category as the caller had it.
 - `fetch-json.ts` (`./fetch-json`) is one JSON call over HTTP: a deadline of its own combined with the caller's signal,
   a refusal's body quoted in the error and cut at 300 characters, and a `kind` that tells a timeout from a server that
   could not be reached. No schema library, like `cloudflare.ts`: each caller validates the body with its own.
 - `escape.ts` (`./escape`) holds `escapeHtml` (all five HTML-active characters, the apostrophe included),
   `escapeRegExp` and `isRecord`, which a dozen packages each kept a copy of.
 - `errors.ts` lets a catch name the failure it expects: `isMissing` is ENOENT or ENOTDIR only, and
-  `undefinedIfMissing` answers undefined for "not there" while EACCES, EIO and a bug's TypeError still arrive.
+  `undefinedIfMissing` answers undefined for "not there" while EACCES, EIO and a bug's TypeError still arrive. It
+  reads another program's failure by its structure rather than its sentence: `stderrOf` and `exitCodeOf` off a failed
+  child, `networkCodeOf` for the errno wherever the runtime hangs it, and `isFetchNetworkFailure` for a fetch that got
+  no answer. Node's fetch says `fetch failed` with the errno on `cause` and Bun's says `Unable to connect` with it on
+  the error, and `errors.integration.test.ts` has both runtimes throw their own (2026-10-16).
 - `json.ts` (`./json`) reads text that may not be JSON: `parseJsonOr` hands back its fallback for a SyntaxError and
   rethrows anything else, and `parseJsonWith` runs a schema over the value, undefined when the text is not JSON or the
   schema refuses it. The schema is anything with zod's `safeParse`, so base still depends on no schema library.
@@ -119,7 +124,9 @@ flowchart LR
   `GitRunner` behind almost every git call the daemon makes: it forks git from a small resident child (`forker.ts`,
   kept beside `runner.ts` so `new URL("./forker.js", import.meta.url)` finds it in `dist/`) rather than from the
   large daemon process, retries only on `index.lock` contention, and marks pathspecs literal so a file named `[slug]`
-  matches only itself. `forkedExec` runs the daemon's other polled commands (tmux, status probes) from the same child:
+  matches only itself. Every git it starts runs untranslated, since the daemon classifies git's refusals by their
+  English words; tmux through `forkedExec` keeps the caller's locale, as its server hands its environment to every
+  shell it opens. `forkedExec` runs the daemon's other polled commands (tmux, status probes) from the same child:
   a spawn from a large process first copies its page tables, 52 ms at 778 MB, where a request to the child costs
   0.04 ms. `setRunnerEnv` adds what every command it starts carries and the process's own environment must not: the
   daemon's ssh agent socket, which its own git signs through and its other children would inherit from `process.env`.

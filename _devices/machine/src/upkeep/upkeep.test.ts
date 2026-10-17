@@ -3,7 +3,7 @@ import type { UpkeepItem } from "./reconcile.js";
 import { reportOf, summaryLine } from "./reconcile.js";
 import { doctorItem } from "./doctor.js";
 import { isInside, trashedAt, trashStamp } from "./trash.js";
-import { loginEntryFinding, mutagenRunDecision, runValueData } from "./login.js";
+import { loginEntryFinding, mutagenRunDecision } from "./login.js";
 import { MANIFEST } from "./manifest.js";
 import { expiredRunLogs, expiredTrash, isShimPart, RUN_LOG_KEEP_MS, RUN_LOGS_KEPT, TRASH_KEEP_MS } from "./retention.js";
 import { legacyAutostart } from "./retired.js";
@@ -82,19 +82,6 @@ test("this agent's login entry is written again when stale or missing, left when
         what: 'the "IntenticMachine" logon task',
         why: "it could not be read, so it is left as it is",
     });
-});
-
-test("a Run value is read out of what reg query prints", () => {
-    const printed = [
-        "",
-        "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-        '    IntenticMutagenDaemon    REG_SZ    "C:\\Users\\dev\\.intentic\\machine\\bin\\intentic-launch.exe" "--log" "x" "--" "C:\\Users\\dev\\.intentic\\machine\\bin\\mutagen.exe" "daemon" "start"',
-        "",
-    ].join("\r\n");
-    expect(runValueData(printed, "IntenticMutagenDaemon")).toBe(
-        '"C:\\Users\\dev\\.intentic\\machine\\bin\\intentic-launch.exe" "--log" "x" "--" "C:\\Users\\dev\\.intentic\\machine\\bin\\mutagen.exe" "daemon" "start"',
-    );
-    expect(runValueData(printed, "IntenticMachine")).toBeUndefined();
 });
 
 test("Mutagen's Run value goes once no pairing needs it, is written while one does and this agent's copy runs, else is left", () => {

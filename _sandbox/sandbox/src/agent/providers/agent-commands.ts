@@ -35,9 +35,14 @@ export function localCommandText(content: string): string {
     return (wrapped?.[1] ?? content).trim();
 }
 
+// The Claude CLI's own words for a slash command it does not know, checked against the installed binary
+// (tests/vendor-phrases.integration.test.ts); a reworded refusal reads as the command's real output.
+export const UNKNOWN_COMMAND_PREFIX = "Unknown command:";
+const UNKNOWN_COMMAND = new RegExp(String.raw`^${UNKNOWN_COMMAND_PREFIX}\s*\/?(\S+)`);
+
 // The name in the CLI's "Unknown command: /x" refusal; undefined for any other, real, output.
 export function unknownCommandName(output: string): string | undefined {
-    return /^Unknown command:\s*\/?(\S+)/.exec(output)?.[1];
+    return UNKNOWN_COMMAND.exec(output)?.[1];
 }
 
 // Sandbox reset / test isolation.

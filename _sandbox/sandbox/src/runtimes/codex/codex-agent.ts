@@ -1,4 +1,5 @@
 import { sleep } from "@intentic/base/async";
+import { escapeRegExp } from "@intentic/base/escape";
 import { vendorShellEnv } from "../../agent/run/vendor-shell-env.js";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
@@ -44,7 +45,7 @@ import { codexAllowlistConfig, codexHooksConfig, type CodexHookSession, createCo
 import { GATE_SERVER } from "../daemon-tools/policy-gate-server.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
 import { CODEX_FAST_TIER } from "./codex-model-list.js";
-import { CODEX_ADVISORY, CODEX_MODEL_INVALID, CODEX_MODEL_RESUMED_ELSEWHERE } from "./codex-models.js";
+import { CODEX_ADVISORY, CODEX_COMPACTION_NOTICE, CODEX_MODEL_RESUMED_ELSEWHERE, CODEX_RECONNECTING, isCodexModelInvalid } from "./codex-models.js";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
 import { containerKeyEnv } from "../../seams/sealed-env.js";
 
@@ -202,11 +203,11 @@ const mcpResultContent = (item: Extract<CodexItem, { type: "mcp_tool_call" }>, n
 // Codex's in-turn retry notice when it counts ("Reconnecting... 2/5 (...)"); 0.162 also says "Reconnecting... waiting
 // for network", with no counters at all. Read only for its counters once willRetry has said the error is a retry: the
 // sentence decides nothing.
-const CODEX_RETRY_COUNTERS = /^Reconnecting\.\.\.\s*(\d+)\s*\/\s*(\d+)/;
+const CODEX_RETRY_COUNTERS = new RegExp(String.raw`^${escapeRegExp(CODEX_RECONNECTING)}\s*(\d+)\s*\/\s*(\d+)`);
 
 // Codex's heads-up after every auto-compaction. The context_compaction item already carries the lifecycle frame, so
 // repeating it here would show the reader two compaction notices for one compaction.
-const CODEX_COMPACTED = /long threads and multiple compactions/i;
+const CODEX_COMPACTED = new RegExp(escapeRegExp(CODEX_COMPACTION_NOTICE), "i");
 
 // Codex messages this chat swallows on any channel: each reports something already framed elsewhere, so neither an
 // error nor a muted line may come of them.
@@ -258,6 +259,7 @@ const failureFrame = (message: string, info: CodexFailureInfo | undefined): Erro
 // Codex retrying inside the turn: the counters its sentence carries where it carries them, else this turn's own count.
 const retryFrame = (event: Extract<CodexEvent, { type: "error" }>, retries: { count: number }): AgentEvent => {
     retries.count += 1;
+    // allow(dependency-text): the Codex CLI's retry notice (codex-models.ts); without its counters, this turn's own count.
     const counters = CODEX_RETRY_COUNTERS.exec(event.message);
     return {
         kind: "provider_retry",
@@ -282,6 +284,7 @@ const limitRetry = (event: Extract<CodexEvent, { type: "error" }>): boolean => c
 
 // `hosted`: another provider's model, whose fallback-metadata advisory is expected and says nothing (CodexStreamContext).
 const codexError = (event: Extract<CodexEvent, { type: "error" }>, retries: { count: number }, hosted = false): CodexErrorReading => {
+    // allow(dependency-text): the Codex CLI's notices (codex-models.ts); an unmatched one shows as the failure it came as.
     if (codexDropped(event.message) || (hosted && CODEX_ADVISORY.test(event.message))) {
         return { frames: [], errored: false };
     }
@@ -290,6 +293,7 @@ const codexError = (event: Extract<CodexEvent, { type: "error" }>, retries: { co
         return limitRetry(event) ? { ...retry, limited: true } : retry;
     }
     // An advisory isn't a failure: the turn still answers normally, so it must not mark the phase errored.
+    // allow(dependency-text): the Codex CLI's fallback-metadata advisory; an unmatched one shows as a failure.
     if (CODEX_ADVISORY.test(event.message)) {
         return { frames: [{ kind: "error", code: "codex-advisory", message: event.message }], errored: false };
     }
@@ -301,7 +305,7 @@ const codexError = (event: Extract<CodexEvent, { type: "error" }>, retries: { co
 // pin, then a thread past the model's window, which the daemon re-runs in a fresh one.
 const CODEX_FAILURES: readonly VendorRule[] = [
     [isRateLimited, "rate_limit"],
-    [(message) => CODEX_MODEL_INVALID.test(message), "codex-model-invalid"],
+    [isCodexModelInvalid, "codex-model-invalid"],
     [isContextOverflowText, "context-overflow"],
 ];
 

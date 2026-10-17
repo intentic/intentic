@@ -95,11 +95,12 @@ describe("enrollKey", () => {
     });
 
     // An answer outside the contract (a mode this agent has no word for) is refused, not read as a grant it never made.
+    // Our sentence and the field it names are pinned; how zod words the rest is zod's.
     it("refuses an answer the shared contract does not describe", async () => {
         stubGlobal("fetch", jest.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse(200, { ok: true, syncToken: "ist_tok", mode: "watch" })));
 
         await expect(enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).rejects.toThrow(
-            'the sandbox enrolled this device but its answer could not be read: ✖ Invalid option: expected one of "sync"|"mirror"\n  → at mode',
+            /the sandbox enrolled this device but its answer could not be read: [\s\S]*\bmode\b/,
         );
     });
 

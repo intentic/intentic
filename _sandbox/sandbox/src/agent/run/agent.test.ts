@@ -1022,6 +1022,32 @@ test("a genuinely revoked credential still reads as one to re-mint", async () =>
     ]);
 });
 
+// The CLI's category decides a refused credential and a disabled seat whatever its sentence says: it words a 401 its
+// own way per credential and per mode ("Please run /login · …" at a terminal, "Invalid API key · …" for a key).
+test("the CLI's own category codes a refused credential or a disabled seat, worded however it likes", async () => {
+    const assistant = (error: string, text: string) =>
+        fakeQuery({ type: "assistant", session_id: "s", error, message: { content: [{ type: "text", text }] } });
+    const login = "Please run /login · API Error: 401 Invalid bearer token";
+    expect(await collect(request, assistant("authentication_failed", login))).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "error", code: "claude-token-refused", message: login },
+        { kind: "done" },
+    ]);
+    const seat = "Claude Code is switched off for this organization";
+    expect(await collect(request, assistant("oauth_org_not_allowed", seat))).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "error", code: "claude-not-entitled", message: seat },
+        { kind: "done" },
+    ]);
+    // A spent plan behind a 403 still reads as the limit it is: the category cannot tell it from a dead credential.
+    const kimi = "Failed to authenticate. API Error: 403 You've reached your usage limit for this billing cycle.";
+    expect(await collect(request, assistant("authentication_failed", kimi))).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "error", code: "rate_limit", message: kimi },
+        { kind: "done" },
+    ]);
+});
+
 // 5xx/socket failures (server_error) and pre-retry capacity refusals (overloaded) are both coded provider-outage,
 // classified by category rather than wording that changes across CLI releases.
 test("a server_error is coded as a provider outage, keeping the provider's own sentence", async () => {

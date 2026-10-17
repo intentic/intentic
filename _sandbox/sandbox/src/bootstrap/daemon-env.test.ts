@@ -1,4 +1,6 @@
-import { logEscaped } from "./daemon-env.js";
+import { os } from "@orpc/server";
+import { failureOf, orpcLink } from "../peers/orpc-link.testing.js";
+import { isAbandonedPeerSend, logEscaped } from "./daemon-env.js";
 
 const recording = () => {
     const lines: { level: string; data: Record<string, unknown>; message: string }[] = [];
@@ -35,4 +37,19 @@ test("anything else that escapes stays an error with its stack, even with the sa
         ["error", "uncaught exception", real],
         ["error", "unhandled rejection", lookalike],
     ]);
+});
+
+// isAbandonedPeerSend can only read oRPC's words and frames (its link throws a bare Error), so this holds them to the
+// installed oRPC: a send on a peer socket that has closed, which is what an abandoned call's cancel meets. The fixture
+// above stands in for the stack; this is the real throw it was copied from.
+test("oRPC's refused send on a closed peer socket is the one recognised", async () => {
+    const { client, peer, close } = await orpcLink<{ ping: () => Promise<string> }>({ ping: os.handler(() => "pong") });
+    try {
+        expect(await client.ping()).toBe("pong");
+        peer.terminate();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(isAbandonedPeerSend(await failureOf(client.ping()))).toBe(true);
+    } finally {
+        close();
+    }
 });

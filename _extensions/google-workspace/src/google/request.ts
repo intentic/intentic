@@ -52,15 +52,37 @@ const serviceOf = (url: string): string | undefined => {
     return host === undefined ? undefined : Object.keys(API_ENABLE_HINT).find((service) => host.startsWith(service));
 };
 
-export const googleError = (status: number, url: string, body: unknown): GoogleApiError => {
+// One entry of a refusal's `details` (an AIP-193 ErrorInfo) or of its legacy `errors`, each with a machine `reason`.
+const isReasoned = (entry: JsonValue): entry is { readonly reason: string } =>
+    typeof entry === "object" && entry !== null && "reason" in entry && typeof entry["reason"] === "string";
+
+// The reasons Google gives a refusal for code to read: ErrorInfo's (SERVICE_DISABLED, ACCESS_TOKEN_SCOPE_INSUFFICIENT)
+// and the v1 APIs' older ones (accessNotConfigured, insufficientPermissions).
+const reasonsOf = (error: Record<string, unknown> | undefined): ReadonlySet<string> =>
+    new Set([error?.["details"], error?.["errors"]].flatMap((list) => (Array.isArray(list) ? list.filter(isReasoned).map((entry) => entry.reason) : [])));
+
+const DISABLED_REASONS = ["SERVICE_DISABLED", "accessNotConfigured"];
+const SCOPE_REASONS = ["ACCESS_TOKEN_SCOPE_INSUFFICIENT", "insufficientPermissions"];
+
+// Google's sentence, read only where a refusal carries no reason at all.
+// allow(dependency-text): Google API error.message; an unmatched 403 is relayed as Google phrased it.
+const saysDisabled = (message: string): boolean => /has not been used|is disabled/i.test(message);
+// allow(dependency-text): Google API error.message; an unmatched 403 is relayed as Google phrased it.
+const saysScope = (message: string): boolean => /insufficient authentication scopes/i.test(message);
+
+// `challenge` is the WWW-Authenticate header, whose RFC 6750 error says a token's scope fell short.
+export const googleError = (status: number, url: string, body: unknown, challenge?: string | null): GoogleApiError => {
     const error = (body as { error?: Record<string, unknown> } | undefined)?.error;
     const message = typeof error?.["message"] === "string" ? error["message"] : `HTTP ${status}`;
     const service = serviceOf(url);
-    if (status === 403 && /has not been used|is disabled/i.test(message)) {
+    const reasons = reasonsOf(error);
+    const reasoned = reasons.size > 0;
+    if (status === 403 && (DISABLED_REASONS.some((reason) => reasons.has(reason)) || (!reasoned && saysDisabled(message)))) {
         const api = service === undefined ? "the API this needs" : API_ENABLE_HINT[service];
         return new GoogleApiError(`${message.split(".")[0] ?? message}. Enable ${api} for the project in console.cloud.google.com.`, status);
     }
-    if (status === 403 && /insufficient|scope/i.test(message)) {
+    const scopeShort = /\berror="?insufficient_scope\b/.test(challenge ?? "");
+    if (status === 403 && (scopeShort || SCOPE_REASONS.some((reason) => reasons.has(reason)) || (!reasoned && saysScope(message)))) {
         return new GoogleApiError(
             `Google refused this for lack of permission: ${message}, the connection was approved for narrower scopes than it needs. Re-approve it with the scopes listed on the card, or add the scope to the service account's domain-wide delegation.`,
             status,
@@ -172,7 +194,7 @@ const send = async <T>(session: Session, spec: CallSpec, attempt: (url: string, 
             await sleep(retryDelay(tries, answer.headers.get("retry-after")), undefined, spec.signal === undefined ? {} : { signal: spec.signal });
             continue;
         }
-        throw googleError(answer.status, url, answer.problem);
+        throw googleError(answer.status, url, answer.problem, answer.headers.get("www-authenticate"));
     }
 };
 

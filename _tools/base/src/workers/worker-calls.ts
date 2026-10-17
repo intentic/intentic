@@ -1,17 +1,74 @@
 import { extname } from "node:path";
 import { type MessagePort, Worker } from "node:worker_threads";
-import { errorMessage } from "../errors.js";
+import { errnoCode, errorMessage, exitCodeOf, stderrOf } from "../errors.js";
 
 // A call-and-answer channel to a worker thread: spawned on first call and after a crash, referenced only while a call is in flight.
 
 // The worker module beside the caller, in whichever form is running: `.ts` under the test runner, `.js` from dist.
 export const siblingModule = (meta: ImportMeta, name: string): URL => new URL(`./${name}${extname(meta.filename)}`, meta.url);
 
+// A failure as it crosses the thread: beside its words, what a caller branches on (its class's name, the errno or exit
+// `code`, a child's `stderr`, and the cause under it), each structured-cloneable. Rebuilt as `new Error(message)` alone,
+// `isMissing` and `isFetchNetworkFailure` would read nothing on the caller's side.
+export interface WorkerFailure {
+    readonly message: string;
+    readonly name?: string;
+    readonly code?: string | number;
+    readonly stderr?: string;
+    readonly cause?: WorkerFailure;
+}
+
 // What a worker posts: the answer to call `id`, which may carry news too, or news alone (no `id`) for the caller's `onNews`.
 export type WorkerAnswer<News> =
     | { readonly id: number; readonly ok: true; readonly value?: unknown; readonly news?: News }
-    | { readonly id: number; readonly ok: false; readonly message: string }
+    | ({ readonly id: number; readonly ok: false } & WorkerFailure)
     | { readonly id?: undefined; readonly news: News };
+
+// How far down a cause chain a failure is carried: undici nests two levels, so four is generous and bounds a cycle.
+const CAUSE_DEPTH = 4;
+
+// A WorkerFailure while it is filled in, a field at a time, on the worker's side.
+interface FailureDraft {
+    message: string;
+    name?: string;
+    code?: string | number;
+    stderr?: string;
+    cause?: WorkerFailure;
+}
+
+export const workerFailure = (error: unknown, depth = 0): WorkerFailure => {
+    if (!(error instanceof Error)) {
+        return { message: errorMessage(error) };
+    }
+    const failure: FailureDraft = { message: errorMessage(error), name: error.name };
+    const code = errnoCode(error) ?? exitCodeOf(error);
+    if (code !== undefined) {
+        failure.code = code;
+    }
+    const stderr = stderrOf(error);
+    if (stderr !== undefined) {
+        failure.stderr = stderr;
+    }
+    if (error.cause !== undefined && depth < CAUSE_DEPTH) {
+        failure.cause = workerFailure(error.cause, depth + 1);
+    }
+    return failure;
+};
+
+// The failure rebuilt on the caller's side, with the fields a caller reads where the thrower hung them.
+const rebuilt = (failure: WorkerFailure): Error => {
+    const error: Error & { code?: string | number; stderr?: string } = new Error(failure.message, failure.cause === undefined ? undefined : { cause: rebuilt(failure.cause) });
+    if (failure.name !== undefined) {
+        error.name = failure.name;
+    }
+    if (failure.code !== undefined) {
+        error.code = failure.code;
+    }
+    if (failure.stderr !== undefined) {
+        error.stderr = failure.stderr;
+    }
+    return error;
+};
 
 export interface WorkerCalls<Ask> {
     readonly call: <T>(ask: Ask) => Promise<T>;
@@ -54,7 +111,7 @@ export const workerCalls = <Ask extends object, News = never>(url: URL, workerDa
                 waiter.resolve(answer.value);
                 return;
             }
-            waiter.reject(new Error(answer.message));
+            waiter.reject(rebuilt(answer));
         });
         spawned.on("error", fail);
         spawned.on("exit", (code) => fail(new Error(`a worker thread exited with code ${String(code)}`)));
@@ -134,8 +191,7 @@ export const serveCalls = <Ask extends { readonly id: number }>(port: MessagePor
     port.on("message", (ask: Ask) => {
         void answer(ask).then(
             (value) => post(port, { id: ask.id, ok: true, value } satisfies WorkerAnswer<never>),
-            (error: unknown) =>
-                post(port, { id: ask.id, ok: false, message: errorMessage(error) } satisfies WorkerAnswer<never>),
+            (error: unknown) => post(port, { id: ask.id, ok: false, ...workerFailure(error) } satisfies WorkerAnswer<never>),
         );
     });
 };

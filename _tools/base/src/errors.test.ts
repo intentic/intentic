@@ -1,4 +1,4 @@
-import { errnoCode, errorMessage, isMissing, undefinedIfMissing } from "./errors.js";
+import { errnoCode, errorMessage, exitCodeOf, isFetchNetworkFailure, isMissing, networkCodeOf, stderrOf, undefinedIfMissing } from "./errors.js";
 
 const errno = (code: string): NodeJS.ErrnoException => Object.assign(new Error(code), { code });
 
@@ -43,5 +43,66 @@ describe(`undefinedIfMissing`, () => {
         await expect(Promise.reject(denied).catch(undefinedIfMissing)).rejects.toBe(denied);
         const bug = new TypeError(`x is undefined`);
         await expect(Promise.reject(bug).catch(undefinedIfMissing)).rejects.toBe(bug);
+    });
+});
+
+// The shapes below are the two runtimes' own, as each throws them (errors.integration.test.ts has them thrown for real):
+// Bun puts the errno on the TypeError, Node's undici on its cause, an AggregateError there for a multi-address host.
+const bunRefused = Object.assign(new TypeError(`ECONNREFUSED: Unable to connect. Is the computer able to access the url?`), { code: `ECONNREFUSED` });
+const nodeRefused = new TypeError(`fetch failed`, { cause: errno(`ECONNREFUSED`) });
+const nodeRefusedEverywhere = new TypeError(`fetch failed`, {
+    cause: Object.assign(new AggregateError([errno(`ECONNREFUSED`), errno(`ECONNREFUSED`)]), { code: `ECONNREFUSED` }),
+});
+
+describe(`stderrOf and exitCodeOf`, () => {
+    it(`read what execFile hangs on a failed command, and nothing else`, () => {
+        const failed = Object.assign(new Error(`Command failed: git status`), { code: 128, stderr: `fatal: not a git repository\n` });
+        expect(stderrOf(failed)).toBe(`fatal: not a git repository\n`);
+        expect(exitCodeOf(failed)).toBe(128);
+        // A spawn failure's string code is an errno, not an exit status.
+        expect(exitCodeOf(errno(`ENOENT`))).toBeUndefined();
+        expect(stderrOf(new Error(`plain`))).toBeUndefined();
+        expect(stderrOf(`fatal: text`)).toBeUndefined();
+    });
+
+    it(`does not read a DOMException's legacy error number as an exit`, () => {
+        expect(exitCodeOf(new DOMException(`timed out`, `TimeoutError`))).toBeUndefined();
+    });
+});
+
+describe(`networkCodeOf`, () => {
+    it(`finds the code on the error, on its cause, or on the first attempt of an AggregateError`, () => {
+        expect(networkCodeOf(bunRefused)).toBe(`ECONNREFUSED`);
+        expect(networkCodeOf(nodeRefused)).toBe(`ECONNREFUSED`);
+        expect(networkCodeOf(nodeRefusedEverywhere)).toBe(`ECONNREFUSED`);
+        expect(networkCodeOf(new TypeError(`fetch failed`, { cause: new AggregateError([errno(`ENETUNREACH`)]) }))).toBe(`ENETUNREACH`);
+        expect(networkCodeOf(new TypeError(`fetch failed`))).toBeUndefined();
+    });
+
+    it(`stops on a cause cycle`, () => {
+        const looped = new Error(`a`);
+        Object.assign(looped, { cause: looped });
+        expect(networkCodeOf(looped)).toBeUndefined();
+    });
+});
+
+describe(`isFetchNetworkFailure`, () => {
+    it(`is true for either runtime's refusal, whatever its sentence`, () => {
+        expect(isFetchNetworkFailure(bunRefused)).toBe(true);
+        expect(isFetchNetworkFailure(nodeRefused)).toBe(true);
+        expect(isFetchNetworkFailure(nodeRefusedEverywhere)).toBe(true);
+        // Node's own refusal of a blocked port carries a cause with no code.
+        expect(isFetchNetworkFailure(new TypeError(`fetch failed`, { cause: new Error(`bad port`) }))).toBe(true);
+    });
+
+    it(`is false for a malformed request, an abort, a deadline and a bug`, () => {
+        expect(isFetchNetworkFailure(Object.assign(new TypeError(`fetch() URL is invalid`), { code: `ERR_INVALID_URL` }))).toBe(false);
+        expect(isFetchNetworkFailure(new TypeError(`Failed to parse URL from x`, { cause: Object.assign(new TypeError(`Invalid URL`), { code: `ERR_INVALID_URL` }) }))).toBe(false);
+        expect(isFetchNetworkFailure(new DOMException(`aborted`, `AbortError`))).toBe(false);
+        expect(isFetchNetworkFailure(new DOMException(`timed out`, `TimeoutError`))).toBe(false);
+        expect(isFetchNetworkFailure(new TypeError(`Cannot read properties of undefined (reading 'json')`))).toBe(false);
+        // The sentence alone is no evidence: Node's wording with nothing under it is somebody's hand-written fake.
+        expect(isFetchNetworkFailure(new TypeError(`fetch failed`))).toBe(false);
+        expect(isFetchNetworkFailure(errno(`ECONNREFUSED`))).toBe(false);
     });
 });

@@ -106,13 +106,19 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
 const GIT_FAILURE = /^Command failed: git\b/u;
 // Git's words for a checkout that no longer shares history with the workspace: an object or range it cannot find, or
 // a link it cannot follow. Said as what it means to the reader, since "bad object 3e03077" means nothing to them.
+// The daemon's git runs untranslated, so these are git's English whatever the locale.
+// allow(dependency-text): git's stderr wording; an unmatched one is quoted as git's verdict line below, never misnamed.
 const LOST_LINK = /bad object|invalid symmetric difference|unknown revision|not a git repository|\.git file broken|not a valid object/iu;
+// Git's verdict: the last `fatal:` or `error:` line of the message, which is execFile's `Command failed: git …` line
+// followed by git's stderr whole (`apply` says `error:`, most verbs `fatal:`, and a hint can follow the verdict).
+// allow(dependency-text): git's `fatal:`/`error:` line prefixes; a message without one reads as the generic gitRefused.
+const GIT_VERDICT = /^(?:fatal|error): (.+)$/gmu;
 // Git's refusal as the reader is told it.
 const gitReason = (failure: string): string => {
     if (LOST_LINK.test(failure)) {
         return t(`agents.agentStatus.lostLink`);
     }
-    const said = /fatal: (.+)$/u.exec(failure)?.[1]?.trim();
+    const said = [...failure.matchAll(GIT_VERDICT)].at(-1)?.[1]?.trim();
     return said === undefined || said === `` ? t(`agents.agentStatus.gitRefused`) : said;
 };
 export const landFailure = (agent: AgentStanding): string | undefined => {

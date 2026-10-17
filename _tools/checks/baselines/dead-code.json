@@ -373,7 +373,6 @@
         "count": 4,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_extensions/slack/src/reply.ts": "standing when the check arrived (2026-10-16)",
     "_extensions/telegram/src/listener.ts": "standing when the check arrived (2026-10-16)",
     "_extensions/viewers/src/odf/content.ts": "standing when the check arrived (2026-10-16)",
     "_extensions/viewers/src/odf/document-model.ts": "standing when the check arrived (2026-10-16)",
@@ -459,6 +458,10 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/prompt/system-prompt.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/providers/claude/claude-session-copy.ts": {
+        "count": 10,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
     "_sandbox/sandbox/src/agent/providers/limit-handoff.ts": {
         "count": 2,
         "why": "standing when the check arrived (2026-10-16)"
@@ -510,7 +513,6 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/automations/watch/watch-condition.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/sandbox/src/bootstrap/daemon-env.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/bootstrap/state-boot.ts": {
         "count": 2,
         "why": "standing when the check arrived (2026-10-16)"
@@ -720,10 +722,6 @@
     "_sandbox/sandbox/src/runtimes/acp/acp-adapter.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/runtimes/acp/acp-mcp-proxy.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/runtimes/acp/acp-model.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/sandbox/src/agent/providers/claude/claude-session-copy.ts": {
-        "count": 10,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/runtimes/claude/claude-warm.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/runtimes/codex/codex-agent.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/runtimes/codex/codex-app-server.ts": "standing when the check arrived (2026-10-16)",

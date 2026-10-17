@@ -1,5 +1,5 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import { isContextOverflowText } from "../../engines/failure-sentences.js";
+import { isContextOverflowText, isModelRefusalText } from "../../engines/failure-sentences.js";
 import { modelUnavailableFrame } from "../../agent/run/error-frames.js";
 import { opt } from "../../opt.js";
 import { isRateLimited, RATE_LIMIT_PATIENCE_MS, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
@@ -24,10 +24,13 @@ export interface StructuredError {
 // where xAI names its valid models.
 export const errorDetail = (error: StructuredError): string => (error.response === undefined ? error.message : `${error.message} ${error.response.body}`);
 
-// xAI surfaces an unknown/retired model id as a "model not found" error naming valid alternatives; OpenCode itself says
-// "Model unavailable" for one it cannot route at all. Tagged so the client reloads the catalog and drops the bad pinned
-// model.
-export const MODEL_INVALID = /model not found|does not exist|no such model|did you mean|model unavailable/i;
+// xAI surfaces an unknown/retired model id as a "model not found" error naming valid alternatives (read with every
+// vendor's, isModelRefusalText); OpenCode itself says "Model unavailable" for one it cannot route at all. Tagged so the
+// client reloads the catalog and drops the bad pinned model.
+// allow(dependency-text): OpenCode's own sentence; an unmatched wording stays an uncoded failure, the pin kept.
+const OPENCODE_MODEL_UNAVAILABLE = /\bmodel unavailable\b/i;
+
+export const isModelInvalid = (message: string): boolean => isModelRefusalText(message, OPENCODE_MODEL_UNAVAILABLE);
 
 // What a failure is, for the daemon: a spent allowance waits for its reset, a provider having a bad time is re-run on
 // backoff, a session past its window is re-run fresh, and a model the route cannot reach is taken off the picker.
@@ -64,7 +67,7 @@ export interface FailureTarget {
 // The sentence rules, read only where the type said nothing the daemon can act on: a model xAI rejected, then a spent
 // allowance (a retry-later notice instead of a Continue that would just re-fail), then a session past the model's window.
 const SENTENCE_RULES: readonly VendorRule[] = [
-    [(message) => MODEL_INVALID.test(message), "grok-model-invalid"],
+    [isModelInvalid, "grok-model-invalid"],
     [isRateLimited, "rate_limit"],
     [isContextOverflowText, "context-overflow"],
 ];

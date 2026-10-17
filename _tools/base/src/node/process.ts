@@ -98,6 +98,9 @@ export const textCollector = (maxOutput: number): OutputSink<CollectedOutput> =>
     };
 };
 
+// The environment for a program whose output is parsed: its own module, offered from this door too.
+export { untranslatedEnv } from "./untranslated-env.js";
+
 // A text already in hand, cut the same way: for output that arrived whole (a byte stream read as text afterwards).
 export const clipText = (text: string, maxOutput: number): CollectedOutput => {
     if (text.length <= maxOutput) {

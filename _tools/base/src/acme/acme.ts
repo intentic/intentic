@@ -59,14 +59,25 @@ export interface AcmeOptions {
 }
 
 // Parses a JSON body, or {} when the response carries none (finalize's 200 with just a certificate URL).
-const jsonOf = async (response: Response): Promise<Record<string, unknown>> => {
-    const text = await response.text();
+const parsedJson = (text: string): Record<string, unknown> => {
     if (text === "") {
         return {};
     }
     // A body that is not JSON has no fields to read; the response's status decides.
     // SAFETY: an ACME body is a JSON object (RFC 8555); what each field holds is the caller's to read.
     return parseJsonOr(text, {}) as Record<string, unknown>;
+};
+
+const jsonOf = async (response: Response): Promise<Record<string, unknown>> => parsedJson(await response.text());
+
+// RFC 8555 §6.7's problem type for a stale nonce: the one refusal a client retries at once, with the fresh nonce it carried.
+const BAD_NONCE = "urn:ietf:params:acme:error:badNonce";
+
+const isBadNonce = async (response: Response): Promise<boolean> => {
+    const text = await response.text();
+    const type = parsedJson(text)["type"];
+    // allow(dependency-text): an ACME CA's 400 body that is no RFC 7807 problem document; without the word it is returned as the CA's refusal.
+    return typeof type === "string" ? type === BAD_NONCE : text.includes("badNonce");
 };
 
 // The CA's own error text: ACME problem documents are RFC 7807, `detail` the human sentence and `type` the machine tag.
@@ -132,7 +143,7 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
         });
         nonce = response.headers.get("replay-nonce") ?? nonce;
         // A stale nonce is the one failure the CA expects a client to simply retry with the fresh nonce returned.
-        if (response.status === 400 && (await response.clone().text()).includes("badNonce")) {
+        if (response.status === 400 && (await isBadNonce(response.clone()))) {
             return signedPost(url, payload);
         }
         return response;

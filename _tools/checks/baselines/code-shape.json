@@ -52,7 +52,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_deploy/providers/src/forgejo/forgejo.ts#createForgejoProvider#lines": {
-        "count": 134,
+        "count": 127,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_deploy/providers/src/host/workspace.ts#createWorkspaceProvider#lines": {
@@ -1810,7 +1810,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/ci/providers.ts": {
-        "count": 868,
+        "count": 814,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/ci/providers.ts#githubClient#lines": {

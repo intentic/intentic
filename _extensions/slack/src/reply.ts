@@ -12,9 +12,9 @@ import {
     type ReplyTiming,
     statusCardOf,
 } from "@intentic/connector-runtime";
-import { type ChatStopStreamArguments, WebAPIPlatformError } from "@slack/web-api";
+import type { ChatStopStreamArguments } from "@slack/web-api";
 import { renderCard, type SlackBlock } from "./card.js";
-import type { SlackConnection } from "./client.js";
+import { type SlackConnection, slackErrorCode } from "./client.js";
 import { streamChunks, type StreamShown, streamShown } from "./stream.js";
 
 // One addressed message's answer in Slack. What happens when (the mark the moment it is heard, the status card once the
@@ -39,9 +39,6 @@ export const REACTIONS = {
 export const WORKING_STATUS = "is working on it…";
 // Slack clears the status after two minutes, and whenever the app posts; it is set again on this cadence.
 const STATUS_EVERY_MS = 30_000;
-
-// The code Slack answered a call with ("already_reacted", "not_allowed"), for a call Slack itself refused.
-export const slackErrorCode = (error: Error): string | undefined => (error instanceof WebAPIPlatformError ? error.data.error : undefined);
 
 // Codes that say the thread status will never work for this app, so it stops asking.
 const STATUS_REFUSALS = new Set(["not_allowed", "not_allowed_token_type", "missing_scope", "unknown_method", "method_deprecated", "feature_not_enabled"]);

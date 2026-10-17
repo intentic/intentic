@@ -1,5 +1,6 @@
 import type { GitHost } from "../capabilities/cli/git-access.js";
-import { ciClientFor, CiRateLimited, type FetchFn, githubRun, githubStatus, gitlabHookRun, gitlabRun, gitlabStatus } from "./providers.js";
+import { CiRateLimited } from "./forge-refusals.js";
+import { ciClientFor, type FetchFn, githubRun, githubStatus, gitlabHookRun, gitlabRun, gitlabStatus } from "./providers.js";
 import type { CiProject } from "./projects.js";
 
 const githubProject: CiProject = {
@@ -589,6 +590,21 @@ test("a spent rate limit is a typed refusal carrying when it lifts, and the acco
         CiRateLimited,
     );
     expect(asked).toBe(1);
+});
+
+// The secondary limit's 403 can come without a header naming it; the body's docs link names it whatever its message says.
+test("a 403 whose body links GitHub's rate-limit docs is a spent limit, however its message is worded", async () => {
+    const before = Date.now();
+    // SAFETY: as above, the transport is called with (url, init) only.
+    const secondary = (async () =>
+        new Response(
+            JSON.stringify({
+                message: "Slow down.",
+                documentation_url: "https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api#about-secondary-rate-limits",
+            }),
+            { status: 403 },
+        )) as FetchFn;
+    expect((await limitedBy(ciClientFor("github", secondary).listRuns(githubProject, 5))).until).toBeGreaterThanOrEqual(before);
 });
 
 test("a 403 that is not a rate limit stays a refusal, and a 429's Retry-After is when the limit lifts", async () => {

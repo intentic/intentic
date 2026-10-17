@@ -1,12 +1,11 @@
-import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { autostart, clearWindowsRunValue, type EntryInspection } from "@intentic/local-agent";
 import { MACHINE_AUTOSTART } from "../autostart/autostart.js";
 import { agentPath } from "../release.js";
 import { machineLauncher } from "../resident/supervision.js";
 import { readState } from "../sync/config.js";
 import { MUTAGEN_RUN_VALUE, ownMutagenPath, registerMutagenAutostart } from "../sync/mutagen.js";
+import { readRegistryValue } from "../windows-registry.js";
 import type { Finding, UpkeepContext, UpkeepEntry } from "./entry.js";
 
 /* THE LOGIN ENTRIES THIS AGENT WRITES, kept as this build writes them: its own (which the start's repair also checks,
@@ -74,24 +73,15 @@ const ownLoginEntry: UpkeepEntry = {
    Mutagen of the user's own stands in, starting it is theirs. Nothing took it away once the last pairing went, so a PC that stopped syncing
    still started this agent's Mutagen daemon at every sign-in. Windows only: elsewhere `sync setup` registers nothing. */
 
-const WINDOWS_RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+// The key as PowerShell's registry drive names it.
+const WINDOWS_RUN_KEY = "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 
-// The data of one Run value as `reg query` prints it, or undefined when the output names no such value. Pure.
-export const runValueData = (output: string, name: string): string | undefined => {
-    for (const line of output.split(/\r?\n/)) {
-        const match = /^\s*(\S.*?)\s+REG_\w+\s+(.*)$/.exec(line);
-        if (match?.[1] === name) {
-            return match[2]?.trim();
-        }
-    }
-    return undefined;
-};
-
-const readRunValue = (name: string): string | undefined => {
-    const reg = join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "reg.exe");
-    const result = spawnSync(reg, ["query", WINDOWS_RUN_KEY, "/v", name], { encoding: "utf8", windowsHide: true, timeout: 30_000 });
-    return result.status === 0 ? runValueData(result.stdout, name) : undefined;
-};
+// The Run value's data as stored (windows-registry.ts: reg.exe's listing would come in the OEM code page, and a path
+// under a non-ASCII profile would never match this agent's own), or undefined when there is none. One that cannot be
+// read reads as none, as it did through reg.exe: the worst that follows is the value written again.
+const readRunValue = async (name: string): Promise<string | undefined> =>
+    // allow(silent-catch): an unreadable Run value is taken for an absent one, whose repair only writes it again
+    (await readRegistryValue(WINDOWS_RUN_KEY, name).catch(() => undefined))?.data;
 
 export interface MutagenRunReading {
     // How many pairings this environment holds, or why sync.json could not be read.
@@ -127,7 +117,7 @@ const mutagenReading = async (): Promise<MutagenRunReading> => {
             (state) => state.pairings.length,
             (error: unknown) => (error instanceof Error ? error : new Error(String(error))),
         ),
-        value: readRunValue(MUTAGEN_RUN_VALUE),
+        value: await readRunValue(MUTAGEN_RUN_VALUE),
         own,
         // The pinned copy is the Mutagen this agent runs whenever it is there (sync/mutagen.ts, ensureMutagen); PATH's
         // stands in only while it cannot be fetched.

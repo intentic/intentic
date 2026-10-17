@@ -3,6 +3,7 @@ import { ClientError, type OpenCodeClient, type OpenCodeEvent } from "@opencode/
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync, realYield } from "@intentic/testing/bun";
+import { refusedFetchError } from "@intentic/testing/real-failures";
 import {
     createOpenCodeAgent,
     createOpenCodeRunner,
@@ -662,11 +663,15 @@ test("a server the turn could not reach is said as the local OpenCode server, re
         },
         { kind: "done" },
     ]);
-    expect(await collect(createOpenCodeAgent(unreachable(new TypeError("fetch failed")), OPENCODE_GEMINI_PROVIDER), request)).toEqual([
-        { kind: "session", sessionId: "s1" },
-        { kind: "error", message: "The local OpenCode server that runs Google turns could not be reached. Send again: it is restarted for the next turn." },
-        { kind: "done" },
-    ]);
+    // This runtime's own refused fetch, not a hand-written `fetch failed`: Node hangs the errno on its cause, Bun on the
+    // error itself, and the sentence says so either way.
+    const frame = (await collect(createOpenCodeAgent(unreachable(await refusedFetchError()), OPENCODE_GEMINI_PROVIDER), request)).find(
+        (event) => event.kind === "error",
+    );
+    expect(frame).toEqual({
+        kind: "error",
+        message: expect.stringMatching(/^The local OpenCode server that runs Google turns could not be reached \(.*ECONNREFUSED.*\)\. Send again: it is restarted for the next turn\.$/),
+    });
 });
 
 // Both phases of a plan carry the same instructions: propose-then-execute must not drop them for the second message.

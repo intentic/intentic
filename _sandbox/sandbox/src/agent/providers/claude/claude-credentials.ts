@@ -162,6 +162,22 @@ const tokenResponseSchema = z.object({
 });
 type TokenResponse = z.infer<typeof tokenResponseSchema>;
 
+const OAuthErrorBodySchema = z.object({ error: z.string() });
+const OAUTH_ERROR_FIELD = /"error"\s*:\s*"([^"]+)"/;
+
+// The `error` code of an OAuth error body, whole or cut short.
+const oauthErrorCode = (body: string): string | undefined => {
+    try {
+        const parsed = OAuthErrorBodySchema.safeParse(JSON.parse(body));
+        if (parsed.success) {
+            return parsed.data.error;
+        }
+    } catch {
+        // allow(silent-catch): a body cut at its bound is not JSON; the key is still read below.
+    }
+    return OAUTH_ERROR_FIELD.exec(body)?.[1];
+};
+
 // A non-2xx from the token endpoint; invalidGrant distinguishes a dead refresh token (stop retrying) from a transient
 // failure. `body` is the start of the endpoint's answer, one bounded line, which is where OAuth puts its `error` code.
 export class TokenRequestError extends Error {
@@ -172,8 +188,10 @@ export class TokenRequestError extends Error {
         super(`Claude token request failed (${status}). ${body}`.trim());
     }
 
+    // OAuth's own error code (RFC 6749 §5.2), read from the body's `error` field rather than anywhere in it, so a
+    // description that merely mentions the code is not it. A body cut short of valid JSON is read by the same key.
     get invalidGrant(): boolean {
-        return this.body.includes("invalid_grant");
+        return oauthErrorCode(this.body) === "invalid_grant";
     }
 }
 

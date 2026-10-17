@@ -134,13 +134,24 @@ describe("finding the project by its folder", () => {
         });
     });
     it("keeps an acronym that opens a thrown reason as it was written", async () => {
-        // Lowering the first letter to run on from the headline turned a runtime's "JSON Parse error" into "jSON".
+        // Lowering the first letter to run on from the headline turned a runtime's "JSON Parse error" into "jSON". The
+        // sentence is asked of the runtime running this: Bun's opens "JSON Parse error", Node's (the npm bin's) opens a
+        // plain word, which is lowered.
         const file = join(machineDir, "sync.json");
         const saved = await readFile(file, "utf8");
         await writeFile(file, "{not json");
+        const said = ((): string => {
+            try {
+                JSON.parse("{not json");
+            } catch (error) {
+                return error instanceof Error ? error.message : String(error);
+            }
+            throw new Error("the runtime parsed {not json");
+        })();
+        const opening = /^\p{Lu}\p{Lu}/u.test(said) ? said : `${said.charAt(0).toLowerCase()}${said.slice(1)}`;
         try {
             const { stderr } = await cli("changes", "--dir", project);
-            expect(stderr).toStartWith("error: The sandbox's changes could not be listed.\n   problem: JSON Parse error");
+            expect(stderr).toStartWith(`error: The sandbox's changes could not be listed.\n   problem: ${opening}`);
         } finally {
             await writeFile(file, saved);
         }

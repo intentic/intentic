@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseElementJson, parseElementTreeJson } from "../parse.js";
-import { psText } from "./powershell.js";
+import { PS_UTF8_OUTPUT, psText } from "./powershell.js";
 import { run } from "../run.js";
 import { DesktopError, type ElementAction, type ElementTree, type UiElement } from "../types.js";
 import { WINDOWS_DPI_AWARE } from "./windows-dpi.js";
@@ -37,6 +37,8 @@ public static class IntenticUia {
     TogglePattern.ToggleStateProperty
   };
 
+  // Everything past ASCII escaped too: the JSON then reads the same whatever code page carries it, and a surrogate pair
+  // the 200-character cut splits stays a pair of escapes JSON.parse accepts rather than a byte sequence UTF-8 cannot hold.
   static string Esc(string s) {
     if (s == null) return "null";
     if (s.Length > 200) s = s.Substring(0, 200) + "…";
@@ -44,7 +46,7 @@ public static class IntenticUia {
     foreach (char c in s) {
       if (c == '"') b.Append("\\\\\\"");
       else if (c == '\\\\') b.Append("\\\\\\\\");
-      else if (c < 0x20) b.AppendFormat("\\\\u{0:x4}", (int)c);
+      else if (c < 0x20 || c > 0x7e) b.AppendFormat("\\\\u{0:x4}", (int)c);
       else b.Append(c);
     }
     return b.Append('"').ToString();
@@ -173,7 +175,7 @@ public static class IntenticUia {
 }
 `;
 
-const ADD_HELPER = `${WINDOWS_DPI_AWARE}
+const ADD_HELPER = `${PS_UTF8_OUTPUT}${WINDOWS_DPI_AWARE}
 Add-Type -ReferencedAssemblies UIAutomationClient, UIAutomationTypes, WindowsBase -TypeDefinition @'
 ${HELPER}
 '@;

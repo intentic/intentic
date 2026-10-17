@@ -88,6 +88,21 @@ describe("trust through the cached lists", () => {
         expect(report.signatures[0]?.qualification).toStartWith("not established");
     });
 
+    // PKI.js answers these two with different codes (a dead end at an issuer it cannot find, a path that reaches no anchor).
+    test("a signer under a CA on no list is not anchored, nor is a self-signed one", async () => {
+        const evaluator = trustListEvaluator(await refreshed());
+        const unlisted = await party({ subject: [["2.5.4.3", "Unlisted CA"]], serial: 7000, ca: true });
+        const orphan = await party({ subject: [["2.5.4.3", "Orphan"]], serial: 7001, issuer: unlisted });
+        expect((await evaluator.evaluate(orphan.certificate, [], undefined, "signer")).status).toBe("not-anchored");
+        expect((await evaluator.evaluate(parties.stranger.certificate, [], undefined, "signer")).status).toBe("not-anchored");
+    });
+
+    test("a path to a listed CA that fails a check on the way is chain-invalid, with PKI.js's reason", async () => {
+        const facts = await trustListEvaluator(await refreshed()).evaluate(parties.signer.certificate, [], new Date("2000-01-01T00:00:00Z"), "signer");
+        expect(facts.status).toBe("chain-invalid");
+        expect(facts.detail).toStartWith("the path to the trusted list does not validate: ");
+    });
+
     test("no cache means trust is not checked, said in those words", async () => {
         const report = await verifyBytes({ name: "pismo.p7m", bytes: await signCms(new Uint8Array(Buffer.from("treść")), parties.signer) }, undefined, trustListEvaluator(undefined));
         expect(report.signatures[0]?.trust.detail).toContain("trust chain not checked");

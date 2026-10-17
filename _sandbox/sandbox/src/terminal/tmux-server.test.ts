@@ -1,12 +1,13 @@
+import { missingProgramError } from "@intentic/testing/real-failures";
 import { isNoTmuxServer, isNoTmuxTarget, withoutHeldNames } from "./tmux-server.js";
 
 // The stderr tmux 3.5a writes for each case, carried on execFile's rejection the way a real call carries it.
 const exited = (stderr: string): Error => Object.assign(new Error("Command failed: tmux list-panes -a"), { code: 1, stderr });
 
-test("no server, no socket and no tmux binary all mean no sessions", () => {
+test("no server, no socket and no tmux binary all mean no sessions", async () => {
     expect(isNoTmuxServer(exited("no server running on /tmp/tmux-0/default\n"))).toBe(true);
     expect(isNoTmuxServer(exited("error connecting to /tmp/tmux-0/default (No such file or directory)\n"))).toBe(true);
-    expect(isNoTmuxServer(Object.assign(new Error("spawn tmux ENOENT"), { code: "ENOENT" }))).toBe(true);
+    expect(isNoTmuxServer(await missingProgramError("intentic-no-such-tmux"))).toBe(true);
 });
 
 // The pinned server between boot and the first terminal: alive, empty, and answering every lookup this way. Read as a

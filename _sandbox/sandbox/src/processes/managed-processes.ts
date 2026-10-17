@@ -8,7 +8,7 @@ import { endSession } from "../seams/session-processes.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { SHELL } from "../terminal/pane-state.js";
 import { watchPromptSignals } from "../terminal/prompt-signal.js";
-import { isNoTmuxServer } from "../terminal/tmux-server.js";
+import { isNoTmuxServer, isNoTmuxTarget } from "../terminal/tmux-server.js";
 import { applyWorkload, type WorkloadClass } from "../workload/workload-class.js";
 
 export interface ProcessSpec {
@@ -71,8 +71,7 @@ export const launchEnv = (spec: ProcessSpec & { port: number }, path: string): R
 const endPanes = async (session: string): Promise<void> => {
     const listed = await forkedExec("tmux", ["list-panes", "-s", "-t", `=${session}:`, "-F", "#{pane_pid}"]).catch((error: unknown) => {
         // A session that is not there has no panes to end, and no tmux server means no sessions at all.
-        const stderr = typeof error === "object" && error !== null ? (error as { stderr?: unknown }).stderr : undefined;
-        if (isNoTmuxServer(error) || (typeof stderr === "string" && /can't find (session|window)/.test(stderr))) {
+        if (isNoTmuxTarget(error)) {
             return undefined;
         }
         throw error;

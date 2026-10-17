@@ -193,6 +193,15 @@ export const CHECKS = [
         about: "no new hand-rolled copy of a job with one shared door: a header-only body cap, a local hop-by-hop list, a `..` prefix containment test, an inline sleep, a card deadline, raw browser storage, a promisified execFile (ratcheted)",
     },
     {
+        id: "dependency-text",
+        ratchet: true,
+        file: "dependency-text.mjs",
+        needs: "checkout",
+        gate: "tidy",
+        scoped: true,
+        about: "no new branch on another program's wording (a failure's message, a child's stderr) where its errno, exit status, error code, HTTP status or a machine format says the same; words that must stay say which dependency and what an unmatched wording falls back to (ratcheted)",
+    },
+    {
         id: "format-tiers",
         ratchet: true,
         file: "format-tiers.mjs",

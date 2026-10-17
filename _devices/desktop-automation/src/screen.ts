@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { parseDisplaysJson, parseSwayOutputs, parseXrandrMonitors } from "./parse.js";
 import { environment, has, run } from "./run.js";
 import { DesktopError, type DisplayInfo, type Rect, type ScreenFrame } from "./types.js";
+import { PS_UTF8_OUTPUT } from "./windows/powershell.js";
 import { WINDOWS_DPI_AWARE } from "./windows/windows-dpi.js";
 
 // Screen capture and geometry across platforms. Capture tries a list of candidate tools in order, since each
@@ -161,9 +162,10 @@ export const frame = async (): Promise<ScreenFrame> => {
     return { ...pngSize(await capture()), origin: { x: 0, y: 0 } };
 };
 
-// Each monitor's bounds relative to the virtual desktop's top-left, so they share the screenshot's pixels.
+// Each monitor's bounds relative to the virtual desktop's top-left, so they share the screenshot's pixels. Asked in
+// UTF-8 like every answer read back as text (powershell.ts).
 const WINDOWS_DISPLAYS =
-    `${WINDOWS_DPI_AWARE 
+    `${PS_UTF8_OUTPUT}${WINDOWS_DPI_AWARE 
     }Add-Type -AssemblyName System.Windows.Forms; ` +
     `$v = [System.Windows.Forms.SystemInformation]::VirtualScreen; ` +
     `$list = @([System.Windows.Forms.Screen]::AllScreens | ForEach-Object { [pscustomobject]@{ name = $_.DeviceName; primary = $_.Primary; ` +

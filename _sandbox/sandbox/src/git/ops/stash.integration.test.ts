@@ -133,6 +133,28 @@ test("an apply refused over local changes says so in git's words, not as a confl
     expect(await stashList(dir)).toHaveLength(1);
 });
 
+// A conflict is the unmerged entries the apply itself wrote; ones a merge left before it are git refusing to start.
+test("an apply refused over an index already mid-merge carries git's reason, not a conflict", async () => {
+    const dir = await repo();
+    await writeFile(join(dir, "b.txt"), "stashed\n");
+    await git(dir, ["add", "b.txt"]);
+    await stashPush(dir, { message: "wip" });
+    await git(dir, ["checkout", "-q", "-b", "other"]);
+    await writeFile(join(dir, "a.txt"), "theirs\n");
+    await git(dir, ["commit", "-qam", "theirs"]);
+    await git(dir, ["checkout", "-q", "main"]);
+    await writeFile(join(dir, "a.txt"), "mine\n");
+    await git(dir, ["commit", "-qam", "mine"]);
+    await expect(git(dir, ["merge", "other"])).rejects.toThrow();
+    expect((await git(dir, ["ls-files", "--unmerged"])).stdout).not.toBe("");
+
+    const result = await stashApply(dir, "stash@{0}", true);
+
+    expect(result.ok).toBe(false);
+    expect(result).not.toEqual({ ok: false, reason: "conflict" });
+    expect(await stashList(dir)).toHaveLength(1);
+});
+
 test("dropping removes one entry and renumbers the rest", async () => {
     const dir = await repo();
     for (const text of ["first", "second"]) {

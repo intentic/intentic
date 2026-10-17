@@ -1,10 +1,16 @@
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
+import { stderrOf } from "../errors.js";
+import { untranslatedEnv } from "../node/untranslated-env.js";
 import { clearStaleLock, contendedLockOf, gitProcessRunning, observeStaleLocks, STALE_LOCK_MS, type StaleLockCleared } from "./locks.js";
 
 // A stale lock is removed only on both pieces of evidence: its age, and no git running. Pinned against a fake /proc and
 // a lock file in a temp dir, never the machine's own.
+
+const exec = promisify(execFile);
 
 const tempDirs: string[] = [];
 afterEach(async () => {
@@ -54,6 +60,30 @@ test("the lock a git refused on is read off its own message", () => {
         "/repo/refs/heads/x.lock",
     );
     expect(contendedLockOf("/repo", "fatal: not a git repository")).toBeUndefined();
+});
+
+// The parser above against git's own refusal, so a git that rewords it fails here rather than leaving every stale lock
+// in place. The runner runs git untranslated (untranslatedEnv), and so does this.
+test("git's own refusal on a held lock names the lock contendedLockOf reads", async () => {
+    const dir = await temp();
+    const env = untranslatedEnv(process.env);
+    await exec("git", ["-C", dir, "init", "-q"], { env });
+    await exec("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "one"], { env });
+    const refusal = async (args: readonly string[]): Promise<string> => {
+        try {
+            await exec("git", ["-C", dir, ...args], { env });
+        } catch (error) {
+            return stderrOf(error) ?? "";
+        }
+        throw new Error(`git ${args.join(" ")} succeeded over a held lock`);
+    };
+    const indexLock = join(dir, ".git", "index.lock");
+    await writeFile(indexLock, "");
+    expect(contendedLockOf(dir, await refusal(["add", "--all"]))).toBe(indexLock);
+    await rm(indexLock);
+    const refLock = join(dir, ".git", "refs", "heads", "side.lock");
+    await writeFile(refLock, "");
+    expect(contendedLockOf(dir, await refusal(["update-ref", "refs/heads/side", "HEAD"]))).toBe(refLock);
 });
 
 describe("clearStaleLock", () => {

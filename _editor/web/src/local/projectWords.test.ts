@@ -22,7 +22,8 @@ it(`says what to beware of`, () => {
 it(`counts what the first copy carries, and its size where there is one`, () => {
     expect(copyWeight({ files: 1, bytes: 0, more: false })).toBe(`1 file to copy`);
     expect(copyWeight({ files: 3, bytes: 355, more: false })).toBe(`3 files to copy, 355 B`);
-    expect(copyWeight({ files: 60_000, bytes: 3 * 1024 ** 3, more: true })).toBe(`More than ${(60_000).toLocaleString()} files to copy, 3.0 GB`);
+    // Spelled out: the words are English here, and so are their numbers, whatever locale the host running the test has.
+    expect(copyWeight({ files: 60_000, bytes: 3 * 1024 ** 3, more: true })).toBe(`More than 60,000 files to copy, 3.0 GB`);
 });
 
 it(`gives every stage of the house its own headline`, () => {

@@ -1,7 +1,9 @@
 // OpenAI/Codex's live model catalog for a ChatGPT-account turn; always resolves an explicit model id, never the CLI's
 // built-in default. Discovery order: the translator's /v1/models, then OpenAI's /v1/models with the OAuth token, then
 // the persisted catalog, then a compile-time seed.
+import { escapeRegExp } from "@intentic/base/escape";
 import { listModels } from "../../agent/models/model-discovery.js";
+import { isModelRefusalText } from "../../engines/failure-sentences.js";
 
 const OPENAI_MODELS_URL = "https://api.openai.com/v1/models";
 
@@ -38,13 +40,28 @@ export const discoverTranslatorCodexModels = async (
     fetchImpl: typeof fetch = fetch,
 ): Promise<string[]> => codexModelIds(`${translatorUrl.replace(/\/$/, "")}/v1/models`, translatorToken, fetchImpl);
 
+// The Codex CLI's own words for the notices this runtime reads, as against an upstream API's text it relays: each must
+// stay in the installed binary (agent/providers/tests/vendor-phrases.integration.test.ts), so a release that rewords
+// one fails a suite instead of reaching the chat as the notice it came as.
+const FALLBACK_METADATA = "Defaulting to fallback metadata";
+const RESUMING_WITH = "but is resuming with";
+// The in-turn retry notice ("Reconnecting... 2/5 (...)") and the heads-up after an auto-compaction (codex-agent.ts).
+export const CODEX_RECONNECTING = "Reconnecting...";
+export const CODEX_COMPACTION_NOTICE = "Long threads and multiple compactions";
+export const CODEX_CLI_PHRASES: readonly string[] = [CODEX_RECONNECTING, CODEX_COMPACTION_NOTICE, FALLBACK_METADATA, RESUMING_WITH];
+
 // Non-fatal advisory on the error channel (fallback metadata used); a muted notice, not an error.
-export const CODEX_ADVISORY = /defaulting to fallback metadata/i;
+export const CODEX_ADVISORY = new RegExp(escapeRegExp(FALLBACK_METADATA), "i");
 
 // Codex's resume warning when the thread's last recorded model isn't the one now picked. Dropped rather than shown:
 // switching model mid-conversation is a first-class move here, the chat already prints its own "Switched to ..." line,
 // and Codex's advice to switch back argues with a deliberate pick.
-export const CODEX_MODEL_RESUMED_ELSEWHERE = /recorded with model.+but is resuming with/is;
+export const CODEX_MODEL_RESUMED_ELSEWHERE = new RegExp(`recorded with model.+${escapeRegExp(RESUMING_WITH)}`, "is");
 
-// 'model not found' must stay literal: the advisory also pairs those words without rejecting the model.
-export const CODEX_MODEL_INVALID = /model is not supported|\bmodel not found\b|does not exist|no such model|does not have access to|did you mean/i;
+// Codex's ChatGPT-account refusal ("The 'gpt-5-codex' model is not supported when using Codex with a ChatGPT account."),
+// beside every vendor's (isModelRefusalText, where 'model not found' stays literal: the advisory above also pairs those
+// words without rejecting the model).
+// allow(dependency-text): the Codex CLI and OpenAI's API; an unmatched wording stays an uncoded failure, the pin kept.
+const CODEX_MODEL_UNSUPPORTED = /\bmodel is not supported\b/i;
+
+export const isCodexModelInvalid = (message: string): boolean => isModelRefusalText(message, CODEX_MODEL_UNSUPPORTED);

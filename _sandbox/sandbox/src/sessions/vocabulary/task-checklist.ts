@@ -1,10 +1,23 @@
 import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
+import { z } from "zod";
 import type { StoredTask } from "../../agent/run/task-store.js";
 
 // The agent's working checklist, rebuilt from the Task tool family (TaskCreate/TaskUpdate/TaskList), since no SDK
 // message carries it. A create learns its id from its result; an update names its id in its input and applies
 // immediately; TaskList is the authoritative resync, and a resumed session's tasks arrive via `seed` first.
 
+// A verb's structured output, the user message's `tool_use_result` (sdk-tools.d.ts TaskCreateOutput, TaskListOutput),
+// parsed where the message arrives: read first, since the text the model was shown is the CLI's to reword.
+export const TaskOutputSchema = z.union([
+    z.object({ task: z.object({ id: z.string().min(1) }) }),
+    z.object({
+        tasks: z.array(z.object({ id: z.string().min(1), subject: z.string(), status: z.enum(["pending", "in_progress", "completed"]) })),
+    }),
+]);
+export type TaskOutput = z.infer<typeof TaskOutputSchema>;
+
+// The same results as the text the model reads, for a CLI that sends no structured output; a rewording here leaves the
+// checklist as it stood, never wrong.
 const CREATED = /^Task #(\d+) created successfully/;
 const LISTED = /^#(\d+) \[(pending|in_progress|completed)] (.+)$/;
 
@@ -43,15 +56,15 @@ export class TaskChecklist {
         this.pending.set(toolUseId, { content, status: "pending", ...(activeForm !== undefined ? { activeForm } : {}) });
     }
 
-    // The result of a TaskCreate: `Task #N created successfully`. Undefined when this result belongs to another tool,
-    // or a create whose subject never parsed.
-    resolved(toolUseId: string, content: unknown): TodoItem[] | undefined {
+    // The result of a TaskCreate: its output's task id, else `Task #N created successfully`. Undefined when this result
+    // belongs to another tool, or a create whose subject never parsed.
+    resolved(toolUseId: string, content: unknown, output?: TaskOutput): TodoItem[] | undefined {
         const task = this.pending.get(toolUseId);
         if (task === undefined) {
             return undefined;
         }
         this.pending.delete(toolUseId);
-        const id = CREATED.exec(resultText(content) ?? "")?.[1];
+        const id = (output !== undefined && "task" in output ? output.task.id : undefined) ?? CREATED.exec(resultText(content) ?? "")?.[1];
         if (id === undefined) {
             return undefined;
         }
@@ -102,28 +115,44 @@ export class TaskChecklist {
 
     // The result of a TaskList: the authoritative set. Replaces everything, so tasks created before this process
     // attached appear, and anything deleted elsewhere disappears.
-    listed(content: unknown): TodoItem[] | undefined {
-        const text = resultText(content);
-        if (text === undefined) {
-            return undefined;
-        }
-        const rows = text
-            .split("\n")
-            .map((line) => LISTED.exec(line.trim()))
-            .filter((match) => match !== null);
-        if (rows.length === 0) {
-            // An empty list is real, but so is an unrecognised result; only the former says "no tasks", spelled this
-            // way.
-            return text.trim() === "" ? [] : undefined;
-        }
+    listed(content: unknown, output?: TaskOutput): TodoItem[] | undefined {
+        const rows = output !== undefined && "tasks" in output ? output.tasks : listedRows(resultText(content));
+        return rows === undefined ? undefined : this.replaced(rows);
+    }
+
+    private replaced(rows: readonly ListedRow[]): TodoItem[] {
         // TaskList does not echo activeForm, so carry the spinner label forward from what is already known.
         const known = new Map(this.tasks);
         this.tasks.clear();
-        for (const row of rows) {
-            const [, id, status, subject] = row as unknown as [string, string, Status, string];
+        for (const { id, status, subject } of rows) {
             const activeForm = known.get(id)?.activeForm;
             this.tasks.set(id, { content: subject, status, ...(activeForm !== undefined ? { activeForm } : {}) });
         }
         return this.snapshot();
     }
 }
+
+interface ListedRow {
+    readonly id: string;
+    readonly status: Status;
+    readonly subject: string;
+}
+
+// A TaskList's rows from the text the model was shown; undefined for a result that is not one.
+const listedRows = (text: string | undefined): ListedRow[] | undefined => {
+    if (text === undefined) {
+        return undefined;
+    }
+    const rows = text
+        .split("\n")
+        .map((line) => LISTED.exec(line.trim()))
+        .flatMap((match) => {
+            const [, id, status, subject] = match ?? [];
+            return id !== undefined && subject !== undefined && isStatus(status) ? [{ id, status, subject }] : [];
+        });
+    if (rows.length === 0) {
+        // An empty list is real, but so is an unrecognised result; only the former says "no tasks", spelled this way.
+        return text.trim() === "" ? [] : undefined;
+    }
+    return rows;
+};

@@ -1,3 +1,4 @@
+import { exitCodeOf } from "@intentic/base/errors";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
 import type { StashEntry } from "@intentic/sandbox-contract/schemas/git/git-history";
@@ -54,8 +55,21 @@ export const stashChanges = async (dir: string, ref: string, git: GitRunner = de
     return status.map((change) => Object.assign(change, stats.get(change.path)));
 };
 
-// Sets the tree aside; `includeUntracked` sweeps up files git has never seen. An empty worktree exits non-zero with
-// nothing to stash — a no-op, reported plainly, not a failure.
+// The commit `refs/stash` names, undefined when there is no stash: `rev-parse -q --verify` exits 1, silently, for a
+// missing ref, and anything else is a failure to read it.
+const stashTip = async (dir: string, git: GitRunner): Promise<string | undefined> => {
+    try {
+        return (await git(dir, ["rev-parse", "-q", "--verify", "refs/stash"])).stdout.trim();
+    } catch (error) {
+        if (exitCodeOf(error) === 1) {
+            return undefined;
+        }
+        throw error;
+    }
+};
+
+// Sets the tree aside; `includeUntracked` sweeps up files git has never seen. With nothing to stash git exits 0 and
+// writes no entry, so a `refs/stash` that did not move is the no-op, reported plainly, not a failure.
 export const stashPush = async (
     dir: string,
     options: { message?: string; includeUntracked?: boolean } = {},
@@ -69,30 +83,37 @@ export const stashPush = async (
         args.push("--message", options.message);
     }
     try {
-        const { stdout } = await git(dir, args);
-        return stdout.includes("No local changes") ? { ok: false, reason: "nothing to stash" } : { ok: true };
+        const before = await stashTip(dir, git);
+        await git(dir, args);
+        return (await stashTip(dir, git)) === before ? { ok: false, reason: "nothing to stash" } : { ok: true };
     } catch (error) {
         return { ok: false, reason: gitFailureReason(error, "could not stash") };
     }
 };
 
+// The index's unmerged (stage 1-3) entries, NUL-joined: what a conflicted merge leaves behind.
+const unmergedEntries = async (dir: string, git: GitRunner): Promise<string> => (await git(dir, ["ls-files", "--unmerged", "-z"])).stdout;
+
 // `apply` keeps the entry, `pop` drops it on a clean apply — git's own distinction, kept rather than collapsed. A
 // conflict leaves markers and (for pop) keeps the entry too; reported as `ok: false`, not lost work. Any other refusal
-// (local changes the apply would overwrite, an unknown ref) moved nothing, and carries git's own reason.
+// (local changes the apply would overwrite, an unknown ref, an index already mid-merge) moved nothing, and carries
+// git's own reason. A conflict is told by the unmerged entries the failed apply wrote, not by merge-ort's wording.
 export const stashApply = async (
     dir: string,
     ref: string,
     pop: boolean,
     git: GitRunner = defaultGit,
 ): Promise<{ ok: true } | { ok: false; reason: string }> => {
+    // allow(silent-catch): an index that cannot be listed claims no conflict; a failed apply then shows git's own reason.
+    const unmergedBefore = await unmergedEntries(dir, git).catch(() => undefined);
     try {
         await git(dir, ["stash", pop ? "pop" : "apply", ref]);
         return { ok: true };
     } catch (error) {
-        const stdout = (error as { stdout?: unknown }).stdout;
-        return typeof stdout === "string" && /^CONFLICT/m.test(stdout)
-            ? { ok: false, reason: "conflict" }
-            : { ok: false, reason: gitFailureReason(error, "could not apply the stash") };
+        // allow(silent-catch): as above, the apply's own failure is what is reported.
+        const unmergedAfter = await unmergedEntries(dir, git).catch(() => undefined);
+        const conflicted = unmergedBefore !== undefined && unmergedAfter !== undefined && unmergedAfter !== "" && unmergedAfter !== unmergedBefore;
+        return conflicted ? { ok: false, reason: "conflict" } : { ok: false, reason: gitFailureReason(error, "could not apply the stash") };
     }
 };
 

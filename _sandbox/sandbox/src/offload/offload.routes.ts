@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { OffloadFrame, OffloadRecord, OffloadTarget } from "@intentic/sandbox-contract/schemas/offload";
 import { offloadContract } from "@intentic/sandbox-contract/contracts/offload.contract";
-import { implement } from "@orpc/server";
+import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { areasOf } from "../auth/principal.js";
@@ -37,8 +37,9 @@ export const offloadTarget = async (deps: OffloadDeps, runner: string): Promise<
     return { runner, name, ready: true };
 };
 
-// A runner that predates offloading has no such procedure; oRPC says so in its own words.
-const isMissingProcedure = (error: unknown): boolean => /not.?found|no procedure|unknown procedure/iu.test(errorMessage(error));
+// A runner that predates offloading has no such procedure: its oRPC peer answers 404, which the client raises as
+// NOT_FOUND. runCommand itself never throws that code, so a NOT_FOUND here is the procedure, never what it ran.
+const isMissingProcedure = (error: unknown): boolean => error instanceof ORPCError && error.code === "NOT_FOUND";
 
 export const createOffloadRoutes = (deps: OffloadDeps) => {
     const i = implement(offloadContract).$context<OrpcContext>();

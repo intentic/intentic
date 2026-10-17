@@ -1,3 +1,4 @@
+import { missingProgramError } from "@intentic/testing/real-failures";
 import { gitFailureReason, pushRefusal, pushRefusalReason } from "./git.js";
 
 // Stderr fixtures below are copied verbatim from real git failures.
@@ -33,12 +34,13 @@ test("gitFailureReason names the rules a commit message broke rather than the he
     );
 });
 
-test("gitFailureReason reads a single-line failure and an execFile rejection with no stderr", () => {
+test("gitFailureReason reads a single-line failure and an execFile rejection with no stderr", async () => {
     expect(gitFailureReason({ stderr: "fatal: could not read Username for 'https://github.com': terminal prompts disabled\n" }, "git failed")).toBe(
         "fatal: could not read Username for 'https://github.com': terminal prompts disabled",
     );
-    // A spawn failure: no stderr, no git prefix, just the Error's own message.
-    expect(gitFailureReason(new Error("Command failed: git fetch --prune\nspawn git ENOENT"), "git failed")).toBe("spawn git ENOENT");
+    // A spawn failure: no stderr, no git prefix, just the Error's own message, in whichever runtime's words.
+    const missing = await missingProgramError("intentic-no-such-git");
+    expect(gitFailureReason(missing, "git failed")).toBe(missing.message);
     expect(gitFailureReason(new Error(""), "git failed")).toBe("git failed");
 });
 

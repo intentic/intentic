@@ -1,0 +1,45 @@
+{
+    "_devices/desktop-automation/src/linux/input-linux.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_devices/keyring/src/backends.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_devices/keyring/src/consent/consent-posix.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_devices/keyring/src/typing/mac.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_devices/machine/src/sync/mutagen.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_editor/ui/src/composables/useAsyncAction.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_editor/web/src/app/clientDiagnostics.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_editor/web/src/features/chat/transcript/cards/ChatChildAgentAsk.vue": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_editor/web/src/features/sandbox/recovery/useRecovery.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_extensions/e-urzad/src/signatures/engine.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_extensions/git-history/src/useAsyncAction.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_extensions/onlyoffice/editor/src/guards/x2t-worker.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_extensions/telegram/src/listener.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_platform/api/src/admin/admin-upstream.routes.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_platform/api/src/sandbox/hosted/fly/fly.ts": {
+        "count": 2,
+        "why": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)"
+    },
+    "_platform/api/src/sandbox/hosted/gate/state-gate.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_sandbox/sandbox/bin/needs-cli.mjs": {
+        "count": 3,
+        "why": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)"
+    },
+    "_sandbox/sandbox/src/activity/outbound.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_sandbox/sandbox/src/agent/pages/page-check.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_sandbox/sandbox/src/agent/run/frames/classify-failure.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_sandbox/sandbox/src/exit/exit-dns.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_sandbox/sandbox/src/git/ops/stash.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_sandbox/sandbox/src/netdisk/smb.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_sandbox/sandbox/src/runtimes/claude/claude-accounts.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts": {
+        "count": 2,
+        "why": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)"
+    },
+    "_sandbox/sandbox/src/runtimes/devin/accounts/devin-accounts.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_sandbox/sandbox/src/runtimes/minted/minted-login.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_sandbox/sandbox/src/runtimes/pi/pi-extension-ui.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_sandbox/sandbox/src/runtimes/pi/pi-rpc.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_sandbox/sandbox/src/sandboxes/fleet-client.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_search/iq-engine/src/engines/git.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_search/iq-engine/src/verbs/dispatch.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_tools/base/src/git/locks.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
+    "_tools/base/src/git/runner.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)"
+}

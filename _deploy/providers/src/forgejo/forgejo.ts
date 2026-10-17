@@ -65,6 +65,27 @@ const persisted = async (session: SshSession, file: string): Promise<string> => 
     return result.stdout.trim();
 };
 
+// Whether the admin user exists, read off `forgejo admin user list --admin`: a table whose second column is the username
+// (one word: Forgejo allows no space in a name), under a header row.
+const adminListed = async (session: SshSession, adminUser: string): Promise<boolean> => {
+    const list = await session.exec(`docker exec -u git ${CONTAINER} forgejo admin user list --admin`);
+    return list.code === 0 && list.stdout.split("\n").slice(1).some((row) => row.trim().split(/\s+/)[1] === adminUser);
+};
+
+// Idempotent admin bootstrap: created only where the admin list does not already name it.
+const ensureAdmin = async (session: SshSession, adminUser: string, adminPassword: string, domain: string): Promise<void> => {
+    if (await adminListed(session, adminUser)) {
+        return;
+    }
+    const admin = await session.exec(
+        `docker exec -u git ${CONTAINER} forgejo admin user create --admin --username ${adminUser} --password ${adminPassword} --email ${adminUser}@${domain}`,
+    );
+    // allow(dependency-text): Forgejo's ErrUserAlreadyExist, for a list this could not read; any other failure (an e-mail in use among them) is thrown.
+    if (admin.code !== 0 && !admin.stderr.includes("user already exists")) {
+        throw new Error(`failed to create forgejo admin: exited ${admin.code}: ${admin.stderr.trim()}`);
+    }
+};
+
 const waitHealthy = async (session: SshSession): Promise<void> => {
     if (!(await pollUntil(() => healthy(session), { timeoutMs: READY_TIMEOUT_MS, intervalMs: READY_INTERVAL_MS }))) {
         throw new Error(`forgejo did not become healthy within ${READY_TIMEOUT_MS}ms`);
@@ -157,14 +178,7 @@ export const createForgejoProvider = (executor: SshExecutor): Provider => ({
             } else {
                 await bringUp(parsed.image);
             }
-            // Idempotent admin bootstrap: tolerate the user already existing, propagate anything else.
-            const admin = await session.exec(
-                `docker exec -u git ${CONTAINER} forgejo admin user create --admin --username ${parsed.adminUser} ` +
-                    `--password ${parsed.adminPassword} --email ${parsed.adminUser}@${parsed.domain}`,
-            );
-            if (admin.code !== 0 && !admin.stderr.includes("already exists")) {
-                throw new Error(`failed to create forgejo admin: exited ${admin.code}: ${admin.stderr.trim()}`);
-            }
+            await ensureAdmin(session, parsed.adminUser, parsed.adminPassword, parsed.domain);
             // Mints the runner/git/packages tokens once; later applies reuse the persisted ones.
             await session.exec(`test -f ${TOKEN_FILE} || docker exec -u git ${CONTAINER} forgejo actions generate-runner-token > ${TOKEN_FILE}`);
             await session.exec(

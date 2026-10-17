@@ -90,3 +90,28 @@ test("a subagent's Task verbs leave the parent's checklist alone, and raise no c
     expect(todos(events)).toEqual([{ kind: "todos", items: [{ content: "Draw the mark", status: "pending" }] }]);
     expect(events.filter((event) => event.kind === "tool_call").map((event) => event.name)).toEqual(["Agent"]);
 });
+
+// The CLI's structured output (`tool_use_result`, sdk-tools.d.ts TaskCreateOutput/TaskListOutput) is read before the text
+// the model sees, so a CLI that rewords that text still keeps the checklist live.
+test("a Task verb's structured output keeps the checklist, whatever its text says", async () => {
+    const structured = (id: string, text: string, output: object) => ({
+        type: "user",
+        tool_use_result: output,
+        message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: text }] },
+    });
+    const events = await collect(
+        fakeQuery(
+            call("t1", "TaskCreate", { subject: "Draw the mark" }),
+            structured("t1", "Created a task: Draw the mark", { task: { id: "1", subject: "Draw the mark" } }),
+            call("t2", "TaskList", {}),
+            structured("t2", "Your tasks:\n- Draw the mark (done)", {
+                tasks: [{ id: "1", subject: "Draw the mark", status: "completed", blockedBy: [] }],
+            }),
+            { type: "result", subtype: "success" },
+        ),
+    );
+    expect(todos(events)).toEqual([
+        { kind: "todos", items: [{ content: "Draw the mark", status: "pending" }] },
+        { kind: "todos", items: [{ content: "Draw the mark", status: "completed" }] },
+    ]);
+});

@@ -3,7 +3,8 @@ import type { Logger } from "pino";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { CiStore } from "./ci-store.js";
 import { createCiFailureLog, vendorStatusOf } from "./logs/ci-failure-log.js";
-import { ciClientFor, CiRateLimited, type FetchFn } from "./providers.js";
+import { CiRateLimited } from "./forge-refusals.js";
+import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
 
 // Reconciles each mapped repo's CI webhook against this sandbox's public receiver, on an interval and at boot since

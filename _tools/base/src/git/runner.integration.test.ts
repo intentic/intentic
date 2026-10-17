@@ -70,6 +70,36 @@ test("defaultGit never gives up forever: a lock that is never released still rej
     await expect(defaultGit(dir, ["add", "a.txt"])).rejects.toThrow(/index\.lock/);
 });
 
+// What git sees of the locale, printed by a shell alias git runs with its own environment.
+const LOCALE_PROBE = ["-c", 'alias.locale=!printf "%s|%s|%s" "${LC_MESSAGES-unset}" "${LC_ALL-unset}" "${LANGUAGE-unset}"', "locale"];
+
+test("every git this runner starts reads its messages untranslated, whatever locale its caller runs in", async () => {
+    const dir = await tempRepo();
+    const saved = { LC_ALL: process.env["LC_ALL"], LANGUAGE: process.env["LANGUAGE"] };
+    process.env["LC_ALL"] = "pl_PL.UTF-8";
+    process.env["LANGUAGE"] = "pl";
+    try {
+        expect((await defaultGit(dir, LOCALE_PROBE)).stdout).toBe("C|unset|unset");
+        expect((await politeGit(dir, LOCALE_PROBE)).stdout).toBe("C|unset|unset");
+        // A caller's own env merges first and is pinned with the rest.
+        expect((await defaultGit(dir, LOCALE_PROBE, { LC_ALL: "de_DE.UTF-8" })).stdout).toBe("C|unset|unset");
+    } finally {
+        for (const [name, value] of Object.entries(saved)) {
+            if (value === undefined) {
+                delete process.env[name];
+            } else {
+                process.env[name] = value;
+            }
+        }
+    }
+});
+
+test("a non-git command run through the same forker keeps its caller's locale", async () => {
+    // tmux runs through forkedExec, and a server started pinned would hand LC_MESSAGES=C to every shell it opens.
+    const { stdout } = await forkedExec("sh", ["-c", 'printf "%s" "${LC_MESSAGES-unset}"'], { env: { LC_MESSAGES: "pl_PL.UTF-8" } });
+    expect(stdout).toBe("pl_PL.UTF-8");
+});
+
 // Only politeGit (agent-side bulk work) is queued to a ceiling; interactive git is never held back. Bounding all git
 // regressed latency: the kernel schedules processes better than a promise queue can.
 

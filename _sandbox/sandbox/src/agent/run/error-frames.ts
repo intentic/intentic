@@ -29,8 +29,9 @@ const trialExhaustedFrame = (message?: string): ErrorEvent => ({
 
 export const trialRetryFrame = (error: string): ErrorEvent => (error === "rate_limit" ? trialExhaustedFrame() : trialUnavailableFrame());
 
-// The SDK's `error` field is only a category ('unknown' catches every 4xx); the actual message is in the assistant
-// message's text block, when present.
+// The SDK's `error` field is a category (SDKAssistantMessageError: `authentication_failed` for a 401/403,
+// `oauth_org_not_allowed`, `billing_error`, `invalid_request` for most 400s, `unknown` for the API errors the CLI does
+// not sort); the sentence is in the assistant message's text block, when present.
 const apiErrorMessage = (message: SDKAssistantMessage): string => {
     const content = message.message.content as ReadonlyArray<{ type: string; text?: string }>;
     const explained = content.find((block) => block.type === "text" && block.text !== undefined && block.text.trim() !== "")?.text;
@@ -135,7 +136,7 @@ const trialFrame = (message: SDKAssistantMessage): ErrorEvent => {
 };
 
 // Reads `rate_limit`, `server_error`, and `overloaded` from the SDK's category, since a resume must be safe regardless
-// of wording; everything else is decided from the message text.
+// of wording; everything else is decided in sentenceFrame, the category first where it names the case.
 export const errorFrame = async (message: SDKAssistantMessage, allowance: TurnAllowance | undefined, trial = false): Promise<ErrorEvent> => {
     if (trial) {
         return trialFrame(message);
@@ -147,14 +148,16 @@ export const errorFrame = async (message: SDKAssistantMessage, allowance: TurnAl
     if (message.error === "server_error" || message.error === "overloaded") {
         return { kind: "error", code: "provider-outage", message: apiErrorMessage(message) };
     }
-    return sentenceFrame(apiErrorMessage(message));
+    return sentenceFrame(apiErrorMessage(message), message.error);
 };
 
 // The half that reads the message text, in the order it must be read: each condition below can wear another's clothes,
-// so ordering is the correctness.
-const sentenceFrame = (explained: string): ErrorEvent => {
+// so ordering is the correctness. Where the CLI's category names a case (the org-disabled seat, a refused credential),
+// it decides that case whatever the sentence says, and the sentence is the fallback for a message without one; the
+// conditions the category cannot see (a spent plan behind a 403) are still read first.
+const sentenceFrame = (explained: string, category: SDKAssistantMessage["error"]): ErrorEvent => {
     // The seat, not the credential: read before auth failures, since a re-mint cannot fix a disabled seat.
-    if (isEntitlementRefusalText(explained)) {
+    if (category === "oauth_org_not_allowed" || isEntitlementRefusalText(explained)) {
         return { kind: "error", code: "claude-not-entitled", message: explained };
     }
     // Read before every branch below: a 400 model-floor refusal would otherwise reach the catch-all as dead text.
@@ -171,8 +174,9 @@ const sentenceFrame = (explained: string): ErrorEvent => {
     if (mentionsSpentAllowance(explained)) {
         return { kind: "error", code: "rate_limit", message: explained };
     }
-    // A credential the CLI stopped using; coded so the route can re-mint and resume rather than leave a dead tab.
-    if (isAuthFailureText(explained)) {
+    // A credential the CLI stopped using; coded so the route can re-mint and resume rather than leave a dead tab. The
+    // category covers the CLI's other sentences for a 401/403 ("Please run /login · …", a gateway's or a key's).
+    if (category === "authentication_failed" || isAuthFailureText(explained)) {
         return { kind: "error", code: "claude-token-refused", message: explained };
     }
     // A routed model's words for a session past its window, or the CLI's; below the refusals, which each outrank it.

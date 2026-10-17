@@ -23,6 +23,10 @@
             "types": "./src/requires.ts",
             "default": "./src/requires.ts"
         },
+        "./real-failures": {
+            "types": "./src/real-failures.ts",
+            "default": "./src/real-failures.ts"
+        },
         "./fly-fake": {
             "types": "./src/fly-fake.ts",
             "default": "./src/fly-fake.ts"

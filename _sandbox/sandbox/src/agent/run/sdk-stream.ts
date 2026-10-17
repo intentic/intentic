@@ -25,7 +25,7 @@ import { noteRetryCause } from "./turn/turn-pulse.js";
 import { promptFingerprint } from "./prompt-fingerprint.js";
 import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type SubagentTurn } from "../subagents/subagents.js";
 import { endJobTheCliStopped, noteJobNotice, noteJobShell, noteModelRequest } from "../tools/jobs/background-jobs.js";
-import { TaskChecklist } from "../../sessions/vocabulary/task-checklist.js";
+import { TaskChecklist, type TaskOutput, TaskOutputSchema } from "../../sessions/vocabulary/task-checklist.js";
 import { PageDrafts } from "../pages/page-draft.js";
 import { PAGE_TOOL_NAMES } from "../pages/page-names.js";
 import type { ChecklistSeed } from "./task-store.js";
@@ -712,11 +712,11 @@ class TurnFold {
 
     // What a checklist verb's result does to the list: a create learns its id here; a TaskList result is authoritative.
     // A child's verb contributes nothing, since its TaskList would replace this list wholesale.
-    private checklistFrom(toolUseId: string, content: unknown): TodoItem[] | undefined {
+    private checklistFrom(toolUseId: string, content: unknown, output: TaskOutput | undefined): TodoItem[] | undefined {
         if (this.foreignChecklistToolIds.has(toolUseId)) {
             return undefined;
         }
-        return this.checklist.resolved(toolUseId, content) ?? this.checklist.listed(content);
+        return this.checklist.resolved(toolUseId, content, output) ?? this.checklist.listed(content, output);
     }
 
     private *onBashCall(block: ToolUseBlock, sessionId: unknown): Generator<AgentEvent> {
@@ -771,20 +771,23 @@ class TurnFold {
     }
 
     // Tool results arrive as tool_result blocks on a (usually synthetic) user message; this is where edit diffs and
-    // bash output live. A result with no tool_use_id can't be correlated.
+    // bash output live. A result with no tool_use_id can't be correlated. The message's `tool_use_result` is one tool's
+    // structured output, so it is read only beside a lone result, where it cannot belong to another.
     private *onToolResults(message: SdkOf<"user">): Generator<AgentEvent> {
         const content = message.message.content;
         if (!Array.isArray(content)) {
             return;
         }
-        for (const block of content as ReadonlyArray<{ type?: string; tool_use_id?: string; content?: unknown; is_error?: boolean }>) {
-            if (block.type === "tool_result" && block.tool_use_id !== undefined) {
-                yield* this.onToolResult(block.tool_use_id, block.content, block.is_error === true);
-            }
+        const results = (content as ReadonlyArray<{ type?: string; tool_use_id?: string; content?: unknown; is_error?: boolean }>).flatMap((block) =>
+            block.type === "tool_result" && block.tool_use_id !== undefined ? [{ ...block, id: block.tool_use_id }] : [],
+        );
+        const output = results.length === 1 ? TaskOutputSchema.safeParse(message.tool_use_result).data : undefined;
+        for (const block of results) {
+            yield* this.onToolResult(block.id, block.content, block.is_error === true, output);
         }
     }
 
-    private *onToolResult(toolUseId: string, content: unknown, failed: boolean): Generator<AgentEvent> {
+    private *onToolResult(toolUseId: string, content: unknown, failed: boolean, output: TaskOutput | undefined): Generator<AgentEvent> {
         yield* this.informational.settled(toolUseId);
         // A page's own frame (or its failure) has landed; the draft that stood for it goes.
         yield* this.pageDrafts.settled(toolUseId);
@@ -795,7 +798,7 @@ class TurnFold {
         }
         // A checklist verb has no card here; a create learns its id from this result, and TaskList is authoritative.
         if (this.checklistToolIds.has(toolUseId)) {
-            const items = this.checklistFrom(toolUseId, content);
+            const items = this.checklistFrom(toolUseId, content, output);
             if (items !== undefined) {
                 yield { kind: "todos", items };
             }

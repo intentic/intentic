@@ -41,8 +41,10 @@ const CODEX_POST_TOOL_TIMEOUT_SEC = 30 * 60;
 const CODEX_STOP_TIMEOUT_SEC = 60 * 60;
 
 // What Codex says, on its warning channel, once per thread whose hooks were loaded without its review prompt. The
-// daemon wrote them; the reader has nothing to act on.
-export const HOOK_TRUST_WARNING = /dangerously-bypass-hook-trust/;
+// daemon wrote them; the reader has nothing to act on. The flag it names is the Codex CLI's own words, checked against
+// the installed binary (agent/providers/tests/vendor-phrases.integration.test.ts).
+export const HOOK_TRUST_FLAG = "dangerously-bypass-hook-trust";
+export const HOOK_TRUST_WARNING = new RegExp(HOOK_TRUST_FLAG);
 
 // Keys of thread/start's `config`, as dotted paths into Codex's config.toml.
 export type CodexConfigLayer = Record<string, JsonValue>;

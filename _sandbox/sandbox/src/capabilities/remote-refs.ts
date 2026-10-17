@@ -1,3 +1,4 @@
+import { stderrOf } from "@intentic/base/errors";
 import { defaultGit, GIT_STALL_GUARD, gitAuthHeader, gitHeaderEnv, type GitRunner } from "@intentic/base/git";
 import type { RemoteRef, RemoteRefs } from "@intentic/sandbox-contract/schemas/git/remote-refs";
 
@@ -45,23 +46,27 @@ export const parseRemoteRefs = (stdout: string): RemoteRefs => {
 };
 
 // git's own words for a refusal are about credentials it was told not to ask for; these are the same refusals said in
-// terms of the form the reader is looking at.
+// terms of the form the reader is looking at. Only words: git exits 128 for every one of them, run untranslated by the
+// base runner, so this phrasebook of git ls-remote's and its curl transport's English is the one place they are read.
+const REFUSALS: readonly { readonly words: RegExp; readonly reason: (authenticated: boolean) => string }[] = [
+    {
+        words: /terminal prompts disabled|could not read Username|Authentication failed|Invalid username or password/i,
+        reason: (authenticated) =>
+            authenticated ? "that repository refused the access token: check it has read access." : "that repository is private: add an access token with read access.",
+    },
+    { words: /repository .* not found|Repository not found|not a git repository/i, reason: () => "there is no repository at that address." },
+    { words: /Could not resolve host/i, reason: () => "that host does not resolve from this sandbox." },
+    { words: /timed out|Connection refused|Failed to connect/i, reason: () => "that host did not answer." },
+];
+
 const refusalReason = (stderr: string, authenticated: boolean): string => {
-    if (/terminal prompts disabled|could not read Username|Authentication failed|Invalid username or password/i.test(stderr)) {
-        return authenticated
-            ? "that repository refused the access token: check it has read access."
-            : "that repository is private: add an access token with read access.";
-    }
-    if (/repository .* not found|Repository not found|not a git repository/i.test(stderr)) {
-        return "there is no repository at that address.";
-    }
-    if (/Could not resolve host/i.test(stderr)) {
-        return "that host does not resolve from this sandbox.";
-    }
-    if (/timed out|Connection refused|Failed to connect/i.test(stderr)) {
-        return "that host did not answer.";
+    // allow(dependency-text): git ls-remote and curl (REFUSALS); an unmatched wording shows git's own last fatal line.
+    const known = REFUSALS.find(({ words }) => words.test(stderr));
+    if (known !== undefined) {
+        return known.reason(authenticated);
     }
     // git's last fatal line is more use than its whole transcript, and is the only part addressed to a person.
+    // allow(dependency-text): git's `fatal:` verdict prefix; none found shows a generic sentence.
     return [...stderr.matchAll(/^fatal:\s*(.+)$/gim)].at(-1)?.[1]?.trim() ?? "the repository could not be read.";
 };
 
@@ -84,7 +89,7 @@ export const readRemoteRefs = async (dir: string, url: string, token?: string, g
         return parseRemoteRefs(stdout);
     } catch (error) {
         throw new RemoteRefsError(
-            `Could not read ${url}: ${refusalReason(String((error as { stderr?: unknown }).stderr ?? ""), token !== undefined)}`,
+            `Could not read ${url}: ${refusalReason(stderrOf(error) ?? "", token !== undefined)}`,
         );
     }
 };

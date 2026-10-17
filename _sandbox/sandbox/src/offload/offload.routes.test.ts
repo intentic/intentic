@@ -5,6 +5,7 @@ import { unstubbed } from "@intentic/testing";
 import type { OrpcContext } from "../app-env.js";
 import type { OffloadDeps } from "./offload.routes.js";
 import { createOffloadRoutes } from "./offload.routes.js";
+import { failureOf, orpcLink } from "../peers/orpc-link.testing.js";
 import { mergeHeavyRules } from "@intentic/constants/heavy-rules";
 
 // This sandbox's side of an offloaded command: whether a runner can take it, the runner's frames relayed unchanged, and
@@ -57,6 +58,16 @@ const world = (runners: Record<string, FakeRunner | "offline">) => {
     return createOffloadRoutes(deps);
 };
 
+// What a runner built before offloading answers runCommand with, from a real oRPC peer whose router has no such procedure.
+const missingProcedureError = async (): Promise<Error> => {
+    const { client, close } = await orpcLink<{ runCommand: () => Promise<never> }>({});
+    try {
+        return await failureOf(client.runCommand());
+    } finally {
+        close();
+    }
+};
+
 const run = (runner: string): OffloadRun => ({
     runner,
     runId: "run-0000abcd",
@@ -107,8 +118,14 @@ describe("an offloaded run", () => {
 
     test("is refused, so it runs here, when the runner is offline or predates offloading", async () => {
         expect(await frames(world({ "runner-omen": "offline" }), run("runner-omen"))).toEqual([{ kind: "refused", why: expect.stringContaining("offline") }]);
-        const old = world({ "runner-omen": { fails: new Error("Not Found"), cancelled: [] } });
+        const old = world({ "runner-omen": { fails: await missingProcedureError(), cancelled: [] } });
         expect(await frames(old, run("runner-omen"))).toEqual([{ kind: "refused", why: expect.stringContaining("predates offloading") }]);
+    });
+
+    // Another program's "not found" (a missing repository, a missing file) is a failed link, not an old runner.
+    test("is refused as a failed link, in its own words, when the runner fails with anything else not found", async () => {
+        const failed = world({ "runner-omen": { fails: new Error("remote: Repository not found."), cancelled: [] } });
+        expect(await frames(failed, run("runner-omen"))).toEqual([{ kind: "refused", why: "the link to omen failed: remote: Repository not found." }]);
     });
 });
 

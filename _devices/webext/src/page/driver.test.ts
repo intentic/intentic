@@ -81,6 +81,42 @@ test("a payment or deletion button is flagged, so the person is asked before it 
     expect(describeRef("e3").sensitive).toBe(true);
 });
 
+// The owner's own pages are Polish, and a word ending in "ć" or "ń" once had no edge an ASCII `\b` could see. Judged by
+// the function re-parsed alone, as the page runs it, so the word lists can't lean on anything outside it.
+const judged = (labels: readonly string[]): boolean[] => {
+    // oxlint-disable-next-line typescript/no-implied-eval -- re-parsing the source is exactly what Chrome does with it
+    const alone = new Function(`return (${describeRef.toString()})`)() as typeof describeRef;
+    document.body.innerHTML = labels.map((label) => `<button>${label}</button>`).join("");
+    collectPage();
+    return labels.map((_, index) => alone(`e${index}`).sensitive);
+};
+
+test("a Polish payment or deletion button is flagged, in every inflection a page words it in", () => {
+    const money = [`Zapłać`, `Zapłać 240 zł`, `Zapłacić teraz`, `Płatność`, `Przejdź do płatności`, `Opłać zamówienie`, `Kup teraz`, `KUP TERAZ`];
+    const more = [`Kupuję i płacę`, `Potwierdź zakup`, `Zamów`, `Zamawiam z obowiązkiem zapłaty`, `Złóż zamówienie`, `Wykonaj przelew`, `Przelej środki`];
+    const still = [`Wpłać`, `Wypłać środki`, `Wypłata`, `Subskrybuj`, `Wykup subskrypcję`, `Przekaż darowiznę`, `Wesprzyj nas`, `Doładuj konto`];
+    const destructive = [`Usuń`, `Usuń konto`, `Usunąć?`, `Usuwam`, `Skasuj`, `Dezaktywuj konto`, `Zamknij konto`, `Unieważnij token`, `Cofnij dostęp`];
+    const gone = [`Wyczyść dane`, `Wymaż`, `Odinstaluj`, `Opróżnij kosz`, `Anuluj subskrypcję`, `Zakończ umowę`, `Usun konto`];
+    for (const labels of [money, more, still, destructive, gone]) {
+        expect(judged(labels)).toEqual(labels.map(() => true));
+    }
+});
+
+test("the everyday words around them are not, nor a stem met inside another word", () => {
+    const everyday = [`Zapisz szkic`, `Dalej`, `Wstecz`, `Zamknij`, `Anuluj`, `Cofnij`, `Zakończ`, `Szukaj`, `Kontakt`, `Pokaż więcej`];
+    const inside = [`Bezpłatny`, `Kupon rabatowy`, `Skup złomu`, `Usługi`, `Wymagane`, `Display settings`, `Reorder list`, `Orders`];
+    expect(judged([...everyday, ...inside])).toEqual([...everyday, ...inside].map(() => false));
+});
+
+test("a button that says it only in its attributes, or names its form from outside, is judged by that", () => {
+    document.body.innerHTML = `
+        <input type="submit" value="Zapłać" />
+        <button aria-label="Usuń"><svg></svg></button>
+        <form id="card"><input autocomplete="cc-number" /></form><button form="card">Dalej</button>`;
+    collectPage();
+    expect([describeRef("e0").sensitive, describeRef("e1").sensitive, describeRef("e3").sensitive]).toEqual([true, true, true]);
+});
+
 test("a dropdown can be chosen by the label a snapshot actually shows", () => {
     document.body.innerHTML = `<select><option value="gb">United Kingdom</option><option value="de">Germany</option></select>`;
     collectPage();

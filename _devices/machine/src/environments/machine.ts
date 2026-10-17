@@ -71,13 +71,31 @@ export const withoutChild = (config: MachineConfig, distro: string): MachineConf
 const INTEROP_CWD = "/mnt/c";
 const interopCwd = (): string | undefined => (existsSync(INTEROP_CWD) ? INTEROP_CWD : undefined);
 
+// The profile out of PowerShell's answer (PROFILE_ASKS), undefined for anything that is not base64 of one. Pure.
+export const profileFromBase64 = (stdout: string): string | undefined => {
+    const encoded = stdout.trim();
+    return /^[A-Za-z0-9+/]+={0,2}$/.test(encoded) ? Buffer.from(encoded, "base64").toString("utf8") : undefined;
+};
+
+// The Windows profile asked of PowerShell, as base64 of its UTF-8: cmd's `echo %USERPROFILE%` prints in the console's
+// OEM code page (852 on a Polish Windows), so a profile with a Polish letter in its name came back with U+FFFD in it,
+// `wslpath` mapped a folder that is not there, and this distro acted as though the PC had no Windows agent. Base64 is
+// ASCII in every code page, so the answer needs neither a `chcp 65001` in the interop's console nor an encoding pin.
+// cmd stays as the fallback where PowerShell may not run: right for an ASCII profile, as it always was.
+const POWERSHELL_EXE = ["powershell.exe", "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"];
 const CMD_EXE = ["cmd.exe", "/mnt/c/Windows/System32/cmd.exe"];
+const PROFILE_BASE64 = "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($env:USERPROFILE))";
+const PROFILE_ASKS: readonly { readonly command: string; readonly args: readonly string[]; readonly read: (stdout: string) => string | undefined }[] = [
+    ...POWERSHELL_EXE.map((command) => ({ command, args: ["-NoProfile", "-NonInteractive", "-Command", PROFILE_BASE64], read: profileFromBase64 })),
+    ...CMD_EXE.map((command) => ({ command, args: ["/c", "echo %USERPROFILE%"], read: (stdout: string) => stdout.trim() })),
+];
 
 const windowsProfile = async (): Promise<string | undefined> => {
-    for (const cmd of CMD_EXE) {
-        // candidates in order, the first that answers wins
-        const answer = await execBounded(cmd, ["/c", "echo %USERPROFILE%"], { timeoutMs: 10_000, cwd: interopCwd() }).catch(() => undefined);
-        const profile = answer?.stdout.trim();
+    for (const { command, args, read } of PROFILE_ASKS) {
+        // candidates in order, the first that answers wins; PowerShell starts cold through interop, seconds rather than
+        // cmd's milliseconds.
+        const answer = await execBounded(command, args, { timeoutMs: 20_000, cwd: interopCwd() }).catch(() => undefined);
+        const profile = answer === undefined ? undefined : read(answer.stdout);
         if (profile !== undefined && /^[A-Za-z]:\\/.test(profile)) {
             return profile;
         }

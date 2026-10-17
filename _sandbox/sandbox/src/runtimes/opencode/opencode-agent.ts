@@ -4,6 +4,7 @@ import type { AgentCommand } from "@intentic/sandbox-contract/events/requests";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { displayNameOf } from "@intentic/agent-context/tool-calls";
 import { whenAborted } from "@intentic/base/async";
+import { isFetchNetworkFailure, networkCodeOf } from "@intentic/base/errors";
 import type { AgentRequest, OpenCodeCredential } from "../../agent/providers/agent-request.js";
 import { type SteeringChannel, steeringRelay } from "../../agent/checkpoints/agent-steering.js";
 import { withFileNote } from "../../sessions/vocabulary/attachment-note.js";
@@ -28,7 +29,7 @@ import { type ShellRoute, shellPaneOf, shellRouteOf } from "./shell/opencode-she
 import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
 import { type ApprovalVerdict, DEFAULT_MODE_ASKS, type PermissionAsk, type SessionJudge, type SessionJudges } from "./opencode-permissions.js";
 import { isToolEvent, sessionOf, stepTokens, tokensOf, toolCards, type TurnView, unreportedTokens } from "./opencode-frames.js";
-import { errorDetail, executionErrorFrame, type FailureTarget, MODEL_INVALID, retryFrame } from "./opencode-failures.js";
+import { errorDetail, executionErrorFrame, type FailureTarget, isModelInvalid, retryFrame } from "./opencode-failures.js";
 import { mcpServersOf, mcpToolNameOf, openCodeMounts, type OpenCodeMounts, sessionToolRules } from "./opencode-mcp.js";
 import { openCodeSubagents } from "./opencode-subagents.js";
 import {
@@ -201,7 +202,7 @@ const interrupt = async (c: OpenCodeClient, sessionId: string): Promise<void> =>
 };
 
 // xAI's named alternatives in a model-not-found rejection, chat models only; none for any other failure.
-const modelSuggestions = (message: string): string[] => (MODEL_INVALID.test(message) ? parseModelSuggestions(message).filter(isChatModel) : []);
+const modelSuggestions = (message: string): string[] => (isModelInvalid(message) ? parseModelSuggestions(message).filter(isChatModel) : []);
 
 // The steering a turn borrows, pumped onto its queue; `close` ends admission and resolves once every message that made
 // it in before then is on the queue.
@@ -1027,18 +1028,16 @@ const openCodePlan = (context: StreamContext, run: ReturnType<typeof phaseRun>, 
     };
 };
 
-// A transport failure names neither what was unreachable nor why: said as the local OpenCode server the turn could not
-// reach, since the next turn boots that server afresh (opencode.ts ensure).
+// A transport failure, read by class and code (isFetchNetworkFailure) since Node and Bun word it differently, names
+// neither what was unreachable nor why: said as the local OpenCode server, which the next turn boots afresh (opencode.ts).
 const unreachableServer = (error: unknown, provider: string): string | undefined => {
-    const transport =
-        (error instanceof TypeError && error.message === "fetch failed") ||
-        (error as { readonly reason?: unknown } | undefined)?.reason === "Transport";
+    const transport = isFetchNetworkFailure(error) || (error as { readonly reason?: unknown } | undefined)?.reason === "Transport";
     if (!transport) {
         return undefined;
     }
     const cause = (error as { readonly cause?: unknown }).cause;
-    const detail = cause instanceof Error ? ` (${cause.message})` : "";
-    return `The local OpenCode server that runs ${openCodeBackendLabel(provider)} turns could not be reached${detail}. Send again: it is restarted for the next turn.`;
+    const said = cause instanceof Error ? cause.message : networkCodeOf(error);
+    return `The local OpenCode server that runs ${openCodeBackendLabel(provider)} turns could not be reached${said === undefined ? "" : ` (${said})`}. Send again: it is restarted for the next turn.`;
 };
 
 // An error frame as the chat gets it: an uncoded one that is Google's NOT_FOUND names the model it refused.
@@ -1051,7 +1050,7 @@ const thrownFrame = (message: string, provider: string, model: string | undefine
     googleRefusalFrame(provider, model, message) ?? {
         kind: "error",
         message,
-        ...opt("code", MODEL_INVALID.test(message) ? ("grok-model-invalid" as const) : undefined),
+        ...opt("code", isModelInvalid(message) ? ("grok-model-invalid" as const) : undefined),
     };
 
 // How a turn's shell commands run (shell/opencode-shell.ts): in the conversation's tmux session where tmux-run is in the image,

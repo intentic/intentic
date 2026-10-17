@@ -1,3 +1,4 @@
+import { errnoCode, isMissing } from "../errors.js";
 import { siblingModule, workerCalls, workerPool } from "./worker-calls.js";
 
 // Against a real worker thread: answers find their calls, a refusal costs its call, a crash only the calls in flight.
@@ -16,6 +17,16 @@ test("a refusal rejects its own call and leaves the thread serving", async () =>
     const calls = echo();
     await expect(calls.call({ say: "refuse" })).rejects.toThrow("refused");
     expect(await calls.call<string>({ say: "still here" })).toBe("echo:still here");
+    await calls.close();
+});
+
+test("a refusal keeps its class's name, its code and its cause across the thread", async () => {
+    const calls = echo();
+    const refusal = await calls.call({ say: "missing" }).catch((error: unknown) => error);
+    expect(refusal).toMatchObject({ name: "TypeError", message: "could not read it" });
+    const cause = refusal instanceof Error ? refusal.cause : undefined;
+    expect(errnoCode(cause)).toBe("ENOENT");
+    expect(isMissing(cause)).toBe(true);
     await calls.close();
 });
 

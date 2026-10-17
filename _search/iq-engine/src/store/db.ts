@@ -146,9 +146,24 @@ const open = (dir: string, mode: IndexMode): SqliteDb => {
     return wrapped;
 };
 
-// True when a failure means a concurrent writer holds the lock, not that the index is corrupt.
-export const isIndexBusy = (error: unknown): boolean =>
-    error instanceof Error && /database is locked|database is busy|SQLITE_BUSY/i.test(error.message);
+// SQLITE_BUSY and SQLITE_LOCKED, by primary result code: an extended one (BUSY_SNAPSHOT, 517) carries it in its low byte.
+const BUSY_CODES = new Set([5, 6]);
+
+// node:sqlite (on Node and on Bun) hangs SQLite's result code on what it throws as `errcode`.
+const hasSqliteCode = (error: Error): error is Error & { readonly errcode: number } => "errcode" in error && typeof error.errcode === "number";
+
+// True when a failure means a concurrent writer holds the lock, not that the index is corrupt. Read by SQLite's result
+// code; the sentence only where a runtime carried none.
+export const isIndexBusy = (error: unknown): boolean => {
+    if (!(error instanceof Error)) {
+        return false;
+    }
+    if (hasSqliteCode(error)) {
+        return BUSY_CODES.has(error.errcode & 0xff);
+    }
+    // allow(dependency-text): SQLite's errstr for BUSY/LOCKED, for an error carrying no errcode; any other such failure is cache loss, as before.
+    return /database is locked|database is busy|SQLITE_BUSY/i.test(error.message);
+};
 
 // Opens the index at `<dir>/index.db`; treats corruption or schema drift as cache loss by deleting the dir and
 // rebuilding. A held write lock from a concurrent writer propagates instead. A "read" open never recreates anything.

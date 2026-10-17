@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { parentPort, threadId } from "node:worker_threads";
 import { post, serveCalls } from "./worker-calls.js";
 
@@ -13,6 +14,14 @@ type Ask = { readonly id: number; readonly say: string };
 serveCalls<Ask>(port, async (ask) => {
     if (ask.say === "refuse") {
         throw new Error("refused");
+    }
+    // A real errno failure, wrapped: what the caller must still be able to read by its code.
+    if (ask.say === "missing") {
+        try {
+            await readFile("/intentic-no-such-file");
+        } catch (cause) {
+            throw new TypeError("could not read it", { cause });
+        }
     }
     if (ask.say === "die") {
         process.exit(3);

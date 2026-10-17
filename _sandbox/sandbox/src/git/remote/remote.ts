@@ -1,4 +1,5 @@
 import type { GitRemoteState } from "@intentic/sandbox-contract/schemas/git/git";
+import { exitCodeOf, stderrOf } from "@intentic/base/errors";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { upstreamOf } from "../ops/branches.js";
 import type { ActionResult } from "../changes/changes-commits.js";
@@ -60,24 +61,26 @@ export const remoteState = async (
 export const fetchRemote = async (dir: string, git: GitRunner = defaultGit): Promise<ActionResult> => run(dir, ["fetch", "--prune", "--quiet"], git);
 
 // `reset --keep` names each refused path in quotes on an `error:` line; the trailing `fatal:` names only a sha.
-const refusedPaths = (error: unknown): string[] => {
-    const stderr = (error as { stderr?: unknown }).stderr;
-    return (typeof stderr === "string" ? stderr : "")
+// allow(dependency-text): git reset --keep (run untranslated); no path read falls back to git's own verdict line.
+const refusedPaths = (error: unknown): string[] =>
+    (stderrOf(error) ?? "")
         .split("\n")
         .filter((line) => line.startsWith("error:"))
         .flatMap((line) => /'([^']+)'/.exec(line)?.[1] ?? []);
-};
 
 // Local-only commits rebuilt on `upstream` by `git replay`, which writes no file, index or ref; `reset --keep` then moves
 // the checkout as a fast-forward would, refusing rather than touching an uncommitted file the move would change.
+// `replay.refAction=print` keeps it that way: git 2.53 made replay move the refs itself by default, which would move the
+// checked-out branch under an index and worktree left at the old tip. Older git ignores the key, and only prints.
 const replayOnto = async (dir: string, branch: string, upstream: string, ahead: number, author: Author, git: GitRunner): Promise<ActionResult> => {
     const local = ahead === 1 ? "1 local commit" : `${ahead} local commits`;
     let replayed: string;
     try {
-        replayed = (await git(dir, [...identity(author), "replay", "--onto", upstream, `${upstream}..refs/heads/${branch}`])).stdout;
+        const replay = ["-c", "replay.refAction=print", "replay", "--onto", upstream, `${upstream}..refs/heads/${branch}`];
+        replayed = (await git(dir, [...identity(author), ...replay])).stdout;
     } catch (error) {
         // Exit 1 with nothing printed is a conflict; any other exit prints its own reason (a merge commit in range).
-        return (error as { code?: unknown }).code === 1
+        return exitCodeOf(error) === 1
             ? { ok: false, reason: `${local} conflict with ${upstream}; rebase in a terminal to resolve them` }
             : { ok: false, reason: gitFailureReason(error, "git replay failed") };
     }

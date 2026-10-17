@@ -198,7 +198,8 @@ describe("a definition from an earlier release", () => {
 
     test("a field never seen before is still refused, and a newer release's file says to update", () => {
         const future = "# written by intentic 9.0.0\nschemaVersion = 1\n[settings]\nwarpDrive = true\n";
-        expect(() => parseDefinitionToml(future)).toThrow('this is TOML but not a sandbox definition: settings: Unrecognized key: "warpDrive"');
+        // Our sentence, the section and the key are pinned; how zod words the refusal between them is zod's.
+        expect(() => parseDefinitionToml(future)).toThrow(/this is TOML but not a sandbox definition: settings: .*"warpDrive"/);
         expect(unreadableDefinition(future, 'settings: Unrecognized key: "warpDrive"', "1.400.0").message).toBe(
             'this definition was written by intentic 9.0.0, newer than this sandbox (1.400.0); update the sandbox to apply it (settings: Unrecognized key: "warpDrive")',
         );

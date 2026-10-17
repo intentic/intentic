@@ -1,5 +1,5 @@
 import { focusRefusal, parseSessionJson, parseWindowsJson } from "../parse.js";
-import { psText } from "./powershell.js";
+import { PS_UTF8_OUTPUT, psText } from "./powershell.js";
 import { run } from "../run.js";
 import { DesktopError, type SessionState, type WindowInfo } from "../types.js";
 import { WINDOWS_DPI_AWARE } from "./windows-dpi.js";
@@ -113,7 +113,8 @@ $locked = @(Get-Process -Name 'LogonUI' -ErrorAction SilentlyContinue | Where-Ob
 ConvertTo-Json -Compress -InputObject ([pscustomobject]@{ locked = $locked; id = $id; title = $title; app = $app });
 `;
 
-const powershell = (script: string): Promise<string> => run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `${SHIM}${script}`]);
+// Window titles and the clipboard come back as text in any language, so the answer is asked for in UTF-8.
+const powershell = (script: string): Promise<string> => run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `${PS_UTF8_OUTPUT}${SHIM}${script}`]);
 
 /**
  * Whether this desktop can be driven at all, and by whom it is currently held. Windows-only, and named so:

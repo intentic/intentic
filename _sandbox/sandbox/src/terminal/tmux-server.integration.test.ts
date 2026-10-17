@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createLogger } from "../logger.js";
-import { isNoTmuxServer, pinTmuxServer, tmuxServerLeaked } from "./tmux-server.js";
+import { isNoTmuxServer, isNoTmuxTarget, pinTmuxServer, tmuxServerLeaked } from "./tmux-server.js";
 
 // Runs against a real tmux server (src/testing/tmux-fence.ts's private `-S` shim), exercising the pin and proving the
 // fence: nothing here can reach the daemon's socket even though every call is bare `tmux`.
@@ -45,6 +45,23 @@ test("the pinned server's answers to a listing and to an exact target both read 
             (error: unknown) => error,
         );
         expect(isNoTmuxServer(failure)).toBe(true);
+    }
+});
+
+// A server holding other sessions answers a lookup of one it lacks with its own words, which only isNoTmuxTarget reads
+// as gone: a session's panes to end (managed-processes.ts), a pane to read (pane-door.ts).
+test("a running server's answer for a session it does not hold is no target, and not no server", async () => {
+    await pinTmuxServer(logger);
+    await tmux("new-session", "-d", "-s", "intentic-target-probe");
+    try {
+        const failure: unknown = await execFileAsync("tmux", ["list-panes", "-s", "-t", "=panel-not-there:", "-F", "#{pane_pid}"]).then(
+            () => undefined,
+            (error: unknown) => error,
+        );
+        expect(isNoTmuxTarget(failure)).toBe(true);
+        expect(isNoTmuxServer(failure)).toBe(false);
+    } finally {
+        await tmux("kill-session", "-t", "=intentic-target-probe");
     }
 });
 

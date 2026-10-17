@@ -16,6 +16,7 @@ import { agentPath, download, launcherAssetName, launcherAssetUrl, launcherPath 
 import { verifyReleaseFiles } from "./release/release-verify.js";
 import { type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
 import { MACHINE_VERSION } from "./version.js";
+import { readRegistryValue, type RegistryValue } from "./windows-registry.js";
 
 // Everything an installer used to decide, decided once, here: the shims put a first agent down and exec `setup`.
 
@@ -101,36 +102,22 @@ const WINDOWS_ENV_BROADCAST = [
     `[void][Intentic.Native]::SendMessageTimeout([IntPtr]0xffff,0x1A,[UIntPtr]::Zero,'Environment',2,5000,[ref]$r)`,
 ].join(";");
 
-// The per-user PATH out of `reg query HKCU\Environment` rows; only no row named Path (case-insensitively) is empty.
-// The value is written back whole, so one this cannot read throws rather than being replaced by the folder added.
-export const windowsPathFrom = (listing: string): { readonly kind: string; readonly stored: string } => {
-    const row = listing
-        .split(/\r?\n/)
-        .map((line) => /^\s+(.+?)\s{2,}(REG_[A-Z_]+)(?:\s{2,}(.*))?$/.exec(line))
-        .find((match) => match?.[1]?.toLowerCase() === "path");
-    if (row === undefined || row === null) {
+// The per-user PATH as stored: absent is an empty REG_EXPAND_SZ. The value is written back whole, so one this cannot
+// write back the same throws rather than being replaced by the folder added. Pure.
+export const windowsPathFrom = (value: RegistryValue | undefined): { readonly kind: string; readonly stored: string } => {
+    if (value === undefined) {
         return { kind: "REG_EXPAND_SZ", stored: "" };
     }
-    const [, , kind = "", data = ""] = row;
-    if (kind !== "REG_SZ" && kind !== "REG_EXPAND_SZ") {
-        throw new Error(`your PATH is stored as ${kind}, which this installer does not rewrite`);
+    if (value.kind !== "REG_SZ" && value.kind !== "REG_EXPAND_SZ") {
+        throw new Error(`your PATH is stored as ${value.kind}, which this installer does not rewrite`);
     }
-    return { kind, stored: data.trimEnd() };
+    return { kind: value.kind, stored: value.data };
 };
 
-// HKCU\Environment is read and written through reg.exe, which neither expands REG_EXPAND_SZ on query nor
-// changes a value's kind on add, the property [Environment]::SetEnvironmentVariable lacks. The whole key is listed,
-// since `/v Path` exits 1 alike for a value that is absent and for a query that failed.
-const readWindowsPath = async (): Promise<{ readonly kind: string; readonly stored: string }> => {
-    const query = await runBounded("reg", ["query", "HKCU\\Environment"], { timeoutMs: 15_000 });
-    if (query.spawnError !== undefined) {
-        throw query.spawnError;
-    }
-    if (query.exitCode !== 0) {
-        throw new Error(query.stderr.text.trim() === "" ? `reg query exited ${String(query.exitCode)}` : query.stderr.text.trim());
-    }
-    return windowsPathFrom(query.stdout.text);
-};
+// Read unexpanded and with its kind (windows-registry.ts), the property [Environment]::GetEnvironmentVariable lacks;
+// written through reg.exe, which never changes a value's kind on add and takes the value as UTF-16 from Node's argv.
+const readWindowsPath = async (): Promise<{ readonly kind: string; readonly stored: string }> =>
+    windowsPathFrom(await readRegistryValue("HKCU:\\Environment", "Path"));
 
 const writeWindowsPath = async (kind: string, value: string): Promise<void> => {
     const add = await runBounded("reg", ["add", "HKCU\\Environment", "/v", "Path", "/t", kind, "/d", value, "/f"], { timeoutMs: 15_000 });

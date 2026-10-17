@@ -99,6 +99,19 @@ describe("XAdES", () => {
         expect((await verify("wniosek.xml", bytes(swapped))).signatures[0]?.integrity).toBe("invalid");
     });
 
+    // xmldsigjs says so by its error's code: what it does not implement is not judged, where a wrong digest is.
+    test("a transform or signature method this verifier does not implement leaves the signature not checked", async () => {
+        const xml = await signXadesEnveloped("<wniosek/>", parties.signer);
+        const transform = xml.replace('Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"', 'Transform Algorithm="urn:example:unknown-transform"');
+        const method = xml.replace("http://www.w3.org/2001/04/xmldsig-more#rsa-sha256", "urn:example:unknown-signature");
+        for (const changed of [transform, method]) {
+            expect(changed).not.toBe(xml);
+            const [signature] = (await verify("wniosek.xml", bytes(changed))).signatures;
+            expect(signature?.integrity).toBe("not-checked");
+            expect(signature?.integrityDetail).toContain("urn:example:unknown-");
+        }
+    });
+
     test("a signature time-stamp over the canonical SignatureValue is verified", async () => {
         const xml = await signXadesEnveloped("<wniosek/>", parties.signer, { timestampBy: parties.tsa });
         const [signature] = (await verify("wniosek.xml", bytes(xml))).signatures;

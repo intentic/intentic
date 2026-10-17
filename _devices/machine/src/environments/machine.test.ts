@@ -1,5 +1,5 @@
 import { withSwitches } from "./commands.js";
-import { supervisedByWindows, withChild, withoutChild } from "./machine.js";
+import { profileFromBase64, supervisedByWindows, withChild, withoutChild } from "./machine.js";
 
 describe("the children registry", () => {
     it("adds a distro once, sorted, and removes it without leaving an empty list behind", () => {
@@ -40,5 +40,19 @@ describe("withSwitches", () => {
         const off = withSwitches({ sandboxUpdates: false }, { backups: "off", tidy: "off" });
         expect(off).toEqual({ sandboxUpdates: false, sandboxBackups: false, sandboxTidy: false });
         expect(withSwitches(off, { backups: "on" })).toEqual({ sandboxUpdates: false, sandboxTidy: false });
+    });
+});
+
+// cmd's echo of %USERPROFILE% arrived in the OEM code page; base64 of the UTF-8 arrives the same in every code page.
+describe("profileFromBase64", () => {
+    it("reads a profile with Polish letters in it as Windows names it", () => {
+        const profile = "C:\\Users\\Zażółć Gęślą";
+        expect(profileFromBase64(`${Buffer.from(profile, "utf8").toString("base64")}\r\n`)).toBe(profile);
+    });
+
+    it("answers nothing for what is not base64", () => {
+        expect(profileFromBase64("")).toBeUndefined();
+        expect(profileFromBase64("C:\\Users\\dev")).toBeUndefined();
+        expect(profileFromBase64("powershell.exe : The term is not recognized")).toBeUndefined();
     });
 });

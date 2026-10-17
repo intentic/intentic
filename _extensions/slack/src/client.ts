@@ -1,6 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
 import { SocketModeClient } from "@slack/socket-mode";
-import { WebClient } from "@slack/web-api";
+import { WebAPIPlatformError, WebClient } from "@slack/web-api";
 
 // One Socket Mode socket + Web API client per configured Slack app, alive while the daemon reports an enabled listener
 // automation; a module singleton reached by the reconcile loop and the listener. Socket Mode's outbound connection
@@ -58,17 +58,21 @@ export const closeSlackConnection = async (appToken: string): Promise<void> => {
     await connection.socket.disconnect().catch(() => undefined);
 };
 
-// Slack's dead-credential codes are always fatal; anything else is a transient failure to retry.
-const FATAL_CODES = ["invalid_auth", "not_authed", "account_inactive", "token_revoked", "token_expired", "team_disabled"];
+// The code Slack answered a call with ("already_reacted", "not_allowed"), for a call Slack itself refused. Read off the
+// answer rather than the SDK's sentence around it; socket.start() throws the same error for apps.connections.open.
+export const slackErrorCode = (error: Error): string | undefined => (error instanceof WebAPIPlatformError ? error.data.error : undefined);
 
-const authFailure = (error: unknown, field: string, prefix: string): Error => {
-    const message = errorMessage(error);
-    const code = FATAL_CODES.find((candidate) => message.includes(candidate));
-    if (code !== undefined) {
+// Slack's dead-credential codes are always fatal (user_removed_from_team is one Socket Mode also gives up on); anything
+// else is a transient failure to retry.
+const FATAL_CODES = new Set(["invalid_auth", "not_authed", "account_inactive", "token_revoked", "token_expired", "team_disabled", "user_removed_from_team"]);
+
+export const authFailure = (error: unknown, field: string, prefix: string): Error => {
+    const code = error instanceof Error ? slackErrorCode(error) : undefined;
+    if (code !== undefined && FATAL_CODES.has(code)) {
         return new FatalSlackError(`Slack rejected the ${field} (${code}): paste a fresh ${prefix} token on the Slack capability`);
     }
-    if (message.includes("missing_scope")) {
-        return new FatalSlackError(`The Slack app is missing a required scope: reinstall it with the scopes the capability card lists (${message})`);
+    if (code === "missing_scope") {
+        return new FatalSlackError(`The Slack app is missing a required scope: reinstall it with the scopes the capability card lists (${errorMessage(error)})`);
     }
-    return error instanceof Error ? error : new Error(message);
+    return error instanceof Error ? error : new Error(errorMessage(error));
 };

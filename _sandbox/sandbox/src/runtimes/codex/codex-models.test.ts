@@ -1,4 +1,4 @@
-import { CODEX_ADVISORY, CODEX_MODEL_INVALID, discoverCodexModels, discoverTranslatorCodexModels, isCodexModel } from "./codex-models.js";
+import { CODEX_ADVISORY, discoverCodexModels, discoverTranslatorCodexModels, isCodexModel, isCodexModelInvalid } from "./codex-models.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
 
@@ -50,11 +50,13 @@ test("discoverCodexModels returns [] on a non-ok response so the caller falls th
     expect(await discoverCodexModels("tok", fake)).toEqual([]);
 });
 
-test("CODEX_MODEL_INVALID matches the ChatGPT-account rejection", () => {
-    expect(CODEX_MODEL_INVALID.test("The 'gpt-5-codex' model is not supported when using Codex with a ChatGPT account.")).toBe(true);
-    expect(CODEX_MODEL_INVALID.test("The model `gpt-5-foo` does not exist or you do not have access to it.")).toBe(true);
-    expect(CODEX_MODEL_INVALID.test("model not found")).toBe(true);
-    expect(CODEX_MODEL_INVALID.test("rate limit reached")).toBe(false);
+test("isCodexModelInvalid matches the ChatGPT-account rejection", () => {
+    expect(isCodexModelInvalid("The 'gpt-5-codex' model is not supported when using Codex with a ChatGPT account.")).toBe(true);
+    expect(isCodexModelInvalid("The model `gpt-5-foo` does not exist or you do not have access to it.")).toBe(true);
+    expect(isCodexModelInvalid("model not found")).toBe(true);
+    expect(isCodexModelInvalid("rate limit reached")).toBe(false);
+    // A tool's failure in the same words is not the model's: read as one, it unpinned a model that was serving.
+    expect(isCodexModelInvalid("apply_patch failed: src/app.ts does not exist")).toBe(false);
 });
 
 test("the metadata advisory is a warning, not a rejection: reading it as one would drop a working model", () => {
@@ -63,6 +65,6 @@ test("the metadata advisory is a warning, not a rejection: reading it as one wou
     const advisory = "Model metadata for `gpt-5.6-sol` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.";
 
     expect(CODEX_ADVISORY.test(advisory)).toBe(true);
-    expect(CODEX_MODEL_INVALID.test(advisory)).toBe(false);
+    expect(isCodexModelInvalid(advisory)).toBe(false);
     expect(CODEX_ADVISORY.test("The 'gpt-5-codex' model is not supported when using Codex with a ChatGPT account.")).toBe(false);
 });
