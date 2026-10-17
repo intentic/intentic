@@ -140,8 +140,24 @@ export const raw = {
     // No phone is paired in the demo, but adding the Android card mints a pairing, so its QR code can be seen; nothing
     // can ever redeem this one.
     "GET /system/phones": () => json({ phones: [] }),
-    // No other sandbox is linked to hand the demo tasks: the Access tab's linked sandboxes section shows none.
-    "GET /system/links": () => json({ links: [] }),
+    // The support desk's own sandbox hands this one tasks as Maya, one of them waiting for the owner's yes: the Access tab's
+    // linked sandboxes section and the map's left column both have one to show.
+    "GET /system/links": () =>
+        json({
+            links: [
+                {
+                    id: `lnk_support`,
+                    label: `support-desk`,
+                    from: { sandboxId: `sbx_support`, url: `https://support-desk.acme.dev` },
+                    terms: { actsAs: `maya-support`, approve: true, turnsPerHour: 20 },
+                    createdAt: Date.now() - 20 * 24 * 3_600_000,
+                    createdBy: `ada@acme.dev`,
+                    lastUsedAt: Date.now() - 2 * 3_600_000,
+                    conversations: 4,
+                    requests: [{ id: `req_1`, conversationId: `link-refund-macro`, task: `Draft the refund macro for damaged parcels`, askedAt: Date.now() - 40 * 60_000 }],
+                },
+            ],
+        }),
     "GET /speech/voices": () => json(DEMO_VOICES),
     "POST /system/phones/pair": () => json({ token: `demo-pairing-never-redeemable`, expiresIn: 600_000 }),
     // intentic-netd's own answer in a real sandbox: a daemon that is up, idle and never restarted.

@@ -157,6 +157,12 @@ export const PAIRED_PHONES = family(`phones`);
 export const RUNNERS = family(`runners`);
 export const REGISTRY = family(`registry`);
 export const SANDBOX_MEMBERS = family(`members`);
+// The platform's invite records for this sandbox (invite.list): whose invite still waits, and whose ran out.
+export const SANDBOX_INVITES = family(`invites`);
+// The control tokens minted against this sandbox and the other sandboxes' links into it (GET /system/control/tokens,
+// GET /system/links), as Sandbox ▸ Map reads them; the Access tab keeps its own lists, the ones it mints into and revokes.
+export const CONTROL_TOKENS = family(`control-tokens`);
+export const INBOUND_LINKS = family(`inbound-links`);
 // What the signed-in person's own grant allows (GET /members/self), read for a writer, whose tier alone does not say
 // whether it runs agents.
 export const SANDBOX_SELF_ACCESS = family(`members-self`);

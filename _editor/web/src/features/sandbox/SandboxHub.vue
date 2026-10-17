@@ -25,6 +25,7 @@ import HubLayout from "../../workbench/hub/HubLayout.vue";
 import type { HubTab } from "../../workbench/hub/hubNav";
 import { hubWorkKey, hubWorkRunning } from "../../workbench/hub/hubWork";
 import SandboxAccess from "./access/SandboxAccess.vue";
+import SandboxMap from "./map/SandboxMap.vue";
 import SandboxAgent from "./overview/SandboxAgent.vue";
 import SandboxModels from "./models/SandboxModels.vue";
 import { sourcesNeedingSomeone } from "./models/modelSources";
@@ -197,6 +198,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
                     <template #turns><ExtensionView v-bind="embedded(`activity`)!" /></template>
                 </SandboxActivity>
                 <SandboxEnvironment v-else-if="slug === `environment`" />
+                <SandboxMap v-else-if="slug === `map`" :models="sources" />
                 <SandboxAccess v-else-if="slug === `access`" :open="openPersona" />
                 <SandboxPersonas v-else-if="slug === `personas`" :open="openPersona" />
                 <SandboxAreas v-else-if="slug === `areas`" />

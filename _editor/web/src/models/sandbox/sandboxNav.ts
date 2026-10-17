@@ -60,6 +60,10 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
         key: `reach`,
         label: t(`sandbox.sandboxNav.reach`),
         items: [
+            // The whole of the group on one drawing: who gets in, the box, and everything it reaches, each line drawn from
+            // what the daemon enforces. First, since it is the overview of the three rows below, which each set one part of
+            // it. Maintainer, as most of what it draws is a maintainer's read (connections, tokens, links).
+            { slug: `map`, label: t(`sandbox.sandboxNav.map`), icon: `sitemap`, maintainer: true },
             // Who may use this box: members, invites, roles. `shield`, not `users` (Personas' glyph, one row below).
             // Access stays below maintainer: revoking your own grant is anyone's.
             { slug: `access`, label: t(`sandbox.words.access`), icon: `shield` },

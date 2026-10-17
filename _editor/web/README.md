@@ -68,6 +68,18 @@ flowchart LR
   rail tile, the page or the control itself, the closest one on screen leading (`features/tour/`). The list is never
   offered on a sandbox where work has already landed, so nobody who is past their first run meets it. `?mode=fresh`
   in `_site/demo` shows it.
+- **Map.** `/sandbox/map` (`features/sandbox/map/`, maintainer and up) opens the hub's Reach group and draws its other
+  three rows as one picture. On the left are the ways in: people, control tokens and other sandboxes' links. In the
+  middle is the box, with its areas, personas and secrets. On the right is everything it reaches: services, accounts
+  and browsers, machines, other sandboxes, what it publishes, and models. Pointing at a way in lights what it reaches
+  and dims the rest. Pointing at a thing lights who reaches it, and threads it to what it is tied to (a persona to its
+  accounts, an area to the personas that live there). A click keeps the focus. Each line is worked out with the rules
+  the daemon refuses on (`reachModel.ts`): a grant's areas and edit scope, the personas its fence holds
+  (`fenceHoldsPersona`), its credential reach, and for someone who only chats or a link's tasks, what their personas
+  allow (`personaAllowsCapability`, shared with the daemon through the contract). A connection whose tile is not loaded
+  still appears under its own id. The roster is the owner's to read, so a maintainer's map shows tokens, links and
+  themselves, and says so. It is core rather than an extension for the same reason as the audit log: it describes the
+  security model, and a copy of those rules that drifted, or that someone switched off, would misstate it.
 - **Privacy & safety, then Records.** The hub's last two groups (`sandboxNav.ts`). Privacy & safety holds what the
   whole box does with what passes through it, each a page that sets it: Data protection (below), Privacy shield
   (`features/sandbox/privacy-shield/`: the shield, its trusted providers, and Intentic's product analytics), Guardrails

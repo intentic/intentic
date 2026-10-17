@@ -1,6 +1,7 @@
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { ConversationGrant } from "@intentic/sandbox-contract/schemas/needs";
 import { type Fence, fenceIntersection } from "@intentic/sandbox-contract/policy/fence-paths";
+import { isSignedInAccount, personaAllowsCapability } from "@intentic/sandbox-contract/policy/persona-capability";
 import {
     type Persona,
     type PersonaPowers,
@@ -75,38 +76,7 @@ const NONE_POWERS: PersonaPowers = {
 const EVERYTHING = (): boolean => true;
 const NOTHING = (): boolean => false;
 // Identities count as accounts: an identity's browser holds every account born from it.
-const ACCOUNTS_ONLY_DENIED = (capability: Capability): boolean => capability.kind !== "browser" && capability.kind !== "identity";
-
-// Which capability kinds a persona has an opinion about; a kind absent from this switch (an agent runtime, a devops entry)
-// passes through untouched, so a new kind is never silently denied.
-const allowsCapability = (capability: Capability, persona: Persona, powers: PersonaPowers): boolean => {
-    switch (capability.kind) {
-        // The signed-in browsers: the persona's own `capabilities` list, and the field that predates the shelves.
-        case "browser":
-            return persona.capabilities.includes(capability.id);
-        // Granting an account (`reddit-work`) grants its hands; granting the identity itself grants the someone.
-        case "identity":
-            return persona.capabilities.includes(capability.id);
-        // Connector credentials reach the shell; an ungranted id keeps its env vars out of the turn entirely.
-        case "cli":
-            return powers.connectors === undefined || powers.connectors.includes(capability.id);
-        // A phone is one of the owner's own devices, on the same shelf as their computers.
-        case "device":
-        case "phone":
-            return powers.devices === undefined || powers.devices.includes(capability.id);
-        case "mcp":
-            return powers.mcp === undefined || powers.mcp.includes(capability.id);
-        // Making sandboxes on the owner's account is administering what this one runs beside: the sandbox shelf.
-        case "fleet":
-            return powers.sandbox;
-        // Another of the owner's sandboxes sits on the devices list beside their computers, picked one by one, and handing
-        // it a task is delegating, as spawning a subagent is.
-        case "link":
-            return powers.delegate && (powers.devices === undefined || powers.devices.includes(capability.id));
-        default:
-            return true;
-    }
-};
+const ACCOUNTS_ONLY_DENIED = (capability: Capability): boolean => !isSignedInAccount(capability.kind);
 
 export const turnPersona = ({ personas, actsAs, unattended, fence }: TurnPersonaInput): TurnPersona => {
     if (actsAs === undefined) {
@@ -122,7 +92,7 @@ export const turnPersona = ({ personas, actsAs, unattended, fence }: TurnPersona
     const powers = PersonaPowersSchema.parse(persona.powers ?? {});
     return {
         persona,
-        allows: (capability) => allowsCapability(capability, persona, powers),
+        allows: (capability) => personaAllowsCapability(capability, persona.capabilities, powers),
         powers,
         ...(persona.workspace !== undefined ? { workspace: persona.workspace } : { workspace: undefined }),
         // The persona narrows the conversation's fence, never widens it: one naming a folder its starter cannot see
