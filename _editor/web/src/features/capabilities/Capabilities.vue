@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useSandbox } from "../../client/sandbox/useSandbox";
 import {
     BrandMark,
     Button,
@@ -19,6 +20,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LiveLinkRows from "./LiveLinkRows.vue";
+import GpuHostedNote from "./GpuHostedNote.vue";
 import { startAgent } from "../../models/fleet/agentActions";
 import { useExtensions } from "../../models/extensions/useExtensions";
 import { useRegistry } from "../extensions/useRegistry";
@@ -134,7 +136,9 @@ const pane = useTilePane({
 });
 const { selectedDevices, cardProcesses, rowState, cardRowFacts, soleRebuildStep, publishedCount, verifiedCount, selectedRecommendation } = pane;
 
+const hosted = computed(() => useSandbox().active.value?.hosted != null);
 const form = useCapabilityForm({
+    hosted,
     selected,
     editing,
     instances: selectedInstances,
@@ -159,6 +163,7 @@ const { connectVisible, connectId, connectPlatform, connectPermissions, connectU
 const { browserConnectVisible, browserConnectId, browserInstall, browserPermissions, onBrowserExtConnected, handOff } = pairing;
 const { phoneConnectVisible, phoneConnectId, phoneInstall, phonePermissions, phonePlatform, onPhoneConnected } = pairing;
 const { submit, submitting, failure: saveFailure } = useCapabilitySubmit({
+    hosted,
     selected,
     editing,
     capabilities,
@@ -486,6 +491,7 @@ onBeforeUnmount(() => {
                                 />
                             </label>
 
+                            <GpuHostedNote v-if="selected.kind === 'docker' && hosted" v-model="values['gpu']" />
                             <!-- Main fields first, rarely-changed ones folded behind Advanced. -->
                             <template v-for="field in mainFields(selected)" :key="field.key">
                                 <!-- An extension pins a commit, so that box is answered from the repository rather than typed into. -->

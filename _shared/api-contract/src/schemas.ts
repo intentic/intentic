@@ -156,15 +156,11 @@ export interface PlanStreamEvent {
 
 // ---- sandboxes: the user's workspaces + shared access ----
 
-
-
-
 // Two copies of one sandbox seen announcing side by side, on the owner's summary: what each copy named itself as
 // (`rog (windows)`, `rog (linux)`), and since when. The tunnel keeps only one of them at a time, so the other is an
 // agent and a disk nobody can reach; the owner is the one who decides which copy goes.
 export const DuplicateCopiesSchema = z.object({ hosts: z.array(z.string()), since: z.string() });
 export type DuplicateCopies = z.infer<typeof DuplicateCopiesSchema>;
-
 
 // A short-lived code the recovery panel puts in the command it hands out, so the run can report back to the page that
 // asked for it without a credential in the shell's history. Owner-only, own-machine sandboxes only.
@@ -228,8 +224,9 @@ export const HostedBuildStatusSchema = z.object({
 export type HostedBuildStatus = z.infer<typeof HostedBuildStatusSchema>;
 
 // The hosted machine as the browser sees it; its presence means "call wake", never "it's gone".
-// No live machine state here: `wake` is idempotent, so the daemon's own answer is the only source of truth.
+// State is a placement hint; only a daemon answer proves reachability. Older platforms omit it.
 export const SandboxHostedSchema = z.object({
+    state: z.enum(["awake", "asleep", "starting", "down", "unknown"]).optional(),
     region: z.string(),
     // Whether the machine came warm from the pool (seconds) or was built to order (a cold image pull, minutes).
     warm: z.boolean(),
@@ -324,7 +321,6 @@ export const AdoptionTicketSchema = z.object({
 });
 export type AdoptionTicket = z.infer<typeof AdoptionTicketSchema>;
 
-
 export const SandboxSummarySchema = z.object({
     id: z.string(),
     name: z.string(),
@@ -350,7 +346,7 @@ export const SandboxSummarySchema = z.object({
     providedAddress: z.boolean(),
     // Loopback listener's certified name, or null; server-computed, since it's a different zone from the sandbox.
     localHostname: z.string().nullable(),
-    // The hosted lane's live machine record, null off-platform; unreachable with `state` != started means wake it.
+    // The hosted lane's machine placement, null off-platform. An asleep machine wakes when selected or retried.
     hosted: SandboxHostedSchema.nullable(),
     // The version the sandbox's daemon named in its last check-in, which is what the platform knows it runs even
     // while it is down. Null until a daemon that names its version checks in; absent from an older platform.
@@ -472,7 +468,6 @@ export type CfZones = z.infer<typeof CfZonesSchema>;
 // Redeemed at /setup/claim for a connect token and reachability grant; the address is derived, not chosen.
 export const SetupCodeSchema = z.object({ code: z.string(), hostname: z.string(), expiresAt: z.string() });
 export type SetupCode = z.infer<typeof SetupCodeSchema>;
-
 
 // A "view" is a projection of the desired-state graph plus reconciliation drift.
 // Read through the sandbox's own git routes (desired-state.json + status.json); it stays the source of truth.

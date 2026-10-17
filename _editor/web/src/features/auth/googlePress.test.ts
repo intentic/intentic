@@ -57,7 +57,7 @@ it(`says nothing before a press, however long the page sits`, async () => {
     expect(stalled.value).toBe(false);
 });
 
-it(`gives Google's window as long as it stays up, then a few seconds once the reader is back`, async () => {
+it(`gives Google's window as long as it stays up, then a long grace once the reader is back`, async () => {
     const { stalled } = watchPresses();
 
     press();
@@ -67,7 +67,7 @@ it(`gives Google's window as long as it stays up, then a few seconds once the re
     expect(stalled.value).toBe(false);
 
     focused = true;
-    await advanceTimersByTimeAsync(2_000);
+    await advanceTimersByTimeAsync(24_000);
     expect(stalled.value).toBe(false);
     await advanceTimersByTimeAsync(1_500);
 
@@ -163,4 +163,45 @@ it(`reports a stalled page once, however many presses follow`, async () => {
     await advanceTimersByTimeAsync(8_500);
 
     expect(track).toHaveBeenCalledTimes(1);
+});
+
+// The field case: focus came back for a moment (a click on the page, a passkey prompt) while Google's window was still
+// signing the reader in, and the credential landed 48 s after the press.
+it(`does not call a sign-in dead because focus came back for a moment, and counts the one that finishes`, async () => {
+    const { stalled, completed } = watchPresses();
+
+    press();
+    focused = false;
+    await advanceTimersByTimeAsync(10_000);
+    focused = true;
+    await advanceTimersByTimeAsync(3_000);
+    expect(stalled.value).toBe(false);
+    focused = false;
+    await advanceTimersByTimeAsync(35_000);
+    completed();
+
+    expect(stalled.value).toBe(false);
+    expect(track).toHaveBeenCalledTimes(1);
+    expect(track).toHaveBeenCalledWith(`signin_completed`, { method: `google`, stall_shown: false });
+});
+
+it(`takes the note down when the credential arrives after it was shown`, async () => {
+    const { stalled, completed } = watchPresses();
+
+    press();
+    await advanceTimersByTimeAsync(8_500);
+    expect(stalled.value).toBe(true);
+    completed();
+
+    expect(stalled.value).toBe(false);
+    expect(track).toHaveBeenLastCalledWith(`signin_completed`, { method: `google`, stall_shown: true });
+});
+
+it(`does not count a dismissal as a completed sign-in`, async () => {
+    const { answered } = watchPresses();
+
+    press();
+    answered();
+
+    expect(track).not.toHaveBeenCalled();
 });

@@ -176,6 +176,7 @@ export interface CapabilityGuide {
 
 // This package is a kind's whole story: tiles declare the form, effects.ts declares the consequence.
 export * from "./effects.js";
+export * from "./gpu.js";
 
 // The grid the rail's "+" renders; a tile is a capability type; the user names each instance, so a provider can have N.
 export interface CapabilityCatalogEntry {
@@ -393,7 +394,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 boolean: true,
                 default: "off",
                 rebuild: true,
-                hint: "Needs an NVIDIA GPU and nvidia-container-toolkit on the host.",
+                hint: "Local or self-hosted only. Needs an NVIDIA GPU and nvidia-container-toolkit or CDI on the host; checked before saving.",
             },
             {
                 key: "registryMirror",

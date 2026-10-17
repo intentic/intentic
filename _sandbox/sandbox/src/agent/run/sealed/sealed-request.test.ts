@@ -1,13 +1,15 @@
-import { WORKSPACE_ROOT } from "@intentic/constants";
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
 import { privacySliceFake } from "../../../privacy/privacy-slice.testing.js";
 import { tokenOf } from "../../../privacy/tokens.js";
-import type { TurnArmPlan, TurnContext } from "../../providers/adapter.js";
+import type { IsolationPlan, TurnPlacement } from "../../../conversations/worktrees/isolation.js";
+import { armPlan, type TurnArmPlan, type TurnContext } from "../../providers/adapter.js";
 import { AgentDomainRefusedError, type AgentExecutionLease } from "../../../workload/agent-execution.js";
-import { rootExecution } from "../../../workload/agent-execution.testing.js";
+import { rootExecution, rootExecutionService } from "../../../workload/agent-execution.testing.js";
+import { forgetNamespaceEntry, registerMountEntry } from "../../../workload/namespace-entry.js";
 import { runSealedRequest, SEALED_SYSTEM_PROMPT, type SealedAsk } from "./sealed-request.js";
 
 // A helper's request on the turn's own seam: planned by the runtime's arm, run by its loop, read whole by the privacy
@@ -313,4 +315,64 @@ test("any other refusal is not a reason to plan again", async () => {
     });
     await expect(runSealedRequest(services(adapter).fake, ask())).rejects.toThrow("Connect your Cursor account again in Sandbox ▸ Agent.");
     expect(planned).toHaveLength(1);
+});
+
+// The arm a real runtime builds: its loop bound through armPlan, so the request it runs is held to the issued context
+// (assertAgentExecution) exactly as in production. What the loop was handed is kept for the assertions.
+const armed = () => {
+    const ran: TurnContext["base"]["spec"][] = [];
+    const adapter: Adapter = {
+        runtime: "cursor",
+        sealed: true,
+        preflight: async (_deps, _input, context): Promise<TurnArmPlan> =>
+            armPlan(
+                async function* (request) {
+                    ran.push(request.spec);
+                    yield* saying("a summary");
+                },
+                { ...context.base, credential: { kind: "cursor-key" as const, apiKey: "key" } },
+                "cursor-one",
+            ),
+        health: unstubbed<Adapter>("adapter", {}).health,
+        holdsSession: unstubbed<Adapter>("adapter", {}).holdsSession,
+    };
+    return { adapter, ran };
+};
+
+const PLAN: IsolationPlan = {
+    root: WORKSPACE_ROOT, worktree: `${HISTORY_ROOT}/worktrees/sealed`, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/sealed`, fence: undefined,
+};
+
+// Regression (deft-vale-wxkr, 2026-10-16T00:54:51Z, "hand-off: no summary was written"): a hand-off summary or a command
+// verdict borrows the execution of a worktree or anchored turn, and its sealed spec carried no isolation, so armPlan
+// refused it on the plan identity. It now carries the admitted isolation, which is also what launches its runtime inside
+// the turn's namespace (agent.ts runtimeSpawn) rather than beside it.
+test.each(["a worktree", "an anchored"] as const)("a sealed request borrowing %s turn's execution runs with that turn's isolation", async (kind) => {
+    const service = rootExecutionService();
+    const admission = await service.admit();
+    const namespace = kind === "an anchored" ? registerMountEntry(62250) : undefined;
+    const anchor = namespace === undefined ? undefined : { pid: namespace.pid, cwd: WORKSPACE_ROOT, plan: PLAN, namespace, dispose: () => {} };
+    const isolation: TurnPlacement = anchor === undefined ? { plan: PLAN } : { plan: PLAN, anchor };
+    const turn = service.acquire(admission, { localCwd: PLAN.worktree, isolation });
+    // The hand-off borrows the turn's context (limit-handoff.ts summaryNote); the judge uses the turn's own.
+    const borrowed = service.borrow(turn.context);
+    try {
+        const { adapter, ran } = armed();
+        await expect(runSealedRequest(services(adapter).fake, ask({ execution: borrowed.context }))).resolves.toBe("a summary");
+        const [spec] = ran;
+        expect(spec?.cwd).toBe(turn.context.cwd);
+        expect(spec?.isolation?.plan).toBe(PLAN);
+        expect(spec?.isolation?.anchor).toBe(anchor);
+    } finally {
+        borrowed.release();
+        turn.release();
+        service.close(admission);
+        if (namespace !== undefined) { forgetNamespaceEntry(namespace); }
+    }
+});
+
+test("a sealed request in a plain view carries no isolation", async () => {
+    const { adapter, ran } = armed();
+    await expect(runSealedRequest(services(adapter).fake, ask())).resolves.toBe("a summary");
+    expect(ran[0]?.isolation).toBeUndefined();
 });

@@ -1,3 +1,4 @@
+import type { LandConflict } from "@intentic/sandbox-contract/schemas/agents";
 import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, effectScope, type EffectScope, onScopeDispose, shallowRef, watch } from "vue";
 import { editsRefusal } from "../../agent-status/agentStatus-attention";
@@ -10,11 +11,11 @@ import { settingsPagesOf } from "./conflictResolution";
 // it: the board card then names them in the review page's words rather than "Your edits". Read off the review's own
 // query (agents.diff, the same key, so opening the review is warm), and only while `refusing`: the query lives in a
 // scope made then and stopped after, so a board of cards holds no read for the ones that aren't refusing.
-export const useSettingsRefusal = (
+export const useWorkspaceRefusal = (
     agent: () => { readonly id: string; readonly sandboxId?: string | undefined },
     refusing: () => boolean,
-): ComputedRef<string | undefined> => {
-    const pages = shallowRef<ComputedRef<string | undefined>>();
+): ComputedRef<readonly LandConflict[] | undefined> => {
+    const pages = shallowRef<ComputedRef<readonly LandConflict[] | undefined>>();
     let scope: EffectScope | undefined;
     const stop = (): void => {
         scope?.stop();
@@ -33,13 +34,21 @@ export const useSettingsRefusal = (
             pages.value = scope.run(() => {
                 const at = (): string | undefined => agent().sandboxId;
                 const { query } = useSandboxQuery({ ...rpcQuery(`agents.diff`, () => ({ id: agent().id }), { at }) }, at);
-                return computed(() => settingsPagesOf(query.data.value?.conflicts));
+                return computed(() => query.data.value?.conflicts);
             });
         },
         { immediate: true },
     );
     onScopeDispose(stop);
     return computed(() => pages.value?.value);
+};
+
+export const useSettingsRefusal = (
+    agent: () => { readonly id: string; readonly sandboxId?: string | undefined },
+    refusing: () => boolean,
+): ComputedRef<string | undefined> => {
+    const conflicts = useWorkspaceRefusal(agent, refusing);
+    return computed(() => settingsPagesOf(conflicts.value));
 };
 
 // A corner chip over such a refusal, named as the review names it ("Unsaved settings") rather than "Your edits", once the

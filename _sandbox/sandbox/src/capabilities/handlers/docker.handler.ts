@@ -148,7 +148,7 @@ const applyEngineSettings = async (ctx: CapabilityCtx, config: unknown): Promise
 // SANDBOX_GPU, the runner's answer to the ask, read fresh each call so tests need not fight module order:
 //   undefined the container predates the ask (not rebuilt yet)
 //   "all" the flag rode; devices should be present
-//   "unsupported" host docker has no nvidia runtime; no rebuild fixes it
+//   "unsupported" the host could not supply a usable GPU (or is hosted); no rebuild fixes it
 const gpuState = (): string | undefined => process.env["SANDBOX_GPU"];
 
 // `nvidia-smi -L` lists the GPUs the toolkit injects; it fails exactly when passthrough didn't really happen (a host
@@ -161,16 +161,19 @@ const gpuVisible = async (): Promise<boolean> =>
 
 // Per-option status, separate from the engine's own state (up, but a GPU may still be missing). A list, since each
 // option names itself; `unsupported` is `error`, not `pending`: no rebuild adds a missing GPU.
-const optionStatuses = async (config: unknown): Promise<CapabilityStatus[]> => {
+export const optionStatuses = async (config: unknown): Promise<CapabilityStatus[]> => {
     if (!gpuAsked(config)) {
         return [];
+    }
+    if (process.env["SANDBOX_VM"] === "1") {
+        return [{ state: "error", detail: "GPU access: unsupported on hosted sandboxes" }];
     }
     const state = gpuState();
     if (state === undefined) {
         return [{ state: "pending", detail: "GPU access: rebuild required" }];
     }
     if (state === "unsupported") {
-        return [{ state: "error", detail: "GPU access: this host's Docker has no nvidia runtime, install nvidia-container-toolkit on it" }];
+        return [{ state: "error", detail: "GPU access: no usable NVIDIA GPU on this host; check its GPU driver and nvidia-container-toolkit or CDI configuration" }];
     }
     return (await gpuVisible()) ? [] : [{ state: "error", detail: "GPU access: passed through but no device answers, check the host's driver" }];
 };
@@ -204,7 +207,7 @@ export const dockerHandler: CapabilityHandler = {
     // option leaking in would charge one for a value dockerd rereads live.
     fragment: async (config) => {
         const engine = await packFragment("docker");
-        const directive = gpuAsked(config) ? `${DOCKER_DIRECTIVE}\n${GPU_FRAGMENT}` : DOCKER_DIRECTIVE;
+        const directive = gpuAsked(config) && process.env["SANDBOX_VM"] !== "1" ? `${DOCKER_DIRECTIVE}\n${GPU_FRAGMENT}` : DOCKER_DIRECTIVE;
         return engine === undefined ? directive : `${engine}\n${directive}`;
     },
     async *apply(ctx, id, config) {
@@ -246,9 +249,12 @@ export const dockerHandler: CapabilityHandler = {
         }
         yield { kind: "log", message: "dockerd did not become ready within 30s, check the panel-docker terminal." };
     },
-    // Engine state first: an option caveat matters on a entry that reads active, but is noise in front of one that reads
-    // dockerd not running.
+    // A hosted GPU ask cannot be granted by rebuilding, even while the engine is still absent. Other option
+    // caveats follow the engine state, so they do not hide why Docker itself is unavailable.
     status: async (ctx, _id, config) => {
+        if (gpuAsked(config) && process.env["SANDBOX_VM"] === "1") {
+            return { state: "error", detail: "GPU access: unsupported on hosted sandboxes" };
+        }
         if (await dockerUp()) {
             return worst(await optionStatuses(config)) ?? { state: "active" };
         }

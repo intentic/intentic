@@ -82,6 +82,7 @@
         "allow-onboarding-set-up",
         "allow-onboarding-pause",
         "allow-onboarding-restart",
+        "allow-onboarding-sign-out",
         "allow-onboarding-use-cloud",
         "allow-first-task-read",
         "allow-first-task-queue",

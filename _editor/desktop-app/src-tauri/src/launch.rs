@@ -19,7 +19,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 
@@ -55,6 +55,18 @@ impl Stage {
     }
 }
 
+/// Written before cleanup: session end does not pass through Tauri's ExitRequested.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ExitCause {
+    Quit,
+    Restart,
+    Update,
+    SessionEnd,
+    #[default]
+    Unknown,
+}
+
 /// What a launch leaves behind about itself, rewritten as it goes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -68,6 +80,8 @@ pub struct Marker {
     pub started_at: u64,
     pub version: String,
     pub stage: Stage,
+    #[serde(default)]
+    pub exit_cause: ExitCause,
 }
 
 /// A panic, as the hook wrote it down for the next launch to report.
@@ -109,9 +123,21 @@ pub enum Report {
     Unreachable { status: String, version: String },
     /// `desktop_crashed`: a panic.
     Crashed {
+        #[serde(default)]
+        at: Option<u64>,
+        #[serde(default)]
+        exit_cause: ExitCause,
         stage: Stage,
         message: String,
         location: String,
+        version: String,
+    },
+    /// Every process start, even when no page reaches its own analytics.
+    Launched {
+        at: u64,
+        launch_id: String,
+        face: String,
+        previous_exit_reason: ExitCause,
         version: String,
     },
     /// `desktop_engine_restarted`: Intentic's engine stopped answering while this app ran, and the engine keeper
@@ -190,6 +216,8 @@ pub fn report_for(
 ) -> Option<Report> {
     if let Some(crash) = crash.filter(|crash| crash.pid == previous.pid) {
         return Some(Report::Crashed {
+            at: Some(crash.at),
+            exit_cause: previous.exit_cause,
             stage: previous.stage,
             message: crash.message.clone(),
             location: crash.location.clone(),
@@ -264,16 +292,42 @@ struct Launch {
 }
 
 static LAUNCH: Mutex<Option<Launch>> = Mutex::new(None);
+static LAUNCH_ID: OnceLock<String> = OnceLock::new();
+static REPORTS: Mutex<()> = Mutex::new(());
+
+/// One id per process, also present in windows created long after startup.
+pub fn id() -> &'static str {
+    LAUNCH_ID.get_or_init(|| uuid::Uuid::new_v4().to_string())
+}
 
 /// The first thing `run` does: the panic hook, the stuck copy, and the marker. Never fails a launch: anything it
 /// cannot do it skips.
 pub fn begin() {
+    let started_at = now();
     install_panic_hook();
     let Some(dir) = config_dir() else {
         return;
     };
     let previous: Option<Marker> = crate::state::read_json(&marker_path(&dir));
-    let replaced = match verdict(running_copy()) {
+    let verdict = verdict(running_copy());
+    keep_report(
+        &dir,
+        Report::Launched {
+            at: started_at,
+            launch_id: id().to_string(),
+            face: if verdict == Verdict::HandOver {
+                "handoff"
+            } else {
+                "none"
+            }
+            .into(),
+            previous_exit_reason: previous
+                .as_ref()
+                .map_or(ExitCause::Unknown, |last| last.exit_cause),
+            version: crate::commands::VERSION.to_string(),
+        },
+    );
+    let replaced = match verdict {
         Verdict::HandOver => return,
         Verdict::Run => None,
         Verdict::Replace { pid } => end_stuck_copy(pid).then_some(pid),
@@ -300,14 +354,107 @@ pub fn begin() {
     let marker = Marker {
         pid,
         identity: process_identity(pid),
-        started_at: now(),
+        started_at,
         version: crate::commands::VERSION.to_string(),
         stage: Stage::Starting,
+        exit_cause: ExitCause::Unknown,
     };
     crate::state::write_json(&marker_path(&dir), &marker);
     *LAUNCH
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Launch { dir, marker });
+}
+
+/// The face actually opened, after local arguments, deep links and the background choice were applied.
+pub fn opened(face: &str) {
+    let _guard = REPORTS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let Some(dir) = config_dir() else { return };
+    let path = reports_path(&dir);
+    let mut reports: Vec<Report> = crate::state::read_json(&path).unwrap_or_default();
+    for report in &mut reports {
+        if let Report::Launched {
+            launch_id,
+            face: opened,
+            ..
+        } = report
+        {
+            if launch_id == id() {
+                *opened = face.into();
+            }
+        }
+    }
+    crate::state::write_json(&path, &reports);
+}
+
+/// A cause known before Exit (our own restart or update). Kept even if Windows ends us directly.
+pub fn exiting(cause: ExitCause) {
+    let mut launch = LAUNCH
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(launch) = launch.as_mut() {
+        launch.marker.exit_cause = cause;
+        crate::state::write_json(&marker_path(&launch.dir), &launch.marker);
+    }
+}
+
+/// Only an accepted ExitRequested is a quit; Exit on its own is Windows ending the session.
+pub fn exit_requested(code: i32) {
+    let cause = if code == tauri::RESTART_EXIT_CODE {
+        ExitCause::Restart
+    } else {
+        ExitCause::Quit
+    };
+    let mut launch = LAUNCH
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(launch) = launch.as_mut() {
+        if launch.marker.exit_cause != ExitCause::Update {
+            launch.marker.exit_cause = cause;
+        }
+        crate::state::write_json(&marker_path(&launch.dir), &launch.marker);
+    }
+}
+
+/// Windows' updater calls process::exit without the event loop. Record that exit before handing over,
+/// but restore the live stage if the installer refuses it.
+pub fn updater_exit() -> Option<(Stage, ExitCause)> {
+    let mut launch = LAUNCH
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let launch = launch.as_mut()?;
+    let before = (launch.marker.stage, launch.marker.exit_cause);
+    if cfg!(windows) {
+        launch.marker.stage = Stage::Exited;
+    }
+    launch.marker.exit_cause = ExitCause::Update;
+    crate::state::write_json(&marker_path(&launch.dir), &launch.marker);
+    Some(before)
+}
+
+pub fn updater_refused(before: Option<(Stage, ExitCause)>) {
+    let mut launch = LAUNCH
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let (Some(launch), Some((stage, cause))) = (launch.as_mut(), before) {
+        launch.marker.stage = stage;
+        launch.marker.exit_cause = cause;
+        crate::state::write_json(&marker_path(&launch.dir), &launch.marker);
+    }
+}
+
+pub fn exited() {
+    let mut launch = LAUNCH
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(launch) = launch.as_mut() {
+        if launch.marker.exit_cause == ExitCause::Unknown {
+            launch.marker.exit_cause = ExitCause::SessionEnd;
+        }
+        launch.marker.stage = Stage::Exited;
+        crate::state::write_json(&marker_path(&launch.dir), &launch.marker);
+    }
 }
 
 /// This launch got as far as `stage`. Only ever forward, and written only when it moves, so the page-load callback
@@ -368,6 +515,9 @@ pub fn note_engine_restart(
 }
 
 fn keep_report(dir: &Path, report: Report) {
+    let _guard = REPORTS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if !analytics_allowed() {
         return;
     }
@@ -465,8 +615,19 @@ pub fn send_reports(app: &AppHandle) {
         let _ = std::fs::remove_file(&path);
         return;
     };
+    static SENDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if SENDING.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    struct Sending;
+    impl Drop for Sending {
+        fn drop(&mut self) {
+            SENDING.store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
     let install_id = app.state::<crate::state::AppState>().install_id();
     tauri::async_runtime::spawn(async move {
+        let _sending = Sending;
         if rustls::crypto::CryptoProvider::get_default().is_none() {
             let _ = rustls::crypto::ring::default_provider().install_default();
         }
@@ -476,7 +637,6 @@ pub fn send_reports(app: &AppHandle) {
         else {
             return;
         };
-        let mut unsent = Vec::new();
         for report in reports {
             if !analytics_allowed() {
                 break;
@@ -489,14 +649,22 @@ pub fn send_reports(app: &AppHandle) {
                 .send()
                 .await
                 .is_ok_and(|response| response.status().is_success());
-            if !sent {
-                unsent.push(report);
+            if sent {
+                // A report may have arrived during the HTTP request. Remove only this one, under the same
+                // lock as append, so completing a send never overwrites a new crash/launch/engine report.
+                let _guard = REPORTS
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                let mut pending: Vec<Report> = crate::state::read_json(&path).unwrap_or_default();
+                if let Some(index) = pending.iter().position(|pending| pending == &report) {
+                    pending.remove(index);
+                }
+                if pending.is_empty() {
+                    let _ = std::fs::remove_file(&path);
+                } else {
+                    crate::state::write_json(&path, &pending);
+                }
             }
-        }
-        if unsent.is_empty() {
-            let _ = std::fs::remove_file(&path);
-        } else {
-            crate::state::write_json(&path, &unsent);
         }
     });
 }
@@ -524,17 +692,31 @@ pub fn event_body(key: &str, install_id: &str, report: &Report) -> serde_json::V
         ),
         Report::Crashed {
             stage,
+            exit_cause,
             message,
             location,
             version,
+            ..
         } => (
             "desktop_crashed",
             serde_json::json!({
                 "stage": stage.word(),
+                "at_exit": *stage == Stage::Exited,
+                "exit_cause": exit_cause,
                 "message": message,
                 "location": location,
                 "launchVersion": version,
             }),
+        ),
+        Report::Launched {
+            launch_id,
+            face,
+            previous_exit_reason,
+            version,
+            ..
+        } => (
+            "desktop_launched",
+            serde_json::json!({ "launch_id": launch_id, "face": face, "previous_exit_reason": previous_exit_reason, "launchVersion": version }),
         ),
         Report::EngineRestarted {
             ok,
@@ -559,12 +741,27 @@ pub fn event_body(key: &str, install_id: &str, report: &Report) -> serde_json::V
     properties["desktop_version"] = crate::commands::VERSION.into();
     properties["desktop_os"] = std::env::consts::OS.into();
     properties["desktop_install_id"] = install_id.into();
-    serde_json::json!({
+    let mut body = serde_json::json!({
         "api_key": key,
         "event": event,
         "distinct_id": install_id,
         "properties": properties,
-    })
+    });
+    let at = match report {
+        Report::Crashed { at, .. } => *at,
+        Report::Launched { at, .. } => Some(*at),
+        _ => None,
+    };
+    if let Some(timestamp) = at
+        .and_then(|at| time::OffsetDateTime::from_unix_timestamp(at.try_into().ok()?).ok())
+        .and_then(|at| {
+            at.format(&time::format_description::well_known::Rfc3339)
+                .ok()
+        })
+    {
+        body["timestamp"] = timestamp.into();
+    }
+    body
 }
 
 /* WHETHER THE LAST LAUNCH'S PROCESS STILL RUNS: its pid, and that it is the same process that wrote the marker. */
@@ -784,6 +981,7 @@ mod tests {
             started_at: 1_000,
             version: "1.326.0".into(),
             stage,
+            exit_cause: ExitCause::Unknown,
         }
     }
 
@@ -882,6 +1080,8 @@ mod tests {
         assert_eq!(
             report_for(&marker(Stage::Shown), Some(&crash), Ending::Gone, 2_000),
             Some(Report::Crashed {
+                at: Some(1_010),
+                exit_cause: ExitCause::Unknown,
                 stage: Stage::Shown,
                 message: "boom".into(),
                 location: "src/lib.rs:297".into(),
@@ -935,6 +1135,61 @@ mod tests {
         assert_eq!(body["properties"]["how"], "replaced");
         assert_eq!(body["properties"]["client"], "desktop");
         assert_eq!(body["properties"]["desktop_install_id"], "install-1");
+    }
+
+    #[test]
+    fn crash_time_and_exit_cause_survive_the_next_launch() {
+        let crash = Crash {
+            pid: 4242,
+            message: "boom".into(),
+            location: "runner.rs:371".into(),
+            version: "1.338.0".into(),
+            at: 1_010,
+        };
+        for (stage, at_exit) in [(Stage::Shown, false), (Stage::Exited, true)] {
+            let mut previous = marker(stage);
+            previous.exit_cause = ExitCause::SessionEnd;
+            let report = report_for(&previous, Some(&crash), Ending::Gone, 2_000).unwrap();
+            let body = event_body("key", "install", &report);
+            assert_eq!(body["timestamp"], "1970-01-01T00:16:50Z");
+            assert_eq!(body["properties"]["at_exit"], at_exit);
+            assert_eq!(body["properties"]["exit_cause"], "session-end");
+        }
+    }
+
+    #[test]
+    fn old_markers_and_queued_crashes_still_read() {
+        let previous: Marker = serde_json::from_str(
+            r#"{"pid":4242,"startedAt":1000,"version":"old","stage":"exited"}"#,
+        )
+        .unwrap();
+        assert_eq!(previous.exit_cause, ExitCause::Unknown);
+        let queued: Report = serde_json::from_str(r#"{"kind":"crashed","stage":"exited","message":"boom","location":"runner.rs","version":"old"}"#).unwrap();
+        let body = event_body("key", "install", &queued);
+        assert_eq!(body["properties"]["at_exit"], true);
+        assert_eq!(body["properties"]["exit_cause"], "unknown");
+        assert_eq!(body.get("timestamp"), None);
+    }
+
+    #[test]
+    fn launch_event_identifies_its_process_and_opened_face() {
+        let body = event_body(
+            "key",
+            "install",
+            &Report::Launched {
+                at: 1_000,
+                launch_id: "launch-1".into(),
+                face: "workspace".into(),
+                previous_exit_reason: ExitCause::Update,
+                version: "new".into(),
+            },
+        );
+        assert_eq!(body["event"], "desktop_launched");
+        assert_eq!(body["timestamp"], "1970-01-01T00:16:40Z");
+        assert_eq!(body["properties"]["launch_id"], "launch-1");
+        assert_eq!(body["properties"]["face"], "workspace");
+        assert_eq!(body["properties"]["previous_exit_reason"], "update");
+        assert_eq!(uuid::Uuid::parse_str(id()).unwrap().get_version_num(), 4);
     }
 
     #[test]

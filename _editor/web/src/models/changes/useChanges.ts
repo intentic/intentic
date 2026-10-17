@@ -27,6 +27,7 @@ import { spliceRepoChanges } from "../workspace/changes/spliceRepoChanges";
 import { truncatedTotal } from "../workspace/changes/truncation";
 import { dropEditBuffers } from "../workspace/files/useEditBuffers";
 import { usePushRun } from "../workspace/push/usePushRun";
+import { runIndexJob } from "./indexRuns";
 import { agentReviewPrefixes, GIT_LOG, rpcKey, rpcPrefix, workingReviewKeys } from "../../lib/queryKeys";
 import { t } from "@intentic/ui/i18n";
 
@@ -210,7 +211,8 @@ const applyCommitResult = async (repo: string, result: CommitResult): Promise<vo
 };
 
 // One real commit per group (git can't span repos); stageFirst stages the group's target first when nothing's staged
-// yet.
+// yet. Each is a commit run (indexRuns.ts), not one request: a stage-first over a dependency tree outlives the header
+// deadline, and the run's guardrail asks before a commit would sweep thousands of files into history.
 // No refetch on the happy path — each commit's own answer is spliced in directly; a refusal falls back to a full read.
 // Answers whether any repo recorded a commit: a "Commit all" over nothing but scratch stages nothing, and git's
 // `committed: false` is then the only sign the typed message went nowhere.
@@ -223,11 +225,12 @@ const commitRepos = async (groups: readonly RepoTarget[], message: string, stage
                 scope: COMMIT_SCOPE,
                 action: t(`workspace.useChanges.commitFailed`),
                 run: async (): Promise<void> => {
-                    const result = await sandboxRpc.git.commit({
-                        repo: group.repo,
-                        message,
-                        ...(stageFirst ? { stage: targetBody(group) } : {}),
-                    });
+                    const run = await runIndexJob(
+                        group.repo,
+                        stageFirst ? { op: `commit`, message, target: targetBody(group) } : { op: `commit`, message },
+                    );
+                    // A passed commit run carries the commit route's own answer.
+                    const result = run.result ?? { committed: false };
                     recorded ||= result.committed;
                     await applyCommitResult(group.repo, result);
                 },
@@ -279,7 +282,9 @@ const abortOperation = (repo: string): Promise<void> =>
     );
 
 // Index-only move; the worktree is untouched, so unlike discard nothing needs resetting or refetching.
-// A group with an empty path list is dropped, since sending it would read as the whole-repo target.
+// A group with an empty path list is dropped, since sending it would read as the whole-repo target. A described target
+// (a side, an origin, the whole repo) stages as a run (indexRuns.ts), since it has no size bound; picked paths are
+// bounded by the wire (MAX_ACTION_PATHS) and stay one request.
 const stageGroups = (groups: readonly RepoTarget[], staged: boolean): Promise<void> =>
     runBatch(
         groups
@@ -288,6 +293,10 @@ const stageGroups = (groups: readonly RepoTarget[], staged: boolean): Promise<vo
                 scope: group.repo,
                 action: staged ? t(`workspace.useChanges.stageFailed`) : t(`workspace.useChanges.unstageFailed`),
                 run: async (): Promise<void> => {
+                    if (staged && group.paths === undefined) {
+                        await runIndexJob(group.repo, { op: `stage`, target: targetBody(group) });
+                        return;
+                    }
                     const target = { repo: group.repo, ...targetBody(group) };
                     await (staged ? sandboxRpc.git.stage(target) : sandboxRpc.git.unstage(target));
                 },

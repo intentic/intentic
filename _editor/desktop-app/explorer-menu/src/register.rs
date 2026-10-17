@@ -392,7 +392,7 @@ fn add_package(manager: &PackageManager, package: &Path, dir: &Path) -> Result<(
         "add package",
         manager.AddPackageByUriAsync(&file_uri(package, false)?, &options),
     )?;
-    deployed("add package", operation.get(), || operation.GetResults())
+    deployed("add package", operation.join(), || operation.GetResults())
 }
 
 /// The full name a package file will register under, read from its own manifest by Windows' packaging API.
@@ -475,7 +475,9 @@ fn remove(manager: &PackageManager, packages: &[Registered]) -> Result<(), Strin
             "remove package",
             manager.RemovePackageAsync(&package.full_name),
         )?;
-        deployed("remove package", operation.get(), || operation.GetResults())?;
+        deployed("remove package", operation.join(), || {
+            operation.GetResults()
+        })?;
     }
     Ok(())
 }
@@ -810,7 +812,7 @@ impl Certificate {
             if certificate.context.is_null() {
                 return Err(format!(
                     "create certificate: {}",
-                    windows_core::Error::from_win32()
+                    windows_core::Error::from_thread()
                 ));
             }
         }

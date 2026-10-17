@@ -60,7 +60,7 @@ import {
     workspaceChildren,
     workspaceTree,
 } from "../fixture/workspace";
-import { commit, discard, gitChanges, stage, unstage } from "./gitIndex";
+import { commit, discard, gitChanges, indexRunState, stage, startIndexRun, unstage } from "./gitIndex";
 import { demoMode, demoQuiet, deskEdition, freshEdition } from "../mode";
 import { HANDOVER_TEXT, HANDOVER_TEXT_BEFORE } from "../fixture/document";
 import { DEMO_CATALOGS, DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND, DEMO_TRANSLATOR_ACCOUNTS } from "./accounts";
@@ -266,6 +266,9 @@ export const procedures = {
         stage: ({ repo, ...target }) => stage(repo, target),
         unstage: ({ repo, ...target }) => unstage(repo, target),
         commit: ({ repo, stage: stageFirst }) => commit(repo, stageFirst),
+        indexRunStart: (start) => startIndexRun(start),
+        indexRunState: ({ repo }) => indexRunState(repo),
+        indexRunCancel: () => ({ ok: true }),
         discard: ({ repo, ...target }) => discard(repo, target),
         push: () => refuse(`This is the demo workspace: there is no remote to push to.`),
         // Where each repo lives online, matched against the registry for the publish path picker.

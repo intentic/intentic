@@ -1,7 +1,8 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
-import { landAgent, landFailureOf, type LandOutcome, reportLockfileFailures } from "./land.js";
+import { landAgent, type LandOutcome, reportLockfileFailures } from "./land.js";
+import { landFailureOf } from "./land-failure.js";
 import { intoOf, type LandTarget, landTargetOf, type Upstream, upstreamOf, underLeases } from "./land-target.js";
 import { landingPaths } from "./landing-paths.js";
 import { noteLandHeldForWake } from "./wake-held.js";

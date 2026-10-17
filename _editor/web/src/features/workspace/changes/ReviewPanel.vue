@@ -26,6 +26,7 @@ import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import HoverCard from "../../chat/tabs/HoverCard.vue";
 import ReviewStat from "./ReviewStat.vue";
 import CommitField from "./commit/CommitField.vue";
+import IndexRunPrompt from "./commit/IndexRunPrompt.vue";
 import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
 import { rendersAsBytes } from "../../../models/workspace/tree/fileType";
 import { useAgents } from "../../../models/fleet/useAgents";
@@ -1086,6 +1087,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 :draft-title="filterLabel"
                 @submit="doCommit"
             />
+            <IndexRunPrompt />
             <!-- The bar's own width says the one thing its buttons can't, most pressing first: what stops Commit, a press
                  under way, why Ctrl+Enter refused, the push in flight or just done, why the lit chip left the box alone,
                  and last what the sync spans. A line that matters keeps a floor (basis), so a narrow box wraps the buttons

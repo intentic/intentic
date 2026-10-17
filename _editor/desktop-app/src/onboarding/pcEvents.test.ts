@@ -218,9 +218,9 @@ describe(`the PC setup's events`, () => {
         expect(told).toEqual([[`onboarding_setup`, { action: `failed`, step: `Downloading the engine`, reason: `could not write <path> denied` }]]);
     });
 
-    it(`tells a restart asked for, and nothing for a sign-out`, () => {
+    it(`tells both a restart and a sign-out asked for`, () => {
         expect(actions(playSetup([{ state: `waiting`, for: `restart` }]))).toEqual([`restartAsked`]);
-        expect(playSetup([{ state: `waiting`, for: `signOut` }])).toEqual([]);
+        expect(actions(playSetup([{ state: `waiting`, for: `signOut` }]))).toEqual([`signOutAsked`]);
     });
 });
 

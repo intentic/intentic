@@ -43,7 +43,7 @@ import RunCommand from "../../../components/RunCommand.vue";
 import { oneLinerFits } from "@intentic/constants";
 import { announceDesktopRoster, desktopApp, openThisComputer } from "../../../app/environments/desktop";
 import { useAuth } from "../../../client/auth/useAuth";
-import { removalTakes } from "./switcherRows";
+import { answerNote, removalTakes } from "./switcherRows";
 import { useRemovalDoor } from "./useRemovalDoor";
 import { slotChord, useSwitchCommands } from "./useSwitchCommands";
 import { useT } from "@intentic/ui/i18n";
@@ -171,7 +171,7 @@ const rowNote = (option: SandboxSummary): readonly NotePart[] => {
         { text: place.label },
         option.role !== `owner` && place.kind !== `shared` ? { text: t(`shared.shared`).toLocaleLowerCase() } : undefined,
         isActive(option) && !quiet.value ? { text: connectionLabel.value, ink: connectionInkClass.value } : undefined,
-        silent(option) ? { text: t(`sandbox.sandboxSwitcher.notAnswering`).toLocaleLowerCase(), ink: `text-warning` } : undefined,
+        answerNote(option.hosted?.state, silent(option)),
     ];
     return parts.filter((part) => part !== undefined);
 };

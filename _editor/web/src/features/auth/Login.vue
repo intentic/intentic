@@ -103,7 +103,7 @@ const signInWithCredential = async (): Promise<void> => {
         if (idToken === undefined) {
             return; // Dismissed, or Google unavailable; the fallback is already on screen.
         }
-        press.answered();
+        press.completed();
         await signInWithGoogleCredential(idToken);
         await router.push(destination.value);
     } catch {

@@ -44,6 +44,7 @@ const office = connection(`office`, `vpn`, { provider: `fortinet`, server: `vpn.
 
 interface Opening {
     readonly editing?: CapabilitySummary;
+    readonly hosted?: boolean;
     readonly instances?: readonly CapabilitySummary[];
     readonly device?: string;
     readonly prefill?: Record<string, string>;
@@ -60,6 +61,7 @@ afterEach(() => {
 // The form over one tile, as the page hands it over: the URL's tile and connection, the tile's own connections.
 const formOn = (entry: CapabilityCatalogEntry, opening: Opening = {}) => {
     const state = {
+        hosted: ref(opening.hosted ?? false),
         selected: ref<CapabilityCatalogEntry | undefined>(entry),
         editing: ref<CapabilitySummary | undefined>(opening.editing),
         instances: ref<readonly CapabilitySummary[]>(opening.instances ?? []),
@@ -435,4 +437,12 @@ describe(`a file dragged over the page`, () => {
         expect(drag([`Files`])).toHaveBeenCalledTimes(1);
         expect(drag([`text/plain`])).toHaveBeenCalledTimes(0);
     });
+});
+
+it(`offers GPU access on local machines and explains its absence on hosted machines`, () => {
+    const docker = catalogEntry(`docker`);
+    const { form, state } = formOn(docker);
+    expect(form.mainFields(docker).map((shown) => shown.key)).toContain(`gpu`);
+    state.hosted.value = true;
+    expect(form.mainFields(docker).map((shown) => shown.key)).not.toContain(`gpu`);
 });

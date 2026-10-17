@@ -368,6 +368,10 @@
             "inputWaitNote": "Nothing in the sandbox will answer it. Stop ends the command, so the work can land.",
             "webhook": "Webhook",
             "couldntLandChip": "Couldn't land",
+            "landProcessStopped": "The workspace's Git process stopped. Retry to land this agent's work.",
+            "landTooManyPaths": "This change includes too many file paths to land at once. Reduce the overlap in your workspace, then land again.",
+            "landOutputLimit": "Git returned more information than the workspace could handle. Reduce the size of this change, then land again.",
+            "workspaceOverlap": "{count} files in your workspace overlap this agent's work. Commit or discard them, then land again.",
             "couldntLand": "Couldn't land: {reason}",
             "lostLink": "this agent's copy lost its link to your workspace's history",
             "gitRefused": "git refused to carry its work into your files",
@@ -447,6 +451,8 @@
             "noAgentYoursMentions": "No agent of yours mentions \"{trim}\". This searches the titles and what either side said in the chat.",
             "noAgentsWorkingStart": "No agents working. Start one and delegate.",
             "noMatchesInLane": "No matches in this lane.",
+            "needYouElsewhere": "{count} needs you in other projects | {count} need you in other projects",
+            "showThem": "Show",
             "nothingArchivedYetFinished": "Nothing archived yet. Finished agents land here on their own after a few quiet days.",
             "nothingNeedsRightNow": "Nothing needs you right now.",
             "nothingWrittenToWorkspace": "Nothing is written to your workspace unless it succeeds. You can stop the turn at any point.",
@@ -811,6 +817,7 @@
             "countingEverySandbox": "Counting every sandbox",
             "countingExcept": "Counting every sandbox except {names}, which isn't answering | Counting every sandbox except {names}, which aren't answering",
             "needYou": "{count} needs you | {count} need you",
+            "needYouOutside": "{owed} ({outside} outside {project})",
             "owedElsewhere": "{owed}, {elsewhere} elsewhere"
         },
         "laneDrop": {
@@ -990,7 +997,7 @@
             "sendItAgain": "Send it again",
             "troubleSigningInUse": "Trouble signing in? Use Google's own page.",
             "continueOnGooglesPage": "Continue on Google's page",
-            "googleDidntComeBack": "Google's sign-in didn't finish in its window. Continue on Google's page instead: it works where pop-ups are blocked.",
+            "googleDidntComeBack": "Still waiting on Google? If its window is stuck or closed, continue on Google's page instead: it works where pop-ups are blocked.",
             "googleAnswerRefused": "Google answered, but with a sign-in this computer counts as already expired: its clock may be wrong. Continue on Google's page instead.",
             "continueGoogleInBrowser": "Continue with Google in your browser",
             "continueGoogle": "Continue with Google"
@@ -1236,6 +1243,8 @@
             "renamedTo": "Renamed to"
         },
         "capabilitySubmit": {
+            "gpuDisable": "Remove the GPU request",
+            "gpuHosted": "GPU access is unavailable on hosted sandboxes. Use a local or self-hosted sandbox with an NVIDIA GPU.",
             "adding": "Adding {name}",
             "saving": "Saving {name}",
             "couldNotAdd": "Could not add the capability.",
@@ -1659,7 +1668,7 @@
                         "label": "Container address pool"
                     },
                     "gpu": {
-                        "hint": "Needs an NVIDIA GPU and nvidia-container-toolkit on the host.",
+                        "hint": "Local or self-hosted only. Needs an NVIDIA GPU and nvidia-container-toolkit or CDI on the host; checked before saving.",
                         "label": "GPU access"
                     },
                     "insecureRegistries": {
@@ -2869,7 +2878,10 @@
             "sendNowTimeNote": "It goes now rather than at its time.",
             "sendAt": "Send at {when}",
             "sendIn": "Send in {when}",
-            "sendAtTitle": "Send when the allowance reopens"
+            "sendAtTitle": "Send when the allowance reopens",
+            "startNewChat": "Start a new chat",
+            "startNewChatTitle": "Sending it again would be refused the same way",
+            "startNewChatNote": "This conversation's setup cannot run here. A new chat opens with your message in its composer."
         },
         "sandboxNotice": {
             "compacted": "Context compacted to free up space.",
@@ -2889,10 +2901,12 @@
             "reconnect": "{message} Reconnect the account to pick this conversation back up.",
             "undelivered": "{message} Your message was not delivered: it is held for you to send again.",
             "undeliveredUnattended": "{message} Nothing ran, and nothing is held: this run started on its own, so there is no message waiting to be sent again.",
+            "undeliveredDeterministic": "{message} Your message was not delivered, and sending it again would be refused the same way. Start a new chat to carry on.",
             "kept": "{message} Nothing has run yet: the message above is kept here to send again once that is sorted.",
             "keptMemory": "{message} Nothing has run yet: the message above is kept here, and sending it anyway starts it.",
             "memoryHeld": "{message} Your message is held: send it again to start anyway.",
             "agentBusy": "This agent is already running a turn, wait for it to finish.",
+            "agentDomainRefused": "This conversation's workspace setup cannot run here.",
             "memoryLow": "Sandbox memory is low.",
             "memoryLowShare": "Sandbox memory is low ({share}).",
             "turnRunning": "A turn is already running in this conversation.",
@@ -7560,6 +7574,8 @@
             "leftStillListed": "You left \"{name}\" on your account, but it could not be reached to take you off its own member list, so it still lists you until its owner removes you under Access. ({reason})",
             "leftStillListedHeader": "Left, but still listed",
             "needsYou": "Needs you",
+            "asleep": "asleep: opens when you select it",
+            "starting": "starting: ready in a moment",
             "notAnswering": "Not answering",
             "removeAccount2": "Remove from account?",
             "removeAccountEveryoneLoses": "Remove \"{name}\" from your account? Everyone loses access here; the sandbox itself keeps running wherever it is.",
@@ -11663,7 +11679,7 @@
             "restorePointSavedFirst2": "A restore point is saved first, so this is reversible from Restore points.",
             "retriesWithHooks": "{verb} retries with hooks",
             "scratchLeftOut": "Stage all and Commit all leave out {count} path that looks like scratch | Stage all and Commit all leave out {count} paths that look like scratch",
-            "scratchLeftOutHint": "Stage one from its own row to commit it.",
+            "scratchLeftOutHint": "They are kept out of commits because they look like generated or dependency content. Stage one from its own row if it should be committed.",
             "scratchTag": "scratch",
             "stageAllFirst": "Stages all first",
             "staged2": "Staged",
@@ -12144,6 +12160,28 @@
             "downloadNamed": "Download {name}",
             "printNamed": "Print {name}",
             "listFailed": "Could not read which documents this conversation made."
+        },
+        "indexRuns": {
+            "commitStopped": "Commit stopped. Nothing was recorded; anything already staged stays staged.",
+            "declined": "Not staged: you chose to leave the {count} file alone. | Not staged: you chose to leave the {count} files alone.",
+            "lost": "Lost track of the run in {repo}: the sandbox restarted or forgot it. Check the list before trying again.",
+            "stageStopped": "Stage stopped. What git had already staged stays staged; unstage it to take it back."
+        },
+        "indexRunPrompt": {
+            "commitAnyway": "Commit anyway",
+            "commitFiles": "Commit {count} file? | Commit {count} files?",
+            "committing": "Committing in {repo}…",
+            "counting": "Counting what to stage in {repo}…",
+            "dirFiles": "{count} file | {count} files",
+            "looksLikeDependencies": "That is far more than a usual change, and it usually means dependencies or build output nobody meant to commit. These folders hold the most:",
+            "reconnecting": "Reconnecting…",
+            "repoRoot": "(top level)",
+            "stageAnyway": "Stage anyway",
+            "stageFiles": "Stage {count} file? | Stage {count} files?",
+            "staging": "Staging in {repo}…",
+            "stagingFiles": "Staging {count} file in {repo}… | Staging {count} files in {repo}…",
+            "stop": "Stop",
+            "waiting": "Waiting for {repo} to be free…"
         }
     },
     "gettingStarted": {

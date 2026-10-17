@@ -25,12 +25,16 @@ const routePatternOf = (path: string): string | undefined => (path.startsWith(`/
 
 // `desktop` stands in for the app's init script (windows.rs), the only signal that tells this SPA it's running in
 // the desktop app rather than a browser tab.
-const bootAnalytics = async (posthogKey: string, desktop?: { version: string; installId: string; update: string | null }) => {
+const bootAnalytics = async (posthogKey: string, desktop?: { version: string; installId: string; update: string | null }, launchId?: string) => {
     environment.analytics.posthogKey = posthogKey;
-    stubGlobal(`window`, {
-        env: environment,
-        ...(desktop !== undefined ? { __INTENTIC_DESKTOP__: desktop } : {}),
-    });
+    const stubbed: { env: typeof environment } & Pick<Window, `__INTENTIC_DESKTOP__` | `__INTENTIC_LAUNCH_ID__`> = { env: environment };
+    if (desktop !== undefined) {
+        stubbed.__INTENTIC_DESKTOP__ = desktop;
+    }
+    if (launchId !== undefined) {
+        stubbed.__INTENTIC_LAUNCH_ID__ = launchId;
+    }
+    stubGlobal(`window`, stubbed);
     const { posthog } = await import(`posthog-js`);
     const { analyticsChoice } = await import("./analyticsConsent");
     analyticsChoice.value = `allow`;
@@ -101,10 +105,63 @@ describe(`initAnalytics`, () => {
 
         const [beforeSend] = [config.before_send].flat();
         const sent = beforeSend!({ uuid: `u1`, event: `$pageview`, properties: { $current_url: `https://app.intentic.dev/workspace/web/src/a.ts`, $pathname: `/workspace/web/src/a.ts` } });
-        expect(sent?.properties).toEqual({ $current_url: `https://app.intentic.dev/workspace/:path*`, $pathname: `/workspace/:path*` });
+        expect(sent?.properties).toEqual({ $current_url: `https://app.intentic.dev/workspace/:path*`, $pathname: `/workspace/:path*`, load_reason: `navigate` });
 
         const recorded = config.session_recording!.maskCapturedNetworkRequestFn!({ name: `https://app.intentic.dev/workspace/web/src/a.ts`, entryType: `navigation`, startTime: 0, duration: 0 });
         expect(recorded?.name).toBe(`https://app.intentic.dev/workspace/:path*`);
+    });
+
+    // A reload the app forced must not read as the reader's own: the first pageview of a load names why it happened, from
+    // the note the reloading code left (or the navigation type), and the pageviews of in-page navigation after it do not.
+    describe(`load_reason`, () => {
+        const pageview = { uuid: `u`, event: `$pageview`, properties: {} };
+        const beforeSend = async () => [mocked((await bootAnalytics(`phc_test`)).posthog.init).mock.calls[0]![1]!.before_send].flat()[0]!;
+        const fakeStorage = (note?: string) => {
+            const items = new Map<string, string>(note === undefined ? [] : [[`intentic.reloadReason`, note]]);
+            stubGlobal(`sessionStorage`, { getItem: (key: string) => items.get(key) ?? null, setItem: (key: string, value: string) => items.set(key, value), removeItem: (key: string) => items.delete(key) });
+        };
+
+        it(`rides the load's first pageview only, and falls back to the navigation type`, async () => {
+            fakeStorage();
+            const send = await beforeSend();
+
+            expect(send({ ...pageview, properties: {} })?.properties).toMatchObject({ load_reason: `navigate` });
+            expect(send({ ...pageview, properties: {} })?.properties).not.toHaveProperty(`load_reason`);
+            expect(send({ uuid: `c`, event: `$autocapture`, properties: {} })?.properties).not.toHaveProperty(`load_reason`);
+        });
+
+        it(`names the reload the app started, from the note it left, and clears the note`, async () => {
+            fakeStorage(`stale-chunk|${Date.now()}`);
+            const send = await beforeSend();
+
+            expect(send({ ...pageview, properties: {} })?.properties).toMatchObject({ load_reason: `stale-chunk` });
+            expect(sessionStorage.getItem(`intentic.reloadReason`)).toBeNull();
+        });
+
+        it(`ignores a note from a reload that never came`, async () => {
+            fakeStorage(`update|${Date.now() - 120_000}`);
+            const send = await beforeSend();
+
+            expect(send({ ...pageview, properties: {} })?.properties).toMatchObject({ load_reason: `navigate` });
+        });
+    });
+
+    // The desktop window is not a tab: its sessionStorage dies on every relaunch, which made each relaunch a new person.
+    it(`keeps the desktop window's ids across relaunches, and a browser tab's to the tab`, async () => {
+        const { posthog: browser } = await bootAnalytics(`phc_test`);
+        const { posthog: app } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc`, update: null });
+
+        expect(mocked(browser.init).mock.calls[0]![1]).toMatchObject({ persistence: `sessionStorage` });
+        expect(mocked(app.init).mock.calls.at(-1)![1]).toMatchObject({ persistence: `localStorage` });
+    });
+
+    it(`tells one run of the desktop app from the next by the launch id its webview carries`, async () => {
+        const { posthog } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc`, update: null }, `launch-7`);
+        expect(posthog.register).toHaveBeenCalledWith({ desktop_launch_id: `launch-7` });
+
+        jest.clearAllMocks();
+        const { posthog: without } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc`, update: null });
+        expect(without.register).not.toHaveBeenCalledWith(expect.objectContaining({ desktop_launch_id: expect.anything() }));
     });
 
     // Without a client tag, the desktop app (which loads this SPA) and a browser tab look like the same row, broken

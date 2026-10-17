@@ -116,7 +116,8 @@ export const RUNTIME_DIRECTIVES = ["--device=/dev/net/tun", "--cap-add=NET_ADMIN
 
 // Directives a host may not support: droppable via preflight (unlike the all-or-nothing kind), as data so the check
 // works across every host-side dialect. `probe` is a closed vocabulary, not shell:
-// - "runtime": docker's own runtime list names it (e.g. the nvidia container runtime).
+// - "runtime": the runtime can grant its device request; GPU requests exercise gpuProbeArgv, since the runtime
+//   list alone misses CDI and also passes on GPU-less hosts.
 // - "device": a device node exists on the host.
 export interface OptionalDirective {
     // The allowlisted token, exactly as it appears in RUNTIME_DIRECTIVES.
@@ -136,6 +137,21 @@ export const OPTIONAL_DIRECTIVES: readonly OptionalDirective[] = [
         probe: { kind: "runtime", name: "nvidia" },
     },
 ];
+
+// Exercise the actual Docker device request. A registered runtime or CDI setting alone also exists on GPU-less
+// hosts; only a successful device listing proves the launch can use one. The sandbox image is already on the host.
+export const gpuProbeArgv = (image: string): string[] => [
+    "docker",
+    "run",
+    "--rm",
+    "--pull=never",
+    "--network=none",
+    "--gpus=all",
+    "--entrypoint=nvidia-smi",
+    image,
+    "-L",
+];
+export const gpuProbePassed = (code: number, stdout: string): boolean => code === 0 && /GPU-[a-f0-9-]+/iu.test(stdout);
 
 export const optionalDirective = (token: string): OptionalDirective | undefined => OPTIONAL_DIRECTIVES.find((entry) => entry.token === token);
 

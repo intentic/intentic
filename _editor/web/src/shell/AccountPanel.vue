@@ -11,7 +11,7 @@ import { ACCOUNT } from "../workbench/commands/categories";
 import { registerCommand } from "../workbench/commands/useCommands";
 import { useAccount } from "../client/auth/useAccount";
 import { useHostedPlan } from "../models/hosted-plan/useHostedPlan";
-import { environment } from "../app/environments/environment";
+import { leaveAfterSignOut } from "../app/environments/afterSignOut";
 import { useT } from "@intentic/ui/i18n";
 
 // The rail's bottom account control: an avatar opening a popover with account identity (email, name,
@@ -88,8 +88,7 @@ const logout = async (): Promise<void> => {
         }
         return;
     }
-    // Full navigation, not a router push: afterSignOut may point outside this SPA.
-    globalThis.location.href = environment.afterSignOut;
+    leaveAfterSignOut();
 };
 
 const tour = useGettingStarted();

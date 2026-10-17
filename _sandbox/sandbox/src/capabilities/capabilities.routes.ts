@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import { type Capability, CapabilitySchema } from "@intentic/sandbox-contract/schemas/capabilities";
+import { type Capability, CapabilitySchema, type CapabilityProbe } from "@intentic/sandbox-contract/schemas/capabilities";
 import { capabilitiesContract } from "@intentic/sandbox-contract/contracts/capabilities.contract";
 import { collidesWithReservedServer } from "@intentic/sandbox-contract/policy/reserved-servers";
 import { EXTENSION_TOKEN_HEADER } from "@intentic/sandbox-contract/protocol/headers";
@@ -155,7 +155,19 @@ const refuseReservedServerId = (kind: string, id: string): void => {
 
 // `add` streams progress frames, then records the manifest entry, then a terminal `result`. `list` fans each
 // handler's status() out concurrently.
-export const createCapabilitiesRoutes = (services: Services) => {
+type ResolvedEntry = Awaited<ReturnType<typeof withKeptSecrets>>;
+// A docker entry asking for the GPU is judged by a real device request on the host, not by the generic probe.
+const gpuProbeOf = async (entry: ResolvedEntry, probe: () => Promise<CapabilityProbe>): Promise<CapabilityProbe | undefined> =>
+    entry.kind === "docker" && entry.config.gpu === "on" ? probe() : undefined;
+const refuseUnusableGpu = async (entry: ResolvedEntry, probe: () => Promise<CapabilityProbe>): Promise<void> => {
+    const answer = await gpuProbeOf(entry, probe);
+    if (answer !== undefined && !answer.ok) {
+        throw new ORPCError("BAD_REQUEST", { message: answer.message });
+    }
+};
+
+// `probeDockerGpu` is handed in: asking the host needs the device hub, and capabilities must not import hosts.
+export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (services: Services) => Promise<CapabilityProbe>) => {
     const i = implement(capabilitiesContract).$context<OrpcContext>();
     const ctx = capabilityCtx(services);
     // One add per id at once, or a concurrent same-id add interleaves handler runs and races the manifest upsert.
@@ -208,9 +220,9 @@ export const createCapabilitiesRoutes = (services: Services) => {
                     throw new ORPCError("FORBIDDEN", { message: "only a sandbox maintainer can install extensions" });
                 }
             }
-            // Resolved before the id is claimed, so a bad "keep" request refuses plainly instead of erroring
-            // mid-stream.
+            // Resolved before the id is claimed, so a bad "keep" request refuses plainly instead of erroring mid-stream.
             const entry = await withKeptSecrets(services, stash, input);
+            await refuseUnusableGpu(entry, () => probeDockerGpu(services));
             adding.add(input.id);
             try {
                 yield* handler.apply(ctx, entry.id, entry.config);
@@ -262,7 +274,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
         // question. Kept credentials resolve the same way `add` does, for the same reason (the form never saw them).
         probe: i.probe.handler(async ({ input }) => {
             const entry = await withKeptSecrets(services, stash, input);
-            return probeCapability(await contributionRegistry(services), entry);
+            return (await gpuProbeOf(entry, () => probeDockerGpu(services))) ?? probeCapability(await contributionRegistry(services), entry);
         }),
         // Made here so its private half never crosses the wire: the answer is the public half to authorize on the
         // server and a token, which the add that installs the key trades back for it.

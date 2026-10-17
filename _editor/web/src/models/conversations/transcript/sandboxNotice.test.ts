@@ -194,6 +194,20 @@ describe(`a sandbox notice, as the chat says it`, () => {
         await setLocale(`en`);
     });
 
+    // A refusal latched on the conversation (agent-domain-refused: its persona's start folder, its isolation) reads as
+    // what the reader can act on, not the daemon's internal sentence, and offers a new chat rather than a resend.
+    it(`says an agent-domain refusal as the conversation's setup, with a new chat as the way on`, async () => {
+        const [row] = turn([{ kind: `error`, code: `agent-domain-refused`, message: `Agent request placement does not match its admitted execution context.` }]);
+        expect(noticeLine(row!, `developer`)).toBe(
+            `This conversation's workspace setup cannot run here. Your message was not delivered, and sending it again would be refused the same way. Start a new chat to carry on.`,
+        );
+        await setLocale(`pl`);
+        expect(noticeLine(row!, `developer`)).toBe(
+            `Konfiguracja przestrzeni roboczej tej rozmowy nie może tu działać. Twoja wiadomość nie została dostarczona, a ponowne wysłanie zostałoby odrzucone tak samo. Rozpocznij nowy czat, żeby kontynuować.`,
+        );
+        await setLocale(`en`);
+    });
+
     // A provider that says more than a line keeps its first sentence on the row, and the sandbox's clause after it.
     it(`folds a provider's longer words to their first sentence, and keeps them whole as the row's details`, () => {
         const said = `API Error: 500 Internal server error. This is a server-side issue, usually temporary — try again in a moment. If it persists, check https://status.claude.com.`;

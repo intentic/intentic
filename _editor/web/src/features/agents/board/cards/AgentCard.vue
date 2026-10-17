@@ -36,7 +36,7 @@ import WorkflowMark from "../../../../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../laneDrop";
 import type { CardOwnPresses } from "../view/cardMenu";
 import type { IdMatch } from "../idMatch";
-import { attentionReason, landFailure, reviewAction } from "../../../../models/agent-status/agentStatus-attention";
+import { attentionReason, landFailure, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
 import { type FamilyChip, type StandingChip, standingChip } from "../../../../models/agent-status/agentStatus-chips";
 import { type FleetLane, laneOf, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
 import { activityLine, agentDisplayTitle, agentStandingMeta, contextPct, cornerInk, loopMeta } from "../../../../models/agent-status/agentStatus-meta";
@@ -58,12 +58,13 @@ import SessionChip from "../session/SessionChip.vue";
 import SessionMetrics from "../../metrics/SessionMetrics.vue";
 import ChildCount from "../../../../parts/fleet/ChildCount.vue";
 import { boxImageOf, boxNameOf } from "../../../../models/fleet/fleetScope";
+import { settingsPagesOf } from "../../../../models/conversations/review/conflictResolution";
 import { accountBadge } from "../session/accountChip";
 import { previewOf } from "../../../../models/conversations/panel/useChat-strip";
 import { useSelectionBlade } from "../../../../models/fleet/board/selectionBlade";
 import { providerAccounts } from "../../../../models/providers/providerAccounts";
 import { markSegments } from "../../../../lib/markSegments";
-import { settingsChip, useSettingsRefusal } from "../../../../models/conversations/review/settingsRefusal";
+import { settingsChip, useWorkspaceRefusal } from "../../../../models/conversations/review/settingsRefusal";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { canArchive, type FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import { modelLabelFor } from "../../../../models/providers/providerCatalog";
@@ -244,7 +245,9 @@ const yoursToClear = computed(
     () => props.agent.archivedAt === undefined && (props.agent.attention.conflict || props.agent.status === `conflict`) && conflictIsYours(props.agent),
 );
 // The Sandbox pages that wrote every file of such a refusal, when one did: then the sentence names them, as the review does.
-const settingsPages = useSettingsRefusal(() => props.agent, () => yoursToClear.value);
+const workspaceRefusal = useWorkspaceRefusal(() => props.agent, () => yoursToClear.value);
+const settingsPages = computed(() => settingsPagesOf(workspaceRefusal.value));
+const overlapLine = computed(() => workspaceOverlap((workspaceRefusal.value ?? []).reduce((count, conflict) => count + conflict.paths.filter((path) => path.reason === `workspace`).length, 0)));
 // Work this agent landed that's no longer in the tree; excluded in the archive, like every other press here (restore
 // first).
 // Takes the Ready button's slot: Land now would leave the discarded half missing (the hardest wrong to notice), so Land
@@ -407,7 +410,7 @@ const failureLine = computed(() => (landBroke.value === undefined ? props.agent.
 // keeps the line after the next turn cleared the turn's failure, since its work is still stuck (landFailure).
 const failureRaw = computed(() =>
     landBroke.value !== undefined
-        ? (props.agent.landFailure?.reason ?? props.agent.failure)
+        ? failureLine.value
         : limited(props.agent) || memoryHeld(props.agent)
           ? undefined
           : props.agent.failure,
@@ -785,7 +788,7 @@ const grab = (event: PointerEvent): void => {
             </p>
 
             <!-- `failure` is present only while the card reads as failed, so no extra status check is needed here. -->
-            <!-- A broken land in plain words; git's own sentence stays in the hover for whoever fixes it. -->
+            <!-- The hover repeats the localized reason so internal process names never become instructions to the user. -->
             <p v-if="failureRaw" class="flex min-w-0 items-start gap-2 text-2xs text-danger" v-tooltip.top="failureRaw">
                 <Icon name="exclamation-circle" class="mt-px shrink-0 text-2xs" />
                 <span class="line-clamp-2 min-w-0 flex-1 leading-4">{{ failureLine }}</span>
@@ -882,7 +885,7 @@ const grab = (event: PointerEvent): void => {
             <!-- Same seat, the refusals the agent cannot touch: a fact, not a press. Nothing on the card can commit the edits in its way, a button that only changed the view read as one that did nothing, and the card leaves this seat by itself once they are committed. The footer's review link names the files. -->
             <p v-else-if="yoursToClear" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-muted">
                 <Icon name="file-edit" class="mt-0.5 shrink-0 text-2xs text-warning" /><span class="min-w-0">{{
-                    settingsPages === undefined ? words.clearYoursHint : t(`agents.agentCard.settingsNotSaved`, { pages: settingsPages })
+                    overlapLine ?? (settingsPages === undefined ? words.clearYoursHint : t(`agents.agentCard.settingsNotSaved`, { pages: settingsPages }))
                 }}</span>
             </p>
 
@@ -915,6 +918,9 @@ const grab = (event: PointerEvent): void => {
                 </Button>
             </div>
 
+            <Button v-if="canShip && agent.archivedAt === undefined && retryLand(agent)" size="small" tier="boring" :disabled="busy || landing" @click.stop="emit('land')">
+                {{ t(`ui.action.retry`) }}
+            </Button>
             <!-- What the land did in the owner's own folder: warm only where they have something to look at or do, and the paths it kept out in the hover. -->
             <p
                 v-if="delivery !== undefined"

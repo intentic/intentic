@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 import { Button, Notice, ui } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
 import {
@@ -17,6 +18,7 @@ import {
     uncommittedAcross,
 } from "../../../models/workspace/changes/changesAcross";
 import { landOnAfterSwitch } from "../../../models/sandbox/sandboxScreen";
+import { retrySandboxRead } from "../../../client/sandbox/reachability";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";
 
@@ -52,15 +54,29 @@ const summary = computed(() => {
 
 // Reported separately from the summary: 'nothing outstanding' and 'two machines didn't answer' are different claims
 // that must not merge into one.
-const silentLine = computed(() =>
-    silent.value.length === 0
-        ? undefined
-        : t(
-              `workspace.otherSandboxChanges.notAnswering`,
-              { names: silent.value.map((box) => box.sandbox.name).join(`, `), count: silent.value.length },
-              silent.value.length,
-          ),
-);
+const retryError = ref<string>();
+const retrying = ref(false);
+const retry = async (box: (typeof silent.value)[number]): Promise<void> => {
+    if (retrying.value) {
+        return;
+    }
+    retrying.value = true;
+    retryError.value = undefined;
+    try {
+        await retrySandboxRead(box.sandbox, useSandbox().wake, refreshChangesAcross);
+    } catch (error) {
+        retryError.value = errorMessage(error);
+    } finally {
+        retrying.value = false;
+    }
+};
+const silentText = (box: (typeof silent.value)[number]): string => {
+    const state = box.sandbox.hosted?.state;
+    if (state === `asleep` || state === `starting`) {
+        return `${box.sandbox.name} · ${t(state === `asleep` ? `sandbox.sandboxSwitcher.asleep` : `sandbox.sandboxSwitcher.starting`)}`;
+    }
+    return t(`workspace.otherSandboxChanges.notAnswering`, { names: box.sandbox.name, count: 1 }, 1);
+};
 
 // ReviewPanel's leading-glyph slot: 10px, so a chevron here sits in the same column as the repo rows' above.
 const LEAD = `flex w-2.5 shrink-0 items-center justify-center`;
@@ -117,13 +133,20 @@ const detail = (row: LedgerRow): string => {
         </button>
 
         <!-- Name the boxes so a summary cannot be mistaken for a complete list. -->
-        <p v-if="silentLine !== undefined" class="flex items-center gap-1.5 py-0.5 pl-5 pr-1 text-2xs text-subtle">
-            <span class="min-w-0 flex-1 truncate">{{ silentLine }}</span>
+        <p v-for="box in silent" :key="box.sandbox.id" class="flex items-center gap-1.5 py-0.5 pl-5 pr-1 text-2xs text-subtle">
+            <span class="min-w-0 flex-1 truncate">{{ silentText(box) }}</span>
             <!-- Pulled out by its own padding, so the word ends on the gutter Commit and the row glyphs end on. -->
-            <button type="button" class="-mr-1 shrink-0 rounded px-1 py-0.5 text-link transition-colors hover:bg-overlay" @click="refreshChangesAcross()">
+            <button
+                type="button"
+                class="-mr-1 shrink-0 rounded px-1 py-0.5 text-link transition-colors hover:bg-overlay"
+                :disabled="retrying"
+                @click="retry(box)"
+            >
                 {{ t(`ui.action.retry`) }}
             </button>
         </p>
+
+        <Notice v-if="retryError" tone="danger" size="xs">{{ retryError }}</Notice>
 
         <template v-if="open">
             <Notice

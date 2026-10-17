@@ -342,7 +342,10 @@ describe(`sandbox routes`, () => {
             () => undefined,
             (thrown: unknown) => thrown,
         );
-        expect(refused).toMatchObject({ code: `CONFLICT`, message: `Urząd Gminy holds this sandbox; an admin of Urząd Gminy must release it before it can be deleted` });
+        expect(refused).toMatchObject({
+            code: `CONFLICT`,
+            message: `Urząd Gminy holds this sandbox; an admin of Urząd Gminy must release it before it can be deleted`,
+        });
         expect(deleteRow).not.toHaveBeenCalled();
         expect(trash).not.toHaveBeenCalled();
     });
@@ -413,7 +416,9 @@ describe(`sandbox.wake on a sandbox intentic does not host`, () => {
 
     it(`is NOT_FOUND for a removed sandbox, and stamps nothing`, async () => {
         const update = jest.fn();
-        const prisma = fakePrisma({ sandbox: { findFirst: jest.fn().mockResolvedValue({ ...sandboxRow, hosted: null, removedAt: new Date() }), update } });
+        const prisma = fakePrisma({
+            sandbox: { findFirst: jest.fn().mockResolvedValue({ ...sandboxRow, hosted: null, removedAt: new Date() }), update },
+        });
         const error = await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: context({ prisma }) }).then(
             () => undefined,
             (thrown: unknown) => thrown,
@@ -715,7 +720,10 @@ describe(`sandbox.delete on a hosted sandbox`, () => {
 // The platform's word that the caller controls their address (identity-assertion.ts): for a sandbox they own or joined,
 // verifiable with the identity key alone, and only for an address a code or Google confirmed.
 describe(`sandbox.identityAssertion`, () => {
-    const keys = generateKeyPairSync(`ed25519`, { publicKeyEncoding: { type: `spki`, format: `pem` }, privateKeyEncoding: { type: `pkcs8`, format: `pem` } });
+    const keys = generateKeyPairSync(`ed25519`, {
+        publicKeyEncoding: { type: `spki`, format: `pem` },
+        privateKeyEncoding: { type: `pkcs8`, format: `pem` },
+    });
     const signing = (signingKey: string): Partial<OrpcContext> => ({
         // SAFETY: the route reads only these sections of config, and the suite's context() builds its config as the same
         // partial object.
@@ -749,18 +757,44 @@ describe(`sandbox.identityAssertion`, () => {
 
     it(`says how the platform confirmed the address: Google for an account with Google linked`, async () => {
         const { prisma } = owned({ token: `tok` }, 1);
-        const minted = await call(sandboxRoutes.identityAssertion, { sandboxId: `s1` }, { context: context({ ...signing(keys.privateKey), prisma }) });
+        const minted = await call(
+            sandboxRoutes.identityAssertion,
+            { sandboxId: `s1` },
+            { context: context({ ...signing(keys.privateKey), prisma }) },
+        );
         expect(verifyIdentityAssertion(keys.publicKey, minted.assertion, Date.now())).toMatchObject({ method: `google` });
     });
 
     it(`vouches for nothing without an identity key, for an unconfirmed address, or for a sandbox the caller is not in`, async () => {
-        await expect(call(sandboxRoutes.identityAssertion, { sandboxId: `s1` }, { context: context({ ...signing(``), prisma: owned({ token: `tok` }).prisma }) })).rejects.toMatchObject({
+        await expect(
+            call(
+                sandboxRoutes.identityAssertion,
+                { sandboxId: `s1` },
+                { context: context({ ...signing(``), prisma: owned({ token: `tok` }).prisma }) },
+            ),
+        ).rejects.toMatchObject({
             code: `NOT_FOUND`,
         });
         await expect(
-            call(sandboxRoutes.identityAssertion, { sandboxId: `s1` }, { context: context({ ...signing(keys.privateKey), prisma: owned({ token: `tok` }).prisma, user: { ...user, emailVerified: false } }) }),
+            call(
+                sandboxRoutes.identityAssertion,
+                { sandboxId: `s1` },
+                {
+                    context: context({
+                        ...signing(keys.privateKey),
+                        prisma: owned({ token: `tok` }).prisma,
+                        user: { ...user, emailVerified: false },
+                    }),
+                },
+            ),
         ).rejects.toMatchObject({ code: `FORBIDDEN` });
-        await expect(call(sandboxRoutes.identityAssertion, { sandboxId: `s1` }, { context: context({ ...signing(keys.privateKey), prisma: owned(null).prisma }) })).rejects.toMatchObject({
+        await expect(
+            call(
+                sandboxRoutes.identityAssertion,
+                { sandboxId: `s1` },
+                { context: context({ ...signing(keys.privateKey), prisma: owned(null).prisma }) },
+            ),
+        ).rejects.toMatchObject({
             code: `NOT_FOUND`,
         });
     });
@@ -1006,5 +1040,41 @@ describe(`recovery`, () => {
             code: `PRECONDITION_FAILED`,
             message: `this platform hands out no addresses, so it cannot vouch for a sandbox: connect it by its address instead`,
         });
+    });
+});
+
+describe(`hosted machine state on a sandbox summary`, () => {
+    it.each([
+        [`stopped`, `asleep`],
+        [`started`, `awake`],
+        [`starting`, `starting`],
+    ] as const)(`maps Fly %s to %s`, async (machine, expected) => {
+        const fetch = jest.fn(
+            async () => new Response(JSON.stringify({ id: `m1`, state: machine }), { headers: { "content-type": "application/json" } }),
+        );
+        stubGlobal(`fetch`, fetch);
+        const hosted = { appName: `test-app`, machineId: `m1`, region: `iad`, warm: true };
+        const prisma = fakePrisma({
+            sandbox: { findFirst: jest.fn().mockResolvedValue(sandboxRow), update: jest.fn().mockResolvedValue({ ...sandboxRow, hosted }) },
+        });
+        const ctx = context({ prisma });
+        ctx.config.hosted.flyApiToken = `fake-test-token`;
+        ctx.config.hosted.flyOrg = `test-org`;
+        const row = await call(sandboxRoutes.update, { sandboxId: `s1`, name: `dev` }, { context: ctx });
+        expect(row.hosted).toEqual({ region: `iad`, warm: true, canRollBack: false, state: expected });
+        expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it(`a failed provider read says unknown, never asleep`, async () => {
+        stubGlobal(`fetch`, async () => new Response(`unavailable`, { status: 503 }));
+        const hosted = { appName: `test-app`, machineId: `m1`, region: `iad`, warm: false };
+        const prisma = fakePrisma({
+            sandbox: { findFirst: jest.fn().mockResolvedValue(sandboxRow), update: jest.fn().mockResolvedValue({ ...sandboxRow, hosted }) },
+        });
+        const ctx = context({ prisma });
+        ctx.config.hosted.flyApiToken = `fake-test-token`;
+        ctx.config.hosted.flyOrg = `test-org`;
+        const row = await call(sandboxRoutes.update, { sandboxId: `s1`, name: `dev` }, { context: ctx });
+        expect(row.hosted?.state).toBe(`unknown`);
     });
 });

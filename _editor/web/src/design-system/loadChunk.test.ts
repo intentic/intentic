@@ -1,6 +1,7 @@
 // jsdom: the kit's one stale-chunk recovery. Every lazy chunk in the editor goes through `loadChunk` (views, the
 // shell, extension views, Monaco, mermaid, the highlighter), so these are the rules all of them follow.
 import "@intentic/testing/dom";
+import { takeReloadReason } from "@intentic/ui/reload-reason";
 import { installChunkRecovery, isStaleChunkError, loadChunk } from "@intentic/ui/chunk";
 
 // window.location is unforgeable in jsdom; the reload is observed through a replaced global, read at call time.
@@ -39,6 +40,13 @@ const outcome = async (pending: Promise<unknown>): Promise<string> => {
 it(`answers a dead chunk with one reload onto the page the reader is on, and never settles while it goes`, async () => {
     expect(await outcome(loadChunk(dead))).toBe(`pending`);
     expect(assign.mock.calls).toEqual([[`/files?path=a`]]);
+});
+
+// Analytics reads this note on the next load to tell a reload the app forced from one the reader did (reloadReason.ts).
+it(`leaves a note that the reload it starts was a dead chunk's`, async () => {
+    await outcome(loadChunk(dead));
+    expect(takeReloadReason()).toBe(`stale-chunk`);
+    expect(takeReloadReason()).toBeUndefined();
 });
 
 it(`reloads onto the target it is given instead, once: the second dead load rejects as it came`, async () => {

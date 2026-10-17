@@ -24,7 +24,7 @@ flowchart LR
   through its CLI, with no Docker library in the crate. The one run of `ic` itself rather than a script is `fix.rs`'s
   `ic sandbox fix`, streamed the same way and stopped after ten minutes.
 - **Talking back to pages.** The workspace learns it is inside the app from `window.__INTENTIC_DESKTOP__`, set by
-  an initialization script, and hears about updates and setups through `intentic-desktop-update` and
+  an initialization script, with the process's launch UUID in `window.__INTENTIC_LAUNCH_ID__`, and hears about updates and setups through `intentic-desktop-update` and
   `intentic-desktop-setup` DOM events, and whether its window is on screen through `intentic-desktop-shown`
   (`shown.rs`), which WebView2's own `document.visibilityState` does not say for a window in the tray. The workspace
   alone is told `wake: true` and the microphone, says what its wake-word listening does on `intentic://wake`, and is
@@ -38,7 +38,7 @@ flowchart LR
   press with the workspace at the notification's route. Both take the page's word for what to show
   (`intentic://badge`, `intentic://notice`) and decide nothing about it.
 - **State on disk.** `state.rs` keeps `settings.json` (`appUrl`, `platformUrl`), the install id, the close choice,
-  the colour mode, a setup parked across a Windows restart, the face last in use (`last-face.json`), the folder the
+  the colour mode, a setup parked across a Windows restart or sign-out, the face last in use (`last-face.json`), the folder the
   main window opens on (`home-folder.json`, `~/intentic/local` until it is pointed elsewhere), whether an account was
   ever seen (`account-seen.json`), the recents and the folders that have a sandbox of their own (`projects.json`).
 - **Local windows.** `local.rs` owns the windows on the user's own folders and documents, the main one among them, and

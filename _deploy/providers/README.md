@@ -18,6 +18,8 @@ flowchart LR
 - A NAT'd host is reached through its own Cloudflare tunnel (`via: "cloudflared"`). Host keys are trusted on first use and pinned.
 - Stateful services on a host with the `guarded` update policy snapshot their volumes with restic before an image bump and roll back if the new image fails its health check.
 
+- Workspace updates park the predecessor, retry a refused launch without optional runtime flags, and require a ready daemon with a committed state journal. A host-side watch keeps the predecessor for 24 hours and restores it if probation fails, independently of the SSH client. GPU preflight exercises the host’s actual Docker device request, including Docker’s CDI path.
+
 ## Key files
 
 - [src/providers.ts](src/providers.ts) — `createProviders`, the map the engine reconciles against.

@@ -1,17 +1,21 @@
-import type { PostHog } from "posthog-js";
+import type { CaptureResult, PostHog } from "posthog-js";
 import type { User } from "@intentic/api-contract";
 import { type Ref, watch } from "vue";
+import { takeReloadReason } from "@intentic/ui/reload-reason";
 import { deviceKey, storedValue, storeValue } from "@intentic/ui/storage";
 import { analyticsAvailable, analyticsChoice } from "./analyticsConsent";
-import { desktopApp } from "./environments/desktop";
+import { desktopApp, desktopLaunchId } from "./environments/desktop";
 import { environment } from "./environments/environment";
 import { addressRedactor, eventPrivacy, type RoutePatternOf } from "./eventPrivacy";
 import { replayPrivacy } from "./replayPrivacy";
 
 // PostHog instrumentation: autocapture, session replay, SPA pageviews, plus funnel milestones via `track()`.
-// `api_host` proxies through this origin's /wire (nginx.conf) since privacy blockers match PostHog's own hostnames;
-// `sessionStorage` scopes the session id to the tab so a reload doesn't fragment one visit into unrelated
-// recordings.
+// `api_host` proxies through this origin's /wire (nginx.conf) since privacy blockers match PostHog's own hostnames.
+// In a browser `sessionStorage` scopes the session id to the tab so a reload doesn't fragment one visit into unrelated
+// recordings. The desktop app's window is not a tab: every relaunch emptied its sessionStorage, so each one began a new
+// session and a new anonymous person, and a person who opens the app daily looked like a stream of strangers. There the
+// ids live in `localStorage` and survive a relaunch; PostHog still ends a session after half an hour idle, and
+// `desktop_launch_id` (below) tells one run of the app from the next.
 //
 // What this captures is what the privacy policy and sub-processor list (_site/site-content/src/legal.ts) say it
 // captures; a change here that alters what leaves the browser must move LEGAL_VERSION and both documents together.
@@ -116,9 +120,9 @@ export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readon
         opt_out_capturing_by_default: true,
         // No cookieless counts on refusal: the promise made by switching it off is that this client sends no events.
         defaults: `2026-06-25`,
-        persistence: `sessionStorage`,
+        persistence: desktopApp() === undefined ? `sessionStorage` : `localStorage`,
         ...replayPrivacy(redactAddress, { touch: touchScreen() }),
-        before_send: (event) => allowed ? eventPrivacy(redactAddress)(event) : null,
+        before_send: (event) => (allowed ? eventPrivacy(redactAddress)(stampLoadReason(event)) : null),
         // Serving the SDK from our own origin isn't enough: blocker lists also match a bare filename on any host
         // (posthog-recorder.js, dead-clicks-autocapture.js). Prefixing every SDK script, not just those two, breaks the
         // match; nginx.conf strips the prefix back off.
@@ -167,13 +171,37 @@ export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readon
     );
 };
 
+// WHY THIS PAGE LOADED, on the load's first pageview: the navigation type the browser reports (navigate, reload,
+// back_forward), unless the app itself reloaded the page and left a note (update, stale-chunk, self-heal, opener-fallback,
+// sign-out), which is the truer answer. Without it a reload the app forced looks like the reader's own, and a burst of
+// "reloads" cannot be told from an update rolling out. Read once at import: the note is cleared as it is read.
+const loadReason = ((): string => {
+    const nav = globalThis.performance?.getEntriesByType?.(`navigation`)[0];
+    const type = nav !== undefined && `type` in nav ? String(nav.type) : `navigate`;
+    return takeReloadReason() ?? type;
+})();
+let loadReasonStamped = false;
+const stampLoadReason = (event: CaptureResult | null): CaptureResult | null => {
+    if (event === null || event.event !== `$pageview` || loadReasonStamped) {
+        return event;
+    }
+    loadReasonStamped = true;
+    event.properties = { ...event.properties, load_reason: loadReason };
+    return event;
+};
+
 // Which client sent this event, as a super property (not a per-call field) so it also tags autocapture and
 // pageviews. The install id joins this to what the app's own screens report (desktop.ts).
 const registerClient = (posthog: PostHog): void => {
     const app = desktopApp();
+    const launchId = desktopLaunchId();
     posthog.register(
         app === undefined ? { client: `browser`, ...landingCampaign } : { client: `desktop`, desktop_version: app.version, desktop_install_id: app.installId, ...landingCampaign },
     );
+    // Persistence outlives a relaunch (see the top of this file); this is what tells one run of the app from the next.
+    if (launchId !== undefined) {
+        posthog.register({ desktop_launch_id: launchId });
+    }
 };
 
 // THE APP'S OWN EVENTS ON THIS PERSON. The desktop app's screens report under its install id (desktop-app's

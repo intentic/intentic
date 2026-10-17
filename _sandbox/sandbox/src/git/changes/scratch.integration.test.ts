@@ -157,3 +157,26 @@ test("a stage-everything with the scratch excluded never stages it, and stages t
         ["D  docs/guide.md", "A  src/feature.ts", "?? .trun/x.log", "?? we[ir]d/f*.log"].join("\n"),
     );
 });
+
+// Regression: staging one file under a hidden dir (`.venv/`) used to dissolve the scratch exemption for the whole dir,
+// because the collapsed listing no longer showed `.venv/` as a single row — the old code only checked the outermost
+// ancestor. With `hiddenAncestorsOf` checking every hidden ancestor of each path, the rest of `.venv/` stays scratch.
+test("staging one file under a hidden dir does not dissolve the scratch exemption for its siblings", async () => {
+    const dir = await tempRepo();
+    await put(dir, ".venv/pyvenv.cfg", "home = /usr/bin\n");
+    await put(dir, ".venv/lib/python3.12/site-packages/pkg/mod0.py", "# mod0\n");
+    await put(dir, ".venv/lib/python3.12/site-packages/pkg/mod1.py", "# mod1\n");
+    await put(dir, ".venv/lib/python3.12/site-packages/pkg/mod2.py", "# mod2\n");
+
+    // Before staging anything, the whole .venv/ is scratch.
+    const before = await scratchOf(dir, PROJECT);
+    expect(before.some((entry) => entry.path === ".venv/" || entry.path.startsWith(".venv/"))).toBe(true);
+
+    // Stage one file — this used to dissolve the exemption.
+    await exec("git", ["-C", dir, "add", ".venv/lib/python3.12/site-packages/pkg/mod0.py"]);
+
+    // After staging one path, the rest of .venv/ must still be scratch.
+    const after = await scratchOf(dir, PROJECT);
+    const venvScratch = after.filter((entry) => entry.path.startsWith(".venv"));
+    expect(venvScratch.length).toBeGreaterThan(0);
+});

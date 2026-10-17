@@ -17,7 +17,6 @@ use crate::notice;
 use crate::prefetch;
 use crate::scripts::{self, Heard, Stream};
 use crate::setup_link::{NoticeArgs, NoticeKind};
-#[cfg(windows)]
 use crate::state::SessionEnd;
 
 pub const EVENT: &str = "desktop://onboarding";
@@ -661,6 +660,12 @@ pub fn onboarding_restart(app: AppHandle, when: String) -> Result<(), String> {
     }
 }
 
+/// End the Windows session the PC setup is waiting for; its park and resume entry already exist.
+#[tauri::command]
+pub fn onboarding_sign_out() -> Result<(), String> {
+    crate::commands::end_session(SessionEnd::SignOut)
+}
+
 /// A machine we host instead, for a PC that cannot run a sandbox.
 #[tauri::command]
 pub async fn onboarding_use_cloud(
@@ -947,9 +952,13 @@ fn run_pc_setup(app: &AppHandle) -> Result<(), String> {
         Setup::Waiting {
             for_,
             ..
-        } if for_ == "restart"
+        } if parks_setup(for_)
     ) {
         park_pc_setup();
+        #[cfg(windows)]
+        if let Err(error) = crate::resume::register() {
+            eprintln!("intentic: could not register setup resume: {error}");
+        }
     }
     if recheck {
         clear_pc_park();
@@ -1668,7 +1677,12 @@ fn write_ledger(name: &str, value: &Value) {
     }
 }
 
-/// The setup stopped for a restart: the next launch resumes it, and says when it parked (an older app wrote `1`).
+/// Both waits lose this process when Windows ends the session, so both need the same durable resume.
+fn parks_setup(wait: &str) -> bool {
+    matches!(wait, "restart" | "signOut")
+}
+
+/// The setup stopped for a restart or sign-out: the next launch resumes it, and says when it parked (an older app wrote `1`).
 fn park_pc_setup() {
     write_ledger(PARK_FILE, &json!({ "at": now_secs() }));
 }
@@ -1692,11 +1706,11 @@ fn parse_parked(text: &str) -> Option<u64> {
     serde_json::from_str::<Value>(text).ok()?["at"].as_u64()
 }
 
-/// Whether this PC's setup is parked for a restart that has not come yet: what keeps the sign-in entry that resumes it
+/// Whether this PC's setup is parked for a restart or sign-out that has not come yet: what keeps the sign-in entry that resumes it
 /// (resume.rs `settle`). The reader's "Restart later" writes that entry, and every launch after it used to take it away
 /// again, since only a handed-over setup counted as parked: a reader who reopened Intentic before restarting, or whose
 /// Intentic updated meanwhile, restarted to an app that never came back to finish the setup (2026-10-12).
-pub fn waits_for_restart() -> bool {
+pub fn waits_for_session_end() -> bool {
     park_path()
         .and_then(|path| std::fs::read_to_string(path).ok())
         .is_some_and(|text| park_waits(&text))
@@ -1902,6 +1916,17 @@ pub fn prefetch_display(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn restart_and_sign_out_park_until_the_resume_launch() {
+        for wait in ["restart", "signOut"] {
+            assert!(parks_setup(wait));
+            assert!(park_waits(r#"{"at":1791000000}"#));
+            assert!(!park_waits(r#"{"at":1791000000,"resumed":true}"#));
+        }
+        assert!(!parks_setup("admin"));
+        assert!(!parks_setup("user"));
+    }
 
     #[test]
     fn prefetch_stop_waits_for_an_exited_child_to_leave_the_registry() {

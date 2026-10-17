@@ -71,16 +71,17 @@ export interface GitSlice {
             // Object names status already reported per path; free here, a spawn per file elsewhere.
             blobs: Map<string, { head?: string; index?: string }>;
         }>;
-        readonly stagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
+        // `git`, where given, runs the moves instead of the slice's own: the stage run's killable runner (index-run.ts).
+        readonly stagePaths: (dir: string, paths: readonly string[], git?: GitRunner) => Promise<void>;
         // The whole repository in one spawn, nothing built or chunked; why staging everything has no size limit.
-        readonly stageAll: (dir: string, scratch?: readonly ScratchPath[]) => Promise<void>;
+        readonly stageAll: (dir: string, scratch?: readonly ScratchPath[], git?: GitRunner) => Promise<void>;
         // What a stage-everything leaves out of the checkout at `dir` because it looks like scratch.
         readonly scratchOf: (dir: string, scope: ScratchScope) => Promise<ScratchPath[]>;
         readonly unstagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
         // Index entries read and written exactly, so an origin chip can put back the staging it replaced (chip-staging.ts).
         readonly indexEntries: (dir: string, paths: readonly string[]) => Promise<IndexEntries>;
         readonly writeIndexEntries: (dir: string, entries: ReadonlyMap<string, string | undefined>) => Promise<void>;
-        readonly commitIndex: (dir: string, message: string, author: { name: string; email: string }) => Promise<boolean>;
+        readonly commitIndex: (dir: string, message: string, author: { name: string; email: string }, git?: GitRunner) => Promise<boolean>;
         // Exactly `paths`, whatever else is staged or dirty; false when they match HEAD (seams/settings-versions.ts).
         readonly commitOnly: (
             dir: string,

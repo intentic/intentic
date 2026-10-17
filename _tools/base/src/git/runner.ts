@@ -127,12 +127,17 @@ const residentForker = (): ChildProcess | undefined => {
         waiting.resolve({ stdout: response.stdout, stderr: response.stderr, execMs: response.execMs });
     });
     // A dead forker's in-flight reads are rejected rather than left hanging; the next call starts a fresh child.
-    started.on("exit", () => {
+    // The code and signal are the only account of why it died (its stderr is inherited, but a crash may outrun the
+    // flush); they ride the rejection's `cause` so a log or card can say more than "the forker exited".
+    started.on("exit", (code, signal) => {
         forker = undefined;
         const orphaned = [...inFlight.values()];
         inFlight.clear();
+        if (orphaned.length > 0) {
+            console.error(`git: the forker exited (code ${String(code)}, signal ${String(signal)}) with ${String(orphaned.length)} call(s) in flight`);
+        }
         for (const waiting of orphaned) {
-            waiting.reject(new Error("the forker exited"));
+            waiting.reject(new Error("the forker exited", { cause: { code, signal } }));
         }
     });
     // A fork that cannot start is not the command's failure; every call falls back to exec'ing directly.
@@ -218,6 +223,9 @@ interface ForkedOptions {
     // Messages pinned to gettext's C locale (untranslatedEnv), for a command whose stderr is read rather than only
     // shown: every git, never tmux, whose server would hand the pin on to every shell it starts.
     readonly untranslated?: boolean;
+    // Kills the command when aborted. The resident forker has no way to kill what it started, so a run carrying one
+    // execs directly, paying the parent's fork cost for a command a person can stop.
+    readonly signal?: AbortSignal;
 }
 
 // What every command this runner starts carries that the process's own environment must not: the sandbox daemon's ssh
@@ -239,12 +247,12 @@ const runForked = async (command: string, args: readonly string[], options: Fork
         ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
         ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
     };
-    const channel = residentForker();
+    const channel = options.signal === undefined ? residentForker() : undefined;
     if (channel === undefined) {
         // No forker: this process execs directly, so there is one clock, not the two the forked path needs.
         const from = process.hrtime.bigint();
         try {
-            const output = await exec(command, [...args], { ...limits, env: resolved });
+            const output = await exec(command, [...args], { ...limits, env: resolved, ...(options.signal !== undefined ? { signal: options.signal } : {}) });
             return { ...output, execMs: Number(process.hrtime.bigint() - from) / 1e6 };
         } catch (error) {
             // Guards a non-object throw, which is rethrown untouched instead of being boxed.
@@ -278,9 +286,12 @@ const runGitSlotted = async (
     env: Readonly<Record<string, string>> | undefined,
     bulk: boolean,
     unbounded: boolean,
+    signal: AbortSignal | undefined,
 ): Promise<GitRun> => {
     // Untranslated: git's refusals are classified by their English words (LOCK_CONTENTION, @intentic/sandbox's git.ts).
-    const options = { maxBuffer: MAX_GIT_OUTPUT, untranslated: true, ...(env !== undefined ? { env } : {}) };
+    const plain: ForkedOptions = { maxBuffer: MAX_GIT_OUTPUT, untranslated: true };
+    const withEnv: ForkedOptions = env === undefined ? plain : { ...plain, env };
+    const options: ForkedOptions = signal === undefined ? withEnv : { ...withEnv, signal };
     if (!bulk || unbounded) {
         return await runForked(command, args, options);
     }
@@ -355,15 +366,16 @@ export const withGitCaller = <T>(caller: string, run: () => T): T => callerScope
 // Cumulative since boot, by caller; a rate is the difference between two samples, as for gitRunCounts.
 export const gitRunCallers = (): Readonly<Record<string, number>> => Object.fromEntries(runsByCaller);
 
-interface RunnerShape {
+interface RunnerOptions {
     readonly bulk: boolean;
     readonly globals: readonly string[];
     // Whether a run waits out a settle in its checkout; the settle's own run is the one that must not.
     readonly gated: boolean;
+    readonly signal?: AbortSignal | undefined;
 }
 
 const gitRunnerVia =
-    (argv: readonly string[], { bulk, globals, gated }: RunnerShape): GitRunner =>
+    (argv: readonly string[], { bulk, globals, gated, signal }: RunnerOptions): GitRunner =>
     async (dir, args, env) => {
         const pending = gated ? settling.get(dir) : undefined;
         if (pending !== undefined) {
@@ -375,7 +387,7 @@ const gitRunnerVia =
         const caller = callerScope.getStore() ?? UNLABELLED_GIT_CALLER;
         runsByCaller.set(caller, (runsByCaller.get(caller) ?? 0) + 1);
         try {
-            return await runGit(argv, bulk, globals, dir, args, env);
+            return await runGit(argv, { bulk, globals, signal }, dir, args, env);
         } finally {
             const left = (runningIn.get(dir) ?? 1) - 1;
             if (left === 0) {
@@ -388,8 +400,7 @@ const gitRunnerVia =
 
 const runGit = async (
     argv: readonly string[],
-    bulk: boolean,
-    globals: readonly string[],
+    { bulk, globals, signal }: Pick<RunnerOptions, "bulk" | "globals" | "signal">,
     dir: string,
     args: readonly string[],
     env: Readonly<Record<string, string>> | undefined,
@@ -415,7 +426,9 @@ const runGit = async (
     };
     for (let attempt = 1; ; attempt += 1) {
         try {
-            const output = await runGitSlotted(command!, [...rest, ...globals, "-C", dir, ...literalPathspecs(args)], env, bulk, unbounded);
+            // Checked per attempt, so a stop that lands while backing off index.lock starts nothing more.
+            signal?.throwIfAborted();
+            const output = await runGitSlotted(command!, [...rest, ...globals, "-C", dir, ...literalPathspecs(args)], env, bulk, unbounded, signal);
             execMs += output.execMs;
             observe(attempt, false);
             return { stdout: output.stdout, stderr: output.stderr };
@@ -425,7 +438,7 @@ const runGit = async (
             if (attempt === RETRY_ATTEMPTS && isLockContention(error) && (await clearedStaleLock(dir, error))) {
                 continue;
             }
-            if (attempt >= RETRY_ATTEMPTS || !isLockContention(error)) {
+            if (attempt >= RETRY_ATTEMPTS || !isLockContention(error) || signal?.aborted === true) {
                 observe(attempt, true);
                 throw error;
             }
@@ -436,6 +449,12 @@ const runGit = async (
 };
 
 export const defaultGit: GitRunner = gitRunnerVia(["git"], { bulk: false, globals: GIT_GLOBAL_ARGS, gated: true });
+
+// `defaultGit` that dies with `signal`: aborting kills the git it is running (SIGTERM, which git answers by removing
+// its own index.lock) and refuses to start another. For a long write a person can stop, a stage-all over a dependency
+// tree; it skips the resident forker (see ForkedOptions.signal), so nothing run on a timer should take it.
+export const cancellableGit = (signal: AbortSignal): GitRunner =>
+    gitRunnerVia(["git"], { bulk: false, globals: GIT_GLOBAL_ARGS, gated: true, signal });
 
 // CPU/IO demoted (nice +10, ionice best-effort) for bulk agent work; its ENOENT fallback is bulk-classed too.
 const nicedGit: GitRunner = gitRunnerVia(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7", "git"], {

@@ -2,7 +2,7 @@
 import { Button } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { ref } from "vue";
-import { environment } from "../../app/environments/environment";
+import { leaveAfterSignOut } from "../../app/environments/afterSignOut";
 import { useAuth } from "../../client/auth/useAuth";
 
 // The setup page's way out of the account: who is signed in, and signing out. The page sits outside the shell, so the
@@ -27,8 +27,7 @@ const leave = async (): Promise<void> => {
         failed.value = true;
         return;
     }
-    // Full navigation, not a router push: afterSignOut may point outside this SPA.
-    globalThis.location.href = environment.afterSignOut;
+    leaveAfterSignOut();
 };
 </script>
 

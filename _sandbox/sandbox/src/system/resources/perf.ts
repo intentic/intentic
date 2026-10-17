@@ -21,6 +21,11 @@ const SLOW_MS: Readonly<Record<string, number>> = {
     "git.scan": 1_000,
     // One repo's slice of git.scan.
     "git.scan.repo": 500,
+    // Staging a set of paths or the whole repo, by request or as a run (`run: true`); it scales with the tree, so a line
+    // here is a dependency dir or a cold disk, which is exactly what the guardrail and the excludes exist for.
+    "git.stage": 2_000,
+    // One user commit including any stage-first it carries, which is its long pole; hooks are the repo's own time.
+    "git.commit": 3_000,
     // Waiting for a repo's op chain; a queue, not work, so any measurable wait is worth a line.
     "git.lock.wait": 150,
     // Holding the lock; a land checks out a monorepo, so seconds are expected, only a stall is not.

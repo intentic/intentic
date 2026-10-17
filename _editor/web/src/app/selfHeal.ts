@@ -14,6 +14,7 @@
 
 import { sleep } from "@intentic/base/async";
 import { describeError, flushClientDiagnostics, reportClient } from "./clientDiagnostics";
+import { noteReload } from "@intentic/ui/reload-reason";
 import { storedValue, storeValue } from "@intentic/ui/storage";
 import { TURN_DEFAULT_KEYS } from "./turnDefaultKeys";
 
@@ -76,6 +77,7 @@ const heal = (error: unknown): void => {
         // and
         // surfaces the crash.
     }
+    noteReload(`self-heal`);
     location.reload();
 };
 

@@ -368,7 +368,8 @@ fn workspace_init_script(install_id: &str, update: Option<&str>, wake: bool) -> 
         None => "null".to_string(),
     };
     format!(
-        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {}, wake: {wake}, sandboxWakes: true }}); }} }})();",
+        "(function () {{ window.__INTENTIC_LAUNCH_ID__ = \"{}\"; if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {}, wake: {wake}, sandboxWakes: true }}); }} }})();",
+        crate::launch::id(),
         crate::commands::VERSION,
         // Only where the page's message reaches drop_copy.rs: WebView2 is what says where a dropped file is.
         cfg!(windows)
@@ -2003,6 +2004,10 @@ fn ask_before_closing(app: &AppHandle) {
             // The frame between "window mapped" and "webview painted", which is white by default and reads as
             // a flash on a dark dialog — the exact impression of malfunction this whole change is about.
             .background_color(face_background(mode))
+            .initialization_script(format!(
+                "window.__INTENTIC_LAUNCH_ID__ = \"{}\";",
+                crate::launch::id()
+            ))
             .initialization_script(face_init_script(mode))
             // Nothing here reaches loopback. It carries the arguments so every window in this process agrees
             // on them, because the first one built is the one that configures the environment (BROWSER_ARGS).
@@ -2409,6 +2414,15 @@ fn confirm_setup(app: &AppHandle, args: SetupArgs) {
 #[cfg(test)]
 mod loopback_tests {
     use super::*;
+
+    #[test]
+    fn every_page_gets_the_process_launch_id() {
+        let script = workspace_init_script("install-1", None, true);
+        assert!(script.contains(&format!(
+            "window.__INTENTIC_LAUNCH_ID__ = \"{}\"",
+            crate::launch::id()
+        )));
+    }
 
     /// Setting our own arguments replaces wry's default rather than adding to it, and Chromium reads only the
     /// last `--disable-features` — so one list, holding wry's three as well as ours.

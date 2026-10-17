@@ -41,3 +41,5 @@ flowchart LR
 - [src/quote.ts](src/quote.ts) — quoters to compose outward, one per parser a value crosses.
 - [src/slug.ts](src/slug.ts) — a sandbox's slug and id read back off a container name, an address or a token.
 - [src/index.test.ts](src/index.test.ts) — the emitted argv and directive handling, by example.
+
+GPU preflight uses `gpuProbeArgv` to exercise an actual Docker `--gpus=all` device request with an image already on the host. `gpuProbePassed` requires a physical GPU listing; a registered NVIDIA runtime or CDI setting alone is insufficient. Fly machines stamp GPU access as unsupported.

@@ -34,6 +34,7 @@ describe(`flyMachineConfig`, () => {
             [`SANDBOX_IMAGE`, `ghcr.io/intentic/sandbox:stable`],
             [`SANDBOX_BASE_IMAGE`, `ghcr.io/intentic/sandbox:stable`],
             [`SANDBOX_VM`, `1`],
+            [`SANDBOX_GPU`, `unsupported`],
             [`CONNECT_TOKEN`, `t0k`],
         ]);
     });

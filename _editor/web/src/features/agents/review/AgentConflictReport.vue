@@ -3,6 +3,7 @@ import type { LandConflict } from "@intentic/sandbox-contract/schemas/agents";
 import { Button, toneTint, useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { agentBlockers, blockersOf, causeLine, settingsOrigin, settingsPageName, userBlockers } from "../../../models/conversations/review/conflictResolution";
+import { workspaceOverlap } from "../../../models/agent-status/agentStatus-attention";
 import { useT } from "@intentic/ui/i18n";
 
 // What a refused land is blocking, as one decision bar: how many files conflict, why in one line, and what happens
@@ -40,7 +41,7 @@ const mine = computed(() => agentBlockers(blockers.value));
 const theirs = computed(() => userBlockers(blockers.value));
 // The user's half when a Sandbox page wrote all of it: saved in one press rather than sent to Changes.
 const settingsPages = computed(() => settingsOrigin(theirs.value)?.map(settingsPageName).join(`, `));
-const why = computed(() => causeLine(blockers.value, settingsPages.value));
+const why = computed(() => workspaceOverlap(theirs.value.length) ?? causeLine(blockers.value, settingsPages.value));
 const saveSettings = (): void => emit(`saveSettings`, theirs.value.map((blocker) => blocker.path));
 // A three-way apply goes through the index, so git refuses it outright on any unstaged path.
 const mergeable = computed(() => blockedCount.value > 0 && theirs.value.length === 0);

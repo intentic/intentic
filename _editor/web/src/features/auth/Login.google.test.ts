@@ -129,10 +129,10 @@ it(`tells the reader a press came back with nothing, and offers Google's own pag
     focused = false;
     await advanceTimersByTimeAsync(2_000);
     focused = true;
-    await advanceTimersByTimeAsync(3_500);
+    await advanceTimersByTimeAsync(25_500);
     await nextTick();
 
-    expect(el.textContent).toContain(`Google's sign-in didn't finish in its window`);
+    expect(el.textContent).toContain(`Still waiting on Google?`);
     const googlesPage = [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Continue on Google's page`));
     googlesPage?.click();
     expect(signInWithGoogle).toHaveBeenCalledWith(`/`);

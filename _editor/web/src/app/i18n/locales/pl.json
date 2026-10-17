@@ -368,6 +368,10 @@
             "inputWaitNote": "Nic w sandboksie na to nie odpowie. Zatrzymanie kończy polecenie, żeby praca mogła trafić do workspace’u.",
             "webhook": "Webhook",
             "couldntLandChip": "Nie scalono",
+            "landProcessStopped": "Proces Git obszaru roboczego zatrzymał się. Spróbuj ponownie zastosować pracę agenta.",
+            "landTooManyPaths": "Ta zmiana zawiera zbyt wiele ścieżek plików, aby zastosować ją naraz. Zmniejsz liczbę kolidujących zmian w obszarze roboczym i spróbuj ponownie.",
+            "landOutputLimit": "Git zwrócił więcej informacji, niż obszar roboczy mógł obsłużyć. Zmniejsz rozmiar zmiany i spróbuj ponownie.",
+            "workspaceOverlap": "Pliki w Twoim obszarze roboczym kolidują z pracą tego agenta: {count}. Zatwierdź lub odrzuć zmiany w nich i spróbuj ponownie.",
             "couldntLand": "Nie udało się scalić: {reason}",
             "lostLink": "kopia tego agenta straciła połączenie z historią Twojej przestrzeni roboczej",
             "gitRefused": "git nie przeniósł jego pracy do Twoich plików",
@@ -447,6 +451,8 @@
             "noAgentYoursMentions": "Żaden Twój agent nie wspomina „{trim}”. To przeszukuje tytuły i to, co obie strony powiedziały na czacie.",
             "noAgentsWorkingStart": "Żaden agent nie pracuje. Uruchom jednego i deleguj.",
             "noMatchesInLane": "Brak trafień na tym torze.",
+            "needYouElsewhere": "{count} sprawa czeka na Ciebie w innych projektach | {count} sprawy czekają na Ciebie w innych projektach | {count} spraw czeka na Ciebie w innych projektach",
+            "showThem": "Pokaż",
             "nothingArchivedYetFinished": "Nic jeszcze nie zarchiwizowano. Skończone agenty lądują tu same po kilku spokojnych dniach.",
             "nothingNeedsRightNow": "W tej chwili nic Cię nie potrzebuje.",
             "nothingWrittenToWorkspace": "Nic nie zostaje zapisane do Twojej przestrzeni roboczej, jeśli się nie uda. Turę możesz zatrzymać w dowolnym momencie.",
@@ -811,6 +817,7 @@
             "countingEverySandbox": "Liczone ze wszystkich sandboxów",
             "countingExcept": "Liczone ze wszystkich sandboxów poza tym, który nie odpowiada: {names} | Liczone ze wszystkich sandboxów poza tymi, które nie odpowiadają: {names} | Liczone ze wszystkich sandboxów poza tymi, które nie odpowiadają: {names}",
             "needYou": "{count} sprawa czeka na Ciebie | {count} sprawy czekają na Ciebie | {count} spraw czeka na Ciebie",
+            "needYouOutside": "{owed} ({outside} poza {project})",
             "owedElsewhere": "{owed}, {elsewhere} gdzie indziej"
         },
         "laneDrop": {
@@ -990,7 +997,7 @@
             "sendItAgain": "Wyślij ponownie",
             "troubleSigningInUse": "Kłopot z logowaniem? Skorzystaj z własnej strony Google.",
             "continueOnGooglesPage": "Kontynuuj na stronie Google",
-            "googleDidntComeBack": "Logowanie w oknie Google nie zostało dokończone. Kontynuuj na stronie Google: działa nawet wtedy, gdy wyskakujące okna są blokowane.",
+            "googleDidntComeBack": "Nadal czekasz na Google? Jeśli jego okno się zawiesiło lub zostało zamknięte, kontynuuj na stronie Google: działa nawet wtedy, gdy wyskakujące okna są blokowane.",
             "googleAnswerRefused": "Google odpowiedział, ale logowaniem, które ten komputer uznaje za już wygasłe: jego zegar może być źle ustawiony. Kontynuuj na stronie Google.",
             "continueGoogleInBrowser": "Kontynuuj przez Google w przeglądarce",
             "continueGoogle": "Kontynuuj przez Google"
@@ -1236,6 +1243,8 @@
             "renamedTo": "Zmieniono nazwę na"
         },
         "capabilitySubmit": {
+            "gpuDisable": "Usuń żądanie dostępu do GPU",
+            "gpuHosted": "Dostęp do GPU jest niedostępny w chmurze. Użyj lokalnej piaskownicy lub własnego serwera z GPU NVIDIA.",
             "adding": "Dodawanie {name}",
             "saving": "Zapisywanie {name}",
             "couldNotAdd": "Nie udało się dodać możliwości.",
@@ -1617,7 +1626,7 @@
                         "label": "Pula adresów kontenerów"
                     },
                     "gpu": {
-                        "hint": "Wymaga karty NVIDIA i nvidia-container-toolkit na hoście.",
+                        "hint": "Tylko lokalnie lub na własnym serwerze. Wymaga GPU NVIDIA i nvidia-container-toolkit lub CDI na hoście; sprawdzane przed zapisem.",
                         "label": "Dostęp do GPU"
                     },
                     "insecureRegistries": {
@@ -2869,7 +2878,10 @@
             "sendNowTimeNote": "Wyjdzie teraz zamiast o swojej porze.",
             "sendAt": "Wyślij o {when}",
             "sendIn": "Wyślij za {when}",
-            "sendAtTitle": "Wyślij, gdy limit się odnowi"
+            "sendAtTitle": "Wyślij, gdy limit się odnowi",
+            "startNewChat": "Rozpocznij nowy czat",
+            "startNewChatTitle": "Ponowne wysłanie zostałoby odrzucone tak samo",
+            "startNewChatNote": "Konfiguracja tej rozmowy nie może tu działać. Nowy czat otworzy się z Twoją wiadomością w polu tekstowym."
         },
         "sandboxNotice": {
             "compacted": "Kontekst został skrócony, żeby zwolnić miejsce.",
@@ -2889,10 +2901,12 @@
             "reconnect": "{message} Połącz konto ponownie, żeby wrócić do tej rozmowy.",
             "undelivered": "{message} Twoja wiadomość nie została dostarczona: czeka, aż wyślesz ją ponownie.",
             "undeliveredUnattended": "{message} Nic się nie uruchomiło i nic nie czeka: ten przebieg ruszył sam, więc nie ma wiadomości do ponownego wysłania.",
+            "undeliveredDeterministic": "{message} Twoja wiadomość nie została dostarczona, a ponowne wysłanie zostałoby odrzucone tak samo. Rozpocznij nowy czat, żeby kontynuować.",
             "kept": "{message} Nic jeszcze nie ruszyło: wiadomość powyżej czeka tutaj, żeby wysłać ją ponownie, gdy to się wyjaśni.",
             "keptMemory": "{message} Nic jeszcze nie ruszyło: wiadomość powyżej czeka tutaj, a wysłanie jej mimo to ją uruchomi.",
             "memoryHeld": "{message} Twoja wiadomość czeka: wyślij ją ponownie, żeby mimo to zacząć.",
             "agentBusy": "Ten agent już wykonuje turę, poczekaj, aż skończy.",
+            "agentDomainRefused": "Konfiguracja przestrzeni roboczej tej rozmowy nie może tu działać.",
             "memoryLow": "Pamięć sandboxa się kończy.",
             "memoryLowShare": "Pamięć sandboxa się kończy ({share}).",
             "turnRunning": "W tej rozmowie trwa już tura.",
@@ -7216,6 +7230,8 @@
             "leftStillListed": "Opuszczono „{name}” na twoim koncie, ale nie udało się z nim połączyć, żeby usunąć cię z jego własnej listy członków, więc nadal cię wymienia, dopóki właściciel nie usunie cię w zakładce Dostęp. ({reason})",
             "leftStillListedHeader": "Opuszczono, ale nadal na liście",
             "needsYou": "Czeka na ciebie",
+            "asleep": "uśpiona: otworzy się po wybraniu",
+            "starting": "uruchamia się: za chwilę gotowa",
             "notAnswering": "Nie odpowiada",
             "removeAccount2": "Usunąć z konta?",
             "removeAccountEveryoneLoses": "Usunąć „{name}” ze swojego konta? Wszyscy tracą tu dostęp; sam sandbox działa dalej tam, gdzie jest.",
@@ -11221,7 +11237,7 @@
             "restorePointSavedFirst2": "Najpierw zapisujemy punkt przywracania, więc to da się cofnąć z Punktów przywracania.",
             "retriesWithHooks": "{verb} ponawia z hookami",
             "scratchLeftOut": "Dodanie wszystkiego i commit wszystkiego pomijają {count} ścieżkę, która wygląda na roboczą | Dodanie wszystkiego i commit wszystkiego pomijają {count} ścieżki, które wyglądają na robocze | Dodanie wszystkiego i commit wszystkiego pomijają {count} ścieżek, które wyglądają na robocze",
-            "scratchLeftOutHint": "Dodaj ją do indeksu z jej własnego wiersza, żeby ją zacommitować.",
+            "scratchLeftOutHint": "Są wyłączone z commitów, ponieważ wyglądają na wygenerowaną zawartość lub zależności. Dodaj do indeksu z własnego wiersza, jeśli powinny zostać zacommitowane.",
             "scratchTag": "roboczy",
             "stageAllFirst": "Najpierw indeksuje wszystko",
             "staged2": "W indeksie",
@@ -11720,6 +11736,28 @@
             "downloadNamed": "Pobierz {name}",
             "printNamed": "Drukuj {name}",
             "listFailed": "Nie udało się sprawdzić, jakie dokumenty powstały w tej rozmowie."
+        },
+        "indexRuns": {
+            "commitStopped": "Commit zatrzymany. Nic nie zapisano; to, co już było w indeksie, w nim zostaje.",
+            "declined": "Nie dodano do indeksu: postanowiłeś zostawić {count} plik. | Nie dodano do indeksu: postanowiłeś zostawić {count} pliki. | Nie dodano do indeksu: postanowiłeś zostawić {count} plików.",
+            "lost": "Utracono przebieg w {repo}: sandbox uruchomił się ponownie albo o nim zapomniał. Sprawdź listę, zanim spróbujesz znowu.",
+            "stageStopped": "Dodawanie do indeksu zatrzymane. To, co git zdążył dodać, w nim zostaje; wycofaj to z indeksu, żeby cofnąć."
+        },
+        "indexRunPrompt": {
+            "commitAnyway": "Commituj mimo to",
+            "commitFiles": "Commitować {count} plik? | Commitować {count} pliki? | Commitować {count} plików?",
+            "committing": "Commitowanie w {repo}…",
+            "counting": "Liczenie, co dodać do indeksu w {repo}…",
+            "dirFiles": "{count} plik | {count} pliki | {count} plików",
+            "looksLikeDependencies": "To znacznie więcej niż zwykła zmiana i zwykle oznacza zależności albo wyniki budowania, których nikt nie chciał zatwierdzać. Najwięcej jest w tych folderach:",
+            "reconnecting": "Ponowne łączenie…",
+            "repoRoot": "(główny katalog)",
+            "stageAnyway": "Dodaj do indeksu mimo to",
+            "stageFiles": "Dodać {count} plik do indeksu? | Dodać {count} pliki do indeksu? | Dodać {count} plików do indeksu?",
+            "staging": "Dodawanie do indeksu w {repo}…",
+            "stagingFiles": "Dodawanie {count} pliku do indeksu w {repo}… | Dodawanie {count} plików do indeksu w {repo}… | Dodawanie {count} plików do indeksu w {repo}…",
+            "stop": "Zatrzymaj",
+            "waiting": "Czekanie, aż {repo} będzie wolne…"
         }
     },
     "needs": {

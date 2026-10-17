@@ -8,12 +8,18 @@ const IMAGE = "ghcr.io/intentic/sandbox:0.1.0";
 const CONTAINER = "intentic-sandbox-workspace";
 
 const fakeSsh = (
-    opts: { running?: boolean; image?: string; tools?: string; runFails?: boolean; buildFails?: boolean } = {},
+    opts: { running?: boolean; image?: string; tools?: string; runFails?: boolean; buildFails?: boolean; gpu?: boolean } = {},
 ): { executor: SshExecutor; commands: string[] } => {
     const commands: string[] = [];
     const session: SshSession = {
         exec: async (command) => {
             commands.push(command);
+            if (command.startsWith("sh -c")) {
+                return res("id", opts.runFails ? 1 : 0);
+            }
+            if (command.includes("--entrypoint=nvidia-smi")) {
+                return opts.gpu ? res("GPU 0: NVIDIA (UUID: GPU-1234)") : res("", 125);
+            }
             // Both image and tools-digest reads are `docker inspect`; distinguish by the label in the command.
             if (command.includes("docker inspect")) {
                 return res(command.includes("intentic.tools") ? (opts.tools ?? "") : (opts.image ?? IMAGE));
@@ -181,11 +187,11 @@ test("apply with an overlay dockerfile builds it (base64 → stdin) BEFORE recre
     const run = ssh.commands[runIndex] as string;
     expect(run).toContain(`-e SANDBOX_ENVIRONMENT_HASH=${DOCKERFILE_HASH}`);
     expect(run).toContain(`-e SANDBOX_IMAGE=${ENV_IMAGE}`);
-    expect(run.endsWith(` ${ENV_IMAGE}`)).toBe(true);
+    expect(run).toContain(` ${ENV_IMAGE}`);
     // The overlay's runtime directives become allowlisted docker flags.
     expect(run).toContain("--device=/dev/net/tun --cap-add=NET_ADMIN");
-    // rm + run ride one exec so an in-sandbox self-apply isn't killed between them.
-    expect(run).toContain(`docker rm -f ${CONTAINER}`);
+    // Park + run ride one exec so an in-sandbox self-apply keeps a host-side recovery path.
+    expect(run).toContain(`parked=${CONTAINER}-previous`);
 });
 
 test("apply splices --privileged from a docker-capability overlay (the only source of a privileged run)", async () => {
@@ -229,4 +235,18 @@ test("apply sets ANTHROPIC_BASE_URL only when agentBaseUrl is provided", async (
     const withBase = fakeSsh();
     await createWorkspaceProvider(withBase.executor).apply({ ...inputs, agentBaseUrl: "http://gateway.internal:4000" }, undefined, ctx());
     expect(withBase.commands.some((c) => c.includes("docker run") && c.includes("-e ANTHROPIC_BASE_URL=http://gateway.internal:4000"))).toBe(true);
+});
+
+test("GPU preflight checks a real device request and degrades a missing host GPU before cutover", async () => {
+    const dockerfile = "FROM image\n# intentic:runtime --gpus=all\n";
+    for (const gpu of [true, false]) {
+        const ssh = fakeSsh({ gpu });
+        await createWorkspaceProvider(ssh.executor).apply({ ...inputs, dockerfile }, undefined, ctx());
+        const probe = ssh.commands.find((command) => command.startsWith("docker run --rm"));
+        expect(probe).toContain("--gpus=all --entrypoint=nvidia-smi");
+        const swap = ssh.commands.find((command) => command.startsWith("sh -c")) ?? "";
+        // The overlay's own runtime stamp also spells the token (as an env value), so look for it as a bare docker flag.
+        expect(/\s--gpus=all\s/.test(swap)).toBe(gpu);
+        expect(swap).toContain("SANDBOX_GPU=unsupported");
+    }
 });

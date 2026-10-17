@@ -146,15 +146,15 @@ fn dock(app: &AppHandle, count: u32) {
             return;
         };
         let mut properties = std::collections::HashMap::new();
-        properties.insert("count", zbus::zvariant::Value::I64(i64::from(count)));
-        properties.insert("count-visible", zbus::zvariant::Value::Bool(count > 0));
-        if let Err(error) = bus.emit_signal(
+        properties.insert("count", zbus::wire::Variant::I64(i64::from(count)));
+        properties.insert("count-visible", zbus::wire::Variant::Bool(count > 0));
+        if let Err(error) = tauri::async_runtime::block_on(bus.emit_signal(
             None::<&str>,
             "/dev/intentic/desktop/launcher",
             "com.canonical.Unity.LauncherEntry",
             "Update",
             &(entry.as_str(), properties),
-        ) {
+        )) {
             eprintln!("intentic: the dock could not be told the count: {error}");
         }
     });

@@ -298,13 +298,13 @@ describe(`when Google's button goes nowhere`, () => {
         // Google's pop-up comes up in front of the page, and is closed with nothing in it.
         focused = false;
         await advanceTimersByTimeAsync(5_000);
-        expect(el.textContent).not.toContain(`didn't finish`);
+        expect(el.textContent).not.toContain(`Still waiting on Google`);
         focused = true;
-        await advanceTimersByTimeAsync(3_500);
+        await advanceTimersByTimeAsync(25_500);
         await nextTick();
 
-        expect(el.textContent).toContain(`Google's sign-in didn't finish in its window`);
-        expect(el.querySelector(`[role="status"]`)?.textContent).toContain(`didn't finish`);
+        expect(el.textContent).toContain(`Still waiting on Google?`);
+        expect(el.querySelector(`[role="status"]`)?.textContent).toContain(`Still waiting on Google?`);
         // Promoted from secondary: the press that just failed is the reason to take the other road.
         expect(googlesPageButton()?.className ?? ``).toContain(`p-button`);
         expect(googlesPageButton()?.className).not.toContain(`p-button-secondary`);

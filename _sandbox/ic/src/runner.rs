@@ -192,7 +192,7 @@ pub fn up(args: Up) -> Result<()> {
         // A runner is a fresh container with no owner asks of its own: only the overlay's directives to probe.
         contract::host_probes(&run_image, &runtime_lines, "", &log)
     };
-    let unsupported = contract::unsupported_on_this_host(&probes);
+    let unsupported = contract::unsupported_on_this_host(&probes, &run_image);
 
     // The whole difference from a person's sandbox is these two values — and the absences around them: no
     // setup code, no tunnel grant, no Google client, so the daemon boots loopback and only ever dials OUT.

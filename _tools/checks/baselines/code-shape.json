@@ -539,10 +539,7 @@
         "count": 221,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/chat/transcript/ChatMessageView.vue": {
-        "count": 656,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
+    "_editor/web/src/features/chat/transcript/ChatMessageView.vue": 659,
     "_editor/web/src/features/chat/transcript/pages/ChatPageFrame.vue#act#cognitive": {
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
@@ -731,7 +728,7 @@
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/workspace/changes/ReviewPanel.vue": 1732,
+    "_editor/web/src/features/workspace/changes/ReviewPanel.vue": 1725,
     "_editor/web/src/features/workspace/changes/save/useSaveActions.ts#useSaveActions#lines": {
         "count": 105,
         "why": "standing when the check arrived (2026-10-16)"
@@ -813,7 +810,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/models/conversations/session/turnClient.ts": {
-        "count": 1306,
+        "count": 1302,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/models/conversations/transcript/transcriptState.ts#applyPatch#cognitive": {
@@ -1165,7 +1162,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_platform/api/src/sandbox/sandbox.routes.ts": {
-        "count": 906,
+        "count": 703,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_platform/api/src/trial/trial-pool.ts#call#cognitive": {
@@ -1879,7 +1876,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/conversations/land/land.ts": {
-        "count": 695,
+        "count": 688,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/conversations/land/landed-history.ts#commitsCarrying#cognitive": {
@@ -2083,7 +2080,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/git/git.routes.ts": {
-        "count": 726,
+        "count": 611,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/git/git.routes.ts#createGitRoutes#cognitive": {
@@ -3227,11 +3224,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/api-contract/src/schemas.ts": {
-        "count": 905,
+        "count": 902,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/capability-catalog/src/index.ts": {
-        "count": 1185,
+        "count": 1184,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/connector-runtime/src/chat-reply.ts#createChatReply#lines": {
@@ -3327,7 +3324,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/text/transcript-fold.ts": {
-        "count": 1014,
+        "count": 1007,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/text/transcript-fold.ts#apply#cognitive": {

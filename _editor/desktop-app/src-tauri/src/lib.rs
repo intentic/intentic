@@ -270,6 +270,7 @@ pub fn run() {
             onboarding::onboarding_set_up,
             onboarding::onboarding_pause,
             onboarding::onboarding_restart,
+            onboarding::onboarding_sign_out,
             onboarding::onboarding_use_cloud,
             // The first task, kept until this computer's sandbox is ready (first_task.rs).
             first_task::first_task_read,
@@ -436,6 +437,15 @@ pub fn run() {
                 app.handle(),
                 std::time::Duration::from_secs(if windowed { 3 } else { 0 }),
             );
+            launch::opened(if app.get_webview_window(windows::WORKSPACE).is_some() {
+                "workspace"
+            } else if app.get_webview_window(windows::HOME).is_some() {
+                "home"
+            } else if opened_local {
+                "local"
+            } else {
+                "tray"
+            });
             // What earlier launches left to report (a launch that never showed a window, a panic), sent off this thread.
             launch::send_reports(app.handle());
             // This computer's own sandbox, made after sign-in and kept, by a thread of its own rather than any window
@@ -482,11 +492,15 @@ pub fn run() {
         } => {
             if windows::hold_quit(app, code) {
                 api.prevent_exit();
+            } else {
+                launch::exit_requested(code);
             }
         }
         RunEvent::Exit => {
             // Quitting is not stalling: a launch that ends here is not reported, wherever it got to.
-            launch::reached(launch::Stage::Exited);
+            // tao 0.37.1 calls process::exit after WM_ENDSESSION's LoopDestroyed callback, so
+            // cleanup finishes here and no later message can enter a Destroyed runner (tao #1157).
+            launch::exited();
             // A setup of this computer's sandbox under way is stopped with all it started, and run again next launch.
             machine_sandbox::before_exit();
             // Nothing the app put up can be answered once it has gone.

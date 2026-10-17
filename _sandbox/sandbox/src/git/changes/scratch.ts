@@ -104,22 +104,60 @@ const untracked = async (dir: string, args: readonly string[], git: GitRunner): 
 const isDirectoryRow = (path: string): boolean => path.endsWith("/");
 
 // A file that vanished between listing and stat counts as empty rather than failing the read.
-const sizesOf = async (dir: string, paths: readonly string[]): Promise<Map<string, number>> =>
-    new Map(
-        await Promise.all(
-            paths.filter((path) => !isDirectoryRow(path)).map(async (path) => [path, (await lstat(join(dir, path)).catch(() => undefined))?.size ?? 0] as const),
-        ),
+const LSTAT_CONCURRENCY = 64;
+const sizesOfBounded = async (dir: string, paths: readonly string[]): Promise<Map<string, number>> => {
+    const files = paths.filter((path) => !isDirectoryRow(path));
+    const results: [string, number][] = [];
+    let cursor = 0;
+    await Promise.all(
+        Array.from({ length: Math.min(LSTAT_CONCURRENCY, files.length) }, async () => {
+            for (let index = cursor++; index < files.length; index = cursor++) {
+                const path = files[index] ?? "";
+                const size = (await lstat(join(dir, path)).catch(() => undefined))?.size ?? 0;
+                results.push([path, size]);
+            }
+        }),
     );
+    return new Map(results);
+};
 
-// The collapsed listing's own rows: a wholly new directory judged by its name, a loose file by its shape.
+// The collapsed listing's own rows: a wholly new directory judged by its name, a loose file by its shape. A file under
+// a hidden ancestor (`.venv/lib/mod.py` under `.venv/`) is that ancestor's: once one file under it is staged, git lists
+// the rest one by one instead of as the collapsed `.venv/`, and judging them as loose files would dissolve the rule.
+// Only the loose files are sized; an ancestor's verdict needs no stat.
 const judgeOuter = async (dir: string, outer: readonly string[], scope: ScratchScope, found: Map<string, ScratchReason>): Promise<void> => {
-    const sizes = await sizesOf(dir, outer);
+    const loose: string[] = [];
     for (const path of outer) {
-        const reason = isDirectoryRow(path) ? directoryReason(path) : fileReason(path, sizes.get(path) ?? 0, scope);
+        const owner = isDirectoryRow(path) ? path : hiddenAncestorsOf(path)[0];
+        const reason = owner === undefined ? undefined : directoryReason(owner);
+        if (owner !== undefined && reason !== undefined) {
+            found.set(owner, reason);
+        } else if (!isDirectoryRow(path)) {
+            loose.push(path);
+        }
+    }
+    const sizes = await sizesOfBounded(dir, loose);
+    for (const path of loose) {
+        const reason = fileReason(path, sizes.get(path) ?? 0, scope);
         if (reason !== undefined) {
             found.set(path, reason);
         }
     }
+};
+
+// Every scratch-named (hidden) ancestor directory of `path`, outermost first: `.venv/` and `.venv/.cache/` for
+// `.venv/.cache/pkg/mod.py`. Read from the path itself rather than from the collapsed listing, so the verdict holds
+// whatever is already in the index.
+const hiddenAncestorsOf = (path: string): string[] => {
+    const segments = path.replace(/\/$/, "").split("/");
+    const ancestors: string[] = [];
+    for (let depth = 1; depth < segments.length; depth++) {
+        const dir = `${segments.slice(0, depth).join("/")}/`;
+        if (directoryReason(dir) !== undefined) {
+            ancestors.push(dir);
+        }
+    }
+    return ancestors;
 };
 
 // The entry holding one path found inside an open new directory: an inner directory by its name, else the path itself.
@@ -130,15 +168,22 @@ const insideVerdict = (
     scope: ScratchScope,
     found: ReadonlyMap<string, ScratchReason>,
 ): readonly [string, ScratchReason] | undefined => {
+    // Every hidden ancestor of the path, not only those below `outer`: after one file under `.venv/` is staged, `.venv/`
+    // is no longer an open directory of its own, and the rest of its tree must still be its.
+    const ancestors = hiddenAncestorsOf(path);
+    if (ancestors.some((directory) => found.has(directory))) {
+        return undefined;
+    }
+    for (const ancestor of ancestors) {
+        const reason = directoryReason(ancestor);
+        if (reason !== undefined) {
+            return [ancestor, reason];
+        }
+    }
+    // A new directory below `outer` that is not hidden: already judged, its contents go with it.
     const directories = newDirectoriesOn(outer, path).filter((directory) => directory !== path);
     if (directories.some((directory) => found.has(directory))) {
         return undefined;
-    }
-    for (const directory of directories) {
-        const reason = directoryReason(directory);
-        if (reason !== undefined) {
-            return [directory, reason];
-        }
     }
     const reason = isDirectoryRow(path) ? (scope.root ? "checkout" : undefined) : fileReason(path, bytes, scope);
     return reason === undefined ? undefined : [path, reason];
@@ -148,9 +193,23 @@ const insideVerdict = (
 // into; a listing too large to read leaves them carried as they are, which is what every capture did before this.
 const judgeInside = async (dir: string, open: readonly string[], scope: ScratchScope, found: Map<string, ScratchReason>, git: GitRunner): Promise<void> => {
     const inside = await untracked(dir, ["--", ...open], git).catch(() => []);
-    const sizes = await sizesOf(dir, inside);
+    // Prefix map: for each path, find its outer directory in O(segments) instead of O(open.length). Built once from the
+    // open list, which is always short (top-level directories), but the inside list can be huge.
+    const prefixSet = new Set(open);
+    const outerOf = (path: string): string | undefined => {
+        const segments = path.split("/");
+        let prefix = "";
+        for (let i = 0; i < segments.length - 1; i++) {
+            prefix += `${segments[i]}/`;
+            if (prefixSet.has(prefix)) {
+                return prefix;
+            }
+        }
+        return undefined;
+    };
+    const sizes = await sizesOfBounded(dir, inside);
     for (const path of inside) {
-        const outer = open.find((candidate) => path.startsWith(candidate));
+        const outer = outerOf(path);
         const verdict = outer === undefined ? undefined : insideVerdict(path, outer, sizes.get(path) ?? 0, scope, found);
         if (verdict !== undefined) {
             found.set(verdict[0], verdict[1]);
@@ -181,7 +240,7 @@ const readScratch = async (dir: string, scope: ScratchScope, git: GitRunner): Pr
 const withCounts = async (dir: string, found: ReadonlyMap<string, ScratchReason>, git: GitRunner): Promise<ScratchPath[]> => {
     const directories = [...found].filter(([path, reason]) => isDirectoryRow(path) && reason !== "checkout").map(([path]) => path);
     const listed = directories.length === 0 ? [] : await untracked(dir, ["--", ...directories], git).catch(() => undefined);
-    const sizes = await sizesOf(dir, [...(listed ?? []), ...found.keys()]);
+    const sizes = await sizesOfBounded(dir, [...(listed ?? []), ...found.keys()]);
     const counted = (path: string, reason: ScratchReason): ScratchPath => {
         if (reason === "checkout" || (isDirectoryRow(path) && listed === undefined)) {
             return { path, reason };

@@ -818,7 +818,7 @@ fn recreate(
     } else {
         contract::host_probes(&target_image, &runtime_lines, &host_runtime, &log)
     };
-    let unsupported = contract::unsupported_on_this_host(&probes);
+    let unsupported = contract::unsupported_on_this_host(&probes, &target_image);
 
     // The resolvers the container was created with. The hand-written recreates silently DROPPED these on
     // every swap — a restricted-network sandbox lost its split-horizon config the first time its owner

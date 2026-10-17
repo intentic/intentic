@@ -650,7 +650,7 @@
             "later": "Más tarde",
             "save": "Guarda primero tu trabajo en otras aplicaciones."
         },
-        "signOut": "Cierra sesión en Windows y vuelve a entrar para terminar de preparar este PC. Seguirá solo cuando vuelvas.",
+        "signOut": "Guarda tu trabajo en otras aplicaciones y cierra la sesión de Windows. La configuración continuará automáticamente cuando vuelvas a iniciar sesión.",
         "repair": "Preguntar a Repair",
         "hosted": "Un ordenador que alojamos nosotros puede ejecutar tus agentes en su lugar.",
         "cloud": "Usar Intentic en la nube",

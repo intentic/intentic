@@ -1,4 +1,5 @@
 import type { CommitResult, GitChange, GitChanges, GitScope, GitTarget, RepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
+import type { IndexRun, IndexRunStart } from "@intentic/sandbox-contract/schemas/git/index-run";
 import { UNATTRIBUTED_ORIGIN } from "@intentic/sandbox-contract/schemas/git/git";
 import { worktreeChanges } from "../fixture/workspace";
 
@@ -99,6 +100,26 @@ export const commit = (repo: string, stageFirst: GitTarget | undefined): CommitR
     }
     return result;
 };
+
+/** Each repo's last stage or commit run: the simulated index moves at once, so a run is settled when it starts. */
+const runs = new Map<string, IndexRun>();
+let runCount = 0;
+
+/** A stage or commit run (IndexRunSchema), done on the spot and answered already passed; the editor's follow reads it once. */
+export const startIndexRun = ({ repo, op, target }: IndexRunStart): IndexRun => {
+    runCount += 1;
+    const now = Date.now();
+    const run: IndexRun = { status: `passed`, id: `demo-run-${String(runCount)}`, repo, op, command: `git ${op === `stage` ? `add` : `commit`}`, startedAt: now, finishedAt: now, output: `` };
+    if (op === `commit`) {
+        run.result = commit(repo, target);
+    } else {
+        stage(repo, target ?? {});
+    }
+    runs.set(repo, run);
+    return run;
+};
+
+export const indexRunState = (repo: string): IndexRun => runs.get(repo) ?? { status: `idle`, id: ``, repo, command: ``, output: `` };
 
 export const discard = (repo: string, target: GitTarget) => {
     for (const path of resolve(repo, target)) {

@@ -1,5 +1,6 @@
-import { rmdir } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { mkdtemp, rm, rmdir, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import type { ScratchPath } from "@intentic/sandbox-contract/schemas/git/git";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { EMPTY_TREE } from "../../workspace/layout/git-layout.js";
@@ -95,8 +96,9 @@ export const commitIndex = async (
 
 // Commits the working-tree state of exactly `paths` (adds, edits, deletions), disregarding whatever else is staged and
 // leaving that staging as it was. The paths are staged first, since `commit` refuses a path git has never seen, then
-// `--only` records them alone; the index reads clean on them afterwards. False when they already match HEAD. One
-// spawn for the commit, since a commit cannot be chunked; the list is a landing's claim, not a whole tree.
+// `--only` records them alone; the index reads clean on them afterwards. False when they already match HEAD. The diff
+// check is chunked through `chunkPaths` to stay under ARG_MAX; the commit itself cannot be chunked (`--only` records
+// a single snapshot), so paths are fed via a pathspec file when they wouldn't fit a single argv.
 export const commitOnly = async (
     dir: string,
     paths: readonly string[],
@@ -109,13 +111,35 @@ export const commitOnly = async (
     }
     await stagePaths(dir, paths, git);
     const head = await headSha(dir, git);
-    try {
-        await git(dir, ["diff", "--cached", "--quiet", "--no-textconv", "--no-ext-diff", head ?? EMPTY_TREE, "--", ...paths]);
-        return false;
-    } catch {
-        // The paths differ from HEAD, fall through to commit.
+    // Check whether the staged paths differ from HEAD at all; chunked to stay under ARG_MAX.
+    let anyDiff = false;
+    for (const chunk of chunkPaths(paths)) {
+        try {
+            await git(dir, ["diff", "--cached", "--quiet", "--no-textconv", "--no-ext-diff", head ?? EMPTY_TREE, "--", ...chunk]);
+        } catch {
+            anyDiff = true;
+            break;
+        }
     }
-    await git(dir, [...identity(author), "commit", "-q", "--only", "-m", message, "--", ...paths]);
+    if (!anyDiff) {
+        return false;
+    }
+    // `commit --only` records one atomic snapshot so it cannot be chunked; when the path list would exceed ARG_MAX,
+    // feed it through a temporary pathspec file instead, matching the pattern in scratch.ts:withScratchExcluded.
+    const chunks = chunkPaths(paths);
+    if (chunks.length === 1) {
+        // Small enough for a single argv.
+        await git(dir, [...identity(author), "commit", "-q", "--only", "-m", message, "--", ...paths]);
+    } else {
+        const specs = await mkdtemp(join(tmpdir(), "intentic-commit-paths-"));
+        try {
+            const file = join(specs, "pathspecs");
+            await writeFile(file, paths.map((p) => `:(literal)${p}`).join("\0"));
+            await git(dir, [...identity(author), "commit", "-q", "--only", "-m", message, `--pathspec-from-file=${file}`, "--pathspec-file-nul"]);
+        } finally {
+            await rm(specs, { recursive: true, force: true });
+        }
+    }
     return true;
 };
 

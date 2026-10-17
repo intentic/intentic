@@ -103,6 +103,7 @@ const COMMANDS: &[&str] = &[
     "onboarding_set_up",
     "onboarding_pause",
     "onboarding_restart",
+    "onboarding_sign_out",
     "onboarding_use_cloud",
     // The first task (first_task.rs).
     "first_task_read",

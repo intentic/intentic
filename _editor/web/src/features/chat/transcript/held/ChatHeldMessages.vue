@@ -2,7 +2,7 @@
 import { Button, Icon, type Tip } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { useLimitResend } from "../../panel/pane/scheduledSend";
 import { atReopenPhrase, pickUpWhen } from "../../../../models/conversations/endings/pickUp";
@@ -16,6 +16,8 @@ import ChatHeldStatus from "./ChatHeldStatus.vue";
 import { HELD_PRESS_ATTR } from "../../panel/pane/heldLineSeen";
 import { useHeldQueue } from "./heldQueue";
 import { sendAnywayTip } from "../../../../models/conversations/transcript/memoryTip";
+import { track } from "../../../../app/analytics";
+import { composeAgent } from "../../../../models/fleet/agentActions";
 
 /* What the conversation's queue holds, drawn where the reader looks for a message they just sent: at the foot of the transcript, as their own prompts. What a Stop or a refusal held is marked not sent, over the one line that says why and the one press that sends it; a low-memory hold also asks what happens next, as a spent allowance does. Each group of messages booked for later stands under its own line with the time it goes, its own Change and its own Send now (ChatHeldBooking). */
 
@@ -25,9 +27,18 @@ defineProps<{
 }>();
 
 const t = useT();
-const { conversation, waiting, streaming, resumeQueue, bookedGroups, spentReopensAt } = usePaneView();
-const { held, notice, reason, detail } = useHeldQueue();
+const { conversation, waiting, streaming, resumeQueue, bookedGroups, spentReopensAt, lastFailure } = usePaneView();
+const { held, notice, reason, detail, deterministic } = useHeldQueue();
 const limitResend = useLimitResend(() => conversation.value);
+
+// Once per refused turn that reaches this component: fires when `held` transitions to true with a refusal reason.
+// The card's failure code carries the daemon's error code (agent-domain-refused, etc.).
+watch(held, (isHeld) => {
+    if (isHeld && reason.value === `refused`) {
+        const code = lastFailure.value?.code;
+        track(`turn_refused`, { code, agent: conversation.value.selection.provider.value });
+    }
+});
 
 // The one press, worded for what it overrides: a warning it goes past, a refusal it tries again, a stop it undoes. All
 // three let the hold go (TurnClient.resume), and none touches a booked message: a low-memory hold warns a person once a
@@ -36,6 +47,20 @@ interface HeldPress {
     readonly label: string;
     readonly hint?: Tip | undefined;
 }
+// A refusal latched on this conversation (its persona, its start folder) refuses every resend the same way, and nothing
+// clears it here: the conversation keeps the first answer it got (the registry's identity). The way on is a fresh chat,
+// opened with the person's held words in its composer to read and send there; the held messages stay where they are,
+// each with its own door (ChatHeldBubble), so nothing is lost by the press.
+const freshHint = computed((): Tip => ({ title: t(`chat.chatHeld.startNewChatTitle`), note: t(`chat.chatHeld.startNewChatNote`) }));
+const startFresh = (): void => {
+    const words = waiting.value
+        .filter((message) => message.voice === `person`)
+        .map((message) => message.text)
+        .filter((text) => text.length > 0);
+    track(`turn_refused_new_chat`, { code: lastFailure.value?.code, held: waiting.value.length });
+    composeAgent(words.join(`\n\n`));
+};
+
 // What the press lets go: the messages the hold kept, by id, so a booking beside them stays on its time. Sent only to a
 // sandbox that books each message (TurnClient.resume); an older one lets its whole queue go, as it always did.
 const heldIds = computed(() => waiting.value.map((message) => message.id));
@@ -101,7 +126,12 @@ const sendAtReopen = (): void => {
             <ChatHeldStatus :reason="reason" :detail="detail" :spread="compact" v-bind="{ [HELD_PRESS_ATTR]: `` }">
                 <!-- Held means nothing goes by itself, even after a turn running now: the press lets it go, after that turn if one runs. -->
                 <span class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+                    <!-- A resend would be refused the same way, so the one press is the way on rather than another try. -->
+                    <Button v-if="deterministic" size="small" thumb v-tooltip.top="freshHint" @click="startFresh()">{{
+                        t(`chat.chatHeld.startNewChat`)
+                    }}</Button>
                     <Button
+                        v-else
                         size="small"
                         thumb
                         :tier="reopenAt === undefined ? undefined : `quiet`"

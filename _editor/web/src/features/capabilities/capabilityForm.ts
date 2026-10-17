@@ -1,4 +1,4 @@
-import { type CapabilityCatalogEntry, instancesOf } from "@intentic/capability-catalog";
+import { type CapabilityCatalogEntry, instancesOf, capabilityFieldAvailable } from "@intentic/capability-catalog";
 import type { CapabilityField } from "@intentic/extension-manifest";
 import type { ForticlientConnection } from "@intentic/sandbox-contract/schemas/vpn";
 import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -43,6 +43,7 @@ const splicedAtCaret = (current: string, event: ClipboardEvent, pasted: string):
 };
 
 export interface FormHost {
+    readonly hosted?: Readonly<Ref<boolean>>;
     readonly selected: Readonly<Ref<CapabilityCatalogEntry | undefined>>;
     // The connection the form is over; undefined while adding.
     readonly editing: Readonly<Ref<CapabilitySummary | undefined>>;
@@ -80,7 +81,12 @@ const linkedPicker =
         form.touched.clear();
     };
 
-export const useCapabilityForm = ({ selected, editing, instances, capabilities, device, recommendationFor, contributionOf, manifestOf, error }: FormHost) => {
+// A tile's fields on one side of the Advanced fold, less those this kind of machine cannot offer (a GPU on a hosted one).
+const fieldsOf = (entry: CapabilityCatalogEntry, values: FormValues, on: { advanced: boolean; hosted: boolean }): readonly CapabilityField[] =>
+    shownFields(entry, values).filter((field) => (field.advanced === true) === on.advanced && capabilityFieldAvailable(entry, field.key, on.hosted));
+
+export const useCapabilityForm = (host: FormHost) => {
+    const { selected, editing, instances, capabilities, device, recommendationFor, contributionOf, manifestOf, error } = host;
     const name = ref(``);
     // Whether the user (or a picked tile) chose the name; until then the field tracks the live suggestion.
     const nameEdited = ref(false);
@@ -121,11 +127,10 @@ export const useCapabilityForm = ({ selected, editing, instances, capabilities, 
     const clear = (): void => {
         name.value = ``;
         nameEdited.value = false;
-        for (const key of Object.keys(values)) {
-            delete values[key];
-        }
-        for (const key of Object.keys(pasteNotes)) {
-            delete pasteNotes[key];
+        for (const bag of [values, pasteNotes]) {
+            for (const key of Object.keys(bag)) {
+                delete bag[key];
+            }
         }
         probeResult.value = undefined;
         probedWho.value = undefined;
@@ -251,10 +256,8 @@ export const useCapabilityForm = ({ selected, editing, instances, capabilities, 
         },
         fieldPlaceholder: (field: CapabilityField): string | undefined => placeholderFor(field, values[field.key], keptSecrets.value),
         // Main fields are the tile's actual questions; advanced ones fold behind one line.
-        mainFields: (entry: CapabilityCatalogEntry): readonly CapabilityField[] =>
-            shownFields(entry, values).filter((field) => field.advanced !== true),
-        advancedFields: (entry: CapabilityCatalogEntry): readonly CapabilityField[] =>
-            shownFields(entry, values).filter((field) => field.advanced === true),
+        mainFields: (entry: CapabilityCatalogEntry) => fieldsOf(entry, values, { advanced: false, hosted: host.hosted?.value === true }),
+        advancedFields: (entry: CapabilityCatalogEntry) => fieldsOf(entry, values, { advanced: true, hosted: host.hosted?.value === true }),
         versionToken: computed(() => versionReadToken(values, keptSecrets.value)),
         // What the answers compose into (a spending policy, a RAM bill), kept current with what submit agrees to.
         formSummary: computed(() => answersSummary(selected.value?.kind, values)),

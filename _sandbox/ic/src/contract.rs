@@ -216,14 +216,40 @@ fn parse_probes(output: &str) -> Vec<Probe> {
         .collect()
 }
 
+fn gpu_probe_passed(success: bool, stdout: &str) -> bool {
+    success && stdout.lines().any(|line| line.contains("UUID: GPU-"))
+}
+
+fn gpu_on_this_host(image: &str) -> bool {
+    let command = docker::command(&[
+        "run",
+        "--rm",
+        "--pull=never",
+        "--network=none",
+        "--gpus=all",
+        "--entrypoint=nvidia-smi",
+        image,
+        "-L",
+    ]);
+    intentic_bounded::capture(
+        command,
+        std::time::Duration::from_secs(20),
+        intentic_bounded::Reach::Tree,
+    )
+    .is_ok_and(|out| gpu_probe_passed(out.success(), &out.stdout))
+}
+
 /// Run the probes against THIS host; returns the tokens the host cannot provide. Only the two kinds the
 /// contract promises are interpreted — an image newer than this binary may know a third, and that reads as
 /// unsupported with a message: the sandbox starts without the extra and says so, which beats guessing yes
 /// and failing the launch.
-pub fn unsupported_on_this_host(probes: &[Probe]) -> Vec<String> {
+pub fn unsupported_on_this_host(probes: &[Probe], image: &str) -> Vec<String> {
     let mut unsupported = Vec::new();
     for probe in probes {
         let satisfied = match probe.kind.as_str() {
+            // New Docker can resolve --gpus through CDI with no registered nvidia runtime. Conversely,
+            // a registered runtime on a GPU-less host proves nothing: exercise the actual device request.
+            "runtime" if probe.token == "--gpus=all" => gpu_on_this_host(image),
             "runtime" => docker::try_capture(&["info", "--format", "{{json .Runtimes}}"])
                 .is_some_and(|runtimes| runtimes.contains(&format!("\"{}\"", probe.target))),
             "device" => std::path::Path::new(&probe.target).exists(),
@@ -462,7 +488,7 @@ mod tests {
         // put a flag on the docker run that the host cannot honour and fail the whole launch.
         let probes = parse_probes("--gpus=all\tsome-future-kind\twhatever");
         assert_eq!(
-            unsupported_on_this_host(&probes),
+            unsupported_on_this_host(&probes, "unused"),
             vec!["--gpus=all".to_string()]
         );
     }
@@ -470,16 +496,33 @@ mod tests {
     #[test]
     fn a_device_probe_answers_from_the_filesystem() {
         // Satisfied: /dev/null exists on every host this runs on.
-        assert!(
-            unsupported_on_this_host(&parse_probes("--device=/dev/null\tdevice\t/dev/null"))
-                .is_empty()
-        );
+        assert!(unsupported_on_this_host(
+            &parse_probes("--device=/dev/null\tdevice\t/dev/null"),
+            "unused"
+        )
+        .is_empty());
         // Unsatisfied: a path that cannot exist reports the token as unavailable.
         assert_eq!(
-            unsupported_on_this_host(&parse_probes(
-                "--device=/dev/nope\tdevice\t/dev/intentic-no-such-node"
-            )),
+            unsupported_on_this_host(
+                &parse_probes("--device=/dev/nope\tdevice\t/dev/intentic-no-such-node"),
+                "unused"
+            ),
             vec!["--device=/dev/nope".to_string()]
         );
+    }
+}
+
+#[cfg(test)]
+mod gpu_tests {
+    use super::gpu_probe_passed;
+    #[test]
+    fn device_request_must_succeed_and_list_a_physical_gpu() {
+        assert!(gpu_probe_passed(true, "GPU 0: NVIDIA (UUID: GPU-1234)"));
+        assert!(!gpu_probe_passed(false, "GPU 0: NVIDIA (UUID: GPU-1234)"));
+        assert!(!gpu_probe_passed(true, "No devices were found"));
+        assert!(!gpu_probe_passed(
+            false,
+            "failed to discover GPU vendor from CDI: no known GPU vendor found"
+        ));
     }
 }

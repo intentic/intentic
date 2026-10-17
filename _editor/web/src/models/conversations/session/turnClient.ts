@@ -22,7 +22,7 @@ import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { accountsOutdated } from "../../providers/accountsOutdated";
 import { type ContinueOptions, repointedPickUp, withHandoffChosen } from "../endings/pickUp";
 import { type AttachHead, type FollowEnd, followRun, type SentMessage, type TurnContext } from "../../../client/sandbox/streams/turnStream";
-import { noteTurnCompleted } from "../../../app/analytics";
+import { noteTurnCompleted, track } from "../../../app/analytics";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
 import { type ChatAttachment, continuationFor, isNudgeText } from "../transcript/transcript";
 import { refusalWords } from "../transcript/sandboxNotice";
@@ -473,6 +473,8 @@ export class TurnClient {
         this.giveBack(sent, messageId);
         // In the reader's language where the refusal is one this build knows (a turn already running), else as said.
         this.host.error.value = t(`chat.sandboxNotice.refusedBack`, { reason: refusalWords(refusal.message) });
+        // Once per refused turn, so a repeating door refusal is visible in analytics.
+        track(`turn_refused`, { agent: this.host.selection.provider.value });
     }
 
     // Hands an opened turn's words to the daemon and follows it to its end. `taken` hears exactly once whether the daemon

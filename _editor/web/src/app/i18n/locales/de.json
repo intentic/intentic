@@ -316,7 +316,18 @@
             "needsInput": "Eingabe nötig",
             "inputWaitProcess": "Prozess",
             "inputWaitFor": "Wartet seit",
-            "inputWaitNote": "Nichts in der Sandbox wird darauf antworten. Stoppen beendet den Befehl, damit die Arbeit übernommen werden kann."
+            "inputWaitNote": "Nichts in der Sandbox wird darauf antworten. Stoppen beendet den Befehl, damit die Arbeit übernommen werden kann.",
+            "landProcessStopped": "Der Git-Prozess des Arbeitsbereichs wurde beendet. Versuche erneut, die Arbeit dieses Agenten zu übernehmen.",
+            "landTooManyPaths": "Diese Änderung enthält zu viele Dateipfade, um sie auf einmal zu übernehmen. Reduziere die Überschneidungen in deinem Arbeitsbereich und versuche es erneut.",
+            "landOutputLimit": "Git hat mehr Informationen zurückgegeben, als der Arbeitsbereich verarbeiten konnte. Verkleinere die Änderung und versuche es erneut.",
+            "workspaceOverlap": "{count} Dateien in deinem Arbeitsbereich überschneiden sich mit der Arbeit dieses Agenten. Committe oder verwirf ihre Änderungen und versuche es erneut."
+        },
+        "agentsTile": {
+            "countingEverySandbox": "Alle Sandboxes werden gezählt",
+            "countingExcept": "Alle Sandboxes außer {names} werden gezählt, das nicht antwortet | Alle Sandboxes außer {names} werden gezählt, die nicht antworten",
+            "needYou": "{count} braucht Sie | {count} brauchen Sie",
+            "needYouOutside": "{owed} ({outside} außerhalb von {project})",
+            "owedElsewhere": "{owed}, {elsewhere} woanders"
         },
         "agentsView": {
             "agentResolveConflict": "Den Agenten den Konflikt lösen lassen?",
@@ -352,6 +363,8 @@
             "noAgentYoursMentions": "Keiner Ihrer Agenten erwähnt „{trim}“. Das durchsucht die Titel und was beide Seiten im Chat gesagt haben.",
             "noAgentsWorkingStart": "Keine Agenten am Arbeiten. Starten Sie einen und delegieren Sie.",
             "noMatchesInLane": "Keine Treffer in dieser Spur.",
+            "needYouElsewhere": "{count} braucht Sie in anderen Projekten | {count} brauchen Sie in anderen Projekten",
+            "showThem": "Anzeigen",
             "nothingArchivedYetFinished": "Noch nichts archiviert. Fertige Agenten landen nach ein paar ruhigen Tagen von selbst hier.",
             "nothingNeedsRightNow": "Gerade braucht Sie nichts.",
             "nothingWrittenToWorkspace": "Nichts wird in Ihren Workspace geschrieben, wenn es nicht gelingt. Sie können den Zug jederzeit stoppen.",
@@ -720,7 +733,7 @@
             "sendItAgain": "Erneut senden",
             "troubleSigningInUse": "Probleme bei der Anmeldung? Nutzen Sie Googles eigene Seite.",
             "continueOnGooglesPage": "Auf Googles Seite fortfahren",
-            "googleDidntComeBack": "Die Anmeldung in Googles Fenster wurde nicht abgeschlossen. Fahren Sie stattdessen auf Googles Seite fort: Das funktioniert auch, wenn Pop-ups blockiert werden.",
+            "googleDidntComeBack": "Warten Sie noch auf Google? Wenn das Fenster hängt oder geschlossen ist, fahren Sie stattdessen auf Googles Seite fort: Das funktioniert auch, wenn Pop-ups blockiert werden.",
             "googleAnswerRefused": "Google hat geantwortet, aber mit einer Anmeldung, die dieser Computer für bereits abgelaufen hält: Seine Uhr geht womöglich falsch. Fahren Sie stattdessen auf Googles Seite fort.",
             "continueGoogleInBrowser": "Im Browser mit Google weitermachen",
             "continueGoogle": "Weiter mit Google"
@@ -897,6 +910,8 @@
             "renamedTo": "Umbenannt in"
         },
         "capabilitySubmit": {
+            "gpuDisable": "GPU-Anforderung entfernen",
+            "gpuHosted": "GPU-Zugriff ist in gehosteten Sandboxes nicht verfügbar. Verwende eine lokale oder selbst gehostete Sandbox mit NVIDIA-GPU.",
             "walletCapsNotSaved": "Die Kachel wurde gespeichert, aber die Plattform hat ihre Ausgabenlimits nicht übernommen. Der Signierdienst wendet daher weiterhin die bisherigen Limits an. Speichern Sie die Kachel erneut, um es noch einmal zu versuchen.",
             "walletOwnerOnly": "Nur der Eigentümer dieser Sandbox kann die Ausgabenlimits ihrer Wallet ändern: Die Wallet, die bezahlt, gehört ihm."
         },
@@ -1183,6 +1198,15 @@
             "hosts": "Seiten, zu denen es darf: {hosts}.",
             "changeOn": "Ändern auf {machine}:",
             "copyCommand": "Befehl kopieren"
+        },
+        "catalog": {
+            "docker": {
+                "fields": {
+                    "gpu": {
+                        "hint": "Nur lokal oder selbst gehostet. Benötigt eine NVIDIA-GPU und nvidia-container-toolkit oder CDI auf dem Host; wird vor dem Speichern geprüft."
+                    }
+                }
+            }
         }
     },
     "chat": {
@@ -1351,7 +1375,10 @@
                 "swapped": "Ausgelagert",
                 "title": "Speicher knapp",
                 "used": "Belegt"
-            }
+            },
+            "startNewChat": "Neuen Chat starten",
+            "startNewChatTitle": "Erneutes Senden würde genauso abgelehnt",
+            "startNewChatNote": "Die Einrichtung dieser Unterhaltung kann hier nicht laufen. Ein neuer Chat öffnet sich mit Ihrer Nachricht im Eingabefeld."
         },
         "chatJobRow": {
             "ended": "Beendet nach {elapsed}",
@@ -2198,6 +2225,10 @@
                 "goOn": "Sprich weiter…",
                 "listeningDetail": "Hört auf diesem Gerät auf „{word}“. Klicke, um eine Stunde zu pausieren."
             }
+        },
+        "sandboxNotice": {
+            "undeliveredDeterministic": "{message} Ihre Nachricht wurde nicht zugestellt, und erneutes Senden würde genauso abgelehnt. Starten Sie einen neuen Chat, um weiterzumachen.",
+            "agentDomainRefused": "Die Arbeitsbereich-Einrichtung dieser Unterhaltung kann hier nicht laufen."
         }
     },
     "common": {
@@ -3837,6 +3868,8 @@
             "leaveLoseAccessSandbox": "„{name}“ verlassen? Sie verlieren den Zugriff; die Sandbox läuft weiter.",
             "leaveSandbox": "Sandbox verlassen?",
             "needsYou": "Braucht Sie",
+            "asleep": "im Ruhezustand: öffnet sich beim Auswählen",
+            "starting": "startet: gleich bereit",
             "notAnswering": "Antwortet nicht",
             "removeAccount2": "Aus dem Konto entfernen?",
             "removeAccountEveryoneLoses": "„{name}“ aus Ihrem Konto entfernen? Alle verlieren hier den Zugriff; die Sandbox selbst läuft weiter, wo sie ist.",
@@ -6397,7 +6430,7 @@
             "restorePointSavedFirst2": "Zuerst wird ein Wiederherstellungspunkt gesichert, das hier ist also über „Wiederherstellungspunkte“ umkehrbar.",
             "retriesWithHooks": "{verb} wiederholt mit Hooks",
             "scratchLeftOut": "Alles stagen und alles committen lassen {count} Pfad aus, der nach Arbeitsrest aussieht | Alles stagen und alles committen lassen {count} Pfade aus, die nach Arbeitsresten aussehen",
-            "scratchLeftOutHint": "Stagen Sie ihn über seine eigene Zeile, um ihn zu committen.",
+            "scratchLeftOutHint": "Sie werden aus Commits ausgeschlossen, weil sie wie generierter oder Abhängigkeitsinhalt aussehen. Stagen Sie einen über seine eigene Zeile, wenn er committet werden soll.",
             "scratchTag": "Arbeitsrest",
             "stageAllFirst": "Staged zuerst alles",
             "staged2": "Gestaged",
@@ -6710,6 +6743,28 @@
             "downloadNamed": "{name} herunterladen",
             "printNamed": "{name} drucken",
             "listFailed": "Welche Dokumente diese Unterhaltung erstellt hat, konnte nicht gelesen werden."
+        },
+        "indexRuns": {
+            "commitStopped": "Commit gestoppt. Nichts wurde aufgezeichnet; was schon gestaged war, bleibt gestaged.",
+            "declined": "Nicht gestaged: Du hast die {count} Datei liegen lassen. | Nicht gestaged: Du hast die {count} Dateien liegen lassen.",
+            "lost": "Der Lauf in {repo} ist verloren gegangen: Die Sandbox wurde neu gestartet oder hat ihn vergessen. Prüfe die Liste, bevor du es erneut versuchst.",
+            "stageStopped": "Stagen gestoppt. Was git schon gestaged hat, bleibt gestaged; unstage es, um es zurückzunehmen."
+        },
+        "indexRunPrompt": {
+            "commitAnyway": "Trotzdem committen",
+            "commitFiles": "{count} Datei committen? | {count} Dateien committen?",
+            "committing": "Commit in {repo}…",
+            "counting": "Zähle, was in {repo} gestaged würde…",
+            "dirFiles": "{count} Datei | {count} Dateien",
+            "looksLikeDependencies": "Das ist weit mehr als eine übliche Änderung und bedeutet meist Abhängigkeiten oder Build-Ausgaben, die niemand committen wollte. Diese Ordner enthalten am meisten:",
+            "reconnecting": "Verbindung wird wiederhergestellt…",
+            "repoRoot": "(oberste Ebene)",
+            "stageAnyway": "Trotzdem stagen",
+            "stageFiles": "{count} Datei stagen? | {count} Dateien stagen?",
+            "staging": "Stagen in {repo}…",
+            "stagingFiles": "{count} Datei wird in {repo} gestaged… | {count} Dateien werden in {repo} gestaged…",
+            "stop": "Stoppen",
+            "waiting": "Warte, bis {repo} frei ist…"
         }
     },
     "needs": {

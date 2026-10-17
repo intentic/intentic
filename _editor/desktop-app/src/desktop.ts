@@ -261,7 +261,7 @@ export type OnboardingSetup =
           readonly step?: string;
           readonly percent: number;
           readonly needsYou?: boolean;
-          /** The setup a Windows restart was waited for, and when it parked (seconds since the epoch). */
+          /** The setup a Windows restart or sign-out was waited for, and when it parked (seconds since the epoch). */
           readonly resumed?: boolean;
           readonly parkedAt?: number;
           /** It has said nothing since then (seconds since the epoch), for twenty minutes or more; and its transcript. */
@@ -288,6 +288,7 @@ export const onboardingRecheck = (): Promise<void> => invoke(`onboarding_recheck
 /** `again`: stop a setup that has gone quiet and start it anew; without it a running setup is left alone. */
 export const onboardingSetUp = (again = false): Promise<void> => invoke(`onboarding_set_up`, { again });
 export const onboardingPause = (paused: boolean): Promise<void> => invoke(`onboarding_pause`, { paused });
+export const onboardingSignOut = (): Promise<void> => invoke(`onboarding_sign_out`);
 export const onboardingRestart = (when: `now` | `in10Minutes` | `later`): Promise<void> => invoke(`onboarding_restart`, { when });
 export const onboardingUseCloud = (): Promise<void> => invoke(`onboarding_use_cloud`);
 export const onOnboarding = (handler: (snapshot: OnboardingSnapshot) => void): Promise<UnlistenFn> =>

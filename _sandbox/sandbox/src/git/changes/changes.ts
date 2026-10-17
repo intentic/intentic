@@ -11,6 +11,10 @@ import { MAX_FILE_DIFF_BYTES } from "./diff-partial.js";
 // Rest of the review sits beside this file: porcelain parsers, index moves, diffs, and the commit graph.
 // Runs against the real git dir; each function takes an injectable GitRunner (defaultGit shells out).
 
+// Counting lines for untracked files beyond what the scan can ship wastes reads nobody sees. This matches the per-repo
+// cap in git.routes.ts (MAX_REPO_CHANGES) without importing it, since the routes module imports us via the slice.
+const UNTRACKED_LINE_LIMIT = 500;
+
 // HEAD's sha; undefined when git answers with an exit status (unborn HEAD, no repository at `dir`). A git that never
 // answered (spawn failure, kill, a dead forker) throws: read as unborn, a discard would untrack and clean every file.
 export const headSha = async (dir: string, git: GitRunner = defaultGit): Promise<string | undefined> => {
@@ -56,18 +60,22 @@ const untrackedLineStats = async (dir: string, path: string): Promise<{ addition
 };
 
 // Thousands of untracked paths would hold every file in memory at once; read a few at a time off a shared cursor.
-// Files not in `untracked` are left exactly as the numstat pass returned them.
+// Files not in `untracked` are left exactly as the numstat pass returned them. `limit` caps how many untracked files
+// are read for line counts: the scan ships at most MAX_REPO_CHANGES rows, and counting lines for files that will be
+// truncated away wastes reads on what nobody sees.
 const UNTRACKED_READ_CONCURRENCY = 8;
-const withUntrackedLineStats = async (dir: string, untracked: readonly string[], changes: GitChange[]): Promise<GitChange[]> => {
+const withUntrackedLineStats = async (dir: string, untracked: readonly string[], changes: GitChange[], limit?: number): Promise<GitChange[]> => {
     if (untracked.length === 0) {
         return changes;
     }
+    // Only count lines for the first `limit` untracked files; the rest ship without counts (truncated away by the cap).
+    const toCount = limit !== undefined && limit < untracked.length ? untracked.slice(0, limit) : untracked;
     const stats = new Map<string, { additions: number; deletions: number }>();
     let cursor = 0;
     await Promise.all(
-        Array.from({ length: Math.min(UNTRACKED_READ_CONCURRENCY, untracked.length) }, async () => {
-            for (let index = cursor++; index < untracked.length; index = cursor++) {
-                const path = untracked[index] ?? "";
+        Array.from({ length: Math.min(UNTRACKED_READ_CONCURRENCY, toCount.length) }, async () => {
+            for (let index = cursor++; index < toCount.length; index = cursor++) {
+                const path = toCount[index] ?? "";
                 const stat = await untrackedLineStats(dir, path);
                 if (stat !== undefined) {
                     stats.set(path, stat);
@@ -111,7 +119,7 @@ const readChangedFiles = async (dir: string, git: GitRunner): Promise<ChangedFil
     // No numstat for a conflict: line counts have no answer across three stages, so the row shows none.
     const [staged, unstaged] = await Promise.all([
         withLineStats(dir, ["--cached", base], stagedNames, git),
-        withLineStats(dir, [], unstagedNames, git).then((changes) => withUntrackedLineStats(dir, untracked, changes)),
+        withLineStats(dir, [], unstagedNames, git).then((changes) => withUntrackedLineStats(dir, untracked, changes, UNTRACKED_LINE_LIMIT)),
     ]);
     // `head` rides along free from the status read; other readers would each spend a rev-parse for the same sha.
     return { ...(branch !== undefined ? { branch } : {}), ...(head !== undefined ? { head } : {}), conflicted, staged, unstaged, blobs };
@@ -139,7 +147,7 @@ const readChangesAgainstBase = async (dir: string, base: string, scratch: readon
     }
     // Same numstat pass as the working-tree review; untracked files added above are counted from disk instead.
     const counted = await withLineStats(dir, [base], [...changes.values()], git);
-    return withUntrackedLineStats(dir, untracked, counted);
+    return withUntrackedLineStats(dir, untracked, counted, UNTRACKED_LINE_LIMIT);
 };
 
 // Same cumulative delta as changesAgainstBase, from two refs instead of a checkout; what an archived review runs on.

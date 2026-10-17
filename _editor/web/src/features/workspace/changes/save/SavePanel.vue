@@ -17,6 +17,7 @@ import { useSaveActions } from "./useSaveActions";
 import type { OpenMode } from "../../../../models/workspace/tabs/workspaceTabs";
 import { useT } from "@intentic/ui/i18n";
 import CommitField from "../commit/CommitField.vue";
+import IndexRunPrompt from "../commit/IndexRunPrompt.vue";
 import ChangeRowName from "../../../../components/ChangeRowName.vue";
 import ProviderLogo from "../../../../parts/providers/ProviderLogo.vue";
 
@@ -226,6 +227,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                 :draft-title="soleId === undefined ? undefined : titleOf(soleId)"
                 @submit="doSave"
             />
+            <IndexRunPrompt />
             <div class="flex items-center justify-end gap-1">
                 <Button
                     v-if="pending > 0"

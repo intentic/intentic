@@ -34,34 +34,52 @@ if (send === undefined) {
 
 process.on("message", (request: ForkRequest) => {
     const from = process.hrtime.bigint();
-    execFile(
-        request.command,
-        [...request.args],
-        {
-            maxBuffer: request.maxBuffer,
-            ...(request.timeout !== undefined ? { timeout: request.timeout } : {}),
-            ...(request.cwd !== undefined ? { cwd: request.cwd } : {}),
-            ...(request.env !== undefined ? { env: request.env } : {}),
-        },
-        (error, stdout, stderr) => {
-            const response: ForkResponse = {
-                id: request.id,
-                stdout,
-                stderr,
-                execMs: Number(process.hrtime.bigint() - from) / 1e6,
-                // A null code (signal-killed) carries nothing to branch on; omitted rather than passed through.
-                ...(error === null
-                    ? {}
-                    : {
-                          failure: {
-                              message: error.message,
-                              ...(error.code !== undefined && error.code !== null ? { code: error.code } : {}),
-                          },
-                      }),
-            };
-            send(response);
-        },
-    );
+    try {
+        execFile(
+            request.command,
+            [...request.args],
+            {
+                maxBuffer: request.maxBuffer,
+                ...(request.timeout !== undefined ? { timeout: request.timeout } : {}),
+                ...(request.cwd !== undefined ? { cwd: request.cwd } : {}),
+                ...(request.env !== undefined ? { env: request.env } : {}),
+            },
+            (error, stdout, stderr) => {
+                const response: ForkResponse = {
+                    id: request.id,
+                    stdout,
+                    stderr,
+                    execMs: Number(process.hrtime.bigint() - from) / 1e6,
+                    // A null code (signal-killed) carries nothing to branch on; omitted rather than passed through.
+                    ...(error === null
+                        ? {}
+                        : {
+                              failure: {
+                                  message: error.message,
+                                  ...(error.code !== undefined && error.code !== null ? { code: error.code } : {}),
+                              },
+                          }),
+                };
+                send(response);
+            },
+        );
+    } catch (error) {
+        // posix_spawn reports an argv past the OS's ARG_MAX by throwing synchronously (spawn E2BIG), ahead of the
+        // callback; uncaught here it would kill the forker and reject every git in flight with it. The call itself
+        // failed, so answer as that one call's failure and stay alive for the next request.
+        // SAFETY: execFile's synchronous throw is its own ErrnoException (spawn errors); a non-object throw degrades
+        // to `code` undefined and `message` undefined-stringified, which the parent reports as-is.
+        const spawnError = error as NodeJS.ErrnoException;
+        const said = { message: String(spawnError.message) };
+        const response: ForkResponse = {
+            id: request.id,
+            stdout: "",
+            stderr: "",
+            execMs: Number(process.hrtime.bigint() - from) / 1e6,
+            failure: spawnError.code === undefined ? said : { ...said, code: spawnError.code },
+        };
+        send(response);
+    }
 });
 
 // Exit rather than linger as an orphan holding a dead pipe once the parent is gone.

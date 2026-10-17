@@ -68,7 +68,7 @@ const unmount = (): void => {
 const mount = (
     agent: FleetAgent,
     pending?: PendingAction,
-    handlers: { onOpen?: () => void; onReview?: () => void; onClose?: () => void; onReland?: () => void; onUnwatch?: () => void } = {},
+    handlers: { onOpen?: () => void; onReview?: () => void; onClose?: () => void; onReland?: () => void; onLand?: () => void; onUnwatch?: () => void } = {},
 ): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -711,4 +711,15 @@ it(`says no "Completed" on a finished card, with a drill-in or without one`, () 
         expect(mount(agent).textContent).not.toContain(`Completed`);
         unmount();
     }
+});
+
+it(`offers Retry for a stopped land process and emits the existing land action`, () => {
+    const onLand = jest.fn();
+    const el = mount({ ...ready(`error`), landFailure: { reason: `the forker exited`, at: 1 } }, undefined, { onLand });
+    expect(el.textContent).toContain(`The workspace's Git process stopped. Retry to land this agent's work.`);
+    expect(el.textContent).not.toContain(`the forker exited`);
+    const retry = textButton(el, `Retry`);
+    expect(retry?.disabled).toBe(false);
+    retry?.click();
+    expect(onLand.mock.calls).toEqual([[]]);
 });

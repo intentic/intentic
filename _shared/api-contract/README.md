@@ -44,3 +44,5 @@ flowchart LR
 - [src/ingress/routes.ts](src/ingress/routes.ts) — `PLATFORM_INGRESS`: every route a machine calls, and what proves the caller.
 - [../../_platform/api/src/router.ts](../../_platform/api/src/router.ts) — where the per-domain handlers are assembled into the contract's shape.
 - [../../_editor/web/src/lib/useApi.ts](../../_editor/web/src/lib/useApi.ts) — the single typed client the editor uses.
+
+Hosted sandbox summaries carry an optional machine `state` (awake, asleep, starting, down or unknown). Its absence on an older platform means unknown; only the daemon’s answer proves reachability.

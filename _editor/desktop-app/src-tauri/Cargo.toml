@@ -16,39 +16,41 @@ name = "intentic_desktop_lib"
 crate-type = ["rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.7.3", features = [] }
 
 # Deliberately short. The machine work is done by the scripts this app bundles (src/scripts.rs), so there is no
 # HTTP client, no docker crate and no async runtime beyond Tauri's own — the crate that used to hold all of that
 # (intentic-desktop-core) is what made the first attempt unmaintainable.
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "image-png"] }
-tauri-plugin-dialog = "2"
-tauri-plugin-opener = "2"
-tauri-plugin-process = "2"
+tauri = { version = "2.12.4", features = ["tray-icon", "image-png"] }
+tauri-plugin-dialog = "2.8.3"
+tauri-plugin-opener = "2.7.2"
+tauri-plugin-process = "2.4.0"
 # NOT target-gated, unlike the two below it. Those two are genuinely desktop-OS-specific plumbing; this one is
 # how the app stays on the version that was released (src/update.rs), and gating it would make the whole
 # module — its state, its commands and the tray row that reads them — conditional on a `cfg` for a platform
 # this app does not build for anyway.
-tauri-plugin-updater = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-url = "2"
+tauri-plugin-updater = "2.14.0"
+serde = { version = "1.0.229", features = ["derive"] }
+# PostHog takes an RFC3339 timestamp: a queued crash must keep its own time across launches.
+time = { version = "0.3.55", features = ["formatting"] }
+serde_json = "1.0.154"
+url = "2.5.8"
 # The sign-in handoff's nonce (auth.rs). Tauri already pulls uuid in transitively; naming it here is what makes
 # "the state a handoff must echo" something this crate generates rather than something it improvises.
-uuid = { version = "1", features = ["v4"] }
-base64 = "0.23"
-sha2 = "0.11"
+uuid = { version = "1.28.0", features = ["v4"] }
+base64 = "0.23.1"
+sha2 = "0.11.1"
 # The update schedule's only need: a sleep that yields rather than one that holds a thread. Tauri's async
 # runtime IS tokio, so this names what is already in the graph instead of adding to it — and the alternative,
 # `spawn_blocking` around `thread::sleep`, would park a pooled worker for six hours at a time.
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1.53.3", features = ["time"] }
 # The one HTTP call this app makes for a page: a local window's account menu and Settings, sent with the session the
 # workspace signed in with (src/account.rs), since that page cannot hold it. The updater's client, at the updater's
 # features (rustls with no provider of its own, ring installed by whichever runs first), so this names what is already
 # compiled into the graph rather than adding a second HTTP or TLS stack.
-reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
-rustls = { version = "0.23", default-features = false, features = ["ring"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring"] }
 # The time-limited child every short read here goes through, shared with `ic` so a fix to it reaches both.
 intentic-bounded = { path = "../../../_sandbox/ic/bounded" }
 # What docker's refusals mean and where Docker Desktop lives, the one reading `ic` makes too (a broken engine is told
@@ -56,21 +58,20 @@ intentic-bounded = { path = "../../../_sandbox/ic/bounded" }
 intentic-docker-host = { path = "../../../_sandbox/ic/docker-host" }
 # A big drop on the workspace, streamed as one tar archive into `docker cp -` (src/drop_copy.rs). Already in the graph
 # at this version through the updater, so this names what is compiled rather than adding a download.
-tar = { version = "0.4", default-features = false }
+tar = { version = "0.4.46", default-features = false }
 # A delete in a local window goes to the Recycle Bin or the Trash, never straight off the disk (local.rs): the one
 # platform API behind a crate rather than written here, because each OS spells it differently (the freedesktop
 # trash spec on Linux, the shell's IFileOperation on Windows). MIT. Default features: `chrono` is what writes the
 # DeletionDate a file manager shows, and `coinit_apartmentthreaded` is the COM mode for the thread the move runs on.
-trash = "5"
+trash = "5.2.9"
 
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
-tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
-tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2.5.4", features = ["deep-link"] }
+tauri-plugin-deep-link = "2.6.2"
 
 # The system's notifications and the dock's count (src/notice.rs, src/badge.rs), each through the platform's own API
-# rather than a notification crate: both crates are already in the graph at these versions (windows through tao and
-# wry, zbus through the opener and single-instance plugins), so naming them adds features to compile and nothing to
-# download, where notify-rust would bring a second `windows` and its own toast wrapper for the same two calls.
+# rather than a notification crate. Windows matches tao/wry so with_webview shares their COM types. The Linux
+# D-Bus calls use zbus 6 on Tauri's runtime; plugins still use zbus 5 internally until their next migration.
 #
 # The rest of `windows`' features are launch.rs (a running copy that does not answer: its window, its process, and
 # ending it) and offline.rs (a workspace navigation that failed, through WebView2's own event, where webview2-com is
@@ -78,7 +79,7 @@ tauri-plugin-deep-link = "2"
 # cli_path.rs: the user's PATH, when the installer could not put the terminal command on it. microphone.rs answers
 # WebView2's permission request for the wake word through the same webview2-com.
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.61", features = [
+windows = { version = "0.62.2", features = [
     "Data_Xml_Dom",
     "UI_Notifications",
     "Win32_System_Com",
@@ -87,10 +88,15 @@ windows = { version = "0.61", features = [
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
 ] }
-webview2-com = "0.38"
+webview2-com = "0.39.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-zbus = "5"
+# deep-link 2.6.2 constructs ParseOption with two fields. rust-ini 0.21.2/3 added required fields in a patch
+# release; keep its last compatible patch until the plugin uses ..Default::default().
+rust-ini = "=0.21.1"
+zbus = { version = "6.0.0", default-features = false, features = ["tokio"] }
+# The stream of notification presses from zbus, polled on Tauri's runtime.
+futures-util = "0.3.34"
 # The microphone for the workspace's wake word (src/microphone.rs): WebKitGTK's media stream setting and its permission
 # request, on the webview Tauri hands over (`with_webview`), which is this crate's own type. Pinned to the version wry
 # pins and at the features Tauri asks for, so this names what is already compiled rather than adding a download.

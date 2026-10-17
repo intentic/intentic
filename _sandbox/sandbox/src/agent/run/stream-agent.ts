@@ -989,6 +989,8 @@ async function* runTurn(
         yield* runPreparedTurn(services, input, signal, worktree, prepared, reach);
     } catch (error) {
         if (!(error instanceof AgentDomainRefusedError)) { throw error; }
+        // Log once per refusal with the structured check that failed, so a repeating persona/startIn mismatch is diagnosable.
+        services.logger.warn({ err: error, conversationId: input.conversationId, check: error.check, startIn: input.startIn }, "agent-domain-refused: turn refused before it ran");
         yield refusalFrame({ code: error.code, message: error.message }, input.unattended === true);
         yield { kind: "done" };
     } finally {

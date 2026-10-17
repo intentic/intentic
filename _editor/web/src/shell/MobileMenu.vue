@@ -35,7 +35,7 @@ import { placementOf, type SandboxPlacement } from "../features/sandbox/overview
 import { useSandboxPlacement } from "../features/sandbox/overview/useSandboxPlacement";
 import { useSandboxAvailability } from "../features/sandbox/overview/useSandboxAvailability";
 import { useWorkspaceTree } from "../models/workspace/tree/useWorkspaceTree";
-import { environment } from "../app/environments/environment";
+import { leaveAfterSignOut } from "../app/environments/afterSignOut";
 import { usePushNotifications } from "../workbench/push/usePushNotifications";
 import { pushMenuRow } from "./pushMenuRow";
 import MenuRow from "./MenuRow.vue";
@@ -151,8 +151,7 @@ const resumeSetup = (id: string) => ({ path: `/setup`, query: { sandbox: id } })
 
 const logout = async (): Promise<void> => {
     await signOut();
-    // Full navigation, not a router push: afterSignOut may point outside this SPA.
-    globalThis.location.href = environment.afterSignOut;
+    leaveAfterSignOut();
 };
 </script>
 

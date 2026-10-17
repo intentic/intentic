@@ -1,7 +1,7 @@
 import type { AgentJob, AgentStatus, AgentWatch } from "@intentic/sandbox-contract/schemas/agents";
 import { formatWhen } from "@intentic/ui/format";
 import { useAudience } from "../../../../app/useAudience";
-import { attentionReason, drillTarget, landFailure, reviewAction } from "../../../../models/agent-status/agentStatus-attention";
+import { attentionReason, drillTarget, landFailure, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
 import { scheduledWhen, standingChip, unfinishedMark } from "../../../../models/agent-status/agentStatus-chips";
 import { attentionCalls, attentionCards, callsOwner, laneOf, type RimAgent, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
 import { agentStandingMeta, agentStatusMeta, activityLine, currentAction } from "../../../../models/agent-status/agentStatus-meta";
@@ -1108,4 +1108,21 @@ describe(`what the agent is doing, in the reader's words`, () => {
         // Its own list item is already prose.
         expect(currentAction({ todo: `Fix the badge` })).toBe(`Fix the badge`);
     });
+});
+
+// Internal process names and OS limits cannot tell a person how to recover their finished work.
+it(`localizes land infrastructure failures and offers retry only for a stopped Git process`, () => {
+    const stopped: AgentStanding = { status: `error`, attention: none, landFailure: { reason: `the forker exited`, at: 1 } };
+    expect(landFailure(stopped)).toBe(`The workspace's Git process stopped. Retry to land this agent's work.`);
+    expect(retryLand(stopped)).toBe(true);
+    expect(landFailure({ ...stopped, status: `landing` })).toBeUndefined();
+    expect(retryLand({ ...stopped, status: `landing` })).toBe(false);
+    for (const reason of [`spawn E2BIG`, `argument list too long`]) {
+        const large = { ...stopped, landFailure: { reason, at: 1 } };
+        expect(landFailure(large)).toBe(`This change includes too many file paths to land at once. Reduce the overlap in your workspace, then land again.`);
+        expect(retryLand(large)).toBe(false);
+    }
+    expect(landFailure({ ...stopped, landFailure: { reason: `stdout maxBuffer length exceeded`, at: 1 } })).toBe(`Git returned more information than the workspace could handle. Reduce the size of this change, then land again.`);
+    expect(workspaceOverlap(12_621)).toBe(`12,621 files in your workspace overlap this agent's work. Commit or discard them, then land again.`);
+    expect(workspaceOverlap(3_000)).toBeUndefined();
 });

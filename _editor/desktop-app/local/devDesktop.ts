@@ -753,6 +753,9 @@ const onboardingVerb = (machine: Machine, command: string, args: InvokeArgs | un
             }
             return changeOnboarding({ prefetch: { state: sent(args, `paused`, true) ? `paused` : `running`, done: prefetch.done, total: prefetch.total } });
         }
+        case `onboarding_sign_out`:
+            // As the app comes back after signing in: the parked setup finishes by itself.
+            return pause(1500).then(() => changeOnboarding({ check: CHECK_READY, setup: { state: `ready` } }));
         case `onboarding_restart`: {
             if (sent(args, `when`, `now`)) {
                 // As the app comes back from the restart: the setup finished, this PC ready.

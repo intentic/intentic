@@ -179,10 +179,7 @@ const runningEvents = (raw: RunningSetup, memory: SetupMemory, now: number): Tol
 const outcomeEvent = (raw: OnboardingSetup, previous: OnboardingSetup, minutes: number | undefined): Tracked | undefined => {
     switch (raw.state) {
         case `waiting`:
-            if (raw.for === `signOut`) {
-                return undefined;
-            }
-            return [`onboarding_setup`, { action: raw.for === `admin` ? `adminRefused` : `restartAsked` }];
+            return [`onboarding_setup`, { action: { admin: `adminRefused`, restart: `restartAsked`, signOut: `signOutAsked` }[raw.for] }];
         case `ready`:
             return [`onboarding_setup`, { action: `ready`, minutes }];
         case `failed`: {

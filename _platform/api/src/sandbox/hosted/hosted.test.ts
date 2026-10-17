@@ -1836,7 +1836,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         });
         const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context: routeContext({ prisma }) });
         // `warm` is read off the app name: a pool claim keeps its pool-assigned name.
-        expect(summary.hosted).toEqual({ region: `iad`, warm: true, canRollBack: false });
+        expect(summary.hosted).toEqual({ state: `unknown`, region: `iad`, warm: true, canRollBack: false });
         expect(fetchSpy).toHaveLength(0);
     });
 
@@ -1867,7 +1867,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         });
         const context = routeContext({ prisma, headers: new Headers() });
         const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context });
-        expect(summary.hosted).toEqual({ region: `iad`, warm: true, canRollBack: false });
+        expect(summary.hosted).toEqual({ state: `unknown`, region: `iad`, warm: true, canRollBack: false });
         expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(`/apps/intentic-sbx-`))).toBe(true);
     });
 
@@ -2083,7 +2083,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             hostedMachine: { findUnique: jest.fn().mockResolvedValue({ appName: `intentic-sbx-a`, machineId: `m1` }), count: jest.fn() },
         });
         const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context: routeContext({ prisma }) });
-        expect(summary.hosted).toEqual({ region: `iad`, warm: false, canRollBack: true });
+        expect(summary.hosted).toEqual({ state: `unknown`, region: `iad`, warm: false, canRollBack: true });
     });
 
     // Same sandbox identity (name, address, sharing) on a fresh, empty disk; nothing on a destroyed machine is worth

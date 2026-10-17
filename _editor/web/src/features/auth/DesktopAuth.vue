@@ -208,7 +208,8 @@ const hand = async (): Promise<void> => {
             // daemon to spend it on, so a nearly-expired one is re-minted here instead. `pick`: no silent attempt at
             // all, so Google's chooser is the only road to a credential.
             idToken = await getIdToken({ gate: false, usableFor: HANDOFF_USABLE_FOR_MS, pick: picking.value });
-            press.answered();
+            // A dismissal is an answer too, but only a credential is a sign-in completed.
+            if (idToken === undefined) { press.answered(); } else { press.completed(); }
         }
         if (idToken === undefined) {
             error.value = noticeOf(t(`auth.desktopAuth.needsGoogleSignIn`));

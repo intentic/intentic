@@ -1,9 +1,13 @@
 import type { ViewBadge } from "@intentic/extension-api";
 import { t } from "@intentic/ui/i18n";
 import { computed, onUnmounted, watch } from "vue";
+import { projectScope } from "../../../app/projectScope";
+import { useAuth } from "../../../client/auth/useAuth";
+import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { subscribe as watchOtherBoxes, silentBoxes } from "../../sandbox/live/fleetAcross";
 import { acrossAttention, listNames, readingAcross, watchRemoteSeen } from "../fleetScope";
 import { useAgents } from "../useAgents";
+import { attentionOutsideProject, trackScopeInputs } from "./attentionOutside";
 
 // What the agents tile shows, wherever it is drawn (rail tile, phone tab): the Attention lane's count follows the
 // board's sandbox scope, and the cross-sandbox sum exists only while the reader has opted into it.
@@ -31,7 +35,11 @@ export const agentsBadge = computed<ViewBadge | undefined>(() => {
         return undefined;
     }
     const elsewhere = readingAcross.value ? acrossAttention.value : 0;
-    const owed = t(`agents.agentsTile.needYou`, { count: total }, total);
+    const needYou = t(`agents.agentsTile.needYou`, { count: total }, total);
+    // The count is the sandbox's; the board shows the open project. Saying how many sit outside it is what keeps a badge
+    // over a quiet board from reading as a bug.
+    const outside = attentionOutsideProject.value;
+    const owed = outside > 0 && projectScope.value !== undefined ? t(`agents.agentsTile.needYouOutside`, { owed: needYou, outside, project: projectScope.value }) : needYou;
     return { count: total, tooltip: elsewhere > 0 ? t(`agents.agentsTile.owedElsewhere`, { owed, elsewhere }) : owed };
 });
 
@@ -63,4 +71,10 @@ export const watchAgentsScope = (): void => {
     // Marks a remote chat read while it's open in front of the user, or it would count toward this number forever.
     watchRemoteSeen();
     followOtherBoxes();
+    const { personas } = usePersonas();
+    const { user } = useAuth();
+    trackScopeInputs(
+        personas,
+        computed(() => user.value?.email),
+    );
 };

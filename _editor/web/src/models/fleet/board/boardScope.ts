@@ -8,37 +8,20 @@ import { hold } from "../../../workbench/notifications/notifications";
 import { presenceOthers } from "../../../workbench/presence/usePresence";
 import { refreshAcross } from "../../sandbox/live/fleetAcross";
 import type { FleetLane } from "../../agent-status/agentStatus-lanes";
-import { unregistered } from "../../agent-status/agentStatus-standing";
 import { otherFleet, partialAnswer, readingAcross } from "../fleetScope";
 import { type FleetAgent, laneGroups } from "../useAgents-fleet";
 import { insideRun, runIdsInLedger } from "../useWorkflowRuns";
 import { followOtherBoxes } from "./agentsTile";
-import { boardOwners, type OwnerLook, ownedBy, ownerFilter, sameAddress } from "../../agent-status/ownership";
-import { agentInProject, heldWakeInProject, runInProject } from "./projectMembership";
+import { boardOwners, type OwnerLook, ownerFilter } from "../../agent-status/ownership";
+import { heldWakeInProject, runInProject } from "./projectMembership";
+import { attentionHidden, scopeFleet } from "./scopeFleet";
 import { type ChildFold, foldChildren, steadyFold } from "./childFold";
 
 // Which of the fleet the board covers: the open project, whose work it is, and whether every other sandbox's roster
 // joins this one's. Lanes group by one rule (laneGroups) either way, so no scope orders a column differently; a sandbox
 // is never a column or a sort key, which would rebuild the very problem the wide board exists to solve.
 
-// The narrowing the reader chose; `project` and `owner` are undefined for all of them.
-export interface Scope {
-    readonly project: string | undefined;
-    readonly owner: string | undefined;
-    readonly me: string | undefined;
-    readonly personas: readonly Persona[];
-}
-
-// A draft not yet sent stays under the project it was opened in, having no record to say so yet, and under Mine and
-// everybody's, being about to be the reader's own; never under a colleague's chip, where it would not belong.
-export const scopeFleet = (fleet: readonly FleetAgent[], { project, owner, me, personas }: Scope): FleetAgent[] => {
-    const keepsDrafts = owner === undefined || sameAddress(owner, me);
-    return fleet.filter(
-        (agent) =>
-            (unregistered(agent.status) && keepsDrafts) ||
-            ((project === undefined || agentInProject(agent, project, personas)) && (owner === undefined || ownedBy(agent, owner))),
-    );
-};
+export { scopeFleet } from "./scopeFleet";
 
 // A run's steps live inside its row, never as cards of their own. Gated on the ledger, not on the row being drawn:
 // every reason a row is off screen (filter, window, archive) must take its conversations off the board too.
@@ -141,6 +124,10 @@ export const useBoardScope = (host: ScopeHost) => {
             keptHeld: scopedHeld.value,
         }),
     );
+    // Items needing the reader that the open project keeps off the board, for the Attention lane to offer.
+    const attentionElsewhere = computed(() =>
+        attentionHidden({ fleet: agents.fleet.value, held: agents.heldWakes.value, personas: personas.value, project: projectScope.value, owner: undefined, me: host.me.value }),
+    );
     // The store's own grouping while nothing narrows the board.
     const scopedLanes = computed<Record<FleetLane, FleetAgent[]>>(() =>
         readingAcross.value || projectScope.value !== undefined || ownerFilter.value !== undefined
@@ -179,6 +166,7 @@ export const useBoardScope = (host: ScopeHost) => {
         archivedRunRows,
         ledgerRunIds,
         projectHidden,
+        attentionElsewhere,
         boardLanes,
         boardChildren,
         boardHosts,

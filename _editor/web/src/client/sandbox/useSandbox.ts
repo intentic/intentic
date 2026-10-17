@@ -1,3 +1,5 @@
+import { track } from "../../app/analytics";
+import { noteUnreachable } from "./reachability";
 import type { SandboxSummary } from "@intentic/api-contract";
 import { ORPCError } from "@orpc/client";
 import { hashKey } from "@tanstack/vue-query";
@@ -84,7 +86,8 @@ const reconcileActive = (live: SandboxSummary[]): SandboxSummary[] => {
 // Loads sandboxes through the shared cache: concurrent callers coalesce to one request, and a call within
 // staleTime serves from cache. Opened directly (recovery/directMode.ts), the list is the one this device remembers and
 // the platform is not asked: it is down, and a navigation a minute in must not send the reader back to say so.
-const list = async (): Promise<SandboxSummary[]> => reconcileActive(directMode.value ? sandboxes.value : await queryClient.fetchQuery(sandboxListQuery));
+const list = async (): Promise<SandboxSummary[]> =>
+    reconcileActive(directMode.value ? sandboxes.value : await queryClient.fetchQuery(sandboxListQuery));
 
 // Forces a fresh list past staleTime, single-flighted so overlapping callers (onboarding, invite accept,
 // liveness recovery) share one round-trip.
@@ -98,6 +101,11 @@ const refresh = withConcurrency<void, SandboxSummary[]>(
 // follow the new active id.
 const select = (id: string): void => {
     persistActive(id);
+    const box = sandboxes.value.find((row) => row.id === id);
+    if (box?.hosted?.state === `asleep`) {
+        // allow(silent-catch): wake() already recorded the refusal for the gate and sent sandbox_wake with its outcome
+        void wake(id, `switch`).catch(() => undefined);
+    }
 };
 
 // A write's answer, put on the cached list: the row it returned replaces its old self, or joins the list when the write
@@ -196,15 +204,28 @@ watch(
         }
         wokeAt.set(id, Date.now());
         const box = active.value;
-        void apiClient.sandbox
-            .wake({ sandboxId: id })
-            .then(() => {
-                recordWake(id, undefined);
-                collectWakeHere(box);
-            })
-            .catch((error: unknown) => recordWake(id, error));
+        if (box !== undefined) {
+            noteUnreachable(box);
+        }
+        // allow(silent-catch): wake() already recorded the refusal for the gate and sent sandbox_wake with its outcome
+        void wake(id, `switch`).catch(() => undefined);
     },
 );
+// A manual retry crosses the same platform gate as selection, and keeps its refusal in the active gate.
+const wake = async (sandboxId: string, source: `retry` | `switch`): Promise<void> => {
+    wokeAt.set(sandboxId, Date.now());
+    try {
+        await apiClient.sandbox.wake({ sandboxId });
+        recordWake(sandboxId, undefined);
+        collectWakeHere(sandboxes.value.find((box) => box.id === sandboxId));
+        track(`sandbox_wake`, { source, outcome: `success` });
+    } catch (error) {
+        recordWake(sandboxId, error);
+        track(`sandbox_wake`, { source, outcome: refusalKind(error) ?? `error` });
+        throw error;
+    }
+};
+
 // The ACTIVE sandbox's last refused wake, if its last wake was refused.
 const activeWakeRefused = computed(() =>
     wakeRefused.value !== undefined && wakeRefused.value.sandboxId === active.value?.id ? wakeRefused.value : undefined,
@@ -275,6 +296,7 @@ export function useSandbox() {
         list,
         refresh,
         select,
+        wake,
         create,
         hostedProvision,
         hostedRelease,

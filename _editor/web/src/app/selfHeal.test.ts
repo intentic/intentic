@@ -2,6 +2,7 @@
 // origin stored and reloads once. These tests pin the once-ness (a crash surviving the clean slate must surface,
 // not loop) and the split across the reload (this page only marks the database wipe; the next boot performs it).
 import "@intentic/testing/dom";
+import { takeReloadReason } from "@intentic/ui/reload-reason";
 import { freshImport, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 // Hoisted to top level (like storageRule.test.ts, staleChunk.test.ts) so compiling the sandbox-contract/vue-query
 // graph it drags in is charged to file load, not a single test's budget. Only the healing half needs a fresh
@@ -35,6 +36,12 @@ it(`answers a startup crash by wiping storage, marking the try, and reloading`, 
     expect(localStorage.getItem(`intentic.wipeOnBoot`)).toBe(`1`);
     expect(sessionStorage.getItem(`intentic.selfHealed`)).toBe(`1`);
     expect(reload).toHaveBeenCalledTimes(1);
+});
+
+it(`leaves a note that the reload was a self-heal, which survives the wipe of session storage`, async () => {
+    const { reportStartupError } = await load();
+    reportStartupError(new Error(`boom`));
+    expect(takeReloadReason()).toBe(`self-heal`);
 });
 
 it(`keeps what a new chat runs on across the wipe: a reset model map opened every new chat on an older model`, async () => {

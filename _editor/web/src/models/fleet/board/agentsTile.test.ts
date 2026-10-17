@@ -7,7 +7,12 @@ import { createApp, defineComponent, h, ref } from "vue";
 // (silent boxes), since a badge is one digit and cannot be partly unknown.
 
 const attention = ref(0);
-jest.mock("../useAgents", () => ({ useAgents: () => ({ attention }) }));
+// The cards behind the count, for the part of it the open project keeps off the board.
+const fleet = ref<unknown[]>([]);
+jest.mock("../useAgents", () => ({ useAgents: () => ({ attention, fleet, heldWakes: ref([]) }) }));
+// Read by the tile's own watch, which this test mounts outside any sandbox or session.
+jest.mock("../../sandbox/personas/usePersonas", () => ({ usePersonas: () => ({ personas: ref([]) }) }));
+jest.mock("../../../client/auth/useAuth", () => ({ useAuth: () => ({ user: ref(null) }) }));
 
 const silentBoxes = ref<{ sandbox: { name: string } }[]>([]);
 const release = jest.fn();
@@ -25,6 +30,7 @@ jest.mock("../fleetScope", () => ({
     listNames: (names: readonly string[]) => names.join(`, `),
 }));
 
+const { projectScope, setProjectScope } = await import("../../../app/projectScope");
 const { agentsAttention, agentsBadge, agentsScopeNote, followOtherBoxes, watchAgentsScope } = await import("./agentsTile");
 
 // The composable inside a real component: its whole contract is "for as long as this is mounted".
@@ -86,6 +92,20 @@ describe("what the badge counts", () => {
         acrossAttention.value = 3;
         readingAcross.value = true;
         expect(agentsBadge.value?.tooltip).toBe(`5 need you, 3 elsewhere`);
+    });
+
+    // The count is the sandbox's and the board shows the open project: the tooltip says how much of it that hides.
+    it("says how much of the count sits outside the open project", () => {
+        const asking = (id: string, startIn: string) => ({ id, title: id, status: `awaiting`, updatedAt: 1, attention: {}, startIn });
+        fleet.value = [asking(`a`, `shop`), asking(`b`, `api`)];
+        attention.value = 2;
+        setProjectScope(`shop`);
+        expect(agentsBadge.value?.tooltip).toBe(`2 need you (1 outside shop)`);
+
+        setProjectScope(undefined);
+        expect(agentsBadge.value?.tooltip).toBe(`2 need you`);
+        expect(projectScope.value).toBeUndefined();
+        fleet.value = [];
     });
 
     it("does not mention elsewhere when there is nothing there", () => {

@@ -612,15 +612,23 @@ pub(crate) fn end_session(how: SessionEnd) -> CommandResult<()> {
     // `/l` signs the session out and `/r` takes the machine down; both end with a sign-in, which is the only
     // event either of these requirements is actually waiting for. See [`session_end_args`] for why the restart
     // carries no countdown.
+    crate::launch::exiting(match how {
+        SessionEnd::Restart => crate::launch::ExitCause::Restart,
+        SessionEnd::SignOut => crate::launch::ExitCause::SessionEnd,
+    });
     let (verb, ended) = session_end_args(how);
     let done = std::process::Command::new("shutdown.exe")
         .args(&verb)
         .creation_flags(CREATE_NO_WINDOW)
         .status()
-        .map_err(|error| format!("could not {ended} this PC: {error}"))?;
+        .map_err(|error| {
+            crate::launch::exiting(crate::launch::ExitCause::Unknown);
+            format!("could not {ended} this PC: {error}")
+        })?;
     if done.success() {
         return Ok(());
     }
+    crate::launch::exiting(crate::launch::ExitCause::Unknown);
     Err(format!(
         "Windows refused the {ended}. Do it yourself and open Intentic again - your setup is saved."
     ))

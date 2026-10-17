@@ -9,6 +9,7 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { isNavigationFailure, NavigationFailureType, RouterView, useRoute, useRouter } from "vue-router";
 import { useWallpaperedRoute } from "../skins/useWallpaper";
+import { askForAttention } from "../models/fleet/board/attentionOutside";
 import { agentsBadge, agentsScopeNote } from "../models/fleet/board/agentsTile";
 import { useCapabilities } from "../models/capabilities/useCapabilities";
 import { useRole } from "../client/sandbox/useRole";
@@ -585,6 +586,7 @@ useGettingStarted();
                             v-tooltip.right="railTileTip(tile)"
                             @contextmenu="onTileContextMenu(tile, $event)"
                             @pointerdown="pressTile(tile, $event)"
+                            @click="tile.id === `agents` && isNavActive(tile.to) && askForAttention()"
                         >
                             <RailIcon
                                 :section="tile.id"

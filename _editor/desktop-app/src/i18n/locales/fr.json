@@ -650,7 +650,7 @@
             "later": "Plus tard",
             "save": "Enregistrez d'abord votre travail dans les autres applications."
         },
-        "signOut": "Déconnectez-vous de Windows puis reconnectez-vous pour terminer la préparation de ce PC. Elle reprend d'elle-même à votre retour.",
+        "signOut": "Enregistrez votre travail dans les autres applications, puis fermez votre session Windows. La configuration reprendra automatiquement à votre prochaine connexion.",
         "repair": "Demander à Repair",
         "hosted": "Un ordinateur que nous hébergeons peut faire tourner vos agents à la place.",
         "cloud": "Utiliser Intentic dans le cloud",

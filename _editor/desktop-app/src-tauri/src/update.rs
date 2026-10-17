@@ -607,7 +607,10 @@ pub fn install(app: &AppHandle, restart: bool) -> Result<(), String> {
     // Intentic came back on its own half a minute after the reader had quit it (2026-10-12). Elsewhere this changes
     // nothing: Linux restarts below, and only when asked.
     let update = staged.update.restart_after_install(restart);
+    // The Windows updater exits the process itself; it does not emit RunEvent::Exit.
+    let before_update = crate::launch::updater_exit();
     if let Err(error) = update.install(bytes) {
+        crate::launch::updater_refused(before_update);
         if resume_prefetch {
             let _ = crate::onboarding::onboarding_pause(app.clone(), false);
         }
@@ -636,6 +639,7 @@ fn restart_onto_update(app: &AppHandle) -> Result<(), String> {
         return Err(RESTART_HELD.to_string());
     }
     crate::onboarding::pause_for_update(app)?;
+    crate::launch::exiting(crate::launch::ExitCause::Update);
     app.restart();
 }
 

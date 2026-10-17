@@ -316,7 +316,18 @@
             "needsInput": "Saisie requise",
             "inputWaitProcess": "Processus",
             "inputWaitFor": "En attente depuis",
-            "inputWaitNote": "Rien dans le sandbox n’y répondra. Arrêter met fin à la commande pour que le travail puisse être intégré."
+            "inputWaitNote": "Rien dans le sandbox n’y répondra. Arrêter met fin à la commande pour que le travail puisse être intégré.",
+            "landProcessStopped": "Le processus Git de l’espace de travail s’est arrêté. Réessayez d’intégrer le travail de cet agent.",
+            "landTooManyPaths": "Cette modification comprend trop de chemins de fichiers pour être intégrée en une fois. Réduisez les modifications qui se chevauchent dans votre espace de travail, puis réessayez.",
+            "landOutputLimit": "Git a renvoyé plus d’informations que l’espace de travail ne pouvait traiter. Réduisez la taille de la modification, puis réessayez.",
+            "workspaceOverlap": "{count} fichiers de votre espace de travail chevauchent le travail de cet agent. Validez ou annulez leurs modifications, puis réessayez."
+        },
+        "agentsTile": {
+            "countingEverySandbox": "Comptage de tous les sandboxes",
+            "countingExcept": "Comptage de tous les sandboxes sauf {names}, qui ne répond pas | Comptage de tous les sandboxes sauf {names}, qui ne répondent pas",
+            "needYou": "{count} a besoin de vous | {count} ont besoin de vous",
+            "needYouOutside": "{owed} ({outside} hors de {project})",
+            "owedElsewhere": "{owed}, {elsewhere} ailleurs"
         },
         "agentsView": {
             "agentResolveConflict": "Laisser l'agent résoudre le conflit ?",
@@ -351,6 +362,8 @@
             "noAgentYoursMentions": "Aucun de vos agents ne mentionne « {trim} ». La recherche porte sur les titres et sur ce que les deux côtés ont dit dans le chat.",
             "noAgentsWorkingStart": "Aucun agent au travail. Lancez-en un et déléguez.",
             "noMatchesInLane": "Aucune correspondance dans ce couloir.",
+            "needYouElsewhere": "{count} a besoin de vous dans d'autres projets | {count} ont besoin de vous dans d'autres projets",
+            "showThem": "Afficher",
             "nothingArchivedYetFinished": "Rien d'archivé pour l'instant. Les agents terminés atterrissent ici tout seuls après quelques jours calmes.",
             "nothingNeedsRightNow": "Rien n'a besoin de vous en ce moment.",
             "nothingWrittenToWorkspace": "Rien n'est écrit dans votre espace de travail sauf si cela réussit. Vous pouvez arrêter le tour à tout moment.",
@@ -722,7 +735,7 @@
             "sendItAgain": "Renvoyer",
             "troubleSigningInUse": "Un souci pour vous connecter ? Passez par la page de Google.",
             "continueOnGooglesPage": "Continuer sur la page de Google",
-            "googleDidntComeBack": "La connexion n'a pas abouti dans la fenêtre de Google. Continuez plutôt sur la page de Google : elle fonctionne même si les fenêtres pop-up sont bloquées.",
+            "googleDidntComeBack": "Vous attendez toujours Google ? Si sa fenêtre est bloquée ou fermée, continuez plutôt sur la page de Google : elle fonctionne même si les fenêtres pop-up sont bloquées.",
             "googleAnswerRefused": "Google a répondu, mais avec une connexion que cet ordinateur considère déjà expirée : son horloge est peut-être déréglée. Continuez plutôt sur la page de Google.",
             "continueGoogleInBrowser": "Continuer avec Google dans votre navigateur",
             "continueGoogle": "Continuer avec Google"
@@ -900,6 +913,8 @@
             "renamedTo": "Renommée en"
         },
         "capabilitySubmit": {
+            "gpuDisable": "Retirer la demande d’accès au GPU",
+            "gpuHosted": "L’accès au GPU n’est pas disponible sur les sandboxes hébergées. Utilisez une sandbox locale ou auto-hébergée avec un GPU NVIDIA.",
             "walletCapsNotSaved": "La tuile a été enregistrée, mais la plateforme n'a pas accepté ses plafonds de dépense. Le service de signature continue donc d'appliquer les précédents. Enregistrez à nouveau la tuile pour réessayer.",
             "walletOwnerOnly": "Seul le propriétaire de ce sandbox peut modifier les plafonds de dépense de son portefeuille : le portefeuille qui paie est le sien."
         },
@@ -1186,6 +1201,15 @@
             "hosts": "Sites où il peut aller : {hosts}.",
             "changeOn": "Change-les sur {machine} :",
             "copyCommand": "Copier la commande"
+        },
+        "catalog": {
+            "docker": {
+                "fields": {
+                    "gpu": {
+                        "hint": "Uniquement en local ou en auto-hébergement. Nécessite un GPU NVIDIA et nvidia-container-toolkit ou CDI sur l’hôte ; vérifié avant l’enregistrement."
+                    }
+                }
+            }
         }
     },
     "chat": {
@@ -1353,7 +1377,10 @@
                 "swapped": "En swap",
                 "title": "Mémoire faible",
                 "used": "Utilisée"
-            }
+            },
+            "startNewChat": "Démarrer un nouveau chat",
+            "startNewChatTitle": "Le renvoyer serait refusé de la même façon",
+            "startNewChatNote": "La configuration de cette conversation ne peut pas s’exécuter ici. Un nouveau chat s’ouvre avec votre message dans la zone de saisie."
         },
         "chatJobRow": {
             "ended": "Arrêté après {elapsed}",
@@ -2198,6 +2225,10 @@
                 "goOn": "Continuez…",
                 "listeningDetail": "Écoute « {word} » sur cet appareil. Cliquez pour mettre en pause une heure."
             }
+        },
+        "sandboxNotice": {
+            "undeliveredDeterministic": "{message} Votre message n’a pas été remis, et le renvoyer serait refusé de la même façon. Démarrez un nouveau chat pour continuer.",
+            "agentDomainRefused": "La configuration de l’espace de travail de cette conversation ne peut pas s’exécuter ici."
         }
     },
     "common": {
@@ -3836,6 +3867,8 @@
             "leaveLoseAccessSandbox": "Quitter « {name} » ? Vous perdez l'accès ; le sandbox continue de tourner.",
             "leaveSandbox": "Quitter le sandbox ?",
             "needsYou": "Vous attend",
+            "asleep": "en veille : s’ouvre lorsque vous le sélectionnez",
+            "starting": "démarrage : prêt dans un instant",
             "notAnswering": "Ne répond pas",
             "removeAccount2": "Retirer du compte ?",
             "removeAccountEveryoneLoses": "Retirer « {name} » de votre compte ? Tout le monde perd l'accès ici ; le sandbox lui-même continue de tourner là où il est.",
@@ -6349,7 +6382,7 @@
             "restorePointSavedFirst2": "Un point de restauration est enregistré d'abord : ceci est donc réversible depuis Points de restauration.",
             "retriesWithHooks": "{verb} réessaie avec les hooks",
             "scratchLeftOut": "Tout indexer et tout committer laissent de côté {count} chemin qui semble temporaire | Tout indexer et tout committer laissent de côté {count} chemins qui semblent temporaires",
-            "scratchLeftOutHint": "Indexez-le depuis sa propre ligne pour le committer.",
+            "scratchLeftOutHint": "Ils sont exclus des commits car ils ressemblent à du contenu généré ou à des dépendances. Indexez-en un depuis sa propre ligne s'il doit être commité.",
             "scratchTag": "temporaire",
             "stageAllFirst": "Indexe tout d'abord",
             "staged2": "Indexé",
@@ -6664,6 +6697,28 @@
             "downloadNamed": "Télécharger {name}",
             "printNamed": "Imprimer {name}",
             "listFailed": "Impossible de lire quels documents cette conversation a créés."
+        },
+        "indexRuns": {
+            "commitStopped": "Commit arrêté. Rien n’a été enregistré ; ce qui était déjà indexé le reste.",
+            "declined": "Non indexé : vous avez choisi de laisser {count} fichier de côté. | Non indexé : vous avez choisi de laisser {count} fichiers de côté.",
+            "lost": "Le suivi de l’exécution dans {repo} est perdu : le sandbox a redémarré ou l’a oubliée. Vérifiez la liste avant de réessayer.",
+            "stageStopped": "Indexation arrêtée. Ce que git avait déjà indexé le reste ; retirez-le de l’index pour revenir en arrière."
+        },
+        "indexRunPrompt": {
+            "commitAnyway": "Committer quand même",
+            "commitFiles": "Committer {count} fichier ? | Committer {count} fichiers ?",
+            "committing": "Commit en cours dans {repo}…",
+            "counting": "Décompte de ce qui serait indexé dans {repo}…",
+            "dirFiles": "{count} fichier | {count} fichiers",
+            "looksLikeDependencies": "C’est bien plus qu’un changement habituel, et cela signifie généralement des dépendances ou des sorties de build que personne ne voulait committer. Ces dossiers en contiennent le plus :",
+            "reconnecting": "Reconnexion…",
+            "repoRoot": "(racine)",
+            "stageAnyway": "Indexer quand même",
+            "stageFiles": "Indexer {count} fichier ? | Indexer {count} fichiers ?",
+            "staging": "Indexation dans {repo}…",
+            "stagingFiles": "Indexation de {count} fichier dans {repo}… | Indexation de {count} fichiers dans {repo}…",
+            "stop": "Arrêter",
+            "waiting": "En attente que {repo} soit libre…"
         }
     },
     "needs": {

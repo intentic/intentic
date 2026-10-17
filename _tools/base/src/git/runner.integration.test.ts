@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import { packageRoot } from "@intentic/constants/node";
 import { requires } from "@intentic/testing/requires";
 import {
+    cancellableGit,
     defaultGit,
     forkedExec,
     gitRunCallers,
@@ -60,6 +61,20 @@ test("defaultGit retries a write blocked by index.lock, and gives up on anything
     expect((await defaultGit(dir, ["diff", "--cached", "--name-only"])).stdout.trim()).toBe("a.txt");
 
     await expect(defaultGit(dir, ["rev-parse", "--verify", "refs/heads/nope"])).rejects.toThrow();
+});
+
+test("cancellableGit kills the git it is running when its signal aborts, and starts none once aborted", async () => {
+    const dir = await tempRepo();
+    const stop = new AbortController();
+    // `hash-object --stdin` waits on a stdin nobody closes: a git that only a kill ends.
+    const hung = cancellableGit(stop.signal)(dir, ["hash-object", "--stdin"]);
+    setTimeout(() => stop.abort(), 50);
+    const from = Date.now();
+    await expect(hung).rejects.toMatchObject({ name: "AbortError" });
+    expect(Date.now() - from).toBeLessThan(5_000);
+    await expect(cancellableGit(stop.signal)(dir, ["status"])).rejects.toMatchObject({ name: "AbortError" });
+    // The same runner without an abort answers like defaultGit.
+    expect((await cancellableGit(new AbortController().signal)(dir, ["rev-parse", "--is-inside-work-tree"])).stdout.trim()).toBe("true");
 });
 
 test("defaultGit never gives up forever: a lock that is never released still rejects", async () => {

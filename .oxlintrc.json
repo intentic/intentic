@@ -50,6 +50,8 @@
                     "__INTENTIC_DESKTOP__",
                     // What the desktop app's init script hands a window on a local folder (src-tauri/src/local.rs).
                     "__INTENTIC_LOCAL__",
+                    // One random string per launch of the desktop app, injected into every webview (web desktop.ts `desktopLaunchId`).
+                    "__INTENTIC_LAUNCH_ID__",
                     // The desktop app's half of that window's shell, set by its bootstrap (desktop-app/src/host.ts).
                     "__INTENTIC_LOCAL_HOST__",
                     // How a loaded workspace page is taken to a path without a reload (web desktop.ts `installDesktopOpener`).

@@ -156,7 +156,7 @@ const required = <T>(value: T | undefined, what: string): T => {
     return value;
 };
 
-// The git area's inputs: stage and take back the same file, commit it, throw away another.
+// The git area's inputs: stage and take back the same file, commit it, stage it as a run, throw away another.
 const GIT_SAMPLES: Samples[`git`] = {
     repos: undefined,
     changes: undefined,
@@ -165,6 +165,9 @@ const GIT_SAMPLES: Samples[`git`] = {
     stage: { repo: `web`, paths: [`src/lib/checkout.ts`] },
     unstage: { repo: `web`, paths: [`src/lib/checkout.ts`] },
     commit: { repo: `web`, message: `smoke`, stage: { paths: [`src/lib/checkout.ts`] } },
+    indexRunStart: { repo: `web`, op: `stage`, target: { paths: [`src/lib/checkout.ts`] } },
+    indexRunState: { repo: `web` },
+    indexRunCancel: { repo: `web` },
     discard: { repo: `web`, paths: [`tests/checkout.spec.ts`] },
     push: { repo: `web` },
     remoteRepos: undefined,

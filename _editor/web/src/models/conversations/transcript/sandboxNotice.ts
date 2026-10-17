@@ -88,6 +88,9 @@ const failureWords = ({ message, error }: Failure): string => {
         const share = memoryShare(message);
         return share === undefined ? t(`chat.sandboxNotice.memoryLow`) : t(`chat.sandboxNotice.memoryLowShare`, { share });
     }
+    if (error === `agent-domain-refused`) {
+        return t(`chat.sandboxNotice.agentDomainRefused`);
+    }
     return failureHeadline(message, error) ?? message;
 };
 
@@ -179,7 +182,9 @@ const failureLine = (notice: FailureNotice): string => {
         case `reconnect`:
             return t(`chat.sandboxNotice.reconnect`, { message });
         case `undelivered`:
-            return notice.params.unattended === true ? t(`chat.sandboxNotice.undeliveredUnattended`, { message }) : t(`chat.sandboxNotice.undelivered`, { message });
+            return notice.params.deterministic === true
+                ? t(`chat.sandboxNotice.undeliveredDeterministic`, { message })
+                : notice.params.unattended === true ? t(`chat.sandboxNotice.undeliveredUnattended`, { message }) : t(`chat.sandboxNotice.undelivered`, { message });
         case `kept`:
             return notice.params.memory === true ? t(`chat.sandboxNotice.keptMemory`, { message }) : t(`chat.sandboxNotice.kept`, { message });
         case `memoryHeld`:

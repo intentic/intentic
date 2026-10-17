@@ -3,20 +3,20 @@ import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 
 // The four affordance flags per tier, as one table: a guest drives its own chats but never reviews, ships or owns.
 const role = ref<MemberRole | undefined>(`owner`);
-jest.mock(`./useSandbox`, () => ({
+jest.mock(`../useSandbox`, () => ({
     useSandbox: () => ({ active: computed(() => (role.value === undefined ? undefined : { role: role.value })) }),
 }));
 
 // Whether the signed-in writer's grant runs agents, which the tier alone does not say.
 const agents = ref<string | undefined>(undefined);
-jest.mock(`./useMembers`, () => ({ selfAgents: () => computed(() => agents.value) }));
+jest.mock(`../useMembers`, () => ({ selfAgents: () => computed(() => agents.value) }));
 
-const { useRole } = await import(`./useRole`);
+const { useRole } = await import(`../useRole`);
 
 describe(`useRole`, () => {
     it(`reads each tier into its affordances`, () => {
         const flags = useRole();
-        const read = (): Record<string, boolean> => ({
+        const read = () => ({
             isGuest: flags.isGuest.value,
             canDrive: flags.canDrive.value,
             canReview: flags.canReview.value,

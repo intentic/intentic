@@ -981,6 +981,48 @@ describe(`a refusal that ran nothing`, () => {
             expect(fold.turnedAway(REFUSED)).toBe(false);
         });
     });
+
+    // A deterministic refusal — one whose cause is latched on the conversation (agent-domain-refused from a persona's
+    // startIn) — must not say "held for you to send again" because resending hits the same wall every time.
+    describe(`deterministic refusals`, () => {
+        const DOMAIN_REFUSED = {
+            kind: `error`,
+            code: `agent-domain-refused`,
+            message: `Agent request placement does not match its admitted execution context.`,
+        } as const satisfies AgentEvent;
+
+        it(`does not promise "send again" for agent-domain-refused`, () => {
+            const row = foldOf(`land it`, [DOMAIN_REFUSED]).at(-1);
+            expect(row?.text).toContain(`Start a new chat`);
+            expect(row?.text).not.toContain(`held for you to send again`);
+            expect(row?.noticeAction).toBeUndefined();
+            expect(row?.noticeCode).toEqual({
+                code: `undelivered`,
+                params: { message: DOMAIN_REFUSED.message, error: `agent-domain-refused`, deterministic: true },
+            });
+        });
+
+        it(`still says "send again" for a non-deterministic refusal`, () => {
+            const row = foldOf(`land it`, [REFUSED]).at(-1);
+            expect(row?.text).toContain(`held for you to send again`);
+        });
+
+        // A fix press or a peer's message the sandbox kept whole offered "Send again" under this refusal too, and every
+        // press met the same wall: the kept row says what the queued one does, and offers no resend.
+        it(`does not offer a resend of a turn the sandbox kept`, () => {
+            const fold = new TranscriptFold(openingOf(`land it`));
+            fold.apply({ ...DOMAIN_REFUSED, held: { ran: false } });
+            const row = fold.rows.at(-1);
+            expect(row).toEqual({
+                role: `notice`,
+                text: `${DOMAIN_REFUSED.message} Your message was not delivered, and sending it again would be refused the same way. Start a new chat to carry on.`,
+                sandboxHeld: true,
+                noticeCode: { code: `undelivered`, params: { message: DOMAIN_REFUSED.message, error: `agent-domain-refused`, deterministic: true } },
+            });
+            // Still recorded like any kept turn: the message stays above the row.
+            expect([fold.rows[0]?.text, fold.ranNothing]).toEqual([`land it`, false]);
+        });
+    });
 });
 
 // The sandbox's own notices ride as a code beside their English words, so an app can say them in the reader's language

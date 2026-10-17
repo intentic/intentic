@@ -62,7 +62,7 @@ export const SandboxNoticeSchema = z.discriminatedUnion("code", [
     z.object({ code: z.literal("renewing"), params: z.object(failure) }),
     z.object({ code: z.literal("renewalWithdrawn"), params: z.object(failure) }),
     z.object({ code: z.literal("reconnect"), params: z.object(failure) }),
-    z.object({ code: z.literal("undelivered"), params: z.object({ ...failure, unattended: z.boolean().optional() }) }),
+    z.object({ code: z.literal("undelivered"), params: z.object({ ...failure, unattended: z.boolean().optional(), deterministic: z.boolean().optional() }) }),
     // A turn the sandbox kept whole, its message above; `memory` when a memory hold kept it.
     z.object({ code: z.literal("kept"), params: z.object({ ...failure, memory: z.boolean().optional() }) }),
     z.object({ code: z.literal("memoryHeld"), params: z.object(failure) }),

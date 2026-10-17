@@ -9,3 +9,15 @@ export const removalTakes = (role: string): readonly string[] =>
     role === `owner`
         ? [t(`sandbox.sandboxSwitcher.takesAccounts`), t(`sandbox.sandboxSwitcher.takesSettings`), t(`sandbox.sandboxSwitcher.takesChats`)]
         : [];
+
+// WHETHER A ROW'S MACHINE ANSWERS, in words and ink. A hosted machine asleep wakes when it is picked and one booting is on
+// its way, so neither earns the warning a silent box does; a box that answers says nothing.
+export const answerNote = (hostedState: string | undefined, silent: boolean): { readonly text: string; readonly ink?: string } | undefined => {
+    if (hostedState === `asleep`) {
+        return { text: t(`sandbox.sandboxSwitcher.asleep`) };
+    }
+    if (!silent) {
+        return undefined;
+    }
+    return hostedState === `starting` ? { text: t(`sandbox.sandboxSwitcher.starting`) } : { text: t(`sandbox.sandboxSwitcher.notAnswering`).toLocaleLowerCase(), ink: `text-warning` };
+};

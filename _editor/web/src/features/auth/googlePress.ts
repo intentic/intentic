@@ -12,8 +12,11 @@ export const hasFedCm = (): boolean => `IdentityCredential` in window;
 
 // How often a press still waiting on Google is looked at.
 const TICK_MS = 500;
-// Back on this page with no answer: Google's answer lands as its window closes, so seconds of silence mean none.
-const BACK_GRACE_MS = 3_000;
+// Back on this page with no answer. Focus coming back is no sign Google's window is done: a click on this page, a
+// Windows or passkey prompt, or a phone-approval wait all hand it back while the sign-in is still going, and one
+// completed 48 s after the page had already declared it dead. So this is long enough for a second factor, and what it
+// raises is an offer (the note says "still waiting?"), not a verdict.
+const BACK_GRACE_MS = 25_000;
 // The press opened nothing this page saw come up (a blocked pop-up, a window that never drew); longer, since a FedCM
 // dialog may sit inside this window without taking its focus while the reader picks an account.
 const UNSEEN_MS = 8_000;
@@ -21,8 +24,11 @@ const UNSEEN_MS = 8_000;
 export interface GooglePress {
     // True once a press came back without an answer; stays up, since the road around the button is what helps now.
     readonly stalled: Readonly<Ref<boolean>>;
-    // The press in flight was answered (a credential, or a refusal the page says itself): stop timing it.
+    // The press in flight was answered (a refusal the page says itself, or a dismissal): stop timing it.
     readonly answered: () => void;
+    // The credential arrived: stop timing, take down a note already shown (the sign-in did finish after all), and count
+    // the sign-in with whether the reader had been told it stalled, which is how the note's grace is tuned.
+    readonly completed: () => void;
 }
 
 // Watches presses on Google's button inside `slot`. `surface` names the page in the stall's analytics event.
@@ -48,6 +54,12 @@ export const useGooglePress = (slot: Readonly<Ref<HTMLElement | undefined>>, sur
         stalled.value = true;
         // The gate's own funnel event, so a sign-in that stalls on the button counts beside one that never got that far.
         track(`sandbox_signin_gate`, { reason: `button-stalled`, mode: `button`, surface, fedcm: hasFedCm(), left });
+    };
+
+    const completed = (): void => {
+        stop();
+        track(`signin_completed`, { method: `google`, stall_shown: stalled.value });
+        stalled.value = false;
     };
 
     const tick = (): void => {
@@ -112,5 +124,5 @@ export const useGooglePress = (slot: Readonly<Ref<HTMLElement | undefined>>, sur
         window.removeEventListener(`blur`, onBlur);
     });
 
-    return { stalled, answered: stop };
+    return { stalled, answered: stop, completed };
 };

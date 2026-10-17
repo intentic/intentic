@@ -1,7 +1,17 @@
 import { createHash } from "node:crypto";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { OPTIONAL_DIRECTIVES, runtimeDirectivesOf, sandboxNames, sandboxRunCommand } from "@intentic/sandbox-run";
+import {
+    gpuProbeArgv,
+    gpuProbePassed,
+    OPTIONAL_DIRECTIVES,
+    runtimeDirectivesOf,
+    sandboxNames,
+    sandboxRunCommand,
+    type SandboxRun,
+} from "@intentic/sandbox-run";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
+import { shellQuote } from "@intentic/sandbox-run/quote";
+import { workspaceSwapScript } from "./workspace-swap.js";
 import { z } from "zod";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import { listStampedContainers } from "../core/list-stamped.js";
@@ -138,11 +148,11 @@ export const createWorkspaceProvider = (executor: SshExecutor): Provider => ({
             // apply.
             const unsupported: string[] = [];
             for (const directive of OPTIONAL_DIRECTIVES.filter((entry) => runtime.includes(entry.token))) {
-                const runtimes = directive.probe.kind === "runtime" ? (await session.exec(`docker info --format '{{json .Runtimes}}'`)).stdout : "";
+                const gpu = directive.token === "--gpus=all" ? await session.exec(gpuProbeArgv(image).map(shellQuote).join(" ")) : undefined;
                 const probe =
-                    directive.probe.kind === "runtime"
-                        ? runtimes.includes(`"${directive.probe.name}"`)
-                        : (await session.exec(`test -e ${directive.probe.path}`)).code === 0;
+                    gpu !== undefined
+                        ? gpuProbePassed(gpu.code, gpu.stdout)
+                        : directive.probe.kind === "device" && (await session.exec(`test -e ${shellQuote(directive.probe.path)}`)).code === 0;
                 if (!probe) {
                     unsupported.push(directive.token);
                     ctx.log(`workspace "${ctx.id}": host cannot provide ${directive.token}, starting without ${directive.name}`);
@@ -153,7 +163,7 @@ export const createWorkspaceProvider = (executor: SshExecutor): Provider => ({
             // fresh
             // tunnel name; baseImage stops a pinned overlay from reading as permanently unbuilt once the daemon infers
             // a base.
-            const runCommand = sandboxRunCommand({
+            const runOptions: SandboxRun = {
                 names: { ...NAMES, network: parsed.network },
                 image,
                 baseImage: parsed.image,
@@ -182,15 +192,10 @@ export const createWorkspaceProvider = (executor: SshExecutor): Provider => ({
                         ? [["INTENTIC_AGENT_TOOLS", Buffer.from(JSON.stringify(parsed.tools)).toString("base64")] as const]
                         : []),
                 ],
-            });
-            const run = await session.exec(
-                // rm + run in one exec: splitting them would kill the CLI when apply recreates its own sandbox
-                // mid-command.
-                // Logs are tailed to disk before rm, so a failed recreate still has the predecessor's record (`intentic
-                // deploy logs`).
-                `(docker logs --tail 2000 ${CONTAINER} > /opt/intentic/workspace-previous.log 2>&1 || true) && ` +
-                    `(docker rm -f ${CONTAINER} 2>/dev/null || true) && ${runCommand}`,
-            );
+            };
+            const runCommand = sandboxRunCommand(runOptions);
+            const fallback = sandboxRunCommand({ ...runOptions, unsupported: OPTIONAL_DIRECTIVES.map((entry) => entry.token) });
+            const run = await session.exec(`sh -c ${shellQuote(workspaceSwapScript(CONTAINER, runCommand, fallback, parsed.daemonPort))}`);
             if (run.code !== 0) {
                 throw new Error(`failed to start workspace sandbox on host: exited ${run.code}: ${run.stderr.trim()}`);
             }

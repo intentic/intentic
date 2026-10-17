@@ -3,7 +3,7 @@ import type { AgentDomainPolicy } from "@intentic/sandbox-contract/schemas/setti
 import type { FencedPlacement, IsolationPlan } from "../conversations/worktrees/isolation.js";
 import { AGENT_DOMAIN_NOT_READY } from "./domain/agent-domain-rollout.js";
 import {
-    AgentDomainRefusedError, agentExecutionScope, agentInvocation, assertAgentExecution, createAgentExecutionService,
+    AgentDomainRefusedError, admittedPlacement, agentExecutionScope, agentInvocation, assertAgentExecution, createAgentExecutionService,
     type AgentExecutionContext,
 } from "./agent-execution.js";
 import { rootExecutionService } from "./agent-execution.testing.js";
@@ -143,7 +143,9 @@ test("a root plan without an anchor invokes directly but still binds the request
     try {
         expect(agentInvocation(lease.context, COMMAND, ARGS)).toEqual({ command: COMMAND, args: ARGS, cwd: LOCAL });
         expect(() => assertAgentExecution(lease.context, { cwd: LOCAL, isolation: { plan } })).not.toThrow();
+        // Dropping the isolation is a different placement too: a helper takes it from admittedPlacement instead.
         expectRefused(() => assertAgentExecution(lease.context, { cwd: LOCAL }), PLACEMENT_REFUSED);
+        // A structurally identical but referentially different plan is refused.
         expectRefused(() => assertAgentExecution(lease.context, { cwd: LOCAL, isolation: { plan: { ...plan } } }), PLACEMENT_REFUSED);
     } finally { lease.release(); service.close(admission); }
 });
@@ -369,7 +371,8 @@ test.each(["cwd", "removed isolation", "plan", "anchor"] as const)("request vali
     const lease = service.acquire(admission, fixture.placement);
     try {
         expect(() => assertAgentExecution(lease.context, { cwd: VIEW, isolation: { ...isolation } })).not.toThrow();
-        const replacement = kind === "cwd" ? { cwd: `${VIEW}/src`, isolation }
+        // cwd: a path OUTSIDE the view is refused; a subfolder of it is accepted (startIn fix).
+        const replacement = kind === "cwd" ? { cwd: `${HISTORY_ROOT}/elsewhere`, isolation }
             : kind === "removed isolation" ? { cwd: VIEW }
                 : { cwd: VIEW, isolation: kind === "plan" ? { ...isolation, plan: { ...isolation.plan } } : { ...isolation, anchor: { ...isolation.anchor } } };
         expectRefused(() => assertAgentExecution(lease.context, replacement), PLACEMENT_REFUSED);
@@ -557,4 +560,85 @@ test("a successful scope acquires once and transfers namespace lifetime to indep
         expect(other.dispose).not.toHaveBeenCalled();
         expect(() => agentEntrant(namespace, VIEW, COMMAND, ARGS)).toThrow("namespace anchor 62223 reference is not registered");
     } finally { scope.dispose(); borrower.release(); other.dispose(); service.close(admission); }
+});
+
+// Regression: a persona's startIn resolves to a subfolder of the view root (honoured.ts:209), and assertAgentExecution
+// must accept it. Before this fix every project-persona turn was refused with PLACEMENT_REFUSED.
+test("assertAgentExecution accepts a cwd inside the admitted view (startIn subfolder)", async () => {
+    const service = rootExecutionService();
+    const admission = await service.admit();
+    const lease = service.acquire(admission, { localCwd: VIEW });
+    try {
+        // A persona sets cwd to <view>/my-project; this must pass, not refuse with PLACEMENT_REFUSED.
+        expect(() => assertAgentExecution(lease.context, { cwd: `${VIEW}/my-project` })).not.toThrow();
+        // Deeper nesting is still within the view.
+        expect(() => assertAgentExecution(lease.context, { cwd: `${VIEW}/my-project/packages/core` })).not.toThrow();
+        // Outside the view is still refused.
+        expectRefused(() => assertAgentExecution(lease.context, { cwd: "/somewhere/else" }), PLACEMENT_REFUSED);
+        // Parent of the view is still refused.
+        expectRefused(() => assertAgentExecution(lease.context, { cwd: WORKSPACE_ROOT }), PLACEMENT_REFUSED);
+    } finally { lease.release(); service.close(admission); }
+});
+
+test("assertAgentExecution accepts a startIn subfolder with an isolation plan", async () => {
+    const service = rootExecutionService();
+    const admission = await service.admit();
+    const { plan } = anchored(62230).placement.isolation;
+    const isolation = { plan };
+    const lease = service.acquire(admission, { localCwd: LOCAL, isolation });
+    try {
+        // The view's own cwd still passes.
+        expect(() => assertAgentExecution(lease.context, { cwd: LOCAL, isolation: { plan } })).not.toThrow();
+        // A subfolder of the view passes — this is the startIn case.
+        expect(() => assertAgentExecution(lease.context, { cwd: `${LOCAL}/my-project`, isolation: { plan } })).not.toThrow();
+    } finally { lease.release(); service.close(admission); }
+});
+
+test("AgentDomainRefusedError carries the check that failed", async () => {
+    const service = rootExecutionService();
+    const admission = await service.admit();
+    const lease = service.acquire(admission, { localCwd: VIEW });
+    try {
+        try {
+            assertAgentExecution(lease.context, { cwd: "/somewhere/outside" });
+            throw new Error("should have thrown");
+        } catch (error) {
+            expect(error).toBeInstanceOf(AgentDomainRefusedError);
+            if (error instanceof AgentDomainRefusedError) {
+                expect(error.check).toBe("cwd");
+                expect(error.code).toBe("agent-domain-refused");
+            }
+        }
+    } finally { lease.release(); service.close(admission); }
+});
+
+// Regression (deft-vale-wxkr, 2026-10-16T00:54:51Z, "hand-off: no summary was written"): a sealed helper borrowing an
+// isolated turn's execution built its spec with no isolation and was refused on the plan identity. Dropping the
+// isolation must stay refused, since the runtimes spawn through `spec.isolation?.anchor` and would launch outside the
+// namespace; the helper takes the admitted isolation from admittedPlacement instead (sealed-request.ts).
+test("a request without isolation is refused in an isolated context, and admittedPlacement is what passes", async () => {
+    const service = rootExecutionService();
+    const admission = await service.admit();
+    const namespace = tracked(registerMountEntry(62240));
+    const fixture = anchored(namespace.pid, namespace);
+    const lease = service.acquire(admission, fixture.placement);
+    const borrowed = service.borrow(lease.context);
+    try {
+        expectRefused(() => assertAgentExecution(borrowed.context, { cwd: VIEW }), PLACEMENT_REFUSED);
+        const placement = admittedPlacement(borrowed.context);
+        expect(placement?.plan).toBe(fixture.placement.isolation.plan);
+        expect(placement?.anchor).toBe(fixture.anchor);
+        if (placement === undefined) { throw new Error("an anchored context was admitted with no placement"); }
+        expect(() => assertAgentExecution(borrowed.context, { cwd: borrowed.context.cwd, isolation: placement })).not.toThrow();
+    } finally { borrowed.release(); lease.release(); service.close(admission); }
+});
+
+test("admittedPlacement is absent for a plain view and refused for a released context", async () => {
+    const service = rootExecutionService();
+    const admission = await service.admit();
+    const lease = service.acquire(admission, { localCwd: VIEW });
+    expect(admittedPlacement(lease.context)).toBeUndefined();
+    lease.release();
+    service.close(admission);
+    expectRefused(() => admittedPlacement(lease.context), CONTEXT_REFUSED);
 });

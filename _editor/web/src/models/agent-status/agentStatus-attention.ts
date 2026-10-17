@@ -1,4 +1,5 @@
 import type { AgentAttention, AgentStatus } from "@intentic/sandbox-contract/schemas/agents";
+import { formatCount } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 import { useVocabulary } from "../../workbench/views/vocabulary";
 import {
@@ -113,8 +114,35 @@ const LOST_LINK = /bad object|invalid symmetric difference|unknown revision|not 
 // followed by git's stderr whole (`apply` says `error:`, most verbs `fatal:`, and a hint can follow the verdict).
 // allow(dependency-text): git's `fatal:`/`error:` line prefixes; a message without one reads as the generic gitRefused.
 const GIT_VERDICT = /^(?:fatal|error): (.+)$/gmu;
+// Older sandboxes kept only the runner's sentence. Recognise those as well as the stable codes newer ones send.
+// allow(dependency-text): Node/Bun spawn and buffer errors, and our runner's own exit message; unknown failures keep their verdict.
+export const landFailureCode = (reason: string, code?: string): string | undefined => {
+    if (/E2BIG|argument list too long/iu.test(reason)) { return `too_many_paths`; }
+    if (/maxBuffer|ERR_CHILD_PROCESS_STDIO_MAXBUFFER/iu.test(reason)) { return `output_limit`; }
+    if (/the forker exited/iu.test(reason)) { return `forker_exited`; }
+    return code;
+};
+
+export const retryLand = (agent: AgentStanding): boolean =>
+    landFailure(agent) !== undefined && landFailureCode(agent.landFailure?.reason ?? agent.failure ?? ``, agent.landFailure?.code) === `forker_exited`;
+
+const internalReason = (reason: string, code?: string): string | undefined => {
+    switch (landFailureCode(reason, code)) {
+        case `forker_exited`: return t(`agents.agentStatus.landProcessStopped`);
+        case `too_many_paths`: return t(`agents.agentStatus.landTooManyPaths`);
+        case `output_limit`: return t(`agents.agentStatus.landOutputLimit`);
+        default: return undefined;
+    }
+};
+
+// Used by both the report and the card's hover, with the count formatted in the reader's locale by i18n.
+export const workspaceOverlap = (count: number): string | undefined =>
+    count > 3_000 ? t(`agents.agentStatus.workspaceOverlap`, { count: formatCount(count) }) : undefined;
+
 // Git's refusal as the reader is told it.
 const gitReason = (failure: string): string => {
+    const internal = internalReason(failure);
+    if (internal !== undefined) { return internal; }
     if (LOST_LINK.test(failure)) {
         return t(`agents.agentStatus.lostLink`);
     }
@@ -128,10 +156,10 @@ export const landFailure = (agent: AgentStanding): string | undefined => {
             return undefined;
         }
         // The sandbox's own sentence for a lost link is long and English; the code says it in the reader's language.
-        return broke.code === `unlinked` ? t(`agents.agentStatus.lostLink`) : GIT_FAILURE.test(broke.reason) ? gitReason(broke.reason) : broke.reason;
+        return internalReason(broke.reason, broke.code) ?? (broke.code === `unlinked` ? t(`agents.agentStatus.lostLink`) : GIT_FAILURE.test(broke.reason) ? gitReason(broke.reason) : broke.reason);
     }
     const failure = agent.failure;
-    if (agent.status !== `error` || limited(agent) || failure === undefined || !GIT_FAILURE.test(failure)) {
+    if (agent.status !== `error` || limited(agent) || failure === undefined || (!GIT_FAILURE.test(failure) && internalReason(failure) === undefined)) {
         return undefined;
     }
     return gitReason(failure);
@@ -164,6 +192,7 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
     if (park !== undefined) {
         return attentionWords()[park].verb;
     }
+    if (retryLand(agent)) { return t(`agents.agentStatus.reviewChanges`); }
     // A spent allowance is not an error to view: there's nothing to diagnose in the transcript, and the destination is
     // the conversation itself. Checked before the `error` branch below, which it would otherwise fall into.
     // Neither is a held message: the press that sends it is in the conversation. Nor a bare park on a browser or a

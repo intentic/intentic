@@ -408,9 +408,10 @@ mod platform {
     use std::collections::HashMap;
     use std::sync::{LazyLock, Mutex, OnceLock};
 
+    use futures_util::StreamExt;
     use tauri::{AppHandle, Manager};
-    use zbus::blocking::Connection;
-    use zbus::zvariant::Value;
+    use zbus::wire::Variant as Value;
+    use zbus::Connection;
 
     use super::{session_bus, Notices, Posted};
     use crate::setup_link::{NoticeArgs, NoticeKind};
@@ -470,7 +471,7 @@ mod platform {
             };
             hints.insert("sound-name", Value::from(sound));
         }
-        let reply = bus.call_method(
+        let reply = tauri::async_runtime::block_on(bus.call_method(
             Some(SERVER),
             PATH,
             Some(SERVER),
@@ -488,7 +489,7 @@ mod platform {
                 hints,
                 -1_i32,
             ),
-        )?;
+        ))?;
         reply.body().deserialize::<u32>()
     }
 
@@ -496,21 +497,27 @@ mod platform {
     fn markup(bus: &Connection) -> bool {
         static MARKUP: OnceLock<bool> = OnceLock::new();
         *MARKUP.get_or_init(|| {
-            bus.call_method(Some(SERVER), PATH, Some(SERVER), "GetCapabilities", &())
-                .ok()
-                .and_then(|reply| reply.body().deserialize::<Vec<String>>().ok())
-                .is_some_and(|capabilities| capabilities.iter().any(|it| it == "body-markup"))
+            tauri::async_runtime::block_on(bus.call_method(
+                Some(SERVER),
+                PATH,
+                Some(SERVER),
+                "GetCapabilities",
+                &(),
+            ))
+            .ok()
+            .and_then(|reply| reply.body().deserialize::<Vec<String>>().ok())
+            .is_some_and(|capabilities| capabilities.iter().any(|it| it == "body-markup"))
         })
     }
 
     fn close(bus: &Connection, id: u32) {
-        let _ = bus.call_method(
+        let _ = tauri::async_runtime::block_on(bus.call_method(
             Some(SERVER),
             PATH,
             Some(SERVER),
             "CloseNotification",
             &(id,),
-        );
+        ));
     }
 
     pub fn withdraw(_app: &AppHandle, posted: &Posted) {
@@ -532,13 +539,13 @@ mod platform {
         let Some(bus) = session_bus() else {
             return super::Standing::NoService;
         };
-        match bus.call_method(
+        match tauri::async_runtime::block_on(bus.call_method(
             Some(SERVER),
             PATH,
             Some(SERVER),
             "GetServerInformation",
             &(),
-        ) {
+        )) {
             Ok(_) => super::Standing::On,
             Err(_) => super::Standing::NoService,
         }
@@ -560,11 +567,17 @@ mod platform {
             let rule = zbus::MatchRule::builder()
                 .msg_type(zbus::message::Type::Signal)
                 .interface(SERVER)
-                .and_then(|rule| rule.path(PATH))
-                .map(|rule| rule.build());
-            let messages = match rule.and_then(|rule| {
-                zbus::blocking::MessageIterator::for_match_rule(rule, bus, Some(64))
-            }) {
+                .path(PATH)
+                .build();
+            let messages = match rule {
+                Ok(rule) => tauri::async_runtime::block_on(zbus::MessageStream::for_match_rule(
+                    rule,
+                    bus,
+                    std::num::NonZeroUsize::new(64),
+                )),
+                Err(error) => Err(error),
+            };
+            let mut messages = match messages {
                 Ok(messages) => messages,
                 Err(error) => {
                     eprintln!("intentic: a press on a notification will not be heard: {error}");
@@ -572,13 +585,13 @@ mod platform {
                 }
             };
             let app = app.clone();
-            let _ = std::thread::Builder::new()
-                .name("intentic-notices".into())
-                .spawn(move || {
-                    for message in messages.flatten() {
+            tauri::async_runtime::spawn(async move {
+                while let Some(message) = messages.next().await {
+                    if let Ok(message) = message {
                         heard(&app, &message);
                     }
-                });
+                }
+            });
         });
     }
 
@@ -634,10 +647,10 @@ mod platform {
 /// The session bus, once per run: what the notification server and the docks are reached on. None on a desktop without
 /// one, where nothing of this is drawn anyway.
 #[cfg(target_os = "linux")]
-pub(crate) fn session_bus() -> Option<&'static zbus::blocking::Connection> {
-    static BUS: OnceLock<Option<zbus::blocking::Connection>> = OnceLock::new();
+pub(crate) fn session_bus() -> Option<&'static zbus::Connection> {
+    static BUS: OnceLock<Option<zbus::Connection>> = OnceLock::new();
     BUS.get_or_init(|| {
-        zbus::blocking::Connection::session()
+        tauri::async_runtime::block_on(zbus::Connection::session())
             .map_err(|error| eprintln!("intentic: no session bus for notifications: {error}"))
             .ok()
     })

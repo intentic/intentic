@@ -60,7 +60,13 @@ afterEach(() => {
 });
 
 // The submit over a real form, with the daemon's streamed apply as `add`: it lists the connection with `status`.
-const submitOn = (entry: CapabilityCatalogEntry, status: CapabilityStatus, editing?: CapabilitySummary, ownsSandbox = true) => {
+const submitOn = (
+    entry: CapabilityCatalogEntry,
+    status: CapabilityStatus,
+    editing?: CapabilitySummary,
+    ownsSandbox = true,
+    gpu: Pick<import("./capabilitySubmit").SubmitHost, "preflight" | "hosted" | "capture"> = {},
+) => {
     const capabilities = ref<readonly CapabilitySummary[]>(editing === undefined ? [] : [editing]);
     const add = jest.fn(async (input: AddCapabilityInput, onLine?: (line: Record<string, unknown>) => void) => {
         onLine?.({ kind: `terminal`, session: `install-${input.id}` });
@@ -88,7 +94,7 @@ const submitOn = (entry: CapabilityCatalogEntry, status: CapabilityStatus, editi
     scopes.push(scope);
     return scope.run(() => {
         const form = useCapabilityForm(state);
-        const { submit, submitting, failure } = useCapabilitySubmit({ ...state, form, add, ...hands, ownsSandbox: ref(ownsSandbox) });
+        const { submit, submitting, failure } = useCapabilitySubmit({ ...state, form, add, ...hands, ownsSandbox: ref(ownsSandbox), ...gpu });
         return { state, form, add, submit, submitting, failure, scope, ...hands };
     })!;
 };
@@ -258,5 +264,29 @@ describe(`the wallet`, () => {
         await submit();
 
         expect([add.mock.calls.length, state.error.value, failure.value]).toEqual([1, null, undefined]);
+    });
+});
+
+describe(`GPU host preflight before saving`, () => {
+    it(`refuses a missing GPU before Add and records why the capability was blocked`, async () => {
+        const preflight = jest.fn(async () => ({ checked: true, ok: false, message: `host GPU driver missing` }));
+        const capture = jest.fn();
+        const form = submitOn(catalogEntry(`docker`), { state: `active` }, undefined, true, { preflight, capture, hosted: ref(false) });
+        form.form.values[`gpu`] = `on`;
+        await form.submit();
+        expect(preflight).toHaveBeenCalledTimes(1);
+        expect(form.add).toHaveBeenCalledTimes(0);
+        expect(capture).toHaveBeenCalledWith(`gpu_capability_blocked`, { hosted: false });
+        expect(form.failure.value).toEqual({ tone: `danger`, title: `Could not add the capability.`, detail: `host GPU driver missing` });
+    });
+    it(`saves only after the host proves GPU access`, async () => {
+        const preflight = jest.fn(async () => ({ checked: true, ok: true, message: `GPU answers` }));
+        const capture = jest.fn();
+        const form = submitOn(catalogEntry(`docker`), { state: `active` }, undefined, true, { preflight, capture });
+        form.form.values[`gpu`] = `on`;
+        await form.submit();
+        expect(preflight).toHaveBeenCalledTimes(1);
+        expect(form.add).toHaveBeenCalledTimes(1);
+        expect(capture).toHaveBeenCalledTimes(0);
     });
 });

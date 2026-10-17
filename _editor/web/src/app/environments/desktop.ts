@@ -5,6 +5,7 @@
 // wherever floating.ts does, node tests included (where to DOWNLOAD the app is desktopDownloads.ts, which does not).
 
 import { isTypingTarget } from "@intentic/ui/event-target";
+import { noteReload } from "@intentic/ui/reload-reason";
 import { z } from "zod";
 import { inAppPath } from "./inAppPath";
 
@@ -39,6 +40,8 @@ interface DesktopWebview {
 declare global {
     interface Window {
         __INTENTIC_DESKTOP__?: DesktopWebview;
+        /* One random string per launch of the desktop app, injected into every webview it opens (windows.rs). */
+        __INTENTIC_LAUNCH_ID__?: string;
     }
 }
 
@@ -47,6 +50,11 @@ declare global {
 // downloaded. `update` arrives twice, here and via the event below, for the two orderings of page-load vs.
 // download-finish.
 export const desktopApp = (): DesktopWebview | undefined => window.__INTENTIC_DESKTOP__;
+
+// Which run of the desktop app this window belongs to: the same across its windows and page loads, new on each relaunch.
+// Analytics tags every event with it, since the person and session ids deliberately outlive a relaunch (analytics.ts).
+const LaunchIdSchema = z.string().min(1).optional().catch(undefined);
+export const desktopLaunchId = (): string | undefined => LaunchIdSchema.parse(window.__INTENTIC_LAUNCH_ID__);
 
 export const desktopVersion = (): string | undefined => desktopApp()?.version;
 
@@ -296,6 +304,7 @@ const goOrLoad = async (go: (path: string) => Promise<void>, path: string): Prom
         await go(path);
     } catch (error) {
         console.error(`[desktop] could not open ${path} in place; loading it:`, error);
+        noteReload(`opener-fallback`);
         globalThis.location.href = path;
     }
 };

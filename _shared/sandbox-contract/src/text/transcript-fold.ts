@@ -16,6 +16,8 @@ import { keptWarmLine, keptWarmNotice } from "../schemas/keep-warm.js";
 import { handedOffLine, handedOffNotice } from "../schemas/providers/handoff.js";
 import { isLandConflict } from "../events/land-conflict.js";
 import { turnedAwayCode } from "../policy/turned-away.js";
+import { isDeterministicRefusal } from "../policy/deterministic-refusals.js";
+import { undeliveredRow } from "../events/undelivered.js";
 import { mentionedPathTokens } from "./mentions.js";
 import { unspokenPromptRow } from "../events/agent-words.js";
 import { needRowText } from "../events/need-wake.js";
@@ -197,15 +199,6 @@ const landedRow = (event: Extract<AgentEvent, { kind: "landed" }>): TranscriptRo
 const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): { message: string; error?: string } =>
     event.code === undefined ? { message: event.message } : { message: event.message, error: event.code };
 
-// The clause after a refusal that ran nothing. A turn somebody typed is held in its conversation's queue for another
-// press; a turn that started itself — an automation, a loop, a watch wake — has no typed message and nobody watching,
-// so promising a resend there names a composer the reader is not looking at. Neither version promises a retry: whether
-// one comes is the scheduler's decision, not this row's to state.
-const undelivered = (unattended: boolean): string =>
-    unattended
-        ? `Nothing ran, and nothing is held: this run started on its own, so there is no message waiting to be sent again.`
-        : `Your message was not delivered: it is held for you to send again.`;
-
 // The press a memory hold offers: the raise rides along only when the hold carried a ceiling to size it by, since a
 // stall names none and raising one would not clear it.
 const memoryPress = (event: Extract<AgentEvent, { kind: "error" }>): "sendAnyway" | "sandboxMemory" =>
@@ -217,7 +210,11 @@ const memoryPress = (event: Extract<AgentEvent, { kind: "error" }>): "sendAnyway
 const heldRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow => {
     const unattended = event.unattended === true;
     const memory = event.code === "sandbox-memory-low";
+    const deterministic = isDeterministicRefusal(event.code);
     const said = failureOf(event);
+    if (event.held !== undefined && !unattended && deterministic) {
+        return undeliveredRow(event.message, said, { unattended, deterministic, kept: true });
+    }
     if (event.held !== undefined && !unattended) {
         return {
             role: "notice",
@@ -230,11 +227,7 @@ const heldRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow =
         };
     }
     if (!memory || unattended) {
-        return {
-            role: "notice",
-            text: `${event.message} ${undelivered(unattended)}`,
-            noticeCode: noticeCode({ code: "undelivered", params: { ...said, unattended: unattended || undefined } }),
-        };
+        return undeliveredRow(event.message, said, { unattended, deterministic, kept: false });
     }
     return {
         role: "notice",

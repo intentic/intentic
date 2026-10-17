@@ -2,6 +2,7 @@
 // all meaningless in a bare node context.
 import "@intentic/testing/dom";
 import { advanceTimersByTimeAsync, freshImport, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
+import { takeReloadReason } from "@intentic/ui/reload-reason";
 import { effectScope, nextTick } from "vue";
 
 // Two failure modes: never appearing defeats the point (a stale workspace nobody reloads); appearing wrongly is
@@ -83,6 +84,18 @@ describe(`the offer`, () => {
         const { offer } = useAppUpdate();
         await settled();
         expect(offer.value).toEqual({ kind: `web` });
+    });
+
+    it(`leaves a note that the reload it takes was an update's`, async () => {
+        const reload = jest.fn();
+        stubGlobal(`location`, { reload });
+        const { useAppUpdate } = await load({ running: `1720000000000`, deployed: { buildId: `1730000000000` } });
+        const update = useAppUpdate();
+        await settled();
+        update.take();
+
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(takeReloadReason()).toBe(`update`);
     });
 
     it(`stays silent on a build.json that is missing or malformed`, async () => {

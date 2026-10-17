@@ -650,7 +650,7 @@
             "later": "Später",
             "save": "Speichern Sie zuerst Ihre Arbeit in anderen Apps."
         },
-        "signOut": "Melden Sie sich bei Windows ab und wieder an, um die Einrichtung dieses PCs abzuschließen. Sie geht von selbst weiter, sobald Sie zurück sind.",
+        "signOut": "Speichern Sie Ihre Arbeit in anderen Apps und melden Sie sich dann von Windows ab. Die Einrichtung wird nach der erneuten Anmeldung automatisch fortgesetzt.",
         "repair": "Repair fragen",
         "hosted": "Stattdessen kann ein Computer, den wir betreiben, Ihre Agenten ausführen.",
         "cloud": "Intentic in der Cloud nutzen",

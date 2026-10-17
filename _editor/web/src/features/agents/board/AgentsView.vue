@@ -56,10 +56,12 @@ import { CHILD_ROWS } from "../../../models/fleet/board/childRows";
 import StatusBar from "../status-bar/StatusBar.vue";
 import { LIVE_METRICS_KEY, useLiveMetrics } from "../../../models/sandbox/liveMetrics";
 import HeldWakeCard from "./cards/HeldWakeCard.vue";
+import AttentionElsewhere from "./cards/AttentionElsewhere.vue";
 import WorkflowRunCard from "./cards/WorkflowRunCard.vue";
 import { useArchiveDoor } from "./view/archiveDoor";
 import { useBoardCommands } from "./view/boardCommands";
 import { laneHeads, useBoardLanes } from "./view/boardLanes";
+import { useAttentionAsk } from "./view/attentionAsk";
 import { useBoardPresses } from "./view/boardPresses";
 import { followAcross, useBoardScope } from "../../../models/fleet/board/boardScope";
 import { useBoardView } from "./view/boardView";
@@ -107,7 +109,7 @@ const { personas } = usePersonas();
 const { user } = useAuth();
 const { sharedAccess } = useSandboxSharedAccess();
 const scope = useBoardScope({ agents, runs: workflows.runs, personas, me: computed(() => user.value?.email), sharedAccess });
-const { scopeOptions, ownerOptions, ownerScope, projectHidden, scopedHeld } = scope;
+const { scopeOptions, ownerOptions, ownerScope, projectHidden, attentionElsewhere, scopedHeld } = scope;
 followAcross();
 const ring = useCardRing({ mobile, strip: chatStrip, wide: chatWide, runs: workflows.runs });
 const { highlightId, inPane, peeked } = ring;
@@ -285,6 +287,18 @@ const toggleFinished = async (): Promise<void> => {
         lane.scrollIntoView({ block: `start` });
     }
 };
+useAttentionAsk({
+    board: boardEl,
+    filtering,
+    clearFilter: () => {
+        query.value = ``;
+    },
+    inArchive: computed(() => view.value.archive),
+    leaveArchive: toggleArchive,
+    rows: () => ({ cards: cardsFor(`attention`), runs: runsFor(`attention`), wakes: scopedHeld.value.length }),
+    openCard: (agent) => focusAgent(agent),
+    openRun,
+});
 // Workspace facts the starters turn on, already fetched for the rail elsewhere: the board adds no fetch of its own.
 const { panels: workspaceRepos } = usePanels();
 const workspaceChanges = useChanges();
@@ -463,6 +477,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             </Button>
                         </template>
                     </LaneHeader>
+                    <AttentionElsewhere v-if="lane.key === 'attention' && !view.archive && attentionElsewhere > 0" :count="attentionElsewhere" />
                     <!-- Held wakes lead the lane, since a hold is wholly waiting on the user, more than anything running below it; Attention lane only. -->
                     <div v-if="lane.key === 'attention' && !view.archive && scopedHeld.length > 0" class="flex flex-col gap-3.5 pb-2.5">
                         <HeldWakeCard

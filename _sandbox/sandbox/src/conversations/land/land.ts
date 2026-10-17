@@ -1,7 +1,7 @@
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { errorMessage, stderrOf, undefinedIfMissing } from "@intentic/base/errors";
+import { errorMessage, stderrOf } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
 import type { AgentSpan, LandConflict, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract/schemas/agents";
 import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
@@ -14,10 +14,11 @@ import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { agentRepoChanges, anchorOf } from "./agent-changes.js";
 import { branchSha, mainBranchOf } from "../../git/agent-refs.js";
 import { withConversationTrailer } from "../../git-identity.js";
+import { writeChangesPatch, writePatch } from "./land-patch.js";
 import { reconcileLockfile } from "./lockfile-reconcile.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
-import { assertLinked, UnlinkedCheckoutError } from "../worktrees/checkout-link.js";
+import { assertLinked } from "../worktrees/checkout-link.js";
 
 // Lands a conversation's work into the main tree as uncommitted changes: preserves worktree state as a commit on
 // agent/<id>, then applies each repo's anchor..tip patch working-tree-only once every repo in the composition
@@ -45,17 +46,6 @@ export interface LockfileFailure {
     readonly repo: string;
     readonly reason: string;
 }
-
-// The longest a broken land's words run on the card's record; git's own message can carry a whole command line.
-const FAILURE_MAX_CHARS = 1_000;
-
-// A land that threw rather than refused, as the card keeps it (AgentSummary.landFailure): its words, and `unlinked` when
-// the checkout lost its link to the workspace, the one kind the board says in its own words.
-export const landFailureOf = (cause: unknown): { readonly reason: string; readonly code?: string } => {
-    const said = errorMessage(cause);
-    const reason = said.length > FAILURE_MAX_CHARS ? `${said.slice(0, FAILURE_MAX_CHARS - 1)}…` : said;
-    return cause instanceof UnlinkedCheckoutError ? { reason, code: "unlinked" } : { reason };
-};
 
 // Said by every door a land goes through, since pnpm's reason is the only account of why the lockfile lags its manifest.
 export const reportLockfileFailures = (logger: Logger, id: string, outcome: LandOutcome): void => {
@@ -85,15 +75,6 @@ const gitSaid = (error: unknown): string => {
     return stderr !== undefined && stderr !== "" ? stderr : errorMessage(error);
 };
 
-// Diff written straight to a file, never held as a string, since a giant patch would blow the git runner's output
-// ceiling. Returns the file's size, since that's all callers ever wanted; zero advances the tip as landed.
-const writePatch = async (main: string, patchPath: string, range: readonly string[], git: GitRunner): Promise<number> => {
-    // `--no-textconv`/`--no-ext-diff`: a patch converted for reading (this image routes every binary extension through
-    // fileq) carries no bytes `git apply` can use, and a document's diff would come out empty and land as nothing.
-    await git(main, ["diff", `--output=${patchPath}`, "--binary", "--no-textconv", "--no-ext-diff", "-M", ...range]);
-    return (await stat(patchPath).catch(undefinedIfMissing))?.size ?? 0;
-};
-
 // One change of a delta with the complete path set its diff spans: a rename is one change across two paths, so naming
 // only the destination breaks `-M` pairing and creates instead of renaming.
 interface DeltaChange {
@@ -104,6 +85,10 @@ interface DeltaChange {
     // What must not exist once this change has applied: a deletion's own path, a rename's source.
     readonly removes: readonly string[];
 }
+
+// Beyond this, a refusal is a workspace-sized decision. Thousands of per-file git probes would hold the repo lock
+// for minutes; keep the paths (and therefore their count) in the existing conflict contract for the user to clear.
+const MAX_REFUSED_FILES = 3_000;
 
 // A delta's changes split by what main makes of each: `clean` is what a land would carry, `blocked` is a genuine
 // conflict. Already-in-main changes are in neither.
@@ -221,13 +206,18 @@ const classifyDelta = async (
     const reasonOf = (change: DeltaChange): LandConflictReason =>
         isBinary(change.path) ? "binary" : change.paths.some((path) => mainDirty.has(path)) ? "workspace" : "diverged";
     const named = changesNamedIn(refused, changesByPath(changes));
+    const refusedChanges = named.size === 0 ? changes : [...named];
+    if (refusedChanges.length > MAX_REFUSED_FILES) {
+        const blocked = refusedChanges.map((change) => ({ path: change.path, reason: reasonOf(change) }));
+        return { blocked, clean: named.size === 0 ? [] : changes.filter((change) => !named.has(change)) };
+    }
     // A wording this reader could not place: each change probed alone, the road the named set otherwise makes unnecessary.
     if (named.size === 0) {
         return probeEach(main, from, tip, patchDir, repo, changes, reasonOf, git);
     }
     const probePath = join(patchDir, `${repo.replaceAll("/", "_")}.refused.patch`);
     const still =
-        (await writePatch(main, probePath, [from, tip, "--", ...[...named].flatMap((change) => change.paths)], git)) === 0
+        (await writeChangesPatch(main, probePath, from, tip, [...named], git)) === 0
             ? new Set<DeltaChange>()
             : await stillRefused(main, probePath, named, git);
     return {
@@ -262,7 +252,7 @@ const probeEach = async (
     const clean: DeltaChange[] = [];
     for (const [index, change] of changes.entries()) {
         const probePath = join(patchDir, `${repo.replaceAll("/", "_")}.probe.${index}.patch`);
-        if ((await writePatch(main, probePath, [from, tip, "--", ...change.paths], git)) === 0 || (await applies(main, probePath, "forward", git))) {
+        if ((await writeChangesPatch(main, probePath, from, tip, [change], git)) === 0 || (await applies(main, probePath, "forward", git))) {
             clean.push(change);
             continue;
         }
@@ -290,7 +280,7 @@ const applyChanges = async (
         return;
     }
     const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.remainder.patch`);
-    if ((await writePatch(main, patchPath, [from, tip, "--", ...changes.flatMap((change) => change.paths)], git)) === 0) {
+    if ((await writeChangesPatch(main, patchPath, from, tip, changes, git)) === 0) {
         return;
     }
     const removes = changes.flatMap((change) => change.removes);

@@ -2,35 +2,22 @@ import { writeFile } from "node:fs/promises";
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import { pathExists } from "@intentic/base/fs";
-import { DISCARDABLE_SIDES, isWholeRepo, scopedPaths, STAGEABLE_SIDES, UNSTAGEABLE_SIDES } from "@intentic/sandbox-contract/schemas/git/git-scope";
-import { gitContract } from "@intentic/sandbox-contract/contracts/git.contract";
-import {
-    type GitChange,
-    type GitChanges,
-    type GitDiffSide,
-    type GitScope,
-    type GitTarget,
-    isScratch,
-    type ScratchPath,
-    type OriginAgent,
-    type RepoChanges,
-} from "@intentic/sandbox-contract/schemas/git/git";
-import { implement, ORPCError } from "@orpc/server";
+import { scopedPaths } from "@intentic/sandbox-contract/schemas/git/git-scope";
+import { type GitChange, type GitChanges, isScratch, type OriginAgent, type RepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
+import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
-import type { OrpcContext } from "../app-env.js";
-import { repoGitDir, syncRootExcludes } from "../workspace/layout/git-layout.js";
-import { checkRunningIn, isBuildOutputPath } from "../workspace/deps/checks-in-flight.js";
+import { repoGitDir, syncRootExcludes, syncProjectExcludes } from "../workspace/layout/git-layout.js";
 import { isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { currentRepos } from "../workspace/watch/repo-watch.js";
 import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import type { ActionResult } from "./changes/changes-commits.js";
 import { createChipStaging } from "./changes/chip-staging.js";
 import { conflictedSides, stagedSides, unstagedSides, withCodeCounts } from "./changes/code-counts.js";
-import { scratchScopeOf } from "./changes/scratch.js";
+import { createIndexTargets, ownWork } from "./changes/index-targets.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { gitFailureReason } from "./git.js";
-import { parsableMessage } from "./ops/commit-message.js";
 import { createPushRuns } from "./ops/push-run.js";
+import { gitImplementer, indexRoutes } from "./index.routes.js";
 import { opt } from "../opt.js";
 
 // How long a scan result is reused: absorbs a refetch burst, short enough a save still shows live.
@@ -59,13 +46,6 @@ export const capRepoChanges = (
     };
 };
 
-// The worktree rows that are the owner's to review. A check running in this repo is the daemon building the project,
-// so its output dirs are mid-rewrite: a file the build has emptied but not yet written back is not a deletion to show,
-// let alone to offer for staging. Held back only while that check runs (checks-in-flight.ts); the first scan after it
-// reports whatever the build left standing. A build leaves the index alone, so `staged` stands as read.
-const ownWork = (repo: string, unstaged: GitChange[]): GitChange[] =>
-    checkRunningIn(repo) ? unstaged.filter((change) => !isBuildOutputPath(change.path)) : unstaged;
-
 // Fairness bound on concurrent repo scans, not a throughput cap; sized from the machine's own core count.
 const SCAN_CONCURRENCY = Math.max(2, Math.min(8, availableParallelism()));
 
@@ -88,7 +68,7 @@ const mapBounded = async <T, R>(items: readonly T[], limit: number, run: (item: 
 // Per-repo git ops over `root` (the /work repo) and every discovered repo; unknown repo is NOT_FOUND, an escaping path
 // BAD_REQUEST, missing file NOT_FOUND.
 export const createGitRoutes = (services: Services) => {
-    const i = implement(gitContract).$context<OrpcContext>();
+    const i = gitImplementer();
     // Rewrites the --separate-git-dir pointer if deleted, mirroring history's healGitPointer convention
     // (/history/gits/<name>).
     const healPointer = async (repo: string, dir: string): Promise<void> => {
@@ -143,15 +123,8 @@ export const createGitRoutes = (services: Services) => {
     const onRepo = <T>(repo: string, task: (dir: string) => Promise<T>): Promise<T> =>
         services.agentWorktrees.withRepoLock(repo, async () => task(await repoDir(repo)));
 
-    // Resolves a scope from a live `git status`, not the truncated review, so it acts past MAX_REPO_CHANGES. Origin
-    // failures here throw (unlike the scan): a silent miss would quietly narrow a write.
-    const scopeToPaths = async (repo: string, dir: string, scope: GitScope, sides: readonly GitDiffSide[]): Promise<readonly string[]> => {
-        const { head, conflicted, staged, unstaged } = await services.git.changedFiles(dir);
-        const origins = scope.origin === undefined ? {} : await services.agentOrigins.forRepo(repo, dir, head);
-        // The worktree rows the scan shows (ownWork), so a scope never reaches a build-output row the panel hid.
-        return scopedPaths({ conflicted, staged, unstaged: ownWork(repo, unstaged) }, sides, scope, origins);
-    };
-
+    // What a target names in a repo, and the index moves over it (index-targets.ts).
+    const targets = createIndexTargets(services);
     // An origin chip's staging, remembered per repo and origin so clearing the chip puts back exactly what lighting it
     // replaced (chip-staging.ts). Only the unstaged side: staging a conflict marks it resolved, which no chip does for
     // the owner. Callers hold the repo lock.
@@ -163,54 +136,12 @@ export const createGitRoutes = (services: Services) => {
     const lightChip = async (repo: string, dir: string, origin: string): Promise<void> => {
         const { head, unstaged } = await services.git.changedFiles(dir);
         const origins = await services.agentOrigins.forRepo(repo, dir, head);
-        const scratch = await scratchIn(repo, dir);
+        const scratch = await targets.scratchIn(repo, dir);
         const paths = scopedPaths({ conflicted: [], staged: [], unstaged: ownWork(repo, unstaged) }, ["unstaged"], { origin }, origins);
         await chips.light(repo, dir, origin, head, paths.filter((path) => !isScratch(path, scratch)));
     };
     const clearChip = (repo: string, dir: string, origin: string): Promise<void> =>
         chips.clear(repo, dir, origin, async () => (await services.git.changedFiles(dir)).head);
-
-    // Stage-all/discard-all use single-command spellings that never enumerate paths; unstage has none (a bare `reset`
-    // also clears MERGE_HEAD) so it always resolves to paths. Callers must hold the repo lock.
-    // What a stage-everything leaves out of this repo right now (scratch.ts): the scan shows it, the stage honors it.
-    const scratchIn = async (repo: string, dir: string): Promise<ScratchPath[]> => services.git.scratchOf(dir, await scratchScopeOf(repo, services.workspace.root));
-    // A repo row's `scratch`, read only when something is untracked: a scan runs about once a second while files land.
-    const scratchRow = async (repo: string, dir: string, worktree: readonly GitChange[]): Promise<Pick<RepoChanges, "scratch">> => {
-        if (!worktree.some((change) => change.status === "added")) {
-            return {};
-        }
-        const scratch = await scratchIn(repo, dir);
-        return scratch.length > 0 ? { scratch } : {};
-    };
-    const stageTarget = async (repo: string, dir: string, target: GitTarget): Promise<void> => {
-        if (target.paths !== undefined) {
-            await services.git.stagePaths(dir, target.paths);
-            return;
-        }
-        const scope = target.scope ?? {};
-        // A described target means "everything" of some kind, and what looks like scratch joins one only when picked by path.
-        const scratch = await scratchIn(repo, dir);
-        if (isWholeRepo(scope)) {
-            await services.git.stageAll(dir, scratch);
-            return;
-        }
-        await services.git.stagePaths(dir, (await scopeToPaths(repo, dir, scope, STAGEABLE_SIDES)).filter((path) => !isScratch(path, scratch)));
-    };
-    const unstageTarget = async (repo: string, dir: string, target: GitTarget): Promise<void> => {
-        await services.git.unstagePaths(
-            dir,
-            target.paths ?? (await scopeToPaths(repo, dir, target.scope ?? {}, UNSTAGEABLE_SIDES)),
-        );
-    };
-    const discardTarget = async (repo: string, dir: string, target: GitTarget): Promise<void> => {
-        if (target.paths !== undefined) {
-            await services.git.discardPaths(dir, target.paths);
-            return;
-        }
-        const scope = target.scope ?? {};
-        // `undefined` means the whole repo: `reset --hard` + `clean -fd`, which also removes now-empty dirs.
-        await services.git.discardPaths(dir, isWholeRepo(scope) ? undefined : await scopeToPaths(repo, dir, scope, DISCARDABLE_SIDES));
-    };
 
     // Repos mid-commit; held here (not per-tab) so a reload or second tab agrees; empty again on restart.
     const committing = new Set<string>();
@@ -261,7 +192,7 @@ export const createGitRoutes = (services: Services) => {
                     services.git.operationInProgress(dir),
                 ]);
                 const worktree = ownWork(repo, unstaged);
-                const scratch = await scratchRow(repo, dir, worktree);
+                const scratch = await targets.scratchRow(repo, dir, worktree);
                 // `remote` feeds the sync bar; `landed` is which agent touched each path, independently of it.
                 const [remote, landed] = await Promise.all([
                     services.git.remoteState(dir, { branch }),
@@ -343,6 +274,8 @@ export const createGitRoutes = (services: Services) => {
         const repoIds = await services.perf.track("git.discover", {}, () => currentRepos(services.workspace.root));
         // Converges root excludes on the repo set first, so a fresh clone isn't swept into the root scope.
         await syncRootExcludes(services.config.historyRoot, repoIds);
+        // Project repos get the same heavy-dir excludes in info/exclude, so a fresh pip install doesn't show 50k changes.
+        await syncProjectExcludes(services.workspace.root, repoIds);
         const candidates = [
             { repo: "root", dir: services.workspace.root },
             ...repoIds.map((id) => ({ repo: id, dir: join(services.workspace.root, id) })),
@@ -557,55 +490,11 @@ export const createGitRoutes = (services: Services) => {
             guarded(input.repo, `before rebase ${input.sha.slice(0, 8)}`, (dir) => services.git.rebaseOnto(dir, input.sha, AGENT_GIT_AUTHOR)),
         ),
         status: i.status.handler(async ({ input }) => services.git.status(await repoDir(input.repo))),
-        // One commit shape: `stage` (whole repo, scope, or paths) decides what enters the index; there is no
-        // path-scoped `commit --only`. `stage` runs inside the repo lock so a land can't slip in between.
-        // Marked committing before the lock: queued behind a land still counts as running to the user.
-        commit: i.commit.handler(({ input }) =>
-            whileCommitting(input.repo, () =>
-                onRepo(input.repo, async (dir) => {
-                    // Carries git's own refusal text back as a CONFLICT, not an opaque 500 with nothing to act on.
-                    try {
-                        // Stages first, then always commits the whole index (never a partial commit); one spelling
-                        // avoids a --no-verify path that would skip hooks inconsistently.
-                        if (input.stage !== undefined) {
-                            await stageTarget(input.repo, dir, input.stage);
-                        }
-                        // Repairs only spellings a conventional parser can't find a header in at all (`!` before the
-                        // scope, no space after `:`); every other rule's verdict reaches the panel unchanged.
-                        const committed = await services.git.commitIndex(dir, parsableMessage(input.message), AGENT_GIT_AUTHOR);
-                        invalidateScan();
-                        // Re-reads only the just-committed repo, inside the lock, instead of a full rescan: a land
-                        // landing between commit and read would describe a tree the commit didn't make. `scanRepo`
-                        // takes no lock, so this isn't reentrant.
-                        const changes = await scanRepo(input.repo, dir);
-                        if (changes === undefined) {
-                            // Nothing left to show for this repo (the scan's own inclusion rule); the client drops the
-                            // row.
-                            return { committed };
-                        }
-                        const originAgents = identifyOrigins([changes]);
-                        return { committed, changes, ...(Object.keys(originAgents).length > 0 ? { originAgents } : {}) };
-                    } catch (error) {
-                        // The index can move even on failure (staging happens before the commit), so the view is stale
-                        // regardless.
-                        invalidateScan();
-                        throw new ORPCError("CONFLICT", { message: gitFailureReason(error, "git refused the commit") });
-                    }
-                }),
-            ),
-        ),
-        // Index-only: no checkpoint or history notification, since the worktree is untouched. A target means the whole
-        // side, not just the rows a response could fit.
-        stage: i.stage.handler(({ input }) =>
-            onRepo(input.repo, async (dir) => {
-                await (input.chip === undefined ? stageTarget(input.repo, dir, input) : lightChip(input.repo, dir, input.chip));
-                invalidateScan();
-                return { ok: true } as const;
-            }),
-        ),
+        // Stage and commit, the plain routes and the runs (index.routes.ts).
+        ...indexRoutes(i, { services, repoDir, onRepo, whileCommitting, invalidateScan, targets, lightChip, scanRepo, identifyOrigins }),
         unstage: i.unstage.handler(({ input }) =>
             onRepo(input.repo, async (dir) => {
-                await (input.chip === undefined ? unstageTarget(input.repo, dir, input) : clearChip(input.repo, dir, input.chip));
+                await (input.chip === undefined ? targets.unstageTarget(input.repo, dir, input) : clearChip(input.repo, dir, input.chip));
                 invalidateScan();
                 return { ok: true } as const;
             }),
@@ -667,7 +556,7 @@ export const createGitRoutes = (services: Services) => {
                     ...opt("email", context.identity?.email),
                     ...opt("name", context.identity?.name),
                 });
-                await discardTarget(input.repo, dir, input);
+                await targets.discardTarget(input.repo, dir, input);
                 invalidateScan();
                 // Worktree changed, so record it like any other user write.
                 services.history.notifyUserWrite();

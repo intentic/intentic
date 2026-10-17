@@ -657,7 +657,7 @@ fn connect(
         }
         _ => Vec::new(),
     };
-    let unsupported = contract::unsupported_on_this_host(&probes);
+    let unsupported = contract::unsupported_on_this_host(&probes, &sandbox_image);
     // What ic adds to the image's run line (labels.rs): its labels, and HOST_ENV. HOST_ENV rides here and not in the
     // pairs above because the run contract replays only the names it lists, and the images already published do not
     // list it (2026-10-05): handed over with the pairs, it would be dropped before the container ever saw it. A replace

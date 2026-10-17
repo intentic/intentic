@@ -5,6 +5,8 @@
 // destination caps a genuinely missing chunk to one reload, and any chunk that loads clears it: this window's assets
 // evidently exist again, so the next redeploy earns its own reload.
 
+import { noteReload } from "./reloadReason";
+
 const CHUNK_RELOADED_KEY = `intentic.chunkReloaded`;
 const STALE_CHUNK_MESSAGE =
     /error loading dynamically imported module|failed to fetch dynamically imported module|importing a module script failed|unable to preload css/i;
@@ -49,6 +51,7 @@ export const recoverStaleChunk = (target: string = here()): boolean => {
         // allow(silent-catch): storage access may be blocked in sandboxed contexts or private windows
         return false;
     }
+    noteReload(`stale-chunk`);
     location.assign(target);
     return true;
 };

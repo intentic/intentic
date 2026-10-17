@@ -4,7 +4,8 @@
 // render can tell those two sentences apart.
 import "@intentic/testing/dom";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import type { GitChanges } from "@intentic/sandbox-contract/schemas/git/git";
+import type { CommitResult, GitChanges } from "@intentic/sandbox-contract/schemas/git/git";
+import type { IndexRun, IndexRunHold, IndexRunStart } from "@intentic/sandbox-contract/schemas/git/index-run";
 import { IconStub } from "@intentic/ui/testing";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
@@ -27,11 +28,22 @@ const changes = jest.fn(() => new Promise<GitChanges>((resolve) => held.push(res
 const stage = jest.fn(() => Promise.resolve({ ok: true as const }));
 const unstage = jest.fn(() => Promise.resolve({ ok: true as const }));
 const discard = jest.fn(() => Promise.resolve({ ok: true as const }));
-const commit = jest.fn((): Promise<{ committed: boolean }> => Promise.resolve({ committed: true }));
+const commit = jest.fn((): Promise<CommitResult> => Promise.resolve({ committed: true }));
+// A commit is a run (models/changes/indexRuns.ts): the start says what was asked, and the first state read settles it
+// with `commit`'s answer, or with `holds`' next hold, the guardrail stopping it before anything was staged.
+const holds: IndexRunHold[] = [];
+const indexRunStart = jest.fn(
+    async ({ repo, op }: IndexRunStart): Promise<IndexRun> => ({ status: `running`, id: `run`, repo, op, phase: `waiting`, command: `git commit`, output: `` }),
+);
+const indexRunState = jest.fn(async ({ repo }: { repo: string }): Promise<IndexRun> => {
+    const settled = { id: `run`, repo, op: `commit` as const, command: `git commit`, output: `` };
+    const hold = holds.shift();
+    return hold === undefined ? { ...settled, status: `passed`, result: await commit() } : { ...settled, status: `error`, held: hold };
+});
 // Snapshotted before the mock replaces the module: a namespace is a live binding, so spreading it afterwards would
 // spread the stand-in.
 const realSandboxRpc = { ...actualSandboxRpc };
-jest.mock("../../../client/sandbox/sandboxRpc", () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ git: { changes, stage, unstage, discard, commit } }) }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ git: { changes, stage, unstage, discard, indexRunStart, indexRunState } }) }));
 
 const { default: ReviewPanel } = await import("./ReviewPanel.vue");
 
@@ -78,6 +90,8 @@ afterEach(() => {
     unstage.mockClear();
     discard.mockClear();
     commit.mockClear();
+    indexRunStart.mockClear();
+    holds.length = 0;
     // A lit chip's ask lives at module scope, so one test's click would light the next test's chip.
     nameCommitAfter(undefined);
     commitMessage.value = ``;
@@ -355,10 +369,33 @@ it(`keeps the typed message and says so when a commit recorded nothing`, async (
     commitMessage.value = `chore: keep this`;
     await settle();
     // As the daemon answers it: nothing recorded, and the repo's rows as they still stand.
-    commit.mockResolvedValueOnce({ committed: false, changes: scratchOnly } as { committed: boolean });
+    commit.mockResolvedValueOnce({ committed: false, changes: scratchOnly });
     buttonNamed(el, `Commit all`)?.click();
     await settle();
-    expect(commit).toHaveBeenCalledWith({ repo: `root`, message: `chore: keep this`, stage: {} });
+    expect(indexRunStart).toHaveBeenCalledWith({ repo: `root`, op: `commit`, message: `chore: keep this`, target: {} });
     expect(commitMessage.value).toBe(`chore: keep this`);
     expect(el.textContent).toContain(`Nothing to commit.`);
+});
+
+// The 53k-file report: Commit all over a dependency tree swept it into history. The run now stops before staging and the
+// panel asks, naming the folders; only the owner's yes starts it again, past the guardrail.
+it(`asks before a commit-all that would take thousands of files, and goes ahead only on a yes`, async () => {
+    const el = await mount();
+    await answer({ repos: [{ repo: `root`, branch: `main`, conflicted: [], staged: [], unstaged: [{ path: `main.py`, status: `added` }] }] });
+    commitMessage.value = `feat: everything`;
+    await settle();
+    holds.push({ files: 53_000, dirs: [{ dir: `venv`, files: 52_990 }, { dir: ``, files: 10 }] });
+    buttonNamed(el, `Commit all`)?.click();
+    await settle();
+    await settle();
+    const asked = document.body.textContent ?? ``;
+    expect(asked).toContain(`Commit 53,000 files?`);
+    expect(asked).toContain(`venv/`);
+    expect(asked).toContain(`(top level)`);
+    expect(commit).not.toHaveBeenCalled();
+    buttons().find((button) => button.textContent?.trim() === `Commit anyway`)?.click();
+    await settle();
+    await settle();
+    expect(indexRunStart).toHaveBeenLastCalledWith({ repo: `root`, op: `commit`, message: `feat: everything`, target: {}, confirmed: true });
+    expect(commit).toHaveBeenCalledTimes(1);
 });

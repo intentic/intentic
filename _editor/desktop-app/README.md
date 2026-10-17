@@ -900,10 +900,11 @@ ready and someone is signed in, `machine_sandbox.rs` makes this computer's sandb
 card waits on the PC setup and offers a hosted machine when this PC cannot run a sandbox.
 
 Restarts use `/r /t 0` only — never a timed `/t` above zero, because Windows then implies `/f` and force-closes unsaved
-work elsewhere (`commands.rs` `end_session`). A restart the reader schedules (`in10Minutes`, `later`) is parked in
-`~/.intentic/onboarding-pc-parked.json` and resumed on the next launch. `later` writes the sign-in entry too (above), and it
-stays through any launch before the restart: the launch the restart makes (`--resume-setup`) marks the park `resumed`,
-and only then does the entry go (`onboarding.rs` `waits_for_restart`).
+work elsewhere (`commands.rs` `end_session`). Both a restart and a sign-out wait are parked in `~/.intentic/onboarding-pc-parked.json` as soon as setup
+asks for them, with a sign-in entry that resumes setup automatically. “Sign out now” ends the Windows session;
+its card asks the reader to save other work first. The entry stays through launches before the session ends:
+the sign-in launch (`--resume-setup`) marks the park `resumed`, and only then does the entry go
+(`onboarding.rs` `waits_for_session_end`).
 
 Product events from the first launch (`onboarding_launched`, `onboarding_check`, `onboarding_prefetch`,
 `onboarding_setup`, `onboarding_cloud`) are sent from `src/onboarding/pc.ts` through `analytics.ts`, keyed to the
@@ -943,3 +944,29 @@ Open it from the tray (**Repair Intentic…**), the workspace recovery panel (**
 ## Product analytics
 
 `POSTHOG_KEY` enables reporting in a release build. `POSTHOG_HOST` selects the capture origin for both the webview and Rust launch reporter; it defaults to `https://us.i.posthog.com` and can be set to `https://eu.i.posthog.com`. The app records events only after the editor's Data & privacy consent is allowed.
+
+## Process lifecycle telemetry and session-end smoke test
+
+Rust queues `desktop_launched` for every process start, including launches into Workspace or only the tray.
+It records the opened face, a new `launch_id` and the previous run's `previous_exit_reason`.
+Every webview gets the same string as `window.__INTENTIC_LAUNCH_ID__`. Crash reports retain the panic's own
+RFC3339 event timestamp, `at_exit` and `exit_cause` (`quit`, `restart`, `update`, `session-end`, `unknown`).
+Older launch markers and queued reports remain readable. Consent still applies to this queue.
+
+The Windows smoke workflow installs the candidate, runs `scripts/endsession-smoke.ps1`, and uninstalls it
+before the existing installer tier. On a disposable Windows desktop with the app installed and closed:
+
+```powershell
+pwsh -File _editor/desktop-app/scripts/endsession-smoke.ps1 -Executable 'C:\path\intentic-desktop.exe'
+```
+
+It finds only the launched process's “Tao Thread Event Target”, sends `WM_ENDSESSION(1, ENDSESSION_CLOSEAPP)`,
+and requires exit code 0, an exited session-end marker, and no `crash.json`. It does not sign Windows out.
+The tao 0.37.1 handler calls `loop_destroyed()` then immediately `process::exit(0)`
+([upstream fix #1157](https://github.com/tauri-apps/tao/pull/1157)), after Tauri's Exit cleanup, so this app
+needs no extra process-exit guard. The direct Windows/WebView2 pins match wry's versions; zbus 6 removes
+the blocking API, so notifications and dock updates now use its async API on Tauri's runtime.
+
+`rust-ini` is constrained to 0.21.1: deep-link 2.6.2 constructs a two-field `ParseOption`, while
+0.21.2/0.21.3 added required public fields. The latest plugin otherwise fails to compile on Linux.
+Remove this compatibility constraint once upstream defaults the newly added fields.

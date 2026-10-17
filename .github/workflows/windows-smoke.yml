@@ -160,6 +160,13 @@ jobs:
           name: ${{ inputs.artifact-name }}
           path: windows-artifacts
 
+      # Restart Manager ends the Tao event loop without ExitRequested. Exercise those exact shipped bytes
+      # before tier 1, then uninstall so its first-install assertions still start from a clean machine.
+      - name: Session end exits cleanly
+        if: ${{ !inputs.engine-only }}
+        shell: pwsh
+        run: ./_editor/desktop-app/scripts/endsession-smoke.ps1 -Installer (Resolve-Path $env:INSTALLER).Path
+
       # TIER 1, the thing no other job in this repository can do: the shipped installer, executed on Windows.
       # Everything else the pipeline knows about it comes from reading it as an archive. This installs it
       # unattended on a clean machine, asserts what landed on disk, fires a real intentic:// link at a machine

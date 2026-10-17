@@ -52,8 +52,8 @@ pub fn delete_args(key: &str) -> Vec<String> {
 }
 
 /// Whether the next sign-in still has something to start this app for: a setup parked across the session's end
-/// (state.rs `ParkedSetup`), or this PC's own setup parked for a restart that has not come yet (onboarding.rs
-/// `waits_for_restart`: its "Restart later" writes the entry, and the launch that restart makes marks the park, so the
+/// (state.rs `ParkedSetup`), or this PC's own setup parked for a restart or sign-out that has not come yet (onboarding.rs
+/// `waits_for_session_end`: its "Restart later" writes the entry, and the launch that restart makes marks the park, so the
 /// entry goes with that launch). This computer's own sandbox ends the session the same way (machine_sandbox.rs
 /// `resume_on_launch`) but is not counted: its record can wait on a sign-in to the platform indefinitely, and an entry
 /// kept for that would start the app at every sign-in. For it the entry does what RunOnce did: one launch.
@@ -109,7 +109,7 @@ pub fn settle(app: &AppHandle) {
         .state::<crate::state::AppState>()
         .parked_setup()
         .is_some();
-    if !wanted(parked, crate::onboarding::waits_for_restart()) {
+    if !wanted(parked, crate::onboarding::waits_for_session_end()) {
         remove();
     }
 }

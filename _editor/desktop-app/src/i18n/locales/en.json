@@ -650,7 +650,7 @@
             "later": "Later",
             "save": "Save your work in other apps first."
         },
-        "signOut": "Sign out of Windows and back in to finish setting up this PC. It carries on by itself once you're back.",
+        "signOut": "Save your work in other apps, then sign out of Windows. Setup carries on by itself once you sign back in.",
         "repair": "Ask Repair",
         "hosted": "A computer we host can run your agents instead.",
         "cloud": "Use Intentic in the cloud",

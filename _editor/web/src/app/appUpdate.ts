@@ -1,4 +1,5 @@
 import { usePoll } from "@intentic/ui/async";
+import { noteReload } from "@intentic/ui/reload-reason";
 import { computed, effectScope, type EffectScope, getCurrentScope, onScopeDispose, ref, type ComputedRef, type Ref } from "vue";
 import { DESKTOP_UPDATE_EVENT, DESKTOP_UPDATE_LINK, desktopApp, openDesktopLink, type DesktopUpdateEvent } from "./environments/desktop";
 import { localFace } from "./environments/local";
@@ -199,9 +200,11 @@ export const useAppUpdate = (shown?: Readonly<Ref<boolean>>): AppUpdateOffer => 
             }
             if (current.kind === `app`) {
                 // The app installs what it already holds and comes back on it; this page reloads with it.
+                noteReload(`update`);
                 openDesktopLink(DESKTOP_UPDATE_LINK);
                 return;
             }
+            noteReload(`update`);
             globalThis.location.reload();
         },
         dismiss: (): void => {

@@ -5,6 +5,7 @@ import type { TurnPlacement } from "../conversations/worktrees/isolation.js";
 import { requireAgentDomainRollout } from "./domain/agent-domain-rollout.js";
 import { agentEntrant, namespaceTargetOf, nsenterArgv, type NamespaceEntryReference, type NamespaceEntrant } from "./namespace-entry.js";
 import { errorMessage } from "@intentic/base/errors";
+import { opt } from "../opt.js";
 
 // Daemon-local handles, never request/wire shapes. Public fields describe the view; only the private registries below
 // authorize its use. Worktree placement and workload scheduling are not execution authority.
@@ -32,11 +33,15 @@ export interface AgentInvocation extends NamespaceEntrant {
     readonly cwd?: string;
 }
 
+export type AgentDomainRefusedCheck = "cwd" | "plan" | "anchor" | "target" | "pid" | "mode" | "rollout" | "scope" | "domain" | "view";
 export class AgentDomainRefusedError extends Error {
     readonly code = "agent-domain-refused";
-    constructor(message: string, cause?: unknown) {
+    // Which comparison failed, for structured logging: absent on older refusals and generic ones.
+    readonly check: AgentDomainRefusedCheck | undefined;
+    constructor(message: string, cause?: unknown, check?: AgentDomainRefusedCheck) {
         super(message, cause === undefined ? undefined : { cause });
         this.name = "AgentDomainRefusedError";
+        this.check = check;
     }
 }
 
@@ -45,6 +50,8 @@ interface ExecutionGroup {
     readonly cwd: string;
     readonly plan: TurnPlacement["plan"] | undefined;
     readonly anchor: TurnPlacement["anchor"];
+    // plan and anchor as one placement, captured at acquisition, for admittedPlacement.
+    readonly isolation: TurnPlacement | undefined;
     readonly target: number | NamespaceEntryReference | undefined;
     readonly dispose: (() => void) | undefined;
     borrowers: number;
@@ -55,7 +62,8 @@ interface ExecutionState {
     active: boolean;
 }
 const contexts = new WeakMap<AgentExecutionContext, ExecutionState>();
-const refused = (message: string): never => { throw new AgentDomainRefusedError(message); };
+const PLACEMENT_MISMATCH = "Agent request placement does not match its admitted execution context.";
+const refused = (message: string, check?: AgentDomainRefusedCheck): never => { throw new AgentDomainRefusedError(message, undefined, check); };
 const checked = (context: AgentExecutionContext): ExecutionState => {
     const state = contexts.get(context);
     if (state === undefined || !state.active) { return refused("Agent execution context is not registered or has been released."); }
@@ -114,16 +122,42 @@ export const requireRootAgentExecution = (context: AgentExecutionContext, operat
 };
 
 // armPlan may replace words/model fields, but not choose a different execution view or namespace by replacing spec.
+// The cwd check is containment, not equality: a persona's startIn resolves to a subfolder of the admitted root
+// (honoured.ts), which is still inside the view the turn was admitted into. Plan and anchor stay exact identity, and an
+// absent isolation is a claim too: every runtime spawns through `spec.isolation?.anchor` (agent.ts runtimeSpawn, the
+// Pi/Cursor/Codex loops), so a spec that dropped it would launch outside the anchored namespace. A request that holds
+// only a context (a sealed helper) takes the admitted isolation from admittedPlacement rather than going without.
 export const assertAgentExecution = (context: AgentExecutionContext, placement: { readonly cwd: string; readonly isolation?: TurnPlacement }): void => {
     const { group } = checked(context);
     const anchor = placement.isolation?.anchor;
-    if (placement.cwd !== group.cwd || placement.isolation?.plan !== group.plan || anchor !== group.anchor ||
-        (anchor !== undefined && (anchor.cwd !== group.cwd || namespaceTargetOf(anchor) !== group.target ||
-            anchor.pid !== (typeof group.target === "number" ? group.target : group.target?.pid)))) {
-        return refused("Agent request placement does not match its admitted execution context.");
+    if (!isInside(group.cwd, placement.cwd)) {
+        return refused(PLACEMENT_MISMATCH, "cwd");
     }
-    entered(group, group.cwd, "true", []);
+    if (placement.isolation?.plan !== group.plan) {
+        return refused(PLACEMENT_MISMATCH, "plan");
+    }
+    if (anchor !== group.anchor) {
+        return refused(PLACEMENT_MISMATCH, "anchor");
+    }
+    if (anchor !== undefined) {
+        if (anchor.cwd !== group.cwd) {
+            return refused(PLACEMENT_MISMATCH, "cwd");
+        }
+        if (namespaceTargetOf(anchor) !== group.target) {
+            return refused(PLACEMENT_MISMATCH, "target");
+        }
+        if (anchor.pid !== (typeof group.target === "number" ? group.target : group.target?.pid)) {
+            return refused(PLACEMENT_MISMATCH, "pid");
+        }
+    }
+    entered(group, withinView(group.cwd, placement.cwd), "true", []);
 };
+
+// The isolation a live context was admitted with, for a request built from the context alone (sealed-request.ts): a
+// helper borrowing a worktree or anchored turn's execution must carry that turn's plan and anchor, both so armPlan's
+// identity check above holds and so its runtime is launched inside the same namespace rather than beside it. Handing
+// these out grants nothing: they are descriptive, the context is the authority, and they match only this context.
+export const admittedPlacement = (context: AgentExecutionContext): TurnPlacement | undefined => checked(context).group.isolation;
 
 // The turn owns this scope before preparation starts. Acquisition failure still leaves its newly built placement
 // owned here; success transfers that ownership to the lease. Closing also covers generator return during preparation.
@@ -238,6 +272,7 @@ export const createAgentExecutionService = (
             // Capture the target now; mutating the descriptive anchor later cannot select a different generation.
             const group: ExecutionGroup = {
                 mode: admission.mode, cwd, plan: placement.isolation?.plan, anchor,
+                isolation: placement.isolation === undefined ? undefined : Object.freeze({ plan: placement.isolation.plan, ...opt("anchor", anchor) }),
                 target: anchor === undefined ? undefined : namespaceTargetOf(anchor),
                 dispose: anchor?.dispose,
                 borrowers: 0,

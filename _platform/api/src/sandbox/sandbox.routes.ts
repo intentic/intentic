@@ -13,30 +13,20 @@ import { decryptSecret } from "../crypto.js";
 import { requireOwnedSandbox, requireUser } from "../guards.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
 import { edgeTransports } from "./edge-transports.js";
-import { getMachine, isFlyGone, stopMachine } from "./hosted/fly/fly.js";
+import { getMachine, isFlyGone } from "./hosted/fly/fly.js";
 import {
     forgetHostedMachine,
     HostedAppNotOurs,
     HostedNothingKept,
-    type HostedProvisionArgs,
     hostedEnabled,
     HostedSlotsExhausted,
     provisionHosted,
-    refreshHosted,
     rollbackHosted,
-    slotsMessage,
     wakeHosted,
 } from "./hosted/hosted.js";
-import {
-    HostedBuildRefused,
-    type HostedBuildRefusal,
-    hostedBuildStatus,
-    rebuildOnMovedBase,
-    requestHostedBuild,
-} from "./hosted/build/hosted-build.js";
+import { HostedBuildRefused, hostedBuildStatus, rebuildOnMovedBase, requestHostedBuild } from "./hosted/build/hosted-build.js";
 import { HostedAtCapacity, hostedCapacity } from "./hosted/hosted-capacity.js";
 import { HostedImageKept, HostedMachineBusy } from "./hosted/gate/state-gate.js";
-import { withHostedAppLock } from "./hosted/hosted-app-lock.js";
 import { kickHostedPool } from "./hosted/hosted-pool.js";
 import {
     assertHostedIdentity,
@@ -46,16 +36,9 @@ import {
     releaseHosted,
 } from "./hosted/hosted-cleanup.js";
 import { hostedPlanEnabled, hostedSlotUse, onHostedPlan } from "./hosted/plan/hosted-plan.js";
-import { assertHostedSource, HostedSourceCapped, recordHostedProvision } from "./hosted/abuse/hosted-source.js";
-import { assertHostedStanding, HostedSuspended, hostedSuspensionOf } from "./hosted/abuse/hosted-standing.js";
-import {
-    dropHostedMachine,
-    hostedArrivalBudget,
-    type HostedBudget,
-    hostedBudgetOf,
-    openHostedStretch,
-    settleHostedStretch,
-} from "./hosted/hosted-usage.js";
+import { recordHostedProvision } from "./hosted/abuse/hosted-source.js";
+import { hostedSuspensionOf } from "./hosted/abuse/hosted-standing.js";
+import { hostedArrivalBudget, hostedBudgetOf, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { hostReportsOf, mintFixCode } from "./host-report.js";
 import { duplicateCopiesOf } from "./announce-copies.js";
@@ -65,65 +48,23 @@ import { definitionSeedFor } from "./profiles/profiles.js";
 import { mintSetupCodeFor, ReachabilityUnavailable } from "./setup-code.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
 import { mintOwnerTicket, OWNER_TICKET_TTL_MS } from "@intentic/sandbox-contract/owner-ticket";
-import { type AdmittedArrival, arrivalTier, googleRequired, type HostedArrival, hostedArrivalFor, offeredMachines } from "./hosted/free-lane.js";
+import { arrivalTier, hostedArrivalFor, offeredMachines } from "./hosted/free-lane.js";
 import { mintIdentityAssertionFor } from "./identity-assertion.js";
 import { ingressEnabled } from "./reachability.js";
 import { ADOPTION_TICKET_TTL_MS, mintAdoptionTicket, standingsOf } from "./recovery.js";
+import { hostedSummaryOf } from "./hosted/fly/hosted-state.js";
+import { buildRefusal, hoursOf, hoursSpent, paymentRequired } from "./hosted-refusals.js";
+import {
+    assertHostedAllowance,
+    keptVersion,
+    openStretchOrStop,
+    ownedHostedMachine,
+    requireHostedStanding,
+    restartOrRebuild,
+    stopForChange,
+} from "./hosted-changes.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
-
-// Wire status per build refusal; `capacity` isn't the asker's fault, so it maps like provisioning does.
-const REFUSAL_CODES = {
-    off: `NOT_FOUND`,
-    "no-machine": `NOT_FOUND`,
-    mismatch: `CONFLICT`,
-    invalid: `BAD_REQUEST`,
-    busy: `TOO_MANY_REQUESTS`,
-    daily: `TOO_MANY_REQUESTS`,
-    ceiling: `TOO_MANY_REQUESTS`,
-    budget: `PAYMENT_REQUIRED`,
-    capacity: `SERVICE_UNAVAILABLE`,
-} as const satisfies Record<HostedBuildRefusal, string>;
-
-// PAYMENT_REQUIRED is this platform's own code, not oRPC's; the status must be set explicitly or oRPC's unknown-code
-// fallback reports 500 for an ordinary, expected refusal.
-const paymentRequired = (message: string): ORPCError<`PAYMENT_REQUIRED`, undefined> => new ORPCError(`PAYMENT_REQUIRED`, { status: 402, message });
-
-// The refusal for spent hours, in whichever kind the machine spends (hosted-usage.ts): whose, how many, and when they
-// come back. Addressed to the owner where only the owner can be reading (a new machine, a restart), and to nobody in
-// particular on a wake, since a guest waking a shared sandbox spends its owner's hours rather than their own.
-const hoursSpent = (budget: HostedBudget, reader: `owner` | `anyone`): string => {
-    const hours = budget.allowanceMinutes / 60;
-    if (budget.kind === `slot`) {
-        return `this sandbox's ${hours} hours a month on its ${hostedTier(budget.tier).name} slot are used up; they come back on the 1st (UTC)`;
-    }
-    return reader === `owner`
-        ? `your ${hours} free hosted hours for this month are used up; they come back on the 1st (UTC), or run it on your own computer, where nothing is metered`
-        : `the ${hours} free hosted hours of this sandbox's owner are used up for this month; they come back on the 1st (UTC)`;
-};
-
-// The hosted lane is switched off for the machine's OWNER (hosted-standing.ts): FORBIDDEN, in the suspension's own
-// words, for every act that would start a machine. Checked before anything is settled, counted or built.
-const requireHostedStanding = async (context: OrpcContext, ownerId: string): Promise<void> => {
-    try {
-        await assertHostedStanding(context.prisma, context.config, ownerId);
-    } catch (error) {
-        if (error instanceof HostedSuspended) {
-            throw new ORPCError(`FORBIDDEN`, { message: error.message });
-        }
-        throw error;
-    }
-};
-
-// The refusal's own sentence for `hours`; ISO on the wire, absent when the ceiling is the month's.
-const hoursOf = (budget: { allowanceMinutes: number; remainingMinutes: number; rampUntil?: Date }) => ({
-    allowance: Math.round(budget.allowanceMinutes / 60),
-    remaining: Math.floor(budget.remainingMinutes / 60),
-    ...(budget.rampUntil === undefined ? {} : { rampUntil: budget.rampUntil.toISOString() }),
-});
-
-const buildRefusal = (code: HostedBuildRefusal, message: string): ORPCError<string, undefined> =>
-    REFUSAL_CODES[code] === `PAYMENT_REQUIRED` ? paymentRequired(message) : new ORPCError(REFUSAL_CODES[code], { message });
 
 // States the browser narrates, taken from the contract so the two can't drift; anything else is `unknown`.
 const MACHINE_STATES = HostedStatusSchema.shape.machine.options;
@@ -140,159 +81,6 @@ const loopbackHostname = (config: Config, encryptedToken: string): string | null
     }
     const id = sandboxIdFromToken(decryptSecret(config, encryptedToken));
     return id === undefined ? null : localHostname(id, zone);
-};
-
-// The state gate kept the machine on the version it had (a target that cannot convert its state, or one that did not
-// start): the owner reads why, and a machine running there is metered like any restart.
-const keptVersion = async (
-    context: OrpcContext,
-    hosted: { id: string; sandboxId: string; appName: string; machineId: string },
-    ownerId: string,
-    kept: HostedImageKept,
-): Promise<ORPCError<string, unknown>> => {
-    if (kept.running) {
-        await openStretchOrStop(context, hosted, ownerId);
-    }
-    return new ORPCError(kept.reason === `refused` ? `CONFLICT` : `BAD_GATEWAY`, { message: kept.message });
-};
-
-// Reboots the machine, or replaces it when Fly says it's gone. The dead row is deleted before reprovisioning:
-// `sandboxId` is unique on HostedMachine, so keeping it would fail the new machine's write and strand the owner. The
-// replacement adopts the sandbox's own app when the provider still holds it, so a machine lost with its disk intact
-// comes back on that disk (hosted.ts adoptHostedApp, 2026-10-05) instead of failing at createApp.
-const restartOrRebuild = async (
-    context: OrpcContext,
-    args: HostedProvisionArgs,
-    hosted: {
-        id: string;
-        appName: string;
-        machineId: string;
-        volumeId: string;
-        image?: string | null;
-        environmentHash?: string | null;
-        skippedDigest?: string | null;
-    },
-    ownerId: string,
-): Promise<boolean> => {
-    try {
-        await refreshHosted(context.config, args, hosted, context.logger, {
-            prisma: context.prisma,
-            hostedMachineId: hosted.id,
-            sandboxId: args.sandboxId,
-        });
-        return false;
-    } catch (error) {
-        if (!isFlyGone(error)) {
-            throw error;
-        }
-        context.logger.warn(
-            { app: hosted.appName, sandboxId: args.sandboxId },
-            `hosted restart: the machine is gone from the provider; building a replacement for this sandbox`,
-        );
-        await context.prisma.$transaction((tx) => dropHostedMachine(tx, { id: hosted.id, sandboxId: args.sandboxId, ownerId }));
-        await provisionHosted(context.prisma, context.config, context.logger, args);
-        return true;
-    }
-};
-
-// The caller's own sandbox and the machine we run for it: the owner-only changes (a restart, a rollback) start here.
-const ownedHostedMachine = async (context: OrpcContext, sandboxId: string) => {
-    const sandbox = await requireOwnedSandbox(context, sandboxId);
-    const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: sandbox.id } });
-    if (hosted === null) {
-        throw new ORPCError(`NOT_FOUND`, { message: `this sandbox has no machine we run` });
-    }
-    return { sandbox, hosted, user: requireUser(context) };
-};
-
-/* WHAT A RESTART AND A ROLLBACK BOTH STAND ON: the owner in good standing, the machine stopped (so its stretch settles
- * exactly), and hours left to start it again. Answers the identity its config is composed from: the owner's address,
- * and the machine's own rung, since a change puts back the guest it had, never the one a new machine gets. */
-const stopForChange = async (
-    context: OrpcContext,
-    owned: Awaited<ReturnType<typeof ownedHostedMachine>>,
-    what: string,
-): Promise<HostedProvisionArgs> => {
-    const { sandbox, hosted, user } = owned;
-    await requireHostedStanding(context, sandbox.ownerId);
-    // Never under another change's feet: its gate may be waiting for its own new daemon, and a stop now would read as that
-    // version stopped from outside. This change waits its turn in its own gate, whose probe stops the machine.
-    const stopped = await withHostedAppLock(context.config, hosted.appName, false, () =>
-        stopMachine(context.config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error: unknown) =>
-            context.logger.warn({ err: error, app: hosted.appName }, `hosted ${what}: stop refused; starting anyway`),
-        ),
-    );
-    if (stopped === undefined) {
-        context.logger.info({ app: hosted.appName }, `hosted ${what}: another change holds the machine; this one waits its turn`);
-    }
-    // Settling now is exact, since the stop just ended the stretch; the change ends in a start, so the budget applies
-    // too.
-    await settleHostedStretch(context.prisma, context.config, context.logger, { ...hosted, ownerId: sandbox.ownerId });
-    const budget = await hostedBudgetOf(context.prisma, context.config, { sandboxId: sandbox.id, ownerId: sandbox.ownerId });
-    if (budget.metered && budget.remainingMinutes === 0) {
-        throw paymentRequired(hoursSpent(budget, `owner`));
-    }
-    return {
-        sandboxId: sandbox.id,
-        connectToken: decryptSecret(context.config, sandbox.token),
-        ownerEmail: user.email.toLowerCase(),
-        region: hosted.region,
-        tier: hostedTier(hosted.tier).id,
-    };
-};
-
-// A row gone mid-start (trash, release, the idle sweep) leaves nothing to bill the run, so the machine is stopped again.
-const openStretchOrStop = async (
-    context: OrpcContext,
-    hosted: { id: string; sandboxId: string; appName: string; machineId: string },
-    ownerId: string,
-): Promise<void> => {
-    if (await openHostedStretch(context.prisma, { ...hosted, ownerId })) {
-        return;
-    }
-    await stopMachine(context.config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error: unknown) =>
-        context.logger.error({ err: error, app: hosted.appName }, `hosted: a machine started after its row was deleted could not be stopped`),
-    );
-    throw new ORPCError(`NOT_FOUND`, { message: `this sandbox no longer has a machine we run` });
-};
-
-/* THE GATES A NEW HOSTED MACHINE PASSES, together because they are all refusals and none of them is about
- * provisioning. Standing first (a suspended account is told so before anything else), then the same-source caps
- * (hosted-source.ts), then this account's own slots and hours. */
-const assertHostedAllowance = async (
-    context: OrpcContext,
-    source: { readonly userId: string; readonly email: string; readonly ip: string | undefined },
-    arrival: HostedArrival,
-): Promise<AdmittedArrival> => {
-    const { userId } = source;
-    if (arrival.lane === `needs-google`) {
-        throw googleRequired(`A free hosted machine`);
-    }
-    await requireHostedStanding(context, userId);
-    // A machine arriving on a paid slot spends nothing of the free lane, so none of its limits below apply to it.
-    if (arrival.lane === `slot`) {
-        return arrival;
-    }
-    try {
-        await assertHostedSource(context.prisma, context.config, source);
-    } catch (error) {
-        if (error instanceof HostedSourceCapped) {
-            context.logger.warn({ userId, ip: source.ip }, `hosted provision: refused by a same-source cap`);
-            throw new ORPCError(`TOO_MANY_REQUESTS`, { message: error.message });
-        }
-        throw error;
-    }
-    // An arrival lands on the free rung, so a paid slot never earns a second free machine; paid ones are reached by moving up.
-    const { used, left } = await hostedSlotUse(context.prisma, context.config, userId, FREE_TIER.id);
-    if (left <= 0) {
-        throw new ORPCError(`BAD_REQUEST`, { message: slotsMessage(used) });
-    }
-    // The account's free hours, released machines' minutes included: letting one go never buys a fresh month.
-    const budget = await hostedArrivalBudget(context.prisma, context.config, userId);
-    if (budget.metered && budget.remainingMinutes === 0) {
-        throw paymentRequired(hoursSpent(budget, `owner`));
-    }
-    return arrival;
 };
 
 /* THE CONNECT TOKEN IS THE OWNER'S AND ONLY THE OWNER'S: decrypted onto their row, null on a member's. */
@@ -315,7 +103,7 @@ const isoOrNull = (at: Date | null): string | null => (at === null ? null : at.t
 // the newest report of each machine and environment that reported, newest first, on the same rows (2026-10-05).
 // `duplicateCopies` names two copies of the sandbox announcing side by side (announce-copies.ts), on the owner's row:
 // only the owner can remove one of them (2026-10-05).
-const toSummary = (
+const toSummary = async (
     sandbox: {
         id: string;
         name: string;
@@ -336,7 +124,7 @@ const toSummary = (
         seenInstances?: Prisma.JsonValue;
         duplicateSince?: Date | null;
         // Hosted machine relation; optional so a caller that skipped the include reads as not-hosted, never crashes.
-        hosted?: { region: string; warm: boolean; previousImage?: string | null } | null;
+        hosted?: { region: string; warm: boolean; previousImage?: string | null; appName?: string; machineId?: string } | null;
         token: string;
     },
     role: MemberRole,
@@ -361,8 +149,7 @@ const toSummary = (
         removedAt: isoOrNull(sandbox.removedAt),
         removedBy: sandbox.removedBy,
         daemonVersion: sandbox.daemonVersion ?? null,
-        // `canRollBack`: the platform kept the image the machine ran before its last image change (hostedRollback).
-        hosted: hosted === null ? null : { region: hosted.region, warm: hosted.warm, canRollBack: (hosted.previousImage ?? null) !== null },
+        hosted: hosted === null ? null : await hostedSummaryOf(context.config, hosted),
         token: connectTokenFor(context.config, sandbox.token, role),
         hostReport: hostReports[0] ?? null,
         ...(role === `owner` && hosted === null ? { hostReporters: hostReports } : {}),
@@ -394,11 +181,11 @@ export const sandboxRoutes = {
             ingressEnabled(context.config) ? edgeTransports.read(context.config) : undefined,
         ]);
         return {
-            sandboxes: [
+            sandboxes: await Promise.all([
                 ...owned.map((sandbox) => toSummary(sandbox, `owner`, context)),
                 // Same fallback as toInviteRecord: an unrecognized stored role degrades to the safest tier.
                 ...memberships.map((membership) => toSummary(membership.sandbox, GrantedRoleSchema.catch(`viewer`).parse(membership.role), context)),
-            ],
+            ]),
         };
     }),
     // Mints a new sandbox; unlimited per owner. Nothing is provisioned yet — reachability is a signature the first

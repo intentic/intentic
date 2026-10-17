@@ -1,7 +1,8 @@
-import { access, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { access, lstat, readFile, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { VERSIONED_STATE_PATHS } from "@intentic/sandbox-contract/state/workspace-state";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 
 // Where the workspace's git lives and what its root repo leaves out: each repo's real git dir on the history volume,
@@ -87,5 +88,51 @@ export const syncRootExcludes = async (historyRoot: string, repoIds: readonly st
         if ((await readFile(target, "utf8").catch(() => undefined)) !== content) {
             await writeFile(target, content);
         }
+    }
+};
+
+// The heavy-dir patterns that the root repo excludes via COMMON_EXCLUDES; project repos need the same protection,
+// but their .gitignore is the owner's business, so the daemon writes to `.git/info/exclude` instead: git reads it for
+// every worktree, the main one included, and it never touches the working tree. Only dirs not already ignored are
+// appended. Unanchored, at any depth, as COMMON_EXCLUDES is for the root: the trees that grow to 50k files are as often
+// nested (`backend/.venv`, `.local/lib/node_modules`, every `__pycache__`) as at the top. Untracked files only, as any
+// exclude is: a dependency dir the project chose to commit keeps showing its edits.
+const PROJECT_EXCLUDE_NOTE = "# intentic: heavy dependency dirs excluded by default to keep the Changes panel fast.";
+export const projectExcludes = (): string[] => [...IGNORED_DIRS].filter((dir) => dir !== ".git").map((dir) => `${dir}/`);
+
+// The git dir whose info/exclude a checkout reads. A `.git` file points elsewhere (`--separate-git-dir`, a linked
+// worktree), relative to the checkout when not absolute; a linked worktree's own dir names, in `commondir`, the shared
+// one git actually reads info/exclude from. A `.git` directory is the git dir itself, a missing one no repo (which the
+// caller skips), and a missing `commondir` a git dir that is its own common dir.
+const excludeGitDir = async (dir: string): Promise<string> => {
+    const dotGit = join(dir, ".git");
+    const pointer = (await lstat(dotGit).catch(undefinedIfMissing))?.isFile() === true ? await readFile(dotGit, "utf8") : undefined;
+    const named = pointer?.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
+    const gitDir = named === undefined ? dotGit : resolve(dir, named);
+    const common = (await readFile(join(gitDir, "commondir"), "utf8").catch(undefinedIfMissing))?.trim();
+    return common === undefined || common === "" ? gitDir : resolve(gitDir, common);
+};
+
+// Converges project repos' info/exclude onto the heavy-dir list. Called from scanAll alongside syncRootExcludes, so a
+// fresh clone's panel never sees its node_modules as 12k changes.
+export const syncProjectExcludes = async (workspaceRoot: string, repoIds: readonly string[]): Promise<void> => {
+    const lines = projectExcludes();
+    for (const repo of repoIds) {
+        const gitDir = await excludeGitDir(join(workspaceRoot, repo));
+        try {
+            await access(join(gitDir, "info"));
+        } catch {
+            continue;
+        }
+        const target = join(gitDir, "info", "exclude");
+        const current = (await readFile(target, "utf8").catch(undefinedIfMissing)) ?? "";
+        const held = new Set(current.split("\n").map((line) => line.trim()));
+        const missing = lines.filter((line) => !held.has(line.trim()));
+        if (missing.length === 0) {
+            continue;
+        }
+        const note = held.has(PROJECT_EXCLUDE_NOTE.trim()) ? [] : [PROJECT_EXCLUDE_NOTE];
+        const separator = current === "" || current.endsWith("\n") ? "" : "\n";
+        await writeFile(target, `${current}${separator}${[...note, ...missing].join("\n")}\n`);
     }
 };

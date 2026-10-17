@@ -1,3 +1,4 @@
+import { noteUnreachable } from "../../../client/sandbox/reachability";
 import type { SandboxSummary } from "@intentic/api-contract";
 import { usePoll } from "@intentic/ui/async";
 import { computed, type ComputedRef, effectScope, type EffectScope, shallowRef, watch } from "vue";
@@ -41,9 +42,17 @@ export interface AcrossOptions<T extends AcrossRecord> {
     readonly unreachable: (previous: T | undefined) => Partial<T>;
 }
 
+// After a failed read, the box's placement may have changed (a machine that fell asleep): refresh the cached list, which
+// coalesces concurrent readers, and take the row as it now reads.
+const withFreshPlacement = async (sandbox: SandboxSummary, list: () => Promise<readonly SandboxSummary[]>, current: () => readonly SandboxSummary[]): Promise<SandboxSummary> => {
+    // allow(silent-catch): the placement refresh is best effort; the read's own failure is already written as unreachable
+    await Promise.resolve().then(() => list()).catch(() => undefined);
+    return current().find((box) => box.id === sandbox.id) ?? sandbox;
+};
+
 export const createAcrossStore = <T extends AcrossRecord>(options: AcrossOptions<T>): AcrossStore<T> => {
     const boxes = shallowRef<Record<string, T>>({});
-    const { sandboxes, activeSandboxId } = useSandbox();
+    const { sandboxes, activeSandboxId, list } = useSandbox();
 
     // The sandboxes these stores read: ones that have checked in, excluding the one being streamed.
     const targets = computed<readonly SandboxSummary[]>(() =>
@@ -79,6 +88,9 @@ export const createAcrossStore = <T extends AcrossRecord>(options: AcrossOptions
             write(sandbox.id, { ...(await options.read(sandbox)), sandbox, readAt: Date.now() });
         } catch {
             write(sandbox.id, { ...options.unreachable(boxes.value[sandbox.id]), sandbox });
+            sandbox = await withFreshPlacement(sandbox, list, () => sandboxes.value);
+            noteUnreachable(sandbox);
+            write(sandbox.id, { ...options.unreachable(boxes.value[sandbox.id]), sandbox });
         } finally {
             inFlight.delete(sandbox.id);
         }
@@ -91,22 +103,18 @@ export const createAcrossStore = <T extends AcrossRecord>(options: AcrossOptions
     };
 
     let watchers = 0;
-    // Registered per subscription, not at module scope, so merely importing this store starts nothing; stopping the
-    // scope ends the clock and every watch at once.
+    // Registered per subscription, so merely importing this store starts nothing; stopping the scope ends it all.
     let watching: EffectScope | undefined;
 
     const startWatching = (): void => {
         watching = effectScope(true);
         watching.run(() => {
-            // The clock, paused off-screen. A tick does not wait for the round before it: one box that hangs must not hold
-            // the others back, and readBox's in-flight guard already keeps a slow box from being asked twice.
+            // The clock, paused off-screen; a tick never waits for a slow box, which readBox's in-flight guard keeps from stacking.
             usePoll({
                 everyMs: options.pollMs,
                 immediate: false,
                 visible: onScreen,
-                check: () => {
-                    readAll(false);
-                },
+                check: () => readAll(false),
             }).start();
             // A window regaining focus reads every box now rather than waiting out the rest of a hidden interval.
             watch(onScreen, (visible) => {
@@ -115,12 +123,12 @@ export const createAcrossStore = <T extends AcrossRecord>(options: AcrossOptions
                 }
             });
             // Re-reads whatever newly enters `targets`; `force: false` skips boxes that answered seconds ago.
-            watch(targets, () => readAll(false));
+            watch(() => targets.value.map((box) => box.id).join(`,`), () => readAll(false));
         });
     };
 
     return {
-        entries: computed<readonly T[]>(() => targets.value.map((sandbox) => boxes.value[sandbox.id] ?? options.blank(sandbox))),
+        entries: computed<readonly T[]>(() => targets.value.map((sandbox) => ({ ...(boxes.value[sandbox.id] ?? options.blank(sandbox)), sandbox }))),
         get: (sandboxId) => boxes.value[sandboxId],
         patch: write,
         readOne: async (sandboxId) => {

@@ -319,7 +319,18 @@
             "needsInput": "Pide entrada",
             "inputWaitProcess": "Proceso",
             "inputWaitFor": "Esperando desde hace",
-            "inputWaitNote": "Nada en el sandbox lo va a responder. Detener termina el comando para que el trabajo pueda integrarse."
+            "inputWaitNote": "Nada en el sandbox lo va a responder. Detener termina el comando para que el trabajo pueda integrarse.",
+            "landProcessStopped": "El proceso de Git del espacio de trabajo se detuvo. Vuelve a intentar incorporar el trabajo de este agente.",
+            "landTooManyPaths": "Este cambio incluye demasiadas rutas de archivos para incorporarlo de una vez. Reduce los cambios que se solapan en tu espacio de trabajo y vuelve a intentarlo.",
+            "landOutputLimit": "Git devolvió más información de la que el espacio de trabajo pudo procesar. Reduce el tamaño del cambio y vuelve a intentarlo.",
+            "workspaceOverlap": "{count} archivos de tu espacio de trabajo se solapan con el trabajo de este agente. Confirma o descarta sus cambios y vuelve a intentarlo."
+        },
+        "agentsTile": {
+            "countingEverySandbox": "Contando todos los sandboxes",
+            "countingExcept": "Contando todos los sandboxes menos {names}, que no responde | Contando todos los sandboxes menos {names}, que no responden",
+            "needYou": "{count} te necesita | {count} te necesitan",
+            "needYouOutside": "{owed} ({outside} fuera de {project})",
+            "owedElsewhere": "{owed}, {elsewhere} en otro lugar"
         },
         "agentsView": {
             "agentResolveConflict": "¿Que el agente resuelva el conflicto?",
@@ -355,6 +366,8 @@
             "noAgentYoursMentions": "Ningún agente tuyo menciona «{trim}». Esto busca en los títulos y en lo que dijo cada parte en el chat.",
             "noAgentsWorkingStart": "Ningún agente trabajando. Inicia uno y delega.",
             "noMatchesInLane": "Sin coincidencias en este carril.",
+            "needYouElsewhere": "{count} te necesita en otros proyectos | {count} te necesitan en otros proyectos",
+            "showThem": "Mostrar",
             "nothingArchivedYetFinished": "Todavía no hay nada archivado. Los agentes terminados llegan aquí solos tras unos días tranquilos.",
             "nothingNeedsRightNow": "Ahora mismo no te necesita nada.",
             "nothingWrittenToWorkspace": "No se escribe nada en tu espacio de trabajo si no sale bien. Puedes detener el turno en cualquier momento.",
@@ -726,7 +739,7 @@
             "sendItAgain": "Enviarlo de nuevo",
             "troubleSigningInUse": "¿Problemas para iniciar sesión? Usa la página de Google.",
             "continueOnGooglesPage": "Continuar en la página de Google",
-            "googleDidntComeBack": "El inicio de sesión no terminó en la ventana de Google. Continúa en la página de Google: funciona aunque se bloqueen las ventanas emergentes.",
+            "googleDidntComeBack": "¿Sigues esperando a Google? Si su ventana se quedó bloqueada o se cerró, continúa en la página de Google: funciona aunque se bloqueen las ventanas emergentes.",
             "googleAnswerRefused": "Google respondió, pero con un inicio de sesión que este equipo da por caducado: puede que su reloj esté mal. Continúa en la página de Google.",
             "continueGoogleInBrowser": "Continuar con Google en tu navegador",
             "continueGoogle": "Continuar con Google"
@@ -905,6 +918,8 @@
             "renamedTo": "Renombrado a"
         },
         "capabilitySubmit": {
+            "gpuDisable": "Eliminar la solicitud de GPU",
+            "gpuHosted": "El acceso a GPU no está disponible en los sandboxes alojados. Usa uno local o en tu propio servidor con una GPU NVIDIA.",
             "walletCapsNotSaved": "La tarjeta se guardó, pero la plataforma no aceptó sus límites de gasto, por lo que el servicio de firma sigue aplicando los anteriores. Guarda la tarjeta de nuevo para reintentarlo.",
             "walletOwnerOnly": "Solo el propietario de este sandbox puede cambiar los límites de gasto de su monedero: el monedero que paga es el suyo."
         },
@@ -1193,6 +1208,15 @@
             "hosts": "Sitios a los que puede ir: {hosts}.",
             "changeOn": "Cámbialo en {machine}:",
             "copyCommand": "Copiar el comando"
+        },
+        "catalog": {
+            "docker": {
+                "fields": {
+                    "gpu": {
+                        "hint": "Solo local o en tu propio servidor. Requiere una GPU NVIDIA y nvidia-container-toolkit o CDI en el host; se comprueba antes de guardar."
+                    }
+                }
+            }
         }
     },
     "chat": {
@@ -1360,7 +1384,10 @@
                 "swapped": "En swap",
                 "title": "Poca memoria",
                 "used": "Usada"
-            }
+            },
+            "startNewChat": "Empezar un chat nuevo",
+            "startNewChatTitle": "Enviarlo de nuevo se rechazaría igual",
+            "startNewChatNote": "La configuración de esta conversación no puede ejecutarse aquí. Se abre un chat nuevo con tu mensaje en el cuadro de texto."
         },
         "chatJobRow": {
             "ended": "Se detuvo tras {elapsed}",
@@ -2207,6 +2234,10 @@
                 "goOn": "Sigue…",
                 "listeningDetail": "Escuchando «{word}» en este dispositivo. Haz clic para pausar una hora."
             }
+        },
+        "sandboxNotice": {
+            "undeliveredDeterministic": "{message} Tu mensaje no se entregó, y enviarlo de nuevo se rechazaría igual. Empieza un chat nuevo para continuar.",
+            "agentDomainRefused": "La configuración del espacio de trabajo de esta conversación no puede ejecutarse aquí."
         }
     },
     "common": {
@@ -3851,6 +3882,8 @@
             "leaveLoseAccessSandbox": "¿Salir de «{name}»? Pierdes el acceso; el sandbox sigue funcionando.",
             "leaveSandbox": "¿Salir del sandbox?",
             "needsYou": "Te necesita",
+            "asleep": "en reposo: se abre al seleccionarlo",
+            "starting": "iniciándose: listo en un momento",
             "notAnswering": "No responde",
             "removeAccount2": "¿Quitar de la cuenta?",
             "removeAccountEveryoneLoses": "¿Quitar «{name}» de tu cuenta? Todos pierden el acceso aquí; el sandbox en sí sigue funcionando donde esté.",
@@ -6428,7 +6461,7 @@
             "restorePointSavedFirst2": "Primero se guarda un punto de restauración, así que esto es reversible desde Puntos de restauración.",
             "retriesWithHooks": "{verb} reintenta con hooks",
             "scratchLeftOut": "Preparar todo y hacer commit de todo dejan fuera {count} ruta que parece temporal | Preparar todo y hacer commit de todo dejan fuera {count} rutas que parecen temporales",
-            "scratchLeftOutHint": "Prepárala desde su propia fila para incluirla en el commit.",
+            "scratchLeftOutHint": "Se excluyen de los commits porque parecen contenido generado o de dependencias. Prepara uno desde su propia fila si debe incluirse en el commit.",
             "scratchTag": "temporal",
             "stageAllFirst": "Prepara todo primero",
             "staged2": "Preparado",
@@ -6745,6 +6778,28 @@
             "downloadNamed": "Descargar {name}",
             "printNamed": "Imprimir {name}",
             "listFailed": "No se pudo leer qué documentos creó esta conversación."
+        },
+        "indexRuns": {
+            "commitStopped": "Commit detenido. No se registró nada; lo que ya estaba preparado sigue preparado.",
+            "declined": "No preparado: decidiste dejar {count} archivo como está. | No preparado: decidiste dejar {count} archivos como están.",
+            "lost": "Se perdió el rastro de la ejecución en {repo}: el sandbox se reinició o la olvidó. Revisa la lista antes de volver a intentarlo.",
+            "stageStopped": "Preparación detenida. Lo que git ya había preparado sigue preparado; quítalo del índice para deshacerlo."
+        },
+        "indexRunPrompt": {
+            "commitAnyway": "Hacer commit igualmente",
+            "commitFiles": "¿Hacer commit de {count} archivo? | ¿Hacer commit de {count} archivos?",
+            "committing": "Haciendo commit en {repo}…",
+            "counting": "Contando qué preparar en {repo}…",
+            "dirFiles": "{count} archivo | {count} archivos",
+            "looksLikeDependencies": "Es mucho más que un cambio habitual y suele significar dependencias o resultados de compilación que nadie quería incluir. Estas carpetas son las que más contienen:",
+            "reconnecting": "Reconectando…",
+            "repoRoot": "(nivel superior)",
+            "stageAnyway": "Preparar igualmente",
+            "stageFiles": "¿Preparar {count} archivo? | ¿Preparar {count} archivos?",
+            "staging": "Preparando en {repo}…",
+            "stagingFiles": "Preparando {count} archivo en {repo}… | Preparando {count} archivos en {repo}…",
+            "stop": "Detener",
+            "waiting": "Esperando a que {repo} esté libre…"
         }
     },
     "needs": {

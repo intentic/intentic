@@ -1,3 +1,5 @@
+import { probeCapability } from "../../models/capabilities/useCapabilities";
+import { track } from "../../app/analytics";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { AddCapabilityInput, CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { NoticeModel } from "@intentic/ui";
@@ -31,6 +33,9 @@ export const submitOutcome = (added: CapabilitySummary | undefined, wasEditing: 
 };
 
 export interface SubmitHost {
+    readonly hosted?: Readonly<Ref<boolean>>;
+    readonly preflight?: typeof probeCapability;
+    readonly capture?: typeof track;
     readonly selected: Readonly<Ref<CapabilityCatalogEntry | undefined>>;
     readonly editing: Readonly<Ref<CapabilitySummary | undefined>>;
     readonly capabilities: Readonly<Ref<readonly CapabilitySummary[]>>;
@@ -73,7 +78,19 @@ const pushWalletCaps = async (entry: CapabilityCatalogEntry, config: Record<stri
 // is still showing that tile.
 export const saveKey = (entry: string): string => `capabilities/${entry}/save`;
 
-export const useCapabilitySubmit = ({ selected, editing, capabilities, form, add, walk, handOff, stopEditing, error, ownsSandbox }: SubmitHost) => {
+// The GPU switch saves only on a host that proves it can pass a GPU through: Docker would otherwise rebuild into a
+// runtime that refuses every GPU container, and the reader would learn why only from the install's log.
+const wantsGpu = (input: AddCapabilityInput): boolean => input.kind === `docker` && input.config[`gpu`] === `on`;
+const proveGpu = async (input: AddCapabilityInput, { hosted, preflight = probeCapability, capture = track }: SubmitHost): Promise<void> => {
+    const answer = await preflight(input);
+    if (!answer.checked || !answer.ok) {
+        capture(`gpu_capability_blocked`, { hosted: hosted?.value ?? false });
+        throw new Error(answer.message);
+    }
+};
+
+export const useCapabilitySubmit = (host: SubmitHost) => {
+    const { selected, editing, capabilities, form, add, walk, handOff, stopEditing, error, ownsSandbox } = host;
     const save = useOperation(() => saveKey(selected.value?.id ?? ``));
     let showing = true;
     if (getCurrentScope() !== undefined) {
@@ -113,6 +130,10 @@ export const useCapabilitySubmit = ({ selected, editing, capabilities, form, add
                     ? noticeFrom(caught.reason, t(`capabilities.capabilitySubmit.walletCapsNotSaved`))
                     : noticeFrom(caught, wasEditing ? t(`capabilities.capabilitySubmit.couldNotSave`) : t(`capabilities.capabilitySubmit.couldNotAdd`)),
             task: async () => {
+                // Only a GPU ask waits on the host: every other add starts its write in the press's own tick.
+                if (wantsGpu(input)) {
+                    await proveGpu(input, host);
+                }
                 await add(input, (line) => {
                     // The install's own terminal tab: progress is the real commands, not a separate summary retelling them.
                     if (line[`kind`] === `terminal` && typeof line[`session`] === `string`) {

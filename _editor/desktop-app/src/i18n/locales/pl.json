@@ -650,7 +650,7 @@
             "later": "Później",
             "save": "Najpierw zapisz pracę w innych aplikacjach."
         },
-        "signOut": "Wyloguj się z Windows i zaloguj ponownie, aby dokończyć konfigurację tego komputera. Będzie kontynuowana sama po powrocie.",
+        "signOut": "Zapisz pracę w innych aplikacjach, a następnie wyloguj się z systemu Windows. Konfiguracja będzie kontynuowana automatycznie po ponownym zalogowaniu.",
         "repair": "Otwórz Naprawę",
         "hosted": "Twoich agentów może zamiast tego uruchomić nasz komputer w chmurze.",
         "cloud": "Użyj Intentic w chmurze",

@@ -45,6 +45,7 @@ import {
     StashPushSchema,
     StashRefParamSchema,
 } from "../schemas/git/git-history.js";
+import { IndexRunSchema, IndexRunStartSchema } from "../schemas/git/index-run.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema, RepoParamSchema } from "../schemas/shared.js";
 
@@ -462,6 +463,38 @@ export const gitContract = {
             path: "/git/{repo}/push/cancel",
             summary: "Stop the push",
             description: "Kills the run. It settles as cancelled; nothing that git had not already sent reaches the remote.",
+        })
+        .input(RepoParamSchema)
+        .output(OkSchema),
+    // Stage-all and commit-all as runs (index-run.ts): a stage over tens of thousands of files outlives the browser's
+    // header deadline, so it starts, answers at once and is polled, like a push.
+    indexRunStart: procedure
+        .route({
+            method: "POST",
+            path: "/git/{repo}/index-run",
+            summary: "Start staging or committing",
+            description:
+                "Starts a stage or a commit and answers at once with the run; poll indexRunState for its progress and verdict. One per repository: starting the same thing again while it runs joins it, and starting something different is refused until it settles. A stage that would take thousands of files or hundreds of megabytes stops before touching the index and says what it found, unless `confirmed` is set.",
+        })
+        .input(IndexRunStartSchema)
+        .output(IndexRunSchema),
+    indexRunState: procedure
+        .route({
+            method: "GET",
+            path: "/git/{repo}/index-run",
+            summary: "How the stage or commit is going",
+            description:
+                "The repository's latest stage or commit run: its phase and file counts while it runs, then its verdict, the commit's answer, or what held it at the guardrail. Idle when none has been started since the sandbox last started.",
+        })
+        .input(RepoParamSchema)
+        .output(IndexRunSchema),
+    indexRunCancel: procedure
+        .route({
+            method: "POST",
+            path: "/git/{repo}/index-run/cancel",
+            summary: "Stop the stage or commit",
+            description:
+                "Kills the git the run is waiting on. It settles as cancelled; a stage stopped part way leaves the index as git last wrote it, which unstaging takes back, and a commit stopped before git recorded it records nothing.",
         })
         .input(RepoParamSchema)
         .output(OkSchema),

@@ -5,7 +5,7 @@ import { useT } from "@intentic/ui/i18n";
 import { LOCAL_NAVIGATE_EVENT } from "@intentic/web/local";
 import { type LocalCheckRow, type LocalFirstTask, localHost, type LocalRestartWhen } from "@intentic/web/local-host";
 import { computed, ref, watch } from "vue";
-import { firstTaskTakeDraft, signIn } from "../../desktop";
+import { firstTaskTakeDraft, onboardingSignOut, signIn } from "../../desktop";
 import { draft } from "../../onboarding/firstTask";
 import { machineSandbox } from "../machineSandbox";
 import FirstTaskComposer from "./FirstTaskComposer.vue";
@@ -496,7 +496,12 @@ const retryTask = (): Promise<void> =>
                     </Button>
                 </template>
 
-                <p v-else-if="phase === `signOut`" class="max-w-read-sm text-xs leading-relaxed text-muted">{{ t(`desktop.pcSetup.signOut`) }}</p>
+                <template v-else-if="phase === `signOut`">
+                    <p class="max-w-read-sm text-xs leading-relaxed text-muted">{{ t(`desktop.pcSetup.signOut`) }}</p>
+                    <Button class="self-start" size="small" :label="t(`desktop.requirements.signOutNow`)" :disabled="busy !== undefined" @click="ask(`signOut`, onboardingSignOut)">
+                        <template #icon><Icon name="refresh" /></template>
+                    </Button>
+                </template>
 
                 <!-- STOPPED: why in a sentence, the setup's own words behind a press, the same press again, Repair to look into it. -->
                 <template v-else-if="phase === `setupFailed`">

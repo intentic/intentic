@@ -4,7 +4,9 @@ import { stubGlobal, mocked } from "@intentic/testing/bun";
 
 stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
 jest.mock("../../../lib/useApi", () => ({
-    apiClient: { sandbox: { list: jest.fn(), delete: jest.fn(), leave: jest.fn(), hostedProvision: jest.fn(), hostedRelease: jest.fn(), wake: jest.fn() } },
+    apiClient: {
+        sandbox: { list: jest.fn(), delete: jest.fn(), leave: jest.fn(), hostedProvision: jest.fn(), hostedRelease: jest.fn(), wake: jest.fn() },
+    },
 }));
 // The desktop app as the page sees it (`__INTENTIC_DESKTOP__`), and the links handed to it.
 let desktop: { sandboxWakes?: boolean } | undefined;
@@ -290,4 +292,15 @@ describe(`the wake a sleeping sandbox is asked back with`, () => {
         await asleep(summary(`own-4`));
         expect(handed).toEqual([]);
     });
+});
+
+it(`selecting a sleeping hosted sandbox asks the platform to wake it before a failed daemon read`, async () => {
+    const row = { ...summary(`sleeping-selection`), hosted: { region: `iad`, warm: true, state: `asleep` as const } };
+    listMock.mockResolvedValue({ sandboxes: [row] });
+    mocked(apiClient.sandbox.wake).mockResolvedValue({ ok: true });
+    const sandbox = useSandbox();
+    await sandbox.refresh();
+    sandbox.select(row.id);
+    await Promise.resolve();
+    expect(apiClient.sandbox.wake).toHaveBeenCalledWith({ sandboxId: row.id });
 });

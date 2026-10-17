@@ -1,6 +1,10 @@
+import { stubEnv, unstubAllEnvs } from "@intentic/testing/bun";
 import { packFragment, readPack } from "../../image/packs.js";
 import { registry } from "../registry.js";
 import { addressPoolOf, isPrivileged, withEngineSettings } from "./docker.handler.js";
+
+beforeEach(() => stubEnv("SANDBOX_VM", undefined));
+afterEach(unstubAllEnvs);
 
 // Pins two contracts other code trusts: the fragment's directive (what rebuild executors allowlist, what the composed
 // overlay records) and the CapEff probe deciding rebuild vs start now.

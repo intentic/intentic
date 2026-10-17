@@ -10,7 +10,7 @@ import { classifyFailure, type ErrorFrame, type FailureQueries } from "../frames
 import { recordQueries } from "../frames/failure-queries.js";
 import { fileFailureWrites, providerAnswered } from "../frames/frame-effects.js";
 import { type SealedDeadline, sealedDeadline } from "./sealed-deadline.js";
-import { assertAgentExecutionContext, type AgentExecutionContext } from "../../../workload/agent-execution.js";
+import { admittedPlacement, assertAgentExecutionContext, type AgentExecutionContext } from "../../../workload/agent-execution.js";
 
 // A helper job (a title, a commit subject, a verdict, a route) as a request on the turn's own seam: planned by the
 // runtime's arm (adapter.preflight), run by its loop (plan.run), its failures classified and filed by the turn's own
@@ -62,7 +62,9 @@ const sealedQueries = (services: Services): FailureQueries => ({
 });
 
 // The request every arm builds on, with nothing but the words, where they run, and the knobs the pin named. Where they
-// run is the issued context's view, which armPlan holds the request to (agent/providers/adapter.ts).
+// run is the issued context's view and the isolation it was admitted with, which armPlan holds the request to
+// (agent/providers/adapter.ts): a helper borrowing a worktree or anchored turn's context (a hand-off summary, the
+// command judge) is launched inside that turn's namespace, and without the isolation it would be refused outright.
 const sealedContext = (services: Services, ask: SealedAsk, prompt: string, signal: AbortSignal): TurnContext => {
     const root = ask.execution.cwd;
     return {
@@ -71,6 +73,7 @@ const sealedContext = (services: Services, ask: SealedAsk, prompt: string, signa
             spec: {
                 prompt,
                 cwd: root,
+                ...opt("isolation", admittedPlacement(ask.execution)),
                 model: ask.model,
                 ...opt("effort", ask.effort),
                 ...opt("fast", ask.fast),

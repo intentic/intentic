@@ -64,6 +64,7 @@ export const flyMachineConfig = (run: FlyMachineRun): FlyMachineConfig => ({
         ...(run.environmentHash === undefined ? [] : [["SANDBOX_ENVIRONMENT_HASH", run.environmentHash] as const]),
         // The whole machine, privileged, nested dockerd; the daemon skips a tunnel and loopback cert too.
         ["SANDBOX_VM", "1"],
+        ["SANDBOX_GPU", "unsupported"],
         ...(run.env ?? []).filter(([, value]) => value !== ""),
     ]),
     mounts: [{ volume: run.volumeId, path: FLY_VOLUME_PATH }],

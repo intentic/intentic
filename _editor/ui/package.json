@@ -50,6 +50,10 @@
             "types": "./src/lib/format.ts",
             "default": "./src/lib/format.ts"
         },
+        "./reload-reason": {
+            "types": "./src/lib/reloadReason.ts",
+            "default": "./src/lib/reloadReason.ts"
+        },
         "./storage": {
             "types": "./src/lib/browserStorage.ts",
             "default": "./src/lib/browserStorage.ts"

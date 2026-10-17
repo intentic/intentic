@@ -17,6 +17,7 @@ import { createInlineRename } from "@intentic/ui/inline-rename";
 import { computed, onMounted, onUnmounted, provide, ref, useTemplateRef, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import ChatPanel from "../../chat/panel/ChatPanel.vue";
+import AgentLandFailure from "./AgentLandFailure.vue";
 import { agentStatusMeta } from "../../../models/agent-status/agentStatus-meta";
 import { unregistered, writingNow } from "../../../models/agent-status/agentStatus-standing";
 import { agentWork, assignAgent, landRequestWork, requestLandAgent, startAgent } from "../../../models/fleet/agentActions";
@@ -604,6 +605,7 @@ const confirmHandOver = async (): Promise<void> => {
                 <Icon name="arrow-right" />{{ t(`agents.words.openIn`) }} {{ remoteName }}
             </Button>
         </div>
+        <AgentLandFailure v-if="fleetAgent !== undefined" :agent="fleetAgent" :can-ship="canShip" :busy="changes.actionBusy.value" @retry="changes.land('check')" />
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
         <!-- Here rather than inside the review: the presses that raise it are this header's and the session menu's, and
              the review is not on screen for either a phone reading the chat or a land pressed from the menu over it. -->
