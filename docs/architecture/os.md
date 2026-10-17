@@ -52,7 +52,7 @@ converging when the agent gets something wrong, the agent is down, or the machin
   machine ([`policy.ts`](../../_devices/machine/src/device/policy.ts)) and logged there.
 
 The `intentic` user is in the `docker` group, which is root on the machine in all but name, and has sudo for `bootc`
-and reboot, plus the narrow helper that changes its local screen PIN. So the boundary that matters is the device scopes, not Unix permissions: an owner who switches
+and reboot. Its own password stays locked: the screen PIN is the lock screen's, never a way to log in as it. So the boundary that matters is the device scopes, not Unix permissions: an owner who switches
 "Run commands" on for the steward has given it the machine.
 
 ## Isolation between sandboxes
@@ -100,25 +100,34 @@ flowchart TB
 - **A Space is a sandbox.** The app follows sway's binding and window events (`src-tauri/src/shell/`): Super+N moves
   its one editor window to that sandbox's workspace and switches the sandbox in place, the way Alt+N does inside the
   editor. A sandbox's own windows join its Space. Super+Space starts a new chat on the sandbox in front.
-- **Sandboxes may draw windows on the physical screen.** `ic os screen serve` gives each running sandbox its own
-  Wayland socket through security-context-v1, the mechanism Flatpak uses. The compositor tags every window from it
-  with the sandbox's slug and withholds the powers that would let a sandbox read or drive anything else: screen
-  capture, synthetic input, layer surfaces, other windows' lists, session lock. Every such window wears an amber frame
-  and its sandbox's name, and may not go fullscreen, since that would hide both and let it imitate the system. Inside
-  the sandbox, `on-screen <program>` runs a program there. The agent cannot see that screen and checks its work on its
-  own virtual desktop first. The socket's directory is bind-mounted by `ic`'s run policy, so a sandbox gets it at its
-  next recreate. Under Kata a socket cannot cross the VM boundary, so a microVM sandbox draws nothing. The
-  [os-image README](../../_os/os-image/README.md) lists the withheld protocols as checked against Fedora 44's sway.
+- **Sandboxes may draw windows on the physical screen, once the owner lets each one.** Every sandbox is off until
+  the owner turns it on in This computer's Sandbox windows card (or `ic os screen allow <slug>`). `ic os screen serve`
+  then gives that sandbox its own Wayland socket through security-context-v1, the mechanism Flatpak uses. The
+  compositor tags every window from it with the sandbox's slug and withholds the powers that would let a sandbox read
+  or drive anything else: screen capture, synthetic input, layer surfaces, other windows' lists, session lock. Every
+  such window wears an amber frame and its sandbox's name, opens without the keyboard, and may not go fullscreen,
+  since that would hide both and let it imitate the system. The service that hands out the sockets enforces this
+  itself: it watches sway's window events, takes fullscreen back, closes the windows of a sandbox once it may no
+  longer draw, and serves no socket while it cannot watch or on a sway too old to mark the windows. Inside the
+  sandbox, `on-screen <program>` runs a program there. The agent cannot see that screen and checks its work on its own
+  virtual desktop first. `ic`'s run policy mounts every sandbox's (empty, read-only) socket folder when it is made,
+  so turning a sandbox on or off takes effect within seconds. Under Kata a socket cannot cross the VM boundary, so a
+  microVM sandbox draws nothing. The [os-image README](../../_os/os-image/README.md) lists the withheld protocols as
+  checked against Fedora 44's sway.
 - **Settings are verbs first** (below): This computer's cards and the steward's device tools run the same `ic os`
   verbs. A USB drive plugged in raises a notification, and the Drives card copies it into the sandbox chosen.
-- **The screen locks with a PIN, once the owner sets one.** The PIN becomes the `intentic` user's local password
-  through a root helper that can change nothing else, swayidle locks with swaylock after the idle time, and SSH never
-  accepts that password.
+- **The screen locks with a PIN, once the owner sets one.** The PIN is the lock screen's own secret, never an
+  account password: ic keeps its salted hash where only the `intentic` user reads it, and swaylock's PAM asks
+  `ic os lock check`, which refuses for a while after repeated misses. The `intentic` password stays locked, so no
+  console or text login accepts the PIN. A session started with a PIN set begins locked, so restarting the machine is
+  no way past it, and swayidle locks again after the idle time.
 
 With no internet the screen still works. The editor the app loads lives at app.intentic.dev, so when that address does
 not answer, the app shows its own copy of the editor instead, built into its bundle, on this machine's sandboxes. Each
 one is reached on its loopback port with a session the machine minted for its owner through `docker exec` (`ic sandbox
-session`). The daemon accepts that as proof because whoever holds the machine is root over the container already.
+session`). The daemon accepts that as proof because whoever holds the machine is root over the container already,
+but only on a request netd marked as arriving on the loopback port, never over the tunnel, and for a week: the token
+sits in the machine's caches, and a copy of it must be worth nothing anywhere else.
 netd marks requests that arrived on the loopback port, and only those may come from the app's own page origin; the
 bearer session stays the boundary. Whatever needs the platform (billing, sharing, a new sandbox) says in plain words
 that it needs the internet, and the face offers the online workspace again when it answers. The same session lets

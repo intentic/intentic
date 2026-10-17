@@ -154,6 +154,13 @@ pub fn read_json(path: &Path) -> Option<Value> {
     serde_json::from_str(&text).ok()
 }
 
+/// Whether this machine's edition has a screen (the desktop edition), as its release record says: the one reading of
+/// it, which the screen verbs, the screen service and the run policy's screen mount all ask.
+#[cfg(unix)]
+pub fn has_screen(paths: &Paths) -> bool {
+    read_json(&paths.release()).is_some_and(|release| release["edition"] == "desktop")
+}
+
 /// `release.json`, which the gate has already found.
 #[cfg(unix)]
 pub fn release(paths: &Paths) -> crate::util::Result<Value> {
@@ -168,6 +175,12 @@ pub fn release(paths: &Paths) -> crate::util::Result<Value> {
 /// power cut) never finds half of one. Readable by everyone, since root writes files the `intentic` user reads.
 #[cfg(unix)]
 pub fn write_atomic(path: &Path, body: &[u8]) -> crate::util::Result<()> {
+    write_atomic_mode(path, body, 0o644)
+}
+
+/// [`write_atomic`] with the file's mode: 0600 for what only its owner may read (the screen PIN's record).
+#[cfg(unix)]
+pub fn write_atomic_mode(path: &Path, body: &[u8], mode: u32) -> crate::util::Result<()> {
     use std::io::Write as _;
     use std::os::unix::fs::PermissionsExt as _;
     let parent = path
@@ -182,7 +195,7 @@ pub fn write_atomic(path: &Path, body: &[u8]) -> crate::util::Result<()> {
     file.write_all(body).map_err(fail)?;
     file.as_file().sync_all().map_err(fail)?;
     file.as_file()
-        .set_permissions(std::fs::Permissions::from_mode(0o644))
+        .set_permissions(std::fs::Permissions::from_mode(mode))
         .map_err(fail)?;
     file.persist(path).map_err(|err| fail(err.error))?;
     Ok(())

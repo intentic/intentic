@@ -3,6 +3,7 @@ import { settingsDiff } from "../audit/settings-diff.js";
 import { noteAudit } from "../audit/audit-http.js";
 import { join } from "node:path";
 import { bearerFrom } from "../auth/auth.js";
+import { listenerIn } from "../auth/proofs/listener.js";
 import { implement, ORPCError } from "@orpc/server";
 import { forkablePrompt, intenticSystemPrompt } from "../agent/prompt/intentic-prompt.js";
 import { presetSystemPrompt } from "../agent/prompt/preset-prompt.js";
@@ -50,7 +51,7 @@ export const createSettingsRoutes = (services: Services) => {
                 throw new ORPCError("FORBIDDEN", { message: "Only the signed-in owner may change the agent execution domain." });
             }
             try {
-                await services.auth.authorizeOwner(bearerFrom(context.headers.get("authorization") ?? undefined));
+                await services.auth.authorizeOwner(bearerFrom(context.headers.get("authorization") ?? undefined), listenerIn(context.headers));
             } catch {
                 throw new ORPCError("FORBIDDEN", { message: "Only the signed-in owner may change the agent execution domain." });
             }

@@ -1916,6 +1916,7 @@ dependencies = [
  "base64 0.23.1",
  "intentic-bounded",
  "intentic-docker-host",
+ "intentic-sway-ipc",
  "reqwest",
  "rustls",
  "serde",
@@ -1943,6 +1944,13 @@ dependencies = [
 [[package]]
 name = "intentic-docker-host"
 version = "0.0.0"
+
+[[package]]
+name = "intentic-sway-ipc"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "ipnet"

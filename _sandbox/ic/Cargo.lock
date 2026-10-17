@@ -368,6 +368,8 @@ dependencies = [
  "http",
  "intentic-bounded",
  "intentic-docker-host",
+ "intentic-sway-ipc",
+ "ring",
  "rustls",
  "serde",
  "serde_json",
@@ -499,6 +501,13 @@ version = "0.0.0"
 [[package]]
 name = "intentic-docker-host"
 version = "0.0.0"
+
+[[package]]
+name = "intentic-sway-ipc"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "is_terminal_polyfill"

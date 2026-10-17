@@ -1,0 +1,6 @@
+#%PAM-1.0
+# Intentic OS: the lock screen opens with the screen PIN, which ic checks against its own salted hash and refuses for a
+# while after repeated misses (`ic os lock check`, _sandbox/ic/src/os/lock.rs). It is never an account password: the
+# intentic user's stays locked, so no console, text login or SSH accepts the PIN. swaylock runs as that user, and so
+# does the check; swaylock asks PAM for authentication only.
+auth required pam_exec.so quiet expose_authtok /usr/bin/ic os lock check

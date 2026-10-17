@@ -9,7 +9,7 @@ if [ "$#" -eq 0 ] || [ "$1" = "--help" ]; then
     exit 0
 fi
 if [ ! -S /run/intentic/screen/wayland-0 ]; then
-    echo "This sandbox can't show windows on this computer's screen: its screen socket is unavailable. This needs Intentic OS desktop edition, a running screen session, and a sandbox recreated with the screen mount; Kata VMs cannot use it." >&2
+    echo "This sandbox can't show windows on this computer's screen: its screen socket is unavailable. This needs Intentic OS desktop edition with its screen session running, and the owner letting this sandbox show windows (This computer, Sandbox windows); Kata VMs cannot use it." >&2
     exit 1
 fi
 if [ "$1" = "--x11" ]; then

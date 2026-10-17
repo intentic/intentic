@@ -1630,7 +1630,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/auth/auth.ts": {
-        "count": 680,
+        "count": 664,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/auth/auth.ts#createAuthorizer#lines": {

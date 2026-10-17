@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import type { Services } from "../composition.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { authorizeMaintainer, bearerFrom, ForbiddenError } from "./auth.js";
+import { type Listener, listenerIn, listenerOf } from "./proofs/listener.js";
 
 /* The two answers a privileged route asks for before it does anything, as a plain-Hono refusal and as an oRPC one, plus
  * whether the bearer is the owner for a route that refuses nobody and only turns on the answer, and the answer a plain
@@ -16,9 +17,10 @@ import { authorizeMaintainer, bearerFrom, ForbiddenError } from "./auth.js";
 type AuthDeps = Pick<Services, "auth">;
 type Auth = NonNullable<Services["auth"]>;
 
-type Check = (auth: Auth, bearer: string) => Promise<void>;
+// The bearer, and the way the request came in that a channel-bound proof is checked against (listener.ts).
+type Check = (auth: Auth, bearer: string, listener: Listener) => Promise<void>;
 const maintainer: Check = authorizeMaintainer;
-const owner: Check = (auth, bearer) => auth.authorizeOwner(bearer);
+const owner: Check = (auth, bearer, listener) => auth.authorizeOwner(bearer, listener);
 
 const bearerOf = (headers: Headers): string => bearerFrom(headers.get("authorization") ?? undefined);
 
@@ -28,7 +30,7 @@ const denied = async (services: AuthDeps, c: Context, check: Check): Promise<Res
         return undefined;
     }
     try {
-        await check(services.auth, bearerFrom(c.req.header("authorization")));
+        await check(services.auth, bearerFrom(c.req.header("authorization")), listenerOf((name) => c.req.header(name)));
         return undefined;
     } catch (error) {
         return error instanceof ForbiddenError ? c.json({ error: error.message }, 403) : c.json({ error: "unauthorized" }, 401);
@@ -45,7 +47,7 @@ export const requireMaintainer = async (services: AuthDeps, headers: Headers, re
         return;
     }
     try {
-        await authorizeMaintainer(services.auth, bearerOf(headers));
+        await authorizeMaintainer(services.auth, bearerOf(headers), listenerIn(headers));
     } catch {
         throw new ORPCError("FORBIDDEN", { message: refusal });
     }
@@ -57,7 +59,7 @@ const refused = async (services: AuthDeps, headers: Headers, check: Check): Prom
         return;
     }
     try {
-        await check(services.auth, bearerOf(headers));
+        await check(services.auth, bearerOf(headers), listenerIn(headers));
     } catch (error) {
         if (error instanceof ForbiddenError) {
             throw new ORPCError("FORBIDDEN", { message: error.message });
@@ -78,7 +80,7 @@ export const isOwnerBearer = async (services: AuthDeps, headers: Headers): Promi
     if (services.auth === undefined) {
         return true;
     }
-    return services.auth.authorizeOwner(bearerOf(headers)).then(
+    return services.auth.authorizeOwner(bearerOf(headers), listenerIn(headers)).then(
         () => true,
         () => false,
     );

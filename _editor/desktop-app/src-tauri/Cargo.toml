@@ -95,6 +95,8 @@ zbus = "5"
 # request, on the webview Tauri hands over (`with_webview`), which is this crate's own type. Pinned to the version wry
 # pins and at the features Tauri asks for, so this names what is already compiled rather than adding a download.
 webkit2gtk = { version = "=2.0.2", features = ["v2_40"] }
+# sway's IPC for Intentic OS's shell (src/shell/), the copy `ic`'s screen service uses too.
+intentic-sway-ipc = { path = "../../../_sandbox/ic/sway-ipc" }
 
 # Tuned for BUILD time, because that is the only axis this crate can lose on. `lto = true` (fat) with
 # codegen-units = 1 is the slowest release profile rustc offers, and it buys runtime speed this app cannot use:

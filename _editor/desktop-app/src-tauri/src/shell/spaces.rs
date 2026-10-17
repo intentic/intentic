@@ -78,7 +78,7 @@ fn app_node(tree: &Value, title: &str) -> Option<i64> {
 }
 
 fn move_face(title: &str, space: &str) -> bool {
-    let Some(id) = ipc::request(4, "")
+    let Some(id) = ipc::request(ipc::GET_TREE, "")
         .ok()
         .and_then(|tree| app_node(&tree, title))
     else {
@@ -226,7 +226,7 @@ pub(super) fn roster_changed(app: &AppHandle) {
             }
         }
         drop(desired);
-        if let Ok(workspaces) = ipc::request(1, "") {
+        if let Ok(workspaces) = ipc::request(ipc::GET_WORKSPACES, "") {
             for command in rename_spaces(&before, &after, &workspaces) {
                 let _ = ipc::command(&command);
             }
@@ -234,7 +234,7 @@ pub(super) fn roster_changed(app: &AppHandle) {
         *before = after;
         // A window may have opened before the account's roster arrived, or before its platform id was known.
         // Reconcile existing attested windows as well as new-window events when the account changes.
-        if let Ok(tree) = ipc::request(4, "") {
+        if let Ok(tree) = ipc::request(ipc::GET_TREE, "") {
             let local = local_sandboxes();
             for command in tree_commands(&tree, &before, &local) {
                 let _ = ipc::command(&command);
@@ -248,7 +248,9 @@ fn last_roster() -> &'static Mutex<Roster> {
     ROSTER.get_or_init(|| Mutex::new(Roster::default()))
 }
 
-/// A sandbox's security context is supplied by sway, never inferred from its title or app_id alone.
+/// A sandbox window joins its sandbox's Space. Its security context is supplied by sway, never inferred from its title
+/// or app_id alone. The rules it is held to (never fullscreen, closed when its sandbox may not draw) are the screen
+/// service's, which hands its sandbox the socket (`ic os screen serve`); this only places it.
 fn sandbox_commands(event: &Value, roster: &Roster, local: &Value) -> Vec<String> {
     let window = &event["container"];
     if window["sandbox_engine"] != "dev.intentic.sandbox" {
@@ -258,10 +260,6 @@ fn sandbox_commands(event: &Value, roster: &Roster, local: &Value) -> Vec<String
         return Vec::new();
     };
     let mut commands = Vec::new();
-    if window["fullscreen_mode"].as_u64().unwrap_or(0) > 0 {
-        // Keep the system bar and Space label visible: sandbox content must never impersonate the whole desktop.
-        commands.push(format!("[con_id={id}] fullscreen disable"));
-    }
     // Sway reports the security context's app_id as sandbox_app_id. The ordinary app_id is client-controlled.
     let platform = window["sandbox_app_id"].as_str().and_then(|slug| {
         local
@@ -314,7 +312,7 @@ fn local_sandboxes() -> Value {
 }
 
 fn focused_number() -> Option<usize> {
-    ipc::request(1, "")
+    ipc::request(ipc::GET_WORKSPACES, "")
         .ok()?
         .as_array()?
         .iter()
@@ -338,7 +336,7 @@ pub(super) fn start(app: &AppHandle) {
                 .unwrap_or_else(Instant::now);
             while let Ok((kind, event)) = ipc::read_frame(&mut events) {
                 match kind {
-                    0x8000_0005 => {
+                    ipc::EVENT_BINDING => {
                         if let Some(number) = binding(&event) {
                             current = Some(number);
                             activate(&handle, number, false, false);
@@ -348,7 +346,7 @@ pub(super) fn start(app: &AppHandle) {
                             }
                         }
                     }
-                    0x8000_0000 if event["change"] == "focus" => {
+                    ipc::EVENT_WORKSPACE if event["change"] == "focus" => {
                         let number = event["current"]["num"].as_u64().map(|n| n as usize);
                         if current != number {
                             current = number;
@@ -362,13 +360,8 @@ pub(super) fn start(app: &AppHandle) {
                             }
                         }
                     }
-                    0x8000_0003 => {
+                    ipc::EVENT_WINDOW => {
                         let roster = handle.state::<AppState>().roster();
-                        // Undo fullscreen before the bounded sandbox-list read: a slow engine must not leave a
-                        // sandbox covering the system bar while we work out which Space it belongs to.
-                        for command in sandbox_commands(&event, &roster, &Value::Null) {
-                            let _ = ipc::command(&command);
-                        }
                         if event["container"]["sandbox_engine"] == "dev.intentic.sandbox"
                             && local_at.elapsed() >= Duration::from_secs(10)
                         {
@@ -427,15 +420,13 @@ mod tests {
     }
 
     #[test]
-    fn only_attested_sandbox_windows_move_and_fullscreen_is_always_undone() {
+    fn only_attested_sandbox_windows_move_to_their_sandboxs_space() {
         let event = json!({"change":"new","container":{"id":42,"sandbox_engine":"dev.intentic.sandbox","sandbox_app_id":"work","app_id":"untrusted-other-name","fullscreen_mode":1}});
         let local = json!([{"slug":"work","platformId":"box-a"}]);
+        // Fullscreen is the screen service's to take back (ic os screen serve), not this app's.
         assert_eq!(
             sandbox_commands(&event, &roster(), &local),
-            vec![
-                "[con_id=42] fullscreen disable",
-                "[con_id=42] move container to workspace \"1:My work  exec bad\""
-            ]
+            vec!["[con_id=42] move container to workspace \"1:My work  exec bad\""]
         );
         assert_eq!(
             sandbox_commands(
@@ -443,7 +434,7 @@ mod tests {
                 &roster(),
                 &json!([{"slug":"work","platformId":null}])
             ),
-            vec!["[con_id=42] fullscreen disable"]
+            Vec::<String>::new()
         );
         let mut impostor = event.clone();
         impostor["container"]["sandbox_engine"] = Value::Null;
@@ -456,7 +447,7 @@ mod tests {
         missing_context["container"]["app_id"] = json!("work");
         assert_eq!(
             sandbox_commands(&missing_context, &roster(), &local),
-            vec!["[con_id=42] fullscreen disable"]
+            Vec::<String>::new()
         );
     }
 
@@ -471,7 +462,6 @@ mod tests {
             ),
             vec![
                 "[con_id=42] move container to workspace \"1:My work  exec bad\"",
-                "[con_id=43] fullscreen disable",
                 "[con_id=43] move container to workspace \"1:My work  exec bad\""
             ]
         );

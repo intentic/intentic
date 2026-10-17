@@ -1,0 +1,11 @@
+[package]
+name = "intentic-sway-ipc"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "sway's IPC (i3's framing) over its Unix socket: the one copy `ic` and the desktop app share."
+
+# serde_json only, which both binaries already build: `ic` is downloaded on every run of a bootstrap shim, so its size
+# is user-visible, and an IPC crate would bring an event model and a runtime of its own for these few messages.
+[dependencies]
+serde_json = "1"

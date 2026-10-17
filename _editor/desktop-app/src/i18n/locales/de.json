@@ -437,6 +437,18 @@
             "readFailure": "Die Bildschirmsperre konnte nicht gelesen werden. Öffne diese Seite erneut.",
             "changeFailure": "Die Bildschirmsperre konnte nicht geändert werden. Versuche es erneut."
         },
+        "windows": {
+            "title": "Sandbox-Fenster",
+            "lead": "Erlaube einer Sandbox, eigene Fenster auf diesem Bildschirm zu öffnen. Jedes hat einen bernsteinfarbenen Rahmen mit dem Namen der Sandbox und bedeckt nie den ganzen Bildschirm. Jede Sandbox ist aus, bis du sie einschaltest.",
+            "paused": "Sandbox-Fenster sind kurz pausiert und kommen von selbst wieder.",
+            "none": "Auf diesem Computer gibt es noch keine Sandboxen.",
+            "switch": "{name} Fenster auf diesem Bildschirm zeigen lassen",
+            "drawing": "Kann jetzt Fenster zeigen",
+            "allowed": "Erlaubt, zeigt Fenster, solange sie läuft",
+            "off": "Aus",
+            "readFailure": "Es konnte nicht gelesen werden, welche Sandboxen Fenster zeigen dürfen. Öffne diese Seite noch einmal.",
+            "changeFailure": "Das konnte nicht geändert werden. Versuch es noch einmal."
+        },
         "thisComputer": "Dieser Computer",
         "network": {
             "title": "Netzwerk",

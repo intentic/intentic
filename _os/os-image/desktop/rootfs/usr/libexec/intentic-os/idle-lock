@@ -1,9 +1,11 @@
 #!/bin/sh
+# swayidle for the screen PIN. Started (and restarted) by the session's 60-lock.conf while the lock is on; with no PIN
+# stored it has nothing to do.
 set -eu
-minutes=$(awk '/^# intentic-lock \{"enabled":true,/ { enabled=1 } /^# idle-minutes [0-9]+$/ { minutes=$3 } END { if (enabled) print minutes }' /etc/intentic/sway.d/60-lock.conf)
+[ -s /var/lib/intentic-os/screen-lock/pin ] || exit 0
+minutes=$(awk '/^# idle-minutes [0-9]+$/ { minutes=$3 } END { print minutes }' /etc/intentic/sway.d/60-lock.conf 2>/dev/null || true)
 [ -n "$minutes" ] || exit 0
-case "$minutes" in ''|*[!0-9]*) exit 1 ;; esac
+case "$minutes" in *[!0-9]*) exit 1 ;; esac
 [ "$minutes" -ge 1 ] && [ "$minutes" -le 240 ] || exit 1
-exec swayidle -w timeout "$((minutes * 60))" \
-    'swaylock -f --config /usr/share/intentic-os/sway/lock.conf' \
-    before-sleep 'swaylock -f --config /usr/share/intentic-os/sway/lock.conf'
+exec swayidle -w timeout "$((minutes * 60))" /usr/libexec/intentic-os/screen-lock \
+    before-sleep /usr/libexec/intentic-os/screen-lock

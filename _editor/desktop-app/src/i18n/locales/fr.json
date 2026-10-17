@@ -437,6 +437,18 @@
             "readFailure": "Impossible de lire le verrouillage. Ouvrez cette page à nouveau.",
             "changeFailure": "Impossible de modifier le verrouillage. Réessayez."
         },
+        "windows": {
+            "title": "Fenêtres des sandboxes",
+            "lead": "Autorisez une sandbox à ouvrir ses propres fenêtres sur cet écran. Chacune porte un cadre ambre avec le nom de la sandbox et ne couvre jamais tout l’écran. Chaque sandbox reste désactivée tant que vous ne l’activez pas.",
+            "paused": "Les fenêtres des sandboxes sont suspendues un instant et reviennent d’elles-mêmes.",
+            "none": "Il n’y a encore aucune sandbox sur cet ordinateur.",
+            "switch": "Autoriser {name} à afficher des fenêtres sur cet écran",
+            "drawing": "Peut afficher des fenêtres maintenant",
+            "allowed": "Autorisée, affiche des fenêtres quand elle tourne",
+            "off": "Désactivée",
+            "readFailure": "Impossible de savoir quelles sandboxes peuvent afficher des fenêtres. Rouvrez cette page.",
+            "changeFailure": "Impossible de modifier ce réglage. Réessayez."
+        },
         "thisComputer": "Cet ordinateur",
         "network": {
             "title": "Réseau",

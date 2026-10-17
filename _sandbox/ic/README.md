@@ -263,15 +263,20 @@ flowchart LR
   `ic sandbox doctor` is the same engine, read-only.
 - The image owns its `docker run` flags. `ic` asks the image for its run command (`contract.rs`) instead of
   writing one, so a flag change ships with the image.
-- **Sandbox windows on Intentic OS desktop.** `ic os screen serve` runs inside sway's session and registers one
-  security-context-v1 listener per running runc sandbox (`os/screen.rs`). It uses engine `dev.intentic.sandbox`,
+- **Sandbox windows on Intentic OS desktop.** No sandbox may draw until the owner allows it (`ic os screen allow|deny
+  <slug>`, or This computer's card; `/var/lib/intentic-os/screen-allowed.json`). `ic os screen serve` runs inside
+  sway's session and registers one security-context-v1 listener per running runc sandbox the owner allowed
+  (`os/screen.rs`). It watches sway's window events through the shared [sway-ipc](sway-ipc) crate and holds every
+  sandbox window to its rules itself: fullscreen is taken back, the windows of a sandbox no longer allowed are
+  closed, and no socket is served while the watch is down or on a sway older than 1.11. It uses engine `dev.intentic.sandbox`,
   the slug as app id and the full container id as instance id, never an unrestricted Wayland socket. A held close
   endpoint revokes new connections when the container stops or the service dies. Missing sockets and replacement
   containers get fresh listeners. `ic os screen status --json` returns `{available, reason, sandboxes: [{slug,
-  socket}]}` and checks the service's live file lock, so stale files do not claim availability. On desktop edition
-  only, `os/policy.rs` creates `/run/user/1990/intentic/screen/<slug>` (0700, intentic) before Docker and mounts the
-  directory at `/run/intentic/screen` in connect, recreate and runner run lines. Existing sandboxes get the mount on
-  their next recreate. Kata skips it with a warning because a Unix socket cannot cross the VM boundary. Windows
+  allowed, socket}]}` and checks the service's live file lock, so stale files do not claim availability. On desktop
+  edition only, `os/policy.rs` creates `/run/user/1990/intentic/screen/<slug>` (0700, intentic) before Docker and
+  mounts the directory read-only at `/run/intentic/screen` in connect, recreate and runner run lines, so allowing a
+  sandbox later needs no recreate. Kata skips it (with a warning when the owner allowed it) because a Unix socket
+  cannot cross the VM boundary; `screen::shares_sockets` is the one answer the policy and the service both use. Windows
   and macOS compile without the Linux-only Wayland dependencies. See the [OS image's protocol restrictions](../../_os/os-image/README.md#sandbox-window-boundary).
 - **Intentic OS (2026-10-13).** On a machine whose image carries `/usr/lib/intentic-os/release.json`
   ([_os/README.md](../../_os/README.md)), `ic os` is the one door through which the OS changes, and its callers read
@@ -294,9 +299,12 @@ flowchart LR
   one of these paths under another folder, for tests.
   On the desktop edition, `ic os bar` streams i3bar JSON with optional attention, network, sound and update
   readers; clicks only navigate through `intentic://shell`. `ic os lock status --json`, `set-pin`, `off` and
-  `idle <minutes>` control the optional screen lock. A PIN of 4–12 digits arrives on stdin, the narrow root
-  helper changes only `intentic`'s local password, and settings hold no PIN. Turning it off locks that password
-  again. The idle delay is 1–240 minutes, initially 5.
+  `idle <minutes>` control the optional screen lock. A PIN of 4–12 digits arrives on stdin and is kept as a salted
+  PBKDF2 hash in `/var/lib/intentic-os/screen-lock/` (the `intentic` user's alone), never as an account password
+  and never in the settings. `ic os lock check` is what the lock screen asks, through pam_exec in
+  `/etc/pam.d/swaylock`: four misses in a row are free, and the fifth and each one after start a wait (30 s, doubling to an
+  hour) during which no PIN is checked. A session that starts with a PIN set begins locked. Turning it off forgets
+  the PIN and opens a lock screen that is up. The idle delay is 1–240 minutes, initially 5.
 - **Isolation on Intentic OS.** The policy is `/usr/lib/intentic-os/os.json` with `/etc/intentic/os.json` over it,
   key by key: `isolation` (`auto`, `vm`, `container`; a word nobody knows is `auto`, said), `pairOnLan`, `updates`
   (`stage`, `off`). Connect, every recreate and `runner up` pass the sandbox's run line through `os/policy.rs`. Off

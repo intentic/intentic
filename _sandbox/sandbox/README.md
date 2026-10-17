@@ -51,8 +51,10 @@ flowchart LR
   route that mints one, and an agent in the unprivileged domain cannot read either file; a sandbox nobody has bound
   refuses (the first binding still takes a real sign-in with the connect token); every request is still authorized
   against the owner file and roster, so a new owner or "sign out everywhere" (which re-keys the secret) ends it; a
-  `host` proof meets the require-passkey policy, as root over the box would anyway. Each mint is an `auth.sign_in`
-  record with `methods: ["host"]`: the trail has one writer, so the script leaves a note in `/history/audit/inbox/`
+  `host` proof meets the require-passkey policy, as root over the box would anyway, but stands only on a request
+  netd marked as arriving on the loopback port (`auth/proofs/listener.ts`; `BOUND_TO_LISTENER` in `auth/proofs/proof-methods.ts`),
+  never over the tunnel, and lasts a week rather than a month, since its token is kept on the machine's disk. Each
+  mint is an `auth.sign_in` record with `methods: ["host"]`: the trail has one writer, so the script leaves a note in `/history/audit/inbox/`
   that the audit tick records and deletes. The platform's own id for the sandbox's row, which its announce answers,
   is kept in `/history/platform-row.json` for the same reader (`store/platform-row.ts`).
 - On the loopback port, and only there, CORS also admits the desktop app's bundled page (`tauri://localhost`,
@@ -237,8 +239,9 @@ flowchart LR
   pushed as the `desktop` runtime domain: the editor tiles it while a window is open, and says an empty desktop is empty
   rather than showing a black screen that looks like a broken stream.
 - On Intentic OS desktop edition, `on-screen <command>` can also show native Wayland apps on the owner's physical
-  screen through `/run/intentic/screen/wayland-0`. The host mounts its per-sandbox security-context directory when
-  creating or recreating a runc container; existing containers need their next recreate, and Kata VMs cannot use
+  screen through `/run/intentic/screen/wayland-0`, once the owner has allowed this sandbox to (This computer's Sandbox
+  windows card). The host mounts its per-sandbox security-context directory read-only when creating or recreating a
+  runc container, and its screen service puts a socket there only while the owner allows it; Kata VMs cannot use
   the socket. The launcher unsets `DISPLAY` and `WAYLAND_SOCKET`, selects Wayland for GTK, Qt, SDL, Firefox and
   Electron, and gives the app a private writable `XDG_RUNTIME_DIR`. Missing sockets produce a plain explanation;
   it never falls back to another display. Desktop tool descriptions and responses offer this command only while a socket exists,

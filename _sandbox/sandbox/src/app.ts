@@ -4,7 +4,6 @@ import { CONNECT_TOKEN_HEADER, REQUEST_ID_HEADER } from "@intentic/sandbox-contr
 import type { RouteMeta } from "@intentic/sandbox-contract/protocol/route-meta";
 import { sandboxRouteFor } from "@intentic/sandbox-contract";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
-import type { NetdHeader } from "@intentic/sandbox-contract/netd-wire";
 import { ORPCError } from "@orpc/server";
 import { withGitCaller } from "@intentic/base/git";
 import { type Context, Hono } from "hono";
@@ -14,6 +13,7 @@ import { compressResponses } from "./http/compress-responses.js";
 import { watchResponseLength } from "./http/response-length.js";
 import { bearerFrom, ForbiddenError, OwnerUnreadableError, PasskeyRequiredError, PlatformKeyUnknownError } from "./auth/auth.js";
 import { allowedOriginsOf, desktopBundleOnLoopback, originAllowedBy } from "./auth/browser-origins.js";
+import { LISTENER_HEADER, listenerOf } from "./auth/proofs/listener.js";
 import { memberRefusal } from "./auth/role-floor.js";
 import { orgLocks } from "./org/org-locks.middleware.js";
 import { admitByGrant, grantsOf } from "./auth/grants.js";
@@ -50,9 +50,6 @@ const routedPath = (path: string): string => path.replace(/\/+$/u, "") || "/";
 // caller's session.
 // services.boot gates data routes behind the boot chain instead of racing it, while listeners come up as soon as the
 // process can serve.
-// The header netd marks a request with when it arrived on the loopback port (netd-wire `NetdHeader::Listener`).
-const LISTENER_HEADER: NetdHeader = "x-intentic-listener";
-
 export const createApp = (services: Services): Hono<AppEnv> => {
     const orpcHandler = new OpenAPIHandler(createRouter(services), {
         interceptors: [
@@ -197,6 +194,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             try {
                 const caller = await authorize(bearerFrom(c.req.header("authorization")), c.req.header(CONNECT_TOKEN_HEADER) ?? undefined, {
                     enrolment: policy.enrolment === true,
+                    // A session the machine minted stands on its loopback port alone (auth/proofs/proof-methods.ts).
+                    listener: listenerOf((name) => c.req.header(name)),
                 });
                 c.set("identity", caller);
                 // The role floor (auth/role-floor.ts) applies here, after authentication, in one place: a member below

@@ -20,6 +20,9 @@ import { defineDocument } from "../store/evolution/documents.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
 import { tokenEquals } from "./token-equals.js";
+import type { Listener } from "./proofs/listener.js";
+import { assertChannel, meetsPasskeyPolicy } from "./proofs/proof-methods.js";
+import { spentOnce } from "./proofs/spent-once.js";
 
 // The sandbox authenticates the end user directly against Google; the platform never holds that credential. A person
 // whose address no identity provider vouches for comes in on the platform's identity assertion instead, which this
@@ -368,6 +371,8 @@ export interface AuthorizeOptions {
     // The two registration routes: a proof with no passkey may pass the policy there, but only for an identity that
     // holds none yet. With one held, only that passkey opens the door, so a stolen Google account cannot add its own.
     readonly enrolment?: boolean;
+    // Which way the request came in (listener.ts), for a proof bound to one; absent is any but netd's loopback port.
+    readonly listener?: Listener;
 }
 
 // The platform's owner ticket, accepted as a sign-in proof on hosted machines only: verifies against the public key in
@@ -382,28 +387,6 @@ export const ownerTicketVerifier =
         const ticket = verifyOwnerTicket(publicKeyPem, bearer, Date.now());
         return ticket !== undefined && ticket.sandboxId === sandboxId ? { email: ticket.email } : undefined;
     };
-
-// Single-use credentials this daemon has accepted, each remembered until it would have expired anyway (plus a minute
-// of clock skew), so the memory a flood of them costs ends with their lives. In memory: a restart forgets, and the
-// credentials it covers live minutes, never across the time a restart takes to matter.
-const spentOnce = () => {
-    const spent = new Map<string, number>();
-    return {
-        // Whether this is the first time `key` is spent, recording it if so.
-        spend: (key: string, expiresAtMs: number, nowMs: number): boolean => {
-            for (const [seen, until] of spent) {
-                if (until <= nowMs) {
-                    spent.delete(seen);
-                }
-            }
-            if (spent.has(key)) {
-                return false;
-            }
-            spent.set(key, expiresAtMs + 60_000);
-            return true;
-        },
-    };
-};
 
 // How long a sign-in waits for the platform's identity key when the daemon has not learned it yet: its first announce
 // is usually seconds away, and a person who just opened the sandbox should not be refused for the race.
@@ -448,20 +431,21 @@ export interface Authorizer {
     // Enforces access for a proof this daemon verified itself with no bearer (a passkey assertion, a recovery code):
     // the roster and the policy, never first-bind, since no passkey can exist before an owner does.
     authorizeProven(proof: Proof): Promise<ProvenCaller>;
-    // Verifies the bearer and asserts the caller is the bound owner, not merely a member; throws otherwise.
-    authorizeOwner(bearer: string): Promise<void>;
+    // Verifies the bearer and asserts the caller is the bound owner, not merely a member; throws otherwise. `listener`
+    // here and below is AuthorizeOptions' own.
+    authorizeOwner(bearer: string, listener?: Listener): Promise<void>;
     // The account-deletion endpoint's idempotent check; usable even after access is disabled, to disable it again.
-    authorizeRetirement(bearer: string): Promise<void>;
+    authorizeRetirement(bearer: string, listener?: Listener): Promise<void>;
     // The recovery-code door: the bearer must be the owner, and the policy is not asked, since this is how an owner
     // with no passkey left gets back to registering one.
-    authorizeRecovery(bearer: string): Promise<ProvenCaller>;
+    authorizeRecovery(bearer: string, listener?: Listener): Promise<ProvenCaller>;
 }
 
 // The highest revokable grant carries the owner's operating authority, but ownership stays a separate fact.
 // Only authorizeOwner can change the roster or retire the sandbox; a maintainer can be revoked but never revoke or
 // replace the owner.
-export const authorizeMaintainer = async (authorizer: Authorizer, bearer: string): Promise<void> => {
-    const caller = await authorizer.authorize(bearer, undefined);
+export const authorizeMaintainer = async (authorizer: Authorizer, bearer: string, listener?: Listener): Promise<void> => {
+    const caller = await authorizer.authorize(bearer, undefined, { listener });
     if (!roleAtLeast(caller.role, "maintainer")) {
         throw new ForbiddenError("not a sandbox maintainer");
     }
@@ -481,11 +465,6 @@ export const operatesSandbox =
         }
         return (await members.list()).some((member) => sameEmail(member.email, email) && roleAtLeast(member.role, "maintainer"));
     };
-
-// The proofs the require-passkey policy lets through: a passkey; a recovery code, which exists to get an owner with no
-// passkey left back to registering one; and the machine that runs the sandbox (host/host-session.ts), since the policy keeps
-// out somebody holding the owner's Google account, and whoever holds the machine is root over this container already.
-const MEETS_PASSKEY_POLICY: ReadonlySet<ProofMethod> = new Set(["passkey", "recovery", "host"]);
 
 export const createAuthorizer = (deps: {
     readonly verify: IdTokenVerifier;
@@ -527,8 +506,8 @@ export const createAuthorizer = (deps: {
     };
     // The bearer's verified proof: the platform's identity assertion, its own session if the token parses as one, else a
     // Google ID token. A session from a passkey that has since been removed is refused: the session outlived the
-    // credential behind it.
-    const identify = async (bearer: string): Promise<Proof> => {
+    // credential behind it. So is one whose proof stands on another channel than this request's (listener.ts).
+    const identify = async (bearer: string, listener: Listener): Promise<Proof> => {
         const assertion = await assertionProof(bearer);
         if (assertion !== undefined) {
             return assertion;
@@ -540,6 +519,7 @@ export const createAuthorizer = (deps: {
         if (session.credentialId !== undefined && deps.passkeys !== undefined && !(await deps.passkeys.exists(session.credentialId))) {
             throw new Error("the passkey this session came from has been removed");
         }
+        assertChannel(session.methods, listener);
         return { ...session, renewal: true };
     };
     // Whether only the platform's word stands behind this proof: an assertion, or a session minted from one, with no
@@ -579,12 +559,12 @@ export const createAuthorizer = (deps: {
             ...(access.see === undefined ? {} : { areas: access.see }),
         };
     };
-    // The require-passkey policy, read per request like the roster (MEETS_PASSKEY_POLICY says which proofs pass it).
+    // The require-passkey policy, read per request like the roster (proof-methods.ts says which proofs pass it).
     const requirePasskey = async (caller: ProvenCaller, enrolment: boolean): Promise<void> => {
         if (deps.passkeys === undefined || !(await deps.passkeys.required())) {
             return;
         }
-        if (caller.methods.some((method) => MEETS_PASSKEY_POLICY.has(method))) {
+        if (meetsPasskeyPolicy(caller.methods)) {
             return;
         }
         const enrolled = await deps.passkeys.enrolled(caller.email);
@@ -595,11 +575,11 @@ export const createAuthorizer = (deps: {
     };
     // The owner's proof from a bearer, for the two doors that stay open to an owner the policy would otherwise hold
     // out: retiring access and spending a recovery code. Neither adds power the bearer did not already have.
-    const ownerProof = async (bearer: string): Promise<Proof> => {
+    const ownerProof = async (bearer: string, listener: Listener): Promise<Proof> => {
         if (bearer === "") {
             throw new Error("missing bearer token");
         }
-        const proof = await identify(bearer);
+        const proof = await identify(bearer, listener);
         const owner = await deps.owner.read();
         if (owner === undefined || !sameEmail(proof.email, owner)) {
             throw new ForbiddenError("not the sandbox owner");
@@ -647,7 +627,7 @@ export const createAuthorizer = (deps: {
                 const assertion = ticket === undefined ? await assertionProof(bearer) : undefined;
                 return bind(bearer, firstBind, ticket ?? assertion, ticket !== undefined || (assertion !== undefined && deps.assertionsForAnyone === true));
             }
-            const caller = await enforce(ticket ?? (await identify(bearer)), owner);
+            const caller = await enforce(ticket ?? (await identify(bearer, options.listener)), owner);
             await requirePasskey(caller, options.enrolment === true);
             return caller;
         },
@@ -661,24 +641,24 @@ export const createAuthorizer = (deps: {
             await requirePasskey(caller, false);
             return caller;
         },
-        authorizeOwner: async (bearer) => {
+        authorizeOwner: async (bearer, listener) => {
             await requireBrowserAccess();
             if (bearer === "") {
                 throw new Error("missing bearer token");
             }
-            const proof = await identify(bearer);
+            const proof = await identify(bearer, listener);
             const owner = await deps.owner.read();
             if (owner === undefined || !sameEmail(proof.email, owner)) {
                 throw new ForbiddenError("not the sandbox owner");
             }
             await requireOwnerOptIn(proof);
         },
-        authorizeRetirement: async (bearer) => {
-            await ownerProof(bearer);
+        authorizeRetirement: async (bearer, listener) => {
+            await ownerProof(bearer, listener);
         },
-        authorizeRecovery: async (bearer) => {
+        authorizeRecovery: async (bearer, listener) => {
             await requireBrowserAccess();
-            return { ...(await ownerProof(bearer)), role: "owner" };
+            return { ...(await ownerProof(bearer, listener)), role: "owner" };
         },
     };
 };

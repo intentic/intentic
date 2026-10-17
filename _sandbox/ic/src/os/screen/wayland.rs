@@ -89,7 +89,7 @@ impl Compositor {
         let context =
             self.manager
                 .create_listener(listener.as_fd(), close.as_fd(), &self.queue.handle(), ());
-        context.set_sandbox_engine("dev.intentic.sandbox".into());
+        context.set_sandbox_engine(super::ENGINE.into());
         context.set_app_id(sandbox.slug.clone());
         context.set_instance_id(sandbox.id.clone());
         context.commit();

@@ -28,7 +28,8 @@ import LeftoverSandboxes from "./machineSandbox/LeftoverSandboxes.vue";
 import MachineSandboxSection from "./machineSandbox/MachineSandboxSection.vue";
 import { machineSandbox } from "./machineSandbox";
 import SystemCard from "./intenticOs/SystemCard.vue";
-import SecurityCard from "./intenticOs/SecurityCard.vue";
+import SandboxWindowsCard from "./intenticOs/screen/SandboxWindowsCard.vue";
+import SecurityCard from "./intenticOs/screen/SecurityCard.vue";
 import ThisComputer from "./intenticOs/ThisComputer.vue";
 import { followOnScreen, onScreen } from "../onScreen";
 import PcSetupCard from "./pcSetup/PcSetupCard.vue";
@@ -483,6 +484,8 @@ onMounted(() => {
             <ThisComputer v-if="osState" />
             <!-- The screen's PIN after the everyday settings: only the desktop edition has a screen to lock. -->
             <SecurityCard v-if="osState?.edition === `desktop`" />
+            <!-- Which sandboxes may open windows on this screen: none until the owner turns one on. -->
+            <SandboxWindowsCard v-if="osState?.edition === `desktop`" />
 
             <!-- A PC WAITING FOR WINDOWS TO END THE SESSION, with the setup card put away: Docker cannot run until then, and
                  a "Docker wouldn't start" card here sent a reader pressing its "Check again" instead of restarting. -->

@@ -359,10 +359,20 @@ enum OsDrivesCommand {
 enum ScreenCommand {
     /// Serve restricted Wayland sockets for running sandboxes; started inside the sway session
     Serve,
-    /// Whether the screen service is available, and which sandboxes have a socket
+    /// Whether the screen service is available, and for every sandbox whether it may draw and has a socket
     Status {
         #[arg(long)]
         json: bool,
+    },
+    /// Let a sandbox show windows on this computer's screen (none may until allowed)
+    Allow {
+        /// The sandbox, by its slug
+        slug: String,
+    },
+    /// Stop a sandbox showing windows here; any it has open are closed
+    Deny {
+        /// The sandbox, by its slug
+        slug: String,
     },
 }
 
@@ -374,8 +384,10 @@ enum LockCommand {
     },
     /// Read a new PIN (4 to 12 digits) from standard input
     SetPin,
-    /// Turn the screen lock off and lock the local password again
+    /// Turn the screen lock off and forget the PIN
     Off,
+    /// Read a PIN from standard input and exit 0 when it is the screen PIN: what the lock screen's PAM asks
+    Check,
     /// Lock after this many minutes without activity (1 to 240)
     Idle { minutes: u16 },
 }
@@ -1410,6 +1422,8 @@ fn allowed_during_a_move(command: &Command) -> bool {
         ),
         Command::Image(_) => true,
         Command::Docker(DockerCommand::Prepare { dry_run, .. }) => *dry_run,
+        // The lock screen's check reads nothing of an engine, and refusing it would keep the owner out of their screen.
+        Command::Os(OsCommand::Lock(LockCommand::Check | LockCommand::Status { .. })) => true,
         _ => false,
     }
 }
@@ -1442,6 +1456,10 @@ fn run_os(command: OsCommand) -> util::Result<()> {
         OsCommand::Screen(ScreenCommand::Serve) => os::screen::serve(),
         #[cfg(target_os = "linux")]
         OsCommand::Screen(ScreenCommand::Status { json }) => os::screen::status(json),
+        #[cfg(target_os = "linux")]
+        OsCommand::Screen(ScreenCommand::Allow { slug }) => os::screen::set_allowed(&slug, true),
+        #[cfg(target_os = "linux")]
+        OsCommand::Screen(ScreenCommand::Deny { slug }) => os::screen::set_allowed(&slug, false),
         #[cfg(not(target_os = "linux"))]
         OsCommand::Screen(_) => Err(util::Fail(
             "Screen sharing requires Intentic OS on Linux.".to_string(),
@@ -1451,6 +1469,7 @@ fn run_os(command: OsCommand) -> util::Result<()> {
             LockCommand::Status { json } => os::lock::status(json),
             LockCommand::SetPin => os::lock::set_pin(),
             LockCommand::Off => os::lock::off(),
+            LockCommand::Check => os::lock::check(),
             LockCommand::Idle { minutes } => os::lock::idle(minutes),
         },
         OsCommand::Status { json } => os::status::run(json),
@@ -1607,6 +1626,21 @@ mod tests {
                 ..
             })
         ));
+        assert!(matches!(
+            parse(&["os", "screen", "allow", "work"]),
+            Ok(Cli {
+                command: Command::Os(OsCommand::Screen(ScreenCommand::Allow { slug })),
+                ..
+            }) if slug == "work"
+        ));
+        assert!(matches!(
+            parse(&["os", "screen", "deny", "work"]),
+            Ok(Cli {
+                command: Command::Os(OsCommand::Screen(ScreenCommand::Deny { slug })),
+                ..
+            }) if slug == "work"
+        ));
+        assert!(parse(&["os", "screen", "allow"]).is_err());
     }
 
     fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
@@ -2048,7 +2082,13 @@ mod tests {
             os(&["lock", "idle", "12"]),
             OsCommand::Lock(LockCommand::Idle { minutes: 12 })
         ));
+        assert!(matches!(
+            os(&["lock", "check"]),
+            OsCommand::Lock(LockCommand::Check)
+        ));
+        // A PIN never rides on the command line, where `ps` shows it to everyone on the machine.
         assert!(parse(&["os", "lock", "set-pin", "1234"]).is_err());
+        assert!(parse(&["os", "lock", "check", "1234"]).is_err());
         assert!(matches!(
             os(&["update", "--check", "--json"]),
             OsCommand::Update {

@@ -27,6 +27,25 @@ export const osLockStatus = (): Promise<OsLockStatus | null> => invoke(`os_lock_
 export const osLockSetPin = (pin: string): Promise<OsLockStatus> => invoke(`os_lock_set_pin`, { pin });
 export const osLockOff = (): Promise<OsLockStatus> => invoke(`os_lock_off`);
 export const osLockIdle = (minutes: number): Promise<OsLockStatus> => invoke(`os_lock_idle`, { minutes });
+
+/** One sandbox on this computer, as `ic os screen status` lists it: whether its owner lets it draw, and whether it has a
+ * live socket to draw through right now (running, allowed, and the screen service up). */
+export interface OsScreenSandbox {
+    readonly slug: string;
+    readonly allowed: boolean;
+    readonly socket: boolean;
+}
+
+/** Which sandboxes may show windows on this screen (src-tauri/src/shell/screen.rs). None may until allowed. */
+export interface OsScreenStatus {
+    readonly available: boolean;
+    readonly reason: string | null;
+    readonly sandboxes: readonly OsScreenSandbox[];
+}
+
+/** null where there is no screen to show windows on: not Intentic OS, or its server edition. */
+export const osScreenStatus = (): Promise<OsScreenStatus | null> => invoke(`os_screen_status`);
+export const osScreenAllow = (slug: string, allowed: boolean): Promise<OsScreenStatus | null> => invoke(`os_screen_allow`, { slug, allowed });
 /* INTENTIC OS'S OWN SETTINGS (src-tauri/src/os_settings.rs runs `ic os network|sound|display|keyboard|drives`): what This
    computer's cards show and change. Each read is null where ic says this is not Intentic OS, and the screen's and the
    keyboard's on an edition with no screen: the card hides. Each change rejects with ic's words when it was not made. */

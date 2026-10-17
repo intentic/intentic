@@ -7,5 +7,3 @@ Cmnd_Alias INTENTIC_OS = /usr/bin/bootc status, /usr/bin/bootc status *, \
     /usr/bin/bootc switch ghcr.io/intentic/os\:*, /usr/bin/bootc switch ghcr.io/intentic/os-desktop\:*, \
     /usr/bin/systemctl reboot
 intentic ALL=(root) NOPASSWD: INTENTIC_OS
-# Only this helper can set or remove the local screen PIN; it always targets the intentic user.
-intentic ALL=(root) NOPASSWD: /usr/libexec/intentic-os/lock-pin "", /usr/libexec/intentic-os/lock-pin --off

@@ -30,6 +30,9 @@ const refusal = async (promise: Promise<unknown>): Promise<HostSessionRefused> =
 
 const inbox = async (root: string): Promise<string[]> => readdir(join(root, AUDIT_INBOX_DIR)).catch(() => []);
 
+// How netd marks a request that came in on the machine-published loopback port (auth/proofs/listener.ts).
+const LOOPBACK = { listener: "loopback" } as const;
+
 const noMembers: MembersStore = { list: async () => [], add: async () => undefined, remove: async () => undefined };
 
 test("a sandbox nobody has bound yet mints nothing: the first binding still takes a real sign-in", async () => {
@@ -59,7 +62,9 @@ test("the bound owner gets an ordinary daemon session proven by `host`, with the
     const answer = await mintHostSession({ historyRoot: root, now: () => 42, platformId: async () => "cuid-1" });
     expect(answer.email).toBe("Owner@Example.com");
     expect(answer.platformId).toBe("cuid-1");
-    expect(answer.expiresAt).toBeGreaterThan(Date.now() + 29 * 86_400_000);
+    // A week, not the month a browser sign-in lasts: a copy of the machine's cache is worth that little.
+    expect(answer.expiresAt).toBeGreaterThan(Date.now() + 6.9 * 86_400_000);
+    expect(answer.expiresAt).toBeLessThanOrEqual(Date.now() + 7 * 86_400_000);
     // The daemon's own verifier takes it, under the secret it signs every session with, created 0600.
     await expect(createSessions(join(root, "session-secret")).verify(answer.token)).resolves.toEqual({ email: "Owner@Example.com", methods: ["host"] });
     expect(((await stat(join(root, "session-secret"))).mode & 0o777).toString(8)).toBe("600");
@@ -102,12 +107,41 @@ test("the daemon authorizes a host session for its owner only, and the require-p
         members: noMembers,
     });
     const { token } = await mintHostSession({ historyRoot: root });
-    await expect(authorizer.authorize(token, undefined)).resolves.toMatchObject({ email: "owner@example.com", role: "owner", methods: ["host"] });
+    await expect(authorizer.authorize(token, undefined, LOOPBACK)).resolves.toMatchObject({ email: "owner@example.com", role: "owner", methods: ["host"] });
     // Owner moved on (another owner bound): the same session is somebody who is no longer on this sandbox.
     await writeFile(join(root, ownerDocument.path), JSON.stringify({ email: "next@example.com" }));
-    await expect(authorizer.authorize(token, undefined)).rejects.toThrow("not authorized");
+    await expect(authorizer.authorize(token, undefined, LOOPBACK)).rejects.toThrow("not authorized");
     // Signing out everywhere re-keys the secret, which ends every host session with the rest.
     await writeFile(join(root, ownerDocument.path), JSON.stringify({ email: "owner@example.com" }));
     await sessions.rotate();
-    await expect(authorizer.authorize(token, undefined)).rejects.toThrow();
+    await expect(authorizer.authorize(token, undefined, LOOPBACK)).rejects.toThrow();
+});
+
+test("a host session stands on the loopback port alone: over the tunnel or any other way in, every door refuses it", async () => {
+    const root = await historyWith("owner@example.com");
+    const sessions = createSessions(join(root, "session-secret"));
+    const authorizer = createAuthorizer({
+        verify: async () => {
+            throw new Error("no Google here");
+        },
+        session: sessions.verify,
+        owner: fileOwnerStore(join(root, ownerDocument.path)),
+        members: noMembers,
+    });
+    const { token } = await mintHostSession({ historyRoot: root });
+    await expect(authorizer.authorizeOwner(token, "loopback")).resolves.toBeUndefined();
+    await expect(authorizer.authorizeRecovery(token, "loopback")).resolves.toMatchObject({ role: "owner" });
+    for (const listener of [undefined, "tunnel", "Loopback", ""]) {
+        await expect(authorizer.authorize(token, undefined, { listener })).rejects.toThrow("only on this machine's own loopback port");
+        await expect(authorizer.authorizeOwner(token, listener)).rejects.toThrow("only on this machine's own loopback port");
+        await expect(authorizer.authorizeRecovery(token, listener)).rejects.toThrow("only on this machine's own loopback port");
+        await expect(authorizer.authorizeRetirement(token, listener)).rejects.toThrow("only on this machine's own loopback port");
+    }
+    // A passkey added on the machine's own page keeps the session bound: the machine's word is still part of its proof.
+    const upgraded = await sessions.mint({ email: "owner@example.com", methods: ["host", "passkey"] });
+    await expect(authorizer.authorize(upgraded.token, undefined, { listener: "tunnel" })).rejects.toThrow("only on this machine's own loopback port");
+    // Any other session is unaffected by the way in.
+    const browser = await sessions.mint({ email: "owner@example.com", methods: ["google"] });
+    await expect(authorizer.authorize(browser.token, undefined)).resolves.toMatchObject({ methods: ["google"] });
+    expect(browser.expiresAt).toBeGreaterThan(Date.now() + 29 * 86_400_000);
 });

@@ -93,12 +93,14 @@ flowchart LR
   `found=claude,codex` (`with_found`, read from the last reading so a window is never kept waiting on the disk), so the
   new sandbox's Connect offers them. Nothing found leaves the computer
   except those ids.
-- **The OS shell.** Linux kiosk sessions use `src-tauri/src/shell/`: a small synchronous i3 IPC client over
-  `$SWAYSOCK` (fixed framing, bounded payloads, no extra runtime or crate) subscribes to sway’s bindings, workspace
-  focus and windows. Super+1–9 opens the account’s roster in order, Super+0 This computer; the visible face moves
+- **The OS shell.** Linux kiosk sessions use `src-tauri/src/shell/`: sway's IPC over `$SWAYSOCK`, through the
+  framing `ic`'s screen service shares (`_sandbox/ic/sway-ipc`), subscribes to sway’s bindings, workspace focus and
+  windows. Super+1–9 opens the account’s roster in order, Super+0 This computer; the visible face moves
   into that Space. Sandbox windows are matched only by sway’s `sandbox_engine=dev.intentic.sandbox` and the attested
-  `sandbox_app_id` (the security context’s app id), then the slug’s `ic sandbox list --json` platform id. Unknown ids stay where they opened, and sandbox fullscreen is undone
-  to keep the system label visible. Roster handovers also emit `desktop://roster` to the windows and rename occupied
+  `sandbox_app_id` (the security context’s app id), then the slug’s `ic sandbox list --json` platform id. Unknown ids stay where they opened. Holding those
+  windows to their rules (never fullscreen, closed once their sandbox may not draw) is `ic os screen serve`’s, which
+  hands out the sockets; This computer’s Sandbox windows card (`device/intenticOs/screen/SandboxWindowsCard.vue`,
+  `shell/screen.rs`) is where the owner lets each sandbox draw, and every one is off until they do. Roster handovers also emit `desktop://roster` to the windows and rename occupied
   Spaces. Super+Space uses `/chat?sandbox=<id>&shellChat=<nonce>` to reveal an empty draft and focus its message box;
   the query is consumed once and sends no message. External `intentic://shell?open=device` and
   `?open=sandbox&id=<id>&at=agents` links only navigate, and a sandbox must still belong to the stored roster.

@@ -7,6 +7,7 @@ import { isVaulted } from "@intentic/sandbox-contract/policy/capability-secrets"
 import { implement, ORPCError } from "@orpc/server";
 import { forkedExec } from "@intentic/base/git";
 import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
+import { listenerIn } from "../auth/proofs/listener.js";
 import { callingExtension } from "../auth/grants.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -202,7 +203,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
             // tier.
             if (input.kind === "extension" && services.auth !== undefined) {
                 try {
-                    await authorizeMaintainer(services.auth, bearerFrom(context.headers.get("authorization") ?? undefined));
+                    await authorizeMaintainer(services.auth, bearerFrom(context.headers.get("authorization") ?? undefined), listenerIn(context.headers));
                 } catch {
                     throw new ORPCError("FORBIDDEN", { message: "only a sandbox maintainer can install extensions" });
                 }

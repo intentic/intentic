@@ -1,3 +1,5 @@
+import { type Listener, LOOPBACK_LISTENER } from "./proofs/listener.js";
+
 // The daemon's one browser-origin allowlist: what CORS reflects and what a passkey may be bound to (auth/passkeys.ts).
 // An entry may name a family: `https://*.example.net` admits any single label in the wildcard position, for an editor
 // webview's per-session origin. Still an allowlist, not a wildcard: the scheme and suffix are pinned, one label floats.
@@ -41,8 +43,5 @@ nothing either way. */
 
 const DESKTOP_BUNDLE_ORIGINS: ReadonlySet<string> = new Set(["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]);
 
-// The value netd's listener header carries on a request that came in on the loopback port (netd-wire LOOPBACK_LISTENER).
-const LOOPBACK_LISTENER = "loopback";
-
-export const desktopBundleOnLoopback = (origin: string, listener: string | undefined): boolean =>
+export const desktopBundleOnLoopback = (origin: string, listener: Listener): boolean =>
     listener === LOOPBACK_LISTENER && DESKTOP_BUNDLE_ORIGINS.has(origin);

@@ -437,6 +437,18 @@
             "readFailure": "Nie udało się odczytać blokady ekranu. Otwórz tę stronę ponownie.",
             "changeFailure": "Nie udało się zmienić blokady ekranu. Spróbuj ponownie."
         },
+        "windows": {
+            "title": "Okna sandboxów",
+            "lead": "Pozwól sandboxowi otwierać własne okna na tym ekranie. Każde ma bursztynową ramkę z nazwą sandboxa i nigdy nie zakrywa całego ekranu. Każdy sandbox jest wyłączony, dopóki go nie włączysz.",
+            "paused": "Okna sandboxów są na chwilę wstrzymane i wrócą same.",
+            "none": "Na tym komputerze nie ma jeszcze sandboxów.",
+            "switch": "Pozwól {name} pokazywać okna na tym ekranie",
+            "drawing": "Może teraz pokazywać okna",
+            "allowed": "Dozwolone, pokazuje okna, gdy działa",
+            "off": "Wyłączone",
+            "readFailure": "Nie udało się odczytać, które sandboxy mogą pokazywać okna. Otwórz tę stronę ponownie.",
+            "changeFailure": "Nie udało się tego zmienić. Spróbuj ponownie."
+        },
         "thisComputer": "Ten komputer",
         "network": {
             "title": "Sieć",

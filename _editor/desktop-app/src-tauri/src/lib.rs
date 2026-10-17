@@ -298,6 +298,8 @@ pub fn run() {
             shell::lock::os_lock_set_pin,
             shell::lock::os_lock_off,
             shell::lock::os_lock_idle,
+            shell::screen::os_screen_status,
+            shell::screen::os_screen_allow,
             // Intentic OS: this computer's network, sound, screens, keyboard and drives (os_settings.rs).
             os_settings::os_network_status,
             os_settings::os_wifi_list,

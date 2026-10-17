@@ -132,6 +132,8 @@ const COMMANDS: &[&str] = &[
     "os_lock_set_pin",
     "os_lock_off",
     "os_lock_idle",
+    "os_screen_status",
+    "os_screen_allow",
     // Intentic OS: this computer's network, sound, screens, keyboard and drives (os_settings.rs).
     "os_network_status",
     "os_wifi_list",

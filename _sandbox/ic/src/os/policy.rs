@@ -1,3 +1,5 @@
+#[cfg(target_os = "linux")]
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -280,31 +282,40 @@ fn screen_slug(argv: &[String]) -> Option<String> {
     })
 }
 
+/// The sandbox's screen folder, as its run line mounts it: read-only, so the sandbox can reach a socket the screen
+/// service puts there and never write into the session's runtime folder (connecting to a socket is no write to the
+/// mount). Pure.
+#[cfg(target_os = "linux")]
+fn screen_volume(directory: &Path) -> [String; 2] {
+    [
+        "-v".to_string(),
+        format!("{}:/run/intentic/screen:ro", directory.display()),
+    ]
+}
+
+/// On the desktop edition every sandbox's run line carries its screen folder, empty until its owner lets it draw
+/// (screen.rs): a sandbox let draw later gets its socket within seconds, with no recreate.
 #[cfg(target_os = "linux")]
 fn screen_mount(argv: Vec<String>, paths: &Paths) -> Vec<String> {
-    if !super::screen::desktop_edition(paths) {
+    if !super::has_screen(paths) {
         return argv;
     }
     let Some(slug) = screen_slug(&argv) else {
         return argv;
     };
-    if options(&argv).iter().any(|(name, value)| {
-        name == "runtime"
-            && value
-                .as_deref()
-                .is_some_and(|runtime| runtime.starts_with("kata"))
-    }) {
-        crate::ui::warn("This sandbox cannot show windows on this computer's screen: a Wayland socket cannot cross a Kata VM boundary (waypipe over vsock is not implemented).");
+    let runtime = options(&argv)
+        .into_iter()
+        .find(|(name, _)| name == "runtime")
+        .and_then(|(_, value)| value);
+    if runtime.is_some_and(|runtime| !super::screen::shares_sockets(&runtime)) {
+        // Said only where the owner asked for windows: nobody else expects any.
+        if super::screen::allowed(paths).contains(&slug) {
+            crate::ui::warn("This sandbox cannot show windows on this computer's screen: a Wayland socket cannot cross a Kata VM boundary (waypipe over vsock is not implemented).");
+        }
         return argv;
     }
     match super::screen::prepare_directory(paths, &slug) {
-        Ok(directory) => crate::sandbox::labels::into_run(
-            &argv,
-            &[
-                "-v".to_string(),
-                format!("{}:/run/intentic/screen", directory.display()),
-            ],
-        ),
+        Ok(directory) => crate::sandbox::labels::into_run(&argv, &screen_volume(&directory)),
         Err(err) => {
             crate::ui::warn(&format!(
                 "This sandbox cannot show windows on this computer's screen: {}",
@@ -529,6 +540,36 @@ fn mount_source(spec: &str) -> Option<&str> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_screen_folder_is_mounted_read_only() {
+        assert_eq!(
+            screen_volume(Path::new("/run/user/1990/intentic/screen/work")),
+            [
+                "-v".to_string(),
+                "/run/user/1990/intentic/screen/work:/run/intentic/screen:ro".to_string()
+            ]
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_machine_without_a_screen_or_a_line_without_a_sandbox_mounts_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::under(dir.path());
+        std::fs::create_dir_all(paths.release().parent().unwrap()).unwrap();
+        std::fs::write(paths.release(), r#"{"edition":"server"}"#).unwrap();
+        let line = argv("run --label dev.intentic.sandbox=work img");
+        assert_eq!(screen_mount(line.clone(), &paths), line);
+        std::fs::write(paths.release(), r#"{"edition":"desktop"}"#).unwrap();
+        for line in [
+            argv("run img"),
+            argv("run --runtime=kata --label dev.intentic.sandbox=work img"),
+        ] {
+            assert_eq!(screen_mount(line.clone(), &paths), line);
+        }
+    }
 
     #[cfg(target_os = "linux")]
     #[test]

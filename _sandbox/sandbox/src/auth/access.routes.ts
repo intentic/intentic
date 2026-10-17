@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { bearerFrom, ForbiddenError } from "./auth.js";
+import { listenerOf } from "./proofs/listener.js";
 import { ownerDenied } from "./owner-gates.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
 
@@ -45,7 +46,7 @@ export const createAccessRoutes = (services: AccessRoutesDeps) => ({
     disable: async (c: Context<AppEnv>): Promise<Response> => {
         if (services.auth !== undefined) {
             try {
-                await services.auth.authorizeRetirement(bearerFrom(c.req.header("authorization")));
+                await services.auth.authorizeRetirement(bearerFrom(c.req.header("authorization")), listenerOf((name) => c.req.header(name)));
             } catch (error) {
                 return error instanceof ForbiddenError ? c.json({ error: error.message }, 403) : c.json({ error: "unauthorized" }, 401);
             }

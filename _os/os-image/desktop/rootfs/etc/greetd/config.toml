@@ -1,6 +1,6 @@
 # The intentic user is logged in once at boot (initial_session); if that session ever ends, greetd shows its plain
-# text login on the same terminal rather than an empty screen. A configured screen PIN is now also this user's local
-# login password; with screen locking off the password is locked. The initial automatic login is unchanged.
+# text login on the same terminal rather than an empty screen. That user's password stays locked: the screen PIN is the
+# lock screen's own (ic os lock, /etc/pam.d/swaylock), and a session started with a PIN set begins locked.
 [terminal]
 vt = 1
 

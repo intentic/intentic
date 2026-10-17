@@ -1,6 +1,7 @@
 //! Intentic OS's desktop shell. The compositor integration runs only in the Linux kiosk session.
 
 pub mod lock;
+pub mod screen;
 
 #[cfg(target_os = "linux")]
 mod ipc;

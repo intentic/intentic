@@ -50,8 +50,9 @@ machine that is not Intentic OS (no `/usr/lib/intentic-os/release.json`).
 | --- | --- | --- |
 | `ic os bar` | Desktop system bar: an i3bar JSON stream with navigation-only click actions | no |
 | `ic os lock status --json` | Desktop screen lock: `{ "enabled": bool, "idleMinutes": number }` | no |
-| `ic os lock set-pin` | Set or change a screen PIN (4–12 digits on stdin); enables the idle lock | narrow sudo helper |
-| `ic os lock off` | Disable the idle lock and lock the local password again | narrow sudo helper |
+| `ic os lock set-pin` | Set or change the screen PIN (4–12 digits on stdin, kept as a salted hash); turns the lock on | no |
+| `ic os lock off` | Turn the lock off, forget the PIN, and open a lock screen that is up | no |
+| `ic os lock check` | Exit 0 when stdin is the screen PIN: what `/etc/pam.d/swaylock` asks, with a lockout after five misses | no |
 | `ic os lock idle <minutes>` | Set the idle delay, 1–240 minutes; does not enable a lock without a PIN | no |
 | `ic os status --json` | One line of JSON, the shape below | no (bootc status through `sudo -n`) |
 | `ic os update --check --json` | Asks the registry whether a newer image is out: `{"available", "version", "digest"}` | sudo |
@@ -64,8 +65,9 @@ machine that is not Intentic OS (no `/usr/lib/intentic-os/release.json`).
 | `ic os record` | Writes which sandboxes run now to `/var/lib/intentic-os/expected-running.json` | docker |
 | `ic os health [--wait <s>]` | The boot's health verdict; exit 0 when healthy (greenboot calls it) | docker |
 | `ic os pair` | First boot: waits for a setup code on the console and on a LAN page, then `ic sandbox connect` | docker |
-| `ic os screen serve` | Desktop sway session: serves restricted, labelled Wayland sockets for running sandboxes | intentic + docker |
-| `ic os screen status --json` | `{"available":bool,"reason":string\|null,"sandboxes":[{"slug","socket":bool}]}` | no |
+| `ic os screen serve` | Desktop sway session: serves restricted, labelled Wayland sockets for the running sandboxes the owner allowed, and holds their windows to the rules | intentic + docker |
+| `ic os screen status --json` | `{"available":bool,"reason":string\|null,"sandboxes":[{"slug","allowed":bool,"socket":bool}]}`; exit 4 on the server edition | no |
+| `ic os screen allow <slug>` / `deny <slug>` | Let a sandbox show windows on the screen, or stop it (closing any it has open); none may until allowed | no |
 | `ic os network status --json` | How the machine is online: `{"connected", "kind": "wifi"\|"ethernet"\|"none", "name", "signal"}` | no |
 | `ic os network wifi list --json` | Scans, then the networks in reach: `{"adapter", "enabled", "networks": [{"ssid", "signal", "secured", "known", "active"}]}` | polkit rule |
 | `ic os network wifi connect [--password-stdin] -- <ssid>` | Joins a network; a password only on stdin. Exit 5 when it needs one, or refused the one given | polkit rule |
@@ -192,12 +194,21 @@ Defaults ship in `/usr/lib/intentic-os/os.json`; the owner's own values in `/etc
 
 ### Sandbox windows
 
-On the desktop edition, the sway session keeps `ic os screen serve` running. Every running runc sandbox gets its
-own security-context-v1 listener at `/run/user/1990/intentic/screen/<slug>/wayland-0`, under directories owned by
-`intentic` with mode 0700. The host policy mounts that **directory** at `/run/intentic/screen` before Docker starts
-the container, so a sway restart can replace the socket without replacing the container. Existing sandboxes receive
-the mount at their next recreate. Server editions and other operating systems receive no mount. Kata containers
-receive no mount and a warning: Unix sockets cannot cross their VM boundary; waypipe over vsock is future work.
+On the desktop edition, the sway session keeps `ic os screen serve` running. No sandbox may draw until the owner
+allows it, in This computer's Sandbox windows card or with `ic os screen allow <slug>`; the list is
+`/var/lib/intentic-os/screen-allowed.json`. Each running runc sandbox the owner allowed gets its own
+security-context-v1 listener at `/run/user/1990/intentic/screen/<slug>/wayland-0`, under directories owned by
+`intentic` with mode 0700. The host policy mounts every sandbox's **directory** read-only at `/run/intentic/screen`
+when Docker starts the container: empty until its sandbox is allowed, so allowing or denying one takes effect within
+seconds without a recreate, a sway restart can replace the socket without replacing the container, and a sandbox can
+never write into the session's runtime folder. Server editions and other operating systems receive no mount. Kata
+containers receive no mount (and a warning, if their owner allowed them): Unix sockets cannot cross their VM
+boundary; waypipe over vsock is future work.
+
+The service holds every sandbox window to its rules itself, rather than leaving them to the app on screen: it watches
+sway's window events and takes back fullscreen at once, closes the windows of a sandbox whose owner has stopped letting
+it draw, closes every socket while it cannot watch sway, and refuses to serve on a sway older than 1.11, which could not
+mark the windows.
 
 Inside the sandbox, `on-screen <command>` runs a native Wayland app on the owner's screen. Its amber titlebar names
 the sandbox using compositor-supplied metadata, and it starts tiled. The sandbox's desktop tools can still see only
@@ -215,8 +226,10 @@ lists the protocols sway withholds and the remaining limits.
 | `/var/lib/intentic-os/expected-running.json` | `{ "recordedAt": <ms>, "slugs": [...] }` |
 | `/run/intentic-os/health.json` | `{ "verdict": "green"\|"red", "failed": [...], "at": <ms> }` |
 | `/run/user/1990/intentic/screen/<slug>/wayland-0` | The sandbox's security-context Wayland listener; its directory is bind-mounted |
-| `/etc/sudoers.d/intentic-os` | The `intentic` user may run `bootc`, `systemctl reboot` and the narrow `lock-pin` helper without a password |
+| `/etc/sudoers.d/intentic-os` | The `intentic` user may run `bootc` and `systemctl reboot` without a password |
 | `/etc/intentic/sway.d/60-lock.conf` | Desktop only: screen-lock enabled state, idle minutes and the user-service reload command; no PIN |
-| `/etc/ssh/sshd_config.d/40-intentic.conf` | The local PIN can never authenticate an SSH password or keyboard-interactive login |
+| `/etc/ssh/sshd_config.d/40-intentic.conf` | The `intentic` user signs in over SSH with a key only, never a password or keyboard-interactive login |
+| `/var/lib/intentic-os/screen-lock/` | Desktop only, the `intentic` user's alone (0700): the screen PIN's salted hash (`pin`) and its misses (`attempts.json`) |
+| `/etc/pam.d/swaylock` | Desktop only: the lock screen takes the screen PIN through `ic os lock check`, never an account password |
 | `/usr/share/polkit-1/rules.d/50-intentic.rules` | The `intentic` user may change Wi-Fi and open, close and power off removable drives without a password |
 | `/etc/intentic/sway.d/40-keyboard.conf`, `50-display.conf` | The keyboard layout and each screen's mode and scale, written by `ic os keyboard\|display set` |

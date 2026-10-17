@@ -107,6 +107,8 @@
         "allow-os-lock-set-pin",
         "allow-os-lock-off",
         "allow-os-lock-idle",
+        "allow-os-screen-status",
+        "allow-os-screen-allow",
         "allow-os-network-status",
         "allow-os-wifi-list",
         "allow-os-wifi-connect",

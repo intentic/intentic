@@ -56,14 +56,19 @@ flowchart LR
   quietly lose their block. Clicks open This computer or the first sandbox needing attention on its Agents board
   through a navigation-only `intentic://shell` link. Mako displays the app’s existing notifications and their default
   click action, at the top right below the bar.
-- **Screen locking is optional until a PIN is set.** This computer’s Security card calls `ic os lock`: a PIN of
-  4–12 digits goes on stdin to the narrow root helper, which changes only `intentic`’s local password. Turning
-  locking off locks that password again. The PIN is never kept in the settings file. `60-lock.conf` in the owner’s
-  sway directory records only the enabled state and idle minutes (1–240, initially 5); an `exec_always` restarts
-  one systemd user service, so reloads cannot stack swayidle processes. swayidle locks with swaylock before sleep
-  and after the chosen idle delay. Password and keyboard-interactive SSH login for `intentic` are disabled: the
-  PIN is local only. greetd’s initial automatic login stays the same; its agreety fallback now accepts the PIN if
-  the session ends (with locking off, that account’s password remains locked).
+- **Screen locking is optional until a PIN is set.** This computer’s Security card calls `ic os lock`. A PIN of
+  4–12 digits goes on stdin and is kept as a salted PBKDF2 hash in `/var/lib/intentic-os/screen-lock/`, which only
+  the `intentic` user can read; it is never an account password and never in the settings file. The lock screen
+  checks it through `/etc/pam.d/swaylock`, whose one line runs `ic os lock check` with pam_exec: four misses in a row
+  are free, and the fifth and each one after start a wait (30 s, doubling up to an hour) during which no PIN is checked. The
+  `intentic` password stays locked, so the PIN opens no console login, no agreety prompt and no SSH session.
+  `60-lock.conf` in the owner’s sway directory records only the enabled state and idle minutes (1–240, initially 5).
+  Its `exec_always` restarts one systemd user service, so reloads cannot stack swayidle processes, and while a PIN is
+  set its `exec` locks the screen as the session starts: restarting the machine is no way past the PIN.
+  `screen-lock` locks only while a PIN is stored, so a missing PIN can never lock the screen shut; swayidle runs it
+  before sleep and after the idle delay. Turning locking off forgets the PIN and opens a lock screen that is up.
+  greetd’s initial automatic login stays the same. If that session ends, its agreety fallback has no password that
+  works, and restarting the machine starts a session that is locked again.
 
 ## Sandbox window boundary
 
@@ -71,7 +76,8 @@ The desktop sway include `desktop/rootfs/usr/share/intentic-os/sway/config.d/50-
 `/usr/libexec/intentic-os/screen-serve`. Its restart loop inherits the session's display and stops when that sway
 IPC socket no longer answers, including a stale file left after a crash. This avoids a user unit importing a stale
 display environment; `ic` also holds a file lock so duplicate starts cannot replace a live server's sockets.
-The service polls Docker every three seconds, identifies
+The service serves only the sandboxes the owner allowed (`/var/lib/intentic-os/screen-allowed.json`, empty on a new
+machine). It polls Docker every three seconds, identifies
 each running primary container by its full container id, and commits a security context with engine
 `dev.intentic.sandbox`, app id `<slug>` and instance id `<container id>`. Container replacement, disappearance of a
 socket file, and a restarted compositor all create a new listener. Docker listing failures revoke listeners until
@@ -79,6 +85,12 @@ Docker answers again. A close socketpair held by the service revokes **new conne
 protocol deliberately leaves clients already connected alive. Stopping their container ends those clients.
 The listener binds through a short `/proc/self/fd/<directory fd>` path so even the longest valid sandbox slug fits
 Linux's Unix socket address limit; the socket file still lives in the sandbox's own directory.
+
+Before it serves, the service subscribes to sway's window events (through `_sandbox/ic/sway-ipc`, the IPC client the
+desktop app's shell shares). Every sandbox window that goes fullscreen is taken out of it at once, every window of a
+sandbox the owner has not allowed (or no longer allows) is closed, and each poll squares the whole tree with the same
+rules. If that subscription falls, every socket closes in the same moment and none opens until it stands again. The
+service also refuses to start on a sway older than 1.11, which cannot mark sandbox windows.
 
 As checked on 2026-10-16, [Fedora 44 ships sway 1.11-3.fc44](https://packages.fedoraproject.org/pkgs/sway/sway/fedora-44.html).
 Its [package spec](https://src.fedoraproject.org/rpms/sway/raw/f44/f/sway.spec) uses the upstream 1.11 source with no
@@ -104,14 +116,15 @@ Sway separately exposes `xwayland_shell_v1` only to its own Xwayland server. Nor
 clipboard interactions remain available to sandbox windows. Security-context metadata does not make a privileged
 runc container safe from the host: that container already has the host powers described in the OS isolation policy.
 The title is a compositor decoration using `%sandbox_app_id`, with Pango markup enabled and an amber frame; clients
-cannot supply that identity through their own app id or title. The palette applies to visible server decorations;
-the kiosk's normal borderless windows remain borderless.
+cannot supply that identity through their own app id or title. The palette applies to visible server decorations,
+and the kiosk config gives no other window one (`default_border none`, `default_floating_border none`), so amber is
+a sandbox's alone. `no_focus` keeps a new sandbox window from taking the keyboard from what someone is typing into.
 
 No extra desktop package is needed beyond sway 1.11 or later. The `ic` client uses Wayland's Rust backend, without a
 runtime dependency on libwayland. The sandbox image's Debian trixie repositories have
 [no xwayland-satellite package](https://packages.debian.org/search?keywords=xwayland-satellite&searchon=names&suite=trixie&section=all),
 so `on-screen --x11` reports that limit; X11-only apps use the sandbox's virtual desktop. Apps must supply their own
-native Wayland toolkit support. Screen sockets are offered only to runc containers, on their next recreate. A full
+native Wayland toolkit support. Screen sockets are offered only to runc containers whose owner allowed them. A full
 desktop image boot must still check physical GPU rendering, Fedora SELinux access to the bind-mounted socket, and
 the shell's workspace/fullscreen handling together.
 

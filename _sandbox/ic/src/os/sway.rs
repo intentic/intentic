@@ -30,7 +30,11 @@ pub fn settings_dir(paths: &Paths) -> PathBuf {
 
 /// Stop with exit code 4 unless this machine is the edition with a screen.
 pub fn require_screen() -> Result<()> {
-    let release = super::release(&Paths::here())?;
+    let paths = Paths::here();
+    if super::has_screen(&paths) {
+        return Ok(());
+    }
+    let release = super::release(&paths)?;
     let edition = release["edition"].as_str().unwrap_or_default();
     if edition != "desktop" {
         tool::exit_with(

@@ -15,7 +15,7 @@ ARG REPOSITORY=ghcr.io/intentic/os-desktop
 COPY desktop/rpm/ /tmp/intentic-rpm/
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
     dnf -y --setopt=keepcache=1 install \
-        sway swaybg greetd xdg-desktop-portal-wlr mako swayidle swaylock python3 \
+        sway swaybg greetd xdg-desktop-portal-wlr mako swayidle swaylock \
         chromium \
         google-noto-sans-fonts google-noto-emoji-fonts \
         mesa-dri-drivers mesa-vulkan-drivers \

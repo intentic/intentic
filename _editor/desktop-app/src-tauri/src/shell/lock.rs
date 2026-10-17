@@ -1,6 +1,6 @@
-//! The local Security card, through the OS's own `ic`. Its PIN is fed on stdin, never argv or a log.
+//! The local Security card, through the OS's own `ic` (os.rs `ic_os_command`). Its PIN is fed on stdin, never argv
+//! or a log.
 
-use std::process::Command;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -12,9 +12,16 @@ fn valid_pin(pin: &str) -> bool {
     (4..=12).contains(&pin.len()) && pin.bytes().all(|byte| byte.is_ascii_digit())
 }
 
+fn lock_command(args: &[&str]) -> Result<std::process::Command, String> {
+    let args: Vec<&str> = ["os", "lock"]
+        .into_iter()
+        .chain(args.iter().copied())
+        .collect();
+    crate::os::ic_os_command(&crate::os::Image::installed(), &args)
+}
+
 fn read() -> Result<Value, String> {
-    let mut command = Command::new("/usr/bin/ic");
-    command.args(["os", "lock", "status", "--json"]);
+    let command = lock_command(&["status", "--json"])?;
     let ran = intentic_bounded::capture(
         command,
         Duration::from_secs(10),
@@ -41,9 +48,7 @@ fn change(args: &[&str], pin: Option<crate::keyring::Secret>) -> Result<Value, S
     let _guard = CHANGING
         .try_lock()
         .map_err(|_| "The screen lock is already changing. Try again in a moment.")?;
-    let mut command = Command::new("/usr/bin/ic");
-    command.args(["os", "lock"]).args(args);
-    command.envs(crate::commands::app_env(crate::commands::VERSION));
+    let command = lock_command(args)?;
     let (code, timed_out) = if let Some(pin) = pin {
         let ran = crate::keyring::capture_fed(command, &pin, Duration::from_secs(25))
             .map_err(|_| "The screen lock could not be changed.")?;

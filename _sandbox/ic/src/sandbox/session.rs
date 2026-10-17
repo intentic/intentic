@@ -185,8 +185,9 @@ pub fn run_json(slug: &str) -> Result<()> {
     Ok(())
 }
 
-/* THE CACHE: one file per sandbox, this user's alone. A session lasts thirty days, and minting one is a `docker exec` of
-a second or so, which `ic sandbox attention` would otherwise pay for every sandbox on every round. */
+/* THE CACHE: one file per sandbox, this user's alone. A session lasts a week, the daemon takes it only on the loopback
+port (host-session.ts), and minting one is a `docker exec` of a second or so, which `ic sandbox attention` would
+otherwise pay for every sandbox on every round. */
 
 fn cache_dir() -> PathBuf {
     intentic_home().join("sessions")

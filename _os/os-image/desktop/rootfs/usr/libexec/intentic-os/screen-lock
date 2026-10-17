@@ -1,0 +1,5 @@
+#!/bin/sh
+# The lock screen, only while a screen PIN is set (`ic os lock set-pin`): with none, swaylock would lock the screen with
+# nothing that opens it. The session config starts this once at login, and swayidle after the idle time.
+[ -s /var/lib/intentic-os/screen-lock/pin ] || exit 0
+exec swaylock -f --config /usr/share/intentic-os/sway/lock.conf

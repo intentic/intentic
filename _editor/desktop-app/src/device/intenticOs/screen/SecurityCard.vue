@@ -2,7 +2,7 @@
 import { Button, Notice, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, inject, onMounted, ref } from "vue";
-import type { OsLockStatus } from "../../osSettings";
+import type { OsLockStatus } from "../../../osSettings";
 import { SECURITY_ACTIONS, securityActions } from "./security";
 
 const t = useT();

@@ -5,6 +5,7 @@ import type { Config } from "../env.config.js";
 import type { Logger } from "pino";
 import {
     type AuthorizeOptions,
+    type Authorizer,
     createAuthorizer,
     createGoogleVerifier,
     identityAssertionVerifier,
@@ -66,9 +67,9 @@ export interface AuthSlice {
               readonly authorize: (bearer: string, firstBind: string | undefined, options?: AuthorizeOptions) => Promise<ProvenCaller>;
               // The roster and policy for a proof the daemon verified itself: a passkey assertion, a recovery code.
               readonly authorizeProven: (proof: Proof) => Promise<ProvenCaller>;
-              readonly authorizeOwner: (bearer: string) => Promise<void>;
-              readonly authorizeRetirement: (bearer: string) => Promise<void>;
-              readonly authorizeRecovery: (bearer: string) => Promise<ProvenCaller>;
+              readonly authorizeOwner: Authorizer["authorizeOwner"];
+              readonly authorizeRetirement: Authorizer["authorizeRetirement"];
+              readonly authorizeRecovery: Authorizer["authorizeRecovery"];
               readonly mintSession: (proof: Proof) => Promise<MintedSession>;
               // Re-keys the session signer, signing every browser out at once; backs 'sign out everywhere'.
               readonly rotateSessions: () => Promise<void>;

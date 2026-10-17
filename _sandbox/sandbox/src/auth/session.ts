@@ -10,7 +10,12 @@ import type { Proof } from "./auth.js";
 // Owner/member enforcement stays per-request in auth.ts, so a live session cannot outlive a revoked grant; the session
 // carries HOW it was proven (`amr`) so the require-passkey policy is re-read per request too.
 
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const SESSION_TTL_MS = 30 * DAY_MS;
+// A session the machine minted (`host`, host/host-session.ts) is a credential kept on that machine's disk for the app
+// and `ic`, and stands on its loopback port alone (proofs/proof-methods.ts). A week bounds what a copy of it is worth;
+// both its keepers renew a day or an hour ahead.
+const HOST_SESSION_TTL_MS = 7 * DAY_MS;
 // Pins the issuer so no other JWT sharing this secret can pass as a session, and vice versa.
 const ISSUER = "intentic-sandbox-session";
 const SECRET_BYTES = 32;
@@ -59,7 +64,7 @@ export const createSessions = (secretPath: string): Sessions => {
     };
     return {
         mint: async (proof) => {
-            const expiresAt = Date.now() + SESSION_TTL_MS;
+            const expiresAt = Date.now() + (proof.methods.includes("host") ? HOST_SESSION_TTL_MS : SESSION_TTL_MS);
             const token = await new SignJWT({
                 ...(proof.name !== undefined ? { name: proof.name } : {}),
                 ...(proof.picture !== undefined ? { picture: proof.picture } : {}),

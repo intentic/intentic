@@ -437,6 +437,18 @@
             "readFailure": "Could not read the screen lock. Try opening this page again.",
             "changeFailure": "Could not change the screen lock. Try again."
         },
+        "windows": {
+            "title": "Sandbox windows",
+            "lead": "Let a sandbox open its own windows on this screen. Each one has an amber frame with the sandbox's name and never covers the whole screen. Every sandbox is off until you turn it on.",
+            "paused": "Sandbox windows are paused for a moment and come back on their own.",
+            "none": "There are no sandboxes on this computer yet.",
+            "switch": "Let {name} show windows on this screen",
+            "drawing": "Can show windows now",
+            "allowed": "Allowed, shows windows while it runs",
+            "off": "Off",
+            "readFailure": "Could not read which sandboxes may show windows. Try opening this page again.",
+            "changeFailure": "Could not change that. Try again."
+        },
         "thisComputer": "This computer",
         "network": {
             "title": "Network",

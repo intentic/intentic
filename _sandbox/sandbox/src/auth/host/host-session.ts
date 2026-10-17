@@ -24,9 +24,11 @@ TRUST MODEL, spelled out because this is the one proof the daemon takes without 
   (workload/domain) runs as another user and cannot read either file.
 - It mints for the BOUND owner only, and refuses while nobody is bound: the first binding still takes a real sign-in
   with the connect token, so possession of the machine never decides who owns a sandbox it holds.
-- The session is an ordinary daemon session (session.ts), proven by `host`: every request is still authorized per
-  request against the owner file and the roster (auth.ts), so moving the owner or signing out everywhere (which re-keys
-  the secret) ends it like any other.
+- The session is a daemon session (session.ts), proven by `host`: every request is still authorized per request against
+  the owner file and the roster (auth.ts), so moving the owner or signing out everywhere (which re-keys the secret) ends
+  it like any other. Two things set it apart, since its token sits on the machine's disk (ic's and the app's caches):
+  it is accepted only on a request netd marked as arriving on the loopback port, never over the tunnel
+  (../proofs/proof-methods.ts `BOUND_TO_LISTENER`), and it lasts a week rather than a month.
 - Each mint is recorded in the audit trail as a sign-in by `host`. The trail has one writer, the daemon, so this leaves
   a note in `audit/inbox/` that the daemon's audit tick records (`drainAuditInbox`) and deletes. */
 

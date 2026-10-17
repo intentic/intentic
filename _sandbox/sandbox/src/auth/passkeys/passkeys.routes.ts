@@ -11,6 +11,7 @@ import type { z } from "zod";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
 import { bearerFrom, ForbiddenError, OWNER_UNREADABLE, OwnerUnreadableError, type Proof } from "../auth.js";
+import { listenerOf } from "../proofs/listener.js";
 import { ownershipDenied } from "../owner-gates.js";
 import { mintRecoveryCodes, PasskeyError, type StoredCredential, summaryOf } from "./passkey-store.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
@@ -188,7 +189,7 @@ const createPasskeyRoutes = (services: PasskeyRoutesDeps) => {
                 return c.json({ error: "a recovery code is required" }, 400);
             }
             try {
-                const caller = await services.auth.authorizeRecovery(bearerFrom(c.req.header("authorization")));
+                const caller = await services.auth.authorizeRecovery(bearerFrom(c.req.header("authorization")), listenerOf((name) => c.req.header(name)));
                 noteAudit({ actor: { kind: "member", email: caller.email.toLowerCase(), role: caller.role }, details: { method: "recovery" } });
                 if (!(await services.passkeyCeremonies.spendRecoveryCode(request.code))) {
                     return c.json({ error: "that recovery code is not one of yours, or was already used" }, 403);

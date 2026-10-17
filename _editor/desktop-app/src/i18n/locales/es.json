@@ -437,6 +437,18 @@
             "readFailure": "No se pudo consultar el bloqueo. Vuelve a abrir esta página.",
             "changeFailure": "No se pudo cambiar el bloqueo. Inténtalo de nuevo."
         },
+        "windows": {
+            "title": "Ventanas de sandboxes",
+            "lead": "Permite que un sandbox abra sus propias ventanas en esta pantalla. Cada una lleva un marco ámbar con el nombre del sandbox y nunca ocupa toda la pantalla. Todos los sandboxes están desactivados hasta que tú los actives.",
+            "paused": "Las ventanas de sandboxes están en pausa un momento y vuelven solas.",
+            "none": "Todavía no hay sandboxes en este ordenador.",
+            "switch": "Permitir que {name} muestre ventanas en esta pantalla",
+            "drawing": "Puede mostrar ventanas ahora",
+            "allowed": "Permitido, muestra ventanas mientras se ejecuta",
+            "off": "Desactivado",
+            "readFailure": "No se pudo consultar qué sandboxes pueden mostrar ventanas. Vuelve a abrir esta página.",
+            "changeFailure": "No se pudo cambiar. Inténtalo de nuevo."
+        },
         "thisComputer": "Este ordenador",
         "network": {
             "title": "Red",

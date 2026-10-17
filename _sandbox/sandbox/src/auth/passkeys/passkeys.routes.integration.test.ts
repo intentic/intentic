@@ -261,3 +261,15 @@ test("the middleware passes the enrolment allowance to authorize only on the two
     await json(app, "GET", "/settings");
     expect(seen).toEqual([true, false, false]);
 });
+
+test("the middleware hands authorize the listener netd marked, for a proof that stands on one way in", async () => {
+    const seen: (string | undefined)[] = [];
+    const authorize = jest.fn(async (_bearer: string, _first: string | undefined, options?: { listener?: string | undefined }) => {
+        seen.push(options?.listener);
+        return proven(OWNER, "owner");
+    });
+    const app = createApp(services({ auth: { authorize, authorizeOwner: async () => {} } }));
+    await json(app, "GET", "/settings", undefined, { "x-intentic-listener": "loopback" });
+    await json(app, "GET", "/settings");
+    expect(seen).toEqual(["loopback", undefined]);
+});

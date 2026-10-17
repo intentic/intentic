@@ -1,5 +1,5 @@
 import type { InjectionKey } from "vue";
-import { osLockIdle, osLockOff, osLockSetPin, osLockStatus, type OsLockStatus } from "../../osSettings";
+import { osLockIdle, osLockOff, osLockSetPin, osLockStatus, type OsLockStatus } from "../../../osSettings";
 
 export interface SecurityActions {
     readonly status: () => Promise<OsLockStatus | null>;
