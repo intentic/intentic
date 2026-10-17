@@ -180,3 +180,22 @@ test("staging one file under a hidden dir does not dissolve the scratch exemptio
     const venvScratch = after.filter((entry) => entry.path.startsWith(".venv"));
     expect(venvScratch.length).toBeGreaterThan(0);
 });
+
+// A hidden directory the project already versions (`.docker/` here, on no keep-list) is the project's: a new file in it
+// is listed one by one like any loose file, and is work. Taking its ancestor for scratch would also exclude the tracked
+// edit beside it from a stage-everything, since an exclude pathspec drops the whole directory from `add -A`.
+test("a new file in a hidden directory the project already tracks is work, and its tracked edits stage too", async () => {
+    const dir = await tempRepo();
+    await put(dir, ".docker/compose.yml", "services: {}\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "docker");
+    await put(dir, ".docker/compose.yml", "services: { web: {} }\n");
+    await put(dir, ".docker/Dockerfile", "FROM node\n");
+    // A wholly new directory inside it lists collapsed, and is judged inside: still the project's.
+    await put(dir, ".docker/overrides/dev.yml", "services: {}\n");
+
+    const scratch = await scratchOf(dir, PROJECT);
+    expect(scratch).toEqual([]);
+    await withScratchExcluded(scratch, (pathspecArgs) => sh(dir, "add", "-A", ...pathspecArgs));
+    expect(await sh(dir, "status", "--porcelain")).toBe(["A  .docker/Dockerfile", "M  .docker/compose.yml", "A  .docker/overrides/dev.yml"].join("\n"));
+});

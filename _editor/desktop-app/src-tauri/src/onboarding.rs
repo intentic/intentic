@@ -1917,13 +1917,12 @@ pub fn prefetch_display(
 mod tests {
     use super::*;
 
+    /// Only the waits that end the Windows session park the setup; how long a park waits is
+    /// `a_park_waits_for_its_restart_until_the_launch_it_made_marks_it`.
     #[test]
-    fn restart_and_sign_out_park_until_the_resume_launch() {
-        for wait in ["restart", "signOut"] {
-            assert!(parks_setup(wait));
-            assert!(park_waits(r#"{"at":1791000000}"#));
-            assert!(!park_waits(r#"{"at":1791000000,"resumed":true}"#));
-        }
+    fn only_a_restart_or_a_sign_out_parks_the_setup() {
+        assert!(parks_setup("restart"));
+        assert!(parks_setup("signOut"));
         assert!(!parks_setup("admin"));
         assert!(!parks_setup("user"));
     }

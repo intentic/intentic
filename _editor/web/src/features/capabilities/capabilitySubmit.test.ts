@@ -279,6 +279,14 @@ describe(`GPU host preflight before saving`, () => {
         expect(capture).toHaveBeenCalledWith(`gpu_capability_blocked`, { hosted: false });
         expect(form.failure.value).toEqual({ tone: `danger`, title: `Could not add the capability.`, detail: `host GPU driver missing` });
     });
+    it(`saves when the host could not be asked, leaving the GPU to the launch's own preflight`, async () => {
+        const preflight = jest.fn(async () => ({ checked: false, ok: false, message: `not connected as a device` }));
+        const capture = jest.fn();
+        const form = submitOn(catalogEntry(`docker`), { state: `active` }, undefined, true, { preflight, capture });
+        form.form.values[`gpu`] = `on`;
+        await form.submit();
+        expect([form.add.mock.calls.length, capture.mock.calls.length, form.failure.value]).toEqual([1, 0, undefined]);
+    });
     it(`saves only after the host proves GPU access`, async () => {
         const preflight = jest.fn(async () => ({ checked: true, ok: true, message: `GPU answers` }));
         const capture = jest.fn();

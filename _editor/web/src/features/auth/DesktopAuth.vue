@@ -66,6 +66,9 @@ const googleButton = ref<HTMLElement>();
 // A press on Google's button that came back with no answer (googlePress.ts), told apart here as on /login: this page is
 // the same door, and a pop-up nothing answers leaves it looking just as dead.
 const press = useGooglePress(googleButton, `desktop-auth`);
+// A credential Google gave this page that has not reached the app yet: the sign-in counts (press.completed) once its
+// hand-off goes through, which for someone else's account is only after the reader takes it.
+let mintedUnhanded = false;
 // No FedCM: Google's button can only open a pop-up, so Google's own page is a real button from the start.
 const popupOnly = !hasFedCm();
 // Google's answer was refused (a clock set wrong puts a fresh token past its expiry). The mint keeps waiting on the
@@ -208,8 +211,8 @@ const hand = async (): Promise<void> => {
             // daemon to spend it on, so a nearly-expired one is re-minted here instead. `pick`: no silent attempt at
             // all, so Google's chooser is the only road to a credential.
             idToken = await getIdToken({ gate: false, usableFor: HANDOFF_USABLE_FOR_MS, pick: picking.value });
-            // A dismissal is an answer too, but only a credential is a sign-in completed.
-            if (idToken === undefined) { press.answered(); } else { press.completed(); }
+            press.answered();
+            mintedUnhanded ||= idToken !== undefined;
         }
         if (idToken === undefined) {
             error.value = noticeOf(t(`auth.desktopAuth.needsGoogleSignIn`));
@@ -218,6 +221,7 @@ const hand = async (): Promise<void> => {
         // A refusal inside (client-id mismatch, no endpoint) falls to the catch below, which offers Google's own page.
         if (await agreed(idToken, session)) {
             await deliver(idToken);
+            if (mintedUnhanded) { mintedUnhanded = false; press.completed(); }
         }
     } catch (err) {
         error.value = noticeFrom(err, t(`auth.desktopAuth.couldntFinishInApp`));

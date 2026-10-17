@@ -11,11 +11,10 @@ import { replayPrivacy } from "./replayPrivacy";
 
 // PostHog instrumentation: autocapture, session replay, SPA pageviews, plus funnel milestones via `track()`.
 // `api_host` proxies through this origin's /wire (nginx.conf) since privacy blockers match PostHog's own hostnames.
-// In a browser `sessionStorage` scopes the session id to the tab so a reload doesn't fragment one visit into unrelated
-// recordings. The desktop app's window is not a tab: every relaunch emptied its sessionStorage, so each one began a new
-// session and a new anonymous person, and a person who opens the app daily looked like a stream of strangers. There the
-// ids live in `localStorage` and survive a relaunch; PostHog still ends a session after half an hour idle, and
-// `desktop_launch_id` (below) tells one run of the app from the next.
+// `sessionStorage` scopes the ids to the tab so a reload doesn't fragment one visit into unrelated recordings, and it is
+// what the privacy policy promises: the identifier ends with the tab and does not recognise the reader coming back. The
+// desktop app's window keeps that promise too, so each relaunch starts afresh; the account joins its runs once signed in
+// (`identify`), and `desktop_launch_id` (below) ties a run to the app's own events about the same launch.
 //
 // What this captures is what the privacy policy and sub-processor list (_site/site-content/src/legal.ts) say it
 // captures; a change here that alters what leaves the browser must move LEGAL_VERSION and both documents together.
@@ -120,7 +119,7 @@ export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readon
         opt_out_capturing_by_default: true,
         // No cookieless counts on refusal: the promise made by switching it off is that this client sends no events.
         defaults: `2026-06-25`,
-        persistence: desktopApp() === undefined ? `sessionStorage` : `localStorage`,
+        persistence: `sessionStorage`,
         ...replayPrivacy(redactAddress, { touch: touchScreen() }),
         before_send: (event) => (allowed ? eventPrivacy(redactAddress)(stampLoadReason(event)) : null),
         // Serving the SDK from our own origin isn't enough: blocker lists also match a bare filename on any host
@@ -198,7 +197,7 @@ const registerClient = (posthog: PostHog): void => {
     posthog.register(
         app === undefined ? { client: `browser`, ...landingCampaign } : { client: `desktop`, desktop_version: app.version, desktop_install_id: app.installId, ...landingCampaign },
     );
-    // Persistence outlives a relaunch (see the top of this file); this is what tells one run of the app from the next.
+    // The same id the app's own launch events carry (launch.rs), so a run's window joins what the app said about it.
     if (launchId !== undefined) {
         posthog.register({ desktop_launch_id: launchId });
     }

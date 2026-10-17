@@ -146,13 +146,14 @@ describe(`initAnalytics`, () => {
         });
     });
 
-    // The desktop window is not a tab: its sessionStorage dies on every relaunch, which made each relaunch a new person.
-    it(`keeps the desktop window's ids across relaunches, and a browser tab's to the tab`, async () => {
+    // The privacy policy (legal.ts) says the identifier lives in session storage, ends with the tab and does not recognise
+    // the reader coming back; the desktop app's workspace window is the same workspace app and keeps the same promise.
+    it(`keeps the ids to session storage in a browser tab and in the desktop window alike`, async () => {
         const { posthog: browser } = await bootAnalytics(`phc_test`);
         const { posthog: app } = await bootAnalytics(`phc_test`, { version: `1.15.1`, installId: `install-abc`, update: null });
 
         expect(mocked(browser.init).mock.calls[0]![1]).toMatchObject({ persistence: `sessionStorage` });
-        expect(mocked(app.init).mock.calls.at(-1)![1]).toMatchObject({ persistence: `localStorage` });
+        expect(mocked(app.init).mock.calls.at(-1)![1]).toMatchObject({ persistence: `sessionStorage` });
     });
 
     it(`tells one run of the desktop app from the next by the launch id its webview carries`, async () => {

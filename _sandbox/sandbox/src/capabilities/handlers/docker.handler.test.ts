@@ -1,7 +1,7 @@
 import { stubEnv, unstubAllEnvs } from "@intentic/testing/bun";
 import { packFragment, readPack } from "../../image/packs.js";
 import { registry } from "../registry.js";
-import { addressPoolOf, isPrivileged, withEngineSettings } from "./docker.handler.js";
+import { addressPoolOf, isPrivileged, optionStatuses, withEngineSettings } from "./docker.handler.js";
 
 beforeEach(() => stubEnv("SANDBOX_VM", undefined));
 afterEach(unstubAllEnvs);
@@ -30,6 +30,18 @@ test("gpu off leaves no trace in the fragment", async () => {
     for (const config of [{}, { gpu: "off" }]) {
         expect((await registry.docker.fragment?.(config)) ?? "").not.toContain("--gpus");
     }
+});
+
+// A hosted machine cannot pass a GPU through, so its ask must never keep selling a rebuild that cannot grant it.
+test("a hosted gpu ask composes no device request and reads unsupported, even before any stamp", async () => {
+    stubEnv("SANDBOX_VM", "1");
+    stubEnv("SANDBOX_GPU", undefined);
+    const fragment = (await registry.docker.fragment?.({ gpu: "on" })) ?? "";
+    expect(fragment).toContain("# intentic:runtime --privileged");
+    expect(fragment).not.toContain("--gpus");
+    expect(fragment).not.toContain("nvidia-container-toolkit");
+    expect(await optionStatuses({ gpu: "on" })).toEqual([{ state: "error", detail: "GPU access: unsupported on hosted sandboxes" }]);
+    expect(await optionStatuses({ gpu: "off" })).toEqual([]);
 });
 
 test("the echo carries every option, so the entry opens on what the user actually set", () => {

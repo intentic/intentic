@@ -367,24 +367,30 @@ pub fn begin() {
 
 /// The face actually opened, after local arguments, deep links and the background choice were applied.
 pub fn opened(face: &str) {
+    if let Some(dir) = config_dir() {
+        note_face(&dir, id(), face);
+    }
+}
+
+/// Rewrites the queue only when this launch's report is in it: with analytics refused, or the report already sent,
+/// there is nothing to patch and no file to create.
+fn note_face(dir: &Path, launch: &str, face: &str) {
     let _guard = REPORTS
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let Some(dir) = config_dir() else { return };
-    let path = reports_path(&dir);
-    let mut reports: Vec<Report> = crate::state::read_json(&path).unwrap_or_default();
-    for report in &mut reports {
-        if let Report::Launched {
-            launch_id,
-            face: opened,
-            ..
-        } = report
-        {
-            if launch_id == id() {
-                *opened = face.into();
-            }
-        }
-    }
+    let path = reports_path(dir);
+    let Some(mut reports) = crate::state::read_json::<Vec<Report>>(&path) else {
+        return;
+    };
+    let Some(opened) = reports.iter_mut().find_map(|report| match report {
+        Report::Launched {
+            launch_id, face, ..
+        } if launch_id == launch => Some(face),
+        _ => None,
+    }) else {
+        return;
+    };
+    *opened = face.into();
     crate::state::write_json(&path, &reports);
 }
 
@@ -571,9 +577,6 @@ const POSTHOG_HOST: &str = match option_env!("POSTHOG_HOST") {
     None => "https://us.i.posthog.com",
 };
 
-/// On unless this install was switched off: the workspace window's Settings, Data is the one switch
-/// (web/src/app/analyticsConsent.ts), and it writes "deny" here through `intentic://analytics`. No file means
-/// nobody has switched it off.
 /// On unless this install was switched off. Settings, Data in the workspace window is the one switch
 /// (web/src/app/analyticsConsent.ts), and it writes the choice here through `intentic://analytics`; no file means
 /// nobody has switched it off. Without a config dir there is nowhere to keep a refusal, so nothing is sent.
@@ -1169,6 +1172,39 @@ mod tests {
         assert_eq!(body["properties"]["at_exit"], true);
         assert_eq!(body["properties"]["exit_cause"], "unknown");
         assert_eq!(body.get("timestamp"), None);
+    }
+
+    #[test]
+    fn the_opened_face_patches_only_this_launch_and_writes_nothing_when_nothing_is_queued() {
+        let dir =
+            std::env::temp_dir().join(format!("intentic-face-report-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // Nothing queued (analytics refused, or already sent): no reports file appears.
+        note_face(&dir, "launch-1", "workspace");
+        assert!(!reports_path(&dir).exists());
+
+        let launched = |id: &str| Report::Launched {
+            at: 1_000,
+            launch_id: id.into(),
+            face: "none".into(),
+            previous_exit_reason: ExitCause::Unknown,
+            version: "1".into(),
+        };
+        crate::state::write_json(
+            &reports_path(&dir),
+            &vec![launched("launch-0"), launched("launch-1")],
+        );
+        note_face(&dir, "launch-1", "tray");
+        let faces: Vec<String> = crate::state::read_json::<Vec<Report>>(&reports_path(&dir))
+            .unwrap()
+            .into_iter()
+            .filter_map(|report| match report {
+                Report::Launched { face, .. } => Some(face),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(faces, ["none", "tray"]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

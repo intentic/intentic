@@ -98,7 +98,11 @@ export const syncRootExcludes = async (historyRoot: string, repoIds: readonly st
 // nested (`backend/.venv`, `.local/lib/node_modules`, every `__pycache__`) as at the top. Untracked files only, as any
 // exclude is: a dependency dir the project chose to commit keeps showing its edits.
 const PROJECT_EXCLUDE_NOTE = "# intentic: heavy dependency dirs excluded by default to keep the Changes panel fast.";
-export const projectExcludes = (): string[] => [...IGNORED_DIRS].filter((dir) => dir !== ".git").map((dir) => `${dir}/`);
+// What IGNORED_DIRS grays in the tree but a project may still version, so its own .gitignore keeps the say: a Yarn
+// Berry project commits `.yarn/releases` (scratch.ts keeps `.yarn` as work for the same reason), a JavaScript action
+// its built `dist/`. An exclude would hide a new file there from status and from a stage-all. `.git` is git's own.
+const PROJECT_VERSIONED_DIRS: ReadonlySet<string> = new Set([".git", ".yarn", "dist"]);
+export const projectExcludes = (): string[] => [...IGNORED_DIRS].filter((dir) => !PROJECT_VERSIONED_DIRS.has(dir)).map((dir) => `${dir}/`);
 
 // The git dir whose info/exclude a checkout reads. A `.git` file points elsewhere (`--separate-git-dir`, a linked
 // worktree), relative to the checkout when not absolute; a linked worktree's own dir names, in `commondir`, the shared
@@ -111,6 +115,37 @@ const excludeGitDir = async (dir: string): Promise<string> => {
     const gitDir = named === undefined ? dotGit : resolve(dir, named);
     const common = (await readFile(join(gitDir, "commondir"), "utf8").catch(undefinedIfMissing))?.trim();
     return common === undefined || common === "" ? gitDir : resolve(gitDir, common);
+};
+
+// Every pattern a build of this file may have written under the note: the block it owns is the run of these right
+// after it, so an owner's own line below the block ends it rather than being taken for one of ours.
+const WRITABLE_PATTERNS: ReadonlySet<string> = new Set([...IGNORED_DIRS].map((dir) => `${dir}/`));
+
+// Where the note and the patterns under it sit in the file's rows, end exclusive; undefined with no note.
+const noteBlock = (rows: readonly string[]): { readonly at: number; readonly end: number } | undefined => {
+    const at = rows.findIndex((row) => row.trim() === PROJECT_EXCLUDE_NOTE);
+    if (at === -1) {
+        return undefined;
+    }
+    let end = at + 1;
+    while (end < rows.length && WRITABLE_PATTERNS.has(rows[end]?.trim() ?? "")) {
+        end += 1;
+    }
+    return { at, end };
+};
+
+// `current` with the block under PROJECT_EXCLUDE_NOTE made exactly `lines`, less any the owner's own rows already hold:
+// a pattern added since is written, one dropped since (an earlier build also excluded `dist/` and `.yarn/`) removed.
+// Without the note the block is appended; the owner's rows around it are kept as they are.
+export const convergedExclude = (current: string, lines: readonly string[]): string => {
+    const rows = current === "" ? [] : current.replace(/\n$/u, "").split("\n");
+    const block = noteBlock(rows);
+    const before = block === undefined ? rows : rows.slice(0, block.at);
+    const after = block === undefined ? [] : rows.slice(block.end);
+    const held = new Set([...before, ...after].map((row) => row.trim()));
+    const ours = lines.filter((line) => !held.has(line));
+    const converged = [...before, ...(ours.length === 0 ? [] : [PROJECT_EXCLUDE_NOTE, ...ours]), ...after];
+    return converged.length === 0 ? "" : `${converged.join("\n")}\n`;
 };
 
 // Converges project repos' info/exclude onto the heavy-dir list. Called from scanAll alongside syncRootExcludes, so a
@@ -126,13 +161,9 @@ export const syncProjectExcludes = async (workspaceRoot: string, repoIds: readon
         }
         const target = join(gitDir, "info", "exclude");
         const current = (await readFile(target, "utf8").catch(undefinedIfMissing)) ?? "";
-        const held = new Set(current.split("\n").map((line) => line.trim()));
-        const missing = lines.filter((line) => !held.has(line.trim()));
-        if (missing.length === 0) {
-            continue;
+        const next = convergedExclude(current, lines);
+        if (next !== current) {
+            await writeFile(target, next);
         }
-        const note = held.has(PROJECT_EXCLUDE_NOTE.trim()) ? [] : [PROJECT_EXCLUDE_NOTE];
-        const separator = current === "" || current.endsWith("\n") ? "" : "\n";
-        await writeFile(target, `${current}${separator}${[...note, ...missing].join("\n")}\n`);
     }
 };

@@ -38,6 +38,8 @@ had_old=false
 previous_reach=\${previous_reach:-}
 cutover_at=\${cutover_at:-0}
 exists() { docker inspect "$1" >/dev/null 2>&1; }
+# A deliberate stop (an owner's docker stop, an idle sleep) is a version at rest, not a failed one.
+at_rest() { [ "$(docker inspect --format '{{.State.Status}} {{.State.ExitCode}}' "$container" 2>/dev/null)" = "exited 0" ]; }
 restore() {
     if exists "$parked"; then
         docker logs --tail 2000 "$container" > ${HOST_STATE_ROOT}/workspace-failed.log 2>&1 || true
@@ -68,8 +70,7 @@ while [ $(($(date +%s) - at)) -lt 86400 ]; do
     (
         flock -x 9
         [ "$(docker inspect --format '{{.Id}}' "$container" 2>/dev/null)" = "$expected" ] || exit 10
-        # A deliberate stop (including idle sleep) is held, not counted as a failed version.
-        [ "$(docker inspect --format '{{.State.Status}} {{.State.ExitCode}}' "$container")" != "exited 0" ] || exit 0
+        at_rest && exit 0
         check && exit 0
         verdict=$?
         [ "$verdict" -eq 2 ] && { restore; exit 20; }
@@ -111,8 +112,9 @@ trap 'restore' EXIT
 # Finish an interrupted rename before attempting another cutover.
 if ! exists "$container" && exists "$parked"; then restore || exit 1; fi
 if exists "$container"; then
-    # Never discard the only known-good predecessor for a version that has not become ready.
-    if exists "$parked"; then check || restore || exit 1; fi
+    # Never discard the only known-good predecessor for a version that has not become ready. One at rest became ready
+    # before it was stopped, so it is the way back now.
+    if exists "$parked"; then at_rest || check || restore || exit 1; fi
     had_old=true
     previous_reach=$(docker exec "$container" node --input-type=module -e ${shellQuote(`try {const response = await fetch("http://127.0.0.1:${port}/health", { signal: AbortSignal.timeout(5000) }); console.log((await response.json()).reach?.state ?? "");} catch (error) {console.error(String(error));}`)} 2>/dev/null) || true
     docker logs --tail 2000 "$container" > ${HOST_STATE_ROOT}/workspace-previous.log 2>&1 || true

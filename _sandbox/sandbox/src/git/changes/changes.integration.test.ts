@@ -734,6 +734,20 @@ test("an untracked file weighs the same as the identical file one commit later",
     expect(committed).toEqual(untracked);
 });
 
+// The delta is never cut to the scan's row cap: the review lists every file and the land and the fleet card total
+// them, so every untracked file is counted however many there are.
+test("changesAgainstBase counts every untracked file, past the working-tree scan's row cap", async () => {
+    const dir = await tempRepo();
+    const base = await sh(dir, "rev-parse", "HEAD");
+    await mkdir(join(dir, "gen"));
+    const count = 520;
+    await Promise.all(Array.from({ length: count }, (_, i) => writeFile(join(dir, "gen", `f${String(i).padStart(4, "0")}.txt`), "a\nb\n")));
+
+    const changes = await changesAgainstBase(dir, base);
+    expect(changes).toHaveLength(count);
+    expect(changes.filter((change) => change.additions !== 2)).toEqual([]);
+});
+
 // A trailing partial line still counts, so it isn't simply newline count.
 // Binary has no count at all; empty is a real zero, not missing.
 test("untracked line counts follow git's own rules for partial lines, empty and binary files", async () => {

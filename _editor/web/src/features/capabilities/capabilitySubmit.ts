@@ -78,12 +78,13 @@ const pushWalletCaps = async (entry: CapabilityCatalogEntry, config: Record<stri
 // is still showing that tile.
 export const saveKey = (entry: string): string => `capabilities/${entry}/save`;
 
-// The GPU switch saves only on a host that proves it can pass a GPU through: Docker would otherwise rebuild into a
-// runtime that refuses every GPU container, and the reader would learn why only from the install's log.
+// The GPU switch is refused on a host whose device request ran and failed: Docker would otherwise rebuild into a runtime
+// that refuses every GPU container, and the reader would learn why only from the install's log. A check that could not
+// run (`checked: false`, no device to ask) saves, and the launch's own preflight decides.
 const wantsGpu = (input: AddCapabilityInput): boolean => input.kind === `docker` && input.config[`gpu`] === `on`;
 const proveGpu = async (input: AddCapabilityInput, { hosted, preflight = probeCapability, capture = track }: SubmitHost): Promise<void> => {
     const answer = await preflight(input);
-    if (!answer.checked || !answer.ok) {
+    if (answer.checked && !answer.ok) {
         capture(`gpu_capability_blocked`, { hosted: hosted?.value ?? false });
         throw new Error(answer.message);
     }

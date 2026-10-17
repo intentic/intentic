@@ -368,11 +368,20 @@ fn workspace_init_script(install_id: &str, update: Option<&str>, wake: bool) -> 
         None => "null".to_string(),
     };
     format!(
-        "(function () {{ window.__INTENTIC_LAUNCH_ID__ = \"{}\"; if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {}, wake: {wake}, sandboxWakes: true }}); }} }})();",
-        crate::launch::id(),
+        "{}(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {}, wake: {wake}, sandboxWakes: true }}); }} }})();",
+        launch_id_script(),
         crate::commands::VERSION,
         // Only where the page's message reaches drop_copy.rs: WebView2 is what says where a dropped file is.
         cfg!(windows)
+    )
+}
+
+/// This process's launch (launch.rs `id`), told to every page the app builds, so a page's own analytics can name the
+/// process that showed it.
+fn launch_id_script() -> String {
+    format!(
+        "window.__INTENTIC_LAUNCH_ID__ = \"{}\";",
+        crate::launch::id()
     )
 }
 
@@ -2004,10 +2013,7 @@ fn ask_before_closing(app: &AppHandle) {
             // The frame between "window mapped" and "webview painted", which is white by default and reads as
             // a flash on a dark dialog — the exact impression of malfunction this whole change is about.
             .background_color(face_background(mode))
-            .initialization_script(format!(
-                "window.__INTENTIC_LAUNCH_ID__ = \"{}\";",
-                crate::launch::id()
-            ))
+            .initialization_script(launch_id_script())
             .initialization_script(face_init_script(mode))
             // Nothing here reaches loopback. It carries the arguments so every window in this process agrees
             // on them, because the first one built is the one that configures the environment (BROWSER_ARGS).

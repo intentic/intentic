@@ -31,12 +31,12 @@ const { conversation, waiting, streaming, resumeQueue, bookedGroups, spentReopen
 const { held, notice, reason, detail, deterministic } = useHeldQueue();
 const limitResend = useLimitResend(() => conversation.value);
 
-// Once per refused turn that reaches this component: fires when `held` transitions to true with a refusal reason.
-// The card's failure code carries the daemon's error code (agent-domain-refused, etc.).
+// Once per refused turn this pane sees happen: fires when `held` turns true with a refusal reason, not for a chat opened
+// on one already held. The card's failure code carries the daemon's error code (agent-domain-refused, etc.); `via` tells
+// it from a refusal at the door (TurnClient.turnedAway), which hands the words back instead and shares the event name.
 watch(held, (isHeld) => {
     if (isHeld && reason.value === `refused`) {
-        const code = lastFailure.value?.code;
-        track(`turn_refused`, { code, agent: conversation.value.selection.provider.value });
+        track(`turn_refused`, { via: `held`, code: lastFailure.value?.code, agent: conversation.value.selection.provider.value });
     }
 });
 

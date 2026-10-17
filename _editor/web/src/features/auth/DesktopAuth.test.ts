@@ -35,7 +35,8 @@ jest.mock(`../../client/auth/useGoogleIdentity`, () => ({
     useGoogleIdentity: () => ({ getIdToken, renderButton, adoptIdToken, refusedCredentials, cancelSignIn }),
 }));
 // The stall's funnel event, recorded rather than sent.
-jest.mock(`../../app/analytics`, () => ({ track: jest.fn(), replaySessionId: () => undefined }));
+const track = jest.fn();
+jest.mock(`../../app/analytics`, () => ({ track, replaySessionId: () => undefined }));
 const signInWithGoogle = jest.fn<(callbackPath?: string) => Promise<void>>().mockResolvedValue(undefined);
 // What this window's session resolves to; null means a signed-out browser, covered by the tests below.
 const user = ref<{ email: string; signInMethods?: (`google` | `email`)[] } | null>({ email: `owner@example.com` });
@@ -88,6 +89,7 @@ beforeEach(() => {
     googleIdToken.mockReset().mockResolvedValue({});
     cancelSignIn.mockReset();
     refusedCredentials.value = 0;
+    track.mockReset();
     // A browser with FedCM, as on /login's tests; a test that wants one without it leaves this out.
     Object.assign(window, { IdentityCredential: {} });
 });
@@ -396,4 +398,51 @@ it(`keeps minting for an account that also signs in with Google`, async () => {
 
     expect(handoff).toHaveBeenCalledWith({ idToken: expect.any(String), challenge: `chal-1` });
     expect(cancelSignIn).not.toHaveBeenCalled();
+});
+
+// `signin_completed` counts a Google sign-in that went through: here, the credential handed over to the app. One the page
+// refuses to hand over (it names someone else) signed nobody in, and the hand-off the reader then takes counts once.
+describe(`counting the sign-in`, () => {
+    const completions = (): number => track.mock.calls.filter(([event]) => event === `signin_completed`).length;
+
+    it(`counts the credential once it has been handed over`, async () => {
+        user.value = null;
+        getIdToken.mockResolvedValueOnce(credential(60 * 60 * 1000));
+        handoff.mockResolvedValue({ handoff: `row-1` });
+
+        await mount();
+
+        expect(handoff).toHaveBeenCalledTimes(1);
+        expect(track).toHaveBeenCalledWith(`signin_completed`, { method: `google`, surface: `desktop-auth`, stall_shown: false });
+        expect(completions()).toBe(1);
+    });
+
+    it(`does not count a credential it refused to hand over, and counts the hand-off taken after once`, async () => {
+        const other = credential(60 * 60 * 1000, `someone.else@example.com`);
+        getIdToken.mockResolvedValue(other);
+        signInWithGoogleCredential.mockImplementation(async () => {
+            user.value = { email: `someone.else@example.com` };
+        });
+        handoff.mockResolvedValue({ handoff: `row-1` });
+
+        const el = await mount();
+        expect(completions()).toBe(0);
+
+        [...el.querySelectorAll(`button`)].find((node) => node.textContent?.includes(`Continue as`))?.click();
+        await new Promise((resolve) => setTimeout(resolve));
+        await nextTick();
+
+        expect(handoff).toHaveBeenCalledTimes(1);
+        expect(completions()).toBe(1);
+    });
+
+    it(`does not count a hand-off the platform refused`, async () => {
+        user.value = null;
+        getIdToken.mockResolvedValueOnce(credential(60 * 60 * 1000));
+        handoff.mockRejectedValue(new Error(`refused`));
+
+        await mount();
+
+        expect(completions()).toBe(0);
+    });
 });

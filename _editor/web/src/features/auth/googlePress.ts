@@ -26,8 +26,9 @@ export interface GooglePress {
     readonly stalled: Readonly<Ref<boolean>>;
     // The press in flight was answered (a refusal the page says itself, or a dismissal): stop timing it.
     readonly answered: () => void;
-    // The credential arrived: stop timing, take down a note already shown (the sign-in did finish after all), and count
-    // the sign-in with whether the reader had been told it stalled, which is how the note's grace is tuned.
+    // The sign-in Google's credential was for went through (the platform took it, or the app was handed it): stop timing,
+    // take down a note already shown (it did finish after all), and count the sign-in with whether the reader had been
+    // told it stalled, which is how the note's grace is tuned. A credential refused after Google gave it is no sign-in.
     readonly completed: () => void;
 }
 
@@ -58,7 +59,7 @@ export const useGooglePress = (slot: Readonly<Ref<HTMLElement | undefined>>, sur
 
     const completed = (): void => {
         stop();
-        track(`signin_completed`, { method: `google`, stall_shown: stalled.value });
+        track(`signin_completed`, { method: `google`, surface, stall_shown: stalled.value });
         stalled.value = false;
     };
 

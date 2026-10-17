@@ -182,7 +182,7 @@ it(`does not call a sign-in dead because focus came back for a moment, and count
 
     expect(stalled.value).toBe(false);
     expect(track).toHaveBeenCalledTimes(1);
-    expect(track).toHaveBeenCalledWith(`signin_completed`, { method: `google`, stall_shown: false });
+    expect(track).toHaveBeenCalledWith(`signin_completed`, { method: `google`, surface: `login`, stall_shown: false });
 });
 
 it(`takes the note down when the credential arrives after it was shown`, async () => {
@@ -194,7 +194,7 @@ it(`takes the note down when the credential arrives after it was shown`, async (
     completed();
 
     expect(stalled.value).toBe(false);
-    expect(track).toHaveBeenLastCalledWith(`signin_completed`, { method: `google`, stall_shown: true });
+    expect(track).toHaveBeenLastCalledWith(`signin_completed`, { method: `google`, surface: `login`, stall_shown: true });
 });
 
 it(`does not count a dismissal as a completed sign-in`, async () => {

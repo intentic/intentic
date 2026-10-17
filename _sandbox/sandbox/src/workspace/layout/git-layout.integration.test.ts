@@ -3,7 +3,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { projectExcludes, syncProjectExcludes } from "./git-layout.js";
+import { convergedExclude, projectExcludes, syncProjectExcludes } from "./git-layout.js";
+
+const NOTE = "# intentic: heavy dependency dirs excluded by default to keep the Changes panel fast.";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -28,7 +30,7 @@ const tempWorkspace = async (): Promise<{ root: string; repo: string }> => {
     return { root, repo };
 };
 
-test("projectExcludes returns an any-depth directory pattern for every IGNORED_DIRS entry except .git", () => {
+test("projectExcludes returns an any-depth directory pattern for the IGNORED_DIRS entries no project versions", () => {
     const excludes = projectExcludes();
     expect(excludes.length).toBeGreaterThan(0);
     // Every entry matches the directory at any depth, like `node_modules/`.
@@ -97,4 +99,30 @@ test("syncProjectExcludes follows a relative .git pointer and a linked worktree 
     await mkdir(join(root, "linked", "node_modules"), { recursive: true });
     await writeFile(join(root, "linked", "node_modules", "x.js"), "\n");
     expect(await sh(join(root, "linked"), "status", "--porcelain", "-uall")).toBe("");
+});
+
+// The owner's repo decides what it versions: only dirs nobody commits are excluded on its behalf. A Yarn Berry project
+// commits `.yarn/releases` (scratch.ts keeps `.yarn` as work for the same reason), and a JavaScript action commits its
+// built `dist/`, so a new file in either must still reach `git status` and a stage-all.
+test("syncProjectExcludes leaves dirs a project may version visible: .yarn/ and dist/", async () => {
+    const { root, repo } = await tempWorkspace();
+    await mkdir(join(repo, ".yarn", "releases"), { recursive: true });
+    await writeFile(join(repo, ".yarn", "releases", "yarn-4.5.0.cjs"), "// yarn\n");
+    await mkdir(join(repo, "dist"), { recursive: true });
+    await writeFile(join(repo, "dist", "index.js"), "// built action\n");
+    await syncProjectExcludes(root, ["app"]);
+    expect((await sh(repo, "status", "--porcelain", "-uall")).split("\n")).toEqual(["?? .yarn/releases/yarn-4.5.0.cjs", "?? dist/index.js"]);
+});
+
+// A build that excluded more than this one does left its patterns under the note; the sync takes back exactly those and
+// keeps every row the owner wrote, above the block or below it.
+test("convergedExclude drops patterns an earlier build wrote, keeps the owner's rows, and settles", () => {
+    const earlier = ["# git ls-files --others --exclude-from=.git/info/exclude", "*.secret", NOTE, "node_modules/", "dist/", ".yarn/", ".venv/", "build/", ""].join("\n");
+    const lines = ["node_modules/", ".venv/"];
+    const converged = convergedExclude(earlier, lines);
+    expect(converged).toBe(["# git ls-files --others --exclude-from=.git/info/exclude", "*.secret", NOTE, "node_modules/", ".venv/", "build/", ""].join("\n"));
+    expect(convergedExclude(converged, lines)).toBe(converged);
+    // An owner who excludes a pattern already holds it: the block leaves it to them.
+    expect(convergedExclude("node_modules/\n", lines)).toBe(`node_modules/\n${NOTE}\n.venv/\n`);
+    expect(convergedExclude("", [])).toBe("");
 });

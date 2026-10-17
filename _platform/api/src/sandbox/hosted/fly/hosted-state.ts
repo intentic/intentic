@@ -25,13 +25,17 @@ export const hostedStateOf = (state: string): HostedState => {
     }
 };
 
+// Every summary carries this read, the editor's sandbox list among them, so a slow provider costs a hint, never the list:
+// past this a state reads `unknown`, which is what an older platform answers anyway.
+const STATE_READ_DEADLINE_MS = 2_000;
+
 /** What a hosted sandbox's machine is doing right now, read from Fly; `unknown` where hosting is off or no machine is named. */
 const readHostedState = async (config: Config, hosted: { appName?: string; machineId?: string }): Promise<HostedState> => {
     if (!hostedEnabled(config) || !hosted.appName || !hosted.machineId) {
         return `unknown`;
     }
     try {
-        const machine = await getMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId);
+        const machine = await getMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId, STATE_READ_DEADLINE_MS);
         return hostedStateOf(machine.state);
     } catch (error) {
         // A provider outage is not evidence that a machine is asleep.

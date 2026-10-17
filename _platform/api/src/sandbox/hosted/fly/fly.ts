@@ -399,8 +399,11 @@ export const destroyMachine = async (token: string, app: string, machineId: stri
     throw machinesRefusal(response, `DELETE machine ${machineId} in ${app}`);
 };
 
-export const getMachine = async (token: string, app: string, machineId: string): Promise<{ state: string; updatedAt?: Date }> => {
-    const parsed = machineSchema.parse(await call(token, `GET`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}`));
+// `deadlineMs` shortens Fly's own deadline for a read something else waits on (a sandbox summary), never lengthens it.
+export const getMachine = async (token: string, app: string, machineId: string, deadlineMs?: number): Promise<{ state: string; updatedAt?: Date }> => {
+    const parsed = machineSchema.parse(
+        await call(token, `GET`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}`, undefined, deadlineMs),
+    );
     const updatedAt = parsed.updated_at === undefined ? undefined : new Date(parsed.updated_at);
     // An unparseable stamp drops rather than an Invalid Date; a NaN would silently poison every sum it reaches.
     return { state: parsed.state, updatedAt: updatedAt !== undefined && !Number.isNaN(updatedAt.getTime()) ? updatedAt : undefined };

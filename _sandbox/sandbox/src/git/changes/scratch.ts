@@ -6,6 +6,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { currentRepos } from "../../workspace/watch/repo-watch.js";
 import { materializedPaths } from "./changes-porcelain.js";
+import { headSha } from "./changes.js";
 import { readOnFeed } from "../feed/checkout-feed.js";
 
 // What a stage-everything leaves out: untracked paths shaped like scratch, judged by shape since the names scratch
@@ -122,13 +123,19 @@ const sizesOfBounded = async (dir: string, paths: readonly string[]): Promise<Ma
 };
 
 // The collapsed listing's own rows: a wholly new directory judged by its name, a loose file by its shape. A file under
-// a hidden ancestor (`.venv/lib/mod.py` under `.venv/`) is that ancestor's: once one file under it is staged, git lists
-// the rest one by one instead of as the collapsed `.venv/`, and judging them as loose files would dissolve the rule.
-// Only the loose files are sized; an ancestor's verdict needs no stat.
-const judgeOuter = async (dir: string, outer: readonly string[], scope: ScratchScope, found: Map<string, ScratchReason>): Promise<void> => {
+// a hidden ancestor the project has not committed (`.venv/lib/mod.py` under `.venv/`) is that ancestor's: once one file
+// under it is staged, git lists the rest one by one instead of as the collapsed `.venv/`, and judging them as loose
+// files would dissolve the rule. Only the loose files are sized; an ancestor's verdict needs no stat.
+const judgeOuter = async (
+    dir: string,
+    outer: readonly string[],
+    scope: ScratchScope,
+    found: Map<string, ScratchReason>,
+    committed: ReadonlySet<string>,
+): Promise<void> => {
     const loose: string[] = [];
     for (const path of outer) {
-        const owner = isDirectoryRow(path) ? path : hiddenAncestorsOf(path)[0];
+        const owner = isDirectoryRow(path) ? path : scratchAncestorsOf(path, committed)[0];
         const reason = owner === undefined ? undefined : directoryReason(owner);
         if (owner !== undefined && reason !== undefined) {
             found.set(owner, reason);
@@ -160,6 +167,28 @@ const hiddenAncestorsOf = (path: string): string[] => {
     return ancestors;
 };
 
+// The hidden ancestors of `path` that can own it as scratch: those HEAD does not hold. A hidden directory the project
+// versions (`.docker/`, on no keep-list) is its own, and a new file in it is judged one by one like any other; taken for
+// scratch, its exclude pathspec would also keep the tracked edits beside that file out of a stage-everything.
+const scratchAncestorsOf = (path: string, committed: ReadonlySet<string>): string[] =>
+    hiddenAncestorsOf(path).filter((ancestor) => !committed.has(ancestor));
+
+// Which of the hidden directories above the listing's rows HEAD already holds, one ls-tree for all of them. A path
+// inside a wholly new directory has no committed ancestor below it, so the collapsed rows' own ancestors are every
+// candidate. An unborn HEAD holds none; a git that did not answer throws (headSha) rather than guess a whole tree.
+const committedDirs = async (dir: string, outer: readonly string[], git: GitRunner): Promise<ReadonlySet<string>> => {
+    const candidates = new Set(outer.flatMap((path) => hiddenAncestorsOf(path)));
+    if (candidates.size === 0) {
+        return candidates;
+    }
+    const head = await headSha(dir, git);
+    if (head === undefined) {
+        return new Set();
+    }
+    const listed = await git(dir, ["ls-tree", "-z", "--name-only", head, "--", ...[...candidates].map((ancestor) => ancestor.slice(0, -1))]);
+    return new Set(materializedPaths(listed.stdout).map((path) => `${path}/`));
+};
+
 // The entry holding one path found inside an open new directory: an inner directory by its name, else the path itself.
 const insideVerdict = (
     path: string,
@@ -167,10 +196,11 @@ const insideVerdict = (
     bytes: number,
     scope: ScratchScope,
     found: ReadonlyMap<string, ScratchReason>,
+    committed: ReadonlySet<string>,
 ): readonly [string, ScratchReason] | undefined => {
-    // Every hidden ancestor of the path, not only those below `outer`: after one file under `.venv/` is staged, `.venv/`
-    // is no longer an open directory of its own, and the rest of its tree must still be its.
-    const ancestors = hiddenAncestorsOf(path);
+    // Every uncommitted hidden ancestor of the path, not only those below `outer`: after one file under `.venv/` is
+    // staged, `.venv/` is no longer an open directory of its own, and the rest of its tree must still be its.
+    const ancestors = scratchAncestorsOf(path, committed);
     if (ancestors.some((directory) => found.has(directory))) {
         return undefined;
     }
@@ -191,7 +221,14 @@ const insideVerdict = (
 
 // Inside the new directories no rule took whole. A checkout of its own lists as one `dir/` row git does not descend
 // into; a listing too large to read leaves them carried as they are, which is what every capture did before this.
-const judgeInside = async (dir: string, open: readonly string[], scope: ScratchScope, found: Map<string, ScratchReason>, git: GitRunner): Promise<void> => {
+const judgeInside = async (
+    dir: string,
+    open: readonly string[],
+    scope: ScratchScope,
+    found: Map<string, ScratchReason>,
+    committed: ReadonlySet<string>,
+    git: GitRunner,
+): Promise<void> => {
     const inside = await untracked(dir, ["--", ...open], git).catch(() => []);
     // Prefix map: for each path, find its outer directory in O(segments) instead of O(open.length). Built once from the
     // open list, which is always short (top-level directories), but the inside list can be huge.
@@ -210,7 +247,7 @@ const judgeInside = async (dir: string, open: readonly string[], scope: ScratchS
     const sizes = await sizesOfBounded(dir, inside);
     for (const path of inside) {
         const outer = outerOf(path);
-        const verdict = outer === undefined ? undefined : insideVerdict(path, outer, sizes.get(path) ?? 0, scope, found);
+        const verdict = outer === undefined ? undefined : insideVerdict(path, outer, sizes.get(path) ?? 0, scope, found, committed);
         if (verdict !== undefined) {
             found.set(verdict[0], verdict[1]);
         }
@@ -228,10 +265,11 @@ const readScratch = async (dir: string, scope: ScratchScope, git: GitRunner): Pr
         return [];
     }
     const found = new Map<string, ScratchReason>();
-    await judgeOuter(dir, outer, scope, found);
+    const committed = await committedDirs(dir, outer, git);
+    await judgeOuter(dir, outer, scope, found, committed);
     const open = outer.filter((path) => isDirectoryRow(path) && !found.has(path));
     if (open.length > 0) {
-        await judgeInside(dir, open, scope, found, git);
+        await judgeInside(dir, open, scope, found, committed, git);
     }
     return withCounts(dir, found, git);
 };

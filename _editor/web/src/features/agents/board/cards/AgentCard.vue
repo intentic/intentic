@@ -58,7 +58,7 @@ import SessionChip from "../session/SessionChip.vue";
 import SessionMetrics from "../../metrics/SessionMetrics.vue";
 import ChildCount from "../../../../parts/fleet/ChildCount.vue";
 import { boxImageOf, boxNameOf } from "../../../../models/fleet/fleetScope";
-import { settingsPagesOf } from "../../../../models/conversations/review/conflictResolution";
+import { blockersOf, settingsPagesOf, userBlockers } from "../../../../models/conversations/review/conflictResolution";
 import { accountBadge } from "../session/accountChip";
 import { previewOf } from "../../../../models/conversations/panel/useChat-strip";
 import { useSelectionBlade } from "../../../../models/fleet/board/selectionBlade";
@@ -247,7 +247,7 @@ const yoursToClear = computed(
 // The Sandbox pages that wrote every file of such a refusal, when one did: then the sentence names them, as the review does.
 const workspaceRefusal = useWorkspaceRefusal(() => props.agent, () => yoursToClear.value);
 const settingsPages = computed(() => settingsPagesOf(workspaceRefusal.value));
-const overlapLine = computed(() => workspaceOverlap((workspaceRefusal.value ?? []).reduce((count, conflict) => count + conflict.paths.filter((path) => path.reason === `workspace`).length, 0)));
+const overlapLine = computed(() => workspaceOverlap(userBlockers(blockersOf(workspaceRefusal.value)).length));
 // Work this agent landed that's no longer in the tree; excluded in the archive, like every other press here (restore
 // first).
 // Takes the Ready button's slot: Land now would leave the discarded half missing (the hardest wrong to notice), so Land

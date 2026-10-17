@@ -103,8 +103,10 @@ const signInWithCredential = async (): Promise<void> => {
         if (idToken === undefined) {
             return; // Dismissed, or Google unavailable; the fallback is already on screen.
         }
-        press.completed();
+        // Google answered: stop timing the press. Counted as a sign-in only once the platform has taken it.
+        press.answered();
         await signInWithGoogleCredential(idToken);
+        press.completed();
         await router.push(destination.value);
     } catch {
         // The platform can refuse a token Google actually signed (no endpoint, client-id mismatch); the redirect

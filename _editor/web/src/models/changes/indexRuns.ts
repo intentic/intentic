@@ -5,6 +5,7 @@ import { formatCount } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 import { track } from "../../app/analytics";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
+import { supportsRoute } from "../../client/sandbox/useDaemonRoutes";
 
 // Stage-all and commit-all as the daemon's runs (schemas/git/index-run.ts), followed here instead of held open as one
 // request: over a tree of tens of thousands of files `git add -A` outlives the 45 s header deadline, and a request that
@@ -92,10 +93,26 @@ const follow = async (repo: string, request: Omit<IndexRunStart, `repo`>): Promi
     }
 };
 
+// A daemon from before the runs (a self-hosted sandbox updates on its own schedule) has only the one-request routes,
+// which is how every stage and commit went before them: answered as a passed run, and failing as they always did.
+const oneShot = async (repo: string, request: Omit<IndexRunStart, `repo`>): Promise<IndexRun> => {
+    const ran = { status: `passed`, id: ``, repo, op: request.op, output: `` } as const;
+    if (request.op === `stage`) {
+        await sandboxRpc.git.stage({ repo, ...request.target });
+        return { ...ran, command: `git add` };
+    }
+    const body = { repo, message: request.message ?? `` };
+    const result = await sandboxRpc.git.commit(request.target === undefined ? body : { ...body, stage: request.target });
+    return { ...ran, command: `git commit`, result };
+};
+
 // Starts a stage or commit and follows it; a guardrail hold asks first and, on a yes, starts again past it. Resolves
 // with the passed run, and throws a sentence for everything else: refused by git, stopped, or declined at the prompt,
 // so the panel files each where it files any failure, and the typed commit message stays in its box.
 export const runIndexJob = async (repo: string, request: Omit<IndexRunStart, `repo`>): Promise<IndexRun> => {
+    if (!supportsRoute(`git.indexRunStart`)) {
+        return oneShot(repo, request);
+    }
     let settled = await follow(repo, request);
     if (settled.held !== undefined) {
         if (!(await ask(repo, request.op, settled.held))) {

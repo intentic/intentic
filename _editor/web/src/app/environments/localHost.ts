@@ -210,6 +210,8 @@ export interface LocalOnboardingHost {
     /** The setup's log, shown in the file manager. */
     showSetupLog?(): Promise<void>;
     restart(when: LocalRestartWhen): Promise<void>;
+    /** Sign out of Windows now, for a setup that asked for it; the app resumes the setup at the next sign-in. */
+    signOut?(): Promise<void>;
     /** The system's folder dialog for the first task's folder: undefined when nothing was chosen. */
     pickFolder(): Promise<string | undefined>;
     queueFirstTask(task: { readonly folder: string; readonly text: string }): Promise<void>;

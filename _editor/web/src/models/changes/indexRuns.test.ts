@@ -7,7 +7,13 @@ import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
 const track = jest.fn();
 jest.mock("../../app/analytics", () => ({ track }));
 
+// Which routes the daemon advertises (useDaemonRoutes): all of them unless a test says otherwise.
+let served = (_route: string): boolean => true;
+jest.mock("../../client/sandbox/useDaemonRoutes", () => ({ supportsRoute: (route: string) => served(route) }));
+
 const starts: Omit<IndexRunStart, `repo`>[] = [];
+// The one-request calls a daemon from before the runs answers instead.
+const oneShots: unknown[] = [];
 let script: (IndexRun | `throw`)[] = [];
 const cancels: string[] = [];
 const rpc = fakeSandboxRpc({
@@ -25,6 +31,14 @@ const rpc = fakeSandboxRpc({
         },
         indexRunCancel: async ({ repo }) => {
             cancels.push(repo);
+            return { ok: true };
+        },
+        commit: async (input) => {
+            oneShots.push({ commit: input });
+            return { committed: true };
+        },
+        stage: async (input) => {
+            oneShots.push({ stage: input });
             return { ok: true };
         },
     },
@@ -48,6 +62,8 @@ const settled = (n: number, over: Partial<IndexRun> = {}, ms = 1_000): IndexRun 
 });
 
 beforeEach(() => {
+    served = () => true;
+    oneShots.length = 0;
     starts.length = 0;
     cancels.length = 0;
     script = [];
@@ -116,4 +132,21 @@ test("a run past the slow line sends git_op_slow with its op, files and duration
     expect(track).toHaveBeenCalledWith(`git_op_slow`, { op: `stage`, files: 53_000, ms: SLOW_GIT_OP_MS + 5_000 });
     await cancelIndexRun(`app`);
     expect(cancels).toEqual([`app`]);
+});
+
+// A self-hosted sandbox updates on its own schedule, so this page often talks to a daemon from before the runs: there a
+// commit or a stage-all goes through the one-request routes it always did, rather than failing on a route it lacks.
+test("a daemon without the runs commits and stages through its one-request routes", async () => {
+    served = (route) => route !== `git.indexRunStart`;
+    const committed = await runIndexJob(`app`, { op: `commit`, message: `feat: x`, target: {} });
+    const recorded = await runIndexJob(`app`, { op: `commit`, message: `fix: y` });
+    const staged = await runIndexJob(`app`, { op: `stage`, target: { scope: { origin: `brave-otter` } } });
+
+    expect([committed.status, committed.result, recorded.result, staged.status]).toEqual([`passed`, { committed: true }, { committed: true }, `passed`]);
+    expect(oneShots).toEqual([
+        { commit: { repo: `app`, message: `feat: x`, stage: {} } },
+        { commit: { repo: `app`, message: `fix: y` } },
+        { stage: { repo: `app`, scope: { origin: `brave-otter` } } },
+    ]);
+    expect(starts).toEqual([]);
 });

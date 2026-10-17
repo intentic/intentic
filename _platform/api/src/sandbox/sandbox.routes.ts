@@ -431,8 +431,9 @@ export const sandboxRoutes = {
         const fresh = await context.prisma.sandbox.findUniqueOrThrow({ where: { id: sandbox.id }, include: { hosted: true } });
         return toSummary(fresh, `owner`, context);
     }),
-    // What the machine itself is doing, the only signal that exists before the daemon does. A route, not a summary
-    // field, since only the setup wait polls it; every failure degrades to `unknown` rather than throwing.
+    // What the machine itself is doing, the only signal that exists before the daemon does. The setup wait polls this
+    // for Fly's own states and `gone` (keep waiting versus stop); a summary carries only the coarse hint of
+    // hosted-state.ts. Every failure degrades to `unknown` rather than throwing.
     hostedStatus: os.sandbox.hostedStatus.handler(async ({ context, input }) => {
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
         const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: sandbox.id } });

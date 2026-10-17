@@ -8,6 +8,7 @@ import {
     onboardingRecheck,
     onboardingRestart,
     onboardingSetUp,
+    onboardingSignOut,
     onboardingState,
     onboardingUseCloud,
     revealLog,
@@ -313,6 +314,11 @@ export const pcParts = (): PcParts => {
             await ensureListening();
             track(`onboarding_setup`, { action: `restart`, when });
             await onboardingRestart(when);
+        },
+        signOut: async () => {
+            await ensureListening();
+            track(`onboarding_setup`, { action: `signOut` });
+            await onboardingSignOut();
         },
         useCloud: async () => {
             await ensureListening();

@@ -473,8 +473,9 @@ export class TurnClient {
         this.giveBack(sent, messageId);
         // In the reader's language where the refusal is one this build knows (a turn already running), else as said.
         this.host.error.value = t(`chat.sandboxNotice.refusedBack`, { reason: refusalWords(refusal.message) });
-        // Once per refused turn, so a repeating door refusal is visible in analytics.
-        track(`turn_refused`, { agent: this.host.selection.provider.value });
+        // Once per refused turn, so a repeating door refusal is visible in analytics. `via` tells it from a refusal that
+        // held the queue (ChatHeldMessages), which shares the event name.
+        track(`turn_refused`, { via: `door`, status: refusal.status, agent: this.host.selection.provider.value });
     }
 
     // Hands an opened turn's words to the daemon and follows it to its end. `taken` hears exactly once whether the daemon

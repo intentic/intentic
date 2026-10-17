@@ -151,7 +151,9 @@ export const gpuProbeArgv = (image: string): string[] => [
     image,
     "-L",
 ];
-export const gpuProbePassed = (code: number, stdout: string): boolean => code === 0 && /GPU-[a-f0-9-]+/iu.test(stdout);
+// A device line of `nvidia-smi -L` (`GPU 0: … (UUID: GPU-…)`), the same test ic's contract.rs applies at launch, so a
+// save this accepts is not dropped by the start that follows; any other mention of "GPU-" proves nothing.
+export const gpuProbePassed = (code: number, stdout: string): boolean => code === 0 && /\(UUID: GPU-[0-9a-f-]+\)/iu.test(stdout);
 
 export const optionalDirective = (token: string): OptionalDirective | undefined => OPTIONAL_DIRECTIVES.find((entry) => entry.token === token);
 

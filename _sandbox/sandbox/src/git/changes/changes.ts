@@ -11,9 +11,9 @@ import { MAX_FILE_DIFF_BYTES } from "./diff-partial.js";
 // Rest of the review sits beside this file: porcelain parsers, index moves, diffs, and the commit graph.
 // Runs against the real git dir; each function takes an injectable GitRunner (defaultGit shells out).
 
-// Counting lines for untracked files beyond what the scan can ship wastes reads nobody sees. This matches the per-repo
-// cap in git.routes.ts (MAX_REPO_CHANGES) without importing it, since the routes module imports us via the slice.
-const UNTRACKED_LINE_LIMIT = 500;
+// Cap on changes the working-tree scan ships per repo (git.routes.ts capRepoChanges); the remainder is a count
+// (`truncated`), not enumerated rows. Kept beside the scan, which counts lines only for the untracked files it can ship.
+export const MAX_REPO_CHANGES = 500;
 
 // HEAD's sha; undefined when git answers with an exit status (unborn HEAD, no repository at `dir`). A git that never
 // answered (spawn failure, kill, a dead forker) throws: read as unborn, a discard would untrack and clean every file.
@@ -61,8 +61,8 @@ const untrackedLineStats = async (dir: string, path: string): Promise<{ addition
 
 // Thousands of untracked paths would hold every file in memory at once; read a few at a time off a shared cursor.
 // Files not in `untracked` are left exactly as the numstat pass returned them. `limit` caps how many untracked files
-// are read for line counts: the scan ships at most MAX_REPO_CHANGES rows, and counting lines for files that will be
-// truncated away wastes reads on what nobody sees.
+// are read for line counts, for a reader whose rows are cut to a cap anyway (the working-tree scan); a delta whose
+// counts are totalled (changesAgainstBase: the review, a land's stats, the fleet card) counts every one.
 const UNTRACKED_READ_CONCURRENCY = 8;
 const withUntrackedLineStats = async (dir: string, untracked: readonly string[], changes: GitChange[], limit?: number): Promise<GitChange[]> => {
     if (untracked.length === 0) {
@@ -119,7 +119,7 @@ const readChangedFiles = async (dir: string, git: GitRunner): Promise<ChangedFil
     // No numstat for a conflict: line counts have no answer across three stages, so the row shows none.
     const [staged, unstaged] = await Promise.all([
         withLineStats(dir, ["--cached", base], stagedNames, git),
-        withLineStats(dir, [], unstagedNames, git).then((changes) => withUntrackedLineStats(dir, untracked, changes, UNTRACKED_LINE_LIMIT)),
+        withLineStats(dir, [], unstagedNames, git).then((changes) => withUntrackedLineStats(dir, untracked, changes, MAX_REPO_CHANGES)),
     ]);
     // `head` rides along free from the status read; other readers would each spend a rev-parse for the same sha.
     return { ...(branch !== undefined ? { branch } : {}), ...(head !== undefined ? { head } : {}), conflicted, staged, unstaged, blobs };
@@ -147,7 +147,7 @@ const readChangesAgainstBase = async (dir: string, base: string, scratch: readon
     }
     // Same numstat pass as the working-tree review; untracked files added above are counted from disk instead.
     const counted = await withLineStats(dir, [base], [...changes.values()], git);
-    return withUntrackedLineStats(dir, untracked, counted, UNTRACKED_LINE_LIMIT);
+    return withUntrackedLineStats(dir, untracked, counted);
 };
 
 // Same cumulative delta as changesAgainstBase, from two refs instead of a checkout; what an archived review runs on.

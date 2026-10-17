@@ -11,6 +11,7 @@ import { isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { currentRepos } from "../workspace/watch/repo-watch.js";
 import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import type { ActionResult } from "./changes/changes-commits.js";
+import { MAX_REPO_CHANGES } from "./changes/changes.js";
 import { createChipStaging } from "./changes/chip-staging.js";
 import { conflictedSides, stagedSides, unstagedSides, withCodeCounts } from "./changes/code-counts.js";
 import { createIndexTargets, ownWork } from "./changes/index-targets.js";
@@ -23,8 +24,7 @@ import { opt } from "../opt.js";
 // How long a scan result is reused: absorbs a refetch burst, short enough a save still shows live.
 const COALESCE_MS = 500;
 
-// Cap on changes shipped per repo per scan; the remainder is a count (`truncated`), not enumerated rows.
-export const MAX_REPO_CHANGES = 500;
+export { MAX_REPO_CHANGES };
 
 // Splits MAX_REPO_CHANGES across staged/unstaged (conflicts always pass through); `truncated` per side is what fell off
 // each (0/0 = shipped whole).

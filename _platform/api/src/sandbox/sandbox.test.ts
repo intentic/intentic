@@ -1065,6 +1065,25 @@ describe(`hosted machine state on a sandbox summary`, () => {
         expect(fetch).toHaveBeenCalledTimes(1);
     });
 
+    // Every list carried a read with Fly's own 30 s deadline, so a hung provider held the editor's sandbox list that long.
+    it(`a provider that hangs costs the list a short deadline, and the state reads unknown`, async () => {
+        stubGlobal(`fetch`, (_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener(`abort`, () => reject(init.signal?.reason ?? new Error(`aborted`)));
+        }));
+        const hosted = { appName: `test-app`, machineId: `m1`, region: `iad`, warm: false };
+        const prisma = fakePrisma({
+            sandbox: { findMany: jest.fn().mockResolvedValue([{ ...sandboxRow, hosted }]) },
+            sandboxMember: { findMany: jest.fn().mockResolvedValue([]) },
+        });
+        const ctx = context({ prisma });
+        ctx.config.hosted.flyApiToken = `fake-test-token`;
+        ctx.config.hosted.flyOrg = `test-org`;
+        const started = Date.now();
+        const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: ctx });
+        expect(Date.now() - started).toBeLessThan(5_000);
+        expect(sandboxes[0]?.hosted?.state).toBe(`unknown`);
+    });
+
     it(`a failed provider read says unknown, never asleep`, async () => {
         stubGlobal(`fetch`, async () => new Response(`unavailable`, { status: 503 }));
         const hosted = { appName: `test-app`, machineId: `m1`, region: `iad`, warm: false };

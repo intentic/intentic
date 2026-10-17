@@ -16,9 +16,13 @@ const run = rowOf<WorkflowRun>({ runId: `r1` });
 const board = document.createElement(`div`);
 board.innerHTML = `<section data-lane="attention"><div data-reveal data-fold-unit><div id="first-card"></div></div></section>`;
 const scrollIntoView = jest.fn();
-const animate = jest.fn();
+// The elements the ring was drawn on: `animate` is called on the row itself.
+const marked: Element[] = [];
+const animate = jest.fn(function (this: Element) {
+    marked.push(this);
+});
 Element.prototype.scrollIntoView = scrollIntoView;
-Element.prototype.animate = animate;
+Element.prototype.animate = animate as unknown as Element["animate"];
 
 const mount = (rows: { cards: FleetAgent[]; runs: WorkflowRun[]; wakes: number }, over: { filtering?: boolean; archive?: boolean } = {}) => {
     const host = {
@@ -44,6 +48,7 @@ const press = async (): Promise<void> => {
 beforeEach(() => {
     scrollIntoView.mockClear();
     animate.mockClear();
+    marked.length = 0;
 });
 
 it(`scrolls to the Attention lane and marks its first card, not the unit around it`, async () => {
@@ -51,7 +56,7 @@ it(`scrolls to the Attention lane and marks its first card, not the unit around 
     await press();
 
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
-    expect(animate).toHaveBeenCalledTimes(1);
+    expect(marked.map((row) => row.id)).toEqual([`first-card`]);
 });
 
 it(`opens the card when it is the only thing that needs the reader`, async () => {

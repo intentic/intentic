@@ -5,7 +5,7 @@ import { useT } from "@intentic/ui/i18n";
 import { LOCAL_NAVIGATE_EVENT } from "@intentic/web/local";
 import { type LocalCheckRow, type LocalFirstTask, localHost, type LocalRestartWhen } from "@intentic/web/local-host";
 import { computed, ref, watch } from "vue";
-import { firstTaskTakeDraft, onboardingSignOut, signIn } from "../../desktop";
+import { firstTaskTakeDraft, signIn } from "../../desktop";
 import { draft } from "../../onboarding/firstTask";
 import { machineSandbox } from "../machineSandbox";
 import FirstTaskComposer from "./FirstTaskComposer.vue";
@@ -194,6 +194,7 @@ const restartAt = computed(() =>
     setup.value.state === `waiting` && setup.value.restartAt !== undefined ? formatClock(setup.value.restartAt * 1000) : undefined,
 );
 const restart = (when: LocalRestartWhen): Promise<void> => ask(`restart`, async () => onboarding?.restart(when));
+const signOut = (): Promise<void> => ask(`signOut`, async () => onboarding?.signOut?.());
 
 const failedReason = computed(() => (setup.value.state === `failed` ? setup.value.reason : undefined));
 // Repair, the agent that runs on this computer outside every sandbox, opened on the failure (local shell `/repair`).
@@ -498,7 +499,7 @@ const retryTask = (): Promise<void> =>
 
                 <template v-else-if="phase === `signOut`">
                     <p class="max-w-read-sm text-xs leading-relaxed text-muted">{{ t(`desktop.pcSetup.signOut`) }}</p>
-                    <Button class="self-start" size="small" :label="t(`desktop.requirements.signOutNow`)" :disabled="busy !== undefined" @click="ask(`signOut`, onboardingSignOut)">
+                    <Button class="self-start" size="small" :label="t(`desktop.requirements.signOutNow`)" :disabled="busy !== undefined" @click="signOut()">
                         <template #icon><Icon name="refresh" /></template>
                     </Button>
                 </template>

@@ -58,9 +58,13 @@ const gisRenderButton = jest.fn((parent: HTMLElement) => {
     drawn.setAttribute(`role`, `button`);
     parent.append(drawn);
 });
+// GIS is initialized once per window (the module is one per window), so a later test answers through the callback an
+// earlier one saw initialized.
+type GisConfig = { callback: (response: { credential: string }) => void };
+let gisConfig: GisConfig | undefined;
 const answer = (given: string): void => {
-    const config = initialize.mock.calls.at(-1)?.[0] as { callback: (response: { credential: string }) => void };
-    config.callback({ credential: given });
+    gisConfig = (initialize.mock.calls.at(-1)?.[0] as GisConfig | undefined) ?? gisConfig;
+    gisConfig!.callback({ credential: given });
 };
 
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve));
@@ -138,4 +142,29 @@ it(`tells the reader a press came back with nothing, and offers Google's own pag
     expect(signInWithGoogle).toHaveBeenCalledWith(`/`);
     // Google's button stays: it is still the one road that signs in to the platform and the sandbox at once.
     expect(el.querySelector(`.entry-socket-slot [role="button"]`)).not.toBeNull();
+});
+
+// `signin_completed` is the funnel's sign-in: a credential the platform then refuses (a client-id mismatch, no endpoint)
+// signed nobody in, and counting it would hide the very failure the redirect offer exists for.
+it(`counts a sign-in only once the platform has taken the credential`, async () => {
+    const el = await mount();
+    signInWithGoogleCredential.mockRejectedValueOnce(new Error(`client-id mismatch`));
+
+    answer(GOOD);
+    await flush();
+    await nextTick();
+
+    expect(signInWithGoogleCredential).toHaveBeenCalledWith(GOOD);
+    expect(el.textContent).toContain(`Couldn't finish that sign-in`);
+    expect(track).not.toHaveBeenCalledWith(`signin_completed`, expect.anything());
+});
+
+it(`counts the sign-in the platform took`, async () => {
+    await mount();
+
+    answer(GOOD);
+    await flush();
+
+    expect(push).toHaveBeenCalledWith(`/`);
+    expect(track).toHaveBeenCalledWith(`signin_completed`, { method: `google`, surface: `login`, stall_shown: false });
 });

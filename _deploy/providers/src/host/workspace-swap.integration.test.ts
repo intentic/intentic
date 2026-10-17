@@ -15,24 +15,40 @@ const args = process.argv.slice(2);
 state.calls.push(args);
 let code = 0, out = '';
 const name = args.at(-1);
+state.stopped ??= [];
+const stopped = (id) => state.stopped.includes(id);
 if (args[0] === 'inspect') {
     if (!state.containers[name]) code = 1;
     else if (args.includes('{{.Id}}')) out = state.containers[name];
     else if (args.includes('{{.RestartCount}}')) out = state.crash ? '3' : '0';
+    else if (args.includes('{{.State.Status}} {{.State.ExitCode}}')) out = stopped(state.containers[name]) ? 'exited 0' : 'running 0';
 } else if (args[0] === 'rename') {
     state.containers[args[2]] = state.containers[args[1]];
     delete state.containers[args[1]];
 } else if (args[0] === 'rm') {delete state.containers[name];}
+else if (args[0] === 'stop') {state.stopped.push(state.containers[name]);}
+else if (args[0] === 'start') {state.stopped = state.stopped.filter((id) => id !== state.containers[name]);}
 else if (args[0] === 'run') {
     state.containers['box'] = 'new';
     if (state.failAll || (args.includes('--gpus=all') && state.failGpu)) code = 125;
-} else if (args[0] === 'exec') {code = state.notReady && state.containers.box === 'new' ? 2 : 0;}
+} else if (args[0] === 'exec') {
+    const target = args.find((arg) => state.containers[arg] !== undefined);
+    code = target !== undefined && stopped(state.containers[target]) ? 1 : state.notReady && state.containers.box === 'new' ? 2 : 0;
+}
 fs.writeFileSync(file, JSON.stringify(state));
 process.stdout.write(out);
 process.exit(code);
 `;
 
-const arrange = async (options: { failGpu?: boolean; failAll?: boolean; notReady?: boolean } = {}) => {
+interface Arrangement {
+    failGpu?: boolean;
+    failAll?: boolean;
+    notReady?: boolean;
+    containers?: Record<string, string>;
+    stopped?: string[];
+}
+
+const arrange = async (options: Arrangement = {}) => {
     const dir = await mkdtemp(join(tmpdir(), "workspace-swap-"));
     const stateFile = join(dir, "state.json");
     await writeFile(stateFile, JSON.stringify({ containers: { box: "old" }, calls: [], ...options }));
@@ -116,6 +132,18 @@ test("an older probation watch never rolls back a later deployment", async () =>
         const watched = spawnSync("sh", [join(fake.dir, "watch.sh")], { env: { ...fake.env, expected: "superseded" }, encoding: "utf8" });
         expect(watched.status).toBe(0);
         expect((await fake.state()).containers).toEqual({ box: "new", "box-previous": "old" });
+    } finally {
+        await rm(fake.dir, { recursive: true, force: true });
+    }
+});
+
+// The version in place, stopped on purpose (an owner's docker stop) while still on probation, read as a failed one: the
+// next apply put back its 24-hour-old predecessor, destroyed the stopped version, and parked the older one as the way back.
+test("a deliberately stopped version on probation stays the way back", async () => {
+    const fake = await arrange({ containers: { box: "current", "box-previous": "old" }, stopped: ["current"] });
+    try {
+        expect((await fake.run()).status).toBe(0);
+        expect((await fake.state()).containers).toEqual({ box: "new", "box-previous": "current" });
     } finally {
         await rm(fake.dir, { recursive: true, force: true });
     }

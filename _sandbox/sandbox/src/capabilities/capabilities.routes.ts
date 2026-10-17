@@ -159,9 +159,10 @@ type ResolvedEntry = Awaited<ReturnType<typeof withKeptSecrets>>;
 // A docker entry asking for the GPU is judged by a real device request on the host, not by the generic probe.
 const gpuProbeOf = async (entry: ResolvedEntry, probe: () => Promise<CapabilityProbe>): Promise<CapabilityProbe | undefined> =>
     entry.kind === "docker" && entry.config.gpu === "on" ? probe() : undefined;
+// Only a check that ran and failed refuses; one that could not run leaves the GPU to the launch's own preflight.
 const refuseUnusableGpu = async (entry: ResolvedEntry, probe: () => Promise<CapabilityProbe>): Promise<void> => {
     const answer = await gpuProbeOf(entry, probe);
-    if (answer !== undefined && !answer.ok) {
+    if (answer?.checked === true && !answer.ok) {
         throw new ORPCError("BAD_REQUEST", { message: answer.message });
     }
 };

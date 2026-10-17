@@ -560,7 +560,7 @@ mod platform {
             .find_map(|(token, served)| (*served == id).then(|| token.clone()))
     }
 
-    /// Hear the server's presses and closes, once, on a thread of their own for the life of the app.
+    /// Hear the server's presses and closes, once, in a task on Tauri's runtime for the life of the app.
     fn listen(app: &AppHandle, bus: &Connection) {
         static LISTENING: OnceLock<()> = OnceLock::new();
         LISTENING.get_or_init(|| {
