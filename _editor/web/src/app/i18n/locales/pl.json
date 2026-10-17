@@ -7066,7 +7066,7 @@
             "privacyShield": "Osłona prywatności",
             "guardrails": "Bezpieczniki",
             "retention": "Przechowywanie danych",
-            "records": "Rejestry",
+            "oversight": "Nadzór",
             "activity": "Aktywność"
         },
         "sandboxOutdatedNotice": {
@@ -8798,7 +8798,6 @@
             "formatWord": "Word"
         },
         "sandboxAudit": {
-            "part": "Część dziennika zdarzeń",
             "integrityTitle": "Czy dziennik jest nienaruszony?",
             "integrityDescription": "Każdy wpis jest zapieczętowany razem z poprzednim, więc wpis zmieniony lub usunięty później będzie tu widoczny.",
             "checkAgain": "Sprawdź ponownie",
@@ -8812,7 +8811,6 @@
             "tornNote": "Najnowszy plik kończy się niedokończonym wierszem, jaki zostawia awaria. Pominięto go i nie liczy się jako zmiana.",
             "prunedNote": "Wpisy do {date} usunięto zgodnie z okresem przechowywania; sprawdzanie zaczyna się po nich.",
             "reachNote": "To sprawdzenie wykrywa ingerencję, ale jej nie zapobiega: ktoś z pełną kontrolą nad sandboxem mógłby edytować te pliki. Kopia wysyłana do innego systemu to ta, której nikt wewnątrz sandboxa nie może zmienić.",
-            "keeping": "Przechowywanie",
             "readsTitle": "Zapisuj też, kto co otworzył",
             "readsDescription": "Dodaje wpis za każdym razem, gdy ktoś otworzy rozmowę, plik lub ten dziennik. Gdy wyłączone, zapisywane są tylko zmiany i logowania.",
             "forwardTitle": "Wysyłaj kopię do innego systemu",
@@ -8986,8 +8984,7 @@
                 "retention-delete": "Usunięto przeterminowane dane",
                 "file-read": "Otwarto plik",
                 "activity-read": "Otwarto dziennik aktywności"
-            },
-            "keptFor": "Zapisy są przechowywane przez {count} dzień. | Zapisy są przechowywane przez {count} dni. | Zapisy są przechowywane przez {count} dni."
+            }
         },
         "linkedSandboxes": {
             "title": "Połączone sandboxy",
@@ -9042,7 +9039,8 @@
             "transcriptsNote": "Wszystko, co powiedziano w rozmowie, wraz z przesłanymi plikami, stronami i kopiami zapasowymi, liczone od ostatniej wiadomości. Rozmowa, która wciąż pracuje albo czeka na Ciebie, zostaje.",
             "auditNote": "Starsze miesiące są usuwane w całości. Co najmniej 30 dni. Urzędy w Polsce przechowują dzienniki systemów przez 730 dni (2 lata).",
             "title": "Jak długo przechowywany jest każdy zapis",
-            "audit": "Dziennik zdarzeń"
+            "audit": "Dziennik zdarzeń",
+            "auditKeeping": "Jak prowadzony jest dziennik zdarzeń"
         },
         "privacyShieldPage": {
             "intro": "Co może opuścić ten sandbox i w jakiej postaci.",
@@ -9085,7 +9083,8 @@
             "turnsOff": "Tury pochodzą z rozszerzenia Aktywność, które jest w tym sandboxie wyłączone.",
             "turnsOffHow": "Włącz je ponownie, aby widzieć, co obudziło agenta i jak poszła każda tura:",
             "commandsSettings": "Czy sędzia działa i według czego sprawdza:",
-            "personalSettings": "Czego szuka osłona i którym dostawcom ufa:"
+            "personalSettings": "Czego szuka osłona i którym dostawcom ufa:",
+            "auditSettings": "Jak długo jest przechowywany, czy zapisuje odczyty i dokąd trafia kopia:"
         },
         "keyrings": {
             "title": "Pęki kluczy na twoich komputerach",

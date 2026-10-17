@@ -19,12 +19,36 @@ export interface SandboxSection {
      * while no view fills it.
      */
     readonly embeds?: string;
+    /**
+     * Sections this page draws as parts of its own, behind its own switch: no row of their own, since this page is their
+     * row, but still destinations by name (the palette's "Sandbox: …"), at their old address, which the router sends to
+     * the part (router/index.ts), and names no extension may take.
+     */
+    readonly within?: readonly SandboxSection[];
 }
+
+/**
+ * One row for several sections, drawn as tabs above whichever of them is open (workbench/hub/HubLayout.vue). It is the
+ * door for pages few readers open, which as rows of their own made the index long for everyone who never does. Each
+ * part keeps its own address, gating and organisation lock; the row opens the first part this reader may open, and
+ * leaves the index when there is none.
+ */
+export interface SandboxTabbedRow {
+    /** The row's own key, never a route: each of its parts is one. */
+    readonly key: string;
+    readonly label: string;
+    readonly icon: IconName;
+    readonly parts: readonly SandboxSection[];
+}
+
+export type SandboxNavRow = SandboxSection | SandboxTabbedRow;
+
+export const isTabbedRow = (row: SandboxNavRow): row is SandboxTabbedRow => `parts` in row;
 
 export interface SandboxSectionGroup {
     readonly key: string;
     readonly label: string;
-    readonly items: readonly SandboxSection[];
+    readonly items: readonly SandboxNavRow[];
 }
 
 /** The section a param-less `/sandbox` shows; its row writes no param, so no section has two URLs. */
@@ -80,39 +104,51 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
         ],
     },
     {
-        // How this box handles what passes through it, as the pages that set it: what a data protection officer reads
-        // first, then what may leave the box and in what form, what the agent may do without asking a person, and how
-        // long each record is kept. Each was a part of another page until 2026-10-16 (the shield and the judge were Agent ▸
-        // Safety, retention Agent ▸ Finishing and Audit log ▸ How it is kept), so Data protection's measures led out into
-        // pages named for something else. A setting about one thing stays with that thing: a secret's gate on Secrets, a
-        // member's role on Access, an area on Areas; Data protection links to them as it links to these.
-        // Maintainer, as the daemon refuses their reads and writes below; an organisation's Agent lock holds the three
-        // that write settings (organisations/useOrgPolicy.ts), since the daemon files their routes under it.
-        key: `privacy`,
-        label: t(`sandbox.sandboxNav.privacy`),
+        // How this box handles what passes through it, and what happened in it: two rows, one for what is set and one for
+        // what is read. Few readers open either, so each is a single door with its pages as tabs inside, and every page is
+        // still a destination by name in the palette. Until 2026-10-17 they were two groups of six rows (Privacy & safety,
+        // then Records), which made the index long for everyone who never opens them; before 2026-10-16 this group was
+        // Oversight's three rows.
+        key: `oversight`,
+        label: t(`sandbox.sandboxNav.oversight`),
         items: [
-            { slug: `data-protection`, label: t(`sandbox.sandboxNav.dataProtection`), icon: `lock`, maintainer: true },
-            { slug: `privacy-shield`, label: t(`sandbox.sandboxNav.privacyShield`), icon: `eye-slash`, maintainer: true },
-            { slug: `guardrails`, label: t(`sandbox.sandboxNav.guardrails`), icon: `approvals`, maintainer: true },
-            { slug: `retention`, label: t(`sandbox.sandboxNav.retention`), icon: `history`, maintainer: true },
-        ],
-    },
-    {
-        // What happened, split by who did it: agents (Activity) and people (the audit trail). Read, never set, so below the
-        // pages that set what they record. Oversight held these two and Data protection until 2026-10-16.
-        key: `records`,
-        label: t(`sandbox.sandboxNav.records`),
-        items: [
-            // What woke the agent, what it called and how each turn went, then every command the judge checked and every
-            // request the shield masked. Core, though its turns are the Activity extension's view: the judge's and the
-            // shield's records sat at the foot of their settings until 2026-10-16, and an extension can be switched off.
-            // A member sees it too, the turns narrowed to the conversations they may see; the other two parts are a
-            // maintainer's.
-            { slug: `activity`, label: t(`sandbox.sandboxNav.activity`), icon: `wave-pulse`, embeds: `intentic.activity` },
-            // Who changed what anywhere above, and who signed in: the audit trail and how it is kept. Core, not an
-            // extension: the daemon writes it from every route, and an extension can be switched off. Maintainer, as the
-            // daemon refuses it below (it names every member and what they did).
-            { slug: `audit`, label: t(`sandbox.sandboxNav.audit`), icon: `list-check`, maintainer: true },
+            {
+                // How this box handles what passes through it, as the pages that set it: what a data protection officer
+                // reads first, then what may leave the box and in what form, what the agent may do without asking a
+                // person, and how long each record is kept and where a copy of the audit trail goes. Each was a part of
+                // another page until 2026-10-16 (the shield and the judge were Agent ▸ Safety, retention Agent ▸ Finishing
+                // and Audit log ▸ How it is kept), so Data protection's measures led out into pages named for something
+                // else. A setting about one thing stays with that thing: a secret's gate on Secrets, a member's role on
+                // Access, an area on Areas; Data protection links to them as it links to these.
+                // Maintainer, as the daemon refuses their reads and writes below; an organisation's Agent lock holds the
+                // three that write settings (organisations/useOrgPolicy.ts), since the daemon files their routes under it.
+                key: `privacy`,
+                label: t(`sandbox.sandboxNav.privacy`),
+                icon: `lock`,
+                parts: [
+                    { slug: `data-protection`, label: t(`sandbox.sandboxNav.dataProtection`), icon: `lock`, maintainer: true },
+                    { slug: `privacy-shield`, label: t(`sandbox.sandboxNav.privacyShield`), icon: `eye-slash`, maintainer: true },
+                    { slug: `guardrails`, label: t(`sandbox.sandboxNav.guardrails`), icon: `approvals`, maintainer: true },
+                    { slug: `retention`, label: t(`sandbox.sandboxNav.retention`), icon: `history`, maintainer: true },
+                ],
+            },
+            // What happened, split by who did it: what woke the agent, what it called and how each turn went, every
+            // command the judge checked and every request the shield masked, then what people did (the audit trail).
+            // Read, never set, so below the row that sets what it records. Core, though its turns are the Activity
+            // extension's view: the judge's and the shield's records sat at the foot of their settings until 2026-10-16,
+            // and an extension can be switched off. A member sees it too, the turns narrowed to the conversations they
+            // may see; every other part is a maintainer's.
+            {
+                slug: `activity`,
+                label: t(`sandbox.sandboxNav.activity`),
+                icon: `wave-pulse`,
+                embeds: `intentic.activity`,
+                // Who changed what anywhere above, and who signed in. Core, not an extension: the daemon writes it from
+                // every route, and an extension can be switched off. Maintainer, as the daemon refuses it below (it names
+                // every member and what they did). A row of its own until 2026-10-17, and how it is kept (reads, a copy
+                // forwarded) moved to Retention then, so the part is the record alone.
+                within: [{ slug: `audit`, label: t(`sandbox.sandboxNav.audit`), icon: `list-check`, maintainer: true }],
+            },
         ],
     },
     // Recently deleted was a last `account` group here until 2026-10-07; it is the foot of the Devices board now
@@ -121,7 +157,13 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
 
 // Functions, not constants, here and below: the rows carry words, and at import time no catalog is registered to read
 // them from.
-const builtInSections = (): readonly SandboxSection[] => sandboxSectionGroups().flatMap((group) => group.items);
+// A tabbed row's parts and a page's own parts are sections like any other here: addresses, palette destinations, names
+// no extension may take.
+const builtInSections = (): readonly SandboxSection[] =>
+    sandboxSectionGroups()
+        .flatMap((group) => group.items)
+        .flatMap((row) => (isTabbedRow(row) ? row.parts : [row]))
+        .flatMap((section) => [section, ...(section.within ?? [])]);
 
 // Every built-in slug, derived from the rows themselves so adding a section cannot forget to guard its name. The hub also
 // asks it which sections an organisation's lock may wrap (organisations/OrgHeldSection.vue).

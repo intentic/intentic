@@ -80,19 +80,23 @@ flowchart LR
   still appears under its own id. The roster is the owner's to read, so a maintainer's map shows tokens, links and
   themselves, and says so. It is core rather than an extension for the same reason as the audit log: it describes the
   security model, and a copy of those rules that drifted, or that someone switched off, would misstate it.
-- **Privacy & safety, then Records.** The hub's last two groups (`sandboxNav.ts`). Privacy & safety holds what the
-  whole box does with what passes through it, each a page that sets it: Data protection (below), Privacy shield
-  (`features/sandbox/privacy-shield/`: the shield, its trusted providers, and Intentic's product analytics), Guardrails
-  (`features/sandbox/guardrails/`: the command judge, its policy, project installs, then per service whether an
-  outward action runs, asks first or is refused, `settings.actionRules`, and whether work started from outside may
+- **Oversight: Privacy & safety, then Activity.** The hub's last group (`sandboxNav.ts`), two rows for pages few
+  readers open. Privacy & safety is one row standing for four pages, drawn as tabs above whichever is open, each at its
+  own address (`HubTab.parts`, `workbench/hub/HubLayout.vue`); every one is still a palette destination by name. They
+  hold what the whole box does with what passes through it, each a page that sets it: Data protection (below), Privacy
+  shield (`features/sandbox/privacy-shield/`: the shield, its trusted providers, and Intentic's product analytics),
+  Guardrails (`features/sandbox/guardrails/`: the command judge, its policy, project installs, then per service whether
+  an outward action runs, asks first or is refused, `settings.actionRules`, and whether work started from outside may
   run, `settings.admission`) and Retention (`features/sandbox/retention/`: every record's period, the audit trail's
-  included). A setting about one thing stays with that thing (a gate on Secrets, a role on Access). An organisation's
-  Agent lock holds the three that write settings (`organisations/useOrgPolicy.ts`), as the daemon files their routes
-  under it. Records are what happened, split by who did it: Activity (`features/sandbox/activity/`; the Activity
-  extension's turns, drawn inside it as the one view `intentic.activity` may fill under that name, then every command
-  the judge checked and every request the shield handled, which stay when the extension is switched off) and the audit
-  log. Each settings page ends on the way to its record, and each record on the way to its settings
-  (`SectionLink.vue`).
+  included, then the rest of how the audit trail is kept, `settings.audit`: whether reads are recorded, a forward
+  address and the stored secret sent with it). A setting about one thing stays with that thing (a gate on Secrets, a
+  role on Access). An organisation's Agent lock holds the three that write settings (`organisations/useOrgPolicy.ts`),
+  as the daemon files their routes under it. Activity is what happened (`features/sandbox/activity/`, `?section=`): the
+  Activity extension's turns, drawn inside it as the one view `intentic.activity` may fill under that name, then every
+  command the judge checked and every request the shield handled, which stay when the extension is switched off, then
+  the audit log. Each settings page ends on the way to its record, and each record on the way to its settings
+  (`SectionLink.vue`). 2026-10-17: these were two groups of six rows (Privacy & safety, then Records); collapsible
+  groups were the alternative, rejected because a folded group still costs its heading and can hide the page open.
 - **Data protection.** `/sandbox/data-protection` (`features/sandbox/data-protection/`, maintainer and up) draws the
   daemon's compliance report as three steps (`?step=`), each a tile that says how it stands before it is opened.
   Protections: every measure, the public-office preset's changes filed under the measure each switches (current →
@@ -100,11 +104,11 @@ flowchart LR
   each is set, then those in place, folded. Where data goes: what only the office can answer, then every outbound path
   in use with its personal-data, shield and location facts, then the ones one switch would open. Documents: the three
   drafts in Polish or English, as Word or Markdown, with a note while recommended changes are unapplied.
-- **Audit log.** `/sandbox/audit`, for the owner and maintainers (`features/sandbox/audit/`), in two parts. Records,
-  the default: whether the daemon's hash-chained trail is intact (`/audit/verify`), a period downloaded as the JSON
-  Lines the daemon stored, and the records, filtered by who and by what was touched and paged backwards on asking.
-  How it is kept (`?section=keeping`): `settings.audit`, whether reads are recorded, a forward address and the stored
-  secret sent with it; how many days are kept is Retention's, which the part names with the way there.
+- **Audit log.** Activity's last part (`/sandbox/activity?section=audit`; the old `/sandbox/audit` redirects there),
+  for the owner and maintainers (`features/sandbox/audit/`): whether the daemon's hash-chained trail is intact
+  (`/audit/verify`), a period downloaded as the JSON Lines the daemon stored, and the records, filtered by who and by
+  what was touched and paged backwards on asking. How it is kept is Retention's (`audit/AuditKeeping.vue`), which the
+  outside-copy chip opens.
 - **Personas.** `/sandbox/personas` shows square selectors with the selected persona's editor below.
   `PersonaSelector.vue` wraps `components/PersonaTile.vue` (face, label, selected appearance) for renaming and removal
   directly on the selector. It saves a queued edit against its original persona when the selection changes. A persona

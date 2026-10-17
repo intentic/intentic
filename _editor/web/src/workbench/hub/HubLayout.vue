@@ -6,7 +6,7 @@ import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { badgeSpeaks } from "../views/viewBadge";
 import { hubDrills, hubSectionParam } from "./hubDrill";
-import type { HubTab } from "./hubNav";
+import { type HubTab, hubRowOf, hubRowSections } from "./hubNav";
 import HubIndex from "./HubIndex.vue";
 import HubRowBadge from "./HubRowBadge.vue";
 import { hubWorkKey, provideHubSection } from "./hubWork";
@@ -43,7 +43,10 @@ const {
 const route = useRoute();
 const router = useRouter();
 
-const tabs = computed<readonly HubTab[]>(() => groups.flatMap((group) => group.items));
+// The index's rows, and the sections behind them: a row with parts is one row in the index and a section per part,
+// each at an address of its own.
+const rows = computed<readonly HubTab[]>(() => groups.flatMap((group) => group.items));
+const tabs = computed<readonly HubTab[]>(() => rows.value.flatMap(hubRowSections));
 const slugs = computed<readonly string[]>(() => tabs.value.map((tab) => tab.slug));
 
 // The section the address names, if it names one: the param-less URL is the default section on a desktop and the
@@ -68,15 +71,22 @@ const activeSlug = computed<string>(() => {
 // extensions), which put the whole index between the reader and the page they had already picked. A reader who may
 // not stand on the root (a guest, `addressable`) or a hub of one section has no index worth a page of its own.
 const { mobile } = useDevice();
-const drill = computed(() => hubDrills(mobile.value, addressable, tabs.value.length));
+const drill = computed(() => hubDrills(mobile.value, addressable, rows.value.length));
 const onIndex = computed(() => drill.value && named.value === undefined);
 
 // Drilling names every section, the default one included: its param-less URL is the index there.
 const linkTo = (slug: string) => ({ name: routeName, params: { tab: hubSectionParam(slug, defaultSlug, addressable || drill.value) } });
 const indexLink = { name: routeName, params: { tab: undefined } };
+// A row with parts opens its first; it is current while any of them is open, whichever the reader went to.
+const rowLink = (row: HubTab) => linkTo(hubRowSections(row)[0]?.slug ?? row.slug);
+const activeRow = computed<HubTab | undefined>(() => hubRowOf(rows.value, activeSlug.value));
 
-// A drilled section wears its own name; the hub's moves to the way back.
-const activeLabel = computed(() => tabs.value.find((tab) => tab.slug === activeSlug.value)?.label);
+// The tabs above a section whose row stands for several: the row's parts, in its order. A row down to one part (the
+// rest withheld from this reader) draws none, since a single tab switches to nothing.
+const parts = computed<readonly HubTab[]>(() => activeRow.value?.parts ?? []);
+
+// A drilled section wears its row's name (a part's own is the tab under it); the hub's moves to the way back.
+const activeLabel = computed(() => activeRow.value?.label);
 const pageTitle = computed(() => (drill.value && !onIndex.value ? (activeLabel.value ?? title) : title));
 const pageDescription = computed(() => (drill.value && !onIndex.value ? undefined : description));
 
@@ -99,28 +109,35 @@ providePageBack(
 // lives on. The hub draws the mark; what it says comes back through this hub's own badges.
 provideHubSection(computed(() => hubWorkKey(routeName, activeSlug.value)));
 
-// The strip is a control, not a link, so it navigates by hand.
+// The strip and the tabs are controls, not links, so they navigate by hand.
 const select = (slug: string): void => {
     void router.push(linkTo(slug));
+};
+const selectRow = (slug: string): void => {
+    const row = rows.value.find((entry) => entry.slug === slug);
+    if (row !== undefined) {
+        void router.push(rowLink(row));
+    }
 };
 
 // The strip flattens the groups away: it has no headings, which is why it is only the answer for a desktop pane too
 // narrow for the rail: the grouping this component exists to show is exactly what does not survive the trip.
 // A section's own mark keeps the chip; a run takes it only where there is none, turning, and says what it is in the
 // pill's title — the strip has no second corner to put it in.
-const options = computed(() =>
-    tabs.value.map((tab) => {
-        const running = tab.badge?.running;
-        return {
-            label: tab.label,
-            value: tab.slug,
-            badge: tab.badge?.count,
-            mark: (tab.badge?.mark ?? (running === undefined ? undefined : `spinner`)) as IconName | undefined,
-            markSpin: tab.badge?.mark === undefined && running !== undefined,
-            ...(running === undefined ? {} : { markTitle: running }),
-        };
-    }),
-);
+// A row with parts is one pill, as it is one row: its tabs are drawn above the section either way.
+const optionOf = (tab: HubTab) => {
+    const running = tab.badge?.running;
+    return {
+        label: tab.label,
+        value: tab.slug,
+        badge: tab.badge?.count,
+        mark: (tab.badge?.mark ?? (running === undefined ? undefined : `spinner`)) as IconName | undefined,
+        markSpin: tab.badge?.mark === undefined && running !== undefined,
+        ...(running === undefined ? {} : { markTitle: running }),
+    };
+};
+const options = computed(() => rows.value.map(optionOf));
+const partOptions = computed(() => parts.value.map(optionOf));
 
 // An unknown slug (/sandbox/nonsense) resolves to the default: clean the URL back to the canonical one, which on a
 // phone is the index.
@@ -148,22 +165,22 @@ watch(
         <!-- A desktop pane too narrow for the rail keeps the strip. It wraps rather than scrolls: this is the index of everything the hub holds, and a section a reader can't see is a section they won't look for. -->
         <template v-if="!drill" #compact>
             <div class="border-b border-line-subtle pb-2">
-                <SegmentedControl :model-value="activeSlug" :options="options" wrap @update:model-value="select" />
+                <SegmentedControl :model-value="activeRow?.slug ?? activeSlug" :options="options" wrap @update:model-value="selectRow" />
             </div>
         </template>
 
         <template #rail>
-            <HubIndex v-if="drill" :groups="groups" :link-to="linkTo" />
+            <HubIndex v-if="drill" :groups="groups" :link-to="rowLink" />
             <NavRail v-else :aria-label="t(`shell.hubLayout.sections`)" :groups="groups">
                 <template #row="{ item: tab }">
                     <!-- Internal navigation wraps the presentational row to provide its href. -->
-                    <RouterLink :key="tab.slug" :to="linkTo(tab.slug)" class="block">
+                    <RouterLink :key="tab.slug" :to="rowLink(tab)" class="block">
                         <Row
                             as="div"
                             density="dense"
                             :icon="sectionIcon(tab.slug, tab.icon)"
                             :title="tab.label"
-                            :selected="tab.slug === activeSlug"
+                            :selected="tab.slug === activeRow?.slug"
                             class="rounded-lg"
                         >
                             <!-- A fact about the section, so it rides the row's #meta cluster. -->
@@ -178,6 +195,22 @@ watch(
         </template>
 
         <!-- Nothing mounts under the index: a section is a page a phone goes to, not one it keeps under the list. -->
-        <template #detail><slot v-if="!onIndex" :slug="activeSlug" /></template>
+        <template #detail>
+            <template v-if="!onIndex">
+                <!-- A row standing for several sections: its parts as tabs, underlined since they say what the pane is, then the one open. -->
+                <div v-if="partOptions.length > 1" class="flex flex-col gap-6">
+                    <SegmentedControl
+                        :model-value="activeSlug"
+                        :options="partOptions"
+                        variant="underline"
+                        wrap
+                        :aria-label="activeRow?.label"
+                        @update:model-value="select"
+                    />
+                    <slot :slug="activeSlug" />
+                </div>
+                <slot v-else :slug="activeSlug" />
+            </template>
+        </template>
     </SplitView>
 </template>

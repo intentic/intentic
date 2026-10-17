@@ -7457,7 +7457,7 @@
             "privacyShield": "Privacy shield",
             "guardrails": "Guardrails",
             "retention": "Retention",
-            "records": "Records",
+            "oversight": "Oversight",
             "activity": "Activity"
         },
         "sandboxOutdatedNotice": {
@@ -9222,7 +9222,6 @@
             "formatWord": "Word"
         },
         "sandboxAudit": {
-            "part": "Part of the audit log",
             "integrityTitle": "Is the log intact?",
             "integrityDescription": "Each record is sealed together with the one before it, so a record changed or removed afterwards shows up here.",
             "checkAgain": "Check again",
@@ -9236,7 +9235,6 @@
             "tornNote": "The newest file ends in a half-written line, which a crash leaves behind. It was skipped and does not count as a change.",
             "prunedNote": "Records up to {date} were deleted under the retention setting; the check starts after them.",
             "reachNote": "This check shows tampering but cannot prevent it: anyone with full control of the sandbox could edit these files. The copy sent to another system is the one nobody inside the sandbox can change.",
-            "keeping": "How it is kept",
             "readsTitle": "Also record who opened what",
             "readsDescription": "Adds a record every time someone opens a conversation, a file or this log. When off, only changes and sign-ins are recorded.",
             "forwardTitle": "Send a copy to another system",
@@ -9410,8 +9408,7 @@
                 "retention-delete": "Expired data deleted",
                 "file-read": "File opened",
                 "activity-read": "Activity log opened"
-            },
-            "keptFor": "Records are kept for {count} day. | Records are kept for {count} days."
+            }
         },
         "linkedSandboxes": {
             "title": "Linked sandboxes",
@@ -9499,7 +9496,8 @@
             "transcriptsNote": "Everything said in a conversation, with its uploads, pages and backups, counted from its last message. A conversation still working, or waiting for you, is kept.",
             "title": "How long each record is kept",
             "audit": "Audit trail",
-            "auditNote": "Older months are deleted whole. At least 30 days. Public offices in Poland keep system logs for 730 days (2 years)."
+            "auditNote": "Older months are deleted whole. At least 30 days. Public offices in Poland keep system logs for 730 days (2 years).",
+            "auditKeeping": "How the audit log is kept"
         },
         "activityPage": {
             "parts": "Part of the activity record",
@@ -9509,7 +9507,8 @@
             "turnsOff": "The turns come from the Activity extension, which is switched off in this sandbox.",
             "turnsOffHow": "Switch it back on to see what woke the agent and how each turn went:",
             "commandsSettings": "Whether the judge runs, and what it checks against:",
-            "personalSettings": "What the shield looks for, and which providers it trusts:"
+            "personalSettings": "What the shield looks for, and which providers it trusts:",
+            "auditSettings": "How long it is kept, whether reads are recorded, and where a copy goes:"
         },
         "keyrings": {
             "title": "Keyrings on your computers",

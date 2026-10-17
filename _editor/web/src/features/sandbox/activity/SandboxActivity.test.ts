@@ -1,5 +1,5 @@
 // Activity's parts by who reads it and what is switched on: the extension's turns, then the judge's and the shield's
-// records, which stay when the extension is off, and which a member below maintainer never sees.
+// records and the audit trail, which stay when the extension is off, and which a member below maintainer never sees.
 // jsdom: mounts the component tree and reads rendered DOM.
 import "@intentic/testing/dom";
 import { waitFor } from "@intentic/testing/bun";
@@ -17,6 +17,7 @@ jest.mock(`../../organisations/useOrgPolicy`, () => ({
 const stub = (name: string) => ({ default: defineComponent({ render: () => h(`section`, { "data-part": name }) }) });
 jest.mock(`../guardrails/AgentSafetyLog.vue`, () => stub(`commands`));
 jest.mock(`../privacy-shield/PrivacyShieldRecord.vue`, () => stub(`personal`));
+jest.mock(`../audit/SandboxAudit.vue`, () => stub(`audit`));
 
 const { default: SandboxActivity } = await import("./SandboxActivity.vue");
 
@@ -51,10 +52,17 @@ afterEach(() => {
     hiddenAgent.value = false;
 });
 
-it(`opens on the turns, with the two records beside them`, async () => {
+it(`opens on the turns, with the records beside them and the audit trail last`, async () => {
     const { el } = await mount();
     expect(shown(el)).toEqual([`turns`]);
-    expect(tabs(el)).toEqual([`Turns`, `Commands checked`, `Personal data`]);
+    expect(tabs(el)).toEqual([`Turns`, `Commands checked`, `Personal data`, `Audit log`]);
+});
+
+// The audit log was a hub row of its own until 2026-10-17; how it is kept is Retention's now, which its part ends on.
+it(`opens the audit trail as a part, with the way to how it is kept`, async () => {
+    const { el } = await mount({ section: `audit` });
+    expect(shown(el)).toEqual([`audit`]);
+    expect(el.querySelector(`a[href="/sandbox/retention"]`)).not.toBeNull();
 });
 
 it(`opens the record a settings page linked to, with the way back to those settings`, async () => {
@@ -69,24 +77,25 @@ it(`opens the record a settings page linked to, with the way back to those setti
     expect(personal.querySelector(`a[href="/sandbox/privacy-shield"]`)).not.toBeNull();
 });
 
-it(`keeps both records when the extension is switched off, and says where the turns went`, async () => {
+it(`keeps every record when the extension is switched off, and says where the turns went`, async () => {
     const { el } = await mount({ section: `commands` }, { turns: false });
     expect(shown(el)).toEqual([`commands`]);
-    expect(tabs(el)).toEqual([`Turns`, `Commands checked`, `Personal data`]);
+    expect(tabs(el)).toEqual([`Turns`, `Commands checked`, `Personal data`, `Audit log`]);
     (el.querySelectorAll<HTMLButtonElement>(`button[role="tab"]`)[0])?.click();
     await waitFor(() => expect(el.querySelector(`a[href="/sandbox/extensions"]`)).not.toBeNull());
 });
 
 it(`shows a member their turns alone, with no strip to pick from`, async () => {
     canShip.value = false;
-    const { el } = await mount({ section: `commands` });
+    const { el } = await mount({ section: `audit` });
     expect(shown(el)).toEqual([`turns`]);
     expect(tabs(el)).toEqual([]);
 });
 
-it(`leaves out the records whose pages an organisation hides`, async () => {
+// The audit trail stays: no organisation holds it, as it is the record of what an organisation's own locks were used for.
+it(`leaves out the records whose pages an organisation hides, and keeps the audit trail`, async () => {
     hiddenAgent.value = true;
     const { el } = await mount({ section: `personal` });
     expect(shown(el)).toEqual([`turns`]);
-    expect(tabs(el)).toEqual([]);
+    expect(tabs(el)).toEqual([`Turns`, `Audit log`]);
 });

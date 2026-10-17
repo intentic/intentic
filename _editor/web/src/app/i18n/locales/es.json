@@ -3740,7 +3740,7 @@
             "privacyShield": "Escudo de privacidad",
             "guardrails": "Salvaguardas",
             "retention": "Conservación",
-            "records": "Registros",
+            "oversight": "Supervisión",
             "activity": "Actividad"
         },
         "sandboxOutdatedNotice": {
@@ -4553,7 +4553,6 @@
             "formatWord": "Word"
         },
         "sandboxAudit": {
-            "part": "Parte del registro de auditoría",
             "integrityTitle": "¿Está intacto el registro?",
             "integrityDescription": "Cada entrada queda sellada junto con la anterior, así que una entrada cambiada o eliminada después aparece aquí.",
             "checkAgain": "Comprobar de nuevo",
@@ -4567,7 +4566,6 @@
             "tornNote": "El archivo más reciente termina en una línea a medio escribir, como la que deja un fallo. Se omitió y no cuenta como cambio.",
             "prunedNote": "Las entradas hasta el {date} se eliminaron según el periodo de conservación; la comprobación empieza después de ellas.",
             "reachNote": "Esta comprobación muestra manipulaciones pero no las impide: quien controle por completo la sandbox podría editar estos archivos. La copia enviada a otro sistema es la que nadie dentro de la sandbox puede cambiar.",
-            "keeping": "Conservación",
             "readsTitle": "Registrar también quién abrió qué",
             "readsDescription": "Añade una entrada cada vez que alguien abre una conversación, un archivo o este registro. Desactivado, solo se registran los cambios y los inicios de sesión.",
             "forwardTitle": "Enviar una copia a otro sistema",
@@ -4741,8 +4739,7 @@
                 "retention-delete": "Datos caducados eliminados",
                 "file-read": "Archivo abierto",
                 "activity-read": "Registro de actividad abierto"
-            },
-            "keptFor": "Los registros se guardan {count} día. | Los registros se guardan {count} días."
+            }
         },
         "agentVoice": {
             "wakeWord": "Palabra de activación",
@@ -4766,7 +4763,8 @@
             "transcriptsNote": "Todo lo dicho en una conversación, con sus archivos subidos, páginas y copias de seguridad, contado desde su último mensaje. Una conversación que sigue trabajando o te está esperando se conserva.",
             "auditNote": "Los meses más antiguos se eliminan enteros. Al menos 30 días. Las administraciones públicas en Polonia conservan los registros del sistema 730 días (2 años).",
             "title": "Cuánto se guarda cada registro",
-            "audit": "Registro de auditoría"
+            "audit": "Registro de auditoría",
+            "auditKeeping": "Cómo se lleva el registro de auditoría"
         },
         "privacyShieldPage": {
             "intro": "Qué puede salir de este sandbox, y de qué forma.",
@@ -4809,7 +4807,8 @@
             "turnsOff": "Los turnos vienen de la extensión Actividad, que está desactivada en este sandbox.",
             "turnsOffHow": "Vuelve a activarla para ver qué despertó al agente y cómo fue cada turno:",
             "commandsSettings": "Si el juez funciona, y con qué revisa:",
-            "personalSettings": "Qué busca el escudo, y en qué proveedores confía:"
+            "personalSettings": "Qué busca el escudo, y en qué proveedores confía:",
+            "auditSettings": "Cuánto se guarda, si registra las lecturas y adónde va una copia:"
         },
         "secretRows": {
             "offline": "Sin conexión",

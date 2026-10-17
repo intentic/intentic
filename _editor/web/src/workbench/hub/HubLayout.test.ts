@@ -34,9 +34,20 @@ const Section = defineComponent({
 
 let app: App | undefined;
 
+// A row standing for two sections, as Privacy & safety stands for its pages: one row in the index, the sections as tabs.
+const PRIVACY = {
+    slug: `privacy`,
+    label: `Privacy & safety`,
+    icon: `lock` as const,
+    parts: [
+        { slug: `data-protection`, label: `Data protection`, icon: `lock` as const },
+        { slug: `retention`, label: `Retention`, icon: `history` as const },
+    ],
+};
+
 // `listed` is the index as it stands this render — a hub whose sections arrive with a read has fewer of them for as
-// long as the read takes, which is what `ready` is about.
-const mount = async (path: string, index: { ready?: boolean; listed?: readonly string[] } = {}): Promise<HTMLElement> => {
+// long as the read takes, which is what `ready` is about. `tabbed` adds the row above as a group of its own.
+const mount = async (path: string, index: { ready?: boolean; listed?: readonly string[]; tabbed?: boolean } = {}): Promise<HTMLElement> => {
     await router.push(path);
     await router.isReady();
     const el = document.createElement(`div`);
@@ -55,7 +66,8 @@ const mount = async (path: string, index: { ready?: boolean; listed?: readonly s
                         badge: { count: 1, tone: `info` as const, ...(running === undefined ? {} : { running }) },
                     },
                 ];
-                return [{ key: `box`, items: items.filter((item) => index.listed?.includes(item.slug) ?? true) }];
+                const box = { key: `box`, items: items.filter((item) => index.listed?.includes(item.slug) ?? true) };
+                return index.tabbed === true ? [box, { key: `oversight`, items: [PRIVACY] }] : [box];
             });
             return () =>
                 h(
@@ -137,4 +149,41 @@ it(`attributes a section's own work to the row it was started from`, async () =>
 
     expect(hubWorkRunning(DEVICES)).toBe(`Updating a container`);
     expect(spinners(el)).toHaveLength(1);
+});
+
+const partTabs = (el: HTMLElement): HTMLButtonElement[] => [
+    ...el.querySelectorAll<HTMLButtonElement>(`[role="tablist"][aria-label="Privacy & safety"] [role="tab"]`),
+];
+const current = (el: HTMLElement): string[] => [...el.querySelectorAll(`[aria-current="true"]`)].map((row) => row.textContent?.trim() ?? ``);
+
+// THE ROW STANDS FOR ITS SECTIONS: one row in the index, current whichever of them is open, opening the first, and the
+// sections themselves as tabs above the one on screen, each still at its own address.
+it(`draws a row with parts once, current while any of them is open, with their tabs above it`, async () => {
+    const el = await mount(`/sandbox/retention`, { tabbed: true });
+    expect(section(el)).toBe(`retention`);
+    expect(current(el)).toEqual([`Privacy & safety`]);
+    expect(el.querySelector(`a[href="/sandbox/data-protection"]`)?.textContent).toContain(`Privacy & safety`);
+    expect(partTabs(el).map((tab) => tab.textContent?.trim())).toEqual([`Data protection`, `Retention`]);
+    expect(partTabs(el).find((tab) => tab.getAttribute(`aria-selected`) === `true`)?.textContent?.trim()).toBe(`Retention`);
+});
+
+it(`moves between a row's sections by their tabs, at each section's own address`, async () => {
+    const el = await mount(`/sandbox/retention`, { tabbed: true });
+    partTabs(el)[0]?.click();
+    await settle();
+    expect(router.currentRoute.value.path).toBe(`/sandbox/data-protection`);
+    expect(section(el)).toBe(`data-protection`);
+});
+
+it(`draws no tabs above a section that is a row of its own`, async () => {
+    const el = await mount(`/sandbox/devices`, { tabbed: true });
+    expect(section(el)).toBe(`devices`);
+    expect(partTabs(el)).toHaveLength(0);
+});
+
+it(`gives a row with parts no address of its own`, async () => {
+    const el = await mount(`/sandbox/privacy`, { tabbed: true });
+    await settle();
+    expect(router.currentRoute.value.path).toBe(`/sandbox`);
+    expect(section(el)).toBe(`overview`);
 });

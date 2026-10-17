@@ -1,21 +1,41 @@
-import { sandboxEmbedOf, sandboxKeyAllowed, sandboxSectionGroups, sandboxSections } from "./sandboxNav";
+import { isTabbedRow, sandboxEmbedOf, sandboxKeyAllowed, sandboxSectionGroups, sandboxSections } from "./sandboxNav";
 
 // How the Sandbox hub's index is filed. The reach group leads with the three pages that each set one part of who gets in
-// and what the box reaches, and closes on the map, the read-only drawing of all of it. What this box does with what passes through it (the officer's page, what may
-// leave, what the agent may do unasked, how long things are kept) is one group of its own, and the records of what
-// happened, split by who did it, are the last; the one extension view a section draws inside itself is kept for that
-// extension, since a stranger's view under the same name would read as the sandbox's own record.
+// and what the box reaches, and closes on the map, the read-only drawing of all of it. What this box does with what
+// passes through it and what happened in it are pages few readers open, so they are the last group and two rows: one
+// that sets (the officer's page, what may leave, what the agent may do unasked, how long things are kept) with its pages
+// as tabs, and one that reads, Activity, whose parts end on the audit trail. The one extension view a section draws
+// inside itself is kept for that extension, since a stranger's view under the same name would read as the sandbox's own
+// record.
 
-const filing = (): readonly [string, readonly string[]][] => sandboxSectionGroups().map((group) => [group.key, group.items.map((row) => row.slug)]);
+const filing = (): readonly [string, readonly string[]][] =>
+    sandboxSectionGroups().map((group) => [group.key, group.items.map((row) => (isTabbedRow(row) ? row.key : row.slug))]);
 
-it(`files privacy and safety as one group, and the records after everything they read`, () => {
+it(`files what is set about data and what happened as two rows, after everything else`, () => {
     expect(filing()).toEqual([
         [`box`, [`overview`, `usage`]],
         [`configuration`, [`models`, `agent`, `environment`, `secrets`, `extensions`]],
         [`reach`, [`access`, `areas`, `personas`, `map`]],
-        [`privacy`, [`data-protection`, `privacy-shield`, `guardrails`, `retention`]],
-        [`records`, [`activity`, `audit`]],
+        [`oversight`, [`privacy`, `activity`]],
     ]);
+});
+
+it(`draws the privacy and safety pages as one row's tabs, in the order they are read`, () => {
+    const row = sandboxSectionGroups()
+        .flatMap((group) => group.items)
+        .find((item) => isTabbedRow(item) && item.key === `privacy`);
+    expect(row !== undefined && isTabbedRow(row) ? row.parts.map((part) => part.slug) : []).toEqual([
+        `data-protection`,
+        `privacy-shield`,
+        `guardrails`,
+        `retention`,
+    ]);
+});
+
+it(`keeps every page a destination by name, the tabs and Activity's audit trail among them`, () => {
+    const slugs = sandboxSections(true).map((section) => section.slug);
+    expect(slugs).toEqual(expect.arrayContaining([`data-protection`, `privacy-shield`, `guardrails`, `retention`, `activity`, `audit`]));
+    expect(slugs).not.toContain(`privacy`);
 });
 
 it(`draws the Activity extension's view inside Activity, and no other extension's`, () => {

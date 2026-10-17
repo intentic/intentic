@@ -119,8 +119,8 @@ it(`follows an extension onto the sandbox hub`, () => {
 
 it(`gives Activity's name to the sandbox's own section, never to an extension's view`, () => {
     // Activity is a built-in section that draws the Activity extension's turns inside it; a view under the same key, a
-    // stranger's or that extension's own, would open beside the audit trail as if it were the sandbox's record, so it
-    // earns no destination of its own.
+    // stranger's or that extension's own, would open as if it were the sandbox's record, beside the audit trail Activity
+    // holds, so it earns no destination of its own.
     // SAFETY: the palette never loads a view's component, so an empty module stands in for one.
     const stranger = { id: `activity`, label: `Activity`, surface: `sandbox` as const, view: async () => ({}) as never };
     const impostor = registerView(`someone.activity`, { ...stranger, detect: () => [{ key: `activity`, title: `Not the record`, icon: `file` }] });
@@ -133,6 +133,22 @@ it(`gives Activity's name to the sandbox's own section, never to an extension's 
     app.unmount();
     impostor.dispose();
     own.dispose();
+});
+
+it(`names every page a tabbed row stands for, and the audit trail inside Activity, at an address that lands on it`, () => {
+    // Privacy & safety is one row in the hub, and the audit log a part of Activity; a reader who knows the page they want
+    // types its name rather than browsing for its row.
+    const app = mountShell();
+    for (const [slug, title] of [
+        [`privacy-shield`, `Privacy shield`],
+        [`guardrails`, `Guardrails`],
+        [`retention`, `Retention`],
+        [`audit`, `Audit log`],
+    ] as const) {
+        expect(commands.value.find((entry) => entry.command === `view.sandbox.${slug}`)).toMatchObject({ category: `Sandbox`, title });
+    }
+    expect(ids()).not.toContain(`view.sandbox.privacy`);
+    app.unmount();
 });
 
 it(`releases every command when the shell goes away`, () => {

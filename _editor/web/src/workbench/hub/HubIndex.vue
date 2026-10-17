@@ -12,15 +12,15 @@ import HubRowBadge from "./HubRowBadge.vue";
 // height, and a section is a place you go to rather than a tab you flip.
 defineProps<{
     groups: readonly NavGroup<HubTab>[];
-    /** Where a row goes; the hub owns its addresses. */
-    linkTo: (slug: string) => RouteLocationRaw;
+    /** Where a row goes (a row with parts, to its first); the hub owns its addresses. */
+    linkTo: (row: HubTab) => RouteLocationRaw;
 }>();
 </script>
 
 <template>
     <nav class="flex flex-col gap-6">
         <RowGroup v-for="group in groups" :key="group.key" :label="group.label">
-            <RouterLink v-for="tab in group.items" :key="tab.slug" :to="linkTo(tab.slug)" class="block">
+            <RouterLink v-for="tab in group.items" :key="tab.slug" :to="linkTo(tab)" class="block">
                 <Row as="div" interactive chevron :icon="sectionIcon(tab.slug, tab.icon)" :title="tab.label">
                     <!-- A fact about the section, so it rides the row's #meta cluster; tested out here because Row draws that slot only when it is filled. -->
                     <template v-if="tab.badge !== undefined && badgeSpeaks(tab.badge)" #meta>

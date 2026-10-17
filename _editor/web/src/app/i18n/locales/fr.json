@@ -3725,7 +3725,7 @@
             "privacyShield": "Bouclier de confidentialité",
             "guardrails": "Garde-fous",
             "retention": "Conservation",
-            "records": "Registres",
+            "oversight": "Supervision",
             "activity": "Activité"
         },
         "sandboxOutdatedNotice": {
@@ -4533,7 +4533,6 @@
             "formatWord": "Word"
         },
         "sandboxAudit": {
-            "part": "Partie du journal d’audit",
             "integrityTitle": "Le journal est-il intact ?",
             "integrityDescription": "Chaque entrée est scellée avec la précédente : une entrée modifiée ou supprimée après coup apparaît ici.",
             "checkAgain": "Vérifier à nouveau",
@@ -4547,7 +4546,6 @@
             "tornNote": "Le fichier le plus récent se termine par une ligne à moitié écrite, comme en laisse une panne. Elle a été ignorée et ne compte pas comme une modification.",
             "prunedNote": "Les entrées jusqu’au {date} ont été supprimées selon la durée de conservation ; la vérification commence après elles.",
             "reachNote": "Cette vérification révèle une falsification mais ne l’empêche pas : quiconque contrôle entièrement la sandbox pourrait modifier ces fichiers. La copie envoyée à un autre système est celle que personne dans la sandbox ne peut changer.",
-            "keeping": "Conservation",
             "readsTitle": "Noter aussi qui a ouvert quoi",
             "readsDescription": "Ajoute une entrée chaque fois que quelqu’un ouvre une conversation, un fichier ou ce journal. Désactivé, seuls les changements et les connexions sont notés.",
             "forwardTitle": "Envoyer une copie à un autre système",
@@ -4721,8 +4719,7 @@
                 "retention-delete": "Données expirées supprimées",
                 "file-read": "Fichier ouvert",
                 "activity-read": "Journal d’activité ouvert"
-            },
-            "keptFor": "Les enregistrements sont conservés {count} jour. | Les enregistrements sont conservés {count} jours."
+            }
         },
         "agentVoice": {
             "wakeWord": "Mot d'éveil",
@@ -4746,7 +4743,8 @@
             "transcriptsNote": "Tout ce qui a été dit dans une conversation, avec ses fichiers envoyés, ses pages et ses sauvegardes, compté depuis son dernier message. Une conversation encore en cours, ou qui vous attend, est conservée.",
             "auditNote": "Les mois plus anciens sont supprimés en entier. Au moins 30 jours. En Pologne, les administrations conservent les journaux système 730 jours (2 ans).",
             "title": "Combien de temps chaque enregistrement est conservé",
-            "audit": "Journal d’audit"
+            "audit": "Journal d’audit",
+            "auditKeeping": "Comment le journal d’audit est tenu"
         },
         "privacyShieldPage": {
             "intro": "Ce qui peut quitter ce sandbox, et sous quelle forme.",
@@ -4789,7 +4787,8 @@
             "turnsOff": "Les tours viennent de l'extension Activité, désactivée dans ce sandbox.",
             "turnsOffHow": "Réactivez-la pour voir ce qui a réveillé l'agent et comment s'est passé chaque tour :",
             "commandsSettings": "Si le juge fonctionne, et selon quoi il vérifie :",
-            "personalSettings": "Ce que cherche le bouclier, et à quels fournisseurs il fait confiance :"
+            "personalSettings": "Ce que cherche le bouclier, et à quels fournisseurs il fait confiance :",
+            "auditSettings": "Combien de temps il est conservé, s’il enregistre les lectures et où part une copie :"
         },
         "secretRows": {
             "offline": "Hors ligne",

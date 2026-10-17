@@ -365,6 +365,15 @@ const routes: RouteRecordRaw[] = [
             { path: `sandbox/devices`, redirect: (to) => ({ name: `devices`, query: to.query, hash: to.hash }) },
             // Recently deleted was a hub section until 2026-10-07; it is the Devices board's foot now, by its anchor.
             { path: `sandbox/deleted`, redirect: () => DELETED_PATH },
+            // The audit log was a hub section until 2026-10-17; its records are a part of Activity now, and how they are
+            // kept (its old second part, `?section=keeping`) is Retention's.
+            {
+                path: `sandbox/audit`,
+                redirect: (to) =>
+                    to.query[`section`] === `keeping`
+                        ? { name: `sandbox`, params: { tab: `retention` } }
+                        : { name: `sandbox`, params: { tab: `activity` }, query: { ...to.query, section: `audit` }, hash: to.hash },
+            },
             {
                 path: `sandbox/:tab?`,
                 name: `sandbox`,

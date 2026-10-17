@@ -184,9 +184,9 @@ applies from every conversation's next turn, with no restart.
 ```
 
 Settings and config are the owner's to change from the editor (Sandbox ▸ Models, ▸ Agent, ▸ Secrets, ▸ Personas,
-▸ Extensions, ▸ Environment, and under Privacy & safety ▸ Privacy shield, ▸ Guardrails, ▸ Retention). Read them to
-answer questions; edit them only when asked to. What agents did is Sandbox ▸ Activity (turns, commands the judge
-checked, what the shield masked); what people did is Sandbox ▸ Audit log.
+▸ Extensions, ▸ Environment, and the tabs of Privacy & safety: Privacy shield, Guardrails, Retention). Read them to
+answer questions; edit them only when asked to. What happened is Sandbox ▸ Activity, in tabs: turns, commands the
+judge checked, what the shield masked, and the audit log of what people did.
 
 ## Diagnostics playbook (read-only)
 

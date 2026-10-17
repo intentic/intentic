@@ -3726,7 +3726,7 @@
             "privacyShield": "Datenschutzschild",
             "guardrails": "Leitplanken",
             "retention": "Aufbewahrung",
-            "records": "Aufzeichnungen",
+            "oversight": "Aufsicht",
             "activity": "Aktivität"
         },
         "sandboxOutdatedNotice": {
@@ -4537,7 +4537,6 @@
             "formatWord": "Word"
         },
         "sandboxAudit": {
-            "part": "Teil des Prüfprotokolls",
             "integrityTitle": "Ist das Protokoll unverändert?",
             "integrityDescription": "Jeder Eintrag ist zusammen mit dem vorherigen versiegelt, sodass ein später geänderter oder entfernter Eintrag hier auffällt.",
             "checkAgain": "Erneut prüfen",
@@ -4551,7 +4550,6 @@
             "tornNote": "Die neueste Datei endet mit einer halb geschriebenen Zeile, wie sie ein Absturz hinterlässt. Sie wurde übersprungen und zählt nicht als Änderung.",
             "prunedNote": "Einträge bis {date} wurden gemäß der Aufbewahrungsdauer gelöscht; die Prüfung beginnt danach.",
             "reachNote": "Diese Prüfung zeigt Manipulationen, verhindert sie aber nicht: Wer die Sandbox vollständig kontrolliert, könnte diese Dateien bearbeiten. Die Kopie, die an ein anderes System geht, kann niemand innerhalb der Sandbox ändern.",
-            "keeping": "Aufbewahrung",
             "readsTitle": "Auch festhalten, wer was geöffnet hat",
             "readsDescription": "Legt jedes Mal einen Eintrag an, wenn jemand ein Gespräch, eine Datei oder dieses Protokoll öffnet. Ausgeschaltet werden nur Änderungen und Anmeldungen festgehalten.",
             "forwardTitle": "Eine Kopie an ein anderes System senden",
@@ -4725,8 +4723,7 @@
                 "retention-delete": "Abgelaufene Daten gelöscht",
                 "file-read": "Datei geöffnet",
                 "activity-read": "Aktivitätsprotokoll geöffnet"
-            },
-            "keptFor": "Aufzeichnungen werden {count} Tag aufbewahrt. | Aufzeichnungen werden {count} Tage aufbewahrt."
+            }
         },
         "agentVoice": {
             "wakeWord": "Weckwort",
@@ -4750,7 +4747,8 @@
             "transcriptsNote": "Alles, was in einer Unterhaltung gesagt wurde, mit ihren Uploads, Seiten und Sicherungen, gezählt ab ihrer letzten Nachricht. Eine Unterhaltung, die noch arbeitet oder auf dich wartet, bleibt.",
             "auditNote": "Ältere Monate werden vollständig gelöscht. Mindestens 30 Tage. Polnische Behörden bewahren Systemprotokolle 730 Tage (2 Jahre) auf.",
             "title": "Wie lange jede Aufzeichnung aufbewahrt wird",
-            "audit": "Prüfprotokoll"
+            "audit": "Prüfprotokoll",
+            "auditKeeping": "Wie das Prüfprotokoll geführt wird"
         },
         "privacyShieldPage": {
             "intro": "Was diese Sandbox verlassen darf, und in welcher Form.",
@@ -4793,7 +4791,8 @@
             "turnsOff": "Die Durchläufe kommen aus der Erweiterung Aktivität, die in dieser Sandbox ausgeschaltet ist.",
             "turnsOffHow": "Schalte sie wieder ein, um zu sehen, was den Agenten geweckt hat und wie jeder Durchlauf lief:",
             "commandsSettings": "Ob der Richter läuft, und woran er prüft:",
-            "personalSettings": "Wonach der Schild sucht, und welchen Anbietern er vertraut:"
+            "personalSettings": "Wonach der Schild sucht, und welchen Anbietern er vertraut:",
+            "auditSettings": "Wie lange es aufbewahrt wird, ob Lesezugriffe aufgezeichnet werden und wohin eine Kopie geht:"
         },
         "secretRows": {
             "offline": "Offline",

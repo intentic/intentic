@@ -180,13 +180,13 @@ const tab = (name: string): RouteLocationRaw => ({ name: `sandbox`, params: { ta
 const SHIELD = tab(`privacy-shield`);
 const GUARDRAILS = tab(`guardrails`);
 const RETENTION = tab(`retention`);
-const AUDIT_KEEPING = { name: `sandbox`, params: { tab: `audit` }, query: { section: `keeping` } } as const;
 
 // Where each measure is changed in the editor; one with no link here and a preset item points at the panel below on this
 // page instead, and those set outside the editor (the key file, backups) have none. Until 2026-10-16 the shield's and the
 // judge's went to Agent ▸ Safety, retention's to Agent ▸ Finishing, and the two approval floors had no page at all: the
 // box-wide ones are this page's siblings under Privacy & safety now, and a measure about one thing (a member, an area,
-// a secret, a model) still goes to that thing. Running the agent without administrator rights has no control in the
+// a secret, a model) still goes to that thing. Every setting of the audit trail is Retention's: its period always was,
+// and whether reads are recorded and where a copy goes were the audit log's own "How it is kept" until 2026-10-17. Running the agent without administrator rights has no control in the
 // editor (only its owner-only route), so it has no link: it went to Agent, which says nothing about it.
 export const MEASURE_LINKS = new Map<MeasureId, RouteLocationRaw>([
     [`privacy-shield`, SHIELD],
@@ -199,8 +199,8 @@ export const MEASURE_LINKS = new Map<MeasureId, RouteLocationRaw>([
     [`admission`, GUARDRAILS],
     [`retention`, RETENTION],
     [`audit`, RETENTION],
-    [`audit-reads`, AUDIT_KEEPING],
-    [`audit-forward`, AUDIT_KEEPING],
+    [`audit-reads`, RETENTION],
+    [`audit-forward`, RETENTION],
     [`local-models`, tab(`models`)],
     [`member-roles`, tab(`access`)],
     [`guest-jail`, tab(`access`)],

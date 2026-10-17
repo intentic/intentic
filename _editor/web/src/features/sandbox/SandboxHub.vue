@@ -5,7 +5,9 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import {
     GUEST_SECTION,
+    isTabbedRow,
     SANDBOX_DEFAULT_SECTION,
+    type SandboxNavRow,
     type SandboxSection,
     sandboxBuiltInSlugs,
     sandboxEmbedOf,
@@ -37,7 +39,6 @@ import SandboxExtensions from "./extensions/SandboxExtensions.vue";
 import { toListing, updateCount } from "../../models/sandbox/discoverListing";
 import SandboxPersonas from "./personas/SandboxPersonas.vue";
 import SandboxAreas from "./areas/SandboxAreas.vue";
-import SandboxAudit from "./audit/SandboxAudit.vue";
 import SandboxOverview from "./overview/SandboxOverview.vue";
 import SandboxSecrets from "./secrets/SandboxSecrets.vue";
 import SandboxUsage from "./usage/SandboxUsage.vue";
@@ -54,7 +55,9 @@ import { useT } from "@intentic/ui/i18n";
 // mounts (composables are module singletons, so remounting is cheap). Index is the hub's own sections (sandboxNav.ts,
 // shared with the palette's "Sandbox: …" destinations), then every extension-contributed `sandbox`-surface view, which
 // renders a body through ExtensionView rather than its own Page. A section may draw one first-party extension's view as
-// a part of its own (Activity draws the Activity extension's turns), and that view is then no row of its own.
+// a part of its own (Activity draws the Activity extension's turns), and that view is then no row of its own. A row may
+// stand for several sections (Privacy & safety), which the layout draws as tabs above the one open; each is still a
+// section of its own here, mounted by its slug.
 
 const t = useT();
 
@@ -146,9 +149,9 @@ const contributedRow = (active: ActiveExtension): HubTab => ({
     badge: activationBadge(active),
 });
 
-// One table row as this reader's index draws it: a built-in with this reader's gating, the two live counts and whatever
+// One section as this reader's index draws it: a built-in with this reader's gating, the two live counts and whatever
 // is running laid over it.
-const rowOf = (row: SandboxSection): readonly HubTab[] => {
+const sectionOf = (row: SandboxSection): readonly HubTab[] => {
     if (isGuest.value ? row.slug !== GUEST_SECTION : !canShip.value && row.maintainer === true) {
         return [];
     }
@@ -162,6 +165,21 @@ const rowOf = (row: SandboxSection): readonly HubTab[] => {
         return [];
     }
     return [{ ...row, badge: sectionBadge(row.slug, { updates: updatable.value, models: modelsNeedingSomeone.value }, runningIn(row.slug)) }];
+};
+
+// One table row: a section, or a tabbed row of the parts this reader may open, which leaves the index with none of
+// them. The index shows nothing of a part but its row, so whatever runs behind a part turns the row's mark; no part
+// carries a count, so a run is all it has to pass up.
+const rowOf = (row: SandboxNavRow): readonly HubTab[] => {
+    if (!isTabbedRow(row)) {
+        return sectionOf(row);
+    }
+    const parts = row.parts.flatMap(sectionOf);
+    if (parts.length === 0) {
+        return [];
+    }
+    const running = parts.find((part) => part.badge?.running !== undefined)?.badge?.running;
+    return [{ slug: row.key, label: row.label, icon: row.icon, parts, badge: running === undefined ? undefined : { running } }];
 };
 
 // The table's own grouping, kept intact, then whatever extensions add.
@@ -202,7 +220,6 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
                 <SandboxAccess v-else-if="slug === `access`" :open="openPersona" />
                 <SandboxPersonas v-else-if="slug === `personas`" :open="openPersona" />
                 <SandboxAreas v-else-if="slug === `areas`" />
-                <SandboxAudit v-else-if="slug === `audit`" />
                 <SandboxModels v-else-if="slug === `models`" />
                 <SandboxAgent v-else-if="slug === `agent`" />
                 <SandboxExtensions v-else-if="slug === `extensions`" />

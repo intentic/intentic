@@ -174,10 +174,10 @@ it(`sends each measure to where it is set: the box-wide ones to this page's sibl
         expect(MEASURE_LINKS.get(id)).toEqual(tab(`guardrails`));
     }
     expect(MEASURE_LINKS.get(`retention`)).toEqual(tab(`retention`));
-    expect(MEASURE_LINKS.get(`audit`)).toEqual(tab(`retention`));
-    const keeping = { name: `sandbox`, params: { tab: `audit` }, query: { section: `keeping` } };
-    expect(MEASURE_LINKS.get(`audit-reads`)).toEqual(keeping);
-    expect(MEASURE_LINKS.get(`audit-forward`)).toEqual(keeping);
+    // Every setting of the audit trail, its period, whether reads are recorded and where a copy goes, is on Retention.
+    for (const id of [`audit`, `audit-reads`, `audit-forward`] as const) {
+        expect(MEASURE_LINKS.get(id)).toEqual(tab(`retention`));
+    }
     expect(MEASURE_LINKS.get(`ai-notice`)).toEqual(tab(`access`));
     expect(MEASURE_LINKS.get(`credential-gates`)).toEqual(tab(`secrets`));
 });
