@@ -168,3 +168,29 @@ test("a refused account is settled by an answer on any model", async () => {
     await store.clear("cursor", "a", "composer-2.5");
     expect(await store.read()).toEqual({});
 });
+
+// 2026-10-18: a Cursor account refused outright (`[role_forbidden]`) was let go by the observed ledger after a day, and
+// read "blocked, an admin's to fix" on its card for six days more, with nothing to re-test it.
+test("forgets an account refused outright after a day, as the ledger holding it does", async () => {
+    const { store } = tempStore();
+    const message = "[role_forbidden] Cloud Agent is not available for non-billable admins.";
+    await store.record("cursor", refusal({ kind: "entitlement", account: "a", message, at: Date.now() - DAY - 60_000 }));
+    expect(await store.onFile()).toEqual({});
+    // Within the day it stands, and a spent allowance as old is still kept the week.
+    await store.record("cursor", refusal({ kind: "entitlement", account: "a", message, at: Date.now() - DAY + 60_000 }));
+    expect((await store.onFile())["cursor"]).toMatchObject([{ kind: "entitlement", account: "a" }]);
+    await store.record("kimi", refusal({ at: Date.now() - 2 * DAY }));
+    expect(Object.keys(await store.read()).sort()).toEqual(["cursor", "kimi"]);
+});
+
+// 2026-10-15: a team credit refused in a wording nothing read was filed with no reset; no reading answers such a refusal,
+// so it stood a week against the spawn gate and the ladder for a credit back in three and a half hours.
+test("forgets an allowance no reading measures after two hours where it named no reset, and keeps one that did", async () => {
+    const { store } = tempStore();
+    const message = "You’ve hit your usage limit. To get more access now, send a request to your admin.";
+    await store.record("codex", refusal({ message, unmetered: true, at: Date.now() - 2 * 60 * 60_000 - 60_000 }));
+    expect(await store.read()).toEqual({});
+    const resetsAt = Math.ceil(Date.now() / 1000) + 3_600;
+    await store.record("codex", refusal({ message, unmetered: true, resetsAt, at: Date.now() - 2 * 60 * 60_000 - 60_000 }));
+    expect(await store.read()).toMatchObject({ codex: { unmetered: true, resetsAt } });
+});

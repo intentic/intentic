@@ -115,6 +115,18 @@ export const nextDayStartIn = (at: number, zone: Zone): number => {
     return midnightUtc - offsetMinutes(midnightUtc, zone) * 60_000;
 };
 
+/**
+ * The instant a named clock reads `hours:minutes` on a calendar day: what a sentence like "try again at 5:46 PM" means,
+ * written by a program on that clock. The offset is taken again at the first answer, since across a summer-time
+ * changeover the offset at the naive guess is not the one in force at the time itself.
+ */
+export const wallClockInstant = (day: CivilDay, hours: number, minutes: number, zone: Zone): number => {
+    const [year = 0, month = 1, date = 1] = day.split("-").map(Number);
+    const naive = Date.UTC(year, month - 1, date, hours, minutes);
+    const guess = naive - offsetMinutes(naive, zone) * 60_000;
+    return naive - offsetMinutes(guess, zone) * 60_000;
+};
+
 /** Whether two zones are showing the same wall clock right now — which is when naming one on screen would be noise. */
 export const sameClock = (a: Zone, b: Zone, at: number = Date.now()): boolean => a === b || offsetMinutes(at, a) === offsetMinutes(at, b);
 

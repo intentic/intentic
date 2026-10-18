@@ -163,8 +163,21 @@ const observedWrites = (
     return event.code === "rate_limit" && model !== undefined ? [{ kind: "observed-limit", provider, account, model, limit: { at: now, message: event.message } }] : [];
 };
 
+/* The instant a spent allowance's refusal stands until, against every reading: the provider's own. Where its words
+   decided the booking (an instant, or a pool it named by length, whose reset the reading holds), the same instant, so the
+   listing and the spawn gate do not call a model ready before the turn they held would be. A loop's own instant
+   (OpenCode's retry, capped at fifteen minutes) is filed only where nothing better is known: filed instead of the named
+   pool's reset, a Kimi five-hour window two hours from reopening read as ready in fifteen minutes. A snapshot's guess is
+   never filed: a reading with room after the refusal answers it, as it always has. */
+const refusalReset = (event: ErrorFrame, context: FailureContext, reopening: Reopening | undefined): number | undefined => {
+    if (reopening !== undefined) {
+        return reopening.said ? reopening.at : event.resetsAt;
+    }
+    return context.limitReset ?? latestOf(namedReset(event.message, context.now), event.resetsAt);
+};
+
 // The durable refusal a refusing code files, the re-measure it owes, and for a plan with nothing to poll, the reading.
-const refusalWrites = (event: ErrorFrame, context: FailureContext): FailureWrite[] => {
+const refusalWrites = (event: ErrorFrame, context: FailureContext, reopening: Reopening | undefined): FailureWrite[] => {
     if (event.code === undefined || !REFUSING_CODES.has(event.code) || context.door === true) {
         return [];
     }
@@ -183,7 +196,7 @@ const refusalWrites = (event: ErrorFrame, context: FailureContext): FailureWrite
         ...actor,
         ...opt("account", refusingAccount(provider, context.attribution.account)),
         ...opt("model", model),
-        ...opt("resetsAt", kind === "limit" ? (context.limitReset ?? latestOf(namedReset(event.message, now), event.resetsAt)) : undefined),
+        ...opt("resetsAt", kind === "limit" ? refusalReset(event, context, reopening) : undefined),
         // A team's credit no usage endpoint reads: the refusal stands against every reading (ProviderRefusal.unmetered).
         ...opt("unmetered", kind === "limit" && isAdminGrantedAllowanceText(event.message) ? true : undefined),
     };
@@ -197,7 +210,7 @@ const refusalWrites = (event: ErrorFrame, context: FailureContext): FailureWrite
 };
 
 // The records a frame files by its code alone, before anything is asked.
-const filedWrites = (event: ErrorFrame, context: FailureContext): FailureWrite[] => {
+const filedWrites = (event: ErrorFrame, context: FailureContext, reopening: Reopening | undefined): FailureWrite[] => {
     const model = named(context.model);
     const modelRefusal: FailureWrite[] =
         event.code === "model-unavailable" && model !== undefined
@@ -207,7 +220,7 @@ const filedWrites = (event: ErrorFrame, context: FailureContext): FailureWrite[]
         event.code === "claude-not-entitled" && context.account !== undefined
             ? [{ kind: "seat-refusal", account: context.account, reason: event.message }]
             : [];
-    return [...refusalWrites(event, context), ...modelRefusal, ...seatRefusal];
+    return [...refusalWrites(event, context, reopening), ...modelRefusal, ...seatRefusal];
 };
 
 const logOf = (event: ErrorFrame, context: FailureContext): FailurePlan["log"] => {
@@ -346,24 +359,35 @@ const leftBy = (context: FailureContext): Pick<LimitWay, "standing" | "checklist
    ("your 5-hour usage limit") reopens when the account's reading says it does: the later of the two. A frame with no
    instant at all reads the snapshot, as before. Booked at the floor, a Gemini quota resetting in a week was re-run in
    fifteen minutes and a Kimi five-hour window with two hours left in thirty, each refused again (2026-10-17). */
-const reopeningOf = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<number | undefined> => {
+// `said` is whether the provider's own words decided it (its stream's reset, an instant or a pool its sentence named),
+// which is what the refusal it files may stand on (refusalWrites); a floor or a snapshot is only the booking's.
+interface Reopening {
+    readonly at: number | undefined;
+    readonly said: boolean;
+}
+
+const reopeningOf = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<Reopening> => {
+    if (context.limitReset !== undefined) {
+        return { at: context.limitReset, said: true };
+    }
     const said = namedReset(event.message, context.now);
     if (said !== undefined) {
-        return latestOf(said, event.resetsAt);
+        return { at: latestOf(said, event.resetsAt), said: true };
     }
     const period = namedPeriod(event.message);
     const floor = event.resetsAt;
     if (floor !== undefined && period === undefined) {
-        return floor;
+        return { at: floor, said: false };
     }
     const { provider, account } = context;
-    return latestOf(floor, await queries.reopensAt({ provider, model: context.model, account, ...opt("period", period) }));
+    const at = latestOf(floor, await queries.reopensAt({ provider, model: context.model, account, ...opt("period", period) }));
+    return { at, said: period !== undefined };
 };
 
 // A spent allowance: when it reopens, whether it is held, the way on, and the model a routed provider benches.
-const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<Dressed> => {
+const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries, reopening: Reopening): Promise<Dressed> => {
     const { turn, provider, account, answered } = context;
-    const resetsAt = context.limitReset ?? (await reopeningOf(event, context, queries));
+    const resetsAt = reopening.at;
     const model = named(context.model);
     const writes: FailureWrite[] =
         KeyedProviderSchema.safeParse(provider).success && model !== undefined && resetsAt !== undefined && context.door !== true
@@ -448,10 +472,10 @@ const dressDeath = async (event: ErrorFrame, context: FailureContext, conversati
     return { frame, held: holding(context, conversationId, "stopped", leftBy(context)), writes: [] };
 };
 
-const dress = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<Dressed> => {
+const dress = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries, reopening: Reopening | undefined): Promise<Dressed> => {
     const { conversationId } = context.turn;
     if (event.code === "rate_limit") {
-        return dressLimit(event, context, queries);
+        return dressLimit(event, context, queries, reopening ?? (await reopeningOf(event, context, queries)));
     }
     // Every other wall holds a turn only on a conversation.
     if (conversationId === undefined) {
@@ -514,8 +538,10 @@ const namedVerification = async (event: ErrorFrame, context: FailureContext, que
 
 export const classifyFailure = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<FailurePlan> => {
     const asked = await namedVerification(event, context, queries);
-    const filed = filedWrites(asked, context);
+    // A spent allowance's reopening, asked once: the refusal it files and the hold it books must not disagree.
+    const reopening = asked.code === "rate_limit" ? await reopeningOf(asked, context, queries) : undefined;
+    const filed = filedWrites(asked, context, reopening);
     const log = logOf(event, context);
-    const { frame, held, writes } = await dress(asked, context, queries);
+    const { frame, held, writes } = await dress(asked, context, queries, reopening);
     return { frame, writes: [...filed, ...writes], log, held };
 };

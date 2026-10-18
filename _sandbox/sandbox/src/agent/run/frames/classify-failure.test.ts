@@ -192,6 +192,31 @@ describe("a spent allowance", () => {
         expect(queries.asked).toContainEqual(["reopensAt", { provider: "claude", model: "opus", account: "acct", period: 5 * 3_600 }]);
     });
 
+    // 2026-10-17: the refusal kept OpenCode's fifteen-minute retry while the turn was booked at the window's reset two
+    // hours out, so from the fifteenth minute the listing and the spawn gate called the model ready, and it was refused again.
+    const refusalReset = (plan: Awaited<ReturnType<typeof classifyFailure>>): number | undefined => {
+        const write = plan.writes.find((candidate) => candidate.kind === "provider-refusal");
+        return write?.kind === "provider-refusal" ? write.refusal.resetsAt : undefined;
+    };
+    test("the refusal it files stands until the reopening the provider's words decided, not the loop's floor", async () => {
+        const kimi: ErrorFrame = { ...limit, message: "You've reached your 5-hour usage limit.", resetsAt: 1_800 };
+        const queries = answering({ way, reopensAt: 7_200 });
+        const plan = await classifyFailure(kimi, context(), queries);
+        expect(refusalReset(plan)).toBe(7_200);
+        expect(plan.frame.resetsAt).toBe(7_200);
+        // Asked once, for both.
+        expect(queries.asked.filter(([name]) => name === "reopensAt")).toHaveLength(1);
+    });
+
+    test("a loop's floor alone is filed as it is, and a snapshot's guess is never filed", async () => {
+        const floorOnly = await classifyFailure({ ...limit, resetsAt: 1_800 }, context(), answering({ way, reopensAt: 7_200 }));
+        expect(refusalReset(floorOnly)).toBe(1_800);
+        // No instant from the provider: the booking reads the snapshot, and the refusal waits for a reading with room.
+        const guessed = await classifyFailure(limit, context(), answering({ way, reopensAt: 7_200 }));
+        expect(guessed.frame.resetsAt).toBe(7_200);
+        expect(refusalReset(guessed)).toBeUndefined();
+    });
+
     const armed: [string, TurnBreakPolicy, LimitWay, Partial<ErrorFrame>][] = [
         ["an armed conversation keeps the reset as its appointment", "resend", way, { autoResume: "scheduled", nextAt: 60 }],
         ["an unarmed one only offers", "wait", way, { autoResume: "available" }],

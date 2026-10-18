@@ -2,6 +2,7 @@ import { type ProviderRefusal, ProviderRefusalSchema } from "@intentic/sandbox-c
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
+import { ENTITLEMENT_FOR_MS, OBSERVED_FOR_MS } from "./observed-limits.js";
 
 // Last refusal per provider, at <historyRoot>/provider-refusals.json, outside the agent's reach. account-usage.ts holds
 // polled headroom; this holds the moment a plan actually said no, which polling can't produce. Written from the turn's
@@ -45,6 +46,22 @@ export interface ProviderRefusalStore {
 // A week, the longest pool cycle any provider sells: past it a refusal's window has certainly reopened or its
 // credential churned, so a stale one is worse than nothing. Forgotten on read, not pruned on write.
 const FORGET_AFTER_MS = 7 * 24 * 60 * 60_000;
+
+/* How long a refusal nothing else can retire is believed, where a week is far too long:
+   - An account refused outright, for as long as the mark that holds it is (observed-limits.ts): a day, unless a turn on
+     the account is answered first. Kept a week, a Cursor account the ledger had let go of after a day still read
+     "blocked, an admin's to fix" on its card for six more. A Claude seat refused outright is held by its seat mark,
+     re-tested by a probe (claude-seat-check.ts), not by this entry.
+   - An allowance no reading measures (`unmetered`) refused with no instant to try again at, in a wording nothing here
+     reads: as long as any refusal no reading can check (OBSERVED_FOR_MS). No reading answers it and only a turn on its
+     very model settles it, so a team credit refused in Codex's then-unread dated wording stood a week against the spawn
+     gate and the ladder, for a credit back in three and a half hours (2026-10-15). */
+const forgetAfter = (refusal: ProviderRefusal): number => {
+    if (refusal.kind === "entitlement") {
+        return ENTITLEMENT_FOR_MS;
+    }
+    return refusal.unmetered === true && refusal.resetsAt === undefined ? OBSERVED_FOR_MS : FORGET_AFTER_MS;
+};
 
 // Where an account's own copy is filed; a provider's name never holds a colon, so the two kinds of key never meet.
 const accountKey = (provider: string, account: string): string => `${provider}:${account}`;
@@ -94,8 +111,8 @@ export const fileProviderRefusalStore = (path: string, options: ProviderRefusalS
     };
 
     const recent = async (): Promise<[string, ProviderRefusal][]> => {
-        const cutoff = Date.now() - FORGET_AFTER_MS;
-        return Object.entries(await file.read()).filter(([, refusal]) => refusal.at > cutoff);
+        const now = Date.now();
+        return Object.entries(await file.read()).filter(([, refusal]) => refusal.at > now - forgetAfter(refusal));
     };
 
     return {

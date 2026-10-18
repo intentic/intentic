@@ -1,4 +1,4 @@
-import { asCivilDay, asZone, civilDayIn, cronOptions, isZone, sameClock, utcDayOf, UTC, zoneLabel } from "./zone.js";
+import { asCivilDay, asZone, civilDayIn, cronOptions, isZone, sameClock, utcDayOf, UTC, wallClockInstant, zoneLabel } from "./zone.js";
 import type { Zone } from "./zone.js";
 
 // The distinctions this module exists to keep, each of which was a live bug before it: a cron evaluated in the
@@ -85,5 +85,22 @@ describe(`zoneLabel`, () => {
 describe(`cronOptions`, () => {
     test(`hands croner the key it actually reads`, () => {
         expect(cronOptions(WARSAW)).toEqual({ timezone: `Europe/Warsaw` });
+    });
+});
+
+/* A time of day a program on some clock wrote ("try again at 5:46 PM") is an instant only with that clock's zone. */
+describe(`wallClockInstant`, () => {
+    test(`reads the same wall time as a different instant on each clock`, () => {
+        expect(wallClockInstant(asCivilDay(`2026-09-20`)!, 22, 43, UTC)).toBe(Date.UTC(2026, 8, 20, 22, 43));
+        expect(wallClockInstant(asCivilDay(`2026-09-20`)!, 22, 43, WARSAW)).toBe(SEPTEMBER);
+        expect(wallClockInstant(asCivilDay(`2026-12-20`)!, 15, 43, NEW_YORK)).toBe(DECEMBER);
+    });
+
+    // Warsaw changes its clocks at 01:00 UTC: on 2026-03-29 from +1 to +2, on 2026-10-25 from +2 to +1. An hour read just
+    // before the change sits on the other side of it from its naive guess, whose offset alone would be an hour out.
+    test(`takes the offset in force at the time itself, not at the naive guess, across a changeover`, () => {
+        expect(wallClockInstant(asCivilDay(`2026-03-29`)!, 1, 30, WARSAW)).toBe(Date.UTC(2026, 2, 29, 0, 30));
+        expect(wallClockInstant(asCivilDay(`2026-10-25`)!, 1, 30, WARSAW)).toBe(Date.UTC(2026, 9, 24, 23, 30));
+        expect(wallClockInstant(asCivilDay(`2026-10-25`)!, 9, 0, WARSAW)).toBe(Date.UTC(2026, 9, 25, 8, 0));
     });
 });

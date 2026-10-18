@@ -95,3 +95,17 @@ test("an account with two full pools is open again only once both have reopened"
     ];
     expect(fleetLimit(fleet, { id: "gpt-5" })).toEqual({ spent: 1, withHeadroom: 0, reopensAt: 8_000 });
 });
+
+// 2026-10-17: Google said "Resets in 166h40m39s" while the account's reading showed its daily pool full until the day's
+// end; the full pool alone decided, so a fuller reading read as reopening sooner than a frozen one.
+test("an account held by the provider's own instant is open again only then, however soon its full pools reopen", () => {
+    const now = Math.floor(Date.now() / 1000);
+    const said = now + 166 * 3_600;
+    const refusal = { at: (now - 30) * 1000, kind: "limit", message: "Individual quota reached. Resets in 166h40m39s.", model: "gemini-3-pro", resetsAt: said } as const;
+    const daily = { kind: "daily", label: "Daily", gates: "all", resetsAt: now + 36_000 } as const;
+    const fuller = [{ account: "g", usage: { windows: [window({ ...daily, utilization: 100 })], measuredAt: (now - 60) * 1000 } }];
+    const frozen = [{ account: "g", usage: { windows: [window({ ...daily, utilization: 96 })], measuredAt: (now - 60) * 1000 } }];
+    // Held by the provider's words, not by a pool the reading names.
+    expect(fleetLimit(fuller, { id: "gemini-3-pro" }, refusal)).toEqual({ spent: 1, withHeadroom: 0, reopensAt: said });
+    expect(fleetLimit(frozen, { id: "gemini-3-pro" }, refusal)).toEqual({ spent: 1, withHeadroom: 0, reopensAt: said });
+});

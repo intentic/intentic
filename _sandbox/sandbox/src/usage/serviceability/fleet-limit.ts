@@ -57,14 +57,18 @@ const fullPools = (reading: FleetReading, model: ModelRef | undefined): readonly
 // When an account is open again for this model: once EVERY full pool it spends has reopened, so the latest of them, and
 // never before a bench on it lifts. A bench is the translator's own retry, a floor rather than the reopening: a Kimi
 // credential benched for thirty minutes with its five-hour window two hours from reopening was re-run at thirty minutes
-// and refused again (2026-10-17). Named by the pool that reopens last, the one actually holding it.
-const accountReopening = (full: readonly UsageWindow[], floor: number | undefined, fallback: number | undefined): Exhausted => {
+// and refused again (2026-10-17). Nor before the verdict's own instant (`standing`), the provider's "try again at" where
+// a refusal stands: taken only where no pool read full, a reading showing Gemini's daily pool full put the account back
+// at the day's end while Google had said "Resets in 166h", and a fuller reading read as reopening sooner. Named by the
+// pool that reopens last, the one actually holding it; by none where the provider's own instant outlasts every one.
+const accountReopening = (full: readonly UsageWindow[], floor: number | undefined, standing: number | undefined): Exhausted => {
     const last = full.reduce<UsageWindow | undefined>(
         (latest, window) => (window.resetsAt !== undefined && (latest?.resetsAt === undefined || window.resetsAt > latest.resetsAt) ? window : latest),
         undefined,
     );
-    const pool = last ?? full[0];
-    return { resetsAt: latestOf(floor, last?.resetsAt ?? fallback), pool: pool === undefined ? undefined : exhaustedPool(pool).pool };
+    const read = last?.resetsAt;
+    const pool = standing !== undefined && read !== undefined && standing > read ? undefined : (last ?? full[0]);
+    return { resetsAt: latestOf(floor, read, standing), pool: pool === undefined ? undefined : exhaustedPool(pool).pool };
 };
 
 // A blocked account reopens only when its bench lifts (`until`) and its full pools have reopened, and never by a wait
