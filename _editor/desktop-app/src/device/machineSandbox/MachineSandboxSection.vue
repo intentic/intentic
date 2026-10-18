@@ -49,7 +49,10 @@ const detail = computed((): string | undefined => {
 
 const percent = computed(() => (record.value?.state === `creating` ? record.value.percent : 0));
 const step = computed(() => (record.value?.state === `creating` ? record.value.step : undefined));
-const reason = computed(() => (record.value?.state === `failed` ? record.value.reason : undefined));
+// Why it stopped short: its setup's failure, or its last start's.
+const reason = computed(() => (record.value?.state === `failed` ? record.value.reason : record.value?.state === `stopped` ? record.value.startError : undefined));
+// Moving under its own steam: nothing to press, a spinner for how it is going.
+const underWay = computed(() => state.value === `creating` || state.value === `interrupted` || state.value === `starting` || state.value === `signedIn`);
 const folders = computed(() => record.value?.folders ?? []);
 const cloudOffered = computed(
     () => localHost().onboarding?.check.value?.state === `cantRun`,
@@ -77,7 +80,7 @@ const useCloud = (): void => {
 <template>
     <section v-if="record !== undefined" class="flex flex-col gap-3 rounded-xl bg-card p-4 shadow-sm">
         <header class="flex items-start gap-2.5">
-            <Icon v-if="state === `creating` || state === `interrupted`" name="spinner" spin class="mt-0.5 shrink-0 text-link" />
+            <Icon v-if="underWay" name="spinner" spin class="mt-0.5 shrink-0 text-link" />
             <Icon v-else-if="state === `ready`" name="check-circle" class="mt-0.5 shrink-0 text-success" />
             <Icon v-else-if="state === `signedOut`" name="box" class="mt-0.5 shrink-0 text-subtle" />
             <Icon v-else-if="waitsForPc" name="clock" class="mt-0.5 shrink-0 text-subtle" />
@@ -135,7 +138,7 @@ const useCloud = (): void => {
         </div>
 
         <!-- The one thing that moves it on, as the primary press; the log beside a failure. -->
-        <div v-if="state !== `creating` && state !== `ready` && state !== `waiting` && state !== `interrupted`" class="flex flex-wrap items-center gap-2">
+        <div v-if="!underWay && state !== `ready` && state !== `waiting`" class="flex flex-wrap items-center gap-2">
             <!-- Not beside the card for this PC, which carries the sign-in itself. -->
             <Button v-if="state === `signedOut` && !pcCardShown" size="small" :label="t(`desktop.machineSandbox.signIn`)" @click="signIn">
                 <template #icon><Icon name="sign-in" /></template>

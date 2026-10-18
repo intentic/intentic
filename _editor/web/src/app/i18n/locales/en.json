@@ -4885,13 +4885,46 @@
             "hide": "Hide",
             "show": "Show build",
             "attach": "Work on this in this computer's sandbox",
-            "signInAttach": "Sign in and work on this",
-            "attachFailed": "Couldn't add this folder",
-            "machine": {
-                "signedOut": "You'll sign in first. This computer's sandbox is made right after, and this folder goes into it.",
-                "creating": "This computer's sandbox is being set up ({percent}%). This folder goes in as soon as it's ready.",
-                "pcSetup": "This PC still needs a one-time setup before agents can run here. Open Agents to set it up and see what's downloading.",
-                "notReady": "This computer's sandbox isn't ready yet. This folder waits for it, and the card in the corner says what it needs."
+            "signInAttach": "Sign in to continue",
+            "attachFailed": "Couldn't add this folder"
+        },
+        "journey": {
+            "heading": "What happens next",
+            "done": "Done",
+            "signIn": {
+                "title": "Sign in",
+                "opens": "Opens your browser",
+                "inBrowser": "Finish in your browser"
+            },
+            "sandbox": {
+                "title": "Get this computer's sandbox ready",
+                "once": "Set up once, then kept for all your folders",
+                "signedIn": "Getting ready…",
+                "creating": "Setting up, {percent}%",
+                "interrupted": "Picking up where it left off",
+                "starting": "Starting it",
+                "stopped": "Stopped. Intentic starts it for you",
+                "startFailed": "Couldn't start",
+                "needsDocker": {
+                    "notInstalled": "Needs Docker",
+                    "notRunning": "Waiting for Docker to start",
+                    "notAllowed": "Docker turns this account away"
+                },
+                "waiting": {
+                    "consent": "This PC needs a one-time setup first",
+                    "restart": "This computer needs a restart",
+                    "signOut": "Sign out of Windows and back in"
+                },
+                "failed": "Couldn't be set up",
+                "gone": "Gone from this computer"
+            },
+            "copy": {
+                "title": "Copy {name} in",
+                "stays": "Your folder stays where it is",
+                "adding": "Adding it",
+                "copying": "Copying. Agents can start once it's in",
+                "paused": "Paused",
+                "failed": "Couldn't be added"
             }
         },
         "machine": {
@@ -4900,7 +4933,9 @@
             "signedOut": "Sign in to set up this computer's sandbox",
             "signedOutDetail": "Intentic makes it right after you sign in, on this computer.",
             "signingIn": "Finish signing in in your browser",
-            "signingInDetail": "This computer's sandbox is set up as soon as you're signed in, and this window shows how far it is.",
+            "signingInDetail": "Intentic carries on by itself once you've signed in.",
+            "signedIn": "You're signed in",
+            "signedInDetail": "Getting this computer's sandbox ready…",
             "needsDocker": {
                 "notInstalled": "This computer's sandbox needs Docker",
                 "notRunning": "This computer's sandbox is waiting for Docker",
@@ -4924,9 +4959,11 @@
             "failed": "This computer's sandbox wasn't set up",
             "stopped": "This computer's sandbox is stopped",
             "stoppedDetail": "Start it to work on your folders with an agent.",
+            "starting": "Starting this computer's sandbox",
+            "startingDetail": "It was stopped, so Intentic is starting it. This takes up to a minute.",
+            "startFailed": "This computer's sandbox didn't start",
             "gone": "This computer's sandbox is gone",
             "goneDetail": "It isn't on this computer any more. Set it up again, and your folders go back into it, with its files if this computer still has them.",
-            "folderWaits": "{name} goes in as soon as it's ready.",
             "folder": {
                 "adding": "Adding {name} to this computer's sandbox",
                 "copying": "Copying {name} into this computer's sandbox",
@@ -4946,7 +4983,9 @@
                 "paused": "Copying is paused",
                 "failed": "Couldn't add this folder",
                 "setUpComputer": "Set this computer up for agents",
-                "signingIn": "Waiting for you to sign in…"
+                "signingIn": "Waiting for you to sign in…",
+                "signedIn": "Getting ready…",
+                "starting": "Starting this computer's sandbox…"
             },
             "action": {
                 "signIn": "Sign in",

@@ -607,9 +607,10 @@ export const projectAttach = (ask: ProjectAsk): Promise<ProjectAttached> => invo
 /** Why Docker is in the way of it. */
 export type DockerReason = `notInstalled` | `notRunning` | `notAllowed`;
 
-/** Where it stands (machine_sandbox.rs `Standing`). */
+/** Where it stands (machine_sandbox.rs `Standing`). `signedIn`: a sign-in came back from the browser and the
+ * workspace has not said who yet; `starting`: its stopped container being started. */
 export type MachineStanding =
-    | { readonly state: `signedOut` | `ready` | `stopped` | `interrupted` | `gone` }
+    | { readonly state: `signedOut` | `signedIn` | `ready` | `stopped` | `starting` | `interrupted` | `gone` }
     | { readonly state: `needsDocker`; readonly reason: DockerReason }
     | { readonly state: `creating`; readonly phase?: string; readonly step?: string; readonly percent: number }
     | { readonly state: `waiting`; readonly for: SetupWaitingFor }
@@ -643,6 +644,8 @@ export type MachineSandbox = MachineStanding & {
     /** What a setup stopped on a question said this computer needs, as `intentic-requirement:` objects. */
     readonly requirements: readonly unknown[];
     readonly folders: readonly MachineFolder[];
+    /** Why the last start of its stopped container failed, in `ic`'s words. */
+    readonly startError?: string;
 };
 
 export const machineSandboxStatus = (): Promise<MachineSandbox> => invoke(`machine_sandbox_status`);
@@ -662,7 +665,7 @@ export const machineSandboxLeftovers = (): Promise<readonly LeftoverSandbox[]> =
 /** Those of `ids` still left behind taken off the account (the platform's trash keeps each a week). How many went. */
 export const machineSandboxRemoveLeftovers = (ids: readonly string[]): Promise<number> =>
     invoke(`machine_sandbox_remove_leftovers`, { ids });
-/** Its stopped container started (`ic`). Resolves once it has. */
+/** Its stopped container started (`ic`), by the app's supervisor: resolves at once, the record saying `starting`. */
 export const machineSandboxStart = (): Promise<void> => invoke(`machine_sandbox_start`);
 /** The restart or sign-out its setup's first pass asked of Windows; the next launch runs it again, agreed to. */
 export const machineSandboxEndSession = (how: SessionEnd): Promise<void> => invoke(`machine_sandbox_end_session`, { how });

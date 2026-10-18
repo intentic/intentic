@@ -44,6 +44,10 @@ const folderJustReady = ref(false);
 const signingIn = ref(false);
 const SIGNING_IN_FOR_MS = 3 * 60_000;
 let signingInUntil: ReturnType<typeof setTimeout> | undefined;
+// The reader signed in from this window on the folder's way in: the sign-in stays a step of it, ticked, on the card
+// (journey.ts), until the folder is no longer on its way.
+// allow(module-state): the one folder this window's card follows.
+const signedInHere = ref(false);
 // This window's own dialog put its folder in line: once the folder is in, the window takes the reader into its sandbox,
 // which is what they asked for, rather than leaving them to find the way there (2026-10-17).
 // allow(module-state): one folder per window, so one ask about it.
@@ -62,6 +66,7 @@ const card = computed(() =>
         justReady: justReady.value,
         folderJustReady: folderJustReady.value,
         signingIn: signingIn.value,
+        withSignIn: signedInHere.value,
     }),
 );
 
@@ -122,6 +127,14 @@ const watchCard = (): void => {
         (now) => {
             if (now !== `signedOut`) {
                 stopSigningIn();
+            }
+        },
+    );
+    watch(
+        () => folder.value === undefined,
+        (gone) => {
+            if (gone) {
+                signedInHere.value = false;
             }
         },
     );
@@ -284,6 +297,7 @@ function stopSigningIn(): void {
 async function signInFor(project: LocalProjectHost): Promise<void> {
     clearTimeout(signingInUntil);
     signingIn.value = true;
+    signedInHere.value = true;
     signingInUntil = setTimeout(stopSigningIn, SIGNING_IN_FOR_MS);
     try {
         await project.act(`signIn`);

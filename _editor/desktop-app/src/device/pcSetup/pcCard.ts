@@ -41,7 +41,7 @@ export interface PcCardInput {
 
 // This computer's sandbox made or being made: this PC was ready for it, so the check that runs at every launch has
 // nothing new to say until it answers, and "Checking this PC…" over a working sandbox would be noise on every launch.
-const MACHINE_MADE: ReadonlySet<MachineStanding[`state`]> = new Set([`ready`, `creating`, `interrupted`, `stopped`]);
+const MACHINE_MADE: ReadonlySet<MachineStanding[`state`]> = new Set([`ready`, `creating`, `interrupted`, `stopped`, `starting`]);
 
 /**
  * The card's phase. The setup's own state first: it is newer than the check made before it ran, so a running, waiting or

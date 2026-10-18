@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, LazyLock, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -79,6 +79,10 @@ pub enum Standing {
     /// Nobody is signed in: it is made after sign-in.
     #[default]
     SignedOut,
+    /// A sign-in came back from the browser moments ago (auth.rs `complete`), and the workspace has not said who yet
+    /// (its roster): on its way, and made or started as soon as it has. Read as signed out, every card went on saying
+    /// "finish signing in in your browser" for the seconds in between, to a reader who just had (2026-10-18).
+    SignedIn,
     /// Docker is not there or not answering; never installed or started from here.
     NeedsDocker {
         reason: DockerReason,
@@ -99,6 +103,8 @@ pub enum Standing {
     Ready,
     /// The container is here and not running.
     Stopped,
+    /// Its stopped container being started ([`start_container`]): for a folder waiting on it, or the reader's Start.
+    Starting,
     /// Making it stopped, and why.
     Failed {
         reason: String,
@@ -117,7 +123,11 @@ impl Standing {
     pub fn wants_the_reader(&self) -> bool {
         !matches!(
             self,
-            Standing::Ready | Standing::Creating { .. } | Standing::Interrupted
+            Standing::Ready
+                | Standing::SignedIn
+                | Standing::Creating { .. }
+                | Standing::Interrupted
+                | Standing::Starting
         )
     }
 
@@ -134,11 +144,13 @@ impl Standing {
     fn kind(&self) -> &'static str {
         match self {
             Standing::SignedOut => "signedOut",
+            Standing::SignedIn => "signedIn",
             Standing::NeedsDocker { .. } => "needsDocker",
             Standing::Creating { .. } => "creating",
             Standing::Waiting { .. } => "waiting",
             Standing::Ready => "ready",
             Standing::Stopped => "stopped",
+            Standing::Starting => "starting",
             Standing::Failed { .. } => "failed",
             Standing::Interrupted => "interrupted",
             Standing::Gone => "gone",
@@ -236,6 +248,11 @@ pub struct Record {
     /// case a recreate makes a new row; otherwise it sets the same row up again ([`recreated`]).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub row_gone: bool,
+    /// Why the last start of its stopped container failed, in `ic`'s words, said on the card. A stopped container is
+    /// not started by itself again until a folder is asked in afresh ([`enqueue`]) or the reader presses Start
+    /// ([`starts_by_itself`]), so a start that cannot work is not retried every round.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_error: Option<String>,
 }
 
 /* READING THE SETUP'S OWN LINES. */
@@ -466,6 +483,8 @@ pub enum Ask {
     Retry { consent: bool },
     /// "Set it up again", for a sandbox whose container is gone: on the same row unless the account no longer has it.
     Recreate,
+    /// "Start", for a sandbox whose container is stopped ([`start_container`]).
+    Start,
 }
 
 /// What a round found.
@@ -485,6 +504,9 @@ pub struct Facts {
     /// FIRST RUN (2026-10-09): this PC's own setup as onboarding.rs last saw it, read with the rest of a round's facts
     /// so `decide` reads no global.
     pub pc: Pc,
+    /// A sign-in came back from the browser less than [`SIGNED_IN_GRACE`] ago ([`signed_in`]): an account not heard
+    /// of yet is one on its way, not nobody.
+    pub just_signed_in: bool,
 }
 
 /// This PC's own setup (WSL, the container engine), for a round that finds no engine answering.
@@ -534,6 +556,8 @@ pub enum Decision {
     Reset,
     /// A new sandbox in place of one that is gone.
     Recreate,
+    /// Its stopped container started ([`start_container`]).
+    Start,
 }
 
 fn become_(record: &Record, standing: Standing) -> Decision {
@@ -548,6 +572,10 @@ fn become_(record: &Record, standing: Standing) -> Decision {
 /// answer; everything else follows the account, Docker and the container.
 pub fn decide(record: &Record, facts: &Facts) -> Decision {
     let Some(account) = facts.account.as_deref() else {
+        // Signed in in the browser, the workspace still to say who: on its way until the grace is over.
+        if facts.just_signed_in && record.standing == Standing::SignedIn {
+            return Decision::Keep;
+        }
         return become_(record, Standing::SignedOut);
     };
     if record
@@ -562,7 +590,7 @@ pub fn decide(record: &Record, facts: &Facts) -> Decision {
         Some(Ask::Recreate) if record.standing == Standing::Gone => return Decision::Recreate,
         Some(Ask::Recreate) => None,
         Some(Ask::Retry { consent }) => Some(consent),
-        None => None,
+        Some(Ask::Start) | None => None,
     };
     match (&record.standing, retry) {
         // Windows ended the session for it: the consented run brings Docker up itself, so nothing is checked first.
@@ -646,6 +674,7 @@ pub fn decide(record: &Record, facts: &Facts) -> Decision {
     }
     match facts.container {
         Container::Running => become_(record, Standing::Ready),
+        Container::Stopped if starts_by_itself(record, facts.asked) => Decision::Start,
         Container::Stopped => become_(record, Standing::Stopped),
         Container::Missing => become_(record, Standing::Gone),
         Container::Unknown => match record.standing {
@@ -653,6 +682,19 @@ pub fn decide(record: &Record, facts: &Facts) -> Decision {
             _ => become_(record, Standing::Ready),
         },
     }
+}
+
+/// Whether a stopped container is started without stopping on the reader: they pressed Start, or a folder waits for
+/// it and the last start did not fail. A folder waiting is a reader who asked for an agent on it, which is all the
+/// asking a start needs: after a sign-in it used to stop on "This computer's sandbox is stopped" and a second press,
+/// once a folder had already looked like it was copying (2026-10-18). Pure.
+pub fn starts_by_itself(record: &Record, asked: Option<Ask>) -> bool {
+    asked == Some(Ask::Start)
+        || (record.start_error.is_none()
+            && record
+                .folders
+                .iter()
+                .any(|folder| folder.state == FolderState::Queued))
 }
 
 /// What the card says when another environment's agent keeps this computer's sandboxes (`decide`).
@@ -780,6 +822,8 @@ pub fn pause_for(record: &Record) -> Duration {
     }
     match record.standing {
         Standing::NeedsDocker { .. } => Duration::from_secs(15),
+        // Looked at again soon, so a roster that never comes ends the grace on time (`decide`).
+        Standing::SignedIn => Duration::from_secs(10),
         Standing::Ready => Duration::from_secs(300),
         _ => Duration::from_secs(60),
     }
@@ -826,6 +870,8 @@ pub fn enqueue(
     alternatives: &[String],
     attached: &[String],
 ) -> String {
+    // Asked afresh: a stopped container may be started for it again, whatever the last start came to.
+    record.start_error = None;
     if let Some(folder) = record.folders.iter_mut().find(|folder| folder.path == path) {
         if matches!(folder.state, FolderState::Failed | FolderState::Ready) {
             folder.state = FolderState::Queued;
@@ -982,6 +1028,11 @@ static WAKE: LazyLock<(Mutex<Wake>, Condvar)> = LazyLock::new(Default::default);
 static REFUSED: AtomicBool = AtomicBool::new(false);
 /// The app is quitting: a setup stopped now was cut short, not failed.
 static EXITING: AtomicBool = AtomicBool::new(false);
+/// When a sign-in last came back from the browser ([`signed_in`]).
+static SIGNED_IN_AT: Mutex<Option<Instant>> = Mutex::new(None);
+/// How long a sign-in that came back waits for the workspace to say who signed in before the record reads signed out
+/// again: the page redeems the session and announces the roster in seconds, so this is only for a page that never does.
+const SIGNED_IN_GRACE: Duration = Duration::from_secs(90);
 
 /// Wake the supervisor for a round now.
 pub fn kick() {
@@ -1005,6 +1056,18 @@ fn ask(asked: Ask) {
 pub fn account_changed() {
     REFUSED.store(false, Ordering::SeqCst);
     kick();
+}
+
+/// A sign-in came back from the browser (auth.rs `complete`). Every window says so at once, rather than "finish
+/// signing in" until the workspace has said who signed in, and the sandbox is made or started as soon as it has.
+pub fn signed_in(app: &AppHandle) {
+    *SIGNED_IN_AT.lock().unwrap() = Some(Instant::now());
+    update(app, |record| {
+        if record.standing == Standing::SignedOut {
+            record.standing = Standing::SignedIn;
+        }
+    });
+    account_changed();
 }
 
 /// Rest for `pause`, or until kicked; answers what was asked meanwhile.
@@ -1206,8 +1269,14 @@ fn round(app: &AppHandle, launch: bool, asked: Option<Ask>) {
     match decide(&record, &facts) {
         Decision::Keep => {}
         Decision::Become(standing) => {
-            update(app, |record| record.standing = standing);
+            update(app, |record| {
+                if standing == Standing::Ready {
+                    record.start_error = None;
+                }
+                record.standing = standing;
+            });
         }
+        Decision::Start => start_container(app),
         Decision::Create { consent } => create(app, consent),
         Decision::Resume { consent } => {
             update(app, |record| record.standing = Standing::Interrupted);
@@ -1258,6 +1327,10 @@ fn gather(app: &AppHandle, record: &Record, launch: bool, asked: Option<Ask>) ->
         asked,
         elsewhere,
         pc: Pc::now(),
+        just_signed_in: SIGNED_IN_AT
+            .lock()
+            .unwrap()
+            .is_some_and(|at| at.elapsed() < SIGNED_IN_GRACE),
     }
 }
 
@@ -1835,6 +1908,8 @@ pub struct Adoptable {
     pub name: String,
     pub slug: String,
     pub hostname: String,
+    /// Its container runs here now; a stopped one is taken up as stopped ([`adopted`]).
+    pub running: bool,
 }
 
 /// The slugs a listed row's container could have here: its address's first label, and the one its connect token
@@ -1899,6 +1974,7 @@ pub fn adoptable(
                     name: name.to_string(),
                     slug,
                     hostname,
+                    running,
                 },
             ))
         })
@@ -1912,11 +1988,18 @@ pub fn adoptable(
         .map(|(_, _, found)| found)
 }
 
-/// The record taken up again on a row found by [`adoptable`]: made already, and ready until the next round reads its
-/// container. The folders waiting for it keep waiting, for it. Pure.
+/// The record taken up again on a row found by [`adoptable`]: made already, and as its container was found: ready when
+/// it runs, stopped when it does not. Taken up as ready whatever it was, a stopped one had the folder waiting for it
+/// attached and said to be copying into a container that was not running, until the next round read it and the card
+/// fell back to "stopped" (2026-10-18). The folders waiting for it keep waiting, for it, and start it ([`decide`]).
+/// Pure.
 pub fn adopted(record: &Record, account: &str, found: &Adoptable) -> Record {
     Record {
-        standing: Standing::Ready,
+        standing: if found.running {
+            Standing::Ready
+        } else {
+            Standing::Stopped
+        },
         sandbox_id: Some(found.id.clone()),
         slug: Some(found.slug.clone()),
         hostname: Some(found.hostname.clone()),
@@ -2320,6 +2403,35 @@ fn follow_copies(app: &AppHandle) {
     }
 }
 
+/// Its stopped container started by `ic` (a shape saved for its next restart included), said as starting meanwhile.
+/// Started, the next round finds it running and takes the folders waiting in; a start that failed is said on the card
+/// as the reason it is stopped, and not tried again by itself ([`starts_by_itself`]).
+fn start_container(app: &AppHandle) {
+    let Some(slug) = status(app).slug else {
+        return;
+    };
+    update(app, |record| {
+        record.standing = Standing::Starting;
+        record.start_error = None;
+    });
+    let started = crate::commands::power_script(
+        &slug,
+        "start",
+        crate::scripts::Host::current(),
+        crate::commands::VERSION,
+    )
+    .and_then(|run| crate::scripts::run(app, &format!("power:{slug}"), run));
+    match started {
+        Ok(()) => kick(),
+        Err(reason) => {
+            update(app, |record| {
+                record.standing = Standing::Stopped;
+                record.start_error = Some(reason);
+            });
+        }
+    }
+}
+
 /// The app is quitting: a setup under way is stopped with everything it started, and left `creating` for the next
 /// launch to run again (lib.rs, `RunEvent::Exit`).
 pub fn before_exit() {
@@ -2357,25 +2469,14 @@ pub fn machine_sandbox_recreate() {
     ask(Ask::Recreate);
 }
 
-/// "Start", for a sandbox whose container is stopped: `ic` starts it (a shape saved for its next restart included).
+/// "Start", for a sandbox whose container is stopped: the supervisor starts it ([`start_container`]), and every window
+/// says it is starting until it is up, or why it did not.
 #[tauri::command]
-pub async fn machine_sandbox_start(app: AppHandle) -> Result<(), String> {
-    let Some(slug) = status(&app).slug else {
+pub fn machine_sandbox_start(app: AppHandle) -> Result<(), String> {
+    if status(&app).slug.is_none() {
         return Err("This computer's sandbox isn't on this computer yet.".to_string());
-    };
-    let handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let run = crate::commands::power_script(
-            &slug,
-            "start",
-            crate::scripts::Host::current(),
-            crate::commands::VERSION,
-        )?;
-        crate::scripts::run(&handle, &format!("power:{slug}"), run)
-    })
-    .await
-    .map_err(|error| error.to_string())??;
-    kick();
+    }
+    ask(Ask::Start);
     Ok(())
 }
 
@@ -2468,6 +2569,7 @@ mod tests {
             asked: None,
             elsewhere: None,
             pc: Pc::Unknown,
+            just_signed_in: false,
         }
     }
 
@@ -2814,6 +2916,7 @@ mod tests {
                 asked: None,
                 elsewhere: None,
                 pc: Pc::NeedsSetup,
+                just_signed_in: false,
             },
         );
         assert_eq!(signed_out, Decision::Become(Standing::SignedOut));
@@ -3554,6 +3657,7 @@ mod tests {
                 name: "RADARSU-ROG sandbox 3".into(),
                 slug: "sandbox-555555555555".into(),
                 hostname: "sandbox-555555555555.sbx.intentic.dev".into(),
+                running: true,
             })
         );
         assert_eq!(
@@ -3612,6 +3716,7 @@ mod tests {
             name: "Local".into(),
             slug: "sandbox-555555555555".into(),
             hostname: "sandbox-555555555555.sbx.intentic.dev".into(),
+            running: true,
         };
         let taken = adopted(&held, "me@example.com", &found);
         assert_eq!(
@@ -3624,6 +3729,140 @@ mod tests {
             ),
             (Standing::Ready, Some("three"), true, true, 1)
         );
+    }
+
+    /// A row taken up again whose container is stopped is stopped, never ready: ready, the folder waiting was attached
+    /// and said to be copying into a container that was not running, and then the card fell back to "stopped".
+    #[test]
+    fn a_stopped_row_taken_up_again_is_stopped_and_its_folder_starts_it() {
+        let mut held = record(Standing::SignedIn);
+        held.folders.push(asked("app", FolderState::Queued));
+        let found = Adoptable {
+            id: "three".into(),
+            name: "Local".into(),
+            slug: "sandbox-555555555555".into(),
+            hostname: "sandbox-555555555555.sbx.intentic.dev".into(),
+            running: false,
+        };
+        let taken = adopted(&held, "me@example.com", &found);
+        assert_eq!(taken.standing, Standing::Stopped);
+        assert_eq!(taken.folders[0].state, FolderState::Queued);
+        // The next round reads the container stopped, and the folder waiting starts it rather than asking the reader.
+        assert_eq!(
+            decide(
+                &taken,
+                &Facts {
+                    container: Container::Stopped,
+                    ..facts()
+                }
+            ),
+            Decision::Start
+        );
+    }
+
+    /// A stopped container is started by itself only for a folder waiting on it, or the reader's Start; a start that
+    /// failed is not tried again by itself until a folder is asked in afresh.
+    #[test]
+    fn a_stopped_container_starts_for_a_folder_waiting_or_a_press() {
+        let stopped = Facts {
+            container: Container::Stopped,
+            ..facts()
+        };
+        // Nobody waiting: stopped, as the reader may have stopped it.
+        assert_eq!(
+            decide(&made(Standing::Ready), &stopped),
+            Decision::Become(Standing::Stopped)
+        );
+        assert_eq!(decide(&made(Standing::Stopped), &stopped), Decision::Keep);
+        // The reader's Start.
+        assert_eq!(
+            decide(
+                &made(Standing::Stopped),
+                &Facts {
+                    asked: Some(Ask::Start),
+                    ..stopped.clone()
+                }
+            ),
+            Decision::Start
+        );
+        // A folder waiting.
+        let mut waiting = made(Standing::Stopped);
+        waiting.folders.push(asked("app", FolderState::Queued));
+        assert_eq!(decide(&waiting, &stopped), Decision::Start);
+        // Its last start failed: stopped on the reader, with the reason on the card.
+        waiting.start_error = Some("docker said no".into());
+        assert_eq!(decide(&waiting, &stopped), Decision::Keep);
+        assert_eq!(
+            decide(
+                &waiting,
+                &Facts {
+                    asked: Some(Ask::Start),
+                    ..stopped.clone()
+                }
+            ),
+            Decision::Start
+        );
+        // Asked in afresh: tried again.
+        enqueue(&mut waiting, "/b", "b", &[], &[]);
+        assert_eq!(waiting.start_error, None);
+        assert_eq!(decide(&waiting, &stopped), Decision::Start);
+        // Start on a container that runs is the sandbox ready; on a setup that failed, nothing.
+        assert_eq!(
+            decide(
+                &made(Standing::Stopped),
+                &Facts {
+                    asked: Some(Ask::Start),
+                    ..facts()
+                }
+            ),
+            Decision::Become(Standing::Ready)
+        );
+        assert_eq!(
+            decide(
+                &made(Standing::Failed { reason: "x".into() }),
+                &Facts {
+                    asked: Some(Ask::Start),
+                    ..stopped
+                }
+            ),
+            Decision::Keep
+        );
+    }
+
+    /// Between the browser's hand-back and the workspace's roster the record reads signed in, for the grace at most.
+    #[test]
+    fn a_sign_in_that_came_back_is_signed_in_until_the_account_is_heard() {
+        let nobody = Facts {
+            account: None,
+            ..facts()
+        };
+        let back = Facts {
+            just_signed_in: true,
+            ..nobody.clone()
+        };
+        assert_eq!(decide(&record(Standing::SignedIn), &back), Decision::Keep);
+        // The grace over with nobody heard: signed out again, and the card asks again.
+        assert_eq!(
+            decide(&record(Standing::SignedIn), &nobody),
+            Decision::Become(Standing::SignedOut)
+        );
+        // Only a record that was waiting on the sign-in: anything else with nobody signed in is signed out.
+        assert_eq!(
+            decide(&made(Standing::Ready), &back),
+            Decision::Become(Standing::SignedOut)
+        );
+        // The account heard: made as any signed-in record is.
+        let mut fresh = Record {
+            standing: Standing::SignedIn,
+            ..Record::default()
+        };
+        assert_eq!(
+            decide(&fresh, &facts()),
+            Decision::Create { consent: false }
+        );
+        fresh.standing = Standing::SignedIn;
+        assert!(!fresh.standing.wants_the_reader());
+        assert!(!Standing::Starting.wants_the_reader());
     }
 
     #[test]

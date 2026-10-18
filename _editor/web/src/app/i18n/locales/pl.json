@@ -12151,13 +12151,46 @@
             "hide": "Ukryj",
             "show": "Pokaż budowę",
             "attach": "Pracuj nad tym w sandboxie tego komputera",
-            "signInAttach": "Zaloguj się i pracuj nad tym",
-            "attachFailed": "Nie udało się dodać tego folderu",
-            "machine": {
-                "signedOut": "Najpierw się zalogujesz. Zaraz potem powstanie sandbox tego komputera, a ten folder do niego trafi.",
-                "creating": "Sandbox tego komputera jest konfigurowany ({percent}%). Ten folder trafi do niego, gdy tylko będzie gotowy.",
-                "pcSetup": "Ten komputer potrzebuje jeszcze jednorazowej konfiguracji, zanim będą mogli tu działać agenci. Otwórz Agenty, aby go przygotować i zobaczyć, co się pobiera.",
-                "notReady": "Sandbox tego komputera nie jest jeszcze gotowy. Ten folder na niego czeka, a karta w rogu mówi, czego potrzebuje."
+            "signInAttach": "Zaloguj się, aby kontynuować",
+            "attachFailed": "Nie udało się dodać tego folderu"
+        },
+        "journey": {
+            "heading": "Co będzie dalej",
+            "done": "Gotowe",
+            "signIn": {
+                "title": "Zaloguj się",
+                "opens": "Otwiera przeglądarkę",
+                "inBrowser": "Dokończ w przeglądarce"
+            },
+            "sandbox": {
+                "title": "Przygotuj sandbox tego komputera",
+                "once": "Konfigurowany raz, potem służy wszystkim folderom",
+                "signedIn": "Przygotowanie…",
+                "creating": "Konfiguracja, {percent}%",
+                "interrupted": "Wznawianie od miejsca przerwania",
+                "starting": "Uruchamianie",
+                "stopped": "Zatrzymany. Intentic uruchomi go za Ciebie",
+                "startFailed": "Nie udało się uruchomić",
+                "needsDocker": {
+                    "notInstalled": "Potrzebuje Dockera",
+                    "notRunning": "Czeka na uruchomienie Dockera",
+                    "notAllowed": "Docker odrzuca to konto"
+                },
+                "waiting": {
+                    "consent": "Ten komputer najpierw potrzebuje jednorazowej konfiguracji",
+                    "restart": "Ten komputer wymaga ponownego uruchomienia",
+                    "signOut": "Wyloguj się z Windows i zaloguj ponownie"
+                },
+                "failed": "Nie udało się skonfigurować",
+                "gone": "Nie ma go już na tym komputerze"
+            },
+            "copy": {
+                "title": "Skopiuj {name} do środka",
+                "stays": "Twój folder zostaje na miejscu",
+                "adding": "Dodawanie",
+                "copying": "Kopiowanie. Agenci mogą zacząć, gdy tylko będzie w środku",
+                "paused": "Wstrzymane",
+                "failed": "Nie udało się dodać"
             }
         },
         "machine": {
@@ -12166,7 +12199,9 @@
             "signedOut": "Zaloguj się, aby skonfigurować sandbox tego komputera",
             "signedOutDetail": "Intentic utworzy go na tym komputerze zaraz po zalogowaniu.",
             "signingIn": "Dokończ logowanie w przeglądarce",
-            "signingInDetail": "Sandbox tego komputera powstaje zaraz po zalogowaniu, a to okno pokazuje postęp.",
+            "signingInDetail": "Intentic sam dokończy resztę, gdy tylko się zalogujesz.",
+            "signedIn": "Zalogowano",
+            "signedInDetail": "Przygotowywanie sandboxa tego komputera…",
             "needsDocker": {
                 "notInstalled": "Sandbox tego komputera potrzebuje Dockera",
                 "notRunning": "Sandbox tego komputera czeka na Dockera",
@@ -12190,9 +12225,11 @@
             "failed": "Nie udało się skonfigurować sandboxa tego komputera",
             "stopped": "Sandbox tego komputera jest zatrzymany",
             "stoppedDetail": "Uruchom go, aby pracować nad folderami z agentem.",
+            "starting": "Uruchamianie sandboxa tego komputera",
+            "startingDetail": "Był zatrzymany, więc Intentic go uruchamia. Potrwa to do minuty.",
+            "startFailed": "Sandbox tego komputera się nie uruchomił",
             "gone": "Sandbox tego komputera został usunięty",
             "goneDetail": "Nie ma go już na tym komputerze. Skonfiguruj go ponownie, a Twoje foldery do niego wrócą, razem z jego plikami, jeśli ten komputer wciąż je ma.",
-            "folderWaits": "{name} trafi do niego, gdy tylko będzie gotowy.",
             "folder": {
                 "adding": "Dodawanie {name} do sandboxa tego komputera",
                 "copying": "Kopiowanie {name} do sandboxa tego komputera",
@@ -12212,7 +12249,9 @@
                 "paused": "Kopiowanie jest wstrzymane",
                 "failed": "Nie udało się dodać tego folderu",
                 "setUpComputer": "Przygotuj ten komputer do pracy z agentami",
-                "signingIn": "Czekam na zalogowanie…"
+                "signingIn": "Czekam na zalogowanie…",
+                "signedIn": "Przygotowanie…",
+                "starting": "Uruchamianie sandboxa tego komputera…"
             },
             "action": {
                 "signIn": "Zaloguj się",

@@ -1,7 +1,10 @@
-<!-- "WORK ON THIS WITH AN AGENT", ASKED IN THE WINDOW: what going into this computer's sandbox is, drawn rather than
-     explained (the folder's copy carried into the agent's house), what the first copy carries, anything to beware of, how
-     far the sandbox is, and one button, which never waits on it: the folder goes in line, and the card in the corner
-     follows it. It replaced the system's own message box, which said all of it in two paragraphs. -->
+<!-- "WORK ON THIS WITH AN AGENT", ASKED IN THE WINDOW: what the first copy carries, anything to beware of, what happens
+     next, and one button, which never waits on it: the folder goes in line, and the card in the corner follows it. With
+     this computer's sandbox ready the copy is all that happens, drawn rather than explained (the folder's copy carried
+     into the agent's house). With anything before it (a sign-in, the sandbox's setup or its start) the steps are listed
+     instead, the button named for the first: the house and its moving folder over a press that only opened the browser
+     to sign in read as files being uploaded (2026-10-18). It replaced the system's own message box, which said all of
+     it in two paragraphs. -->
 <script setup lang="ts">
 import { Button, Icon, InfoHint, Modal, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
@@ -10,6 +13,8 @@ import { useRouter } from "vue-router";
 import { localFace } from "../app/environments/local";
 import { localHost } from "../app/environments/localHost";
 import AgentHouse from "./house/AgentHouse.vue";
+import { journeyOf } from "./journey/journey";
+import JourneySteps from "./journey/JourneySteps.vue";
 import { cautionSentence, copyWeight, refusalSentence } from "./projectWords";
 import { useLocalProject } from "./useLocalProject";
 
@@ -62,26 +67,18 @@ const ready = computed(() => fresh.value !== undefined);
 const signedOut = computed(() => fresh.value?.machine.state === `signedOut`);
 const label = computed(() => (signedOut.value ? t(`local.project.signInAttach`) : t(`local.project.attach`)));
 
-// Where this computer's sandbox is, said under the folder: the copy starts now, once it is set up, or once what it
-// waits for is done (the card in the corner says what that is).
-const machineNote = computed((): string | undefined => {
-    const machine = fresh.value?.machine;
-    switch (machine?.state) {
-        case undefined:
-        case `ready`:
-            return undefined;
-        case `signedOut`:
-            return t(`local.project.machine.signedOut`);
-        case `creating`:
-            return t(`local.project.machine.creating`, { percent: machine.percent });
-        case `interrupted`:
-            return t(`local.project.machine.creating`, { percent: 0 });
-        case `waiting`:
-            return t(`local.project.machine.pcSetup`);
-        default:
-            return t(`local.project.machine.notReady`);
+// What happens before the copy, step by step, wherever anything does: a sign-in, the sandbox's setup or its start.
+// Nothing, with the sandbox ready: the copy starts on the press, and the picture says so.
+const steps = computed(() => {
+    const asked = fresh.value;
+    if (asked === undefined || asked.machine.state === `ready`) {
+        return undefined;
     }
+    const machine = asked.machine;
+    return journeyOf({ machine, folder: undefined, name: asked.name, signingIn: false, withSignIn: machine.state === `signedOut` || machine.state === `signedIn` });
 });
+// The picture: the copy moving in when that is all that happens, the empty site with its sign where nothing can.
+const picture = computed(() => refused.value !== undefined || document.value || fresh.value?.machine.state === `ready`);
 
 const open = computed({
     get: () => dialogOpen.value,
@@ -107,6 +104,7 @@ const open = computed({
                  own, built beside it. A folder that cannot have one gets the empty site with the sign on it. Drawn
                  straight on the dialog: a frame round it would be a card on a card. -->
             <AgentHouse
+                v-if="picture"
                 :stage="refused !== undefined || document ? `plan` : `moving`"
                 :failed="refused !== undefined || document"
                 class="mx-auto h-auto max-h-36 w-full"
@@ -134,7 +132,11 @@ const open = computed({
 
                 <Notice v-for="caution in cautions" :key="caution" tone="warning" class="text-2xs">{{ caution }}</Notice>
 
-                <p v-if="machineNote" class="text-2xs text-muted">{{ machineNote }}</p>
+                <!-- What happens on the press, in order, when more than the copy does. -->
+                <section v-if="steps !== undefined" class="flex flex-col gap-2 rounded-md border border-line px-3 py-2.5">
+                    <h3 class="text-2xs font-medium text-subtle">{{ t(`local.journey.heading`) }}</h3>
+                    <JourneySteps :steps="steps" />
+                </section>
             </template>
 
             <Notice v-if="failure !== undefined" tone="danger" class="text-2xs">

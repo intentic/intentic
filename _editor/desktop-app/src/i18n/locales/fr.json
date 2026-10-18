@@ -216,17 +216,20 @@
         "title": "Le sandbox de cet ordinateur",
         "state": {
             "signedOut": "créé après votre connexion",
+            "signedIn": "connecté, en préparation",
             "needsDocker": "nécessite Docker",
             "creating": "en préparation",
             "waiting": "attend votre accord",
             "ready": "prêt",
             "stopped": "arrêté",
+            "starting": "démarrage",
             "failed": "non installé",
             "interrupted": "reprend là où il s'était arrêté",
             "gone": "disparu"
         },
         "detail": {
             "signedOut": "Connectez-vous, et Intentic crée un sandbox sur cet ordinateur pour les dossiers sur lesquels vous travaillez avec un agent.",
+            "signedIn": "Vous êtes connecté. Intentic l'installe, ou le démarre, dans un instant.",
             "needsDocker": {
                 "notInstalled": "Il tourne dans Docker, qui n'est pas sur cet ordinateur. Installez Docker Desktop, et Intentic installe le sandbox dès qu'il tourne.",
                 "notRunning": "Il tourne dans Docker, qui n'est pas lancé. Démarrez-le, et Intentic continue tout seul.",
@@ -237,6 +240,7 @@
             "waiting": "Cet ordinateur a besoin de quelques éléments avant de pouvoir faire tourner un sandbox.",
             "ready": "Les dossiers sur lesquels vous travaillez avec un agent y entrent, chacun dans son propre dossier.",
             "stopped": "Il est sur cet ordinateur mais ne tourne pas. Démarrez-le pour travailler sur vos dossiers avec un agent.",
+            "starting": "Il était arrêté, alors Intentic le démarre. Vos dossiers y entrent dès qu'il tourne.",
             "failed": "Son installation s'est arrêtée. Le journal indique ce qu'elle était en train de faire.",
             "gone": "Il n'est plus sur cet ordinateur. Réinstallez-le, et vos dossiers y retournent, avec ses fichiers si cet ordinateur les a encore."
         },

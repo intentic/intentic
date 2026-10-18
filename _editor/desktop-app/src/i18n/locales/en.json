@@ -216,17 +216,20 @@
         "title": "This computer's sandbox",
         "state": {
             "signedOut": "made after you sign in",
+            "signedIn": "signed in, getting ready",
             "needsDocker": "needs Docker",
             "creating": "setting up",
             "waiting": "needs your OK",
             "ready": "ready",
             "stopped": "stopped",
+            "starting": "starting",
             "failed": "not set up",
             "interrupted": "picking up where it left off",
             "gone": "gone"
         },
         "detail": {
             "signedOut": "Sign in, and Intentic makes one sandbox on this computer for the folders you work on with an agent.",
+            "signedIn": "You're signed in. Intentic sets it up, or starts it, in a moment.",
             "needsDocker": {
                 "notInstalled": "It runs in Docker, which isn't on this computer. Install Docker Desktop, and Intentic sets the sandbox up once it runs.",
                 "notRunning": "It runs in Docker, which isn't running. Start it, and Intentic carries on by itself.",
@@ -237,6 +240,7 @@
             "waiting": "This computer needs a few things before it can run a sandbox.",
             "ready": "The folders you work on with an agent go into it, each in a folder of its own.",
             "stopped": "It's on this computer and not running. Start it to work on your folders with an agent.",
+            "starting": "It was stopped, so Intentic is starting it. Your folders go in as soon as it's up.",
             "failed": "Its setup stopped. The log says what it was doing.",
             "gone": "It isn't on this computer any more. Set it up again, and your folders go back into it, with its files if this computer still has them."
         },

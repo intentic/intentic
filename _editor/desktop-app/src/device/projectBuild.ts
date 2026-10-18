@@ -6,9 +6,12 @@ import { machineFolderOf } from "./machineSandbox";
 // local/LocalMachineCard.vue, local/LocalFiles.vue): the app's record (machine_sandbox.rs, device/machineSandbox.ts),
 // read into the few facts the shell takes. Pure, so what each state comes to is tested by value.
 
-/** Where it stands, in the shell's shape: what the record leaves out is said as undefined. */
-export const machineStateOf = (standing: MachineStanding): LocalMachineState => {
+/** Where it stands, in the shell's shape: what the record leaves out is said as undefined. A stopped one carries why its
+ * last start failed, where the record says. */
+export const machineStateOf = (standing: MachineStanding & { readonly startError?: string | undefined }): LocalMachineState => {
     switch (standing.state) {
+        case `stopped`:
+            return standing.startError === undefined ? { state: `stopped` } : { state: `stopped`, reason: standing.startError };
         case `creating`:
             return { state: `creating`, phase: standing.phase, step: standing.step, percent: standing.percent };
         case `needsDocker`:

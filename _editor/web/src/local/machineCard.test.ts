@@ -91,9 +91,55 @@ describe(`the card of this computer's sandbox`, () => {
         );
     });
 
-    it(`says the folder waiting in this window under whatever the sandbox is doing`, () => {
-        const card = machineCardOf(facts(at({ state: `creating`, phase: undefined, step: undefined, percent: 5 }), folderAt(`queued`)));
-        expect(card?.folderNote).toBe(`shop goes in as soon as it's ready.`);
+    it(`ticks off the steps of the folder waiting in this window under whatever the sandbox is doing`, () => {
+        const card = machineCardOf(facts(at({ state: `creating`, phase: undefined, step: undefined, percent: 5 }), folderAt(`queued`), { withSignIn: true }));
+        expect(card?.steps?.map((each) => [each.key, each.state])).toEqual([
+            [`signIn`, `done`],
+            [`sandbox`, `running`],
+            [`copy`, `todo`],
+        ]);
+        // A card about the sandbox alone, with no folder of this window's on its way, lists none.
+        expect(machineCardOf(facts(at({ state: `creating`, phase: undefined, step: undefined, percent: 5 })))?.steps).toBeUndefined();
+    });
+
+    // The report this came from (2026-10-18): the house went up, and the folder was carried into it, over a card that
+    // only asked the reader to sign in.
+    it(`draws no house while the reader is still to sign in, and draws it from the moment they have`, () => {
+        expect(machineCardOf(facts(at({ state: `signedOut` }), folderAt(`queued`), { signingIn: true }))).toMatchObject({ picture: false, stage: `plan` });
+        expect(machineCardOf(facts(at({ state: `signedOut` }), folderAt(`queued`)))?.picture).toBe(false);
+        const back = machineCardOf(facts(at({ state: `signedIn` }), folderAt(`queued`)));
+        expect(back).toMatchObject({ picture: true, tone: `working`, title: `You're signed in`, actions: [], key: `signedIn` });
+        expect(back?.steps?.map((each) => each.state)).toEqual([`done`, `running`, `todo`]);
+    });
+
+    // Signed in, the sandbox found stopped and a folder waiting: the app starts it, and the card says so rather than
+    // asking for a press (the app's machine_sandbox.rs `starts_by_itself`).
+    it(`says a stopped sandbox is starting, and why it did not start when it did not`, () => {
+        expect(machineCardOf(facts(at({ state: `starting` }), folderAt(`queued`)))).toMatchObject({
+            tone: `working`,
+            stage: `roof`,
+            title: `Starting this computer's sandbox`,
+            actions: [],
+            key: `starting`,
+        });
+        expect(machineCardOf(facts(at({ state: `stopped` })))).toMatchObject({ tone: `waiting`, stage: `roof`, actions: [`start`], key: `stopped` });
+        expect(machineCardOf(facts(at({ state: `stopped`, reason: `port 443 is taken` })))).toMatchObject({
+            tone: `failed`,
+            title: `This computer's sandbox didn't start`,
+            detail: `port 443 is taken`,
+            actions: [`start`],
+            key: `startFailed`,
+        });
+        expect(folderButtonOf({ hasSandbox: false, machine: at({ state: `starting` }), folder: folderAt(`queued`) })).toEqual({
+            label: `Starting this computer's sandbox…`,
+            busy: true,
+            press: `card`,
+        });
+        expect(folderButtonOf({ hasSandbox: false, machine: at({ state: `signedIn` }), folder: folderAt(`queued`) })).toEqual({
+            label: `Getting ready…`,
+            busy: true,
+            press: `card`,
+        });
     });
 
     it(`says for a moment that it is ready, while this window watched it get there`, () => {

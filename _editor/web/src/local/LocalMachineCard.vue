@@ -1,8 +1,11 @@
 <!-- THIS COMPUTER'S SANDBOX, AND THIS WINDOW'S FOLDER GOING INTO IT, in the window's corner while the reader keeps
      working: the agent's house going up as the sandbox's setup really goes (AgentHouse.vue), then the folder's copy
-     moving in; what it is doing in its own words, how far, and the one thing to do next whenever there is one. Every
-     local window carries it while the sandbox is not ready (machineCard.ts says what each state is). Folds to a line,
-     and the fold is remembered for what it showed; the folder's own button unfolds it again. -->
+     moving in; what it is doing in its own words, how far, and the one thing to do next whenever there is one. A folder
+     on its way in has its steps ticked off under the title (JourneySteps.vue): sign in, the sandbox, the copy, each said
+     for what it is. No house while the reader is still to sign in: nothing of it is under way, and a house going up
+     beside a press that only signs in read as files being uploaded (2026-10-18). Every local window carries it while the
+     sandbox is not ready (machineCard.ts says what each state is). Folds to a line, and the fold is remembered for what
+     it showed; the folder's own button unfolds it again. -->
 <script setup lang="ts">
 import { Button, Icon, ProgressRing, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
@@ -10,6 +13,8 @@ import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { localHost } from "../app/environments/localHost";
 import AgentHouse from "./house/AgentHouse.vue";
+import JourneySteps from "./journey/JourneySteps.vue";
+import MachineProgress from "./journey/MachineProgress.vue";
 import { runMachineAction } from "./machineAction";
 import type { MachineCardAction } from "./machineCard";
 import { useLocalProject } from "./useLocalProject";
@@ -63,7 +68,7 @@ const run = (action: MachineCardAction): Promise<void> | undefined => runMachine
             :class="attention ? `ring-2 ring-primary-500` : ``"
         >
             <!-- The house, on its own ground: the card's picture, drawn by the setup's real progress. -->
-            <div class="border-b border-line bg-canvas px-4 pb-1.5 pt-4">
+            <div v-if="card.picture" class="border-b border-line bg-canvas px-4 pb-1.5 pt-4">
                 <AgentHouse :stage="card.stage" :paused="tone === `waiting`" :failed="tone === `failed`" class="mx-auto h-auto max-h-28 w-full" />
             </div>
 
@@ -86,25 +91,14 @@ const run = (action: MachineCardAction): Promise<void> | undefined => runMachine
                 <p v-if="detail" class="mt-0.5 line-clamp-3 break-words text-2xs" :class="tone === `failed` || actionFailure ? `text-danger` : `text-muted`">
                     {{ detail }}
                 </p>
-                <p v-if="card.folderNote" class="mt-1 break-words text-2xs text-subtle">{{ card.folderNote }}</p>
 
-                <!-- How far: the setup's own estimate, held back from 100 until it says it is done. -->
-                <template v-if="percent !== undefined">
-                    <div
-                        class="mt-2.5 h-1 overflow-hidden rounded-full bg-line"
-                        role="progressbar"
-                        :aria-valuenow="percent"
-                        aria-valuemin="0"
-                        aria-valuemax="100"
-                        :aria-label="card.title"
-                    >
-                        <div class="h-full rounded-full bg-primary-500 transition-[width] duration-700 ease-smooth" :style="{ width: `${percent}%` }"></div>
-                    </div>
-                    <div class="mt-1.5 flex items-center gap-3 text-2xs">
-                        <span class="min-w-0 flex-1 truncate text-subtle" v-tooltip.top="card.step">{{ card.step }}</span>
-                        <span class="shrink-0 tabular-nums text-muted">{{ t(`local.project.percent`, { percent }) }}</span>
-                    </div>
-                </template>
+                <!-- The folder's steps, its setup's progress under the sandbox's own. -->
+                <JourneySteps v-if="card.steps !== undefined" :steps="card.steps" dense class="mt-2.5">
+                    <template #step="{ step }">
+                        <MachineProgress v-if="step.key === `sandbox` && percent !== undefined" :percent="percent" :step="card.step" :label="card.title" class="mb-0.5 mt-1" />
+                    </template>
+                </JourneySteps>
+                <MachineProgress v-else-if="percent !== undefined" :percent="percent" :step="card.step" :label="card.title" class="mt-2.5" />
 
                 <!-- The one thing to do next, as the primary press; anything beside it is a secondary one away. -->
                 <div v-if="actions.length > 0" class="mt-3 flex items-center justify-end gap-1">

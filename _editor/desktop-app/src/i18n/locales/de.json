@@ -216,17 +216,20 @@
         "title": "Die Sandbox dieses Computers",
         "state": {
             "signedOut": "wird nach der Anmeldung erstellt",
+            "signedIn": "angemeldet, wird vorbereitet",
             "needsDocker": "braucht Docker",
             "creating": "wird eingerichtet",
             "waiting": "braucht Ihr OK",
             "ready": "bereit",
             "stopped": "gestoppt",
+            "starting": "wird gestartet",
             "failed": "nicht eingerichtet",
             "interrupted": "macht dort weiter, wo sie aufgehört hat",
             "gone": "nicht mehr da"
         },
         "detail": {
             "signedOut": "Melden Sie sich an, und Intentic erstellt auf diesem Computer eine Sandbox für die Ordner, an denen Sie mit einem Agenten arbeiten.",
+            "signedIn": "Sie sind angemeldet. Intentic richtet sie gleich ein oder startet sie.",
             "needsDocker": {
                 "notInstalled": "Sie läuft in Docker, das nicht auf diesem Computer ist. Installieren Sie Docker Desktop, und Intentic richtet die Sandbox ein, sobald es läuft.",
                 "notRunning": "Sie läuft in Docker, und Docker läuft nicht. Starten Sie es, dann macht Intentic von selbst weiter.",
@@ -237,6 +240,7 @@
             "waiting": "Dieser Computer braucht noch ein paar Dinge, bevor er eine Sandbox betreiben kann.",
             "ready": "Die Ordner, an denen Sie mit einem Agenten arbeiten, kommen hinein, jeder in einen eigenen Ordner.",
             "stopped": "Sie ist auf diesem Computer, läuft aber nicht. Starten Sie sie, um mit einem Agenten an Ihren Ordnern zu arbeiten.",
+            "starting": "Sie war gestoppt, also startet Intentic sie. Ihre Ordner kommen hinein, sobald sie läuft.",
             "failed": "Ihre Einrichtung ist stehen geblieben. Das Protokoll zeigt, woran sie gerade war.",
             "gone": "Sie ist nicht mehr auf diesem Computer. Richten Sie sie erneut ein, dann kommen Ihre Ordner wieder hinein, mit ihren Dateien, falls dieser Computer sie noch hat."
         },

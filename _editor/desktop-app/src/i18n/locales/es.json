@@ -216,17 +216,20 @@
         "title": "El sandbox de este ordenador",
         "state": {
             "signedOut": "se crea al iniciar sesión",
+            "signedIn": "sesión iniciada, preparándose",
             "needsDocker": "necesita Docker",
             "creating": "preparándose",
             "waiting": "necesita tu OK",
             "ready": "listo",
             "stopped": "detenido",
+            "starting": "iniciándose",
             "failed": "sin configurar",
             "interrupted": "retomando donde lo dejó",
             "gone": "ya no está"
         },
         "detail": {
             "signedOut": "Inicia sesión e Intentic crea un sandbox en este ordenador para las carpetas en las que trabajas con un agente.",
+            "signedIn": "Has iniciado sesión. Intentic lo configura, o lo inicia, en un momento.",
             "needsDocker": {
                 "notInstalled": "Se ejecuta en Docker, que no está en este ordenador. Instala Docker Desktop e Intentic configurará el sandbox en cuanto esté en marcha.",
                 "notRunning": "Se ejecuta en Docker, que no está en marcha. Inícialo e Intentic seguirá solo.",
@@ -237,6 +240,7 @@
             "waiting": "Este ordenador necesita algunas cosas antes de poder ejecutar un sandbox.",
             "ready": "Las carpetas en las que trabajas con un agente entran en él, cada una en su propia carpeta.",
             "stopped": "Está en este ordenador pero no está en marcha. Inícialo para trabajar en tus carpetas con un agente.",
+            "starting": "Estaba detenido, así que Intentic lo está iniciando. Tus carpetas entran en él en cuanto esté en marcha.",
             "failed": "Su configuración se detuvo. El registro indica qué estaba haciendo.",
             "gone": "Ya no está en este ordenador. Vuelve a configurarlo y tus carpetas volverán a entrar en él, con sus archivos si este ordenador aún los tiene."
         },

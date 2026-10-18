@@ -1,6 +1,7 @@
 import { t } from "@intentic/ui/i18n";
 import type { LocalFolderSandbox, LocalMachineSandbox } from "../app/environments/localHost";
 import { HOUSE_STAGES, type HouseStage, stageOfPhase } from "./house/agentHouse";
+import { type JourneyStep, journeyOf } from "./journey/journey";
 import { stageHeadline } from "./projectWords";
 
 // WHAT A LOCAL WINDOW SAYS ABOUT THIS COMPUTER'S SANDBOX AND ITS FOLDER: the card in the window's corner
@@ -39,14 +40,19 @@ export interface MachineCard {
     readonly percent: number | undefined;
     /** The setup's running step, in its own words. */
     readonly step: string | undefined;
-    /** This window's folder, waiting for it. */
-    readonly folderNote: string | undefined;
     /** The card folded to one line. */
     readonly short: string;
     /** The first is the primary press. */
     readonly actions: readonly MachineCardAction[];
     /** What the card is showing, for remembering it was folded: a new state unfolds it again. */
     readonly key: string;
+    /** This window's folder on its way to an agent, step by step (journey.ts): the sign-in, the sandbox, the copy. */
+    readonly steps: readonly JourneyStep[] | undefined;
+    /**
+     * Whether the agent's house is drawn: not while the reader is still to sign in, when nothing of the sandbox is under
+     * way and the picture would show a house going up and a folder carried into it for a press that only signs in.
+     */
+    readonly picture: boolean;
 }
 
 export interface CardFacts {
@@ -58,6 +64,8 @@ export interface CardFacts {
     readonly folderJustReady: boolean;
     /** This window sent the reader to the browser to sign in, and the app has not heard who signed in yet. */
     readonly signingIn?: boolean;
+    /** The sign-in is a step of this window's folder's way in: nobody was signed in when it was asked for. */
+    readonly withSignIn?: boolean;
 }
 
 // The house of this computer's sandbox stands with its lights on once it answers: moving in is a folder's own copy.
@@ -67,14 +75,14 @@ const machineStage = (phase: string | undefined): HouseStage => {
     return HOUSE_STAGES.indexOf(stage) > HOUSE_STAGES.indexOf(MACHINE_TOP) ? MACHINE_TOP : stage;
 };
 
-type Draft = Omit<MachineCard, `short` | `key` | `folderNote` | `percent` | `step`> &
-    Partial<Pick<MachineCard, `short` | `percent` | `step` | `folderNote`>>;
+type Draft = Omit<MachineCard, `short` | `key` | `percent` | `step` | `steps` | `picture`> & Partial<Pick<MachineCard, `short` | `percent` | `step`>>;
 
 const card = (draft: Draft, key: string): MachineCard => ({
     percent: undefined,
     step: undefined,
-    folderNote: undefined,
     short: draft.title,
+    steps: undefined,
+    picture: true,
     ...draft,
     key,
 });
@@ -137,43 +145,53 @@ const folderCard = (folder: LocalFolderSandbox, justIn: boolean): MachineCard | 
     }
 };
 
-// This computer's sandbox while it is not ready, and for a moment once it is.
-const sandboxCard = (machine: LocalMachineSandbox, folder: LocalFolderSandbox | undefined, justReady: boolean, signingIn = false): MachineCard | undefined => {
+// Before the sandbox: nobody signed in, the reader in the browser signing in, or just back from it.
+const accountCard = (machine: LocalMachineSandbox, folder: LocalFolderSandbox | undefined, signingIn: boolean): MachineCard | undefined => {
+    // Back from the browser, the account on its way to the app: the sign-in is done, and the sandbox is next.
+    if (machine.state === `signedIn`) {
+        return card(
+            { about: `machine`, tone: `working`, stage: `plan`, title: t(`local.machine.signedIn`), detail: t(`local.machine.signedInDetail`), actions: [] },
+            `signedIn`,
+        );
+    }
+    // Sent to the browser from here: the card says to finish there, not to sign in again, and stays on its way through
+    // the moment after, before the app has heard who signed in (2026-10-17: it said "Sign in" all along).
+    if (signingIn) {
+        return card(
+            { about: `machine`, tone: `working`, stage: `plan`, title: t(`local.machine.signingIn`), detail: t(`local.machine.signingInDetail`), actions: [`signInAgain`] },
+            `signingIn`,
+        );
+    }
+    // Nothing is under way before sign-in: said only to a reader whose folder waits for it.
+    return machine.waiting > 0 || folder?.state === `queued`
+        ? card(
+              { about: `machine`, tone: `waiting`, stage: `plan`, title: t(`local.machine.signedOut`), detail: t(`local.machine.signedOutDetail`), actions: [`signIn`] },
+              `signedOut`,
+          )
+        : undefined;
+};
+
+// A sandbox made already whose container is stopped, or being started: the house stands with its lights off. A folder
+// waiting starts it by itself (the app's machine_sandbox.rs `starts_by_itself`), so the card asks only when nothing
+// waits for it, or its start failed.
+const powerCard = (machine: LocalMachineSandbox): MachineCard | undefined => {
+    if (machine.state === `starting`) {
+        return card(
+            { about: `machine`, tone: `working`, stage: `roof`, title: t(`local.machine.starting`), detail: t(`local.machine.startingDetail`), actions: [] },
+            `starting`,
+        );
+    }
+    if (machine.state !== `stopped`) {
+        return undefined;
+    }
+    return machine.reason === undefined
+        ? card({ about: `machine`, tone: `waiting`, stage: `roof`, title: t(`local.machine.stopped`), detail: t(`local.machine.stoppedDetail`), actions: [`start`] }, `stopped`)
+        : card({ about: `machine`, tone: `failed`, stage: `roof`, title: t(`local.machine.startFailed`), detail: machine.reason, actions: [`start`] }, `startFailed`);
+};
+
+// The setup's own stops: Docker, a question for This computer, a failure.
+const setupStopCard = (machine: LocalMachineSandbox & { readonly state: `needsDocker` | `waiting` | `failed` }): MachineCard => {
     switch (machine.state) {
-        case `ready`:
-            return justReady
-                ? card({ about: `machine`, tone: `ready`, stage: MACHINE_TOP, title: t(`local.machine.ready`), detail: t(`local.machine.readyDetail`), actions: [] }, `ready`)
-                : undefined;
-        case `signedOut`:
-            // Sent to the browser from here: the card says to finish there, not to sign in again, and stays on its way
-            // through the moment after, before the app has heard who signed in (2026-10-17: it said "Sign in" all along).
-            if (signingIn) {
-                return card(
-                    {
-                        about: `machine`,
-                        tone: `working`,
-                        stage: `plan`,
-                        title: t(`local.machine.signingIn`),
-                        detail: t(`local.machine.signingInDetail`),
-                        actions: [`signInAgain`],
-                    },
-                    `signingIn`,
-                );
-            }
-            // Nothing is under way before sign-in: said only to a reader whose folder waits for it.
-            return machine.waiting > 0 || folder?.state === `queued`
-                ? card(
-                      {
-                          about: `machine`,
-                          tone: `waiting`,
-                          stage: `plan`,
-                          title: t(`local.machine.signedOut`),
-                          detail: t(`local.machine.signedOutDetail`),
-                          actions: [`signIn`],
-                      },
-                      `signedOut`,
-                  )
-                : undefined;
         case `needsDocker`:
             return card(
                 {
@@ -187,6 +205,40 @@ const sandboxCard = (machine: LocalMachineSandbox, folder: LocalFolderSandbox | 
                 },
                 `needsDocker:${machine.reason}`,
             );
+        case `waiting`:
+            return card(
+                { about: `machine`, tone: `waiting`, stage: `plan`, title: t(`local.machine.waiting`), detail: t(`local.machine.waitingDetail.${machine.for}`), actions: [`details`] },
+                `waiting`,
+            );
+        case `failed`:
+            return card(
+                {
+                    about: `machine`,
+                    tone: `failed`,
+                    stage: `plan`,
+                    title: t(`local.machine.failed`),
+                    detail: machine.reason,
+                    actions: machine.hasLog ? [`retry`, `log`] : [`retry`],
+                },
+                `failed`,
+            );
+    }
+};
+
+// This computer's sandbox while it is not ready, and for a moment once it is.
+const sandboxCard = (machine: LocalMachineSandbox, folder: LocalFolderSandbox | undefined, justReady: boolean, signingIn = false): MachineCard | undefined => {
+    switch (machine.state) {
+        case `ready`:
+            return justReady
+                ? card({ about: `machine`, tone: `ready`, stage: MACHINE_TOP, title: t(`local.machine.ready`), detail: t(`local.machine.readyDetail`), actions: [] }, `ready`)
+                : undefined;
+        case `signedIn`:
+        case `signedOut`:
+            return accountCard(machine, folder, signingIn);
+        case `needsDocker`:
+        case `waiting`:
+        case `failed`:
+            return setupStopCard(machine);
         case `creating`: {
             const stage = machineStage(machine.phase);
             return card(
@@ -209,30 +261,24 @@ const sandboxCard = (machine: LocalMachineSandbox, folder: LocalFolderSandbox | 
                 { about: `machine`, tone: `working`, stage: `plan`, title: t(`local.machine.interrupted`), detail: t(`local.machine.interruptedDetail`), actions: [] },
                 `creating`,
             );
-        case `waiting`:
-            return card(
-                { about: `machine`, tone: `waiting`, stage: `plan`, title: t(`local.machine.waiting`), detail: t(`local.machine.waitingDetail.${machine.for}`), actions: [`details`] },
-                `waiting`,
-            );
-        case `failed`:
-            return card(
-                {
-                    about: `machine`,
-                    tone: `failed`,
-                    stage: `plan`,
-                    title: t(`local.machine.failed`),
-                    detail: machine.reason,
-                    actions: machine.hasLog ? [`retry`, `log`] : [`retry`],
-                },
-                `failed`,
-            );
         case `stopped`:
-            return card({ about: `machine`, tone: `waiting`, stage: MACHINE_TOP, title: t(`local.machine.stopped`), detail: t(`local.machine.stoppedDetail`), actions: [`start`] }, `stopped`);
+        case `starting`:
+            return powerCard(machine);
         case `gone`:
             return card({ about: `machine`, tone: `failed`, stage: `plan`, title: t(`local.machine.gone`), detail: t(`local.machine.goneDetail`), actions: [`recreate`] }, `gone`);
-        default:
-            return undefined;
     }
+};
+
+// The card's own, before this window's folder's steps are added to it.
+const bareCardOf = (facts: CardFacts, machine: LocalMachineSandbox): MachineCard | undefined => {
+    const { folder } = facts;
+    if (machine.state === `ready` && folder !== undefined) {
+        const own = folderCard(folder, facts.folderJustReady);
+        if (own !== undefined) {
+            return own;
+        }
+    }
+    return sandboxCard(machine, folder, facts.justReady, facts.signingIn);
 };
 
 /** The card this window carries, or none: its folder's own once the sandbox is up, else this computer's sandbox's. */
@@ -241,17 +287,25 @@ export const machineCardOf = (facts: CardFacts): MachineCard | undefined => {
     if (machine === undefined) {
         return undefined;
     }
-    if (machine.state === `ready` && folder !== undefined) {
-        const own = folderCard(folder, facts.folderJustReady);
-        if (own !== undefined) {
-            return own;
-        }
+    const shown = bareCardOf(facts, machine);
+    if (shown === undefined) {
+        return undefined;
     }
-    const shown = sandboxCard(machine, folder, facts.justReady, facts.signingIn);
-    // A folder waiting for it says so under whatever the sandbox is doing.
-    return shown !== undefined && folder?.state === `queued` && machine.state !== `ready`
-        ? { ...shown, folderNote: t(`local.machine.folderWaits`, { name: folder.name }) }
-        : shown;
+    // The house is the sandbox: nothing of it is under way while the reader is still to sign in.
+    const picture = machine.state !== `signedOut`;
+    // This window's folder on its way in: the card ticks off its steps, which say where it waits as well.
+    const onItsWay = folder !== undefined && (folder.state !== `ready` || facts.folderJustReady);
+    if (!onItsWay) {
+        return { ...shown, picture };
+    }
+    const steps = journeyOf({
+        machine,
+        folder,
+        name: folder.name,
+        signingIn: facts.signingIn === true,
+        withSignIn: facts.withSignIn === true || machine.state === `signedOut` || machine.state === `signedIn`,
+    });
+    return { ...shown, picture, steps };
 };
 
 /**
@@ -277,6 +331,10 @@ const onItsWayButton = (machine: LocalMachineSandbox | undefined, folder: LocalF
     // On its way through the browser's sign-in: the button says where the reader's part of it is.
     if (machine?.state === `signedOut` && signingIn) {
         return { label: t(`local.machine.button.signingIn`), busy: true, press: `card` };
+    }
+    // Signed in and the account on its way, or a stopped sandbox starting for it: what is under way, by name.
+    if (machine?.state === `signedIn` || machine?.state === `starting`) {
+        return { label: t(`local.machine.button.${machine.state}`), busy: true, press: `card` };
     }
     if (machine?.state === `ready`) {
         if (folder.status === `paused`) {
