@@ -39,7 +39,7 @@ export interface HubSearchPanel {
 // never opened on a question the reader is no longer asking.
 // allow(module-state): the hub search's query, carried into the hub an answer opens
 const carried = ref(``);
-// allow(module-state): whether the hub being left is handing its query to the one an answer opens
+// Whether the hub being left is handing its query to the one an answer opens.
 let handing = false;
 
 const HEADING = { sandbox: SANDBOX, settings: SETTINGS } satisfies Readonly<Record<HubName, string>>;

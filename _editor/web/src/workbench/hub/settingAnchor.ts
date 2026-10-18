@@ -111,7 +111,6 @@ const land = (card: HTMLElement): void => {
 };
 
 // The one wait in progress: a second answer picked before the first card arrived replaces it rather than landing twice.
-// allow(module-state): the card a landing is still waiting for
 let waiting: (() => void) | undefined;
 
 /**

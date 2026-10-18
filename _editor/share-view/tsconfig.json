@@ -24,6 +24,6 @@
             "@intentic/sandbox-contract/*": ["../../_shared/sandbox-contract/src/*"]
         }
     },
-    "include": ["./src/**/*.ts", "./src/**/*.vue", "./env.d.ts"],
+    "include": ["./src/**/*.ts", "./src/**/*.vue", "./env.d.ts", "../web/env.d.ts"],
     "extends": "@intentic/tsconfig/tsconfig.vue.json"
 }

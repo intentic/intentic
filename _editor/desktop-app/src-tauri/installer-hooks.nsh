@@ -20,6 +20,49 @@ Var IntenticAgentKept
 ; Whether this uninstall is the first half of a reinstall (1): see AN UNINSTALL AN INSTALL IS ABOUT TO UNDO, below.
 Var IntenticReinstall
 
+; TerminateProcess starts shutdown without waiting for it. The process can disappear from a name lookup while
+; Restart Manager still reports its executable in use; Tauri's next check then tries to shut that stale owner down,
+; silently aborting the uninstall before registry and PATH cleanup. Wait on the same file ownership Tauri checks,
+; including the sidecar whose file must be removable too. A bounded wait leaves Tauri's normal failure handling intact.
+!macro INTENTIC_STOP_PROCESSES
+  Push $0
+  Push $1
+  Push $2
+  Push $3
+  Push $R0
+  Push $R1
+  nsis_tauri_utils::KillProcessCurrentUser "${MAINBINARYNAME}.exe"
+  Pop $0
+  nsis_tauri_utils::KillProcessCurrentUser "intentic-files.exe"
+  Pop $0
+  !insertmacro RestartManager_StartSession $R0
+  ${If} $R0 != ""
+    !insertmacro RestartManager_RegisterFile $R0 "$INSTDIR\${MAINBINARYNAME}.exe"
+    !insertmacro RestartManager_RegisterFile $R0 "$INSTDIR\intentic-files.exe"
+    StrCpy $3 0
+    ${Do}
+      ; A zero-sized list asks only whether any owner remains: ERROR_MORE_DATA means there is one.
+      System::Call 'RSTRTMGR::RmGetList(p R0, *i .r1, *i .r2, p 0, *i .R1) i .r0'
+      ${If} $0 <> ${ERROR_MORE_DATA}
+        ${ExitDo}
+      ${EndIf}
+      IntOp $3 $3 + 1
+      ${If} $3 >= 60
+        DetailPrint "Intentic is still closing; checking whether Windows can finish closing it."
+        ${ExitDo}
+      ${EndIf}
+      Sleep 250
+    ${Loop}
+    !insertmacro RestartManager_EndSession $R0
+  ${EndIf}
+  Pop $R1
+  Pop $R0
+  Pop $3
+  Pop $2
+  Pop $1
+  Pop $0
+!macroend
+
 ; WHY AN UNINSTALL HOOK AT ALL — this app is meant to be running when you uninstall it.
 ;
 ; The tray is where Intentic lives once its window is closed (windows.rs, `apply_close`), so the ordinary
@@ -77,12 +120,7 @@ Var IntenticReinstall
       StrCpy $UpdateMode 1
     ${EndIf}
   ${EndIf}
-  nsis_tauri_utils::KillProcessCurrentUser "${MAINBINARYNAME}.exe"
-  Pop $0
-  nsis_tauri_utils::KillProcessCurrentUser "intentic-files.exe"
-  Pop $0
-  ; The same settle the built-in check gives itself between killing and looking again.
-  Sleep 500
+  !insertmacro INTENTIC_STOP_PROCESSES
   StrCpy $IntenticAgentKept 0
   ${If} $UpdateMode <> 1
     ${If} ${FileExists} "$PROFILE\.intentic\machine\bin\intentic-machine.exe"
@@ -154,11 +192,7 @@ Var IntenticReinstall
 ; The file server is ended as well, for the reason the uninstall hook gives: a sidecar slow to exit holds
 ; intentic-files.exe, and the installer's overwrite of it fails.
 !macro NSIS_HOOK_PREINSTALL
-  nsis_tauri_utils::KillProcessCurrentUser "${MAINBINARYNAME}.exe"
-  Pop $0
-  nsis_tauri_utils::KillProcessCurrentUser "intentic-files.exe"
-  Pop $0
-  Sleep 500
+  !insertmacro INTENTIC_STOP_PROCESSES
   !insertmacro INTENTIC_EXPLORER_MENU_STEP_ASIDE
 !macroend
 

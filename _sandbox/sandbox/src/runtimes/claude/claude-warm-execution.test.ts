@@ -15,6 +15,7 @@ const VIEW = "/pure-cache-view";
 const references: NamespaceEntryReference[] = [];
 afterEach(() => { for (const reference of references.splice(0)) { forgetNamespaceEntry(reference); } });
 const fixture = async (options: {
+    readonly cwd?: string;
     readonly runtime?: ClaudeWarmDeps["agent"];
     readonly staleAnchor?: boolean;
     readonly credential?: HarnessRequest["credential"];
@@ -31,7 +32,7 @@ const fixture = async (options: {
     const oldLease = service.acquire(admission, { localCwd: plan.worktree, isolation: { plan, anchor: oldAnchor } });
     const request: HarnessRequest = {
         execution: oldLease.context,
-        spec: { cwd: VIEW, prompt: "old words", model: "unchanged-model", conversationId: "synthetic-conversation", isolation: { plan, anchor: oldAnchor } },
+        spec: { cwd: options.cwd ?? VIEW, prompt: "old words", model: "unchanged-model", conversationId: "synthetic-conversation", isolation: { plan, anchor: oldAnchor } },
         policy: {}, tools: {}, hooks: { cards: unstubbed("cards", {}) },
         credential: options.credential ?? { kind: "claude-oauth", token: "synthetic-old-token" }, signal: new AbortController().signal,
     };
@@ -136,13 +137,28 @@ test("a captured replay never makes its released original request a new authorit
     expect(turn.read).not.toHaveBeenCalled();
 });
 
-test.each(["forged", "changed cwd"] as const)("replay capture refuses %s authority before storing a recipe", async (kind) => {
+test("a refresh retains a persona's subfolder inside its admitted view", async () => {
+    const sent: HarnessRequest[] = [];
+    const turn = await fixture({
+        cwd: `${VIEW}/child`,
+        async *runtime(refresh) {
+            assertAgentExecution(refresh.execution, refresh.spec);
+            sent.push(refresh);
+            yield { kind: "done" };
+        },
+    });
+    expect(await collect(turn.replay.send(new AbortController().signal))).toEqual([{ kind: "done" }]);
+    expect(sent.map((request) => [request.execution.cwd, request.spec.cwd])).toEqual([[VIEW, `${VIEW}/child`]]);
+    expect(turn.dispose).toHaveBeenCalledTimes(1);
+});
+
+test.each(["forged", "escaped cwd"] as const)("replay capture refuses %s authority before storing a recipe", async (kind) => {
     const service = createAgentExecutionService(async () => ({ agentDomain: "root" }));
     const admission = await service.admit();
     const lease = service.acquire(admission, { localCwd: VIEW });
     const request: HarnessRequest = {
         execution: kind === "forged" ? { mode: "root", cwd: VIEW } : lease.context,
-        spec: { cwd: kind === "changed cwd" ? `${VIEW}/child` : VIEW, prompt: "old words" },
+        spec: { cwd: kind === "escaped cwd" ? `${VIEW}-other` : VIEW, prompt: "old words" },
         policy: {}, tools: {}, hooks: { cards: unstubbed("cards", {}) },
         credential: { kind: "claude-oauth", token: "synthetic-token" }, signal: new AbortController().signal,
     };
