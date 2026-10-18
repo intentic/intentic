@@ -30,16 +30,9 @@ import { testCommandOf } from "./layout/test-runner.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "./layout/templates-config.js";
 import { resolveWithin } from "./files/workspace-files-paths.js";
 import { UnknownArchiveError } from "./files/archive/workspace-extract.js";
-import {
-    DOWNLOAD_TICKET_TTL_MS,
-    type DownloadItem,
-    type DownloadPlan,
-    downloadBinding,
-    nameSelection,
-    pathExists,
-} from "./files/download/workspace-download.js";
 import { TrashMissError } from "./files/trash/workspace-trash.js";
-import { childrenForRead, containedForRead, containedIn, insideArchive, scopedTarget, workspaceRootFor } from "./layout/workspace-scope.js";
+import { workspaceReads } from "./workspace-reads.js";
+import { childrenForRead, containedForRead, containedIn, insideArchive, workspaceRootFor } from "./layout/workspace-scope.js";
 import {
     fencedChildren,
     fencedClassification,
@@ -51,9 +44,7 @@ import {
     refuseUnlistable,
     searchPaths,
 } from "./layout/workspace-fence.js";
-import { provenanceOf, refuseUnlessVisible } from "../auth/fleet-scope.js";
-import { callerEditFence, callerFence } from "../areas/area-scope.js";
-import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
+import { callerEditFence } from "../areas/area-scope.js";
 import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
 import { publicAddressOf } from "../env.config.js";
 
@@ -130,27 +121,8 @@ export const createWorkspaceRoutes = (services: Services) => {
     const scope = services.workspaceScope;
     // Each conversation's change list, held briefly so a hover's peek and the click after it ask git once.
     const overlays = createCheckoutOverlays({ changesOf: cumulativeChanges(services), logger: services.logger });
-    // The caller's own fence, read per request so an area edit lands on the very next one rather than at next sign-in.
-    const fenceFor = async (context: OrpcContext): Promise<Fence> => callerFence(await services.areas.list(), context.identity);
-    // A conversation's checkout is its own. A caller who may not see the conversation may not read out of it either,
-    // or every fence would have a second door marked with somebody else's id.
-    const refuseUnseenAgent = (context: OrpcContext, agent: string | undefined): void => {
-        if (agent === undefined) {
-            return;
-        }
-        const entry = services.agents.entry(agent);
-        // An unknown id stays NOT_FOUND from the scope resolver; saying FORBIDDEN here would answer whether it exists.
-        if (entry !== undefined) {
-            refuseUnlessVisible(context.identity, provenanceOf(entry));
-        }
-    };
-    // Every scoped read asks both questions before a path reaches the resolver: whose copy, and whether this caller
-    // may look there at all.
-    const scopedRead = async (context: OrpcContext, agent: string | undefined, relPath: string) => {
-        refuseUnseenAgent(context, agent);
-        refuseFenced(await fenceFor(context), relPath);
-        return scopedTarget(scope, agent, relPath);
-    };
+    // Whose copy, and whether this caller may look there: shared with the tickets (workspace-tickets.routes.ts).
+    const { fenceFor, refuseUnseenAgent, scopedRead } = workspaceReads(services);
     // Zone and sandbox id used to build per-app preview URLs (preview-<panel>-<id>.<zone>).
     const { zone, sandboxId } = publicAddressOf(services.config);
     // Resolves and validates the {repo} path param for the apps extension's routes; the repo must already exist.
@@ -206,33 +178,6 @@ export const createWorkspaceRoutes = (services: Services) => {
         derive: i.derive.handler(async ({ input, context }) => {
             refuseFenced(await fenceFor(context), input.path);
             return services.derived.derive(services.workspace.root, await derivedRel(input.path));
-        }),
-        // In-memory state of a running service, not a disk read: no path to contain, nothing to scope.
-        // Mints the ticket presented to GET /workspace/media, guarded like a read so it can only name a file already
-        // readable. Binds the resolved file, not its shared-tree namesake, and names who minted it, so removing them or
-        // signing every browser out ends it (auth/tokens/media-tickets.ts).
-        mediaTicket: i.mediaTicket.handler(async ({ input, context }) => {
-            const { target } = await scopedRead(context, input.agent, input.path);
-            if ((await services.files.size(target)) === undefined) {
-                throw new ORPCError("NOT_FOUND", { message: "not found" });
-            }
-            return services.mediaTickets.mint(target, undefined, context.identity?.email);
-        }),
-        // Mints the ticket GET /workspace/download redeems: every path guarded like a read and resolved now, so the plan
-        // the ticket carries names only what this caller could already open, in the copy they asked for. Named after
-        // its minter like a media ticket.
-        downloadTicket: i.downloadTicket.handler(async ({ input, context }) => {
-            const { names, filename } = nameSelection(input.paths, "workspace");
-            const items: DownloadItem[] = [];
-            for (const [path, name] of names) {
-                const { target, shared } = await scopedRead(context, input.agent, path);
-                if (!(await pathExists(target))) {
-                    throw new ORPCError("NOT_FOUND", { message: `${path} is not there any more` });
-                }
-                items.push({ target, name, root: shared ? scope.main : await workspaceRootFor(scope, input.agent) });
-            }
-            const plan: DownloadPlan = { items, filename };
-            return { ...services.mediaTickets.mint(downloadBinding(plan), DOWNLOAD_TICKET_TTL_MS, context.identity?.email), filename };
         }),
         // Resolves which workspace file a named reference means (chat prose, terminal output, a tool chip); wires
         // resolveReference to the workspace's guards, to iq's in-memory glob, and to the conversation's own changes.

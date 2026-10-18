@@ -6290,7 +6290,7 @@
             "insideArchive": "Dentro de un archivo",
             "notInItsCopy": "No está en su copia",
             "noWriteAccess": "Sin acceso de escritura",
-            "pageSealed": "Aislada: sin red ni sesiones",
+            "pageSandboxed": "Aislada del editor",
             "preview": "Vista previa",
             "readAsText": "Leer como texto",
             "readOnlyHere": "Aquí solo lectura",
@@ -6357,8 +6357,6 @@
             "remote": "{count} elemento web bloqueado | {count} elementos web bloqueados",
             "remoteTitle": "Elementos web bloqueados",
             "remoteWhy": "La vista previa no tiene red",
-            "scriptsOff": "Scripts desactivados",
-            "scriptsOffWhy": "La página no paraba de irse",
             "strayed": "Navegación bloqueada",
             "strayedWhy": "Devuelta a esta página",
             "title": "Vista previa de {name}"

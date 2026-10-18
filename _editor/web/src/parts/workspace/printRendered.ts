@@ -3,7 +3,8 @@ import { z } from "zod";
 // Prints what a reading surface shows (a document's pages, a picture, rendered markdown, a web page, a PDF) from a
 // document of its own in a hidden frame, so the app around it never reaches the paper and nothing the file carries
 // runs: the copy keeps no script, no handler, no frame, and its frame is sandboxed without scripts, under a policy
-// that loads nothing from outside this app. A PDF goes to the browser's own PDF printing instead.
+// that loads nothing from outside this app but a web page's own pictures, styles and fonts, which it names at their
+// addresses. A PDF goes to the browser's own PDF printing instead.
 
 // Out of sight but laid out, so the browser has a page to print.
 const HIDDEN = `position:fixed;width:1px;height:1px;left:-10000px;top:0;border:0`;
@@ -14,6 +15,12 @@ const ANSWER_MS = 2_000;
 const LEFT_MS = 60_000;
 // Styles and pictures from this app or carried inline; nothing from the internet, and no script at all.
 const PRINT_POLICY = `default-src 'none'; style-src 'self' 'unsafe-inline' data: blob:; img-src 'self' data: blob:; font-src 'self' data: blob:; media-src 'self' data: blob:`;
+// A web page's copy names its pictures, styles and fonts where it loaded them (beside it on the daemon, or a CDN), so
+// those may load too; still no script.
+const WEB_PAGE_PRINT_POLICY = `default-src 'none'; style-src 'self' 'unsafe-inline' data: blob: https:; img-src 'self' data: blob: https:; font-src 'self' data: blob: https:; media-src 'self' data: blob: https:`;
+
+// The frame a web page's preview draws in (HtmlPreview.vue), whether it holds a sealed document or loads the page.
+const PAGE_FRAME = `iframe[data-print-page]`;
 
 // A page frame's answer, parsed where it arrives: the page's own scripts can post anything.
 const PrintAnswerSchema = z.object({ intenticPrintHtml: z.string() });
@@ -35,7 +42,7 @@ const ASK_EVERY_MS = 250;
 // scripts are off never does).
 const pageSnapshot = (host: HTMLElement): Promise<string> =>
     new Promise((resolve) => {
-        const current = (): HTMLIFrameElement | null => host.querySelector<HTMLIFrameElement>(`iframe[srcdoc]`);
+        const current = (): HTMLIFrameElement | null => host.querySelector<HTMLIFrameElement>(PAGE_FRAME);
         const finish = (html: string): void => {
             clearTimeout(timer);
             clearInterval(asking);
@@ -62,7 +69,7 @@ const pageSnapshot = (host: HTMLElement): Promise<string> =>
 
 // The source as a document fit for paper: everything that could act stripped, the policy first in its head, and pages
 // laid one per sheet where the surface drew a document's pages.
-export const printableDocument = (source: string): string => {
+export const printableDocument = (source: string, webPage = false): string => {
     const parsed = new DOMParser().parseFromString(source, `text/html`);
     for (const node of parsed.querySelectorAll(`script,noscript,button,[role="toolbar"],iframe,frame,object,embed,base,meta[http-equiv]`)) {
         node.remove();
@@ -78,7 +85,7 @@ export const printableDocument = (source: string): string => {
     }
     const policy = parsed.createElement(`meta`);
     policy.setAttribute(`http-equiv`, `Content-Security-Policy`);
-    policy.setAttribute(`content`, PRINT_POLICY);
+    policy.setAttribute(`content`, webPage ? WEB_PAGE_PRINT_POLICY : PRINT_POLICY);
     const paper = parsed.querySelector(`.docx-wrapper, .odf-page`) !== null;
     const style = parsed.createElement(`style`);
     style.textContent = `html,body{height:auto!important;overflow:visible!important;background:white!important;color:black}
@@ -92,13 +99,13 @@ export const printableDocument = (source: string): string => {
     return `<!doctype html>${parsed.documentElement.outerHTML}`;
 };
 
-const printDocument = async (source: string): Promise<void> => {
+const printDocument = async (source: string, webPage = false): Promise<void> => {
     const frame = document.createElement(`iframe`);
     // Same origin without scripts: this window can call print() on it, and nothing inside it can run.
     frame.setAttribute(`sandbox`, `allow-same-origin allow-modals`);
     frame.setAttribute(`aria-hidden`, `true`);
     frame.style.cssText = HIDDEN;
-    frame.srcdoc = printableDocument(source);
+    frame.srcdoc = printableDocument(source, webPage);
     const loaded = new Promise<void>((resolve) => frame.addEventListener(`load`, () => resolve(), { once: true }));
     document.body.append(frame);
     await loaded;
@@ -139,8 +146,8 @@ const printPdf = async (source: string): Promise<void> => {
 
 // Prints the surface mounted in `host`, whichever it is.
 export const printRendered = async (host: HTMLElement): Promise<void> => {
-    if (host.querySelector(`iframe[srcdoc]`) !== null) {
-        await printDocument(await pageSnapshot(host));
+    if (host.querySelector(PAGE_FRAME) !== null) {
+        await printDocument(await pageSnapshot(host), true);
         return;
     }
     const pdf = host.querySelector<HTMLObjectElement>(`object[type="application/pdf"]`);

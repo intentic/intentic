@@ -35,6 +35,8 @@ import {
     WorkspaceMediaTicketQuerySchema,
     WorkspaceMediaTicketSchema,
     WorkspaceDownloadTicketQuerySchema,
+    WorkspacePreviewTicketQuerySchema,
+    WorkspacePreviewTicketSchema,
     WorkspaceDownloadTicketSchema,
     WorkspaceMoveSchema,
     WorkspaceResolveQuerySchema,
@@ -134,6 +136,19 @@ export const workspaceContract = {
         .meta({ floor: "viewer", guest: true })
         .input(WorkspaceDownloadTicketQuerySchema)
         .output(WorkspaceDownloadTicketSchema),
+    // Mints the ticket GET /workspace/preview/{ticket}/* (a plain Hono route serving a page and its files) requires.
+    previewTicket: procedure
+        .route({
+            method: "POST",
+            path: "/workspace/preview-ticket",
+            summary: "Get an address to preview a web page at",
+            description:
+                "Mints a short-lived address a frame loads a workspace web page from, so the page runs as it would on a static file server: its scripts, modules, fetches and links resolve against real addresses beside it. The address serves the files of the page's own repository, never hidden files or the sandbox's own state, and the page runs sandboxed, with no access to the editor or this API.",
+        })
+        // Previewing a page is reading it and the files beside it, and the ticket is narrower than the bearer.
+        .meta({ floor: "viewer", guest: true })
+        .input(WorkspacePreviewTicketQuerySchema)
+        .output(WorkspacePreviewTicketSchema),
     // Matches a prose-written path, often just a suffix, against the tree rather than trusting it as root-relative.
     resolve: procedure
         .route({

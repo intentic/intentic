@@ -11053,7 +11053,7 @@
             "notInItsCopy": "Brak w jego kopii",
             "notUtf8ReadOnly": "Ten plik nie jest tekstem UTF-8, więc otwiera się tutaj tylko do odczytu.",
             "noWriteAccess": "Brak prawa zapisu",
-            "pageSealed": "Odizolowana: bez sieci i logowań",
+            "pageSandboxed": "Odizolowana od edytora",
             "preview": "Podgląd",
             "readAsText": "Czytaj jako tekst",
             "readOnlyHere": "Tu tylko do odczytu",
@@ -11141,8 +11141,6 @@
             "remote": "{count} element z sieci zablokowany | {count} elementy z sieci zablokowane | {count} elementów z sieci zablokowanych",
             "remoteTitle": "Zablokowano elementy z sieci",
             "remoteWhy": "Podgląd nie ma dostępu do sieci",
-            "scriptsOff": "Skrypty wyłączone",
-            "scriptsOffWhy": "Strona ciągle uciekała",
             "strayed": "Nawigacja zablokowana",
             "strayedWhy": "Przywrócona na tę stronę",
             "title": "Podgląd: {name}"

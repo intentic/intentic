@@ -160,6 +160,26 @@ export const WorkspaceDownloadTicketSchema = z.object({
     expiresAt: z.number().describe("When it stops working, in milliseconds. It is meant to be used at once."),
     filename: z.string().describe("What the archive is saved as, so a caller can say what is on its way."),
 });
+// Credential for GET /workspace/preview/{ticket}/*, which a frame loads a web page from so it runs as it would on a
+// static file server: its scripts, modules, fetches and links resolve against real addresses. The ticket is the path's
+// first segment, so every relative address the page names carries it on.
+export const WorkspacePreviewTicketQuerySchema = WorkspaceScopeSchema.extend({
+    path: z.string().min(1).describe("The web page to preview, as a workspace path."),
+    source: z
+        .string()
+        .max(8 * 1024 * 1024)
+        .optional()
+        .describe("The page's text as the editor holds it, when it has edits not yet saved; served in place of the file on disk."),
+});
+export const WorkspacePreviewTicketSchema = z.object({
+    page: z.string().describe("The page's address on this daemon, a path to put after its base URL; the ticket is inside it."),
+    root: z
+        .string()
+        .describe(
+            "The folder the ticket serves, as a workspace path (empty for the workspace's root): the page's own repository. An address under the ticket names the file at the same place under this folder.",
+        ),
+    expiresAt: z.number().describe("When it stops working, in milliseconds."),
+});
 // A read of a window: offset negative reads that many bytes from the end (for following a growing log); limit is
 // clamped to the daemon's own cap. Coerced from query strings.
 export const WorkspaceFileReadQuerySchema = WorkspaceScopeSchema.extend({

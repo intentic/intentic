@@ -6260,7 +6260,7 @@
             "insideArchive": "Im Archiv",
             "notInItsCopy": "Nicht in seiner Kopie",
             "noWriteAccess": "Kein Schreibzugriff",
-            "pageSealed": "Abgeschottet: kein Netz, keine Logins",
+            "pageSandboxed": "Abgeschottet vom Editor",
             "preview": "Vorschau",
             "readAsText": "Als Text lesen",
             "readOnlyHere": "Hier nur lesen",
@@ -6327,8 +6327,6 @@
             "remote": "{count} Web-Element blockiert | {count} Web-Elemente blockiert",
             "remoteTitle": "Web-Elemente blockiert",
             "remoteWhy": "Die Vorschau hat kein Netzwerk",
-            "scriptsOff": "Skripte aus",
-            "scriptsOffWhy": "Die Seite wollte ständig weg",
             "strayed": "Navigation blockiert",
             "strayedWhy": "Zurück auf diese Seite geholt",
             "title": "Vorschau von {name}"

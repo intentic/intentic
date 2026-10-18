@@ -681,7 +681,7 @@ const onEditorSave = (value: string): void =>
                 v-tooltip.bottom="
                     previewing
                         ? t(`workspace.fileViewer.showSource`)
-                        : { title: t(`workspace.fileViewer.showPage`), note: t(`workspace.fileViewer.pageSealed`) }
+                        : { title: t(`workspace.fileViewer.showPage`), note: t(`workspace.fileViewer.pageSandboxed`) }
                 "
             >
                 <Icon :name="previewing ? 'code' : 'eye'" class="text-2xs" />
@@ -823,8 +823,8 @@ const onEditorSave = (value: string): void =>
                     <Icon name="spinner" class="text-xl" spin :aria-label="t(`ui.status.loading`)" />
                 </div>
             </template>
-            <!-- The page rendered in a sealed frame, from the same text the editor below holds (HtmlPreview). -->
-            <HtmlPreview v-else-if="previewing" ref="htmlView" :path="path" :source="editorSeed" :load="readAsset" @open="openLinked" />
+            <!-- The page running in a sandboxed frame, from the same text the editor below holds (HtmlPreview). -->
+            <HtmlPreview v-else-if="previewing" ref="htmlView" :path :source="editorSeed" :unsaved="dirtyThis" :load="readAsset" @open="openLinked" />
             <CodeView
                 v-else-if="open.kind === 'code' && text !== null"
                 ref="editorView"

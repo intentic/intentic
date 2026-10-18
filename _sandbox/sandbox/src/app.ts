@@ -24,6 +24,7 @@ import { createRouter } from "./router.js";
 import { verifySyncToken } from "./peers/desktop-sync.js";
 import { logContext } from "./logger.js";
 import { appRawRoutes } from "./app-raw-routes.js";
+import { PREVIEW_PATH } from "./workspace/files/workspace-preview.js";
 import { serveRawRoutes } from "./http/raw-route-server.js";
 
 // Only genuine server faults (5xx) are logged; expected ORPCErrors are the routes' normal control flow.
@@ -76,7 +77,20 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // arbitrary bytes) and Referrer-Policy (the hostname carries the sandbox id) actually matter here.
     // Cross-Origin-Resource-Policy is off: /webchat/widget.js is loaded as a plain <script> from third-party sites,
     // which CORP would block.
-    app.use("*", secureHeaders({ crossOriginResourcePolicy: false, crossOriginEmbedderPolicy: false }));
+    // A previewed web page (workspace/files/workspace-preview.ts) is framed by the editor from another origin and may be
+    // opened in a tab of its own, always under a CSP sandbox: X-Frame-Options would refuse the frame its own
+    // frame-ancestors admits, and a browser refuses a tab whose answer pairs a sandbox with an opener policy.
+    const hardened = secureHeaders({ crossOriginResourcePolicy: false, crossOriginEmbedderPolicy: false });
+    // An agent cluster keyed to the daemon's origin means nothing to a page whose origin is opaque, and asking for one
+    // only puts a warning in that page's console.
+    const previewHardened = secureHeaders({
+        crossOriginResourcePolicy: false,
+        crossOriginEmbedderPolicy: false,
+        xFrameOptions: false,
+        crossOriginOpenerPolicy: false,
+        originAgentCluster: false,
+    });
+    app.use("*", (c, next) => (c.req.path.startsWith(PREVIEW_PATH) ? previewHardened(c, next) : hardened(c, next)));
 
     // Inside the hardening, outside everything that writes an answer, so every JSON body leaves compressed when the
     // browser accepts it, error bodies included.

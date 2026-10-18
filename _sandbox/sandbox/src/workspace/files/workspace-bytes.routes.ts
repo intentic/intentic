@@ -21,6 +21,7 @@ import type { Caller } from "../../auth/auth.js";
 import { callerEditFence, callerFence } from "../../areas/area-scope.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { decodedBody } from "../../http/request-body.js";
+import { createPreviewRoute } from "./workspace-preview.js";
 
 // Byte routes that stay off oRPC because their bodies are streamed: raw file read, ranged media read, and file/diff/tar
 // uploads. Registered before the oRPC catch-all, like /health.
@@ -371,7 +372,8 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
     },
 });
 
-// The workspace's byte routes: raw file read, the ranged media read a <video> talks to, the ZIP download of a selection, and the three upload doors.
+// The workspace's byte routes: raw file read, the ranged media read a <video> talks to, the ZIP download of a selection,
+// a previewed web page's files, and the three upload doors.
 // Off oRPC since their bodies are streamed bytes.
 export const workspaceBytesRawRoutes = defineRawRoutes((services: WorkspaceBytesRoutesDeps) => {
     const workspaceBytes = createWorkspaceBytesRoutes(services);
@@ -380,6 +382,8 @@ export const workspaceBytesRawRoutes = defineRawRoutes((services: WorkspaceBytes
         "GET /workspace/thumb": workspaceBytes.thumb,
         "GET /workspace/media": workspaceBytes.media,
         "GET /workspace/download": workspaceBytes.download,
+        // A previewed web page and the files beside it, under a ticket workspace.previewTicket minted (workspace-preview.ts).
+        "GET /workspace/preview/{ticket}/*": createPreviewRoute({ mediaTickets: services.mediaTickets }),
         "POST /workspace/upload": workspaceBytes.upload,
         "POST /workspace/upload-diff": workspaceBytes.uploadDiff,
         "POST /workspace/upload-archive": workspaceBytes.uploadArchive,

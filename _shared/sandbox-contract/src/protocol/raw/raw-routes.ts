@@ -40,6 +40,9 @@ export const RAW_ROUTES = {
     "GET /workspace/media": { auth: "door", guest: true, lane: "bulk" },
     // Navigated to for a ZIP of a selection, so no header either: the ticket it carries names the selection.
     "GET /workspace/download": { auth: "door", guest: true, lane: "bulk" },
+    // A previewed web page and the files it names, loaded by a frame, which sends no header: the ticket is the path's
+    // first segment, so the page's relative addresses carry it, and it is checked in the handler.
+    "GET /workspace/preview/{ticket}/*": { auth: "door", guest: true },
     // An attachment is part of the message it rides with; any other target edits the shared tree.
     "POST /workspace/upload": { floor: "writer", attachmentFloor: "collaborator", lane: "bulk" },
     "POST /workspace/upload-diff": {},

@@ -6213,7 +6213,7 @@
             "insideArchive": "Dans une archive",
             "notInItsCopy": "Absent de sa copie",
             "noWriteAccess": "Pas d'accès en écriture",
-            "pageSealed": "Isolée : ni réseau ni session",
+            "pageSandboxed": "Isolée de l'éditeur",
             "preview": "Aperçu",
             "readAsText": "Lire en texte",
             "readOnlyHere": "Lecture seule ici",
@@ -6277,8 +6277,6 @@
             "remote": "{count} élément web bloqué | {count} éléments web bloqués",
             "remoteTitle": "Éléments web bloqués",
             "remoteWhy": "L'aperçu n'a pas de réseau",
-            "scriptsOff": "Scripts désactivés",
-            "scriptsOffWhy": "La page partait sans cesse",
             "strayed": "Navigation bloquée",
             "strayedWhy": "Ramenée sur cette page",
             "title": "Aperçu de {name}"

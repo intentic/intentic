@@ -11541,7 +11541,7 @@
             "notInItsCopy": "Not in its copy",
             "notUtf8ReadOnly": "This file isn't UTF-8 text, so it opens read-only here.",
             "noWriteAccess": "No write access",
-            "pageSealed": "Sealed: no network, no logins",
+            "pageSandboxed": "Sandboxed, apart from the editor",
             "preview": "Preview",
             "readAsText": "Read as text",
             "readOnlyHere": "Read only here",
@@ -11586,8 +11586,6 @@
             "remote": "{count} web item blocked | {count} web items blocked",
             "remoteTitle": "Web items blocked",
             "remoteWhy": "The preview has no network",
-            "scriptsOff": "Scripts off",
-            "scriptsOffWhy": "The page kept leaving",
             "strayed": "Navigation blocked",
             "strayedWhy": "Put back on this page",
             "title": "Preview of {name}"
