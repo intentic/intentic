@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 
 use crate::docker;
 use crate::record::ChannelRecord;
-use crate::sandbox::fix::chain::{Env, WorkSignal};
+use crate::sandbox::fix::chain::{self, Env, WorkSignal};
 use crate::sandbox::fix::host::Os;
 use crate::sandbox::fix::model::{self, Check, Fix, Outcome, Source, Stage, CONTAINER};
 use crate::sandbox::fix::report::{self, Poster, Target};
@@ -59,28 +59,73 @@ const NOT_QUIET: &str = "no quiet signal (busy, or an older daemon)";
 /// Settings or a continuous event/listener automation holds this sandbox awake (the signal's `keepAwake`).
 const KEPT_AWAKE: &str = "its settings or an enabled receiver requires it to stay awake";
 
-// A heartbeat may predate a newly booked send. Ask the daemon itself immediately before sleep; an older daemon or
-// an unreadable clock cannot certify it, so an unattended sleep leaves it running.
+// The heartbeat (`work.json`) may predate a newly booked send, so a sleep rests on the daemon's own answer, asked
+// through this socket just before the stop. Asking starts node inside the container, where reading the heartbeat is a
+// `cat`, so the heartbeat screens first and only a sandbox it already says may sleep is asked (2026-10-18).
 pub(super) const SLEEP_SOCKET: &str = "/run/intentic/sleep.sock";
-const SLEEP_PROBE: &str = r#"const c=require('node:net').connect(process.argv[1]);c.setTimeout(10000,()=>{c.destroy();process.exitCode=1});c.on('data',b=>process.stdout.write(b));c.on('error',()=>{process.exitCode=1});"#;
+// Exits 3 when there is no socket at all: a daemon older than it, whose heartbeat is all it can say.
+const SLEEP_PROBE: &str = r#"const c=require('node:net').connect(process.argv[1]);c.setTimeout(10000,()=>{c.destroy();process.exitCode=1});c.on('data',b=>process.stdout.write(b));c.on('error',e=>{process.exitCode=e.code==='ENOENT'?3:1});"#;
+const NO_SOCKET: i32 = 3;
 
-fn confirmed_signal(container: &str) -> Option<WorkSignal> {
-    confirmed_signal_with(container, docker::run_bounded)
+/// What the daemon said when asked just before a sleep.
+#[derive(Debug, PartialEq, Eq)]
+enum Confirmation {
+    /// Its reading, taken after the question.
+    Fresh(WorkSignal),
+    /// No socket to ask: a daemon from before it.
+    NoSocket,
+    /// A socket that did not answer with a reading: a clock it could not read, a daemon mid-restart, a timeout.
+    Refused,
 }
 
-fn confirmed_signal_with(
+fn confirmation(container: &str) -> Confirmation {
+    confirmation_with(container, docker::run_bounded)
+}
+
+fn confirmation_with(
     container: &str,
     run: impl FnOnce(&str, &[&str], std::time::Duration) -> Result<docker::Bounded>,
-) -> Option<WorkSignal> {
-    let ran = run(
+) -> Confirmation {
+    let Ok(ran) = run(
         "docker",
         &["exec", container, "node", "-e", SLEEP_PROBE, SLEEP_SOCKET],
         std::time::Duration::from_secs(12),
-    )
-    .ok()?;
-    (ran.code == Some(0) && !ran.timed_out)
-        .then(|| WorkSignal::parse(&ran.stdout))
-        .flatten()
+    ) else {
+        return Confirmation::Refused;
+    };
+    match (ran.timed_out, ran.code) {
+        (false, Some(0)) => {
+            WorkSignal::parse(&ran.stdout).map_or(Confirmation::Refused, Confirmation::Fresh)
+        }
+        (false, Some(NO_SOCKET)) => Confirmation::NoSocket,
+        _ => Confirmation::Refused,
+    }
+}
+
+/// The signal an unattended sleep rests on: the daemon's fresh answer, an older daemon's heartbeat, and nothing from a
+/// daemon that has the socket and could not answer (2026-10-18: refusing the older ones too left every sandbox on an
+/// image from before the socket awake for good). Pure.
+fn keeper_signal(
+    asked: Confirmation,
+    heartbeat: impl FnOnce() -> Option<WorkSignal>,
+) -> Option<WorkSignal> {
+    match asked {
+        Confirmation::Fresh(signal) => Some(signal),
+        Confirmation::NoSocket => heartbeat(),
+        Confirmation::Refused => None,
+    }
+}
+
+/// The signal a person's sleep sets its alarm from: the fresh answer where there is one, else the heartbeat. A person
+/// asked for this sleep, and a daemon that cannot answer is no reason to refuse it. Pure.
+fn person_signal(
+    asked: Confirmation,
+    heartbeat: impl FnOnce() -> Option<WorkSignal>,
+) -> Option<WorkSignal> {
+    match asked {
+        Confirmation::Fresh(signal) => Some(signal),
+        Confirmation::NoSocket | Confirmation::Refused => heartbeat(),
+    }
 }
 
 /// The shortest sleep worth taking: a moment due sooner than the alarm's lead and this keeps the sandbox awake, since
@@ -315,10 +360,11 @@ fn sleep_now(slug: Option<String>, json: bool, source: Source) -> Result<()> {
         // A person's sleep keeps the schedule's alarm as the keeper's does, so what it promised still comes on time; one
         // already overdue is left for the next visit rather than starting it straight back up under their hand.
         let now = now_ms();
-        let signal = confirmed_signal(&container).ok_or_else(|| {
-            crate::util::Fail("the daemon could not confirm its wake alarm; left awake".to_string())
-        })?;
-        alarm = signal.next_wake_at.filter(|at| *at > now);
+        alarm = person_signal(confirmation(&container), || {
+            chain::read_work_signal(&container)
+        })
+        .and_then(|signal| signal.next_wake_at)
+        .filter(|at| *at > now);
         put_to_sleep(&slug, source, alarm).err().map(|fail| fail.0)
     };
     if let Some(refused) = refused {
@@ -393,19 +439,22 @@ fn considered(slug: &str, idle_ms: u64, source: Source) -> (bool, String, Option
     if let Some(why) = held_back(&record, docker::container_exists(&parked_of(slug)), true) {
         return (false, why.to_string(), None);
     }
-    let signal = confirmed_signal(&container);
-    let now = now_ms();
-    let idle_ms = idle_limit(&record, signal, idle_ms);
-    match sleep_verdict(signal, now, idle_ms, wake_lead(&record)) {
+    // The heartbeat screens: most rounds most sandboxes are in use, and saying so needs no node inside them.
+    let heartbeat = chain::read_work_signal(&container);
+    let screened = idle_limit(&record, heartbeat, idle_ms);
+    match sleep_verdict(heartbeat, now_ms(), screened, wake_lead(&record)) {
         Verdict::Awake(why) => (false, why.to_string(), None),
         Verdict::Sleep => {
             if let Some(why) = dev_checkout_holds_awake(slug, &container) {
                 return (false, why, None);
             }
-            // The checkout's pre-sleep hook can take a minute. Revalidate after it, so a booking made during that wait
-            // replaces the alarm and work that began in it keeps the container up.
-            let signal = confirmed_signal(&container);
+            // Asked after the checkout's pre-sleep hook, which can take a minute, so a booking made in the meantime is in
+            // the alarm and work that began in it keeps the container up.
+            let signal = keeper_signal(confirmation(&container), || {
+                chain::read_work_signal(&container)
+            });
             let now = now_ms();
+            let idle_ms = idle_limit(&record, signal, idle_ms);
             if let Verdict::Awake(why) = sleep_verdict(signal, now, idle_ms, wake_lead(&record)) {
                 return (false, why.to_string(), None);
             }
@@ -737,17 +786,37 @@ mod tests {
     /// The lead every verdict below is asked with: the floor, as a sandbox that has never been woken has.
     const LEAD: u64 = LEAD_FLOOR_MS;
 
+    fn ran(code: Option<i32>, timed_out: bool, stdout: &str) -> Result<docker::Bounded> {
+        Ok(docker::Bounded {
+            code,
+            timed_out,
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+        })
+    }
+
     #[test]
     fn the_sleep_confirmation_asks_the_live_daemon_with_a_bounded_host_only_probe() {
-        let signal = confirmed_signal_with("sandbox-test", |program, args, limit| {
+        let fresh = json!({ "liveTurns": 0, "at": NOW, "quietSince": NOW - 45 * MIN, "nextWakeAt": NOW + 60 * MIN }).to_string();
+        let asked = confirmation_with("sandbox-test", |program, args, limit| {
             assert_eq!(program, "docker");
-            assert_eq!(args, ["exec", "sandbox-test", "node", "-e", SLEEP_PROBE, SLEEP_SOCKET]);
+            assert_eq!(
+                args,
+                [
+                    "exec",
+                    "sandbox-test",
+                    "node",
+                    "-e",
+                    SLEEP_PROBE,
+                    SLEEP_SOCKET
+                ]
+            );
             assert_eq!(limit, std::time::Duration::from_secs(12));
-            Ok(docker::Bounded {
-                code: Some(0), timed_out: false, stderr: String::new(),
-                stdout: json!({ "liveTurns": 0, "at": NOW, "quietSince": NOW - 45 * MIN, "nextWakeAt": NOW + 60 * MIN }).to_string(),
-            })
-        }).expect("a fresh signal");
+            ran(Some(0), false, &fresh)
+        });
+        let Confirmation::Fresh(signal) = asked else {
+            panic!("a fresh signal, got {asked:?}")
+        };
         assert_eq!(signal.next_wake_at, Some(NOW + 60 * MIN));
         assert_eq!(
             sleep_verdict(Some(signal), NOW, 30 * MIN, LEAD),
@@ -758,33 +827,65 @@ mod tests {
     #[test]
     fn a_failed_or_partial_confirmation_never_becomes_a_sleep_without_an_alarm() {
         let valid = json!({ "liveTurns": 0, "at": NOW, "quietSince": NOW - 45 * MIN }).to_string();
+        let quiet_heartbeat = || WorkSignal::parse(&valid);
         for (code, timed_out, stdout) in [
             (Some(1), false, valid.as_str()),
             (None, true, valid.as_str()),
             (Some(0), true, valid.as_str()),
+            (Some(NO_SOCKET), true, ""),
             (Some(0), false, r#"{"error":"could not confirm sleep"}"#),
             (Some(0), false, ""),
             (Some(0), false, r#"{"liveTurns":0,"at":"#),
         ] {
-            let signal = confirmed_signal_with("sandbox-test", |_, _, _| {
-                Ok(docker::Bounded {
-                    code,
-                    timed_out,
-                    stdout: stdout.to_string(),
-                    stderr: String::new(),
-                })
-            });
+            let asked = confirmation_with("sandbox-test", |_, _, _| ran(code, timed_out, stdout));
+            assert_eq!(asked, Confirmation::Refused);
+            // A daemon that has the socket and could not answer is not overruled by its older heartbeat.
+            let signal = keeper_signal(asked, quiet_heartbeat);
             assert_eq!(
                 sleep_verdict(signal, NOW, 30 * MIN, LEAD),
                 Verdict::Awake("unreadable")
             );
         }
-        let signal = confirmed_signal_with("sandbox-test", |_, _, _| {
+        let asked = confirmation_with("sandbox-test", |_, _, _| {
             Err(crate::util::Fail("Docker unavailable".to_string()))
         });
+        assert_eq!(asked, Confirmation::Refused);
+    }
+
+    #[test]
+    fn a_daemon_from_before_the_socket_sleeps_on_its_heartbeat_as_it_always_did() {
+        let heartbeat = json!({ "liveTurns": 0, "at": NOW, "quietSince": NOW - 45 * MIN, "nextWakeAt": NOW + 60 * MIN }).to_string();
+        let asked = confirmation_with("sandbox-test", |_, _, _| ran(Some(NO_SOCKET), false, ""));
+        assert_eq!(asked, Confirmation::NoSocket);
+        let signal = keeper_signal(asked, || WorkSignal::parse(&heartbeat));
+        assert_eq!(sleep_verdict(signal, NOW, 30 * MIN, LEAD), Verdict::Sleep);
         assert_eq!(
-            sleep_verdict(signal, NOW, 30 * MIN, LEAD),
-            Verdict::Awake("unreadable")
+            signal.and_then(|signal| signal.next_wake_at),
+            Some(NOW + 60 * MIN)
+        );
+    }
+
+    #[test]
+    fn a_persons_sleep_takes_the_heartbeats_alarm_when_the_daemon_cannot_answer() {
+        let heartbeat =
+            json!({ "liveTurns": 0, "at": NOW, "nextWakeAt": NOW + 60 * MIN }).to_string();
+        for asked in [Confirmation::Refused, Confirmation::NoSocket] {
+            let signal = person_signal(asked, || WorkSignal::parse(&heartbeat));
+            assert_eq!(
+                signal.and_then(|signal| signal.next_wake_at),
+                Some(NOW + 60 * MIN)
+            );
+        }
+        let fresh = WorkSignal::parse(
+            &json!({ "liveTurns": 0, "at": NOW, "nextWakeAt": NOW + 5 * MIN }).to_string(),
+        )
+        .expect("a signal");
+        let signal = person_signal(Confirmation::Fresh(fresh), || {
+            panic!("the heartbeat is only read without a fresh answer")
+        });
+        assert_eq!(
+            signal.and_then(|signal| signal.next_wake_at),
+            Some(NOW + 5 * MIN)
         );
     }
 

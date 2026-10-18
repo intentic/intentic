@@ -11,12 +11,19 @@ import { DAY_MS } from "../../durations.js";
 // `hosted.idleWarnDays`; the sandbox row, name, address and sharing survive, so coming back means picking a new
 // machine, not losing the workspace. Never:
 // - a machine on the hosted plan
-// - a machine Fly reports running (`lastSeenAt` is a boot announce, not a heartbeat)
+// - a machine Fly reports running (a person's stamp moves when they wake it or its daemon next sleeps, not while they work)
 // - a machine whose owner we couldn't ask about (Fly unreachable); retried tomorrow
 
-// lastSeenAt is the daemon's last boot announcement; a machine that never announced is measured from its own creation,
-// catching a stalled provision that was abandoned.
-const idleSince = (machine: { createdAt: Date; sandbox: { lastSeenAt: Date | null } }): Date => machine.sandbox.lastSeenAt ?? machine.createdAt;
+// personSeenAt is the last moment a person was there: a browser waking it, or its daemon's word at its last sleep (api
+// hosted-wake-alarm.ts). Not lastSeenAt, the daemon's boot announce: a machine its own alarm starts for a nightly cron
+// boots every night, and would never be collected (2026-10-18). Nobody seen since the stamp began is measured from the
+// machine's creation, catching a stalled provision that was abandoned.
+const idleSince = (machine: { createdAt: Date; sandbox: { personSeenAt: Date | null } }): Date => machine.sandbox.personSeenAt ?? machine.createdAt;
+
+// The warning that stands: one sent after the person was last there. A person coming back withdraws it without a write,
+// so an alarm's wake, which writes nothing a person would, can neither withdraw it nor have it sent again.
+const standingWarning = (machine: IdleCandidate): Date | null =>
+    machine.idleWarnedAt !== null && machine.idleWarnedAt.getTime() >= idleSince(machine).getTime() ? machine.idleWarnedAt : null;
 
 const warnMail = (config: Config, sandboxName: string, days: number) => ({
     subject: `Your intentic machine for "${sandboxName}" will be removed in ${days} days`,
@@ -41,7 +48,7 @@ interface IdleCandidate {
     readonly machineId: string;
     readonly createdAt: Date;
     readonly idleWarnedAt: Date | null;
-    readonly sandbox: { id: string; name: string; lastSeenAt: Date | null; ownerId: string; owner: { email: string } };
+    readonly sandbox: { id: string; name: string; personSeenAt: Date | null; ownerId: string; owner: { email: string } };
 }
 
 /* THE WARNING IS A PROMISE, NOT A FORMALITY, and the clock alone used to be enough to break it. Collection was
@@ -59,9 +66,10 @@ interface IdleCandidate {
 const daysOfGrace = (config: Config, idleDaysSoFar: number): number =>
     Math.max(1, Math.ceil(Math.max(config.hosted.idleDays - idleDaysSoFar, config.hosted.idleDays - config.hosted.idleWarnDays)));
 
-const noticeServed = (config: Config, machine: IdleCandidate, now: number): boolean =>
-    machine.idleWarnedAt !== null &&
-    now - machine.idleWarnedAt.getTime() >= Math.max(0, config.hosted.idleDays - config.hosted.idleWarnDays) * DAY_MS;
+const noticeServed = (config: Config, machine: IdleCandidate, now: number): boolean => {
+    const warnedAt = standingWarning(machine);
+    return warnedAt !== null && now - warnedAt.getTime() >= Math.max(0, config.hosted.idleDays - config.hosted.idleWarnDays) * DAY_MS;
+};
 
 // Decides one candidate: on the plan, gone, alive, past the axe with notice served, or owed its one warning. Split
 // from the sweep loop so each stays one job.
@@ -90,11 +98,9 @@ const decideIdleMachine = async (
         logger.warn({ app: machine.appName, sandboxId: machine.sandbox.id }, `hosted idle sweep: machine gone from the provider; row dropped`);
         return `dropped`;
     }
+    // Running is not proof of a person: its alarm starts it for its schedules. Kept, and its notice left as it stands,
+    // since withdrawing it here would mail a fresh one after every scheduled run.
     if (LIVE_STATES.has(state.state)) {
-        // Re-arms so a full warning period starts fresh whenever it does eventually stop.
-        if (machine.idleWarnedAt !== null) {
-            await prisma.hostedMachine.update({ where: { id: machine.id }, data: { idleWarnedAt: null } });
-        }
         return `kept`;
     }
     if (idleDaysSoFar >= config.hosted.idleDays && noticeServed(config, machine, now)) {
@@ -107,7 +113,7 @@ const decideIdleMachine = async (
         );
         return `destroyed`;
     }
-    if (machine.idleWarnedAt !== null) {
+    if (standingWarning(machine) !== null) {
         return `kept`;
     }
     // Mail first, stamp second: a stamp before a failed send would silently burn the one warning.
@@ -133,7 +139,12 @@ export const reapIdleHosted = async (
     const now = Date.now();
     const candidates = await prisma.hostedMachine.findMany({
         // The warn threshold is the wider net; everything past the destroy threshold falls inside it too.
-        where: { sandbox: { OR: [{ lastSeenAt: { lt: new Date(now - idleWarnDays * DAY_MS) } }, { lastSeenAt: null }] } },
+        where: {
+            OR: [
+                { sandbox: { personSeenAt: { lt: new Date(now - idleWarnDays * DAY_MS) } } },
+                { sandbox: { personSeenAt: null }, createdAt: { lt: new Date(now - idleWarnDays * DAY_MS) } },
+            ],
+        },
         select: {
             id: true,
             sandboxId: true,
@@ -141,7 +152,7 @@ export const reapIdleHosted = async (
             machineId: true,
             createdAt: true,
             idleWarnedAt: true,
-            sandbox: { select: { id: true, name: true, lastSeenAt: true, ownerId: true, owner: { select: { email: true } } } },
+            sandbox: { select: { id: true, name: true, personSeenAt: true, ownerId: true, owner: { select: { email: true } } } },
         },
     });
     const tally = { warned: 0, destroyed: 0, dropped: 0 };

@@ -265,9 +265,14 @@ model Sandbox {
     // does not host), and null once that machine's keeper has heard it (POST /host-report/wakes) or nobody asked. The
     // platform never calls the machine: its agent asks here while any sandbox of its sleeps (api host-report.ts).
     wakeRequestedAt    DateTime?
-    // The hosted daemon's durable alarm, acknowledged before idle-stop; retried until the daemon cancels it at boot.
+    // The hosted daemon's durable alarm, acknowledged before idle-stop; retried with backoff until the daemon retracts it
+    // at boot, a refusal that no retry answers (suspension, spent hours, a machine gone), or a day overdue.
     scheduledWakeAt    DateTime?
     scheduledWakeRetryAt DateTime?
+    // The last moment a person was there: a browser's wake, or the daemon's `personAt` as it next sleeps (api
+    // hosted-wake-alarm.ts). What the free lane's idle collection measures from (hosted-idle.ts), since a boot the alarm
+    // made stamps lastSeenAt as any boot does. Backfilled from lastSeenAt when it arrived (2026-10-18).
+    personSeenAt       DateTime?
     // The last two distinct copies of this sandbox that announced, as [{instance, host, os, firstAt, at}] (api
     // announce-copies.ts): an `instance` is minted once per container start, so two that keep announcing side by side
     // are two containers holding one connect token, which is what pasting the setup command into PowerShell and into

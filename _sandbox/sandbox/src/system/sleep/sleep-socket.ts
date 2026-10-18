@@ -6,7 +6,8 @@ import type { QuietWatch } from "../quiet-watch.js";
 import { workSignalBody } from "../../workload/work-signal.js";
 
 // Host-only, never routed by netd. The keeper asks this just before stopping the container: work.json is a heartbeat,
-// not a certificate that no booking changed since it was written. Failure to obtain a fresh answer forbids sleep.
+// not a certificate that no booking changed since it was written. An answer that fails forbids sleep; no socket at all
+// reads as a daemon from before it, which the keeper sleeps on its heartbeat (ic sleep.rs).
 export const SLEEP_SOCKET_PATH = "/run/intentic/sleep.sock";
 
 const createSleepServer = (quiet: Pick<QuietWatch, "check" | "read">, working: () => number, logger: Pick<Logger, "warn">) =>
@@ -42,7 +43,7 @@ export const startSleepSocket = async (
     } catch (error) {
         if (listening) { await new Promise<void>((resolve) => server.close(() => resolve())); }
         listening = false;
-        logger.warn({ err: error, path }, "sleep socket unavailable; the host must leave this sandbox awake");
+        logger.warn({ err: error, path }, "sleep socket unavailable; the host sleeps this sandbox on its minute-old heartbeat");
     }
     server.on("error", (error) => logger.warn({ err: error }, "sleep socket failed"));
     return { close: () => listening ? new Promise((resolve) => server.close(() => resolve())) : Promise.resolve() };

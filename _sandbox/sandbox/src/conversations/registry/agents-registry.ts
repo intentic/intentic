@@ -28,6 +28,7 @@ import { restoredLimitHold } from "../actor/limit-hold.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
 import type { ConversationUnits } from "../../store/conversation-units.js";
 import { type ConversationActors, type ConversationBooks, createConversationActors } from "../actor/conversation-actors.js";
+import { activateLoadedFleet } from "./fleet-activation.js";
 import type { BeginTurn, SettleFlush } from "../actor/conversation-decide.js";
 import { activityLive, awaitingWake, type ConversationState, type HeldRecord, NO_USAGE, type TurnUsage, nextPromptDayAt } from "../actor/conversation-state.js";
 import { conversationStatus, parkedKinds, permissionAskOf } from "../actor/conversation-status.js";
@@ -827,27 +828,6 @@ const checkFailureClearer =
         await books.persist();
         books.broadcast();
     };
-
-const activateLoadedFleet = (
-    entries: readonly PersistedAgent[],
-    conversations: Pick<ConversationActors, "queued">,
-    broadcast: () => void,
-    reprobe: () => Promise<boolean>,
-): void => {
-    // Queues survive sleep on the entries; the schedulers enumerate actors. Restore those actors before any
-    // wake reader can cancel a platform alarm or report a sandbox quiet with its booked messages unseen.
-    for (const entry of entries) { conversations.queued(entry.id); }
-    // Broadcast before probing, since a fresh boot's verdict cache is empty and the probe spawns git per live agent.
-    broadcast();
-    void reprobe()
-        .then((moved) => {
-            if (moved) {
-                broadcast();
-            }
-        })
-        // allow(silent-catch): reprobe never throws; a broadcast that does leaves the next change to carry the standings.
-        .catch(() => undefined);
-};
 
 export const createFleet = (
     store: FleetStore,

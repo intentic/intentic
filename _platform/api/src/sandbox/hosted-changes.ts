@@ -135,8 +135,9 @@ export const openStretchOrStop = async (
     context: Pick<OrpcContext, "prisma" | "config" | "logger">,
     hosted: { id: string; sandboxId: string; appName: string; machineId: string },
     ownerId: string,
+    options: { readonly keepIdleWarning?: boolean } = {},
 ): Promise<void> => {
-    if (await openHostedStretch(context.prisma, { ...hosted, ownerId })) {
+    if (await openHostedStretch(context.prisma, { ...hosted, ownerId }, options)) {
         return;
     }
     await stopMachine(context.config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error) =>

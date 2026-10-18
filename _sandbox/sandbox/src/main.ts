@@ -20,7 +20,7 @@ import { startDaemonMetrics } from "./bootstrap/daemon-metrics.js";
 import { wireDependencyCoordinator } from "./bootstrap/deps-coordination.js";
 import { requireNetdSockets, startNetdDoor } from "./bootstrap/netd-door.js";
 import { startCredentialGateway } from "./capabilities/broker/broker-server.js";
-import { quietProbes, startPlatformPresence, startPlatformSleep, subscribeSleepChanges } from "./bootstrap/platform-presence.js";
+import { type PlatformSleep, quietProbes, startPlatformPresence, startPlatformSleep } from "./bootstrap/platform-presence.js";
 import { commitStateAtBoot, convergeStateAtBoot } from "./bootstrap/state-boot.js";
 import { startVersionWatches } from "./bootstrap/version-watches.js";
 import { startWorkspaceApps } from "./bootstrap/workspace-apps.js";
@@ -73,6 +73,8 @@ interface Ready {
     readonly prewarm: boolean;
     // The one deliberate stop, registered on SIGTERM and SIGINT as soon as there is anything to tear down.
     readonly stop: (exitCode?: number, cause?: StopCause) => void;
+    // The hosted machine's idle-stop and alarm, running since before the boot chain; handed the alarm past the gate.
+    readonly sleep: PlatformSleep | undefined;
 }
 
 // Everything up to and including the gate opening. Throws whatever stops the boot short of it.
@@ -172,9 +174,9 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
         const ticks: WorkSignalSlot = {};
         const quiet = startQuietWatch(quietProbes(services), { logger, onChange: () => void ticks.signal?.tick() });
         shutdown.push(() => quiet.stop());
-        shutdown.push(subscribeSleepChanges(services, quiet.invalidate));
-        const sleep = await startSleepSocket(quiet, () => workingNow(services, "idle-stop").length, logger);
-        shutdown.push(() => sleep.close());
+        // The keeper's fresh answer just before it stops the container: work.json is a minute-old heartbeat.
+        const sleepSocket = await startSleepSocket(quiet, () => workingNow(services, "idle-stop").length, logger);
+        shutdown.push(() => sleepSocket.close());
         // How much a restart would cut, for the host's keeper, which then asks before it restarts this sandbox (work-signal.ts).
         const signal = startWorkSignal({
             working: () => workingNow(services, "restart").length,
@@ -235,13 +237,14 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // The netd door has dialled its sockets: no child inherits them from here on (daemon-env.ts).
     forgetDaemonOnlyEnv();
     startPlatformPresence(phase, reach);
+    const sleep = startPlatformSleep(phase);
 
     attempt.stage = "Running the boot chain";
     await runBootSteps(phase, runnerEnv);
     wireDependencyCoordinator(services);
     // Converged state opens the gate; everything below is background machinery no queued request depends on.
     services.boot.finish();
-    return { phase, runnerEnv, prewarm, stop };
+    return { phase, runnerEnv, prewarm, stop, sleep };
 };
 
 // Starts one phase past the gate, so a phase that throws is named in the log and the phases after it still start: none
@@ -257,7 +260,7 @@ const startPhase = (logger: BootPhase["logger"], name: string, start: () => void
 };
 
 // Everything past the gate: none of it is a boot failure, and a throw here is only logged.
-const pastGate = async ({ phase, runnerEnv, prewarm, stop }: Ready, fault: BootFault | undefined): Promise<void> => {
+const pastGate = async ({ phase, runnerEnv, prewarm, stop, sleep }: Ready, fault: BootFault | undefined): Promise<void> => {
     const { config, logger, role, services } = phase;
     // This boot got all the way, so the last one's failure is no longer the news: the host reads the record's absence.
     if (role.container) {
@@ -292,8 +295,10 @@ const pastGate = async ({ phase, runnerEnv, prewarm, stop }: Ready, fault: BootF
     startPhase(logger, "restores", () => startBootRestores(phase));
     const schedulersStarted = startPhase(logger, "schedulers", () => startBootSchedulers(phase));
     const resumesStarted = startPhase(logger, "resumes", () => startBootResumes(phase));
-    if (schedulersStarted && resumesStarted) {
-        startPhase(logger, "sleep", () => startPlatformSleep(phase));
+    // Only once what keeps its promises runs: a boot whose schedulers failed leaves the last alarm standing for the
+    // platform to try again, and keeps the whole idle window.
+    if (schedulersStarted && resumesStarted && sleep !== undefined) {
+        startPhase(logger, "sleep alarm", () => sleep.takeCharge());
     }
     startPhase(logger, "version watches", () => startVersionWatches(phase));
     startPhase(logger, "change reactions", () => startChangeReactions(phase));

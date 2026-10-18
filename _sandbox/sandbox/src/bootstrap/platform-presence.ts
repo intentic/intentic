@@ -13,19 +13,19 @@ import { fileMembersStore, membersDocument } from "../auth/auth.js";
 import { revokeHeld } from "../auth/members/revoke-held.js";
 import { reconcileOrgRoster } from "../org/org-roster.js";
 import { settingsDocument } from "../settings/settings-store.js";
-import { subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
+import { subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
+import { runningJobsOf } from "../agent/tools/jobs/background-jobs.js";
 
-// Webhooks have no durable ingress outside this daemon; gateway listeners need their live connection. Keep receiving
-// until the owner disables them (or they expire), rather than acknowledging an always-on automation that sleeps.
+// Webhooks have no durable ingress outside this daemon; gateway listeners need their live connection. A sandbox on
+// somebody's own computer keeps receiving until the owner disables them (or they expire): staying up costs it only
+// memory. A hosted machine does not (sleep/idle-stop.ts): it would spend its month's hours in days.
 export const continuousReception = async (services: Pick<BootPhase["services"], "automations">): Promise<boolean> =>
-    (await services.automations.list()).some((automation) => automation.enabled &&
-        (automation.expiresAt === undefined || automation.expiresAt > Date.now()) &&
-        (automation.trigger.kind === "event" || automation.trigger.kind === "listener"));
-
-export const subscribeSleepChanges = (services: BootPhase["services"], changed: () => void): (() => void) => {
-    const stops = [services.agents.subscribe(changed), subscribeWorkspaceChanges(() => changed()), subscribeUnwatchedWrites(changed)];
-    return () => { for (const stop of stops) { stop(); } };
-};
+    (await services.automations.list()).some(
+        (automation) =>
+            automation.enabled &&
+            (automation.expiresAt === undefined || automation.expiresAt > Date.now()) &&
+            (automation.trigger.kind === "event" || automation.trigger.kind === "listener"),
+    );
 
 // The soonest moment this sandbox promised somebody that a stop for idleness must not sleep through, 0 for none: one list
 // (promised-wakes.ts), shared with the automatic update's.
@@ -87,11 +87,19 @@ export const startPlatformPresence = ({ config, logger, role, services, shutdown
     }
 };
 
-// Only after the schedulers and resumers have started: cancelling the previous alarm during a failed boot would lose
-// its recovery attempt. 0 means always-on; a distant deadline needs the platform's durable acknowledgement.
-export const startPlatformSleep = ({ config, logger, role, services, shutdown }: BootPhase): void => {
-    if (!role.container || (config.idleStopMinutes === 0 && !config.sandbox.vm)) { return; }
-    // Always-on hosted boots also retract an earlier alarm, even when idle-stop was disabled since the last sleep.
+// The hosted machine's sleep: idle-stop and the platform alarm it saves before stopping (sleep/hosted-sleep.ts).
+// Started with the platform presence, before the boot chain, so a boot that stalls still stops for idleness
+// (2026-10-18: started past the gate, a stalled chain billed until the month's hours ran out). The alarm the last sleep
+// left stands until `takeCharge`, once the schedulers and resumers that keep its promises have started.
+export interface PlatformSleep {
+    readonly takeCharge: () => void;
+}
+
+export const startPlatformSleep = ({ config, logger, role, services, shutdown }: BootPhase): PlatformSleep | undefined => {
+    // A hosted machine retracts its last alarm even when idle-stop has since been switched off; 0 means always-on.
+    if (!role.container || (config.idleStopMinutes === 0 && !config.sandbox.vm)) {
+        return undefined;
+    }
     const alarm = createHostedSleep(config, logger);
     if (config.idleStopMinutes > 0) {
         shutdown.push(
@@ -101,7 +109,8 @@ export const startPlatformSleep = ({ config, logger, role, services, shutdown }:
                     ...DEFAULT_PROBES,
                     working: () => workingNow(services, "idle-stop").length,
                     nextPromisedWakeAt: () => nextPromisedWakeAt(services),
-                    keepAwake: quietProbes(services).keepAwake,
+                    leftRunning: () => services.agents.list().filter((agent) => runningJobsOf(services.conversations, agent.id).length > 0).length,
+                    alarmBoot: alarm.alarmBoot,
                     prepareSleep: alarm.prepare,
                     cancelSleep: alarm.cancel,
                 },
@@ -117,4 +126,9 @@ export const startPlatformSleep = ({ config, logger, role, services, shutdown }:
             ),
         );
     }
+    return {
+        takeCharge: () => {
+            void alarm.retractAtBoot();
+        },
+    };
 };

@@ -13,7 +13,8 @@ import type { Services } from "../composition.js";
 // Armed watches (agent/verification/watchers.ts) are not on this list: a watch has no moment, it polls, so it is work in
 // flight rather than a promise (bootstrap/working-now.ts holds the machine for as long as one is armed).
 
-// - idle-stop: nearby promises hold the machine up; distant ones arm a durable platform alarm before it stops.
+// - idle-stop: a promise due within NOT_WORTH_SLEEPING_MS holds the hosted machine up; a later one is saved as the
+//   platform's durable alarm before it stops (system/sleep/idle-stop.ts, hosted-sleep.ts).
 // - restart: this container restarts for an automatic update, and waits for a quiet moment before a promised one.
 // - sleep: the computer this sandbox runs on puts it to sleep and sets an alarm for the soonest of these, started again
 //   ahead of it (ic's `sandbox sleep` and `sandbox wakes`, 2026-10-18), read off the work signal's `nextWakeAt`.

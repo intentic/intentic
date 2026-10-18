@@ -106,7 +106,7 @@ describe("startIdleStop", () => {
             nextPromisedWakeAt: async () => at, prepareSleep,
         }), stop);
         await minutes(5);
-        expect(prepareSleep).toHaveBeenCalledWith(at);
+        expect(prepareSleep).toHaveBeenCalledWith(at, 0);
         expect(stop).toHaveBeenCalledTimes(0);
         acknowledged = true;
         await minutes(1);
@@ -114,24 +114,22 @@ describe("startIdleStop", () => {
         dispose();
     });
 
-    it.each(["retimed", "cancelled", "receiver", "work", "terminal"])("rechecks a %s change while registering the alarm", async (change) => {
+    it.each(["retimed", "cancelled", "work", "terminal"])("rechecks a %s change while registering the alarm", async (change) => {
         const stop = jest.fn();
         let at = Date.now() + 6 * 3_600_000;
-        let receiver = false;
         let work = 0;
         let typed = 0;
         const saved = Promise.withResolvers<boolean>();
         const prepareSleep = jest.fn(() => saved.promise);
         const cancelSleep = jest.fn(async () => true);
         const dispose = startIdleStop({ minutes: 1, logger }, probesOf({
-            nextPromisedWakeAt: async () => at, keepAwake: async () => receiver,
+            nextPromisedWakeAt: async () => at,
             working: () => work, terminalActivityAt: async () => typed, prepareSleep, cancelSleep,
         }), stop);
         await minutes(1);
         expect(prepareSleep).toHaveBeenCalledTimes(1);
         if (change === "retimed") { at += 60_000; }
         if (change === "cancelled") { at = 0; }
-        if (change === "receiver") { receiver = true; }
         if (change === "work") { work = 1; }
         if (change === "terminal") { typed = Date.now(); }
         saved.resolve(true);
@@ -163,7 +161,8 @@ describe("startIdleStop", () => {
         const stop = jest.fn();
         const saved = Promise.withResolvers<boolean>();
         const prepareSleep = jest.fn(() => saved.promise);
-        const dispose = startIdleStop({ minutes: 1, logger }, probesOf({ prepareSleep }), stop);
+        const at = Date.now() + 6 * 3_600_000;
+        const dispose = startIdleStop({ minutes: 1, logger }, probesOf({ prepareSleep, nextPromisedWakeAt: async () => at }), stop);
         await minutes(5);
         expect(prepareSleep).toHaveBeenCalledTimes(1);
         dispose();
@@ -172,16 +171,92 @@ describe("startIdleStop", () => {
         expect(stop).toHaveBeenCalledTimes(0);
     });
 
-    it("enabled continuous reception keeps the machine up until disabled", async () => {
+    it("nothing due stops without waiting on the platform: an unanswered retraction cannot hold the machine up", async () => {
         const stop = jest.fn();
-        let enabled = true;
-        const dispose = startIdleStop({ minutes: 2, logger }, probesOf({ keepAwake: async () => enabled }), stop);
+        const cancelSleep = jest.fn(async () => false);
+        const prepareSleep = jest.fn(async () => false);
+        const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ prepareSleep, cancelSleep }), stop);
         await minutes(5);
-        expect(stop).toHaveBeenCalledTimes(0);
-        enabled = false;
-        await minutes(2);
+        expect(cancelSleep).toHaveBeenCalledTimes(1);
+        expect(prepareSleep).not.toHaveBeenCalled();
         expect(stop).toHaveBeenCalledTimes(1);
         dispose();
+    });
+
+    it("a deadline further off than a sleep is worth is armed rather than held awake for", async () => {
+        const held = jest.fn();
+        const soon = Date.now() + 6 * 60_000;
+        const disposeSoon = startIdleStop({ minutes: 20, logger }, probesOf({ nextPromisedWakeAt: async () => soon, prepareSleep: async () => true }), held);
+        await minutes(6);
+        expect(held).not.toHaveBeenCalled();
+        disposeSoon();
+        const stop = jest.fn();
+        const later = Date.now() + 30 * 60_000;
+        const prepareSleep = jest.fn(async () => true);
+        const dispose = startIdleStop({ minutes: 20, logger }, probesOf({ nextPromisedWakeAt: async () => later, prepareSleep }), stop);
+        await minutes(20);
+        expect(prepareSleep).toHaveBeenCalledWith(later, 0);
+        expect(stop).toHaveBeenCalledTimes(1);
+        dispose();
+    });
+
+    describe("an alarm's boot", () => {
+        const alarmBoot = () => true;
+
+        it("sleeps again after the short grace when nobody came", async () => {
+            const stop = jest.fn();
+            const dispose = startIdleStop({ minutes: 20, logger }, probesOf({ alarmBoot }), stop);
+            await minutes(4);
+            expect(stop).not.toHaveBeenCalled();
+            await minutes(1);
+            expect(stop).toHaveBeenCalledTimes(1);
+            dispose();
+        });
+
+        it("waits for the run it woke for, and every watch it armed, before the grace begins", async () => {
+            const stop = jest.fn();
+            let work = 1;
+            const dispose = startIdleStop({ minutes: 20, logger }, probesOf({ alarmBoot, working: () => work }), stop);
+            await minutes(30);
+            expect(stop).not.toHaveBeenCalled();
+            work = 0;
+            await minutes(4);
+            expect(stop).not.toHaveBeenCalled();
+            await minutes(1);
+            expect(stop).toHaveBeenCalledTimes(1);
+            dispose();
+        });
+
+        it("takes the whole window once a person has connected, and says when they were last here", async () => {
+            const stop = jest.fn();
+            let connected = 1;
+            const at = Date.now() + 6 * 3_600_000;
+            const prepareSleep = jest.fn(async () => true);
+            const dispose = startIdleStop({ minutes: 20, logger }, probesOf({
+                alarmBoot, connected: () => connected, nextPromisedWakeAt: async () => at, prepareSleep,
+            }), stop);
+            await minutes(1);
+            const seenAt = Date.now();
+            connected = 0;
+            await minutes(19);
+            expect(stop).not.toHaveBeenCalled();
+            await minutes(1);
+            expect(stop).toHaveBeenCalledTimes(1);
+            expect(prepareSleep).toHaveBeenCalledWith(at, seenAt);
+            dispose();
+        });
+
+        it("takes the whole window while a command a turn left running for the person is still up", async () => {
+            const stop = jest.fn();
+            let left = 1;
+            const dispose = startIdleStop({ minutes: 20, logger }, probesOf({ alarmBoot, leftRunning: () => left }), stop);
+            await minutes(19);
+            expect(stop).not.toHaveBeenCalled();
+            left = 0;
+            await minutes(1);
+            expect(stop).toHaveBeenCalledTimes(1);
+            dispose();
+        });
     });
 
     it("a failed clock read breaks the quiet streak, and recovery waits a new window", async () => {

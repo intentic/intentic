@@ -384,17 +384,25 @@ flowchart LR
   waits for turns, lands, running subagents and workflow steps; idle-stop waits for those and for parked subagents and
   armed watches, which only this daemon's clock moves on. The device rebuild used to wait for turns alone.
 - Sleep keeps every promised clock in `bootstrap/promised-wakes.ts`: cron and one-time automations, scheduled
-  messages, held countdowns and approved actions. Nearby deadlines keep a hosted machine awake; before a distant
-  deadline can sleep, `system/sleep/hosted-sleep.ts` obtains the platform's durable alarm acknowledgement. The watchdog
-  rechecks clocks, work, receivers and terminal activity after that write, cancelling the alarm if sleep is refused.
-  Its previous alarm is cancelled at boot only after the schedulers and resumers have started.
-  Fleet initialization restores queued conversations before clocks are read, so a persisted booking is visible
-  before any browser opens its chat.
-  Locally, `system/quiet-watch.ts` refreshes on bookings and workspace writes, and `ic` asks
-  `/run/intentic/sleep.sock` for a fresh reading immediately before stopping. Any failed read keeps the sandbox awake.
-  Enabled, unexpired webhook and listener automations also keep it awake: their ingress lives in the daemon.
-  (2026-10-18: sleeping through a distant booking or cron and catching up at the next visit was rejected; each
-  promise needs an alarm outside the sleeping process. The minute heartbeat alone could miss a newly saved booking.)
+  messages, held countdowns and approved actions. On a hosted machine (`system/sleep/idle-stop.ts`):
+  - A promise due within seven minutes (the platform's two-minute lead and five minutes asleep) keeps it awake. Before a
+    later one can sleep, `system/sleep/hosted-sleep.ts` obtains the platform's durable alarm acknowledgement; with
+    nothing due it sleeps whatever the platform answers.
+  - The watchdog rechecks clocks, work and terminal activity after that write, retracting the alarm if sleep is refused.
+  - It starts with the platform presence, before the boot chain, so a stalled boot still stops. The alarm the last
+    sleep left stands until the schedulers and resumers have started, when the boot retracts it.
+  - A boot that alarm made (the daemon's own marker on the history volume) sleeps after five quiet minutes rather than
+    the whole window, once its turns, subagents, workflows and watches have ended. A person connecting, or a command a
+    turn left running for them, gives it the whole window.
+  - Webhook and listener automations do not hold it awake: an always-on receiver would spend its month's hours in days.
+
+  Fleet initialization restores queued conversations before clocks are read, so a persisted booking is visible before
+  any browser opens its chat. Locally, `ic` asks `/run/intentic/sleep.sock` for a fresh reading immediately before
+  stopping, and a failed answer keeps the sandbox awake. Enabled, unexpired webhook and listener automations keep a
+  local sandbox awake, where staying up costs only memory. (2026-10-18: sleeping through a distant booking or cron and
+  catching up at the next visit was rejected; each promise needs an alarm outside the sleeping process. The minute
+  heartbeat alone could miss a newly saved booking. Refreshing the heartbeat on every roster and workspace change was
+  rejected: up to ten full readings a second during a turn, for an answer the socket already gives fresh.)
 - `conversations.db` never keeps the daemon down (`store/conversations-db-recovery.ts`): after a run that died
   unannounced it is quick-checked before anything reads it, and a file that fails to open or to pass is moved aside with
   its sidecars as `conversations.db.corrupt-<ms>` (never deleted), what still reads of it is copied into a new file with

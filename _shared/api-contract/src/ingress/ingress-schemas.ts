@@ -246,7 +246,12 @@ export type BootReportBody = z.input<typeof BootReportBodySchema>;
 export const IngressOkSchema = z.object({ ok: z.literal(true) });
 
 // A hosted daemon must obtain this durable alarm's acknowledgement before stopping. Null cancels its previous alarm.
-export const WakeAlarmBodySchema = z.object({ at: z.number().int().positive().max(8_640_000_000_000_000).nullable() });
+// `personAt` is the last moment a person was here since that boot (0 or absent for none): what the free lane's idle
+// collection measures from, since a boot the alarm made is not somebody opening it (api hosted-idle.ts).
+export const WakeAlarmBodySchema = z.object({
+    at: z.number().int().positive().max(8_640_000_000_000_000).nullable(),
+    personAt: z.number().int().nonnegative().max(8_640_000_000_000_000).optional(),
+});
 
 // An announce the platform took: which database took it, from a platform new enough to say (GET /api/identity).
 // `identityKey` is the public half of the key this platform signs identity assertions with (sandbox-contract

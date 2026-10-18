@@ -16,7 +16,8 @@ import type { Logger } from "pino";
 // - keepAwake: the owner switched sleep off, or an enabled event/listener automation needs continuous reception. No streak is
 //   kept and no `quietSince` is said whatever else is true, so no keeper's verdict can come out as sleep; the flag says
 //   why to a keeper that reads it (ic names it), where one that does not reads a sandbox that never went quiet.
-// Checked once a minute, on booking/file changes, and freshly through sleep/sleep-socket.ts before the host stops it.
+// Checked once a minute, and freshly through sleep/sleep-socket.ts just before the host stops it: work.json is a
+// heartbeat, so a booking saved since the last pass reaches the keeper through that fresh check, not this file.
 
 export interface QuietProbes {
     readonly connected: () => number;
@@ -40,10 +41,9 @@ export interface QuietReading {
 export interface QuietWatch {
     // The latest reading, synchronously, for a writer that keeps its own beat.
     readonly read: () => QuietReading;
-    // One pass, as the timer runs it; exposed for tests.
+    // One pass, as the timer runs it, and what the sleep socket awaits: a call made while a pass is in flight is answered
+    // by another pass after it, so the reading it resolves to began after the call.
     readonly check: () => Promise<void>;
-    // Revoke the previous sleep verdict synchronously, then refresh it. A booking may have changed between polls.
-    readonly invalidate: () => void;
     readonly stop: () => void;
 }
 
@@ -64,7 +64,6 @@ export const startQuietWatch = (
     // The last moment a person was seen here since this boot; 0 for none.
     let personAt = 0;
     let reading: QuietReading = {};
-    let revision = 0;
     let requested = false;
     let flight: Promise<void> | undefined;
     let stopped = false;
@@ -79,14 +78,13 @@ export const startQuietWatch = (
     };
 
     const sample = async (): Promise<void> => {
-        const sampled = revision;
         const wakeAt = await probes.nextWakeAt();
         if (probes.connected() > 0) {
             personAt = now();
         }
         const promised = wakeAt > 0 ? { nextWakeAt: wakeAt } : {};
         const kept = await probes.keepAwake();
-        if (sampled !== revision || stopped) {
+        if (stopped) {
             return;
         }
         if (kept) {
@@ -100,7 +98,7 @@ export const startQuietWatch = (
             return;
         }
         const [activityAt, inUse] = await Promise.all([probes.terminalActivityAt(), probes.appsInUse()]);
-        if (sampled !== revision || stopped) {
+        if (stopped) {
             return;
         }
         personAt = Math.max(personAt, activityAt, inUse ? now() : 0);
@@ -114,7 +112,7 @@ export const startQuietWatch = (
         settle({ quietSince: Math.max(streakStart, activityAt), ...promised, personAt });
     };
 
-    // One pass at a time; an invalidation during an await requires another pass before a fresh answer is returned.
+    // One pass at a time; a call during one queues another, so no caller is answered by a pass that began before it.
     const check = (): Promise<void> => {
         requested = true;
         flight ??= (async () => {
@@ -139,13 +137,11 @@ export const startQuietWatch = (
     timer.unref();
     pass();
     return {
-        read: () => busy() ? unconfirmed(reading) : reading,
+        read: () => (busy() ? unconfirmed(reading) : reading),
         check,
-        invalidate: () => {
-            revision += 1;
-            settle(unconfirmed(reading));
-            pass();
+        stop: () => {
+            stopped = true;
+            clearInterval(timer);
         },
-        stop: () => { stopped = true; clearInterval(timer); },
     };
 };

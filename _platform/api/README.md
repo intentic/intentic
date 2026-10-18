@@ -83,13 +83,24 @@ flowchart LR
   (`src/jobs-lock.ts`), so two replicas never double-bill or double-provision.
 - A hosted daemon saves its earliest promised wake through connect-token-authenticated `POST /sandbox/wake-alarm`
   before idle-stop; `at: null` cancels it. `Sandbox.scheduledWakeAt` and `scheduledWakeRetryAt` survive api restarts.
-  The alarm sweep (`src/sandbox/hosted/wake/hosted-wake-alarm.ts`) runs every 15 seconds, starts machines two minutes before their deadline,
-  and retries failures after a minute. Each attempt claims the unchanged deadline before starting. The alarm remains
-  until the ready daemon cancels it, after its schedulers and resumers have started. Browser and alarm wakes share
-  `wakeHostedSandbox`, including the owner's standing, hours, state gate and metering. A platform with hosted waking
-  disabled refuses new alarms with 503, so a daemon cannot sleep on an acknowledgement it cannot honour.
-  (2026-10-18: relying on the next browser visit for distant bookings and crons was rejected. The database owns the
-  alarm; the sleeping machine owns the scheduled work and delivers it through its existing schedulers after wake.)
+  The alarm sweep (`src/sandbox/hosted/wake/hosted-wake-alarm.ts`) runs every 15 seconds and starts machines two
+  minutes before their deadline. Each attempt claims the unchanged deadline before starting:
+  - a start that worked waits ten minutes for the booted daemon to retract the alarm;
+  - a start that failed retries after a minute, backing off with how overdue the deadline is, up to half an hour;
+  - a suspension, spent hours or a machine that is gone drops the alarm, and so does a deadline a day overdue. The
+    scheduler's catch-up fires the missed work at the next start.
+
+  Alarms never tried are swept first, so failing rows cannot hold fresh ones back. Browser and alarm wakes share
+  `wakeHostedSandbox` (the owner's standing, hours, state gate and metering), but only a person's wake withdraws an idle
+  notice. A platform with hosted waking disabled refuses new alarms with 503, so a daemon cannot sleep on an
+  acknowledgement it cannot honour. (2026-10-18: relying on the next browser visit for distant bookings and crons was
+  rejected. The database owns the alarm; the sleeping machine owns the scheduled work and delivers it through its
+  existing schedulers after wake. Retrying every refusal every minute was rejected too: spent hours never answer it.)
+- The free lane's idle collection (`src/sandbox/hosted/hosted-idle.ts`) measures from `Sandbox.personSeenAt`, the last
+  moment a person was there: a browser's wake, or the `personAt` the daemon sends with its alarm as it sleeps. A
+  notice stands only if it was sent after that moment, so a person coming back withdraws it without a write, and an
+  alarm's start, which is nobody opening the sandbox, neither withdraws it nor has it mailed again. (2026-10-18:
+  `lastSeenAt` is the boot announce, which a nightly cron's alarm stamps every night.)
 - Destruction needs a record (2026-10-05; [platform.md](../../docs/architecture/platform.md#when-the-platform-forgets)).
   The daily orphan reaper (`reapHostedOrphans`) destroys an app no row names only when its sandbox's tunnel id is in
   `SandboxTombstone`, or when every machine in it is unclaimed warm stock this platform stamped. Any other unknown app

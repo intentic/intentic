@@ -378,12 +378,13 @@ or is meant to outlive it and is adopted; nothing is left to whoever happens to 
   ic stores it as the sleep's alarm and starts the sandbox a few minutes ahead of it, and the scheduler sets a timer
   for the soonest moment within a poll, so a woken sandbox fires on the minute rather than at its next 30-second poll.
   `personAt` (when a person was last there since boot) lets a sandbox the alarm woke sleep again soon after.
-  Booking and workspace writes invalidate the quiet reading at once, and immediately before stopping, ic asks the
-  daemon again through the private `/run/intentic/sleep.sock`; a failed read leaves it awake. Hosted idle-stop saves
-  its distant deadline on the platform and rechecks it before stopping; a refused sleep retracts that alarm.
-  Enabled, unexpired webhook and listener automations hold both forms of sleep: they have no durable inbox outside
-  the running daemon. (2026-10-18: a minute-old heartbeat could miss a new booking, and sleeping a receiver could
-  silently drop its events. Both now require an affirmative sleep reading.)
+  ic screens on that heartbeat and, for a sandbox it would sleep, asks the daemon again through the private
+  `/run/intentic/sleep.sock` just before stopping; a failed answer leaves it awake, and a daemon from before the socket
+  sleeps on its heartbeat as it did. Hosted idle-stop saves its distant deadline on the platform and rechecks it before
+  stopping; a refused sleep retracts that alarm. Enabled, unexpired webhook and listener automations hold a local
+  sandbox's sleep, having no durable inbox outside the running daemon; a hosted machine sleeps through them, since an
+  always-on receiver would spend its month's hours in days. (2026-10-18: a minute-old heartbeat could miss a new
+  booking.)
 - **Unused helpers rest.** The code-search engine's process exits after 10 minutes nobody searched and comes back on
   the next search; the workspace's autostarted apps stop after 15 minutes with no editor connected, no preview visit and
   no open connection, and start again when somebody connects or visits one

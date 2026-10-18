@@ -140,7 +140,9 @@ describe("startQuietWatch", () => {
         watch.stop();
     });
 
-    test("invalidation revokes quiet immediately and replaces an in-flight old booking before answering", async () => {
+    // The sleep socket's question: a pass already in flight read the bookings before it was asked, so the answer waits for
+    // another pass that begins after it.
+    test("a check asked while a pass is in flight is answered by a pass that began after it", async () => {
         let at = 9_000_000;
         let held: Promise<number> | undefined;
         const watch = startQuietWatch(probesOf({ nextWakeAt: () => {
@@ -151,17 +153,13 @@ describe("startQuietWatch", () => {
         await watch.check();
         const old = Promise.withResolvers<number>();
         held = old.promise;
-        const checking = watch.check();
+        const inFlight = watch.check();
         at = 3_000_000;
-        watch.invalidate();
-        expect(watch.read()).toEqual({ nextWakeAt: 9_000_000, personAt: 0 });
+        const asked = watch.check();
         old.resolve(9_000_000);
-        await checking;
+        await asked;
+        await inFlight;
         expect(watch.read()).toEqual({ quietSince: 1_000, nextWakeAt: 3_000_000, personAt: 0 });
-        at = 0;
-        watch.invalidate();
-        await watch.check();
-        expect(watch.read()).toEqual({ quietSince: 1_000, personAt: 0 });
         watch.stop();
     });
 

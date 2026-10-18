@@ -31,11 +31,19 @@ export interface WakeAlarmRow extends Omit<HostedWakeSandbox, "hosted"> {
     removedAt: Date | null;
     scheduledWakeAt: Date | null;
     scheduledWakeRetryAt: Date | null;
+    personSeenAt: Date | null;
 }
 
 export const wakeAlarmRow = (at: number | null, id = "s1"): WakeAlarmRow => {
     const sandbox = hostedWakeSandbox(id);
-    return { ...sandbox, tokenDigest: sha256Hex(sandbox.token), removedAt: null, scheduledWakeAt: at === null ? null : new Date(at), scheduledWakeRetryAt: null };
+    return {
+        ...sandbox,
+        tokenDigest: sha256Hex(sandbox.token),
+        removedAt: null,
+        scheduledWakeAt: at === null ? null : new Date(at),
+        scheduledWakeRetryAt: null,
+        personSeenAt: null,
+    };
 };
 
 interface AlarmWhere {
@@ -64,15 +72,25 @@ const alarmMatches = (row: WakeAlarmRow, where: AlarmWhere): boolean =>
     dateMatches(row.scheduledWakeRetryAt, where.scheduledWakeRetryAt) &&
     (where.OR === undefined || where.OR.some((branch) => alarmMatches(row, branch)));
 
+// The sweep's order: alarms never tried first, then retries by when they come due, then by deadline (Postgres sorts
+// nulls first where the query asks it to).
+const sweepOrder = (a: WakeAlarmRow, b: WakeAlarmRow): number => {
+    const retry = (row: WakeAlarmRow): number => row.scheduledWakeRetryAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+    return retry(a) - retry(b) || (a.scheduledWakeAt?.getTime() ?? 0) - (b.scheduledWakeAt?.getTime() ?? 0);
+};
+
 // The alarm's durable table, shared by its ingress and its sweep. Reads return snapshots: a cancellation between the
 // read and claim must beat the old snapshot, just as it does in Postgres. Only the query shapes this seam owns are faked.
 export const fakeWakeAlarms = (rows: WakeAlarmRow[]) => {
     const table = {
-        findMany: jest.fn(async ({ where, take }: { where: AlarmWhere; take: number }) => rows
-            .filter((row) => alarmMatches(row, where))
-            .toSorted((a, b) => (a.scheduledWakeAt?.getTime() ?? 0) - (b.scheduledWakeAt?.getTime() ?? 0))
-            .slice(0, take).map((row) => ({ ...row }))),
-        updateMany: jest.fn(async ({ where, data }: { where: AlarmWhere; data: Partial<Pick<WakeAlarmRow, "scheduledWakeAt" | "scheduledWakeRetryAt">> }) => {
+        findMany: jest.fn(async ({ where, take }: { where: AlarmWhere; take: number }) =>
+            rows
+                .filter((row) => alarmMatches(row, where))
+                .toSorted(sweepOrder)
+                .slice(0, take)
+                .map((row) => ({ ...row })),
+        ),
+        updateMany: jest.fn(async ({ where, data }: { where: AlarmWhere; data: Partial<Pick<WakeAlarmRow, "scheduledWakeAt" | "scheduledWakeRetryAt" | "personSeenAt">> }) => {
             const matched = rows.filter((row) => alarmMatches(row, where));
             for (const row of matched) { Object.assign(row, data); }
             return { count: matched.length };

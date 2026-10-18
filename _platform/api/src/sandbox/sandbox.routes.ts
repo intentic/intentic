@@ -586,7 +586,7 @@ export const sandboxRoutes = {
             return { ok: true };
         }
         const { hosted } = sandbox;
-        await wakeHostedSandbox(context, { ...sandbox, hosted });
+        await wakeHostedSandbox(context, { ...sandbox, hosted }, "person");
         return { ok: true };
     }),
     // Whether this platform mints addresses, the same switch setupCode enforces; asked here so the wizard never draws a

@@ -1643,7 +1643,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/automations/scheduler.ts": {
-        "count": 1286,
+        "count": 1281,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/automations/scheduler.ts#runFire#cognitive": {
@@ -1900,7 +1900,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/conversations/registry/agents-registry.ts": {
-        "count": 1542,
+        "count": 1529,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/conversations/registry/agents-registry.ts#createFleet#cognitive": {

@@ -978,13 +978,8 @@ export const nextRunOf = (automation: AutomationRecord, sandbox: Zone): number |
     }
 };
 
-// The soonest one-time wake, for the idle-stop watchdog; 0 when none is armed. Stopped, this daemon is the only thing
-// that could fire one and only a visit brings it back, so the watchdog holds the machine up rather than sleeping
-// through a moment somebody was promised (system/sleep/idle-stop.ts).
-// Only `once` counts, deliberately. A cron whose moment passes while the machine sleeps fires once, late, the next time
-// the daemon starts (`catchUp`), and a hosted machine held awake all month so a nightly chore is punctual costs more
-// than the chore; a one-time wake is a moment somebody was promised, and holds the machine for at most one window,
-// since it retires as it fires.
+// The soonest one-time wake, 0 when none is armed: one of the promised wakes every sleep keeps
+// (bootstrap/promised-wakes.ts). Held apart from `nextCronWakeAt` because it reads the instant off the trigger.
 export const nextOneTimeWakeAt = async (services: Services): Promise<number> => {
     // Reads the moment off the trigger rather than through `nextRunOf`: a one-time wake IS an instant, so it needs no
     // zone, and routing it through the cron path would make this depend on a setting it has no business reading.

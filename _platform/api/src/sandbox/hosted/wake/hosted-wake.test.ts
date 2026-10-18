@@ -24,12 +24,15 @@ const context = (suspended = false) => {
         hostedSuspendedAt: suspended ? new Date(0) : null, hostedSuspendedReason: suspended ? "acceptable use" : null,
         email: "owner@example.com", accounts: [],
     }));
-    // SAFETY: standing reads only this user projection and the carried-standing lookup; the meter is the seam above.
+    const stamp = jest.fn(async () => ({}));
+    // SAFETY: standing reads only this user projection and the carried-standing lookup, and a person's wake writes only
+    // its stamp; the meter is the seam above.
     const prisma = unstubbed<PrismaClient>("prisma", {
+        sandbox: unstubbed<PrismaClient["sandbox"]>("prisma.sandbox", { update: stamp as never }),
         user: unstubbed<PrismaClient["user"]>("prisma.user", { findUnique: owner as never }),
         hostedStanding: unstubbed<PrismaClient["hostedStanding"]>("prisma.hostedStanding", { findUnique: jest.fn(async () => null) as never }),
     });
-    return { prisma, config: hostedWakeConfig(), logger, owner };
+    return { prisma, config: hostedWakeConfig(), logger, owner, stamp };
 };
 
 afterEach(() => { jest.clearAllMocks(); });
@@ -49,10 +52,21 @@ test("an alarm wake uses the owner's standing, settles the old stretch, checks h
     expect(machine).toEqual(sandbox.hosted);
     expect(heal?.()).toEqual({ sandboxId: "s1", connectToken: "connect-s1", ownerEmail: "owner@example.com", region: "iad", tier: "free" });
     expect(record).toEqual({ prisma: ctx.prisma, hostedMachineId: "h-s1", sandboxId: "s1" });
-    expect(openHostedStretch).toHaveBeenCalledWith(ctx.prisma, { ...sandbox.hosted, ownerId: "u1" });
+    expect(openHostedStretch).toHaveBeenCalledWith(ctx.prisma, { ...sandbox.hosted, ownerId: "u1" }, { keepIdleWarning: false });
     expect(settleHostedStretch.mock.invocationCallOrder[0]).toBeLessThan(hostedBudgetOf.mock.invocationCallOrder[0]!);
     expect(hostedBudgetOf.mock.invocationCallOrder[0]).toBeLessThan(wakeHosted.mock.invocationCallOrder[0]!);
     expect(wakeHosted.mock.invocationCallOrder[0]).toBeLessThan(openHostedStretch.mock.invocationCallOrder[0]!);
+});
+
+// Only a person withdraws an idle notice: an alarm starting the machine for its schedules is nobody opening it.
+test("an alarm's start leaves a standing idle notice where a person's wake withdraws it", async () => {
+    const ctx = context();
+    await wakeHostedSandbox(ctx, hostedWakeSandbox(), "alarm");
+    expect(openHostedStretch).toHaveBeenLastCalledWith(ctx.prisma, expect.anything(), { keepIdleWarning: true });
+    // Nor is it somebody there: only a person's wake moves the stamp idle collection measures from.
+    expect(ctx.stamp).not.toHaveBeenCalled();
+    await wakeHostedSandbox(ctx, hostedWakeSandbox());
+    expect(ctx.stamp).toHaveBeenCalledWith({ where: { id: "s1" }, data: { personSeenAt: expect.any(Date) } });
 });
 
 test("a suspended owner refuses an alarm before reading hours or starting a machine", async () => {

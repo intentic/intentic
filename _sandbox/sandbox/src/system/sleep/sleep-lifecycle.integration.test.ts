@@ -20,8 +20,6 @@ import { testConfig } from "../../env.config.testing.js";
 import { createHostedSleep } from "./hosted-sleep.js";
 import { startQuietWatch } from "../quiet-watch.js";
 import { quietProbesOf } from "../quiet-watch.testing.js";
-import { residentWorkspaceTree, startWorkspaceWatch } from "../../workspace/watch/workspace-watch.js";
-import { subscribeSleepChanges } from "../../bootstrap/platform-presence.js";
 import { nextPromisedWake } from "../../bootstrap/promised-wakes.js";
 
 const logger = pino({ level: "silent" });
@@ -53,29 +51,29 @@ const boot = async (root: string, heard: string[]) => {
     };
 };
 
-test("automation file saves refresh the wake signal on create, retime and disable without a minute poll", async () => {
+// The keeper's question through the sleep socket is answered by a check run after it, which reads the automation files
+// as they stand: a save since the last minute's pass is in the alarm the keeper sets.
+test("a fresh check reads automation file saves on create, retime and disable without a minute poll", async () => {
     const root = await mkdtemp(join(tmpdir(), "sleep-signal-"));
     const sandbox = await boot(root, []);
-    const stopWorkspace = startWorkspaceWatch(root, logger);
     const watch = startQuietWatch(quietProbesOf({
         nextWakeAt: async () => (await nextPromisedWake(sandbox.services, "sleep")) ?? 0,
     }), { logger, checkMs: 1e9 });
-    const unsubscribe = subscribeSleepChanges(sandbox.services, watch.invalidate);
     const at = Date.now() + 3_600_000;
     try {
-        await residentWorkspaceTree(root)!;
         await watch.check();
         expect(watch.read().nextWakeAt).toBeUndefined();
         await sandbox.services.automations.upsert(automationConfig("reminder", { trigger: { kind: "once", at } }));
-        await waitFor(() => expect(watch.read().nextWakeAt).toBe(at), SETTLES);
+        await watch.check();
+        expect(watch.read().nextWakeAt).toBe(at);
         await sandbox.services.automations.upsert(automationConfig("reminder", { trigger: { kind: "once", at: at + 3_600_000 } }));
-        await waitFor(() => expect(watch.read().nextWakeAt).toBe(at + 3_600_000), SETTLES);
+        await watch.check();
+        expect(watch.read().nextWakeAt).toBe(at + 3_600_000);
         await sandbox.services.automations.setEnabled("reminder", false);
-        await waitFor(() => expect(watch.read().nextWakeAt).toBeUndefined(), SETTLES);
+        await watch.check();
+        expect(watch.read().nextWakeAt).toBeUndefined();
     } finally {
-        unsubscribe();
         watch.stop();
-        stopWorkspace();
         sandbox.close();
         await rm(root, { recursive: true, force: true });
     }
@@ -87,7 +85,15 @@ test("sleep and two wakes deliver the earliest booked message and then the remai
     const saved: (number | null)[] = [];
     const at = Date.now() + 3_600_000;
     let sandbox: Awaited<ReturnType<typeof boot>> | undefined;
-    const sleep = () => createHostedSleep(testConfig, logger, async (deadline) => { saved.push(deadline); return true; });
+    // Each boot's alarm, taken charge of once its schedulers run, on the same history volume as the conversations.
+    const sleep = async () => {
+        const alarm = createHostedSleep({ ...testConfig, historyRoot: root }, logger, async (deadline) => {
+            saved.push(deadline);
+            return true;
+        });
+        await alarm.retractAtBoot();
+        return alarm;
+    };
     try {
         sandbox = await boot(root, heard);
         await beginTurn(sandbox.services.conversations, { conversationId: "booked", isolated: true, prompt: "opened", profile: { agent: "grok", harness: "native" } }, Date.now());
@@ -98,14 +104,18 @@ test("sleep and two wakes deliver the earliest booked message and then the remai
         await sandbox.services.automations.upsert(automationConfig("later", { trigger: { kind: "once", at: at + 3_600_000 } }));
         const firstAlarm = await nextPromisedWake(sandbox.services, "sleep");
         expect(firstAlarm).toBe(at);
-        expect(await sleep().prepare(firstAlarm ?? 0)).toBe(true);
+        const firstSleep = await sleep();
+        expect(firstSleep.alarmBoot()).toBe(false);
+        expect(await firstSleep.prepare(firstAlarm ?? 0, Date.now())).toBe(true);
         sandbox.close();
         sandbox = undefined;
         expect(saved).toEqual([null, at]);
 
         // The platform wakes ahead of its saved deadline. New services read what the prior process left on disk.
         sandbox = await boot(root, heard);
-        const secondSleep = sleep();
+        const secondSleep = await sleep();
+        // Stopped with an alarm armed, so this boot is the alarm's: idle-stop's grace applies until a person joins.
+        expect(secondSleep.alarmBoot()).toBe(true);
         expect(await nextPromisedWake(sandbox.services, "sleep")).toBe(at);
         await sandbox.tick(at - 1);
         expect(heard).toEqual([]);
@@ -113,13 +123,14 @@ test("sleep and two wakes deliver the earliest booked message and then the remai
         await waitFor(() => expect(heard).toEqual(["scheduled message"]), SETTLES);
         await turnRunOf(sandbox.services.conversations, "booked")?.waitUntilFinished();
         expect(await nextPromisedWake(sandbox.services, "sleep")).toBe(at + 3_600_000);
-        expect(await secondSleep.prepare(at + 3_600_000)).toBe(true);
+        expect(await secondSleep.prepare(at + 3_600_000, 0)).toBe(true);
         sandbox.close();
         sandbox = undefined;
         expect(saved).toEqual([null, at, null, at + 3_600_000]);
 
         sandbox = await boot(root, heard);
-        const lastSleep = sleep();
+        const lastSleep = await sleep();
+        expect(lastSleep.alarmBoot()).toBe(true);
         await sandbox.tick(at + 3_600_000 - 1);
         expect(heard).toEqual(["scheduled message"]);
         await sandbox.tick(at + 3_600_000);
@@ -129,8 +140,10 @@ test("sleep and two wakes deliver the earliest booked message and then the remai
         expect(heard).toEqual(["scheduled message", "wake:later"]);
         expect((await sandbox.services.automations.get("later"))?.runs.map((run) => run.outcome)).toEqual(["completed"]);
         expect(await nextPromisedWake(sandbox.services, "sleep")).toBeUndefined();
-        expect(await lastSleep.prepare(0)).toBe(true);
+        expect(await lastSleep.prepare(0, 0)).toBe(true);
         expect(saved).toEqual([null, at, null, at + 3_600_000, null, null]);
+        // Nothing armed, so the next boot is nobody's alarm and takes the whole window.
+        expect((await sleep()).alarmBoot()).toBe(false);
     } finally {
         sandbox?.close();
         await rm(root, { recursive: true, force: true });
@@ -147,8 +160,12 @@ test("a cron's alarm survives sleep and new schedulers deliver its occurrence on
         await sandbox.services.automations.upsert(automationConfig("recurring", { trigger: { kind: "schedule", cron: "0 0 1 1 *" } }));
         const at = await nextPromisedWake(sandbox.services, "sleep");
         if (at === undefined) { throw new Error("a cron must promise its next occurrence"); }
-        const sleep = createHostedSleep(testConfig, logger, async (deadline) => { saved.push(deadline); return true; });
-        expect(await sleep.prepare(at)).toBe(true);
+        const sleep = createHostedSleep({ ...testConfig, historyRoot: root }, logger, async (deadline) => {
+            saved.push(deadline);
+            return true;
+        });
+        await sleep.retractAtBoot();
+        expect(await sleep.prepare(at, 0)).toBe(true);
         expect(saved).toEqual([null, at]);
         sandbox.close();
         sandbox = undefined;

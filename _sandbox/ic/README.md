@@ -111,8 +111,10 @@ flowchart LR
   that no person has used since (the signal's `personAt`) needs five minutes of quiet rather than the whole limit. A dev sandbox (one whose container carries `SANDBOX_DEV_ROOT`) first asks that checkout's
   `_sandbox/sandbox/scripts/dev-before-sleep.mjs <slug>` through a login shell, with a one-minute limit. Exit 75 keeps
   it awake, with the script's last line as the reason, while the script rebuilds an image that lacks a dependency the
-  checkout's daemon needs. Any other answer lets it sleep after a second fresh confirmation. A failed confirmation
-  leaves it awake, including for an explicit sleep. (2026-10-18: the minute-old `work.json` heartbeat alone was rejected
+  checkout's daemon needs. Any other answer lets it sleep once the daemon's fresh answer agrees. The heartbeat screens
+  first, so only a sandbox it would sleep has node started inside it; a failed answer leaves it awake, and a daemon
+  from before the socket sleeps on its heartbeat. A person's `ic sandbox sleep` takes the heartbeat's alarm when the
+  daemon cannot answer, rather than refusing. (2026-10-18: the minute-old `work.json` heartbeat alone was rejected
   because a booking saved after it could lose its alarm.) Each sleep posts a host report with `asleep: true`. `ic sandbox wakes` (polled by the agent while anything
   sleeps, run by the desktop app the moment its page asks, and asking docker nothing when nothing does) sends the asleep sandboxes' report keys to the platform's
   `POST /host-report/wakes` and starts each one somebody has opened, as a person's start, reporting `fixing` then

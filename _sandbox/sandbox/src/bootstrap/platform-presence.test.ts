@@ -1,6 +1,6 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import { pino } from "pino";
-import { advanceTimersByTimeAsync, SETTLES, waitFor } from "@intentic/testing/bun";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { ApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
 import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
 import type { TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
@@ -18,7 +18,7 @@ import { createFleet } from "../conversations/registry/agents-registry.js";
 import type { LandStandings } from "../conversations/land/standing.js";
 import type { Services } from "../composition.js";
 import { startIdleStop } from "../system/sleep/idle-stop.js";
-import { continuousReception, nextPromisedWakeAt, quietProbes, subscribeSleepChanges } from "./platform-presence.js";
+import { continuousReception, nextPromisedWakeAt, quietProbes } from "./platform-presence.js";
 import { startQuietWatch } from "../system/quiet-watch.js";
 import { quietProbesOf } from "../system/quiet-watch.testing.js";
 import { nextPromisedWake, PROMISED_WAKES } from "./promised-wakes.js";
@@ -261,12 +261,14 @@ describe("the one list of promised wakes", () => {
             await advanceTimersByTimeAsync(60_000);
         }
         expect(stop).toHaveBeenCalledTimes(1);
-        expect(prepareSleep).toHaveBeenCalledWith(at);
+        expect(prepareSleep).toHaveBeenCalledWith(at, 0);
         dispose();
     });
 });
 
-test.each(["event", "listener"] as const)("an enabled %s receiver holds both hosted and local sleep until disabled or expired", async (kind) => {
+// Local only: a hosted idle-stop asks no such question (sleep/idle-stop.ts), since an always-on receiver would spend its
+// month's hours in days.
+test.each(["event", "listener"] as const)("an enabled %s receiver holds a local sandbox's sleep until disabled or expired", async (kind) => {
     const record = automationRecord("receiver", { trigger: kind === "event" ? { kind } : { kind, provider: "discord" } });
     const services = promising({ automations: [record] });
     expect(await continuousReception(services)).toBe(true);
@@ -279,23 +281,28 @@ test.each(["event", "listener"] as const)("an enabled %s receiver holds both hos
     expect(await quietProbes(services).keepAwake()).toBe(false);
 });
 
-test("booked messages immediately refresh the alarm when added, re-timed or cancelled, alongside automations", async () => {
+// What the sleep socket answers the keeper with is a check run after its question, so it reads each change to a booking.
+test("a fresh check reads booked messages as they are added, re-timed or cancelled, alongside automations", async () => {
     const services = promising({ automations: [once("later", inMinutes(90))] });
     await services.agents.init();
     await beginTurn(services.conversations, { conversationId: "booked", isolated: true, prompt: "first", profile: PROFILE }, NOW);
     await services.conversations.send("booked", { kind: "settle" }, NOW).settled;
     const watch = startQuietWatch(quietProbesOf({ nextWakeAt: quietProbes(services).nextWakeAt }), { logger, now: () => NOW, checkMs: 1e9 });
-    const unsubscribe = subscribeSleepChanges(services, watch.invalidate);
     try {
         await watch.check();
         expect(watch.read().nextWakeAt).toBe(inMinutes(90));
         await services.conversations.send("booked", { kind: "queue-scheduled", booking: { until: inMinutes(60) }, item: {
             id: "m1", voice: "person", queuedAt: NOW, turn: { conversationId: "booked", prompt: "later" },
         } }, NOW).settled;
-        await waitFor(() => expect(watch.read().nextWakeAt).toBe(inMinutes(60)), SETTLES);
+        await watch.check();
+        expect(watch.read().nextWakeAt).toBe(inMinutes(60));
         await services.conversations.send("booked", { kind: "queue-rescheduled", booking: { until: inMinutes(30) }, ids: ["m1"] }, NOW).settled;
-        await waitFor(() => expect(watch.read().nextWakeAt).toBe(inMinutes(30)), SETTLES);
+        await watch.check();
+        expect(watch.read().nextWakeAt).toBe(inMinutes(30));
         await services.conversations.send("booked", { kind: "queue-taken", ids: ["m1"] }, NOW).settled;
-        await waitFor(() => expect(watch.read().nextWakeAt).toBe(inMinutes(90)), SETTLES);
-    } finally { unsubscribe(); watch.stop(); }
+        await watch.check();
+        expect(watch.read().nextWakeAt).toBe(inMinutes(90));
+    } finally {
+        watch.stop();
+    }
 });

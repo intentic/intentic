@@ -313,8 +313,13 @@ export const closeHostedStretch = async (
 };
 
 // Opens a stretch at a start that succeeded, charging the one the row still holds; false when the row is gone.
-// Clearing idleWarnedAt in the same write cancels any pending collection.
-export const openHostedStretch = async (prisma: PrismaClient, machine: { id: string; sandboxId: string; ownerId: string }): Promise<boolean> =>
+// Clearing idleWarnedAt in the same write cancels any pending collection, except for a start nobody asked for in person
+// (`keepIdleWarning`: the platform's alarm), which must not withdraw a notice about a sandbox nobody opens (hosted-idle.ts).
+export const openHostedStretch = async (
+    prisma: PrismaClient,
+    machine: { id: string; sandboxId: string; ownerId: string },
+    options: { readonly keepIdleWarning?: boolean } = {},
+): Promise<boolean> =>
     prisma.$transaction(async (tx) => {
         const row = await lockedStretch(tx, machine.id);
         if (!row) {
@@ -323,7 +328,10 @@ export const openHostedStretch = async (prisma: PrismaClient, machine: { id: str
         if (row.wokeAt) {
             await chargeStretch(tx, machine, row.wokeAt);
         }
-        await tx.hostedMachine.update({ where: { id: machine.id }, data: { wokeAt: new Date(), idleWarnedAt: null } });
+        await tx.hostedMachine.update({
+            where: { id: machine.id },
+            data: options.keepIdleWarning === true ? { wokeAt: new Date() } : { wokeAt: new Date(), idleWarnedAt: null },
+        });
         return true;
     });
 

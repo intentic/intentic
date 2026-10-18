@@ -19,10 +19,18 @@ export interface HostedWakeSandbox {
     readonly hosted: HostedMachine;
 }
 
+// Who asked: a person's browser, or the platform's alarm on the daemon's behalf (hosted-wake-alarm.ts).
+export type HostedWakeCause = "person" | "alarm";
+
 // The same admission, state gate and billing for a browser's wake and a durable alarm. An alarm is the owner's earlier
-// request; it cannot bypass a suspension, spent hours, a move, a removal or a failed image's rollback.
-export const wakeHostedSandbox = async (context: HostedWakeContext, sandbox: HostedWakeSandbox): Promise<void> => {
+// request; it cannot bypass a suspension, spent hours, a move, a removal or a failed image's rollback. Only a person's
+// wake withdraws an idle notice: an alarm's start is not somebody opening the sandbox (hosted-idle.ts).
+export const wakeHostedSandbox = async (context: HostedWakeContext, sandbox: HostedWakeSandbox, cause: HostedWakeCause = "person"): Promise<void> => {
     const { hosted } = sandbox;
+    // A person asked for it, whatever the wake then finds: what the free lane's idle collection measures from.
+    if (cause === "person") {
+        await context.prisma.sandbox.update({ where: { id: sandbox.id }, data: { personSeenAt: new Date() } });
+    }
     await requireHostedStanding(context, sandbox.ownerId);
     await settleHostedStretch(context.prisma, context.config, context.logger, { ...hosted, ownerId: sandbox.ownerId });
     const budget = await hostedBudgetOf(context.prisma, context.config, { sandboxId: sandbox.id, ownerId: sandbox.ownerId });
@@ -51,5 +59,5 @@ export const wakeHostedSandbox = async (context: HostedWakeContext, sandbox: Hos
         }
         throw new ORPCError("BAD_GATEWAY", { message: error instanceof Error ? error.message : "waking the machine failed" });
     }
-    await openStretchOrStop(context, hosted, sandbox.ownerId);
+    await openStretchOrStop(context, hosted, sandbox.ownerId, { keepIdleWarning: cause === "alarm" });
 };
