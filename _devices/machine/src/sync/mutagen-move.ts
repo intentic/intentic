@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { readTextIfExists } from "@intentic/base/fs";
 import { parseJsonOr } from "@intentic/base/json";
 import { clearWindowsRunValue, homeDir, type Log } from "@intentic/local-agent";
@@ -108,6 +109,8 @@ export interface MoveSeams {
     readonly carry: (identifier: string) => Promise<boolean>;
     // Starts the shared daemon again with the owner's own Mutagen, after the move stopped one of another version.
     readonly restartTheirs: () => boolean;
+    // A short wait between two tries of a daemon that is still stopping or starting.
+    readonly settle: () => Promise<void>;
 }
 
 // How the old directory answered: its listing, or why there is none.
@@ -156,6 +159,8 @@ export interface Moved {
     readonly carried: readonly MovingSession[];
     readonly remade: readonly MovingSession[];
     readonly ended: boolean;
+    // Whether the carried sessions that were running run again under this agent's daemon.
+    readonly resumed: boolean;
 }
 
 // Each session's state into this agent's own directory, once the old daemon has stopped syncing them: the ones carried.
@@ -181,18 +186,37 @@ const carrySessions = async (seams: MoveSeams, plan: MovePlan): Promise<MovingSe
     return carried;
 };
 
+// How many times, `settle` apart, the reload waits on a daemon still stopping and retries a resume it refused.
+const RELOAD_TRIES = 20;
+
 // The daemon reads its sessions as it starts: started again, it holds the carried ones, paused as they were left; what
-// was running runs again.
-const loadCarried = (seams: MoveSeams, carried: readonly MovingSession[]): void => {
+// was running runs again. `daemon stop` answers before the daemon has let go of its directory (seen on Windows): a start
+// meanwhile finds it still there and starts nothing, and the resume then reaches a daemon on its way out and is refused,
+// leaving a carried session paused for good. So the stop is waited out (with autostart off, a listing fails once no daemon
+// answers), and the resume is tried until the new daemon takes it. Answers whether what was running runs again.
+const loadCarried = async (seams: MoveSeams, carried: readonly MovingSession[]): Promise<boolean> => {
     if (carried.length === 0) {
-        return;
+        return true;
     }
     seams.own(["daemon", "stop"]);
+    for (let tries = 0; tries < RELOAD_TRIES && seams.own(["sync", "list"]); tries += 1) {
+        // waiting for the old daemon to be gone
+        await seams.settle();
+    }
     seams.startOwn();
     const resume = carried.filter((session) => !session.paused).map((session) => session.name);
-    if (resume.length > 0) {
-        seams.own(["sync", "resume", ...resume]);
+    if (resume.length === 0) {
+        return true;
     }
+    for (let tries = 0; tries < RELOAD_TRIES; tries += 1) {
+        if (seams.own(["sync", "resume", ...resume])) {
+            return true;
+        }
+        // the new daemon is still coming up
+        await seams.settle();
+        seams.startOwn();
+    }
+    return false;
 };
 
 export const moveSessions = async (seams: MoveSeams, plan: MovePlan): Promise<Moved> => {
@@ -200,8 +224,8 @@ export const moveSessions = async (seams: MoveSeams, plan: MovePlan): Promise<Mo
     const ended =
         (plan.sync.length === 0 || seams.shared(["sync", "terminate", ...plan.sync.map((session) => session.target)]).ok) &&
         (plan.terminateForwards.length === 0 || seams.shared(["forward", "terminate", ...plan.terminateForwards]).ok);
-    loadCarried(seams, carried);
-    return { carried, remade: plan.sync.filter((session) => !carried.includes(session)), ended };
+    const resumed = await loadCarried(seams, carried);
+    return { carried, remade: plan.sync.filter((session) => !carried.includes(session)), ended, resumed };
 };
 
 // Whether Mutagen's own sign-in registration (its Run value on Windows, its LaunchAgent on macOS) starts this agent's
@@ -258,6 +282,7 @@ const realSeams = (mutagen: string, from: string): MoveSeams => ({
     startOwn: () => startMutagenDaemon(mutagen),
     ownSessions: (names) => existingSyncSessions(mutagen, names),
     carry: async (identifier) => await carryState(from, mutagenDataDir, identifier),
+    settle: async () => await sleep(500),
     restartTheirs: () => {
         const theirs = resolveOnPath("mutagen");
         if (theirs === undefined || theirs.toLowerCase() === ownMutagenPath().toLowerCase()) {
@@ -317,6 +342,9 @@ export const moveOffSharedMutagen = async (mutagen: string, log: Log, seams?: Mo
         }
     } else if (process.platform === "win32") {
         clearWindowsRunValue(MUTAGEN_RUN_VALUE);
+    }
+    if (!moved.resumed) {
+        log(`this agent's Mutagen daemon did not resume the carried sessions that were running, so they are paused: \`intentic-machine sync resume\` resumes them.`);
     }
     if (!moved.ended) {
         log(`this agent's sessions in ${from} did not all end, so moving off it is tried again at the next start.`);

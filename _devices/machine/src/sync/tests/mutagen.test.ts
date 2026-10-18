@@ -615,8 +615,16 @@ describe("movePlan", () => {
 
 // A Mutagen whose shared-directory answers are scripted by the call's leading words (anything else succeeds empty), whose
 // own daemon holds `own`, and which can carry the state of `carriable`. Every call is kept, in order.
-const fakeMutagen = (answers: Record<string, MutagenCall> = {}, own: readonly string[] = [], carriable: readonly string[] = []) => {
+// `ownAnswers` scripts this agent's own daemon by the call's leading words, successive answers in order (the last repeats);
+// unscripted, a listing fails (the daemon is down once stopped) and anything else succeeds.
+const fakeMutagen = (
+    answers: Record<string, MutagenCall> = {},
+    own: readonly string[] = [],
+    carriable: readonly string[] = [],
+    ownAnswers: Record<string, readonly boolean[]> = {},
+) => {
     const calls: string[] = [];
+    const asked = new Map<string, number>();
     const ok: MutagenCall = { ok: true, stdout: "", stderr: "" };
     const ran = (line: string): void => {
         calls.push(line);
@@ -629,8 +637,16 @@ const fakeMutagen = (answers: Record<string, MutagenCall> = {}, own: readonly st
             return (key === undefined ? undefined : answers[key]) ?? ok;
         },
         own: (args) => {
-            ran(`own ${args.join(" ")}`);
-            return true;
+            const line = `own ${args.join(" ")}`;
+            ran(line);
+            const key = Object.keys(ownAnswers).find((prefix) => line.startsWith(prefix));
+            if (key === undefined) {
+                return !line.startsWith("own sync list");
+            }
+            const nth = asked.get(key) ?? 0;
+            asked.set(key, nth + 1);
+            const said = ownAnswers[key] ?? [];
+            return said[Math.min(nth, said.length - 1)] ?? true;
         },
         startOwn: () => {
             ran("own daemon start");
@@ -644,6 +660,10 @@ const fakeMutagen = (answers: Record<string, MutagenCall> = {}, own: readonly st
         restartTheirs: () => {
             ran("theirs daemon start");
             return true;
+        },
+        settle: async () => {
+            ran("settle");
+            await Promise.resolve();
         },
     };
     return { calls, seams };
@@ -672,10 +692,40 @@ describe("moveSessions", () => {
             "shared sync terminate sync_a sync_b",
             "shared forward terminate fwd_a",
             "own daemon stop",
+            // Gone at the first look.
+            "own sync list",
             "own daemon start",
             // The backup stays paused, as it was.
             "own sync resume intentic-a",
         ]);
+    });
+
+    it("waits out a daemon still stopping and retries the resume until the new one takes it", async () => {
+        const { calls, seams } = fakeMutagen({}, [], ["sync_a", "sync_b"], { "own sync list": [true, true, false], "own sync resume": [false, false, true] });
+        const moved = await moveSessions(seams, plan);
+        expect(moved.resumed).toBe(true);
+        const reload = calls.slice(calls.indexOf("own daemon stop"));
+        expect(reload).toEqual([
+            "own daemon stop",
+            "own sync list",
+            "settle",
+            "own sync list",
+            "settle",
+            "own sync list",
+            "own daemon start",
+            "own sync resume intentic-a",
+            "settle",
+            "own daemon start",
+            "own sync resume intentic-a",
+            "settle",
+            "own daemon start",
+            "own sync resume intentic-a",
+        ]);
+    });
+
+    it("says so when the new daemon never takes the resume", async () => {
+        const { seams } = fakeMutagen({}, [], ["sync_a", "sync_b"], { "own sync resume": [false] });
+        expect((await moveSessions(seams, plan)).resumed).toBe(false);
     });
 
     it("makes again what it cannot carry, and carries nothing beside a session of that name this agent already holds", async () => {
