@@ -314,6 +314,8 @@ defineExpose({ beginRename: actions.beginRename });
                     {{ showAllFinished ? t(`ui.action.showFewer`) : t(`ui.action.showEarlier`, { count: hiddenFinished }) }}
                 </button>
             </RailLane>
+            <!-- What a host adds below the open chats, in the same scroll: the docked sheet's Past chats (ChatTabs.vue). -->
+            <slot name="after" />
         </div>
         <!-- A failed rename leaves the card's field open with the typed name in it; this says why, and is cleared by
              the next attempt. -->

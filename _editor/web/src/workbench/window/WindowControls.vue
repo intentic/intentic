@@ -46,6 +46,8 @@ const RESERVE: Readonly<Record<`width` | `band`, Reserve>> = {
     band: { property: `--window-band`, value: `var(--bar-height)` },
 };
 let reserved: { readonly box: HTMLElement; readonly reserve: Reserve } | undefined;
+/* Whether the corner's holder is a bar, whose controls run up to these buttons and so get a divider between the two groups. */
+const besideBar = ref(false);
 let scheduled = 0;
 
 /* THE BARS, WATCHED FOR MOVING. */
@@ -98,6 +100,7 @@ const measure = (): void => {
     reserved?.box.style.removeProperty(reserved.reserve.property);
     next?.box.style.setProperty(next.reserve.property, next.reserve.value);
     reserved = next;
+    besideBar.value = next?.reserve === RESERVE.width;
 };
 
 /* One measurement per frame at most, and only after something that can have moved a bar: the window resizing, a bar resizing (the observer above). */
@@ -267,7 +270,7 @@ onUnmounted(() => {
 
 <template>
     <!-- Fixed to the viewport, which is what keeps a press on them from being the window's (windowGesture.ts `inOverlay`). -->
-    <div v-if="frameless" ref="controls" class="window-controls">
+    <div v-if="frameless" ref="controls" class="window-controls" :class="{ 'window-controls-beside-bar': besideBar }">
         <button type="button" class="window-control" :aria-label="t(`shell.windowControls.minimise`)" @click="workDesktopWindow(`minimize`)">
             <Icon name="minus" class="text-sm" />
         </button>
@@ -294,6 +297,22 @@ onUnmounted(() => {
     z-index: 40;
     display: flex;
     height: var(--bar-height);
+}
+
+/* A BAR'S OWN CONTROLS AND THE WINDOW'S, TOLD APART: a hairline centred in the gap the bar gives up beyond the buttons
+   (`--window-controls-width` less `--window-controls-buttons`, styles.css), so a bar's last icon never reads as a fourth
+   window button. Only beside a bar: a surface handed the band has no row of controls to divide from. Takes no presses, so
+   the gap stays the window's handle. */
+.window-controls-beside-bar::before {
+    content: "";
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-start: calc((var(--window-controls-buttons) - var(--window-controls-width)) / 2);
+    width: 1px;
+    height: 1.125rem;
+    translate: 0 -50%;
+    background: var(--color-line-strong);
+    pointer-events: none;
 }
 
 /* Each control fills the band's height for a reliable corner target. */

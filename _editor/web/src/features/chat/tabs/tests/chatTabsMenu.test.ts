@@ -108,7 +108,7 @@ const openBarMenu = async (): Promise<void> => {
     strip.querySelector<HTMLElement>(`header`)!.dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
     await flush();
 };
-// The +/history pair beside the switcher; right-clicking it is the same bar gesture as elsewhere on the header.
+// The buttons beside the switcher (+, rail, new window); right-clicking one is the same bar gesture as elsewhere on the header.
 const openMenuOnNewChatButton = async (): Promise<boolean> => {
     const event = new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true });
     strip.querySelector<HTMLElement>(`[aria-label="New agent"]`)!.dispatchEvent(event);
@@ -246,9 +246,9 @@ it(`moves the chat into its own window from the strip's own button`, async () =>
     expect(open).toHaveBeenCalledTimes(1);
 });
 
-// The +/history buttons don't scroll with the tabs, so the empty-space handler lives on the whole header, not
+// The header's buttons don't scroll with the tabs, so the empty-space handler lives on the whole header, not
 // the tab scroll box, or right-clicking them fell through to the browser's own menu.
-it(`opens the tab menu from the ✚ / history pair beside the strip, not the browser's own`, async () => {
+it(`opens the tab menu from the ✚ button beside the strip, not the browser's own`, async () => {
     openTabs(2);
     await nextTick();
 

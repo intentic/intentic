@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Button, ContextMenu, isOverlayTarget, SearchBar, type Tip, toneWash } from "@intentic/ui";
+import { Button, ContextMenu, isOverlayTarget, SearchBar, type Tip, toneWash } from "@intentic/ui";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useSettled } from "@intentic/ui/async";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
-import { type ComponentPublicInstance, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { type ComponentPublicInstance, computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { laneOf } from "../../../models/agent-status/agentStatus-lanes";
@@ -13,6 +13,7 @@ import { turnInFlight } from "../../../models/agent-status/agentStatus-standing"
 import { useAgents } from "../../../models/fleet/useAgents";
 import { canArchive } from "../../../models/fleet/useAgents-fleet";
 import OriginMark from "../../../parts/fleet/OriginMark.vue";
+import RailLane from "../../../components/RailLane.vue";
 import RailColumn from "./RailColumn.vue";
 import { statusIcon, statusLabel, statusTabClass } from "../models/catalog";
 import { chatOnRail, chatWide, toggleChatFloating, toggleChatHome } from "../../../models/conversations/panel/chatPanelLayout";
@@ -172,15 +173,23 @@ watch(activeId, () => {
     }
 });
 
-// Opened from the docked header's history glyph; the anchor also picks the window it opens in, since AnchoredOverlay
-// derives document and viewport from it.
-const historyOpen = ref(false);
-const historyAnchor = ref<HTMLElement>();
-const searchInput = ref<InstanceType<typeof SearchBar> | null>(null);
-
-// Filters sessions by title or content (server-side); settled so a keystroke burst becomes one request.
+// PAST CHATS RIDE UNDER THE OPEN ONES in the switcher's sheet, as the phone's sheet has them (ChatSwitcherSheet.vue), rather
+// than behind a header button of their own: both answer "take me to another chat". Re-read each time the sheet opens, so
+// the list is current as of the press; the search filters by title or content (server-side), settled so a keystroke burst
+// becomes one request.
 const query = ref(``);
 watch(useSettled(query, SEARCH_SETTLE_MS, { trim: true }), (settled) => void loadSessions(settled || undefined));
+watch(listOpen, (open) => {
+    if (open) {
+        query.value = ``;
+        void loadSessions();
+    }
+});
+// Past is what the sheet doesn't already list above it: a session open in this window is its card there, not a second row.
+const pastSessions = computed(() => {
+    const open = new Set(conversations.value.flatMap((conversation) => conversation.session.value?.id ?? []));
+    return sessions.value.filter((session) => !open.has(session.id));
+});
 
 // Right-click on the bar's chrome opens window-wide sweeps (Close Finished/All, pop-out), not a pop-out on the
 // spot. A card's own menu acts on that card; this one and the keyboard commands act on the active chat.
@@ -420,15 +429,6 @@ onBeforeUnmount(() => {
     commandDisposables = [];
 });
 
-const openHistory = (event: Event): void => {
-    query.value = ``;
-    void loadSessions();
-    historyAnchor.value = event.currentTarget instanceof HTMLElement ? event.currentTarget : undefined;
-    historyOpen.value = !historyOpen.value;
-    if (historyOpen.value) {
-        void nextTick(() => searchInput.value?.focus());
-    }
-};
 </script>
 
 <template>
@@ -517,7 +517,8 @@ const openHistory = (event: Event): void => {
             @open="emit('open', $event)"
         />
 
-        <!-- The docked toolbar orders creation, history, docking, and pop-out actions. -->
+        <!-- The docked toolbar: creation, then the chat's two other homes (the rail, its own window). Past chats live in the
+             switcher's sheet, not here. -->
         <div v-if="!vertical" class="flex shrink-0 items-center gap-1">
             <!-- Shown only while there's something to keep: the docked column has no card of its own to carry the rail's pin. -->
             <button
@@ -542,15 +543,6 @@ const openHistory = (event: Event): void => {
             <button
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
-                @click="openHistory"
-                v-tooltip.bottom="t(`chat.chatTabs.history`)"
-                :aria-label="t(`chat.chatTabs.chatHistory`)"
-            >
-                <Icon name="history" class="text-sm" />
-            </button>
-            <button
-                type="button"
-                class="composer-ghost h-7 w-7 shrink-0"
                 @click="toggleChatHome(router)"
                 v-tooltip.bottom="railHint"
                 :aria-label="railLabel"
@@ -570,7 +562,7 @@ const openHistory = (event: Event): void => {
         </div>
 
         <!-- Foot of the rail: New agent (the fleet board's own wording), and nothing else. The rail is one form whether it stands
-             in /chat or in a popped-out window, so neither grows an action the other lacks; history is the docked header's. -->
+             in /chat or in a popped-out window, so neither grows an action the other lacks; past chats are the docked sheet's. -->
         <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
             <!-- The kit's compact secondary tier. It starts as no one in particular: the new chat's posture is picked in its
                  composer, or matched from its first message. -->
@@ -587,34 +579,23 @@ const openHistory = (event: Event): void => {
             v-if="listOpen && !vertical"
             class="ground-canvas absolute inset-x-1.5 top-full z-30 mt-1 flex max-h-[60vh] flex-col overflow-hidden rounded-xl border border-line-strong bg-canvas p-1.5 shadow-lg"
         >
-            <ChatTabList class="min-h-0 flex-1" @select="pick" @close="emit('close', $event)" @open="pickNotOpen" />
+            <ChatTabList class="min-h-0 flex-1" @select="pick" @close="emit('close', $event)" @open="pickNotOpen">
+                <template #after>
+                    <RailLane :label="t(`chat.chatTabs.pastChats`)" data-fold-unit>
+                        <SearchBar
+                            v-model="query"
+                            variant="field"
+                            clearable
+                            :aria-label="t(`chat.words.searchChats`)"
+                            :placeholder="t(`chat.words.searchChatsEllipsis`)"
+                        />
+                        <div class="flex min-w-0 flex-col gap-0.5">
+                            <PastChatList :sessions="pastSessions" :query="query" :failure="sessionsFailure" @open="pickNotOpen" />
+                        </div>
+                    </RailLane>
+                </template>
+            </ChatTabList>
         </div>
-
-        <!-- Anchored to the button pressed; AnchoredOverlay caps it to that button's own window. -->
-        <AnchoredOverlay v-model="historyOpen" :anchor="historyAnchor" side="bottom">
-            <div class="flex min-h-0 w-72 flex-col">
-                <SearchBar
-                    ref="searchInput"
-                    v-model="query"
-                    variant="field"
-                    clearable
-                    :aria-label="t(`chat.words.searchChats`)"
-                    :placeholder="t(`chat.words.searchChatsEllipsis`)"
-                    class="m-1 shrink-0"
-                />
-                <div class="flex min-h-0 max-h-80 flex-col gap-0.5 overflow-auto p-1 pt-0">
-                    <PastChatList
-                        :sessions="sessions"
-                        :query="query"
-                        :failure="sessionsFailure"
-                        @open="
-                            emit(`open`, $event);
-                            historyOpen = false;
-                        "
-                    />
-                </div>
-            </div>
-        </AnchoredOverlay>
 
         <!-- Right-click menu for the bar's own chrome; cards have their own, inside the list. -->
         <ContextMenu ref="barMenu" :model="barMenuItems" :min-width="13" @hide="barMenuUp = false" />
