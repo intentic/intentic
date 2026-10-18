@@ -5,7 +5,6 @@ import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Bullet from "../components/Bullet.astro";
 import Corners from "../components/Corners.astro";
-import Divider from "../components/Divider.astro";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
 import Point from "../components/Point.astro";
@@ -120,8 +119,7 @@ const faq = content.faq.map((item) => ({ question: item.question, answer: item.a
         <section class="border-t band-rule" aria-labelledby="faq-heading">
             <div class="mx-auto max-w-6xl px-6 py-16 pb-24">
                 <h2 id="faq-heading" class="display text-2xl font-semibold sm:text-3xl">Questions</h2>
-                <Divider class="my-8" />
-                <div class="grid gap-x-12 gap-y-9 lg:grid-cols-2">
+                <div class="mt-8 grid gap-x-12 gap-y-9 lg:grid-cols-2">
                     {
                         content.faq.map((item) => (
                             <div id={item.id} class="scroll-mt-28">
