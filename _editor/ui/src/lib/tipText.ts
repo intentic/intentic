@@ -14,5 +14,5 @@ export const tipText = (value: TooltipValue): string | undefined => {
     const rows = (value.rows ?? [])
         .filter((row) => row.label.trim() !== `` && String(row.value).trim() !== ``)
         .map((row) => `${row.label} ${row.value}`);
-    return [value.title, ...rows, value.note ?? ``].filter((part) => part.trim() !== ``).join(`, `);
+    return [value.title, value.quote ?? ``, ...rows, value.note ?? ``].filter((part) => part.trim() !== ``).join(`, `);
 };

@@ -2,10 +2,21 @@ import type { Tip } from "@intentic/ui";
 import { formatWhen } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 import { toneWash } from "@intentic/ui/tone";
-import { attentionReason } from "./agentStatus-attention";
+import { useVocabulary } from "../../workbench/views/vocabulary";
+import { attentionReason, endingReason, landFailure } from "./agentStatus-attention";
+import { failureGist, failureKind, failureTone, failureWord } from "./agentStatus-failure";
 import { laneOf } from "./agentStatus-lanes";
 import { agentDisplayTitle } from "./agentStatus-meta";
-import { type AgentStanding, limited, limitMoveBooked, limitScheduled, soonestHold, turnInFlight, watching } from "./agentStatus-standing";
+import {
+    type AgentStanding,
+    limited,
+    limitMoveBooked,
+    limitScheduled,
+    memoryHeld,
+    soonestHold,
+    turnInFlight,
+    watching,
+} from "./agentStatus-standing";
 
 // One bit, "this session isn't done yet", for surfaces that name an agent by its output rather than itself (the
 // Changes panel's From legend). `laneOf` narrowed to a boolean rather than its own status list, so "finished" means
@@ -68,7 +79,8 @@ export interface StandingChip {
     readonly tone: string;
     // When the reader last opened it, raw, for a host with a clock to phrase; absent on every reason chip.
     readonly seenAt?: number;
-    // What the one word stands for, where it stands for more than itself: when a scheduled card's messages go.
+    // What the one word stands for, where it stands for more than itself: when a scheduled card's messages go, or the
+    // words a failure the word names came with (cardFailure).
     readonly hint?: Tip;
 }
 
@@ -83,7 +95,10 @@ export const standingChip = (
 ): StandingChip | undefined => {
     const reason = attentionReason(agent);
     if (reason !== undefined) {
-        return { label: reason, tone: limited(agent) ? LIMIT_TONE : REASON_TONE };
+        // A word naming the failure the card ended on opens what it came with, the same card the body's line raises.
+        const failure = cardFailure(agent);
+        const chip = { label: reason, tone: limited(agent) ? LIMIT_TONE : REASON_TONE };
+        return failure?.title === reason ? { ...chip, hint: failure.tip } : chip;
     }
     // When it goes by itself outranks news: it is what a card that looks idle is waiting for. One word in the corner,
     // which a title shares the row with; when it goes is the word's hover.
@@ -142,4 +157,42 @@ export const familyChip = (calls: readonly (AgentStanding & { readonly title?: s
             note: rest > 0 ? t(`agents.childRows.callsMore`, { count: rest }) : undefined,
         },
     };
+};
+
+// WHAT A CARD SAYS OF THE FAILURE IT ENDED ON. The corner already names the kind (attentionReason), so the body spends
+// one line on the gist and keeps the rest for a hover: a red paragraph of the provider's English, clamped at two lines
+// beside the corner's "Error", said the same thing twice and neither time what the reader could do. The line is the
+// first sentence of the words the turn died on, in the card's own ink behind one tinted glyph; the hover is the kind
+// over those words whole. A spent allowance and a memory hold draw none: nothing failed, and the corner and the clock say
+// all there is.
+export interface CardFailure {
+    // The kind, in the corner's word: the hover's headline.
+    readonly title: string;
+    // The line at rest: the first sentence of what it failed with.
+    readonly gist: string;
+    // The glyph's ink and the hover's dot: a fault, or a refusal to decide about.
+    readonly tone: `danger` | `warning`;
+    // The hover: the kind, and the words whole.
+    readonly tip: Tip;
+}
+
+const capitalised = (words: string): string => `${words.charAt(0).toLocaleUpperCase()}${words.slice(1)}`;
+
+export const cardFailure = (agent: AgentStanding): CardFailure | undefined => {
+    // A land that broke, in the reader's words rather than git's (landFailure): the command it ran is no instruction to
+    // them. The corner says it couldn't land unless an ask outranks that, and only then does the line say so too.
+    const land = landFailure(agent);
+    if (land !== undefined) {
+        const title = useVocabulary().value.couldntLand;
+        const gist = attentionReason(agent) === title ? capitalised(land) : t(`agents.agentStatus.couldntLand`, { reason: land });
+        return { title, gist, tone: `danger`, tip: { title, tone: `danger`, quote: capitalised(land) } };
+    }
+    const words = agent.failure?.trim();
+    if (words === undefined || words === `` || limited(agent) || memoryHeld(agent)) {
+        return undefined;
+    }
+    const kind = failureKind(agent);
+    const title = kind === undefined ? (endingReason(agent.status) ?? t(`agents.agentStatus.error`)) : failureWord(kind);
+    const tone = failureTone(kind);
+    return { title, gist: failureGist(words), tone, tip: { title, tone, quote: words } };
 };

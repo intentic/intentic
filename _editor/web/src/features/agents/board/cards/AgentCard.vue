@@ -37,10 +37,10 @@ import { dropActionFor, type PendingAction } from "../laneDrop";
 import type { CardOwnPresses } from "../view/cardMenu";
 import type { IdMatch } from "../idMatch";
 import { attentionReason, landFailure, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
-import { type FamilyChip, type StandingChip, standingChip } from "../../../../models/agent-status/agentStatus-chips";
+import { cardFailure, type FamilyChip, type StandingChip, standingChip } from "../../../../models/agent-status/agentStatus-chips";
 import { type FleetLane, laneOf, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
 import { activityLine, agentDisplayTitle, agentStandingMeta, contextPct, cornerInk, loopMeta } from "../../../../models/agent-status/agentStatus-meta";
-import { conflictIsYours, limited, limitScheduled, memoryHeld, scheduledCount, turnInFlight, turnWorking, unregistered } from "../../../../models/agent-status/agentStatus-standing";
+import { conflictIsYours, limited, limitScheduled, scheduledCount, turnInFlight, turnWorking, unregistered } from "../../../../models/agent-status/agentStatus-standing";
 import { landedAway, landedDelivery } from "../../fleet/agentStatus-land";
 import CardSeal from "../../../../parts/fleet/CardSeal.vue";
 import CardPermissionAsk from "./CardPermissionAsk.vue";
@@ -405,16 +405,9 @@ let heldPrint = ``;
 let heldProof: ProofMark | undefined;
 // A land that broke wears no seal: a check mark on the card whose work is stuck read as finished.
 const landBroke = computed(() => landFailure(props.agent));
-const failureLine = computed(() => (landBroke.value === undefined ? props.agent.failure : t(`agents.agentStatus.couldntLand`, { reason: landBroke.value })));
-// The red line's raw sentence, for its hover: the land's own words where it broke, else the turn's. A land that broke
-// keeps the line after the next turn cleared the turn's failure, since its work is still stuck (landFailure).
-const failureRaw = computed(() =>
-    landBroke.value !== undefined
-        ? failureLine.value
-        : limited(props.agent) || memoryHeld(props.agent)
-          ? undefined
-          : props.agent.failure,
-);
+// What the card says of the failure it ended on: one line at rest, the words whole in its hover (cardFailure). A land
+// that broke keeps the line after the next turn cleared the turn's failure, since its work is still stuck.
+const failure = computed(() => cardFailure(props.agent));
 const proof = computed(() => {
     const next = landBroke.value === undefined ? cardProof(props.agent, turnInFlight(props.agent)) : undefined;
     const print = JSON.stringify(next ?? null);
@@ -787,11 +780,23 @@ const grab = (event: PointerEvent): void => {
                 <MatchLine :snippet="match" :needle="needle" :match-case="matchCase" class="line-clamp-2 min-w-0 flex-1 leading-4" />
             </p>
 
-            <!-- `failure` is present only while the card reads as failed, so no extra status check is needed here. -->
-            <!-- The hover repeats the localized reason so internal process names never become instructions to the user. -->
-            <p v-if="failureRaw" class="flex min-w-0 items-start gap-2 text-2xs text-danger" v-tooltip.top="failureRaw">
-                <Icon name="exclamation-circle" class="mt-px shrink-0 text-2xs" />
-                <span class="line-clamp-2 min-w-0 flex-1 leading-4">{{ failureLine }}</span>
+            <!-- The failure it ended on, in ONE line: the corner already names the kind, so this is its gist in the card's own
+                 ink, and only the glyph wears the tone. One line, so the glyph centres on it rather than hanging off a
+                 wrapped paragraph's first line. The hover is the kind over the words whole; on a chip naming the same
+                 failure, the same card. -->
+            <p
+                v-if="failure !== undefined"
+                v-tooltip.top="failure.tip"
+                class="flex min-w-0 max-w-full items-center gap-1.5 text-2xs leading-4 text-muted"
+                :class="dense ? 'w-full' : ''"
+                data-failure
+            >
+                <Icon
+                    :name="failure.tone === `danger` ? `exclamation-circle` : `exclamation-triangle`"
+                    class="shrink-0 text-2xs"
+                    :class="failure.tone === `danger` ? `text-danger` : `text-warning`"
+                />
+                <span class="min-w-0 flex-1 truncate">{{ failure.gist }}</span>
             </p>
 
             <!-- Where its last turn's work went besides its branch: the worst of it in one line, every place in the hover. -->

@@ -2,7 +2,8 @@ import type { AgentJob, AgentStatus, AgentWatch } from "@intentic/sandbox-contra
 import { formatWhen } from "@intentic/ui/format";
 import { useAudience } from "../../../../app/useAudience";
 import { attentionReason, drillTarget, landFailure, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
-import { scheduledWhen, standingChip, unfinishedMark } from "../../../../models/agent-status/agentStatus-chips";
+import { cardFailure, scheduledWhen, standingChip, unfinishedMark } from "../../../../models/agent-status/agentStatus-chips";
+import { failureGist } from "../../../../models/agent-status/agentStatus-failure";
 import { attentionCalls, attentionCards, callsOwner, laneOf, type RimAgent, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
 import { agentStandingMeta, agentStatusMeta, activityLine, currentAction } from "../../../../models/agent-status/agentStatus-meta";
 import { type AgentStanding, awaitingUser, blocked, heardByParent, type ClientAgentStatus, conflictIsYours, standingFrom, memoryHeld, onlyOwnerCanAnswer, promptHeldJob, scheduledSend, scheduledCount, turnInFlight, unregistered, watching } from "../../../../models/agent-status/agentStatus-standing";
@@ -983,6 +984,90 @@ describe("a message held for low memory", () => {
         // Nothing of a person's waits in its queue: the corner can promise nothing about it.
         expect(memoryCorner(held, `resend`)).toBeUndefined();
         expect(memoryCorner({ status: `error`, attention: none, failureCode: `harness-crash`, queue: { paused: `refused` } }, `resend`)).toBeUndefined();
+    });
+});
+
+// EVERY FAILURE USED TO READ "ERROR". The daemon codes what it can classify, and the corner names that kind, so an
+// organization switching Claude Code off, a provider that would not answer and a crash no longer wear one word.
+describe("a failure the daemon classified", () => {
+    const failed = (failureCode: string | undefined, failure = `Something went wrong.`): AgentStanding => {
+        const standing: AgentStanding = { status: `error`, attention: none, failure };
+        return failureCode === undefined ? standing : { ...standing, failureCode };
+    };
+    const REFUSAL = `Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access`;
+
+    it("names the kind in the corner, and leaves an unclassified one the plain word it was", () => {
+        expect(attentionReason(failed(`claude-not-entitled`, REFUSAL))).toBe(`No access`);
+        expect(attentionReason(failed(`account-not-entitled`))).toBe(`No access`);
+        expect(attentionReason(failed(`claude-reauth`))).toBe(`Signed out`);
+        expect(attentionReason(failed(`provider-outage`))).toBe(`Provider down`);
+        expect(attentionReason(failed(`model-unavailable`))).toBe(`Model unavailable`);
+        expect(attentionReason(failed(`context-window-too-small`))).toBe(`Context full`);
+        expect(attentionReason(failed(`engine-version-floor`))).toBe(`Update needed`);
+        expect(attentionReason(failed(`safeguard-flagged`))).toBe(`Flagged`);
+        expect(attentionReason(failed(`turn-cap`))).toBe(`Cut short`);
+        expect(attentionReason(failed(`harness-crash`))).toBe(`Error`);
+        expect(attentionReason(failed(undefined))).toBe(`Error`);
+        // Only an error's code names it: a refused start says it did not start, whatever refused it.
+        expect(attentionReason({ status: `failed`, attention: none, failureCode: `claude-not-entitled` })).toBe(`Didn't start`);
+    });
+
+    // An ask outranks the failure it rides on, as it outranks every ending: the ask is what the card's presses answer.
+    it("gives the corner to an ask over the failure", () => {
+        expect(attentionReason({ ...failed(`provider-outage`), attention: { ...none, question: true } })).toBe(`Question for you`);
+    });
+
+    // The way on for a refusal is a choice the conversation offers (another account or model, sending again): the chat,
+    // as for a spent allowance. A turn cut short is a report of how far it got. An unclassified error stays the review's.
+    it("leads to where the way on is", () => {
+        const branch = { branch: `agent/x` };
+        expect(reviewAction({ ...failed(`claude-not-entitled`), ...branch })).toBe(`Open chat`);
+        expect(drillTarget(failed(`claude-not-entitled`))).toBe(`chat`);
+        expect(drillTarget(failed(`provider-outage`))).toBe(`chat`);
+        expect(reviewAction({ ...failed(`turn-cap`), ...branch })).toBe(`See where it stopped`);
+        expect(drillTarget(failed(`turn-cap`))).toBe(`review`);
+        expect(reviewAction({ ...failed(undefined), ...branch })).toBe(`View error`);
+        expect(drillTarget(failed(undefined))).toBe(`review`);
+    });
+
+    // One line at rest, the words whole in the hover, which the corner's chip opens too.
+    it("says the first sentence on the card and the whole of it in the hover the chip shares", () => {
+        const refused = failed(`claude-not-entitled`, REFUSAL);
+        expect(cardFailure(refused)).toEqual({
+            title: `No access`,
+            gist: `Your organization has disabled Claude subscription access for Claude Code`,
+            tone: `warning`,
+            tip: { title: `No access`, tone: `warning`, quote: REFUSAL },
+        });
+        expect(standingChip({ ...refused, unread: false })?.hint).toEqual(cardFailure(refused)?.tip);
+        // A crash is a fault, and says so in its glyph's ink.
+        expect(cardFailure(failed(undefined, `Claude Code process exited with code 143`))).toMatchObject({ title: `Error`, tone: `danger` });
+        // Nothing failed on a spent allowance or a memory hold: the corner and the clock say all there is.
+        expect(cardFailure(failed(`rate_limit`, `Claude usage limit reached.`))).toBeUndefined();
+        expect(cardFailure(failed(`sandbox-memory-low`, `Sandbox memory is low.`))).toBeUndefined();
+        expect(cardFailure({ status: `idle`, attention: none })).toBeUndefined();
+    });
+
+    it("keeps a chip that names something else from opening the failure", () => {
+        const asked = { ...failed(`provider-outage`), attention: { ...none, question: true }, unread: false };
+        expect(standingChip(asked)?.hint).toBeUndefined();
+    });
+});
+
+// The first sentence of a provider's words, as the card's one line says it.
+describe("failureGist", () => {
+    it("ends at the first sentence, or at the middle dot a refusal joins its advice with", () => {
+        expect(failureGist(`Failed to authenticate. API Error: 403 You've reached your limit.`)).toBe(`Failed to authenticate`);
+        expect(failureGist(`Timed out waiting for response headers`)).toBe(`Timed out waiting for response headers`);
+        expect(failureGist(`Model not found: x/y. Did you mean: a, b?`)).toBe(`Model not found: x/y`);
+        expect(failureGist(`first line\n    at frame (file.js:1)`)).toBe(`first line`);
+    });
+
+    it("does not break inside an abbreviation, a version or a path", () => {
+        expect(failureGist(`Resource has been exhausted (e.g. check quota).`)).toBe(`Resource has been exhausted (e.g. check quota)`);
+        expect(failureGist(`Claude Code 2.1.233 does not support this model; version 2.1.251 or newer is required.`)).toBe(
+            `Claude Code 2.1.233 does not support this model; version 2.1.251 or newer is required`,
+        );
     });
 });
 

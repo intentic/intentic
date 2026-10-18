@@ -343,10 +343,25 @@ it(`says why a session died, on the card that reports it died`, () => {
     expect(card.textContent).toContain(failure.slice(0, 40));
 });
 
+// The screenshot that redrew this: two cards in Attention, each reading "Error" in the corner over two red lines of the
+// same refusal. The corner names the kind the daemon coded, the line keeps the refusal's first sentence in the card's own
+// ink, and its advice (the half after the middle dot) waits in the hover with the rest.
+it(`names a classified failure in the corner and keeps one line of it on the card`, () => {
+    const failure = `Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access`;
+    const card = mount({ ...ready(`error`), failureCode: `claude-not-entitled`, failure });
+    expect(card.querySelector(`.ui-status-pill`)?.textContent?.trim()).toBe(`No access`);
+    const line = card.querySelector<HTMLElement>(`[data-failure]`)!;
+    expect(line.textContent?.trim()).toBe(`Your organization has disabled Claude subscription access for Claude Code`);
+    expect(card.textContent).not.toContain(`Use an Anthropic API key`);
+    // Not a red paragraph: only the glyph wears the tone, and a refusal's tone is the one asking for a decision.
+    expect(line.classList.contains(`text-danger`)).toBe(false);
+    expect(line.querySelector(`[data-icon="exclamation-triangle"]`)?.classList.contains(`text-warning`)).toBe(true);
+});
+
 // `failure` is present only while the card reads as failed; a healthy card must not render an empty line from the same
 // markup.
 it(`keeps the line off a card with nothing to explain`, () => {
-    expect(mount(ready()).querySelector(`[data-icon="exclamation-circle"]`)).toBeNull();
+    expect(mount(ready()).querySelector(`[data-failure]`)).toBeNull();
 });
 
 // Landed work later discarded from the workspace: the card must say so, offer a way back (not as the primary/green
@@ -444,7 +459,9 @@ it(`says what a land did in the owner's own folder, and what it kept out`, () =>
 // Kept by the sandbox until a land goes through, after the next turn cleared the turn's own failure.
 it(`says a land broke on a card whose turn since ended cleanly`, () => {
     const card = mount({ ...ready(), landFailure: { reason: `This agent's copy of the workspace lost its link`, code: `unlinked`, at: 1 } });
-    expect(card.textContent).toContain(`Couldn't land: this agent's copy lost its link to your workspace's history`);
+    expect(card.querySelector(`.ui-status-pill`)?.textContent?.trim()).toBe(`Couldn't land`);
+    // The corner says it couldn't land, so the line is the reason alone, not the corner's words again.
+    expect(card.querySelector(`[data-failure]`)?.textContent?.trim()).toBe(`This agent's copy lost its link to your workspace's history`);
 });
 
 const textButton = (el: HTMLElement, text: string): HTMLButtonElement | undefined =>
@@ -642,9 +659,9 @@ it(`drills in to the review on a double-click`, () => {
 });
 
 // TABULARIUM's lands failed on a checkout git no longer recognised, and its card sat in Finished with a check mark (B6).
-it(`says a broken land in plain words, keeping git's own sentence for the hover`, () => {
+it(`says a broken land in plain words, never git's own command`, () => {
     const el = mount({ ...ready(`error`), failure: BAD_OBJECT });
-    expect(el.textContent).toContain(`Couldn't land: this agent's copy lost its link to your workspace's history`);
+    expect(el.querySelector(`[data-failure]`)?.textContent?.trim()).toBe(`This agent's copy lost its link to your workspace's history`);
     expect(el.textContent).not.toContain(`Command failed`);
     expect(el.querySelector(`.ui-status-pill`)?.textContent?.trim()).toBe(`Couldn't land`);
 });

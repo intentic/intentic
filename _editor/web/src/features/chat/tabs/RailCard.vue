@@ -66,11 +66,14 @@ const now = computed(() => sandboxNow(tick.value));
 const blade = useSelectionBlade(() => props.selected);
 
 const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, props.matchCase === true));
-// Only the "Updated" chip earns a hover: "New" already says unopened, while this hides when you last looked.
+// A chip standing for more than its word carries its own hover (a failure's words, when a scheduled card's messages
+// go), as on the board's card. Of the rest only "Updated" earns one: "New" already says unopened, while this hides when
+// you last looked.
 const chipHint = computed((): Tip | undefined =>
-    props.chip?.seenAt === undefined
+    props.chip?.hint ??
+    (props.chip?.seenAt === undefined
         ? undefined
-        : { title: props.chip.label, rows: [{ label: t(`common.railCard.lastOpened`), value: timeAgo(props.chip.seenAt, { days: true }) }] },
+        : { title: props.chip.label, rows: [{ label: t(`common.railCard.lastOpened`), value: timeAgo(props.chip.seenAt, { days: true }) }] }),
 );
 </script>
 

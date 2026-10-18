@@ -2,6 +2,7 @@ import type { AgentAttention, AgentStatus } from "@intentic/sandbox-contract/sch
 import { formatCount } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 import { useVocabulary } from "../../workbench/views/vocabulary";
+import { failureKind, failureOpensChat, failureWord } from "./agentStatus-failure";
 import {
     type AgentStanding,
     type ClientAgentStatus,
@@ -93,6 +94,12 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
     if (heldByPrompt(agent)) {
         return t(`agents.agentStatus.needsInput`);
     }
+    // A failure the daemon classified says what kind it was ("No access", "Provider down"), never the bare "Error" a
+    // crash wears: the kind is what tells the reader whether to switch account, wait, or read what broke.
+    const kind = failureKind(agent);
+    if (kind !== undefined) {
+        return failureWord(kind);
+    }
     // A park the attention block can't name: `awaiting` covers a browser or terminal hand-off, neither of which raises
     // a wire flag, so it arrives as a bare status. Checked last, only once nothing more specific applies.
     return endingReasons()[agent.status] ?? (agent.status === `awaiting` ? t(`agents.agentStatus.waitingOn`) : undefined);
@@ -165,6 +172,10 @@ export const landFailure = (agent: AgentStanding): string | undefined => {
     return gitReason(failure);
 };
 
+// The word an ending says itself in, for a surface naming how a turn ended rather than why its card is waiting
+// ("Didn't start", "Interrupted"); undefined for a status that is no ending of that kind.
+export const endingReason = (status: AgentStanding["status"]): string | undefined => endingReasons()[status];
+
 // The endings, tabled rather than chained since a sixth condition (`limited`) has to be checked ahead of them.
 // Absent means the card isn't in Attention for a reason worth a chip.
 const endingReasons = (): Partial<Record<AgentStatus | ClientAgentStatus, string>> => ({
@@ -200,6 +211,12 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
     if (limited(agent) || memoryHeld(agent) || agent.status === `awaiting`) {
         return t(`agents.agentStatus.openChat`);
     }
+    // Nor is a classified failure whose way on is a choice the conversation offers (failureOpensChat); a turn cut short
+    // is a report of how far it got, named as a stop's is.
+    const kind = failureKind(agent);
+    if (kind !== undefined && landFailure(agent) === undefined) {
+        return failureOpensChat(kind) ? t(`agents.agentStatus.openChat`) : t(`agents.agentStatus.seeWhereStopped`);
+    }
     return (
         endingActions()[agent.status] ??
         (agent.diff !== undefined && agent.diff.files > 0 ? t(`agents.agentStatus.reviewChanges`) : t(`agents.words.review`))
@@ -209,11 +226,16 @@ export const reviewAction = (agent: AgentStanding & { readonly branch?: string; 
 // Where the card's drill-in leads. An ask answered on its own card (a plan, a question, a permission, a setup, a
 // release, a need, a hand-off) and a spent allowance lead to the chat, where that card and the way on are drawn: the
 // review page draws none of them, and an "Approve" that led there was a round trip to a page with nothing to approve.
-// A refused land's report, an error, and a diff to read are the review page's.
+// A refused land's report, an unclassified error, and a diff to read are the review page's; a classified failure goes
+// where its way on is (failureOpensChat).
 export const drillTarget = (agent: AgentStanding): `chat` | `review` => {
     const park = leadingPark(agent);
     if (park !== undefined) {
         return park === `conflict` ? `review` : `chat`;
+    }
+    const kind = failureKind(agent);
+    if (kind !== undefined && landFailure(agent) === undefined) {
+        return failureOpensChat(kind) ? `chat` : `review`;
     }
     return limited(agent) || memoryHeld(agent) || agent.status === `awaiting` ? `chat` : `review`;
 };

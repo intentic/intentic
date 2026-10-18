@@ -100,6 +100,25 @@
         color: var(--ui-tip-muted);
     }
 
+    /* Somebody else's words, set off by a rule the way a quote is, in the card's full ink since they are its substance.
+       A card carrying one is wider (a refusal is a sentence or two, not a figure) and clamps it, so a stack trace pasted
+       into a failure still raises a card rather than a wall. */
+    .ui-tooltip-card:has(.ui-tip-quote) {
+        max-width: var(--ui-tip-quote-max-width);
+    }
+
+    .ui-tip-quote {
+        margin: 0;
+        padding-left: calc(var(--spacing) * 2);
+        /* A step above the rows' hairline: this rule is a quote mark, read at a glance, not a divider. */
+        border-left: 2px solid color-mix(in oklab, var(--ui-tooltip-content) 30%, var(--ui-tooltip-fill));
+        white-space: pre-line;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: var(--ui-tip-quote-max-lines);
+        overflow: hidden;
+    }
+
     .ui-tip-dot[data-tone="info"] { background: var(--color-info); }
     .ui-tip-dot[data-tone="success"] { background: var(--color-success); }
     .ui-tip-dot[data-tone="warning"] { background: var(--color-warning); }

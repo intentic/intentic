@@ -7,8 +7,10 @@ import type { Signal } from "./tone.js";
 
    TWO SHAPES, ONE DIRECTIVE. A string is a label, and a label is a word or two: "Archive", "New tab". Anything that
    needs more is a `Tip`, drawn as a compact card: a short headline, its facts as label/figure rows, an optional
-   key cap and one short closing line. A sentence in a hover box is read by nobody, so there is no third shape for
-   one: `v-tooltip="{ title: 'Memory low', rows: [{ label: 'Resident', value: '7.4 GiB' }] }"`. */
+   key cap and one short closing line. A sentence of OURS in a hover box is read by nobody, so there is no third shape
+   for one: `v-tooltip="{ title: 'Memory low', rows: [{ label: 'Resident', value: '7.4 GiB' }] }"`. The one sentence a
+   card carries is somebody else's, quoted whole (`quote`): a provider's refusal is the fact itself, and paraphrasing
+   it is how "your organization disabled access" became a bare "Error". */
 
 const GAP = 6; // px between the anchor and the box: leaves room for the arrow
 const EDGE = 8; // px of viewport kept clear on every side
@@ -41,6 +43,9 @@ export interface Tip {
     readonly tone?: TipTone | undefined;
     /** The facts, one per row. Numbers and names, not clauses. */
     readonly rows?: readonly TipRow[] | undefined;
+    /** Someone else's words, verbatim, under the headline: the refusal a provider sent, the line a command died on.
+     *  The one part that may run to sentences, because rewording them loses what they say; clamped, never paraphrased. */
+    readonly quote?: string | undefined;
     /** One closing line of a few words: "Can't be undone". */
     readonly note?: string | undefined;
 }
@@ -116,6 +121,9 @@ const drawTip = (doc: Document, body: HTMLElement, tip: Tip): void => {
         head.appendChild(part(doc, `kbd`, `ui-tip-keys`, tip.keys));
     }
     body.appendChild(head);
+    if (tip.quote !== undefined && tip.quote.trim() !== ``) {
+        body.appendChild(part(doc, `blockquote`, `ui-tip-quote`, tip.quote.trim()));
+    }
     const rows = (tip.rows ?? []).filter((row) => row.label.trim() !== `` && String(row.value).trim() !== ``);
     if (rows.length > 0) {
         const list = part(doc, `dl`, `ui-tip-rows`);

@@ -139,6 +139,8 @@
     --ui-tooltip-max-width: 17rem;
     --ui-tooltip-max-lines: 5;
     --ui-tip-max-width: 16rem;
+    --ui-tip-quote-max-width: 22rem;
+    --ui-tip-quote-max-lines: 8;
 }
 
 /* Compact text size is the default scale. */
