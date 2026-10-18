@@ -6,6 +6,7 @@ import { harnessChoosable, loopsOf, PROVIDERS } from "@intentic/sandbox-contract
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { type ChildRehome, type ChildSupervisor, spawnedNote } from "./children.js";
+import { HALF_A_MOVE } from "./child-words.js";
 import type { SubagentWaitUntil } from "./subagents.js";
 import { type ChildrenWaitAnswer, childrenWaitAnswer, waitForChildren, waitForWork, workWaitAnswer } from "./work-wait.js";
 import { opt } from "../../opt.js";
@@ -244,7 +245,11 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               if (children === undefined) {
                                   return answer({ ok: false, message: "This turn cannot supervise agents." });
                               }
-                              return answer(await children.send(args.child, args.message, rehomeOf(args)));
+                              const rehome = rehomeOf(args);
+                              if (rehome === undefined && [args.provider, args.model, args.harness, args.effort].some((part) => part !== undefined)) {
+                                  return answer(HALF_A_MOVE);
+                              }
+                              return answer(await children.send(args.child, args.message, rehome));
                           },
                           { annotations: toolAnnotations("write") },
                       ),

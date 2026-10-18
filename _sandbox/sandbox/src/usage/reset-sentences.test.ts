@@ -35,6 +35,9 @@ test("names nothing where the sentence names no instant, or one that cannot be m
     expect(namedReset(`Please try again at 9.`, NOW)).toBeUndefined();
     expect(namedReset(`Resets in 900h.`, NOW)).toBeUndefined();
     expect(namedReset(`Quota resets at 2020-01-01T00:00:00Z.`, NOW)).toBeUndefined();
+    // A unit is a whole word: "month" is no "m", which read it as a minute and booked a re-run sixty seconds out.
+    expect(namedReset(`Your plan resets in 1 month.`, NOW)).toBeUndefined();
+    expect(namedReset(`Resets in 2 mos.`, NOW)).toBeUndefined();
 });
 
 test("names the pool a sentence says ran out by its length", () => {

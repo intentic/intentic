@@ -1563,7 +1563,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/subagents/children.ts": {
-        "count": 1864,
+        "count": 1842,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/subagents/subagent-wait.ts#subagentWaitServer#lines": {

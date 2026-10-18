@@ -383,12 +383,15 @@ const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: F
     const { conversationId } = turn;
     // A door's hold names its run, whose rows the model never saw, and re-runs on the session as it stood (turn-resume.ts).
     const turnedAway: Partial<HeldTurn> = context.door === true ? { turnedAway: true, ...opt("run", context.run) } : {};
-    const held = conversationId === undefined ? undefined : holding(context, conversationId, "limit", { ...opt("reopensAt", resetsAt), ...way, ...turnedAway });
+    const far = context.child === true && resetsAt !== undefined && resetsAt * 1000 - context.now > FAR_RERUN_MS;
+    // A far reset is said on the frame and kept off the hold: the resume pass fires a limit hold at its `reopensAt` under
+    // a `resend` answer whatever the frame said, so a child told nothing was booked was re-run by itself a week later.
+    const booked = far ? undefined : resetsAt;
+    const held = conversationId === undefined ? undefined : holding(context, conversationId, "limit", { ...opt("reopensAt", booked), ...way, ...turnedAway });
     // Worth dressing for a reset or a hold; with neither, it goes out bare.
     if (resetsAt === undefined && held === undefined) {
         return { frame: event, held, writes };
     }
-    const far = context.child === true && resetsAt !== undefined && resetsAt * 1000 - context.now > FAR_RERUN_MS;
     const frame = await limitFrame(queries, event, { conversationId, resetsAt, held: held !== undefined, ran: answered, way, far });
     return { frame, held, writes };
 };

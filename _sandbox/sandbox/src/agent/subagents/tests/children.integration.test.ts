@@ -2314,6 +2314,51 @@ describe("the fan-out governor", () => {
         await settled(held.id);
         expect(turns.map((turn) => turn.prompt)).toEqual(["ws1"]);
     });
+
+    // A cancel landing after the governor took the child off its lane, while it re-asks the records, was refused as
+    // "waiting on the owner's card" and the child started anyway.
+    it("keeps a cancel that lands while a held child is being started, which then never starts", async () => {
+        const turns: TurnInput[] = [];
+        const answer = Promise.withResolvers<void>();
+        const gate = Promise.withResolvers<void>();
+        const rechecked = Promise.withResolvers<void>();
+        let rechecking = false;
+        const stream = async function* (input: TurnInput): AsyncGenerator<AgentEvent> {
+            turns.push(input);
+            if (input.prompt === "ws1") {
+                await answer.promise;
+                yield { kind: "delta", text: "On it." };
+            }
+            yield { kind: "done" };
+        };
+        // The held start's own re-check of the records, parked until the cancel is in.
+        const cursor = unstubbed<Services["providerModules"][number]>("cursor module", {
+            id: "cursor",
+            turnLimit: async () => {
+                if (rechecking) {
+                    rechecked.resolve();
+                    await gate.promise;
+                }
+                return undefined;
+            },
+        });
+        const services = drivenBy(unstubbed<Services>("services", { ...spawnServices({}, [], actors), providerModules: [cursor] }), stream);
+        const first = await spawnChild(services, parent, { prompt: "ws1", ...opus });
+        const held = await spawnChild(services, parent, { prompt: "ws2", ...opus });
+        if (!first.ok || !held.ok) {
+            throw new Error("not spawned");
+        }
+        expect(held).toMatchObject({ held: true });
+        rechecking = true;
+        answer.resolve();
+        await rechecked.promise;
+        await expect(cancelChild(services, parent, held.id)).resolves.toMatchObject({ ok: true, note: expect.stringContaining("will not start") });
+        gate.resolve();
+        await settled(held.id);
+        await settled(first.id);
+        expect(listSubagentSessions(actors).find((session) => session.id === held.id)).toMatchObject({ status: "killed" });
+        expect(turns.map((turn) => turn.prompt)).toEqual(["ws1"]);
+    });
 });
 
 // 2026-10-17: a parent whose children were refused on four providers rescued their work by hand, re-spawning twelve
@@ -2333,6 +2378,26 @@ describe("moving a child to another provider", () => {
         expect(turns[1]).toMatchObject({ prompt: "Carry on.", agent: "claude", model: "claude-sonnet-4-6" });
         // The session belonged to the provider it was minted on.
         expect(turns[1]?.sessionId).toBeUndefined();
+    });
+
+    // Left half-moved by a refused admission, the child's next plain send ran on the new provider, its session forgotten.
+    it("stays where it was, its session kept, when the moved turn cannot start", async () => {
+        const turns: TurnInput[] = [];
+        const over: Partial<SandboxSettings> = { subagentsPerTurn: 1 };
+        const services = drivenBy(spawnServices(over, [], actors), fakeTurn(turns, [{ kind: "session", sessionId: "cursor-session" }, { kind: "done" }]));
+        const started = await spawnChild(services, parent, { prompt: "ws3", provider: "cursor", model: "composer-2.5" });
+        if (!started.ok) {
+            throw new Error(started.message);
+        }
+        await settled(started.id);
+        expect(await sendToChild(services, parent, started.id, "Carry on.", { provider: "claude", model: "claude-sonnet-4-6" })).toMatchObject({
+            ok: false,
+            message: expect.stringContaining("lifetime budget"),
+        });
+        over.subagentsPerTurn = 5;
+        expect(await sendToChild(services, parent, started.id, "Carry on.")).toMatchObject({ ok: true });
+        await settled(started.id);
+        expect(turns[1]).toMatchObject({ prompt: "Carry on.", agent: "cursor", model: "composer-2.5", sessionId: "cursor-session" });
     });
 
     it("is refused mid-turn, since a turn stays where it runs", async () => {

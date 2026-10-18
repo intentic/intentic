@@ -155,9 +155,14 @@ describe("a spent allowance", () => {
         expect(offered.frame).toMatchObject({ resetsAt: far, held: { ran: true } });
         expect(offered.frame.autoResume).toBeUndefined();
         expect(offered.frame.nextAt).toBeUndefined();
+        // The hold carries no reopen instant either: the resume pass fires a limit hold at its `reopensAt` under `resend`,
+        // whatever the frame said, so one kept there re-ran the child by itself at the far reset.
+        expect(offered.held).toMatchObject({ reason: "limit" });
+        expect(offered.held?.reopensAt).toBeUndefined();
         const near = Math.ceil(NOW / 1000) + 600;
         const booked = await classifyFailure(limit, context({ child: true, limitReset: near }), answering({ way, policy: "resend" }));
         expect(booked.frame).toMatchObject({ autoResume: "scheduled", nextAt: near });
+        expect(booked.held).toMatchObject({ reason: "limit", reopensAt: near });
     });
 
     // 2026-10-17: Codex's team credit ran out while its weekly pool read 57%; no reading may answer that refusal.

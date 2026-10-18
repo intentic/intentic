@@ -19,9 +19,11 @@ const UNIT_SECONDS = new Map([
     ["s", 1],
 ]);
 
-// "166h40m39s", "2h 5m", "3 days", "45 minutes", "1d 2h": a run of counted units after "reset(s) in".
+// "166h40m39s", "2h 5m", "3 days", "45 minutes", "1d 2h": a run of counted units after "reset(s) in". A unit ends where
+// its word does: unbounded, "resets in 1 month" read as one minute and booked a re-run sixty seconds out.
 // allow(dependency-text): the vendors' own wording (Google's "Resets in 166h40m39s.", Anthropic's "resets in 3h").
-const RESETS_IN = /\bresets?\s+in\s+((?:\d+(?:\.\d+)?\s*(?:d(?:ays?)?|h(?:(?:ou)?rs?)?|m(?:in(?:ute)?s?)?|s(?:ec(?:ond)?s?)?)[\s,]*(?:and\s+)?)+)/i;
+const RESETS_IN =
+    /\bresets?\s+in\s+((?:\d+(?:\.\d+)?\s*(?:d(?:ays?)?|h(?:(?:ou)?rs?)?|m(?:in(?:ute)?s?)?|s(?:ec(?:ond)?s?)?)(?![a-z])[\s,]*(?:and\s+)?)+)/i;
 const COUNTED = /(\d+(?:\.\d+)?)\s*([dhms])/gi;
 
 // "try again at 5:46 PM", "try again at 17:46", "resets at 9am": a time of day, on the clock of the machine the

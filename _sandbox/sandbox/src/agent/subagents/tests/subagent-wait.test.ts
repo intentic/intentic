@@ -106,3 +106,21 @@ test("answer hands the child its picks keyed by each question's text", async () 
     expect(answered).toEqual([{ childId: "kid-1", answers: { "Which store?": ["Postgres"], "Which regions?": ["eu", "us"] } }]);
     expect(reply.result?.content?.map((block) => JSON.parse(block.text) as unknown)).toEqual([{ ok: true, note: "Answered." }]);
 });
+
+// A provider with no model went out as a plain send, whose "Sent" the parent read as the move having happened.
+test("send refuses half a move and sends nothing, and passes a whole one on", async () => {
+    const sent: { childId: string; rehome: unknown }[] = [];
+    const children = unstubbed<ChildSupervisor>("children", {
+        send: async (childId, _message, rehome) => {
+            sent.push({ childId, rehome });
+            return { ok: true, note: "Sent." };
+        },
+    });
+    const call = await connect(serverWith(children));
+    const half = await call("tools/call", { name: "send", arguments: { child: "kid-1", message: "Carry on.", provider: "claude" } });
+    // SAFETY: the tool answers one JSON text block; `unknown` only narrows JSON.parse's `any` for toMatchObject to compare.
+    expect(half.result?.content?.map((block) => JSON.parse(block.text) as unknown)).toMatchObject([{ ok: false, message: expect.stringContaining("Nothing was sent") }]);
+    expect(sent).toEqual([]);
+    await call("tools/call", { name: "send", arguments: { child: "kid-1", message: "Carry on.", provider: "claude", model: "claude-sonnet-4-6" } });
+    expect(sent).toEqual([{ childId: "kid-1", rehome: { provider: "claude", model: "claude-sonnet-4-6" } }]);
+});

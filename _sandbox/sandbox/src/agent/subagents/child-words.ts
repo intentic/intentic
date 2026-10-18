@@ -140,6 +140,13 @@ export const CANCEL_NOTES = {
     paused: "Cancelled: the sandbox will not run it again by itself, and it ends as killed. Send it a message to carry on from where it stopped.",
 } as const satisfies Record<string, string>;
 
+// A send naming only part of a move (a provider with no model, an effort with no provider): sent unmoved, its parent read
+// the plain "Sent" as the move having happened.
+export const HALF_A_MOVE: ChildActionResult = {
+    ok: false,
+    message: "Nothing was sent: to move it, name both a provider and a model (a loop or an effort only beside them), or neither to send it where it is.",
+};
+
 // A linked task runs on the other sandbox's own providers, which this one does not choose.
 export const LINKED_REHOME: ChildActionResult = {
     ok: false,

@@ -8,7 +8,8 @@ import { soleLiveConversation } from "../../conversations/actor/conversation-hol
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
 import { childLandingWords } from "../../conversations/land/child-lands.js";
-import { childReportOf, pendingQuestionOf, supervisorFor } from "./children.js";
+import { type ChildActionResult, type ChildSupervisor, childReportOf, pendingQuestionOf, supervisorFor } from "./children.js";
+import { HALF_A_MOVE } from "./child-words.js";
 import { spawnCatalogText, spawnableProviders } from "./spawn-catalog.js";
 import { markSpentByHand, unmarkSpentByHand } from "../../usage/observed-accounts.js";
 import { opt } from "../../opt.js";
@@ -60,6 +61,18 @@ const SendBodySchema = z.object({
 // The move a send body names, where it names both halves of one.
 const rehomeOfBody = (body: z.infer<typeof SendBodySchema>): { readonly provider: AgentProvider; readonly model: string } | undefined =>
     body.provider === undefined || body.model === undefined ? undefined : { provider: body.provider, model: body.model };
+
+// What a send body gets from the supervisor. Half a move goes nowhere rather than out unmoved, which would read as moved.
+const sendOf = async (
+    supervisor: ChildSupervisor,
+    body: z.infer<typeof SendBodySchema>,
+): Promise<{ readonly result: ChildActionResult; readonly status: 200 | 400 | 409 }> => {
+    if ((body.provider === undefined) !== (body.model === undefined)) {
+        return { result: HALF_A_MOVE, status: 400 };
+    }
+    const result = await supervisor.send(body.child, body.message, rehomeOfBody(body));
+    return { result, status: result.ok ? 200 : 409 };
+};
 
 // One of `answers` (keyed by question text) or `text` (a one-question card's shorthand).
 const AnswerBodySchema = z
@@ -207,8 +220,8 @@ const createChildrenRoutes = (services: Services) => ({
         if (!parsed.success) {
             return c.json({ ok: false, message: 'Pass JSON like {"child": "sub-…", "message": "…"}.' }, 400);
         }
-        const result = await supervisor.send(parsed.data.child, parsed.data.message, rehomeOfBody(parsed.data));
-        return c.json(result, result.ok ? 200 : 409);
+        const { result, status } = await sendOf(supervisor, parsed.data);
+        return c.json(result, status);
     },
     /** POST /children/cancel — stop a child's running turn, its pending start, or the re-run the sandbox booked for it. */
     cancel: async (c: Context<AppEnv>): Promise<Response> => {

@@ -5,7 +5,7 @@ import type { LimitPolicy } from "@intentic/sandbox-contract/schemas/turn-break"
 import { canonicalHarness, loopLabel, loopOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import { opt } from "../../opt.js";
-import type { ChildRecord, ChildRehome, ChildSpawnSpec, ChildTurnTally } from "./children.js";
+import type { ChildParent, ChildRecord, ChildRehome, ChildSpawnSpec, ChildTurnTally, PendingChildCard } from "./children.js";
 
 // What a spawned child runs as, read off its spec alone: its routing and profile, a move's spec, and which of its
 // endings move it on or count against its provider. children.ts holds the records these are asked of.
@@ -74,7 +74,7 @@ export const childRouting = (spec: ChildSpawnSpec): ChildRoute => ({
 // Every child turn's profile: its own worktree, so parallel children and the parent never edit the same files, and
 // nobody at a composer, which also floors the persona so it speaks for no outside account. No `runRole`: the parent's
 // own provider and model pick decides, not a settings-row default.
-export const childProfile = (spec: ChildSpawnSpec): TurnProfile => {
+const childProfile = (spec: ChildSpawnSpec): TurnProfile => {
     const { provider, harness, model } = childRouting(spec);
     const profile: TurnProfile = { agent: provider, harness, model, isolated: true, unattended: true };
     // Each knob only where one was named: an absent one is the model's own default.
@@ -172,4 +172,66 @@ export const rehomedSpec = (spec: ChildSpawnSpec, to: ChildRehome, fallbacks?: r
         next.fallbacks = fallbacks;
     }
     return next;
+};
+
+/** Points a settled or paused child at another provider for its next turn. Its session stays with the provider that
+ *  minted it, so the next turn opens a fresh one seeded from the child's own record (routing.ts sessionFor) on top of the
+ *  same worktree. Answers how to put it back, for a move whose turn could not be started. */
+export const rehomeChild = (kid: ChildRecord, spec: ChildSpawnSpec): (() => void) => {
+    const before = { spec: kid.spec, profile: kid.profile, sessionId: kid.sessionId };
+    const { provider, harness, model } = childRouting(spec);
+    kid.spec = { ...spec, provider, harness, model };
+    kid.profile = childProfile(spec);
+    kid.sessionId = undefined;
+    return () => {
+        kid.spec = before.spec;
+        kid.profile = before.profile;
+        kid.sessionId = before.sessionId;
+    };
+};
+
+// What the child is parked on. `wait` gets only the summary; pendingQuestionOf exposes the full card so a parent can
+// answer, not just report.
+export const pendingOf = (event: AgentEvent): { readonly card: PendingChildCard; readonly summary: string } | undefined => {
+    if (event.kind === "question") {
+        return {
+            card: { kind: "question", requestId: event.requestId, questions: event.questions },
+            summary: event.questions[0]?.question ?? "Waiting on a question.",
+        };
+    }
+    if (event.kind === "permission") {
+        return {
+            card: { kind: "permission", requestId: event.requestId },
+            summary: event.title ?? `Waiting on permission for ${event.toolName}.`,
+        };
+    }
+    if (event.kind === "plan") {
+        return { card: { kind: "plan", requestId: event.requestId }, summary: "Waiting for its plan to be approved." };
+    }
+    return undefined;
+};
+
+// A child's record, as it is filed before its first turn: resolved routing rather than the raw spec, so a follow-up
+// reaches the same provider and model without drift.
+export const childRecordOf = (parent: ChildParent, spec: ChildSpawnSpec, depth: number, held?: ChildRecord["held"]): ChildRecord => {
+    const { provider, harness, model } = childRouting(spec);
+    return {
+        parent: parent.conversationId,
+        spec: { ...spec, provider, harness, model },
+        profile: childProfile(spec),
+        depth,
+        cwd: parent.cwd,
+        sessionId: undefined,
+        running: true,
+        startedAt: Date.now(),
+        pending: undefined,
+        queued: false,
+        behind: false,
+        held,
+        oomKillsAtStart: undefined,
+        report: undefined,
+        cancelled: false,
+        movingOn: undefined,
+        paused: undefined,
+    };
 };

@@ -59,7 +59,7 @@ import { opt } from "../../opt.js";
 import { credentialsTravel, placeFanOut } from "../../runners/runner-scheduler.js";
 import { freshRunnerSummaries } from "../../runners/runner-peer.js";
 import type { DelegateAsk, LinkListing } from "../../links/linked-children.js";
-import { childOpening, childProfile, childRouting, movesOn, onceOnly, providerRefusal, rehomedSpec, repointedNote, sameModel, taskLine, withRun } from "./child-spec.js";
+import { childOpening, childRecordOf, childRouting, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, withRun } from "./child-spec.js";
 import { ALWAYS_LABEL, BEHIND_MAX_MS, CANCELLED, CANCEL_NOTES, LINKED_MERGE, LINKED_REHOME, MOVE_BUTTON, MOVE_TITLE, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, laneHeldNote, movedWords, noRerun, nowhereToAsk, questionWords, quoted, startedWhy, unansweredWords } from "./child-words.js";
 import { elsewhereFor, namedPaths, spentAsked } from "./child-listing.js";
 
@@ -242,27 +242,6 @@ export const resetChildrenForTest = (actors: Actors): void => {
 
 // Display label for the roster row; a provider absent from PROVIDERS shows as its raw id.
 const labelOf = (provider: AgentProvider): string => PROVIDERS.find((entry) => entry.value === provider)?.label ?? provider;
-
-// What the child is parked on. `wait` gets only the summary; pendingQuestionOf exposes the full card so a parent can
-// answer, not just report.
-const pendingOf = (event: AgentEvent): { readonly card: PendingChildCard; readonly summary: string } | undefined => {
-    if (event.kind === "question") {
-        return {
-            card: { kind: "question", requestId: event.requestId, questions: event.questions },
-            summary: event.questions[0]?.question ?? "Waiting on a question.",
-        };
-    }
-    if (event.kind === "permission") {
-        return {
-            card: { kind: "permission", requestId: event.requestId },
-            summary: event.title ?? `Waiting on permission for ${event.toolName}.`,
-        };
-    }
-    if (event.kind === "plan") {
-        return { card: { kind: "plan", requestId: event.requestId }, summary: "Waiting for its plan to be approved." };
-    }
-    return undefined;
-};
 
 /**
  * Full question a blocked child is parked on. Undefined if it is parked on a consent hold (the owner's, never the
@@ -626,8 +605,7 @@ const moveOnward = async (services: Services, childId: string, parent: string, k
             continue;
         }
         giveSeatBack();
-        rehomeChild(services, childId, kid, target);
-        const sent = await followUp(services, { conversationId: parent, cwd: kid.cwd }, kid, childId, carryOnWords(from, kid.spec, failure));
+        const sent = await moveAndFollow(services, { conversationId: parent, cwd: kid.cwd }, { kid, childId, to: target, message: carryOnWords(from, target, failure) });
         if (sent.ok) {
             void sayToParent(
                 services,
@@ -636,8 +614,6 @@ const moveOnward = async (services: Services, childId: string, parent: string, k
             );
             return true;
         }
-        kid.spec = from;
-        kid.profile = childProfile(from);
         return false;
     }
     return false;
@@ -1081,31 +1057,6 @@ const childPlacement = async (
               },
           ).runner;
 
-// A child's record, as it is filed before its first turn: resolved routing rather than the raw spec, so a follow-up
-// reaches the same provider and model without drift.
-const childRecordOf = (parent: ChildParent, spec: ChildSpawnSpec, depth: number, held?: ChildRecord["held"]): ChildRecord => {
-    const { provider, harness, model } = childRouting(spec);
-    return {
-        parent: parent.conversationId,
-        spec: { ...spec, provider, harness, model },
-        profile: childProfile(spec),
-        depth,
-        cwd: parent.cwd,
-        sessionId: undefined,
-        running: true,
-        startedAt: Date.now(),
-        pending: undefined,
-        queued: false,
-        behind: false,
-        held,
-        oomKillsAtStart: undefined,
-        report: undefined,
-        cancelled: false,
-        movingOn: undefined,
-        paused: undefined,
-    };
-};
-
 // A start the gate let through, or held until the owner answers: what was asked, how deep it goes, and the id it runs as.
 interface ChildStart {
     readonly asked: ChildSpawnSpec;
@@ -1146,15 +1097,20 @@ const holdOnLane = (services: Services, parent: ChildParent, start: GovernedStar
         start.seat.release();
         await abandonChildStart(services, parent.conversationId, start.id, why);
     };
+    // Cancelled once off its lane (cancelRecord): ends killed, and its parent, answered already, hears nothing more.
+    const cancelled = (): boolean => services.conversations.holdings(CHILDREN).get(start.id)?.cancelled === true;
     FAN_OUT.hold({
         childId: start.id,
         lane,
         // Asked of the records again first: the sibling it waited on may have filed the refusal that makes it pointless.
         start: async () => {
             try {
-                const spent = await spentAsked(services, start.spec);
+                const spent = (await spentAsked(services, start.spec)) ?? (cancelled() ? NOT_STARTED.cancelled : undefined);
                 const started = spent === undefined ? await startChild(services, parent, start) : { ok: false as const, message: spent };
-                if (!started.ok) {
+                if (!started.ok && cancelled()) {
+                    start.seat.release();
+                    endUnstarted(services, start.id);
+                } else if (!started.ok) {
                     await giveUp(`Not started, and nothing spent on it: ${started.message}`);
                 }
                 return started.ok;
@@ -1193,6 +1149,10 @@ const startChild = async (services: Services, parent: ChildParent, start: Govern
     try {
         composeRuntimeFloor(parent.conversationId, provider, capabilitiesOf(provider, harness));
         const placement = await childPlacement(services, spec, provider, harness);
+        // A held start its parent cancelled while this was placing it: the fresh record below would wipe the cancel.
+        if (start.seat !== undefined && services.conversations.holdings(CHILDREN).get(id)?.cancelled === true) {
+            return { ok: false, message: NOT_STARTED.cancelled };
+        }
         const record = childRecordOf(parent, spec, depth);
         const turn: TurnInput & { conversationId: string } = {
             prompt: spec.prompt,
@@ -1233,6 +1193,12 @@ const holdChildStart = (services: Services, parent: ChildParent, start: ChildSta
 
 // A held start that will not run: its waiting row ends failed with why, and a parent in its turn is told, unless its wait
 // already took the ending.
+// A start its parent cancelled before it ran: off the records, its row killed as the cancel's own ending.
+const endUnstarted = (services: Pick<ChildCancelDeps, "conversations">, id: string): void => {
+    services.conversations.holdings(CHILDREN).drop(id);
+    settleSpawnedChild(services.conversations, id, { status: "killed", report: "", error: CANCELLED });
+};
+
 const abandonChildStart = async (services: Services, parent: string, id: string, message: string): Promise<void> => {
     services.conversations.holdings(CHILDREN).drop(id);
     settleSpawnedChild(services.conversations, id, { status: "failed", report: "", error: message });
@@ -1382,21 +1348,31 @@ const unmovable = (kid: ChildRecord): string | undefined =>
         ? "It is mid-turn: a child moves between turns only. Cancel it (its work stays in its worktree), then send again naming the provider and model."
         : notYet(kid);
 
-// Moves a settled or paused child for its next turn: a re-run booked where it was is dropped, and its session stays
-// with the provider that minted it, so the next turn opens a fresh one seeded from the child's own record (routing.ts
-// sessionFor) on top of the same worktree.
-const rehomeChild = (services: Pick<Services, "conversations">, childId: string, kid: ChildRecord, spec: ChildSpawnSpec): void => {
-    if (kid.paused !== undefined) {
-        endPause(kid);
-        const held = services.conversations.state(childId)?.resume.held;
-        if (held !== undefined && !held.fired) {
-            services.conversations.send(childId, { kind: "resume-dropped" });
-        }
+/* Moves a child and starts its turn there. One whose turn cannot start (the parent's budgets, a throw) is put back whole:
+   left half-moved, its next plain send ran on the new provider with its session forgotten, and the re-run booked where
+   it was had already been dropped. That is dropped only once the moved turn is under way. */
+const moveAndFollow = async (
+    services: Services,
+    parent: ChildParent,
+    moving: { readonly kid: ChildRecord; readonly childId: string; readonly to: ChildSpawnSpec; readonly message: string },
+): Promise<ChildActionResult> => {
+    const { kid, childId, to, message } = moving;
+    const paused = kid.paused !== undefined;
+    const undo = rehomeChild(kid, to);
+    let sent: ChildActionResult;
+    try {
+        sent = await followUp(services, parent, kid, childId, message);
+    } catch (error) {
+        undo();
+        throw error;
     }
-    const { provider, harness, model } = childRouting(spec);
-    kid.spec = { ...spec, provider, harness, model };
-    kid.profile = childProfile(spec);
-    kid.sessionId = undefined;
+    const held = paused && sent.ok ? services.conversations.state(childId)?.resume.held : undefined;
+    if (!sent.ok) {
+        undo();
+    } else if (held !== undefined && !held.fired) {
+        services.conversations.send(childId, { kind: "resume-dropped" });
+    }
+    return sent;
 };
 
 // A message the gate let through: steered into the child's live turn, else a follow-up turn of its own, on `target` where
@@ -1416,8 +1392,7 @@ const deliverToChild = async (
     }
     const from = kid.spec;
     if (target !== undefined) {
-        rehomeChild(services, childId, kid, target);
-        const sent = await followUp(services, parent, kid, childId, message);
+        const sent = await moveAndFollow(services, parent, { kid, childId, to: target, message });
         return sent.ok ? { ok: true, note: `${movedWords(from, kid.spec)} ${sent.note ?? ""}`.trim() } : sent;
     }
     composeRuntimeFloor(parent.conversationId, kid.spec.provider, capabilitiesOf(kid.spec.provider, childRouting(kid.spec).harness));
@@ -1647,10 +1622,13 @@ export const cancelChild = async (services: ChildCancelDeps, parent: ChildParent
 
 // The cancel of one child this daemon supervises, whoever asked for it: its parent, or the end of its family.
 const cancelRecord = async (services: ChildCancelDeps, childId: string, kid: ChildRecord): Promise<ChildActionResult> => {
-    // Held by the governor, not by the owner: the parent may take it back, and it never starts.
-    if (kid.held === "lane" && FAN_OUT.withdraw(childId)) {
-        services.conversations.holdings(CHILDREN).drop(childId);
-        settleSpawnedChild(services.conversations, childId, { status: "killed", report: "", error: CANCELLED });
+    // Held by the governor, not by the owner: the parent may take it back, and it never starts. One already off its lane
+    // is being started (holdOnLane), which sees the cancel; refused as "on the owner's card", it started anyway.
+    if (kid.held === "lane") {
+        if (FAN_OUT.withdraw(childId)) {
+            endUnstarted(services, childId);
+        }
+        kid.cancelled = true;
         return { ok: true, note: CANCEL_NOTES.waiting };
     }
     if (kid.held !== undefined) {
