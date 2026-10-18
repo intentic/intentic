@@ -52,6 +52,7 @@ test("refuses a conversation it does not know, and one whose turn is running", a
 test("asked to run, a held turn runs again at once on the account named, carried when asked", async () => {
     const pressed: unknown[] = [];
     const reopened: string[] = [];
+    const sent: unknown[] = [];
     const deps = {
         agents: unstubbed<Services["agents"]>("agents", {
             entry: () => conversationEntry({ id: ID }),
@@ -59,6 +60,10 @@ test("asked to run, a held turn runs again at once on the account named, carried
         }),
         conversations: unstubbed<Services["conversations"]>("conversations", {
             state: () => ({ resume: { held: { input: { conversationId: ID, prompt: "go", agent: "claude", harness: "native", account: "acct-a" }, reason: "limit", ran: true } } }) as never,
+            send: (_id, event) => {
+                sent.push(event);
+                return { settled: Promise.resolve(), reply: undefined } as never;
+            },
         }),
         turns: unstubbed<Services["turns"]>("turns", {
             resume: async (_id, routing) => {
@@ -74,6 +79,35 @@ test("asked to run, a held turn runs again at once on the account named, carried
     // A person's press reopens a conversation archived since the turn was held, at this door: the engine refuses every
     // archived one.
     expect(reopened).toEqual([ID]);
+    // What their words wait with goes on the account the press named, too.
+    expect(sent).toEqual([{ kind: "queue-rerouted", routing: { agent: "claude", harness: "native", account: "acct-b" } }]);
+});
+
+// Everything a person's words wait with follows the pick: a message the door refused (an expired account), and one booked
+// for later. Left on the account they were sent with, a memory release or a booking's time sent them on the account the
+// person had just moved off (2026-10-17). Each keeps its own model, and nothing goes out: a pick is never a press.
+test("a pick re-points the words that wait, held and booked, and sends none of them", async () => {
+    const deps = services();
+    await ranOnce(deps);
+    const turn = (prompt: string) => ({ conversationId: ID, prompt, agent: "claude" as const, harness: "native" as const, account: "acct-a", model: "opus" });
+    deps.conversations.send(ID, { kind: "queue-returned", items: [{ id: "held", voice: "person", queuedAt: T0, turn: turn("refused at the door") }] }, T0);
+    deps.conversations.send(ID, { kind: "queue-scheduled", item: { id: "later", voice: "person", queuedAt: T0, turn: turn("at five") }, booking: { until: T0 + 3_600_000 } }, T0);
+    deps.conversations.send(ID, { kind: "queue-joined", item: { id: "wake", voice: "sandbox", queuedAt: T0, turn: turn("a watch fired") } }, T0);
+    expect(await switchAccount(deps, { conversationId: ID, account: "acct-b" })).toEqual({ kind: "moved" });
+    const queue = deps.conversations.queued(ID);
+    expect(queue.items.map((item) => [item.id, item.turn.account, item.turn.model])).toEqual([
+        ["held", "acct-b", "opus"],
+        ["later", "acct-b", "opus"],
+        // The sandbox's own words take the conversation's routing when they go (onCurrentRouting), never their own.
+        ["wake", "acct-a", "opus"],
+    ]);
+    // Still held and still booked: the pick let nothing go.
+    expect(queue.paused).toBe("refused");
+    expect(queue.items.find((item) => item.id === "later")?.until).toBe(T0 + 3_600_000);
+    // A second pick of the same account changes nothing, and writes nothing.
+    const revision = queue.revision;
+    await switchAccount(deps, { conversationId: ID, account: "acct-b" });
+    expect(deps.conversations.queued(ID).revision).toBe(revision);
 });
 
 // A pick in the model picker moves the conversation and nothing else: a turn held by a limit, a stop or a memory
@@ -135,6 +169,7 @@ test("without run, a held turn stays held, and its booking moves to the picked a
 // An account with room has nothing to wait for: the booking is due now (an armed resend goes on the next pass, a
 // `wait` answer still waits for a press), and the card states no clock at all.
 test("a pick onto an account with room clears the wait rather than keeping the refused account's", async () => {
+    // SAFETY: the usage reading is read only for this account's windows, which the literal names.
     const { deps, moved, sent } = heldOnPick({ "acct-b": { windows: [window(40, 1_700_005_000)] } as never });
     await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0);
     expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: false, reopensAt: Math.ceil(T0 / 1000) });

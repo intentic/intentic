@@ -2891,7 +2891,11 @@
             "sendNowTimeNote": "Wyjdzie teraz zamiast o swojej porze.",
             "sendAt": "Wyślij o {when}",
             "sendIn": "Wyślij za {when}",
-            "sendAtTitle": "Wyślij, gdy limit się odnowi"
+            "sendAtTitle": "Wyślij, gdy limit się odnowi",
+            "continuesAtClock": "wznowi {clock}, za {wait}",
+            "continuesIn": "wznowi za {wait}",
+            "continuesShortly": "wznowi za chwilę",
+            "takeBack": "Cofnij"
         },
         "sandboxNotice": {
             "compacted": "Kontekst został skrócony, żeby zwolnić miejsce.",
@@ -3311,7 +3315,8 @@
             "goesWithHeldTurn": "Wyjdzie razem ze wstrzymaną turą, gdy limit się odnowi · {when}",
             "remove": "Usuń",
             "removeLabel": "Usuń oczekującą wiadomość",
-            "sendNow": "Wyślij teraz"
+            "sendNow": "Wyślij teraz",
+            "continuation": "Kontynuuj od miejsca, w którym zatrzymała się ostatnia tura"
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Twój agent na Ciebie czeka",

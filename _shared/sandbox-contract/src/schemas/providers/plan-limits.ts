@@ -484,6 +484,35 @@ export const QueueScheduleSchema = z
         message: "a conversation cannot wait for its own work to land",
     });
 export type QueueSchedule = z.infer<typeof QueueScheduleSchema>;
+// Books the conversation to carry on from where its last turn stopped, at an instant or once another conversation's work
+// lands: a Continue (`agent.run` with `continues`) that waits in the queue, where every window draws it as scheduled,
+// rather than words. What a spent allowance's "Continue at 05:00" books, where it once booked the word "Continue".
+export const QueueContinueSchema = z
+    .object({
+        conversationId: z.string().min(1).describe("Which conversation carries on."),
+        sendAt: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Carry on at this instant (epoch milliseconds). At most a month ahead; an instant already past carries on now."),
+        sendAfter: ConversationIdSchema.optional().describe("Carry on once that conversation has finished and all of its work has landed, instead."),
+        routing: ResumeRoutingSchema.optional().describe(
+            "Who serves the turn it starts. Leave it out to carry on where the conversation runs when it goes.",
+        ),
+        messageId: z
+            .string()
+            .min(1)
+            .optional()
+            .describe("Names the booking, so the same press sent twice books it once."),
+    })
+    .refine((input) => (input.sendAt === undefined) !== (input.sendAfter === undefined), {
+        message: "name exactly one of sendAt and sendAfter",
+    })
+    .refine((input) => input.sendAfter !== input.conversationId, {
+        message: "a conversation cannot wait for its own work to land",
+    });
+export type QueueContinue = z.infer<typeof QueueContinueSchema>;
 // Moves a conversation to another account of the provider it runs on: the one command that changes who pays, so the
 // account a conversation runs on is always the daemon's record and never a window's guess.
 export const SwitchAccountSchema = z.object({

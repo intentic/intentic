@@ -38,6 +38,18 @@ describe(`a queue that books each message on its own`, () => {
         expect(bookedGroups(split).map(({ ids }) => ids)).toEqual([[`a`], [`b`]]);
     });
 
+    // A Continue booked for later carries no words: it never goes with words booked for the same moment, so it is a
+    // group of its own, which its line draws without a bubble.
+    it(`keeps a continuation in a group of its own, even beside words booked for the same moment`, () => {
+        const continuation: QueuedMessage = { ...message(`go-on`, { until: 5_000 }), text: ``, continues: true };
+        const booked = { ...queue, items: [message(`a`, { until: 5_000 }), continuation, message(`b`, { until: 5_000 })] };
+        expect(bookedGroups(booked).map(({ ids, continues }) => ({ ids, continues }))).toEqual([
+            { ids: [`a`], continues: false },
+            { ids: [`go-on`], continues: true },
+            { ids: [`b`], continues: false },
+        ]);
+    });
+
     it(`reads its queue-level scheduled as the soonest booking, which holds nothing`, () => {
         const shadow: ConversationQueue = { items: [message(`a`, { until: 5_000 }), message(`now`)], revision: 2, paused: `scheduled`, until: 5_000 };
         expect(holdOfQueue(shadow)).toBeUndefined();

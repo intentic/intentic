@@ -213,11 +213,13 @@ describe(`a scheduled send`, () => {
     });
 
     // A turn that stopped short on a spent account has no appointment of its own: the bare press books its continuation
-    // for the reopen, where it waits drawn as scheduled, and sets the limit answer for a reopen named too early.
+    // for the reopen, where it waits drawn as scheduled, and sets the limit answer for a reopen named too early. A
+    // continuation, never the word "Continue" as the reader's message (2026-10-18).
     it(`books a stopped turn's continuation for the reopen on an empty press`, () => {
         const reopens = inHalfAnHour();
         const { chat, host, say, send } = composerOf(reopens);
         const schedule = jest.spyOn(chat.turn, `schedule`).mockResolvedValue(undefined);
+        const scheduleContinue = jest.spyOn(chat.turn, `scheduleContinue`).mockResolvedValue(true);
         const continued = jest.spyOn(chat.turn, `continueTurn`).mockResolvedValue(undefined);
         chat.pickUp.value = { reason: `stopped`, held: { ran: true } };
 
@@ -226,7 +228,8 @@ describe(`a scheduled send`, () => {
         expect(send.sendHint.value).toMatchObject({ title: `Continue at reset` });
         send.submit();
 
-        expect(schedule.mock.calls).toEqual([[`Continue`, { sendAt: reopens * 1_000 }]]);
+        expect(scheduleContinue.mock.calls).toEqual([[{ sendAt: reopens * 1_000 }]]);
+        expect(schedule).not.toHaveBeenCalled();
         expect(host.armLimitResend).toHaveBeenCalledTimes(1);
         expect(continued).not.toHaveBeenCalled();
         expect(say).not.toHaveBeenCalled();

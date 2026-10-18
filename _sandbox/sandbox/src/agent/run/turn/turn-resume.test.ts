@@ -205,3 +205,89 @@ describe("a spent allowance's hold taken at the door", () => {
         expect(rerun?.resume).toBe("refused");
     });
 });
+
+/* A person's words the pass would let go by itself (a memory hold once room comes back, a booking whose time came) go
+   onto the account they name; where the records call it spent with a reopening ahead, they are booked for that reopening
+   instead of sent into a refusal (allowance-gate.ts). On 2026-10-17 a held message went out twice into refusals before
+   anyone could book it, the second time turning the person's words into a held turn re-run hours later. */
+describe("the pass books words for the reopen rather than sending them into a spent allowance", () => {
+    const standings = (): LandStandings => ({ of: () => "idle", causesOf: () => [], refresh: async () => false, forget: () => {} });
+    const PROFILE = { agent: "claude", harness: "native", account: "acct-b" } as const;
+    const NOW = 1_800_000_000_000;
+    const REOPEN = NOW / 1000 + 8 * 60 * 60;
+    const usage = (utilization: number) => ({ windows: [{ kind: "five_hour" as const, utilization, resetsAt: REOPEN, gates: "all" as const }], measuredAt: NOW });
+
+    const conversation = async (utilization: number) => {
+        const { agents, conversations } = createFleet(fleetStoreOver(openConversationsDb(IN_MEMORY)), standings(), noPresences());
+        await agents.init();
+        const started: TurnInput[] = [];
+        const drained: string[] = [];
+        const services = unstubbed<Services>("services", {
+            agents,
+            conversations,
+            logger: pino({ level: "silent" }),
+            sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({ memoryPolicy: "resend" }) }),
+            // Memory has long been free: only the allowance can keep the words back.
+            resources: unstubbed<Services["resources"]>("resources", { roomSince: async () => NOW - 60 * 60_000 }),
+            claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [{ id: "acct-b", label: "acct-b", connectedAt: 0 }] }),
+            claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => ({}) }),
+            accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => ({ "acct-b": usage(utilization) }) }),
+            providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({}) }),
+            turns: unstubbed<Services["turns"]>("turns", {
+                drain: async (id) => void drained.push(id),
+                start: async (turn) => {
+                    started.push(turn);
+                    return { id: "run-x", async *frames() {} };
+                },
+            }),
+        });
+        return { agents, conversations, services, started, drained };
+    };
+    const words = (id: string, prompt: string) => ({ id, voice: "person" as const, queuedAt: NOW, turn: { conversationId: "c1", prompt, ...PROFILE } });
+
+    // Turned away for memory: the entry ends failed on the room code, the words held at the queue's head.
+    const heldForMemory = async (utilization: number) => {
+        const fleet = await conversation(utilization);
+        await beginTurn(fleet.conversations, { conversationId: "c1", isolated: true, prompt: "Fix the images", profile: PROFILE }, NOW - 120_000);
+        fleet.conversations.send("c1", { kind: "frame", frame: { kind: "error", code: "sandbox-memory-low", message: "Sandbox memory is low." } }, NOW - 120_000);
+        await fleet.conversations.send("c1", { kind: "settle" }, NOW - 110_000).settled;
+        fleet.conversations.send("c1", { kind: "queue-returned", items: [words("m-1", "Fix the images")] }, NOW - 110_000);
+        return fleet;
+    };
+
+    it("books memory-held words for the reopen of the spent account they go on, and sends nothing", async () => {
+        const { conversations, services, drained } = await heldForMemory(100);
+        expect(conversations.queued("c1").paused).toBe("refused");
+
+        await createTurnResumeScheduler(services).tick(NOW);
+        expect(drained).toEqual([]);
+        const queue = conversations.queued("c1");
+        expect(queue.items).toMatchObject([{ id: "m-1", until: REOPEN * 1000 }]);
+        // Booked, the hold is answered: the queue reads scheduled, and no memory hold is left for a later pass.
+        expect(queue.paused).toBe("scheduled");
+    });
+
+    it("lets memory-held words go once memory frees where their account has room", async () => {
+        const { conversations, services, drained } = await heldForMemory(40);
+        await createTurnResumeScheduler(services).tick(NOW);
+        expect(drained).toEqual(["c1"]);
+        expect(conversations.queued("c1").items[0]?.until).toBeUndefined();
+    });
+
+    it("books a booking whose time came again for the reopen, while the account still reads spent", async () => {
+        const { conversations, services, drained } = await conversation(100);
+        conversations.send("c1", { kind: "queue-scheduled", item: words("m-at", "Continue the review"), booking: { until: NOW - 1_000 } }, NOW - 60_000);
+
+        await createTurnResumeScheduler(services).tick(NOW);
+        expect(drained).toEqual([]);
+        expect(conversations.queued("c1").items).toMatchObject([{ id: "m-at", until: REOPEN * 1000 }]);
+    });
+
+    it("lets a booking whose time came go when its account has room", async () => {
+        const { conversations, services, drained } = await conversation(40);
+        conversations.send("c1", { kind: "queue-scheduled", item: words("m-at", "Continue the review"), booking: { until: NOW - 1_000 } }, NOW - 60_000);
+
+        await createTurnResumeScheduler(services).tick(NOW);
+        expect(drained).toEqual(["c1"]);
+    });
+});

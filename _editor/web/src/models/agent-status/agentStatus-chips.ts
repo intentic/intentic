@@ -13,6 +13,7 @@ import {
     limitMoveBooked,
     limitScheduled,
     memoryHeld,
+    scheduledSend,
     soonestHold,
     turnInFlight,
     watching,
@@ -55,7 +56,14 @@ const activeLabel = (agent: AgentStanding): string => {
     if (limitScheduled(agent)) {
         return t(`agents.agentCard.resendBooked`);
     }
-    return watching(agent) && !turnInFlight(agent) ? t(`agents.agentStatus.waitingOnCondition`) : t(`agents.agentStatus.stillWorking`);
+    if (turnInFlight(agent)) {
+        return t(`agents.agentStatus.stillWorking`);
+    }
+    if (watching(agent)) {
+        return t(`agents.agentStatus.waitingOnCondition`);
+    }
+    // Nothing running and something booked to go: scheduled, the word its corner wears, never "still working".
+    return scheduledSend(agent) ? t(`chat.chatHeld.scheduled`) : t(`agents.agentStatus.stillWorking`);
 };
 
 // "New" (never opened) vs. "Updated" (opened, then worked on since); the marker lives on the daemon entry so

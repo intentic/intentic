@@ -43,11 +43,15 @@ export const holdOfQueue = (queue: QueueRead | undefined): QueuePause | undefine
 export const unbookedOf = (queue: QueueRead | undefined): readonly QueuedMessage[] =>
     (queue?.items ?? []).filter((item) => bookingOfMessage(queue, item) === undefined);
 
-/** Consecutive booked messages that go together: one booking, the messages it holds, and their ids. */
+/**
+ * Consecutive booked messages that go together: one booking, the messages it holds, and their ids. A continuation (a
+ * Continue booked for later, no words) is a group of its own, `continues`, since it never goes with words.
+ */
 export interface BookedGroup {
     readonly booking: SendLater;
     readonly messages: readonly QueuedMessage[];
     readonly ids: readonly string[];
+    readonly continues: boolean;
 }
 
 const sameLater = (a: SendLater, b: SendLater): boolean =>
@@ -75,21 +79,22 @@ export const withoutMessage = (queue: ConversationQueue | undefined, id: string 
  * one Send now act on. A queue booked as a whole by an older sandbox is one group.
  */
 export const bookedGroups = (queue: QueueRead | undefined): readonly BookedGroup[] => {
-    const groups: { booking: SendLater; messages: QueuedMessage[] }[] = [];
+    const groups: { booking: SendLater; messages: QueuedMessage[]; continues: boolean }[] = [];
     let joining = false;
     for (const item of queue?.items ?? []) {
         const booking = bookingOfMessage(queue, item);
         const last = groups.at(-1);
+        const continues = item.continues === true;
         if (booking === undefined) {
             joining = false;
-        } else if (joining && last !== undefined && sameLater(last.booking, booking)) {
+        } else if (joining && last !== undefined && !continues && !last.continues && sameLater(last.booking, booking)) {
             last.messages.push(item);
         } else {
-            groups.push({ booking, messages: [item] });
+            groups.push({ booking, messages: [item], continues });
             joining = true;
         }
     }
-    return groups.map(({ booking, messages }) => ({ booking, messages, ids: messages.map((message) => message.id) }));
+    return groups.map(({ booking, messages, continues }) => ({ booking, messages, ids: messages.map((message) => message.id), continues }));
 };
 
 /**

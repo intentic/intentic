@@ -7,6 +7,7 @@ import { createApp } from "../../app.js";
 
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { RESUME_NOTES } from "@intentic/sandbox-contract/events/resume";
+import { laneOf } from "@intentic/sandbox-contract/models/agent-lanes";
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { experimentArm } from "@intentic/agent-context/experiments";
@@ -1443,6 +1444,72 @@ test("a Continue that finds a held turn runs it again rather than carrying on pa
     expect(seen[1]).toContain("ship the parser");
     expect(seen[1]).toMatch(/no part of the request below/i);
     expect(seen[1]).not.toContain(RESUME_NOTES.continued);
+});
+
+// "Continue at 05:00" books a continuation, never the word "Continue" as the person's message (2026-10-18): it waits in the
+// queue drawn as scheduled, and when its time comes it is the very Continue a press makes now, running the held turn
+// again as it was. Nothing of the person's joins the record.
+describe("a Continue booked for later", () => {
+    const refusedFirst = (seen: string[]) => {
+        let refuse = true;
+        return services({
+            async *agent(request) {
+                seen.push(request.spec.prompt);
+                yield { kind: "session", sessionId: "s-booked" };
+                yield refuse ? { kind: "error", code: "rate_limit", message: "Claude usage limit reached." } : { kind: "delta", text: "on it" };
+                refuse = false;
+                yield { kind: "done" };
+            },
+        });
+    };
+
+    it("waits in the queue as a continuation, then runs the held turn again as it was, adding no words", async () => {
+        const seen: string[] = [];
+        const daemon = refusedFirst(seen);
+        const client = clientFor(createApp(daemon));
+        await runAgentTurn(client, { prompt: "ship the parser", conversationId: "conv-at" });
+        const at = Date.now() + 60 * 60_000;
+
+        const queue = await client.agent.queueContinue({ conversationId: "conv-at", sendAt: at, messageId: "c-1" });
+        expect(queue.items).toEqual([expect.objectContaining({ id: "c-1", text: "", voice: "person", until: at, continues: true })]);
+        expect(queue.paused).toBe("scheduled");
+        // The same press twice books it once.
+        expect((await client.agent.queueContinue({ conversationId: "conv-at", sendAt: at, messageId: "c-1" })).items).toHaveLength(1);
+        // Booked by the person, it answers the stopped turn: the card leaves Attention.
+        const card = (await client.agents.list()).agents.find((agent) => agent.id === "conv-at");
+        expect(card?.queue?.items?.[0]?.continues).toBe(true);
+        expect(card === undefined ? undefined : laneOf(card)).toBe("active");
+
+        await createTurnResumeScheduler(daemon).tick(at + 1_000);
+        await waitFor(() => expect(seen).toHaveLength(2), SETTLES);
+        // The held turn's own request, re-run behind the sandbox's note: never a "Continue" the person did not write.
+        expect(seen[1]).toContain("ship the parser");
+        expect(seen[1]).toMatch(/no part of the request below/i);
+        expect(seen[1]).not.toMatch(/^Continue$/im);
+        await waitFor(async () => expect((await queueOf(client, "conv-at"))?.items).toEqual([]), SETTLES);
+    });
+
+    it("is dropped when a turn starts before it goes: that turn already carried the conversation on", async () => {
+        const seen: string[] = [];
+        const daemon = refusedFirst(seen);
+        const client = clientFor(createApp(daemon));
+        await runAgentTurn(client, { prompt: "ship the parser", conversationId: "conv-moot" });
+        await client.agent.queueContinue({ conversationId: "conv-moot", sendAt: Date.now() + 60 * 60_000, messageId: "c-moot" });
+
+        await runAgentTurn(client, { prompt: "actually, start with the lexer", conversationId: "conv-moot" });
+        expect((await queueOf(client, "conv-moot"))?.items).toEqual([]);
+    });
+
+    it("carries on now when its time has already come, and refuses a conversation the sandbox does not have", async () => {
+        const seen: string[] = [];
+        const client = clientFor(createApp(refusedFirst(seen)));
+        await runAgentTurn(client, { prompt: "ship the parser", conversationId: "conv-now" });
+
+        expect((await client.agent.queueContinue({ conversationId: "conv-now", sendAt: Date.now() - 1_000 })).items).toEqual([]);
+        await waitFor(() => expect(seen).toHaveLength(2), SETTLES);
+        expect(seen[1]).toContain("ship the parser");
+        expect(await errorCode(client.agent.queueContinue({ conversationId: "nobody", sendAt: Date.now() + 60_000 }))).toBe("NOT_FOUND");
+    });
 });
 
 test("dismissing a question ends the turn where the dismissal lands, and settles the card as finished", async () => {

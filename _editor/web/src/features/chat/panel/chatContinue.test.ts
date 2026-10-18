@@ -433,6 +433,7 @@ it(`continues a turn that stopped short at the spent account's reopen, instead o
     const conversation = stoppedChat();
     conversation.pickUp.value = { reason: `stopped`, held: { ran: true } };
     const schedule = jest.spyOn(conversation.turn, `schedule`).mockResolvedValue(undefined);
+    const scheduleContinue = jest.spyOn(conversation.turn, `scheduleContinue`).mockResolvedValue(true);
     const carry = jest.spyOn(conversation.turn, `continueTurn`).mockResolvedValue(undefined);
     await mountPanel();
 
@@ -445,7 +446,10 @@ it(`continues a turn that stopped short at the spent account's reopen, instead o
     button(`Continue at`)!.click();
     await settle();
 
-    expect(schedule.mock.calls).toEqual([[`Continue`, { sendAt: reopensAt * 1_000 }]]);
+    // A Continue booked for the reopen, which re-runs the held turn then: never the word "Continue" as the reader's
+    // message, which stood in the transcript as words nobody wrote and superseded the held turn (2026-10-17).
+    expect(scheduleContinue.mock.calls).toEqual([[{ sendAt: reopensAt * 1_000 }]]);
+    expect(schedule).not.toHaveBeenCalled();
     // Set for a reopen the provider named too early, as any scheduled send sets it.
     expect(setBreakPolicy).toHaveBeenCalledWith(conversation.conversationId, `limit`, `resend`);
     expect(carry).not.toHaveBeenCalled();
@@ -460,13 +464,15 @@ it(`books the same continuation from Enter on the empty box`, async () => {
     const reopensAt = spentAccount(6 * 3_600_000);
     const conversation = stoppedChat();
     const schedule = jest.spyOn(conversation.turn, `schedule`).mockResolvedValue(undefined);
+    const scheduleContinue = jest.spyOn(conversation.turn, `scheduleContinue`).mockResolvedValue(true);
     const carry = jest.spyOn(conversation.turn, `continueTurn`).mockResolvedValue(undefined);
     await mountPanel();
 
     composer().dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
     await settle();
 
-    expect(schedule.mock.calls).toEqual([[`Continue`, { sendAt: reopensAt * 1_000 }]]);
+    expect(scheduleContinue.mock.calls).toEqual([[{ sendAt: reopensAt * 1_000 }]]);
+    expect(schedule).not.toHaveBeenCalled();
     expect(carry).not.toHaveBeenCalled();
 });
 

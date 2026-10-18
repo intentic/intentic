@@ -232,7 +232,11 @@ const reopenContinuation =
         if (way === `book`) {
             const chat = host.view.conversation.value;
             track(`message_sent`, { agent: chat.selection.provider.value, scheduled: true });
-            void chat.turn.schedule(continuationFor(host.view.messages.value), { sendAt: until });
+            // A Continue that waits as one, so nothing joins the chat as the reader's words; only a sandbox from before
+            // `agent.queueContinue` books the word "Continue" instead.
+            void (supportsRoute(`agent.queueContinue`)
+                ? chat.turn.scheduleContinue({ sendAt: until })
+                : chat.turn.schedule(continuationFor(host.view.messages.value), { sendAt: until }));
         }
         host.pin();
     };

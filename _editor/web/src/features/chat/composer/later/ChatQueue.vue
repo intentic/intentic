@@ -55,8 +55,11 @@ const filesOf = (message: QueuedMessage): string[] =>
 // Editing happens in the composer below, the box the reader already writes in: the press takes the message out of line
 // and puts its words and files there (TurnClient.takenBack), and sending it again queues it afresh. The sandbox's or an
 // agent's words were nobody's here to write: removed. The hover says which, since the glyph alone does not.
+// A continuation (a Continue booked for later, let go behind a running turn) has no words to edit: removed, as the
+// sandbox's are.
+const editable = (message: QueuedMessage): boolean => message.voice === `person` && message.continues !== true;
 const doorTip = (message: QueuedMessage): TooltipValue =>
-    message.voice === `person` ? { title: t(`chat.chatQueue.edit`), note: t(`chat.chatQueue.editNote`) } : t(`chat.chatQueue.remove`);
+    editable(message) ? { title: t(`chat.chatQueue.edit`), note: t(`chat.chatQueue.editNote`) } : t(`chat.chatQueue.remove`);
 
 // On a touch screen a waiting message is swiped aside for the same door: its button was the one way, a 20px target a
 // thumb kept missing while clearing a queue of them one by one (PostHog, 2026-10: bursts of 8 to 16 taps in four
@@ -66,7 +69,7 @@ const swipe = (message: QueuedMessage): SwipeAction | undefined => {
     if (!coarse.value) {
         return undefined;
     }
-    return message.voice === `person`
+    return editable(message)
         ? { label: t(`chat.chatQueue.edit`), icon: `pencil`, tone: `accent` }
         : { label: t(`chat.chatQueue.remove`), icon: `times`, tone: `danger` };
 };
@@ -94,6 +97,7 @@ const swipe = (message: QueuedMessage): SwipeAction | undefined => {
                     />
                     <div class="min-w-0 flex-1">
                         <p v-if="message.text" class="truncate text-2xs text-muted">{{ message.text }}</p>
+                        <p v-else-if="message.continues" class="truncate text-2xs text-muted">{{ t(`chat.chatQueue.continuation`) }}</p>
                         <p v-if="filesOf(message).length > 0" class="truncate text-2xs text-subtle">
                             <Icon name="file" class="text-2xs" />
                             {{ filesOf(message).join(`, `) }}
@@ -105,10 +109,10 @@ const swipe = (message: QueuedMessage): SwipeAction | undefined => {
                     type="button"
                     class="composer-ghost touch-target h-5 w-5 shrink-0"
                     v-tooltip.top="doorTip(message)"
-                    :aria-label="message.voice === `person` ? t(`chat.chatQueue.editLabel`) : t(`chat.chatQueue.removeLabel`)"
+                    :aria-label="editable(message) ? t(`chat.chatQueue.editLabel`) : t(`chat.chatQueue.removeLabel`)"
                     @click="unqueue(message)"
                 >
-                    <Icon :name="message.voice === `person` ? `pencil` : `times`" class="text-2xs" />
+                    <Icon :name="editable(message) ? `pencil` : `times`" class="text-2xs" />
                 </button>
             </div>
         </SwipeRow>

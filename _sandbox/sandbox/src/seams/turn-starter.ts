@@ -10,6 +10,7 @@ import type {
 } from "@intentic/sandbox-contract/schemas/agent";
 import type {
     AgentReply,
+    QueueContinue,
     QueuedMessageRef,
     QueueEdit,
     QueueResume,
@@ -94,6 +95,14 @@ export type Unqueued = QueueChange | { readonly unopened: TurnQueue };
 // (`released`), found nothing waiting or a message it named gone (`missing`), or was asked to wait for a conversation that cannot land (`invalid`).
 export type Rescheduled = "booked" | "released" | "missing" | { readonly invalid: string };
 
+// A Continue booked for later (agent.queueContinue), with who asked, as the middleware verified them.
+export type ContinueAsk = QueueContinue & { readonly speaker?: TurnSpeaker | undefined; readonly actor?: string | undefined };
+
+// What booking a Continue did: booked it, carried on now because its time had already come (`started`), found the
+// conversation unable to take it now (`busy`: a turn already holds it), found no such conversation (`unknown`), or was
+// asked to wait for one that cannot land (`invalid`).
+export type ContinueBooked = "booked" | "started" | "busy" | "unknown" | { readonly invalid: string };
+
 // Words for a conversation from whoever speaks, and the turn they start should they start one.
 export interface Said {
     // The words and who serves their turn, as the sender named them; `messageId` is theirs, or the sandbox names one.
@@ -165,6 +174,9 @@ export interface TurnStarter {
     // conversation's work lands; what that leaves waiting,
     // or why it could not (nothing waits, or the conversation to wait for cannot land anything).
     readonly reschedule: (schedule: QueueSchedule) => Promise<Rescheduled>;
+    // Books the conversation to carry on from where its last turn stopped, at an instant or after another conversation's
+    // land: a continuation in the queue, never words (continuation.ts).
+    readonly continueAt: (ask: ContinueAsk) => Promise<ContinueBooked>;
     // An answer to a card some turn is parked on: `missing` for no such card, `refused` for one addressed elsewhere.
     readonly reply: (reply: AgentReply) => Promise<"settled" | "missing" | { readonly refused: string }>;
     // Hard-cancels the named run, or whatever is live for a caller that cannot name one, and returns once it has

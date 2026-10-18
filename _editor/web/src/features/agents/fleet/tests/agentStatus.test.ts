@@ -1088,6 +1088,32 @@ describe("a conversation with messages booked for later", () => {
         expect(laneOf({ status: `idle`, attention: none, queue: { paused: `stopped` } })).toBe(`finished`);
     });
 
+    // The person's booking is their answer to a turn that ended badly (an expired account, a stop, a crash): the next move
+    // is the sandbox's, at the booking, so the card leaves Attention as a booked resend after a spent allowance does. Only
+    // the ending is answered: an ask still calls the reader, and an ending still unwinding stays where it rests.
+    it("leaves Attention once something is booked after a dead end, and says Scheduled rather than Error", () => {
+        const failed: AgentStanding = { ...timed, status: `error`, failureCode: `claude-not-entitled`, failure: `Your organization has disabled Claude` };
+        expect(blocked(failed)).toBe(false);
+        expect(laneOf(failed)).toBe(`active`);
+        expect(attentionReason(failed)).toBeUndefined();
+        expect(standingChip({ ...failed, unread: false })?.label).toBe(`Scheduled`);
+        expect(unfinishedMark(failed)?.label).toBe(`Scheduled`);
+        expect(laneOf({ ...timed, status: `stopped` })).toBe(`active`);
+        expect(laneOf({ ...timed, status: `interrupted` })).toBe(`active`);
+        // Nothing booked, the same card is the reader's.
+        expect(laneOf({ ...failed, queue: undefined })).toBe(`attention`);
+        expect(laneOf({ ...failed, queue: { paused: `refused` } })).toBe(`attention`);
+        // Words held for memory, re-timed to go later: answered, and the corner stops saying held.
+        const memory: AgentStanding = { status: `error`, attention: none, failureCode: `sandbox-memory-low`, queue: { items: [{ until: at }] } };
+        expect(laneOf(memory)).toBe(`active`);
+        expect(attentionReason(memory)).toBeUndefined();
+        expect(laneOf({ ...memory, queue: { paused: `refused`, items: [{}] } })).toBe(`attention`);
+        // An ask outranks the booking, and so does an ending still unwinding.
+        expect(laneOf({ ...failed, attention: { ...none, question: true } })).toBe(`attention`);
+        expect(laneOf({ ...timed, status: `stopping` })).toBe(`attention`);
+        expect(laneOf({ ...failed, landFailure: { reason: `git refused`, at: NOW } })).toBe(`attention`);
+    });
+
     // One word in the corner, which the title shares a row with; when it goes is that word's hover.
     it("says Scheduled in its corner, and when it goes on hover, ahead of news and behind a call", () => {
         const titleOf = (id: string): string | undefined => (id === `brave-otter` ? `Fix the login bug` : undefined);

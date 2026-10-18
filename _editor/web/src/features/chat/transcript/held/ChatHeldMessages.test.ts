@@ -189,6 +189,29 @@ describe(`a message the sandbox held for low memory`, () => {
         });
     });
 
+    // 2026-10-17: a message held for memory on an account spent until 05:00 offered only Send anyway, which the allowance
+    // could only refuse. Whatever held it, a spent account's reopen ahead makes booking it the solid press, and Send
+    // anyway steps back to a quiet one that keeps its own stakes on hover.
+    it(`books it for a spent account's reopen, Send anyway stepping back to a quiet press`, async () => {
+        const reopensAt = Math.round(Date.now() / 1_000) + 8 * 3_600;
+        const chat = chatHolding({ items: [held()], paused: `refused` });
+        const reschedule = jest.spyOn(chat.turn, `reschedule`).mockResolvedValue(true);
+        const resume = jest.spyOn(chat.turn, `resume`).mockResolvedValue(undefined);
+        const element = mount(chat, {}, undefined, reopensAt);
+        await nextTick();
+
+        expect(statusLine(element)).toBe(`Not sent · Sandbox memory is low`);
+        const later = buttons(element).find((button) => button.textContent?.trim().startsWith(`Send at`) === true);
+        expect(later?.textContent?.trim()).toMatch(/^Send at \S/u);
+        const anyway = pressNamed(element, `Send anyway`)[0]!;
+        expect(tips.get(anyway)).toEqual({ title: `Starts now`, tone: `warning`, note: `Risk: slowdown, killed processes` });
+
+        later!.click();
+        await settled();
+        expect(reschedule.mock.calls).toEqual([[{ sendAt: reopensAt * 1_000 }, [`m1`]]]);
+        expect(resume).not.toHaveBeenCalled();
+    });
+
     it(`offers the raise beside the send only on a hold that named its ceiling`, async () => {
         const named = mount(chatHolding({ items: [held()], paused: `refused` }));
         await nextTick();

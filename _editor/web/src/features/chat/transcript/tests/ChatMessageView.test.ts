@@ -40,6 +40,8 @@ const pane = {
     editing: undefined as ChatMessage | undefined,
     messages: [] as ChatMessage[],
     queued: [] as { readonly id: string; readonly text: string }[],
+    // When the account the conversation is on reopens, in epoch seconds, while it reads spent (ConversationView).
+    spentReopensAt: undefined as number | undefined,
 };
 // Why what waits is held, if it is: a held queue's row is said by the held message's own line instead.
 interface QueueHold {
@@ -50,6 +52,8 @@ const queueHold: QueueHold = { paused: undefined };
 const resume = jest.fn(async () => undefined);
 // The conversation's ask that the sandbox run a turn it kept, which is what a press on a sandbox-kept refusal is.
 const resendKept = jest.fn(async () => undefined);
+// A Continue booked for later (TurnClient.scheduleContinue): what a kept turn's press books on a spent account.
+const scheduleContinue = jest.fn(async () => true);
 const beginEdit = jest.fn();
 // The one path every card's answer takes (CardReplies.reply), read back from the one the pane holds.
 const reply = jest.fn(async () => true);
@@ -202,6 +206,7 @@ jest.mock("../../../../models/conversations/panel/useChat-view", () => {
             providerRetry: ref(undefined),
             resume,
             resendKept,
+            scheduleContinue,
             turnStartedAt: {
                 get value(): number | undefined {
                     return clock.turnStartedAt;
@@ -231,6 +236,7 @@ jest.mock("../../../../models/conversations/panel/useChat-view", () => {
             queuePaused: computed(() => queueHold.paused),
             // No card says anything about the last turn here: the rows under test say it themselves.
             lastFailure: computed(() => undefined),
+            spentReopensAt: computed(() => pane.spentReopensAt),
         }),
         // The question card injects the pane's view by this key; nothing provides it here, so it reads none.
         PANE_VIEW: Symbol.for(`intentic.chat-pane-view`),
@@ -315,6 +321,8 @@ beforeEach(() => {
     queueHold.paused = undefined;
     resume.mockClear();
     resendKept.mockClear();
+    scheduleContinue.mockClear();
+    pane.spentReopensAt = undefined;
     reply.mockClear();
     beginEdit.mockClear();
     resizers.length = 0;
@@ -632,6 +640,7 @@ describe(`ChatMessageView permission card`, () => {
     // Offsets derived from the command string, not hand-counted, so a fixture typo doesn't test itself instead of the
     // card.
     const CREDENTIAL = { start: COMMAND.indexOf(`.env.production`), end: COMMAND.length };
+    // SAFETY: `extra` only overrides fields of the permission card this literal already spells out, which a test names.
     const held = (extra: Record<string, unknown> = {}): ChatMessage =>
         ({
             id: 3,
@@ -1672,6 +1681,23 @@ describe(`a low-memory hold`, () => {
 
         sendAnyway(element)!.click();
         expect(resendKept).toHaveBeenCalledWith({ text: opener.text, attachments: [] });
+    });
+
+    // 2026-10-17: a kept turn on an account spent until 05:00 offered only Send anyway, which the allowance could only
+    // refuse. The solid press books it to run again at the reopen (a Continue booked for later); Send anyway stays, quiet.
+    it(`books a kept turn for the reopen of a spent account, Send anyway stepping back to a quiet press`, () => {
+        const reopensAt = Math.round(Date.now() / 1000) + 8 * 60 * 60;
+        pane.spentReopensAt = reopensAt;
+        const row = kept(`sendAnyway`);
+        pane.messages = [opener, row];
+        const element = mount(row);
+
+        const atReopen = buttons(element).find((button) => button.textContent?.trim().startsWith(`Send at`) === true);
+        expect(atReopen?.textContent?.trim()).toMatch(/^Send at \S/u);
+        expect(sendAnyway(element)?.textContent?.trim()).toBe(`Send anyway`);
+        atReopen!.click();
+        expect(scheduleContinue).toHaveBeenCalledWith({ sendAt: reopensAt * 1000 });
+        expect(resendKept).not.toHaveBeenCalled();
     });
 
     it(`says a kept turn was held, once it is no longer waiting`, () => {

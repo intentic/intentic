@@ -58,6 +58,7 @@ import { createUsageRoutes } from "./usage/usage.routes.js";
 import { createExitRoutes } from "./exit/exit.routes.js";
 import { createVpnRoutes } from "./vpn/vpn.routes.js";
 import { createOffloadRoutes } from "./offload/offload.routes.js";
+import { createAgentContinueRoutes } from "./agent/routes/agent-continue.routes.js";
 import { createWorkspaceRoutes } from "./workspace/workspace.routes.js";
 import { pruneStore } from "./workspace/watch/state-janitor.js";
 
@@ -71,7 +72,7 @@ export const createRouter = (services: Services): SandboxRouter => ({
     accounts: createAccountsRoutes(services),
     activity: createActivityRoutes(services),
     audit: createAuditRoutes(services),
-    agent: createAgentRoutes(services),
+    agent: { ...createAgentRoutes(services), ...createAgentContinueRoutes(services) },
     agents: { ...createAgentsRoutes(services), ...createAttentionRoutes(services) },
     automations: createAutomationsRoutes(services),
     capabilities: createCapabilitiesRoutes(services, probeDockerGpu),

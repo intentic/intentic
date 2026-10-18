@@ -2891,7 +2891,11 @@
             "sendNowTimeNote": "It goes now rather than at its time.",
             "sendAt": "Send at {when}",
             "sendIn": "Send in {when}",
-            "sendAtTitle": "Send when the allowance reopens"
+            "sendAtTitle": "Send when the allowance reopens",
+            "continuesAtClock": "continues {clock}, in {wait}",
+            "continuesIn": "continues in {wait}",
+            "continuesShortly": "continues in a moment",
+            "takeBack": "Take back"
         },
         "sandboxNotice": {
             "compacted": "Context compacted to free up space.",
@@ -3311,7 +3315,8 @@
             "goesWithHeldTurn": "Goes with the held turn when the limit resets · {when}",
             "remove": "Remove",
             "removeLabel": "Remove waiting message",
-            "sendNow": "Send now"
+            "sendNow": "Send now",
+            "continuation": "Continue from where the last turn stopped"
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Your agent is waiting for you",

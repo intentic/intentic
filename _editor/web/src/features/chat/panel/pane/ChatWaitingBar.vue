@@ -5,6 +5,8 @@ import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
 import { retryHydrate } from "../../../../models/conversations/run/useChat-sessions";
 import { useHeldQueue } from "../../transcript/held/heldQueue";
 import { useMemoryAnswer } from "../../transcript/held/memoryAnswer";
+import { useReopenPress } from "../../transcript/held/heldPresses";
+import { useLimitResend } from "./scheduledSend";
 import { memoryShare, sendAnywayTip } from "../../../../models/conversations/transcript/memoryTip";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import { useHeldLineSeen } from "./heldLineSeen";
@@ -97,7 +99,11 @@ const holdKey = computed(() => (held.value && reason.value === `memory` ? `${con
 const lineSeen = useHeldLineSeen(root, holdKey);
 const memoryShown = computed(() => holdKey.value !== undefined && holdKey.value !== leftHeld.value && !lineSeen.value);
 // Lets go only the messages the hold kept, as the line's own press does: a booking beside them stays on its time.
-const sendHeld = (): Promise<void> => resumeQueue(waiting.value.map((message) => message.id));
+const heldIds = computed(() => waiting.value.map((message) => message.id));
+const sendHeld = (): Promise<void> => resumeQueue(heldIds.value);
+// On an account spent until a reopen still ahead the bar offers what the line does: book them for then, Send anyway
+// stepping back to a quiet press (heldPresses.ts).
+const reopen = useReopenPress(() => memoryShown.value, useLimitResend(() => conversation.value).arm);
 // Whether the sandbox sends it by itself once memory frees up, so the bar never calls stuck what is about to go.
 const { sendsItself } = useMemoryAnswer();
 const memoryLine = computed(() => {
@@ -140,9 +146,24 @@ const memoryLine = computed(() => {
             <Notice v-if="memoryShown" tone="warning" icon="pause" size="sm" role="status">
                 {{ memoryLine }}
                 <template #actions>
-                    <Button size="small" thumb :disabled="!props.canDrive" v-tooltip.top="sendAnywayTip()" @click="sendHeld()">{{
-                        t(`chat.chatHeld.sendAnyway`)
-                    }}</Button>
+                    <Button
+                        v-if="reopen.reopenAt.value !== undefined"
+                        size="small"
+                        thumb
+                        :disabled="!props.canDrive"
+                        v-tooltip.top="reopen.hint.value"
+                        @click="reopen.bookWords(heldIds)"
+                        ><Icon name="clock" class="mr-1 text-2xs" />{{ reopen.label.value }}</Button
+                    >
+                    <Button
+                        size="small"
+                        thumb
+                        :tier="reopen.reopenAt.value === undefined ? undefined : `quiet`"
+                        :disabled="!props.canDrive"
+                        v-tooltip.top="sendAnywayTip()"
+                        @click="sendHeld()"
+                        >{{ t(`chat.chatHeld.sendAnyway`) }}</Button
+                    >
                     <Button
                         size="small"
                         thumb

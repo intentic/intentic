@@ -1,14 +1,13 @@
 import { sessionFor } from "../../../conversations/registry/routing.js";
 import { randomUUID } from "node:crypto";
 import { keyedLock } from "@intentic/base/async";
-import { ATTACHMENT_LIMIT, type MessageReceipt, profileOf, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
+import { type MessageReceipt, profileOf, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import { MENTION_LIMIT } from "@intentic/sandbox-contract/text/mentions";
 import type { BeginRefusal, BeginTurn } from "../../../conversations/actor/conversation-decide.js";
 import { type LiveRun, liveRunOf, turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
-import { type Booking, holdOf, type QueuedItem, waitingOf } from "../../../conversations/actor/conversation-queue.js";
+import { type Booking, holdOf, type QueuedItem, together, waitingOf } from "../../../conversations/actor/conversation-queue.js";
 import { windowShut } from "../../../conversations/actor/conversation-state.js";
 import { cardsParkedOn } from "../../../conversations/actor/parked-cards.js";
-import { unwaitable, workLanded } from "../../../conversations/land/work-landed.js";
 import { forgetConversations } from "../../../conversations/registry/archive.js";
 import { conversationProfile, type PersistedAgent, worktreeOf } from "../../../conversations/registry/agents-store.js";
 import type { Services } from "../../../composition.js";
@@ -19,6 +18,8 @@ import { recordConversationPrompt, recordPrompt } from "../../../sessions/transc
 import { checkpointSteeredMessage } from "../../checkpoints/steer-checkpoints.js";
 import { keepReceipt, receiptOf } from "./message-receipts.js";
 import { steerComposed } from "./turn-interactions.js";
+import { bookingFor, bookingOfAsk, unbookable } from "./booking-ask.js";
+import { bookContinuation, continueQueued } from "./continuation.js";
 
 // Every message to a conversation comes through here, whoever sends it: said into the live turn where that turn takes
 // words, started as a turn of its own when nothing runs, and otherwise queued on the conversation's actor until one of
@@ -177,42 +178,6 @@ const releaseHeldBy = (services: Services, conversationId: string): string | und
     return undefined;
 };
 
-// How far ahead a scheduled send may be booked. A time somebody chose is an appointment, and a month holds every one
-// worth keeping (a spent allowance reopens within a week); past it a booking is a slip, a year typed for a day.
-const LONGEST_BOOKING_MS = 31 * 24 * 60 * 60 * 1000;
-
-// What a scheduled send asks to wait for, as its fields name it: an instant, or another conversation's work; and which
-// conversation is asking.
-interface BookingAsk {
-    readonly conversationId: string;
-    readonly sendAt?: number | undefined;
-    readonly sendAfter?: string | undefined;
-}
-
-/**
- * The booking a scheduled send waits by, undefined when there is nothing left to wait for (an instant already past, a
- * conversation whose work is all in the workspace already: it goes now, the ordinary way), or why it cannot wait (the
- * conversation it names cannot land anything). Clamped, not refused: the person asked for it to wait, and a month is the
- * longest wait there is. A turn running here, or a recovery going first, books it all the same: the person chose when it
- * goes, and a turn ending is not that moment.
- */
-const bookingOfAsk = (services: Services, ask: BookingAsk, now: number): Booking | undefined | Unsaid => {
-    if (ask.sendAfter !== undefined) {
-        const why = unwaitable(services, ask.sendAfter, ask.conversationId);
-        if (why !== undefined) {
-            return { invalid: why };
-        }
-        return workLanded(services, ask.sendAfter, now) ? undefined : { after: { conversationId: ask.sendAfter, since: now } };
-    }
-    return ask.sendAt === undefined || ask.sendAt <= now ? undefined : { until: Math.min(ask.sendAt, now + LONGEST_BOOKING_MS) };
-};
-
-// A person's words only: the sandbox's and an agent's never wait on a clock somebody set.
-const bookingFor = (services: Services, said: Said, now: number): Booking | undefined | Unsaid =>
-    said.voice === "person" ? bookingOfAsk(services, said.turn, now) : undefined;
-
-const unbookable = (booking: Booking | Unsaid | undefined): booking is Unsaid => booking !== undefined && ("invalid" in booking || "why" in booking);
-
 /**
  * The opening a scheduled send writes for a conversation it opens: what that conversation's first turn would record at
  * its `begin` (stream-agent.ts, runConversationTurn), from the same request, so the card is on the board and the booking
@@ -271,25 +236,6 @@ const steerItem = async (services: Services, item: Omit<QueuedItem, "revision">)
     return steeredOr(await steerComposed(services, conversationId, steer));
 };
 
-// Messages that go out as one turn: one person's in a row, joined as the composer always joined them; anything else
-// alone, since the sandbox's own words stand as a card of their own. Never two senders: a turn has one owner and fence.
-// Never more files than one turn may carry (ATTACHMENT_LIMIT) either: the run stops before the message that would take
-// it past, which goes next, said into this turn or as its own. A joined turn past the limit once ran, and its hold on a
-// spent allowance then failed the schema it is kept under, so a restart lost the turn and its booking without a word
-// (limit-hold.ts, 2026-10-10). The first message always goes: the schema already held it to the limit when it was sent.
-export const together = (items: readonly QueuedItem[]): readonly QueuedItem[] => {
-    const first = items[0];
-    if (first === undefined || first.voice !== "person") {
-        return items.slice(0, 1);
-    }
-    let files = 0;
-    const end = items.findIndex((item, index) => {
-        files += item.turn.attachments?.length ?? 0;
-        return item.voice !== "person" || item.actor !== first.actor || (index > 0 && files > ATTACHMENT_LIMIT);
-    });
-    return items.slice(0, end === -1 ? items.length : end);
-};
-
 // A person's turn as its sender asked for it, but on the session the daemon decides (sessionFor), never one it was sent.
 const personTurn = (services: Services, turn: Turn): Turn => {
     const { sessionId: _asked, ...rest } = turn;
@@ -332,11 +278,19 @@ interface Carrying {
     readonly batch: readonly Omit<QueuedItem, "revision">[];
 }
 
+// The sandbox's words a conversation archived since they were queued: dropped, since only a person reopens it.
+const dropArchived = (daemon: Services, conversationId: string, batch: readonly QueuedItem[]): void => {
+    for (const item of batch) {
+        daemon.conversations.send(conversationId, { kind: "queue-removed", id: item.id, revision: item.revision });
+    }
+    daemon.logger.info({ conversationId, messages: batch.length }, "admission: the conversation is archived, the sandbox's waiting words were dropped");
+};
+
 // `services` is read per call, since the port this serves is composed into the very object it reads.
 export const createAdmission = (
     services: () => Services,
     start: TurnStarter["start"],
-): Pick<TurnStarter, "say" | "steerIn" | "drain" | "unqueue" | "reword" | "release" | "reschedule"> => {
+): Pick<TurnStarter, "say" | "steerIn" | "drain" | "unqueue" | "reword" | "release" | "reschedule" | "continueAt"> => {
     // One piece of work per conversation at a time.
     const inTurn = keyedLock<string>();
     const carrying = new Map<string, readonly Carrying[]>();
@@ -362,15 +316,6 @@ export const createAdmission = (
         return started.id;
     };
 
-    // The sandbox's words a conversation archived since they were queued: dropped, since only a person reopens it.
-    const dropArchived = (conversationId: string, batch: readonly QueuedItem[]): void => {
-        const daemon = services();
-        for (const item of batch) {
-            daemon.conversations.send(conversationId, { kind: "queue-removed", id: item.id, revision: item.revision });
-        }
-        daemon.logger.info({ conversationId, messages: batch.length }, "admission: the conversation is archived, the sandbox's waiting words were dropped");
-    };
-
     // Whether anything waiting may go out now: a hold keeps it, and so does a recovery the daemon runs by itself or a rewind
     // restoring files, either of which goes first. A booked message is not waiting: it goes at its own time (turn-resume.ts).
     const held = (conversationId: string): boolean => {
@@ -389,6 +334,10 @@ export const createAdmission = (
         const live = liveRunOf(daemon.conversations, conversationId);
         if (head === undefined) {
             return undefined;
+        }
+        // A continuation is a Continue, never words for a live turn: it starts its own turn, or waits (continuation.ts).
+        if (head.continues === true) {
+            return continueQueued(daemon, head);
         }
         if (live !== undefined || daemon.conversations.state(conversationId)?.phase.kind === "running") {
             if (!takesWords(daemon, conversationId) || (await steerItem(daemon, head)) !== true) {
@@ -415,7 +364,7 @@ export const createAdmission = (
                 daemon.logger.warn({ conversationId, messages: batch.length }, "admission: the conversation stays archived, a person's waiting words were kept");
                 return undefined;
             }
-            dropArchived(conversationId, batch);
+            dropArchived(daemon, conversationId, batch);
             return new Map();
         }
         if (run === "busy") {
@@ -643,5 +592,7 @@ export const createAdmission = (
                 }
                 return daemon.conversations.send(conversationId, { kind: "queue-rescheduled", booking, ...opt("ids", ids) }).reply ? "booked" : "missing";
             }),
+        // A Continue booked for later, a continuation in the queue (continuation.ts), under the conversation's own lock.
+        continueAt: (ask) => inTurn(ask.conversationId, async () => bookContinuation(services(), ask)),
     };
 };

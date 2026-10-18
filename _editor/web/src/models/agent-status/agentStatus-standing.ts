@@ -25,6 +25,7 @@ export {
     turnWorking,
     writingNow,
     landBroken,
+    bookingAnswers,
     blocked,
     awaitingUser,
     onlyOwnerCanAnswer,

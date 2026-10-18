@@ -26,6 +26,7 @@ import {
     rescheduled,
     returned,
     scheduled,
+    superseded,
     taken,
     type TurnQueue,
 } from "./conversation-queue.js";
@@ -193,6 +194,12 @@ export type ConversationEvent =
     // A held queue is let go, with the bookings of the messages `ids` names (every one's, when it names none), what a
     // person waits with pointed at who the press names to serve it.
     | { readonly kind: "queue-released"; readonly routing?: ResumeRouting; readonly ids?: readonly string[] }
+    // A person picked who serves the conversation: what a person waits with (held, queued or booked; every message, when
+    // `ids` names none) goes on that pick, and nothing is let go. The account a waiting message goes on is the
+    // conversation's current pick, as a spent allowance's held turn already follows it (held-repointed): left on the
+    // account it was sent with, a memory release or a booking's time sent it on an account the person had moved off,
+    // an expired one included (2026-10-17).
+    | { readonly kind: "queue-rerouted"; readonly routing: ResumeRouting; readonly ids?: readonly string[] }
     // Whether the daemon can keep the settled turn's cache warm, and on how many refreshes.
     | { readonly kind: "keepable-noted"; readonly keepable: { readonly budget: number } | undefined }
     // The prompt cache is to be kept warm until `until`; a second arming moves the deadline and keeps the count.
@@ -758,7 +765,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     "session-cleared": (state, _event, _now, entry) => onSessionCleared(state, entry),
     "turn-held": (state, event, now) => onHeld(state, event.held, now),
     "turn-got-somewhere": (state) => unchanged(withResume(state, { stopTries: 0 }), undefined),
-    "resume-superseded": (state) => unchanged(withResume(state, { held: undefined }), state.resume.held),
+    "resume-superseded": (state) => withQueue(withResume(state, { held: undefined }), superseded(state.queue), state.resume.held),
     "auth-firing": (state, event) => unchanged(withResume(state, { authFiring: event.firing }), undefined),
     // Told to every window: the card's booking reads this hold (agents-registry limitHold), and nothing else moves when a
     // cancel or a give-up drops it.
@@ -818,6 +825,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     },
     "queue-released": (state, event) =>
         withQueue(state, released(event.routing === undefined ? state.queue : rerouted(state.queue, event.routing, event.ids), event.ids), undefined),
+    "queue-rerouted": (state, event) => withQueue(state, rerouted(state.queue, event.routing, event.ids), undefined),
     "keepable-noted": (state, event) =>
         state.turn.keepable?.budget === event.keepable?.budget
             ? unchanged(state, undefined)

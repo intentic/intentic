@@ -111,7 +111,8 @@ export const limited = (agent: AgentStanding): boolean => agent.status === "erro
 
 // A message held at the door because the sandbox is short of memory (turn-admission): nothing ran and nothing failed,
 // it waits for a person's "send anyway". The daemon files it as an `error`, so this is read off the code, as `limited`
-// is, and the chip and glyph say held rather than error; the lane stays Attention, since the press is the reader's.
+// is, and the chip and glyph say held rather than error; the lane stays Attention, since the press is the reader's,
+// until its words are booked for later (bookingAnswers).
 export const memoryHeld = (agent: Pick<AgentStanding, "status" | "failureCode">): boolean =>
     agent.status === "error" && agent.failureCode === "sandbox-memory-low";
 
@@ -218,12 +219,28 @@ export const writingNow = (agent: AgentStanding): boolean => agent.status === "r
 // `stopped`/`interrupted` leave a half-written worktree only a new message can carry forward; `stopping` is
 // counted the moment the press lands rather than once the unwind finishes, since it settles in the same lane
 // either way; `failed` is the same kind of dead end one step earlier, before a worktree existed. A spent allowance
-// counts until something is booked to carry it on (limitScheduled): a resend at the reset, or a move now.
+// counts until something is booked to carry it on (limitScheduled): a resend at the reset, or a move now. Any settled
+// dead end counts until a booking answers it (bookingAnswers).
 const BLOCKING_ENDINGS: ReadonlySet<AgentStatus | ClientAgentStatus> = new Set(["error", "interrupted", "stopping", "stopped", "failed"]);
 
 // A land that broke and still stands: its work is stuck on the branch, whatever the turn after it did, so the card is
 // the reader's to look at. Not while a turn or a land is under way, which ends in another land of its own.
 export const landBroken = (agent: AgentStanding): boolean => agent.landFailure !== undefined && !turnInFlight(agent);
+
+// The settled dead ends a booking can answer. Not `stopping`, which is still unwinding and rests in Attention whatever
+// waits behind it.
+const ANSWERABLE_ENDINGS: ReadonlySet<AgentStatus | ClientAgentStatus> = new Set(["error", "interrupted", "stopped", "failed"]);
+
+/**
+ * A turn that ended badly, with something booked to go by itself after it: a message for a time, a continuation at a
+ * spent allowance's reopen, words held for memory re-timed to that reopen. That booking is the person's answer to the
+ * ending, or the sandbox's on their standing word, so the next move is the sandbox's, at the booking, and the ending no
+ * longer calls the reader: the card is Active, and its corner says when it goes. Before 2026-10-18 only the sandbox's own
+ * booked resend after a spent allowance (limitScheduled) answered an ending, so an expired account's card stayed in
+ * Attention under a clock already saying "sends Sun 05:00", the reader's answer to it booked and not counted. Answers
+ * only the ending: an ask (a plan, a question, a permission, a land only the reader can clear) still calls them.
+ */
+export const bookingAnswers = (agent: AgentStanding): boolean => ANSWERABLE_ENDINGS.has(agent.status) && scheduledSend(agent);
 
 export const blocked = (agent: AgentStanding): boolean =>
     limitScheduled(agent)
@@ -238,7 +255,7 @@ export const blocked = (agent: AgentStanding): boolean =>
           (agent.attention.need === true && agent.status !== "running") ||
           landBroken(agent) ||
           heldByPrompt(agent) ||
-          BLOCKING_ENDINGS.has(agent.status);
+          (BLOCKING_ENDINGS.has(agent.status) && !bookingAnswers(agent));
 
 // The half of `blocked` that is literally waiting on an answer (plan, question, permission, capability), narrower
 // than `blocked`: dead ends (a failed turn, an unlandable conflict) want looking at but owe the user nothing, so
@@ -273,6 +290,7 @@ export const heardByParent = (child: AgentStanding & { readonly updatedAt: numbe
     child.status !== "stopping" &&
     // Booked to run again by itself: not over, whatever its parent made of the pause.
     !limitScheduled(child) &&
+    !bookingAnswers(child) &&
     !child.attention.question &&
     !child.attention.conflict &&
     !landBroken(child) &&

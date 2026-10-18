@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { Button, Icon, type Tip } from "@intentic/ui";
-import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
-import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
-import { useLimitResend } from "../../panel/pane/scheduledSend";
-import { atReopenPhrase, pickUpWhen } from "../../../../models/conversations/endings/pickUp";
 import TurnBreakQuestion from "../../panel/TurnBreakQuestion.vue";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import { memoryNext } from "../../../../models/conversations/endings/turnBreak";
@@ -15,6 +11,8 @@ import ChatHeldBubble from "./ChatHeldBubble.vue";
 import ChatHeldStatus from "./ChatHeldStatus.vue";
 import { HELD_PRESS_ATTR } from "../../panel/pane/heldLineSeen";
 import { useHeldQueue } from "./heldQueue";
+import { useReopenPress } from "./heldPresses";
+import { useLimitResend } from "../../panel/pane/scheduledSend";
 import { sendAnywayTip } from "../../../../models/conversations/transcript/memoryTip";
 import { track } from "../../../../app/analytics";
 
@@ -26,9 +24,8 @@ defineProps<{
 }>();
 
 const t = useT();
-const { conversation, waiting, streaming, resumeQueue, bookedGroups, spentReopensAt, lastFailure } = usePaneView();
+const { conversation, waiting, streaming, resumeQueue, bookedGroups, lastFailure } = usePaneView();
 const { held, notice, reason, detail } = useHeldQueue();
-const limitResend = useLimitResend(() => conversation.value);
 
 // Once per refused turn this pane sees happen: fires when `held` turns true with a refusal reason, not for a chat opened
 // on one already held. The card's failure code carries the daemon's error code (agent-domain-refused, etc.); `via` tells
@@ -49,6 +46,17 @@ interface HeldPress {
 // What the press lets go: the messages the hold kept, by id, so a booking beside them stays on its time. Sent only to a
 // sandbox that books each message (TurnClient.resume); an older one lets its whole queue go, as it always did.
 const heldIds = computed(() => waiting.value.map((message) => message.id));
+// The account these would go on is spent until a reopen still ahead, whatever held them, memory included: sent now they
+// are refused before anything runs, so the solid press books them for the reopen and the press that sends them now steps
+// back to a quiet one (heldPresses.ts, the one decision every surface drawing a held message reads).
+const reopen = useReopenPress(() => held.value, useLimitResend(() => conversation.value).arm);
+const reopenAt = reopen.reopenAt;
+const spentHint = reopen.sendNowHint;
+const sendAtLabel = reopen.label;
+const sendAtHint = reopen.hint;
+const sendAtReopen = (): void => reopen.bookWords(heldIds.value);
+// The bubbles are the words that wait; a continuation (a Continue booked for later, let go and then held) has none.
+const bubbles = computed(() => waiting.value.filter((message) => message.continues !== true));
 const press = computed((): HeldPress => {
     switch (reason.value) {
         case `memory`:
@@ -59,43 +67,6 @@ const press = computed((): HeldPress => {
             return { label: t(`agents.words.sendAgain`), hint: spentHint.value };
     }
 });
-
-// The account these would go on is spent until a named reopen: sent now they are refused before anything runs, so the
-// solid press books them for the reopen instead (the press that sends them now steps back to a quiet one, since the
-// reopen is the provider's estimate). Booked, they stand under the scheduled line with their own Change and Send now;
-// the limit answer is set to send them again, as for any scheduled send, should the provider name that reopen too early.
-// A low-memory hold is about room, not the allowance, and keeps its own press.
-const spentAt = computed(() => (spentReopensAt.value === undefined ? undefined : spentReopensAt.value * 1_000));
-const now = useNow(() => held.value && spentAt.value !== undefined);
-const reopenAt = computed(() => {
-    const at = spentAt.value;
-    return at === undefined || at <= now.value || reason.value === `memory` || !supportsRoute(`agent.queueSchedule`) ? undefined : at;
-});
-// Sending now before that reopen, said on the press that does it: the allowance may still refuse it.
-const spentHint = computed((): Tip | undefined =>
-    reopenAt.value === undefined ? undefined : { title: t(`chat.chatHeld.sendNowTitle`), note: t(`chat.chatHeld.sendNowSpent`) },
-);
-const sendAtLabel = computed(() =>
-    reopenAt.value === undefined ? `` : atReopenPhrase(
-              { at: (when) => t(`chat.chatHeld.sendAt`, { when }), in: (when) => t(`chat.chatHeld.sendIn`, { when }) },
-              reopenAt.value,
-              now.value,
-          ),
-);
-const sendAtHint = computed((): Tip => ({
-    title: t(`chat.chatHeld.sendAtTitle`),
-    rows: reopenAt.value === undefined ? [] : [{ label: t(`chat.composerIntent.sendsAt`), value: pickUpWhen(reopenAt.value, now.value) }],
-    note: t(`chat.composerIntent.hintScheduledHeld`),
-}));
-const sendAtReopen = (): void => {
-    const at = reopenAt.value;
-    if (at === undefined) {
-        return;
-    }
-    // allow(silent-catch): the write is optimistic and rolls back on failure, so the limit card's control saying `wait` is the report.
-    void limitResend.arm().catch(() => undefined);
-    void conversation.value.turn.reschedule({ sendAt: at }, heldIds.value);
-};
 </script>
 
 <template>
@@ -106,7 +77,7 @@ const sendAtReopen = (): void => {
         :class="compact ? `rounded-xl bg-card shadow-sm px-3 py-2` : `items-end pt-1`"
     >
         <template v-if="held">
-            <ChatHeldBubble v-for="message in waiting" :key="message.id" :message="message" :compact="compact" />
+            <ChatHeldBubble v-for="message in bubbles" :key="message.id" :message="message" :compact="compact" />
             <!-- Marked so the bar over the composer (ChatWaitingBar) repeats a memory hold only while this line is out of view. -->
             <ChatHeldStatus :reason="reason" :detail="detail" :spread="compact" v-bind="{ [HELD_PRESS_ATTR]: `` }">
                 <!-- Held means nothing goes by itself, even after a turn running now: the press lets it go, after that turn if one runs. -->

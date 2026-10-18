@@ -533,6 +533,12 @@ export const QueuedMessageSchema = z.object({
     after: ConversationIdSchema.optional().describe(
         "The conversation whose finished work must land before this message goes out by itself, in place of `until`.",
     ),
+    continues: z
+        .literal(true)
+        .optional()
+        .describe(
+            "A continuation, not words: when it goes, the conversation carries on from where its last turn stopped, as `agent.run` with `continues` does, and nothing is added to it as anybody's message. `text` is empty. A turn that starts in the conversation before it goes makes it moot, and it is dropped.",
+        ),
 });
 export type QueuedMessage = z.infer<typeof QueuedMessageSchema>;
 // Why a queue holds its messages rather than letting them go when the conversation is free.

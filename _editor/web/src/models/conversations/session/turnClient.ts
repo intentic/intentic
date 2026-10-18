@@ -14,6 +14,7 @@ import { computed, ref, shallowRef } from "vue";
 import { uuid } from "../../../lib/uuid";
 import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { type ProcedureInput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { bookContinue, newerQueue, queueRefusal } from "./queueCalls";
 import type { PendingAttachment } from "../../../features/chat/drafts/useChatAttachments";
 import { accountIntent, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
 import type { SendLater, TurnBooking } from "../drafts/sendLater";
@@ -85,14 +86,6 @@ const heldRouting = (settings: TurnSettings, session: SessionRef | undefined, op
 // A file that went out with a message the daemon never answered for, staged again in the composer as a finished chip.
 const chipOf = (file: ChatAttachment): PendingAttachment => ({ id: uuid(), name: file.name, path: file.path, status: `done`, progress: 100 });
 
-// What a waiting message's change was refused for, in the words the error line uses.
-const queueRefusal = (refusal: SandboxHttpError): string => {
-    if (refusal.status === 412) {
-        return t(`chat.turnClient.queueChangedElsewhere`);
-    }
-    return refusal.status === 404 ? t(`chat.turnClient.queueGone`) : refusal.message;
-};
-
 // What a run reads and writes of the conversation around it.
 type TurnHost = Pick<
     Conversation,
@@ -119,10 +112,6 @@ type TurnHost = Pick<
     | "sendLater"
     | "autoLandDraft"
 >;
-
-/** Of two copies of the daemon's queue, the one written last: a card read late must not undo a change made here. */
-export const newerQueue = (held: ConversationQueue | undefined, heard: ConversationQueue | undefined): ConversationQueue | undefined =>
-    heard === undefined || (held !== undefined && held.revision > heard.revision) ? held : heard;
 
 /** One status entry a runtime's extension set: its words, and who set them when the runtime said. */
 export interface AgentStatusEntry {
@@ -354,6 +343,9 @@ export class TurnClient {
         }
         return heard;
     }
+
+    /** A Continue booked for later, never words (queueCalls.ts, bookContinue). */
+    scheduleContinue = (booking: TurnBooking): Promise<boolean> => bookContinue(this.host, booking, () => this.reattach());
 
     // An app errand whose words need a read first: the turn opens at the call, its row and the working line drawn, and
     // `compose` fills it in (undefined: no turn after all). Resolves with whether the daemon took it, not at its end.
@@ -841,7 +833,7 @@ export class TurnClient {
     }
 
     // Takes a waiting message back before it goes out, as this window read it: refused when another window changed it
-    // since, which the error line says. A person's words come back into this composer (takenBack), and when they were
+    // since, which the error line says. A person's words (a continuation has none) return to the composer, and when they were
     // all the conversation ever held, the conversation went with them and this chat is a new one again (unopened).
     //
     // Done from the press, not from the answer. A conversation its message opened is forgotten before the sandbox
@@ -856,7 +848,7 @@ export class TurnClient {
         const booking = bookingOfMessage(host.queue.value, message);
         const before = { draft: host.draft.value, attachments: host.attachments.value, sendLater: host.sendLater.value };
         this.takingBack.value = message.id;
-        if (message.voice === `person`) {
+        if (message.voice === `person` && message.continues !== true) {
             this.takenBack(message, booking);
         }
         const placed = { draft: host.draft.value, attachments: host.attachments.value };

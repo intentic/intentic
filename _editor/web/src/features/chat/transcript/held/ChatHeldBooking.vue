@@ -22,7 +22,7 @@ const props = defineProps<{
 }>();
 
 const t = useT();
-const { conversation, resumeQueue, spentReopensAt } = usePaneView();
+const { conversation, resumeQueue, spentReopensAt, unqueue } = usePaneView();
 const { agentById } = useAgents();
 
 const until = computed(() => (props.group.booking.kind === `at` ? props.group.booking.at : undefined));
@@ -62,17 +62,28 @@ const sendNow = (): void => {
     changing.value = false;
     void resumeQueue(props.group.ids);
 };
+// A continuation has no bubble to take back from, so its line carries the press (the words' bubbles carry their own).
+const takeBack = (): void => {
+    const [message] = props.group.messages;
+    if (message !== undefined) {
+        void unqueue(message);
+    }
+};
 </script>
 
 <template>
-    <ChatHeldBubble v-for="message in group.messages" :key="message.id" :message="message" :compact="compact" />
-    <ChatHeldStatus reason="scheduled" :until="until" :after="awaited" :spread="compact">
+    <!-- A continuation is a Continue booked for later, not words: no bubble, only its line, which says it continues then. -->
+    <template v-if="!group.continues">
+        <ChatHeldBubble v-for="message in group.messages" :key="message.id" :message="message" :compact="compact" />
+    </template>
+    <ChatHeldStatus reason="scheduled" :until="until" :after="awaited" :spread="compact" :continues="group.continues">
         <span class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
             <span v-if="retimable" ref="changeAnchor" class="inline-flex">
                 <Button size="small" thumb tier="quiet" :aria-expanded="changing" @click="changing = !changing">{{
                     t(`chat.chatHeld.change`)
                 }}</Button>
             </span>
+            <Button v-if="group.continues" size="small" thumb tier="quiet" @click="takeBack()">{{ t(`chat.chatHeld.takeBack`) }}</Button>
             <Button size="small" thumb v-tooltip.top="hint" @click="sendNow()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
         </span>
     </ChatHeldStatus>

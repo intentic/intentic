@@ -7,7 +7,7 @@ import { registry } from "../../../../models/fleet/useAgents-registry";
 import { otherBoxes } from "../../../../models/sandbox/live/fleetAcross";
 import { hydrateOnce, refreshAfterSleep } from "../../../../models/conversations/run/useChat-sessions";
 import type { Conversation } from "../../../../models/conversations/session/conversation";
-import { newerQueue } from "../../../../models/conversations/session/turnClient";
+import { newerQueue } from "../../../../models/conversations/session/queueCalls";
 import { onScreen } from "../../../../workbench/window/onScreen";
 import { refVisibility, watchPageWake } from "../../../../client/sandbox/pageWake";
 

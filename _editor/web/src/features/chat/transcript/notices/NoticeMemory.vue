@@ -10,6 +10,7 @@ import ChatHeldStatus from "../held/ChatHeldStatus.vue";
 import { memoryReading, useHeldQueue, useKeptTurn } from "../held/heldQueue";
 import { memoryTip, sendAnywayTip } from "../../../../models/conversations/transcript/memoryTip";
 import MemoryRaise from "./MemoryRaise.vue";
+import { useReopenPress } from "../held/heldPresses";
 
 /* The row a low-memory hold leaves, drawn as one line whatever it says: the sandbox's figures are a hover card away. */
 
@@ -26,13 +27,22 @@ const folded = computed(() => notice.value?.id === props.message.id);
 // The words are the sandbox's to keep for a turn it started itself, and the message they belong to is the row above.
 const heldHere = computed(() => !folded.value && waiting.value);
 const figures = computed(() => memoryTip(memoryReading(props.message.text)));
+// On an account spent until a reopen still ahead, the kept turn is booked to run again then (a Continue booked for later),
+// and Send anyway steps back to a quiet press, as on every held message (heldPresses.ts).
+const reopen = useReopenPress(() => heldHere.value);
+const atReopen = computed(() => reopen.bookContinue.value);
 </script>
 
 <template>
     <!-- Under the kept message, the same line a queued one gets: it was not sent, why, the press, and what happens next. -->
     <div v-if="heldHere" class="flex flex-col items-end gap-1 self-end">
         <ChatHeldStatus reason="memory" :detail="memoryReading(message.text)">
-            <Button size="small" thumb v-tooltip.top="sendAnywayTip()" @click="send">{{ t(`chat.chatHeld.sendAnyway`) }}</Button>
+            <Button v-if="atReopen !== undefined" size="small" thumb v-tooltip.top="reopen.hint.value" @click="atReopen()">
+                <Icon name="clock" class="mr-1 text-2xs" />{{ reopen.label.value }}
+            </Button>
+            <Button size="small" thumb :tier="atReopen === undefined ? undefined : `quiet`" v-tooltip.top="sendAnywayTip()" @click="send">{{
+                t(`chat.chatHeld.sendAnyway`)
+            }}</Button>
             <MemoryRaise v-if="message.noticeAction === `sandboxMemory`" />
         </ChatHeldStatus>
         <div class="flex flex-col items-end gap-1 text-2xs text-muted">

@@ -1,5 +1,6 @@
 import {
     AgentTurnSchema,
+    ATTACHMENT_LIMIT,
     type ConversationQueue,
     MessageVoiceSchema,
     type QueuePause,
@@ -48,6 +49,10 @@ const QueuedItemSchema = z.object({
     // soon as the conversation is free.
     until: z.number().optional(),
     after: AfterLandSchema.optional(),
+    // A continuation, not words (agent.run `continues`, booked for later): it carries the conversation on from where its
+    // last turn stopped, its prompt empty, and goes alone (turn-admission.ts, together). A turn that starts before it
+    // goes makes it moot (`superseded`).
+    continues: z.literal(true).optional(),
 });
 export type QueuedItem = z.infer<typeof QueuedItemSchema>;
 
@@ -82,6 +87,26 @@ export const bookingOfItem = (item: Pick<QueuedItem, "until" | "after">): Bookin
 };
 
 export const isBooked = (item: Pick<QueuedItem, "until" | "after">): boolean => item.until !== undefined || item.after !== undefined;
+
+// Messages that go out as one turn: one person's in a row, joined as the composer always joined them; anything else
+// alone, since the sandbox's own words stand as a card of their own. Never two senders: a turn has one owner and fence.
+// Never more files than one turn may carry (ATTACHMENT_LIMIT) either: the run stops before the message that would take
+// it past, which goes next, said into this turn or as its own. A joined turn past the limit once ran, and its hold on a
+// spent allowance then failed the schema it is kept under, so a restart lost the turn and its booking without a word
+// (limit-hold.ts, 2026-10-10). The first message always goes: the schema already held it to the limit when it was sent.
+// A continuation goes alone too: it carries no words to join, and starts the turn its own way (continuation.ts).
+export const together = (items: readonly QueuedItem[]): readonly QueuedItem[] => {
+    const first = items[0];
+    if (first === undefined || first.voice !== "person" || first.continues === true) {
+        return items.slice(0, 1);
+    }
+    let files = 0;
+    const end = items.findIndex((item, index) => {
+        files += item.turn.attachments?.length ?? 0;
+        return item.voice !== "person" || item.continues === true || item.actor !== first.actor || (index > 0 && files > ATTACHMENT_LIMIT);
+    });
+    return items.slice(0, end === -1 ? items.length : end);
+};
 
 /** What goes as soon as the conversation is free and nothing holds it: every message not booked for later. */
 export const waitingOf = (queue: Pick<TurnQueue, "items">): readonly QueuedItem[] => queue.items.filter((item) => !isBooked(item));
@@ -171,6 +196,19 @@ export const rescheduled = (queue: TurnQueue, booking: Booking, ids?: readonly s
     );
 };
 
+/**
+ * Drops the continuations a turn starting now makes moot: "carry on from where it stopped" names a stop this turn has
+ * already moved past, as the held turn it supersedes does. Words stay, whatever they wait for.
+ */
+export const superseded = (queue: TurnQueue): TurnQueue =>
+    queue.items.some((item) => item.continues === true)
+        ? next(
+              queue,
+              queue.items.filter((item) => item.continues !== true),
+              holdOf(queue),
+          )
+        : queue;
+
 /** Takes out what a turn just delivered. */
 export const taken = (queue: TurnQueue, ids: readonly string[]): TurnQueue =>
     next(
@@ -218,8 +256,18 @@ export const released = (queue: TurnQueue, ids?: readonly string[]): TurnQueue =
  */
 export const rerouted = (queue: TurnQueue, routing: ResumeRouting, ids?: readonly string[]): TurnQueue => {
     const these = named(queue, ids);
+    // Already served as named: nothing to write, so a pick that changes nothing for these moves no revision.
+    const servedSo = (turn: QueuedItem["turn"]): boolean =>
+        turn.agent === routing.agent &&
+        turn.harness === routing.harness &&
+        turn.account === routing.account &&
+        (routing.model === undefined || turn.model === routing.model);
+    const moving = (item: QueuedItem): boolean => item.voice === "person" && these.has(item.id) && !servedSo(item.turn);
+    if (!queue.items.some(moving)) {
+        return queue;
+    }
     const moved = (item: QueuedItem): QueuedItem => {
-        if (item.voice !== "person" || !these.has(item.id)) {
+        if (!moving(item)) {
             return item;
         }
         const { agent: _agent, harness: _harness, account: _account, model, ...turn } = item.turn;
@@ -289,6 +337,7 @@ export const queueView = (queue: TurnQueue): ConversationQueue => ({
         revision: item.revision,
         ...opt("until", item.until),
         ...opt("after", item.after?.conversationId),
+        ...opt("continues", item.continues),
     })),
     revision: queue.revision,
     ...(queue.paused === undefined ? {} : { paused: queue.paused }),

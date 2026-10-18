@@ -1,6 +1,6 @@
 import { headroomState } from "@intentic/sandbox-contract/models/plan-pools";
 import type { SwitchAccount } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import { withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
+import { type AgentHarness, type AgentProvider, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../../composition.js";
 
 // The one command that moves a conversation to another account (routing.ts reads where it points from then on). Asked to
@@ -16,6 +16,11 @@ import type { Services } from "../../../composition.js";
 // that account's reopen, and the card's reset says so. Left alone, the pass fired at the refused account's reset on the
 // refused account, the one thing the person had just said not to do, while the card showed the old clock beside a
 // composer counting down to the new one.
+//
+// So does everything a person's words wait with: held, queued or booked, they go on the account picked (queue-rerouted).
+// They used to keep the account they were sent with, so a memory release sent a held message on the expired account the
+// person had just moved off, and a booking a refused message was re-timed into went at its time on that account too
+// (2026-10-17).
 
 // When the picked account lets the held turn through, in epoch seconds: its reset while it reads spent (absent when it
 // names none), now while it has room or no reading. `shown` is what the card states: only a real wait gets a clock.
@@ -68,6 +73,7 @@ export const switchAccount = async (
         await services.agents.clearArchived([conversationId]);
         const run = await services.turns.resume(conversationId, routing);
         if (run !== undefined) {
+            followPick(services, conversationId, routing);
             return { kind: "moved", run: run.id };
         }
         // A hold a press does not answer (an outage, a credential being re-minted) still takes the new account.
@@ -92,8 +98,18 @@ export const switchAccount = async (
         }
         await services.agents.switchAccount(conversationId, account, reopening.shown === undefined ? {} : { resetsAt: reopening.shown });
     }
+    followPick(services, conversationId, { ...withRuntimeDefaults({ agent: entry.profile.provider, harness: entry.profile.harness }), account });
     if (entry.profile.account !== account && !carry) {
         await services.conversations.send(conversationId, { kind: "session-cleared" }).settled;
     }
     return { kind: "moved" };
+};
+
+// What a person's words wait with goes on the account picked: same provider and loop, its own model kept.
+const followPick = (
+    services: Pick<Services, "conversations">,
+    conversationId: string,
+    routing: { readonly agent: AgentProvider; readonly harness: AgentHarness; readonly account: string },
+): void => {
+    services.conversations.send(conversationId, { kind: "queue-rerouted", routing: { agent: routing.agent, harness: routing.harness, account: routing.account } });
 };

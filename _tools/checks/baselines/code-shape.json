@@ -810,7 +810,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/models/conversations/session/turnClient.ts": {
-        "count": 1302,
+        "count": 1295,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/models/conversations/transcript/transcriptState.ts#applyPatch#cognitive": {
@@ -1526,16 +1526,12 @@
         "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/turn/turn-admission.ts": {
-        "count": 646,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/agent/run/turn/turn-admission.ts#createAdmission#lines": {
         "count": 312,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts": {
-        "count": 1196,
+        "count": 1147,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts#rehydrateParkedTurn#lines": {
@@ -1856,7 +1852,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/conversations/actor/conversation-decide.ts": {
-        "count": 870,
+        "count": 865,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/conversations/actor/parked-cards.ts#parkedCards#lines": {

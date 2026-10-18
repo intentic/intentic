@@ -16,7 +16,7 @@ import { AGENT_DOMAIN_NOT_READY } from "../../../../workload/domain/agent-domain
 import { createAgentExecutionService } from "../../../../workload/agent-execution.js";
 import { streamAgent } from "../../stream-agent.js";
 import { receiptOf } from "../message-receipts.js";
-import { together } from "../turn-admission.js";
+import { together } from "../../../../conversations/actor/conversation-queue.js";
 import { turnDoors } from "../turn-doors.js";
 
 // Which waiting messages leave as one turn. A turn carries one sender's attribution, ownership and fence, so a batch

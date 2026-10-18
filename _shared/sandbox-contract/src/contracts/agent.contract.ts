@@ -18,6 +18,7 @@ import {
     ProviderRefusalsSchema,
     QueuedMessageRefSchema,
     QueueEditSchema,
+    QueueContinueSchema,
     QueueResumeSchema,
     QueueScheduleSchema,
     ResumeTurnSchema,
@@ -137,6 +138,18 @@ export const agentContract = {
         })
         .meta({ floor: "collaborator", guest: true })
         .input(QueueScheduleSchema)
+        .output(ConversationQueueSchema),
+    // NOT_FOUND for a conversation the sandbox does not have; BAD_REQUEST when the conversation named to wait for cannot land.
+    queueContinue: procedure
+        .route({
+            method: "POST",
+            path: "/agent/queue/continue",
+            summary: "Book a Continue for later",
+            description:
+                "Books the conversation to carry on from where its last turn stopped at an instant, or once another conversation has finished and its work has landed: a Continue that waits in the queue, drawn as scheduled, rather than words. Nothing is added to the conversation as your message. When it goes, a turn the sandbox still holds runs again as it was; otherwise the agent is told to continue in its own session. A turn that starts in the conversation before then makes it moot, and it is dropped. Take it back with queueRemove, send it sooner with queueResume, re-time it with queueSchedule.",
+        })
+        .meta({ floor: "collaborator", guest: true })
+        .input(QueueContinueSchema)
         .output(ConversationQueueSchema),
     // CONFLICT while a turn already runs (the client follows it); NOT_FOUND when nothing is held (it falls back to `run`).
     resume: procedure

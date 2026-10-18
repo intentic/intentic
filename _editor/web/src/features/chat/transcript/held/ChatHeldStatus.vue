@@ -23,6 +23,8 @@ const props = defineProps<{
     // Why on the left and the way on at the right, across a card of its own (the quick bar), rather than hung off the
     // right edge under a prompt.
     spread?: boolean;
+    // A Continue booked for later rather than words: it says the conversation continues then, not that something sends.
+    continues?: boolean;
 }>();
 
 const t = useT();
@@ -37,8 +39,12 @@ const CLOCK_FROM_MS = 90 * 60 * 1_000;
 const sendsWhen = (until: number, at: number): string => {
     const seconds = Math.round(until / 1_000);
     const wait = formatWait(seconds, at);
+    if (props.continues === true) {
+        return until - at >= CLOCK_FROM_MS ? t(`chat.chatHeld.continuesAtClock`, { clock: formatReset(seconds, at), wait }) : t(`chat.chatHeld.continuesIn`, { wait });
+    }
     return until - at >= CLOCK_FROM_MS ? t(`chat.chatHeld.sendsAtClock`, { clock: formatReset(seconds, at), wait }) : t(`chat.chatHeld.sendsIn`, { wait });
 };
+const shortly = (): string => (props.continues === true ? t(`chat.chatHeld.continuesShortly`) : t(`chat.chatHeld.sendsShortly`));
 
 // One key per reason, spelled out so every word here is one the catalog check can find.
 const why = computed(() => {
@@ -53,7 +59,7 @@ const why = computed(() => {
                 return props.after.title === undefined ? t(`chat.chatHeld.waitsForGone`) : ``;
             }
             // Past its instant, the sandbox is letting it go on its next pass (every few seconds).
-            return props.until === undefined || props.until <= now.value ? t(`chat.chatHeld.sendsShortly`) : sendsWhen(props.until, now.value);
+            return props.until === undefined || props.until <= now.value ? shortly() : sendsWhen(props.until, now.value);
         default:
             return t(`chat.chatHeld.refused`);
     }

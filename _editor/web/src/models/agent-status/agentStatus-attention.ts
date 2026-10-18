@@ -5,6 +5,7 @@ import { useVocabulary } from "../../workbench/views/vocabulary";
 import { failureKind, failureOpensChat, failureWord } from "./agentStatus-failure";
 import {
     type AgentStanding,
+    bookingAnswers,
     type ClientAgentStatus,
     conflictIsYours,
     heldByPrompt,
@@ -76,7 +77,8 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
         return t(`agents.agentStatus.usageLimit`);
     }
     // Held, not failed: the chip is the word the reader acts on ("send anyway"), and "error" sent people hunting a fault.
-    if (memoryHeld(agent)) {
+    // Once its words are booked for later the hold is answered, and the corner says when they go instead (standingChip).
+    if (memoryHeld(agent) && !bookingAnswers(agent)) {
         return t(`agents.agentStatus.held`);
     }
     const park = leadingPark(agent);
@@ -93,6 +95,11 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
     // word, since a chip beside the name has no room for "Waiting for input": the readout says that, with the clock.
     if (heldByPrompt(agent)) {
         return t(`agents.agentStatus.needsInput`);
+    }
+    // An ending something booked answers names no reason: the card is Active, and its corner says when the booking goes
+    // ("Scheduled"), where "Error" beside a clock already counting to the send read as a fault nobody had dealt with.
+    if (bookingAnswers(agent)) {
+        return undefined;
     }
     // A failure the daemon classified says what kind it was ("No access", "Provider down"), never the bare "Error" a
     // crash wears: the kind is what tells the reader whether to switch account, wait, or read what broke.
