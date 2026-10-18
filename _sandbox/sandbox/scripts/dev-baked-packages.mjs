@@ -10,6 +10,10 @@ export const REPO_ROOT = repoRoot(import.meta.url);
 // Where the image installs the daemon and the workspace packages baked in beside it.
 export const SANDBOX_ROOT = "/opt/sandbox";
 export const packageDir = (name) => `${SANDBOX_ROOT}/node_modules/${name}`;
+// Where the whole checkout is mounted, read-only, for what runs inside the container at start (dev-heal-manifests.mjs).
+// Under SANDBOX_ROOT because ic carries a replaced container's binds there and only there (connect.rs, sandbox_binds).
+// docker-entrypoint.sh spells it too.
+export const DEV_CHECKOUT = `${SANDBOX_ROOT}/dev-checkout`;
 
 // Maps every workspace package's declared name to its directory, read from package.json rather than assumed (e.g.
 // `@intentic/lsp` lives in `_search/lsp`). Package groups are discovered: every `_`-prefixed root directory is one.

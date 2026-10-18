@@ -5,14 +5,19 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { bakedPackageNames, packageDir, REPO_ROOT, SANDBOX_ROOT, workspacePackages } from "./dev-baked-packages.mjs";
+import { bakedPackageNames, DEV_CHECKOUT, packageDir, REPO_ROOT, SANDBOX_ROOT, workspacePackages } from "./dev-baked-packages.mjs";
 
 const mounts = [];
-const push = (hostPath, containerPath) => {
+const push = (hostPath, containerPath, mode = "") => {
     if (existsSync(hostPath)) {
-        mounts.push(`${hostPath}:${containerPath}`);
+        mounts.push(`${hostPath}:${containerPath}${mode}`);
     }
 };
+
+// The checkout itself, read-only: the manifests the dists below were built against, which the entrypoint lays over the
+// image's before the daemon starts (dev-heal-manifests.mjs), so a sandbox that sleeps on an image older than its
+// checkout still wakes.
+push(REPO_ROOT, DEV_CHECKOUT, ":ro");
 
 push(join(REPO_ROOT, "_sandbox/sandbox/dist"), `${SANDBOX_ROOT}/dist`);
 // netd as build-netd.sh last built it on the image's own Debian release. Its directory, not the file: a rebuild

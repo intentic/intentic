@@ -93,6 +93,49 @@ pub fn held_back(record: &ChannelRecord, parked: bool, sweep: bool) -> Option<&'
     None
 }
 
+/* A DEV SANDBOX ASKS ITS CHECKOUT BEFORE IT SLEEPS (2026-10-18). One that dev-sandbox.sh launched runs its checkout's
+compiled code over an image that installed the dependencies of whenever it was built, so a dependency the checkout added
+since crashes its next start, and after a sleep every wake is one. The checkout's own script (dev-before-sleep.mjs) says
+whether the image still holds what the daemon needs and, when it does not, starts the rebuild while nobody is using the
+sandbox: exit 75 and one line hold it awake for that. Anything else lets it sleep as before: a checkout this side cannot
+see, one without the script, a node the login shell cannot find, or a script that took longer than a minute to answer. */
+const DEV_ROOT_ENV: &str = "SANDBOX_DEV_ROOT";
+const DEV_BEFORE_SLEEP: &str = "_sandbox/sandbox/scripts/dev-before-sleep.mjs";
+const DEV_KEEP_AWAKE: i32 = 75;
+const DEV_ASK_LIMIT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// The line that asks, run by a login shell so node and pnpm are where the owner's own terminal finds them. Pure.
+fn dev_ask_script(root: &str, slug: &str) -> String {
+    let quoted = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
+    format!(
+        "cd {} && exec node {DEV_BEFORE_SLEEP} {}",
+        quoted(root),
+        quoted(slug)
+    )
+}
+
+/// The checkout's answer: the reason to stay awake, or None to sleep. Pure.
+fn held_by_checkout(code: Option<i32>, stdout: &str) -> Option<String> {
+    (code == Some(DEV_KEEP_AWAKE)).then(|| {
+        stdout
+            .lines()
+            .map(str::trim)
+            .rfind(|line| !line.is_empty())
+            .unwrap_or("its dev checkout asked")
+            .to_string()
+    })
+}
+
+fn dev_checkout_holds_awake(slug: &str, container: &str) -> Option<String> {
+    let root = docker::container_env_value(container, DEV_ROOT_ENV)?;
+    if !std::path::Path::new(&root).join(DEV_BEFORE_SLEEP).is_file() {
+        return None;
+    }
+    let ran =
+        docker::run_bounded("sh", &["-lc", &dev_ask_script(&root, slug)], DEV_ASK_LIMIT).ok()?;
+    held_by_checkout(ran.code, &ran.stdout)
+}
+
 /// How long a sandbox has been quiet, for the line that says it slept. Pure.
 fn quiet_for(signal: Option<WorkSignal>, now_ms: u64) -> String {
     let minutes = signal
@@ -228,6 +271,9 @@ fn consider(slug: &str, idle_ms: u64, source: Source) -> (bool, String) {
     match sleep_verdict(signal, now, idle_ms) {
         Verdict::Awake(why) => (false, why.to_string()),
         Verdict::Sleep => {
+            if let Some(why) = dev_checkout_holds_awake(slug, &container) {
+                return (false, why);
+            }
             let quiet = quiet_for(signal, now);
             let _why = crate::sandbox::intent::Reason::hold(
                 format!(
@@ -575,6 +621,37 @@ mod tests {
                 "{due}"
             );
         }
+    }
+
+    #[test]
+    fn only_the_checkouts_exit_75_holds_a_dev_sandbox_awake_and_its_last_line_says_why() {
+        assert_eq!(
+            held_by_checkout(
+                Some(75),
+                "intentic: reading\nits image lacks mediaplex 1.0.0\n\n"
+            ),
+            Some("its image lacks mediaplex 1.0.0".to_string())
+        );
+        assert_eq!(
+            held_by_checkout(Some(75), ""),
+            Some("its dev checkout asked".to_string())
+        );
+        // A checkout that says sleep, fails, or never answered: it sleeps as before.
+        for code in [Some(0), Some(1), Some(2), None] {
+            assert_eq!(
+                held_by_checkout(code, "its image lacks x 1"),
+                None,
+                "{code:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_dev_ask_quotes_the_checkout_and_the_slug_for_the_shell() {
+        assert_eq!(
+            dev_ask_script("/home/ada/it's here", "sandbox-0123456789ab"),
+            "cd '/home/ada/it'\\''s here' && exec node _sandbox/sandbox/scripts/dev-before-sleep.mjs 'sandbox-0123456789ab'"
+        );
     }
 
     #[test]

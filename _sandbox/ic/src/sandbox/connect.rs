@@ -905,13 +905,15 @@ fn connected_device(old: &[u8]) -> Option<String> {
     value("HOST_PAIR_TOKEN").and(value("HOST_LABEL"))
 }
 
-/// The dev wrapper's binds of a checkout's compiled trees over the image's own copies (dev-mounts.mjs): the ones a
-/// replace keeps, when the run was not handed its own. Pure.
+/// The dev wrapper's binds of a checkout's compiled trees over the image's own copies, and of the read-only checkout
+/// beside them (dev-mounts.mjs): the ones a replace keeps, mode and all, when the run was not handed its own. Pure.
 fn sandbox_binds(binds: &[String]) -> Vec<String> {
     binds
         .iter()
         .filter(|bind| {
-            bind.rsplit_once(':')
+            bind.strip_suffix(":ro")
+                .unwrap_or(bind)
+                .rsplit_once(':')
                 .is_some_and(|(_, destination)| destination.starts_with("/opt/sandbox/"))
         })
         .cloned()
@@ -1729,10 +1731,12 @@ mod tests {
             "/home/ada/intentic/_sandbox/sandbox/dist:/opt/sandbox/dist".to_string(),
             "/var/run/docker.sock:/var/run/docker.sock".to_string(),
             "C:\\Users\\ada\\intentic\\dist:/opt/sandbox/node_modules/@intentic/x/dist".to_string(),
+            "/home/ada/intentic:/opt/sandbox/dev-checkout:ro".to_string(),
+            "/home/ada/certs:/etc/ssl/extra:ro".to_string(),
         ];
         assert_eq!(
             sandbox_binds(&binds),
-            vec![binds[0].clone(), binds[2].clone()]
+            vec![binds[0].clone(), binds[2].clone(), binds[3].clone()]
         );
     }
 

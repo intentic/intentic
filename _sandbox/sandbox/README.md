@@ -621,3 +621,17 @@ sh _sandbox/sandbox/scripts/dev-restart.sh   # recompile and restart the daemon 
 `dev-restart.sh` runs the compiled daemon's state planner inside the running container before it restarts it, and
 refuses when that cannot load: only compiled code is mounted, never `node_modules`, so a package the image lacks
 crashes every start of the one container there is, and needs `pnpm rebuild:sandbox <slug>` instead.
+
+A dev container also gets the whole checkout, read-only, at `/opt/sandbox/dev-checkout` (`scripts/dev-mounts.mjs`).
+Before the daemon starts, `docker-entrypoint.sh` runs the checkout's `scripts/dev-heal-manifests.mjs`, and
+`dev-restart.sh` runs it before its load check. It lays each baked package's resolution fields (`type`, `main`,
+`exports`, `imports`) from the checkout over the image's manifest, and lays in a workspace package the image was built
+without (its dist, plus `node_modules` pointing at pnpm's hoisted store). So a new export subpath or a new workspace
+package no longer crashes the wake after a sleep. A dependency the image never installed still needs an image. When the
+keeper is about to put the sandbox to sleep, `ic sandbox sleep --idle` asks `scripts/dev-before-sleep.mjs <slug>`
+first. That script compares the daemon's production closure in the checkout's lockfile with the image's deploy
+lockfile (`scripts/dev-image-drift.mjs`). If they differ, it starts `pnpm rebuild:sandbox` detached, into the log the
+Sandbox page's rebuild reads, and keeps the sandbox awake until the rebuild ends. It tries once per drift, so a failing
+build does not run on every sweep. `--dry-run` prints the verdict without starting anything.
+(2026-10-18: rebuilding on every sleep was rejected. Most drift was a manifest the start can heal in milliseconds, and
+a sleep is not the only way a container restarts.)

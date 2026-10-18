@@ -805,7 +805,7 @@ fn mount_source_format(destination: &str) -> String {
 pub fn bind_mounts(container: &str) -> Vec<String> {
     inspect(
         container,
-        "{{range .Mounts}}{{if eq .Type \"bind\"}}{{.Source}}:{{.Destination}}\n{{end}}{{end}}",
+        "{{range .Mounts}}{{if eq .Type \"bind\"}}{{.Source}}:{{.Destination}}{{if not .RW}}:ro{{end}}\n{{end}}{{end}}",
     )
     .map(|text| {
         text.lines()

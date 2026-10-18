@@ -107,7 +107,10 @@ flowchart LR
   `asleep` instead, never both; `--idle <minutes>` (the machine agent's keeper) sleeps only the sandboxes this side
   keeps whose daemon's work signal (`/run/intentic/work.json`) has said `quietSince` for that long, with nothing
   working and no `nextWakeAt` due within the window, and never one mid-update, parked, held or locked by another ic
-  run. Each sleep posts a host report with `asleep: true`. `ic sandbox wakes` (polled by the agent while anything
+  run. A dev sandbox (one whose container carries `SANDBOX_DEV_ROOT`) first asks that checkout's
+  `_sandbox/sandbox/scripts/dev-before-sleep.mjs <slug>` through a login shell, with a one-minute limit. Exit 75 keeps
+  it awake, with the script's last line as the reason, while the script rebuilds an image that lacks a dependency the
+  checkout's daemon needs. Any other answer lets it sleep. Each sleep posts a host report with `asleep: true`. `ic sandbox wakes` (polled by the agent while anything
   sleeps, run by the desktop app the moment its page asks, and asking docker nothing when nothing does) sends the asleep sandboxes' report keys to the platform's
   `POST /host-report/wakes` and starts each one somebody has opened, as a person's start, reporting `fixing` then
   `done` around it; `--json` ends on `{"asleep": n}`. `start`, `restart` and every recreate clear both marks, and so

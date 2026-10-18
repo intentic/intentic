@@ -60,8 +60,12 @@ fi
 # Do the baked manifests still describe the dists mounted over them? Only compiled output is mounted, never
 # node_modules, so a package.json that gained an export subpath since the image was built leaves the container
 # resolving the new dist against the old manifest — Node refuses a subpath whose file is sitting right there.
-# Checked before the build rather than after: nothing compiled can fix it, and the answer is an image rebuild.
-if ! node "$SCRIPT_DIR/dev-manifest-drift.mjs" "$CONTAINER"; then
+# A container with the checkout mounted heals that itself (dev-heal-manifests.mjs, below and at every start); one
+# created before that mount can only be told to rebuild, which is checked before the build: nothing compiled fixes it.
+HEALS_MANIFESTS=0
+if docker inspect --format '{{range .Mounts}}{{.Destination}}{{"\n"}}{{end}}' "$CONTAINER" | grep -qx '/opt/sandbox/dev-checkout'; then
+    HEALS_MANIFESTS=1
+elif ! node "$SCRIPT_DIR/dev-manifest-drift.mjs" "$CONTAINER"; then
     exit 1
 fi
 
@@ -90,6 +94,11 @@ echo "intentic: compiling netd…"
 if ! bash "$ROOT/_tools/scripts/image/build-netd.sh"; then
     echo "error: netd failed to build — the running daemon is untouched. Fix the error and save again." >&2
     exit 1
+fi
+
+# The restart's entrypoint lays the checkout's manifests over the image's; the check below has to read them the same way.
+if [ "$HEALS_MANIFESTS" = 1 ]; then
+    docker exec -u 0 "$CONTAINER" node /opt/sandbox/dev-checkout/_sandbox/sandbox/scripts/dev-heal-manifests.mjs
 fi
 
 # Will the compiled daemon load in this container? Only compiled output is mounted, never node_modules, so code that

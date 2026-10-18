@@ -217,6 +217,17 @@ if [ -w "$cgroup_root/cgroup.subtree_control" ] && grep -qw memory "$cgroup_root
     fi
 fi
 
+# A DEV SANDBOX'S MANIFESTS, from its checkout. dev-sandbox.sh mounts the checkout's compiled dists over the packages
+# baked here, and the checkout itself read-only at /opt/sandbox/dev-checkout (dev-mounts.mjs). A dist built against a
+# manifest newer than the image's (a new export subpath, a new workspace package) would crash the daemon on every start,
+# and after a sleep every wake is one, so the checkout's own script lays its manifests over the baked ones first. Run
+# from the checkout, not baked, so what it heals follows the checkout without a rebuild. Never in the way of a start: a
+# failure says so and the daemon starts as it would have.
+dev_heal=/opt/sandbox/dev-checkout/_sandbox/sandbox/scripts/dev-heal-manifests.mjs
+if [ -f "$dev_heal" ]; then
+    node "$dev_heal" || echo "intentic: the dev checkout's manifests could not be laid over the image's (above); starting as built" >&2
+fi
+
 # UV_THREADPOOL_SIZE: every fs, dns and zlib call the daemon makes shares libuv's pool, four threads by default, so a
 # workspace walk's thousands of stats queue the file a person just opened behind them (measured: a small read's p99
 # went from 268 ms at 4 threads to 112 ms at 64). Children inherit it, which costs them idle threads and nothing else.
