@@ -32,8 +32,8 @@
                 each disk, compact when a disk qualifies.
       panic   - remove everything reclaimable and compact regardless of jobs and hours.
 
-    Never removed: a container labelled dev.intentic.kind=sandbox (an Intentic sandbox, even a
-    stopped one), its image and its volumes, or any other volume named intentic-* outside
+    Never removed: a container carrying the dev.intentic.kind label (an Intentic sandbox or runner,
+    even a stopped one), its image and its volumes, or any other volume named intentic-* outside
     -Mode panic. That covers the trashed sandboxes `ic sandbox restore` brings back.
 
     History: 2026-09-27 CI-safe (no compaction during a job; docker integration restored
@@ -75,7 +75,9 @@ $LastCompactFile = Join-Path $Root 'last-compact'
 $SysDrive = 'C:'
 $DockerExe = 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
 $DockerDisk = Join-Path $env:LOCALAPPDATA 'Docker\wsl\disk\docker_data.vhdx'
-$SandboxLabel = 'dev.intentic.kind=sandbox'
+# The label KEY, not kind=sandbox: a runner (kind=runner) is a stopped container too, and on 2026-10-16 the
+# daily prune deleted omen's, leaving its volumes and enrollment behind with nothing to boot them.
+$IntenticKindLabel = 'dev.intentic.kind'
 
 if (-not (Test-Path -LiteralPath $Root)) { New-Item -ItemType Directory -Path $Root -Force | Out-Null }
 
@@ -386,7 +388,7 @@ function Invoke-Prune {
     param([ValidateSet('light', 'routine', 'aggressive', 'panic')][string]$Level)
 
     if (-not (Test-EngineUp)) { Write-Log 'docker engine not responding; skipping prune' 'WARN'; return }
-    $keepSandboxes = "label!=$SandboxLabel"
+    $keepSandboxes = "label!=$IntenticKindLabel"
     switch ($Level) {
         'light' {
             Write-Log 'pruning: light (unused images older than 24h, build cache capped)'
@@ -401,7 +403,7 @@ function Invoke-Prune {
             Remove-UnusedVolumes
         }
         default {
-            Write-Log "pruning: $Level (every stopped container but sandboxes, every unused image, all build cache, unused volumes)" 'WARN'
+            Write-Log "pruning: $Level (every stopped container but Intentic sandboxes and runners, every unused image, all build cache, unused volumes)" 'WARN'
             Invoke-Docker @('container', 'prune', '-f', '--filter', $keepSandboxes) | Out-Null
             Invoke-Docker @('image', 'prune', '-af') | Out-Null
             Invoke-BuilderPrune 0
