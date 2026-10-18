@@ -93,8 +93,8 @@ interface ArmedWorkspaceWatch extends WorkspaceWatch {
     readonly ready: Promise<void>;
 }
 
-// What the watch's thread answers when asked: the resident tree's view, or that its first listing is done.
-export type WatchAsk = { readonly kind: "view" } | { readonly kind: "ready" };
+// What the thread answers: the resident tree's view, readiness, or completion of native watcher cleanup.
+export type WatchAsk = { readonly kind: "view" } | { readonly kind: "ready" } | { readonly kind: "close" };
 
 // What the watch's thread says unasked: a batch of changed paths, what that batch moved in the tree, or a failure.
 export type WatchNews =
@@ -113,6 +113,7 @@ interface IsolatedWorkspaceWatch extends WorkspaceWatch {
 const createIsolatedWorkspaceWatch = (root: string, logger: Logger): IsolatedWorkspaceWatch => {
     const listeners = new Set<(paths: string[]) => void>();
     const treeListeners = new Set<(delta: WorkspaceTreeDelta) => void>();
+    let closing: Promise<void> | undefined;
     const calls = workerCalls<WatchAsk, WatchNews>(siblingModule(import.meta, "workspace-watch-worker"), { root }, (news) => {
         switch (news.kind) {
             case "error":
@@ -141,7 +142,8 @@ const createIsolatedWorkspaceWatch = (root: string, logger: Logger): IsolatedWor
             return () => treeListeners.delete(listener);
         },
         view: () => calls.call<WorkspaceTree>({ kind: "view" }),
-        close: () => calls.close(),
+        // Native callbacks must be released in their owning thread before that thread is terminated.
+        close: () => (closing ??= calls.call<void>({ kind: "close" }).finally(() => calls.close())),
     };
 };
 
@@ -209,8 +211,8 @@ export const createWorkspaceWatch = (root: string, logger?: Logger): ArmedWorksp
 const subscribers = new Set<(paths: string[]) => void>();
 const treeSubscribers = new Set<(delta: WorkspaceTreeDelta) => void>();
 let instance: { readonly root: string; readonly watch: IsolatedWorkspaceWatch } | undefined;
-// Returns the stop, for the daemon's shutdown.
-export const startWorkspaceWatch = (root: string, logger: Logger): (() => void) => {
+// The stop settles once the native watcher and its thread are both gone.
+export const startWorkspaceWatch = (root: string, logger: Logger): (() => Promise<void>) => {
     if (instance === undefined) {
         instance = { root, watch: createIsolatedWorkspaceWatch(root, logger) };
         instance.watch.subscribe((paths) => {
@@ -224,9 +226,12 @@ export const startWorkspaceWatch = (root: string, logger: Logger): (() => void) 
             }
         });
     }
-    return () => {
-        void instance?.watch.close();
-        instance = undefined;
+    const started = instance;
+    return async () => {
+        if (instance === started) {
+            instance = undefined;
+        }
+        await started.watch.close();
     };
 };
 

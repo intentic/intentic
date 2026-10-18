@@ -40,7 +40,16 @@ watcher.subscribe((paths) => {
     news({ kind: "paths", paths });
     void after(async () => announce(await tree.apply(paths)));
 });
-serveCalls<WatchAsk & { readonly id: number }>(port, (ask) => after(() => (ask.kind === "view" ? tree.view() : undefined)));
-setInterval(() => void after(async () => announce(await tree.rebuild())), RECONCILE_MS).unref();
+const reconcile = setInterval(() => void after(async () => announce(await tree.rebuild())), RECONCILE_MS).unref();
+serveCalls<WatchAsk & { readonly id: number }>(port, (ask) =>
+    after(async () => {
+        if (ask.kind === "close") {
+            clearInterval(reconcile);
+            await watcher.close();
+            return;
+        }
+        return ask.kind === "view" ? tree.view() : undefined;
+    }),
+);
 
 port.on("close", () => void watcher.close());

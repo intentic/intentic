@@ -45,9 +45,8 @@ import StandingGrants from "./StandingGrants.vue";
 import { useOperation } from "../../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
 
-// Owner-only invites: daemon's enforced /members list first, fail-closed (sandboxRaw throws on non-2xx), then the
-// platform's record + email, each with its own error. A declined or refused send isn't a failure, since the grant is
-// already recorded; the owner gets the link instead. Members get read-only; presence is for everyone.
+// Owner invites write the enforced daemon roster first, then the platform record and email, with separate errors.
+// Failed mail returns the active grant's link. Members get read-only access; presence is for everyone.
 
 const t = useT();
 
@@ -56,9 +55,8 @@ const sandbox = useSandbox();
 const { sessionExpiresAt } = useSandboxSession();
 
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
-// Everything on this tab but the roster is operating authority, which a maintainer holds as the owner does: signing
-// every browser out is maintainer and up at the daemon (`ownerDenied`), and the door counts below read at viewer. Only
-// inviting and re-grading people stays the owner's (`isOwner`).
+// Maintainers may operate every control except the roster (`isOwner`); signing out browsers requires maintainer.
+// Door counts need only viewer access.
 const { canShip } = useRole();
 
 // The platform's invite records: who was invited and how that stands. The daemon's own roster is `grants` below.
@@ -80,13 +78,10 @@ const roleLabel = (role: string): string =>
 // The reader's own tier, for the tile a member sees of themselves.
 const ownRole = computed((): string => roleLabel(sandbox.active.value?.role ?? `viewer`));
 
-// The daemon's own roster, the one copy that knows what each person may do; the platform's records above carry the tier
-// only. It is the members cache entry (useMembers), which a grant or revoke here fills with the roster the daemon
-// answers, so this tab holds no copy of its own and the board's Everyone/Mine row reads the same list. Only the owner
-// reads it.
+// The owner reads the daemon's roster through useMembers. Grant/revoke responses update that shared cache,
+// so the board's Everyone/Mine row and this tab agree; platform invite records carry only the tier.
 const { roster, members: grants, error: grantsError } = useMembers({ enabled: isOwner });
-// Why that roster could not be read. While set nobody's access is known, and a grant replaces the whole row, so an edit
-// sent now would drop what it holds and widen what the person gets: no panel opens until it clears.
+// Block panels while the roster is unreadable: saving a whole grant with unknown fields could widen access.
 const grantsUnread = computed<NoticeModel | undefined>(() =>
     grantsError.value === undefined
         ? undefined
@@ -111,8 +106,7 @@ const WORDS = {
 } as const;
 const wordOf = (member: InviteRecord): string => WORDS[accessWord(accessOf(member))]();
 
-// THE OPEN PERSON: one at a time, under the tiles, as a persona opens. Adding someone opens them, since "added a person"
-// and "now set them up" are one errand; their address names them in the URL.
+// One person opens beneath the tiles; adding someone opens their setup, with their address in the URL.
 const selected = ref<string>();
 const selectedMember = computed(() => members.value.find((member) => member.email === selected.value));
 const panelId = useId();
@@ -142,9 +136,8 @@ watch(selected, (email) => {
     }
 });
 
-// ADDING: an address and nothing else, as a persona's name is, typed into the card where the person will appear. The
-// person starts able to see and nothing more (no agents, nothing to spend), so the invite going out at once hands over
-// nothing the owner has not yet decided.
+// Adding an address immediately sends a view-only invite, with no agents or spending authority.
+// Further access is granted through the person's panel.
 const adding = ref(false);
 const newEmail = ref(``);
 const validEmail = (value: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
@@ -313,8 +306,7 @@ const doors = computed(() => {
     return rows;
 });
 
-// Clears what this tab has to say before the next write: the link went with the notice, and a link with no sentence,
-// or vice versa, is worse than neither.
+// Clear the notice and its invite link together before the next write.
 const clearNotice = (): void => {
     localNotice.value = undefined;
     writes.dismiss();

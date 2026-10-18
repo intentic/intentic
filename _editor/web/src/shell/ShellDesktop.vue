@@ -85,9 +85,7 @@ import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 import SandboxSwitcher from "../features/sandbox/gates/SandboxSwitcher.vue";
 import { useT } from "@intentic/ui/i18n";
 
-// A rail element; the identity half (id, route, label, icon) is RailTile, shared with the rail's memory.
-// - id: the tile's own name or contributing extension's id — what RAIL_GROUPS ranks and groups by.
-// - icon: undefined for a repository tile, which renders initials instead.
+// RailTile supplies id, route, label and icon: RAIL_GROUPS ranks the id; repository tiles render initials without an icon.
 const t = useT();
 
 interface SectionTile extends RailTile {
@@ -99,9 +97,7 @@ interface SectionTile extends RailTile {
     readonly ghost?: boolean;
 }
 
-// One label per tile — name, badge tooltip, what's running, then note (what is owed, then what is moving,
-// then standing facts). A badge has no tooltip of its own: nesting one inside the tile's would open two
-// overlapping boxes on hover, and the turning mark can't carry one either, being 10px of glyph.
+// One tile tooltip combines badge, running work and standing facts; nested badge tooltips would overlap it.
 const tileParts = (tile: SectionTile): string[] =>
     [tile.badge?.tooltip, tile.badge?.running, tile.note?.text].flatMap((part) => (part === undefined || part === `` ? [] : [part]));
 const tileLabel = (tile: SectionTile): string => [tile.label, ...tileParts(tile)].join(` · `);

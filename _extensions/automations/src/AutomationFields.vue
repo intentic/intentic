@@ -26,9 +26,7 @@ import { useConversations, useSenders, useWatchCheck } from "./useAutomations";
 import { type AutomationFormState, type ConditionKind, type SenderRuleDraft, splitIds, type TargetKind, type TriggerKind } from "./useAutomationForm";
 import { t } from "./i18n.js";
 
-// Every field of an automation, rendered once by both the composer that creates one and the row that edits one; the
-// shared state lives in useAutomationForm. Three full-width steps (When, Then, Runs as) in a label rail, each sized to
-// its own content, rather than two columns forcing every step into the same box.
+// Shared create/edit fields use useAutomationForm, with content-sized When, Then and Runs as steps in a label rail.
 
 const props = defineProps<{
     state: AutomationFormState;
