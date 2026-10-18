@@ -6,7 +6,8 @@
    big each figure is as the eye follows it, rows arriving in reading order say how a board is laid out, the
    workspace arriving says where the file tree and the editor are. A page switching or a menu opening says nothing a
    static frame does not, so those do not move. A whole window changing what it shows is the exception: a cut there
-   reads as the window going blank, so it crossfades.
+   reads as the window going blank, so it crossfades. A row of tabs is the other: the part under it cuts, but the
+   selection's rule glides from the tab left to the tab chosen (SegmentedControl.vue), carrying the eye to where it went.
 
    THE SWITCH is `data-motion="reduced"` on <html>, written by ../motion/choice.ts from the Appearance setting and,
    under `system`, the OS's reduce-motion answer. Under it every duration token reads 0ms and every transition is

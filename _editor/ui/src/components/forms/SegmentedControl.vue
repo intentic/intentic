@@ -2,7 +2,7 @@
 <script setup lang="ts" generic="T extends string">
 import type { IconName } from "../../icons/iconSets.js";
 import { useDevice } from "../../composables/useDevice.js";
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ui } from "../../lib/ui.js";
 import { segmented } from "./segmented.js";
 import { countBadgePlate, countBadgeText } from "../feedback/countBadge.js";
@@ -110,6 +110,8 @@ const underlineTab = (active: boolean): string =>
         coarse.value ? `flex min-h-11 items-end` : ``,
         size === `xs` ? `pb-1.5 text-xs` : `pb-2 text-sm`,
         !active && `hover:border-b-line`,
+        // Once the gliding rule (below) has its place, it is the selection's mark and the tab's own goes clear.
+        active && rule.value !== undefined && `border-b-transparent`,
     );
 
 const look = computed(() => segmented({ variant, stretch: variant === `pills` && stretch, size, wrap }));
@@ -135,11 +137,64 @@ const reveal = (): void => {
 };
 onMounted(reveal);
 watch(tabStop, reveal, { flush: `post` });
+
+// THE GLIDING RULE: one bar under the strip that slides from the tab being left to the one chosen, rather than one
+// rule going out as another comes in, so the eye is carried to where the selection went. Drawn as a 1px-wide bar that
+// is translated and scaled to the open tab, never given a left or a width: both are compositor-only, so the slide
+// costs no layout and no paint per frame, however busy the page under it. Measured from the tab's offset in the strip,
+// which scrolls with it. The first placement takes no time (nothing slid there); after that it moves on the house
+// curve at `--motion-base`, which reads 0ms under the reduced-motion switch, so a still interface gets a cut. Until it
+// is measured (and with no layout at all, as in a test) the open tab draws its own rule, so nothing is ever unmarked.
+const rule = ref<{ x: number; width: number }>();
+const gliding = ref(false);
+const place = (): void => {
+    const open = track.value?.querySelectorAll<HTMLElement>(`[role="tab"]`)[tabStop.value];
+    if (variant !== `underline` || open === undefined || open.offsetWidth === 0) {
+        return;
+    }
+    const next = { x: open.offsetLeft, width: open.offsetWidth };
+    if (rule.value?.x === next.x && rule.value.width === next.width) {
+        return;
+    }
+    rule.value = next;
+    if (!gliding.value) {
+        requestAnimationFrame(() => requestAnimationFrame(() => (gliding.value = true)));
+    }
+};
+// A tab changes size under a count that ticks, a label a language swaps, a font arriving: every tab is watched, so
+// the rule follows the one it sits under, and the ones before it that push it along.
+let sizes: ResizeObserver | undefined;
+const observe = (): void => {
+    sizes?.disconnect();
+    if (variant !== `underline` || track.value === undefined || !(`ResizeObserver` in globalThis)) {
+        return;
+    }
+    sizes = new ResizeObserver(place);
+    sizes.observe(track.value);
+    track.value.querySelectorAll(`[role="tab"]`).forEach((tab) => sizes?.observe(tab));
+};
+onMounted(() => {
+    place();
+    observe();
+});
+onBeforeUnmount(() => sizes?.disconnect());
+watch(tabStop, place, { flush: `post` });
+watch(
+    () => options.map((option) => option.value).join(`\u0000`),
+    () => {
+        place();
+        observe();
+    },
+    { flush: `post` },
+);
+const ruleStyle = computed(() =>
+    rule.value === undefined ? undefined : { translate: `${rule.value.x}px 0`, scale: `${rule.value.width} 1` },
+);
 const optionClass = (active: boolean): string => (variant === `underline` ? underlineTab(active) : look.value.option({ active }));
 </script>
 
 <template>
-    <div ref="track" role="tablist" :class="look.track()">
+    <div ref="track" role="tablist" :class="[look.track(), variant === `underline` && `relative`]">
         <button
             v-for="(option, index) in options"
             :key="option.value"
@@ -170,5 +225,12 @@ const optionClass = (active: boolean): string => (variant === `underline` ? unde
                 countBadgeText(option.badge)
             }}</span>
         </button>
+        <span
+            v-if="ruleStyle !== undefined"
+            aria-hidden="true"
+            class="pointer-events-none absolute bottom-0 left-0 h-0.5 w-px origin-left bg-primary-500 will-change-[translate,scale]"
+            :class="gliding && `transition-[translate,scale] duration-(--motion-base) ease-smooth`"
+            :style="ruleStyle"
+        />
     </div>
 </template>
