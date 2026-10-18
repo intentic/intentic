@@ -20,7 +20,7 @@ import { sessionFor } from "../conversations/registry/routing.js";
 import type { OutboxSink } from "../webchat/webchat-outbox.js";
 import { type AutomationRecord, consecutiveFailures } from "./automations-store.js";
 import type { ScheduleMark } from "./schedule-coverage.js";
-import { sandboxZone, zoneOf } from "./schedule-zone.js";
+import { momentTimer, nextDueAfter, sandboxZone, zoneOf } from "./schedule-zone.js";
 import type { SenderLane } from "./senders.js";
 import type { JournalledFire } from "../store/journals/turn-journal.js";
 import { opt } from "../opt.js";
@@ -1199,6 +1199,8 @@ const releaseCountdownHolds = async (services: Services, now: number): Promise<v
 
 // Polls the manifest and fires whatever came due since the last pass; fires run detached, since a turn can outlast many
 // polls. Event automations fire from the fire route instead.
+// Every pass of a started scheduler also sets one timer for the soonest moment due within a poll (schedule-zone.ts),
+// so a schedule fires on its minute rather than up to a poll late.
 // What happened while nothing was running is the start's to settle (`catchUp`): a hosted sandbox stops itself when
 // nobody is connected (system/idle-stop.ts) and is not woken for a cron, so a machine asleep at the same hour every day
 // would otherwise never run its nightly chore at all. Each schedule that missed a moment fires ONCE, however many it
@@ -1240,8 +1242,10 @@ export const createAutomationsScheduler = (services: Services, intervalMs = 30_0
         }
         await services.scheduleCoverage.mark(changes);
         await releaseCountdownHolds(services, now);
+        exact.arm(loop === undefined ? undefined : nextDueAfter(automations, now, sandbox));
     };
     const tick = (now = Date.now()): Promise<void> => passes.run("pass", () => pass(now));
+    const exact = momentTimer(intervalMs, () => tick(), loggedAs(services, "automations pass on a due moment failed"));
 
     const catchUp = async (): Promise<void> => {
         const horizon = since;
@@ -1279,6 +1283,7 @@ export const createAutomationsScheduler = (services: Services, intervalMs = 30_0
         stop: () => {
             loop?.dispose();
             loop = undefined;
+            exact.clear();
         },
     };
 };

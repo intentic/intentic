@@ -38,9 +38,9 @@ export interface WorkSignalDeps {
     readonly working: () => number;
     // This boot's facts once known; absent for a daemon that keeps no boot record.
     readonly boot?: () => Promise<WorkSignalBoot | undefined>;
-    // Since when nobody has needed the sandbox, its soonest promised wake, and whether its owner switched sleep off
-    // (system/quiet-watch.ts): what the host's keeper puts a sandbox to sleep on (ic: `sandbox sleep --idle`). Absent
-    // for a daemon that offers no sleep.
+    // Since when nobody has needed the sandbox, its soonest promised wake, when a person was last here, and whether its
+    // owner switched sleep off (system/quiet-watch.ts): what the host's keeper puts a sandbox to sleep on and sets its
+    // alarm by (ic: `sandbox sleep --idle`, `sandbox wakes`). Absent for a daemon that offers no sleep.
     readonly quiet?: () => QuietReading;
     readonly events: Pick<DomainEvents, "subscribe">;
     readonly logger: Pick<Logger, "warn">;
@@ -67,8 +67,13 @@ export const workSignalBody = (liveTurns: number, at: number, boot?: WorkSignalB
         ...opt("lastRestartAt", boot?.restartAskedAt),
         ...opt("quietSince", quiet?.quietSince),
         ...opt("nextWakeAt", quiet?.nextWakeAt),
+        ...opt("personAt", quiet?.personAt),
         ...opt("keepAwake", quiet?.keepAwake),
     })}\n`;
+
+// Whether two quiet readings say the same, so an unchanged one is not rewritten before its stamp is old. Pure.
+const sameQuiet = (a: QuietReading | undefined, b: QuietReading | undefined): boolean =>
+    a?.quietSince === b?.quietSince && a?.nextWakeAt === b?.nextWakeAt && a?.personAt === b?.personAt && a?.keepAwake === b?.keepAwake;
 
 export const startWorkSignal = ({ working, events, logger, boot, quiet, path = WORK_SIGNAL_PATH, now = Date.now }: WorkSignalDeps): WorkSignal => {
     let written: { liveTurns: number; at: number; quiet: QuietReading | undefined } | undefined;
@@ -84,11 +89,7 @@ export const startWorkSignal = ({ working, events, logger, boot, quiet, path = W
         const liveTurns = working();
         const at = now();
         const reading = quiet?.();
-        const quietSame =
-            written?.quiet?.quietSince === reading?.quietSince &&
-            written?.quiet?.nextWakeAt === reading?.nextWakeAt &&
-            written?.quiet?.keepAwake === reading?.keepAwake;
-        if (written !== undefined && written.liveTurns === liveTurns && quietSame && at - written.at < REFRESH_MS) {
+        if (written !== undefined && written.liveTurns === liveTurns && sameQuiet(written.quiet, reading) && at - written.at < REFRESH_MS) {
             return;
         }
         try {

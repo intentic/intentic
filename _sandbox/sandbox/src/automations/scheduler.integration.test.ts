@@ -14,13 +14,14 @@ import { type JournalEntry, sqliteTurnJournal } from "../store/journals/turn-jou
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import type { PersistedAgent } from "../conversations/registry/agents-store.js";
 import type { Services } from "../composition.js";
-import { automationConfig } from "../harness/route-stores.testing.js";
+import { automationConfig, automationRecord } from "../harness/route-stores.testing.js";
 import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { resumeInterruptedFires } from "./fire-resume.js";
 import { restartResume } from "../agent/run/turn/restart-resume-policy.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { fileScheduleCoverageStore } from "./schedule-coverage.js";
+import { nextDueAfter } from "./schedule-zone.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
 import {
     automationIdle,
@@ -150,6 +151,37 @@ test("guards receive the reserved workspace-root directory to prune", async () =
 // "lands every thirty seconds for ever".
 
 const inMinutes = (minutes: number): number => Date.now() + minutes * 60_000;
+
+test("a started scheduler fires a moment due within a poll on the moment, not at the next poll", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    // Polls two seconds apart: the first, at 2s, sets the timer for 2.9s; the poll alone would fire it at 4s.
+    const at = Date.now() + 2_900;
+    await services.automations.upsert(automationConfig("standup", { trigger: { kind: "once", at } }));
+    const prompts: string[] = [];
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)), 2_000);
+    scheduler.start();
+    try {
+        await waitFor(() => expect(prompts).toEqual(["wake:standup"]), { timeout: 8_000, interval: 20 });
+        expect(Date.now() - at).toBeGreaterThanOrEqual(0);
+        expect(Date.now() - at).toBeLessThan(600);
+        await automationIdle("standup");
+    } finally {
+        scheduler.stop();
+    }
+});
+
+test("the soonest moment a clock drives is a cron's next run or a one-time wake still ahead, and nothing else", () => {
+    const after = Date.UTC(2026, 9, 18, 2, 30);
+    const nightly = automationRecord("nightly", { trigger: { kind: "schedule", cron: "0 3 * * *" } });
+    const dentist = automationRecord("dentist", { trigger: { kind: "once", at: Date.UTC(2026, 9, 18, 2, 45) } });
+    const past = automationRecord("past", { trigger: { kind: "once", at: after - 60_000 } });
+    const off = automationRecord("off", { enabled: false, trigger: { kind: "once", at: after + 60_000 } });
+    const broken = automationRecord("broken", { trigger: { kind: "schedule", cron: "not a cron" } });
+    expect(nextDueAfter([nightly], after, UTC)).toBe(Date.UTC(2026, 9, 18, 3, 0));
+    expect(nextDueAfter([nightly, dentist], after, UTC)).toBe(Date.UTC(2026, 9, 18, 2, 45));
+    expect(nextDueAfter([past, off, broken], after, UTC)).toBeUndefined();
+    expect(nextDueAfter([], after, UTC)).toBeUndefined();
+});
 
 test("a one-time wake fires when its moment arrives and switches itself off, so no later poll repeats it", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));

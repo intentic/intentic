@@ -7148,9 +7148,9 @@
             "sandboxUrl": "Adres sandboxa",
             "setUp": "Skonfiguruj go tam →",
             "sleep": "Usypiaj, gdy nieużywany",
-            "sleepOn": "Usypia się, gdy nikt z niego nie korzysta; harmonogram przypadający w tym czasie uruchomi się z opóźnieniem, po przebudzeniu",
-            "sleepOff": "Działa cały czas, więc harmonogramy uruchamiają się punktualnie",
-            "sleepTipNote": "Budzi się przy otwarciu."
+            "sleepOn": "Usypia się, gdy nikt z niego nie korzysta, i budzi przed zaplanowanymi zadaniami oraz przy otwarciu",
+            "sleepOff": "Działa cały czas, nawet gdy nikt z niego nie korzysta",
+            "sleepTipNote": "Zwalnia pamięć, gdy nieużywany."
         },
         "sandboxRecovery": {
             "gateHeading": "Uruchom go ponownie",

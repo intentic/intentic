@@ -354,9 +354,11 @@ or is meant to outlive it and is adopted; nothing is left to whoever happens to 
   workspace app began; absent while busy) and `nextWakeAt` (the soonest promised one-time wake), which the computer's
   keeper puts an unused local sandbox to sleep on ([`quiet-watch.ts`](../../_sandbox/sandbox/src/system/quiet-watch.ts)).
   Since 2026-10-18 the owner can switch that off per sandbox (settings `sleepWhenUnused`, the Overview's "Sleep when
-  unused" row): the signal then carries no `quietSince` and says `keepAwake: true`, so no keeper sleeps it. Nothing
-  wakes a sleeping sandbox for a clock: a cron that came due fires once, late, at its next start (the scheduler's
-  catch-up), and a one-time wake holds it awake only when due within the keeper's window.
+  unused" row): the signal then carries no `quietSince` and says `keepAwake: true`, so no keeper sleeps it. The same
+  day a sleep began to keep the schedule: `nextWakeAt` counts crons for the sleep (promised-wakes.ts, purpose `sleep`),
+  ic stores it as the sleep's alarm and starts the sandbox a few minutes ahead of it, and the scheduler sets a timer
+  for the soonest moment within a poll, so a woken sandbox fires on the minute rather than at its next 30-second poll.
+  `personAt` (when a person was last there since boot) lets a sandbox the alarm woke sleep again soon after.
 - **Unused helpers rest.** The code-search engine's process exits after 10 minutes nobody searched and comes back on
   the next search; the workspace's autostarted apps stop after 15 minutes with no editor connected, no preview visit and
   no open connection, and start again when somebody connects or visits one

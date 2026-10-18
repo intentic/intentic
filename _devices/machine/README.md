@@ -721,7 +721,7 @@ The keeper now puts an unneeded sandbox to sleep and wakes it when somebody open
 - **Sleep.** Right after each sweep the keeper runs `ic sandbox sleep --idle <minutes> --json --source agent`. ic stops,
   through Docker (so `--restart unless-stopped` leaves it down), every running sandbox of this side whose daemon has
   said for that long that nobody needs it: no editor connected, nothing in flight, no terminal typed in, nobody
-  connected to one of its apps (`quietSince` in its work signal), and no promised wake due within the stretch. ic
+  connected to one of its apps (`quietSince` in its work signal), and no promised moment due within the alarm's lead (below). ic
   records it asleep and reports `asleep: true` to the platform, so the editor can say so. A sleeping sandbox's dead link
   is never a repair: the keeper leaves it alone, and `ic sandbox fix` finds it healthy.
 - **Wake.** The platform never calls a machine. A browser that finds the sandbox asleep asks the platform to wake it,
@@ -735,9 +735,14 @@ The keeper now puts an unneeded sandbox to sleep and wakes it when somebody open
   it with `intentic-machine sandbox sleep-after <minutes|off>` and read it with `sleep-after status`. One sandbox can
   be kept awake from its own editor instead (Overview, "Sleep when unused", settings `sleepWhenUnused`, 2026-10-18):
   its daemon then never says it is quiet, and its signal's `keepAwake` is the reason ic gives.
-- **Clocks.** Nothing here wakes a sandbox for a clock. A one-time wake (a one-time automation, a scheduled send, an
-  approved post) due within the window keeps the sandbox up; one due later, and every cron, is missed while it sleeps
-  and fires once, late, when it next starts (the sandbox scheduler's catch-up).
+- **Alarms** (2026-10-18). A sleep keeps the schedule. As ic puts a sandbox to sleep it records the soonest moment
+  the daemon promised (a cron, a one-time automation, a scheduled send, an approved post: the signal's `nextWakeAt`)
+  as an alarm, and the same `ic sandbox wakes` this agent polls starts the sandbox ahead of it, off this machine's clock
+  alone, by twice what its starts from sleep have been taking plus a minute (two minutes at least, ten at most), so the
+  daemon is up and fires it on the minute. A moment due within that lead and five minutes keeps the sandbox awake
+  instead. A sandbox the alarm woke that no person has used since sleeps again five minutes after the work is done. The
+  log says `something it scheduled is due` for such a start. The computer itself asleep or switched off still misses
+  it: the daemon then fires it once, late, when it next starts (the scheduler's catch-up).
   `intentic-machine sandbox sleep <slug>` puts one sandbox to sleep now. An `ic` without the verbs is said once and
   nothing sleeps.
 

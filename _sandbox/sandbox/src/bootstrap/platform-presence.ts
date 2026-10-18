@@ -20,13 +20,14 @@ export const nextPromisedWakeAt = async (services: BootPhase["services"]): Promi
 
 // What the quiet watch asks for the host's keeper that puts an unneeded sandbox to sleep (system/quiet-watch.ts): the
 // same questions idle-stop asks, plus whether a workspace app is in use and whether the owner switched sleep off for this
-// sandbox (settings `sleepWhenUnused`).
+// sandbox (settings `sleepWhenUnused`). Its promised wakes are the sleep's, crons among them: the keeper sets an alarm
+// for the soonest and starts the sandbox ahead of it.
 export const quietProbes = (services: BootPhase["services"]): QuietProbes => ({
     connected: connectedCount,
     working: () => workingNow(services, "idle-stop").length,
     terminalActivityAt: lastTerminalActivity,
     appsInUse: () => anyConnected(services.processes.ports()),
-    nextWakeAt: () => nextPromisedWakeAt(services),
+    nextWakeAt: async () => (await nextPromisedWake(services, "sleep")) ?? 0,
     keepAwake: async () => !(await services.sandboxSettings.get()).sleepWhenUnused,
 });
 

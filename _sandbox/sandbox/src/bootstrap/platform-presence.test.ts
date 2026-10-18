@@ -18,7 +18,7 @@ import { createFleet } from "../conversations/registry/agents-registry.js";
 import type { LandStandings } from "../conversations/land/standing.js";
 import type { Services } from "../composition.js";
 import { startIdleStop } from "../system/idle-stop.js";
-import { nextPromisedWakeAt } from "./platform-presence.js";
+import { nextPromisedWakeAt, quietProbes } from "./platform-presence.js";
 import { nextPromisedWake, PROMISED_WAKES } from "./promised-wakes.js";
 import { workingNow } from "./working-now.js";
 
@@ -155,11 +155,11 @@ describe("the one list of promised wakes", () => {
 
     it("names every clock that starts something on a moment somebody was promised, and which question each answers", () => {
         expect(PROMISED_WAKES.map(({ name, holds }) => [name, holds])).toEqual([
-            ["a one-time automation", ["idle-stop", "restart"]],
-            ["a scheduled message, or a held turn booked for its allowance's reset", ["idle-stop", "restart"]],
-            ["an approved post or action", ["idle-stop", "restart"]],
-            ["a held automation wake counting down", ["idle-stop", "restart"]],
-            ["a cron automation", ["restart"]],
+            ["a one-time automation", ["idle-stop", "restart", "sleep"]],
+            ["a scheduled message, or a held turn booked for its allowance's reset", ["idle-stop", "restart", "sleep"]],
+            ["an approved post or action", ["idle-stop", "restart", "sleep"]],
+            ["a held automation wake counting down", ["idle-stop", "restart", "sleep"]],
+            ["a cron automation", ["restart", "sleep"]],
         ]);
     });
 
@@ -200,12 +200,14 @@ describe("the one list of promised wakes", () => {
         expect(await nextPromisedWake(promising({ holds: [asking] }), "idle-stop")).toBeUndefined();
     });
 
-    it("a cron holds the automatic update's restart and not idle-stop", async () => {
+    it("a cron holds the automatic update's restart and a local sleep's alarm, and not idle-stop", async () => {
         const services = promising({ automations: [nightly("nightly")] });
         expect(await nextPromisedWake(services, "idle-stop")).toBeUndefined();
         const cronAt = await nextPromisedWake(services, "restart");
         expect(cronAt).toBeGreaterThan(Date.now());
         expect(cronAt).toBeLessThanOrEqual(Date.now() + 24 * 3_600_000);
+        expect(await nextPromisedWake(services, "sleep")).toBe(cronAt);
+        expect(await quietProbes(services).nextWakeAt()).toBe(cronAt ?? -1);
     });
 
     it("keeps an idle machine up through the moment an approved post is due, which only the executor's clock sends", async () => {

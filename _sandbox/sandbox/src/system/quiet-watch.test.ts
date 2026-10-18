@@ -19,11 +19,11 @@ describe("startQuietWatch", () => {
         let typedAt = 0;
         const watch = startQuietWatch(probesOf({ terminalActivityAt: () => Promise.resolve(typedAt) }), { logger, now: () => clock, checkMs: 1e9 });
         await watch.check();
-        expect(watch.read()).toEqual({ quietSince: 1_000_000 });
+        expect(watch.read()).toEqual({ quietSince: 1_000_000, personAt: 0 });
         clock += 60_000;
         typedAt = clock - 5_000;
         await watch.check();
-        expect(watch.read()).toEqual({ quietSince: clock - 5_000 });
+        expect(watch.read()).toEqual({ quietSince: clock - 5_000, personAt: clock - 5_000 });
         watch.stop();
     });
 
@@ -65,11 +65,11 @@ describe("startQuietWatch", () => {
         });
         await watch.check();
         await watch.check();
-        expect(watch.read()).toEqual({ nextWakeAt: 5_000_000 });
+        expect(watch.read()).toEqual({ nextWakeAt: 5_000_000, personAt: 0 });
         expect(changes).toHaveLength(1);
         busy = 0;
         await watch.check();
-        expect(watch.read()).toEqual({ quietSince: 1_000, nextWakeAt: 5_000_000 });
+        expect(watch.read()).toEqual({ quietSince: 1_000, nextWakeAt: 5_000_000, personAt: 0 });
         expect(changes).toHaveLength(2);
         watch.stop();
     });
@@ -83,22 +83,49 @@ describe("startQuietWatch", () => {
             checkMs: 1e9,
         });
         await watch.check();
-        expect(watch.read()).toEqual({ quietSince: 0, nextWakeAt: 9_000_000 });
+        expect(watch.read()).toEqual({ quietSince: 0, nextWakeAt: 9_000_000, personAt: 0 });
         kept = true;
         clock = 60_000;
         await watch.check();
-        expect(watch.read()).toEqual({ nextWakeAt: 9_000_000, keepAwake: true });
+        expect(watch.read()).toEqual({ nextWakeAt: 9_000_000, personAt: 0, keepAwake: true });
         kept = false;
         clock = 120_000;
         await watch.check();
-        expect(watch.read()).toEqual({ quietSince: 120_000, nextWakeAt: 9_000_000 });
+        expect(watch.read()).toEqual({ quietSince: 120_000, nextWakeAt: 9_000_000, personAt: 0 });
+        watch.stop();
+    });
+
+    test("a person is remembered from the last moment they were here, whether connected, typing or in an app", async () => {
+        let clock = 10_000;
+        let people = 0;
+        let typedAt = 0;
+        let inUse = false;
+        const watch = startQuietWatch(
+            probesOf({ connected: () => people, terminalActivityAt: () => Promise.resolve(typedAt), appsInUse: () => Promise.resolve(inUse) }),
+            { logger, now: () => clock, checkMs: 1e9 },
+        );
+        await watch.check();
+        expect(watch.read().personAt).toBe(0);
+        people = 1;
+        clock = 70_000;
+        await watch.check();
+        expect(watch.read()).toEqual({ personAt: 70_000 });
+        people = 0;
+        clock = 130_000;
+        await watch.check();
+        expect(watch.read()).toEqual({ quietSince: 130_000, personAt: 70_000 });
+        typedAt = 125_000;
+        inUse = true;
+        clock = 190_000;
+        await watch.check();
+        expect(watch.read()).toEqual({ personAt: 190_000 });
         watch.stop();
     });
 
     test("a switch that cannot be read lets the sandbox sleep as before", async () => {
         const watch = startQuietWatch(probesOf({ keepAwake: () => Promise.reject(new Error("unreadable")) }), { logger, now: () => 5, checkMs: 1e9 });
         await watch.check();
-        expect(watch.read()).toEqual({ quietSince: 5 });
+        expect(watch.read()).toEqual({ quietSince: 5, personAt: 0 });
         watch.stop();
     });
 });

@@ -15,7 +15,9 @@ import type { Services } from "../composition.js";
 
 // - idle-stop: the machine stops until somebody visits, so a wake due within its window keeps it up (system/idle-stop.ts).
 // - restart: this container restarts for an automatic update, and waits for a quiet moment before a promised one.
-export type WakePurpose = "idle-stop" | "restart";
+// - sleep: the computer this sandbox runs on puts it to sleep and sets an alarm for the soonest of these, started again
+//   ahead of it (ic's `sandbox sleep` and `sandbox wakes`, 2026-10-18), read off the work signal's `nextWakeAt`.
+export type WakePurpose = "idle-stop" | "restart" | "sleep";
 
 export interface PromisedWake {
     readonly name: string;
@@ -25,7 +27,7 @@ export interface PromisedWake {
     readonly nextAt: (services: Services) => Promise<number | undefined>;
 }
 
-const BOTH: readonly WakePurpose[] = ["idle-stop", "restart"];
+const EVERY: readonly WakePurpose[] = ["idle-stop", "restart", "sleep"];
 
 // The readers that answer 0 for none (the automations' and the bookings') are read as the numbers they are.
 const instant = async (read: Promise<number>): Promise<number | undefined> => {
@@ -34,18 +36,19 @@ const instant = async (read: Promise<number>): Promise<number | undefined> => {
 };
 
 export const PROMISED_WAKES: readonly PromisedWake[] = [
-    { name: "a one-time automation", holds: BOTH, nextAt: (services) => instant(nextOneTimeWakeAt(services)) },
+    { name: "a one-time automation", holds: EVERY, nextAt: (services) => instant(nextOneTimeWakeAt(services)) },
     {
         name: "a scheduled message, or a held turn booked for its allowance's reset",
-        holds: BOTH,
+        holds: EVERY,
         nextAt: (services) => instant(nextBookedSendAt(services)),
     },
-    { name: "an approved post or action", holds: BOTH, nextAt: (services) => nextApprovedAt(services) },
-    { name: "a held automation wake counting down", holds: BOTH, nextAt: (services) => instant(nextCountdownWakeAt(services)) },
+    { name: "an approved post or action", holds: EVERY, nextAt: (services) => nextApprovedAt(services) },
+    { name: "a held automation wake counting down", holds: EVERY, nextAt: (services) => instant(nextCountdownWakeAt(services)) },
     // Not for idle-stop: a cron that comes due while the machine sleeps is caught up once, late, at the next start, and an
     // always-awake machine to keep a nightly chore punctual costs more than the chore is worth. A restart landing on its
-    // minute would fire it late for nothing, so the automatic update waits it out.
-    { name: "a cron automation", holds: ["restart"], nextAt: (services) => instant(nextCronWakeAt(services)) },
+    // minute would fire it late for nothing, so the automatic update waits it out. A local sandbox's sleep is another
+    // matter: its alarm wakes it a minute or two ahead for the price of a boot, so the cron fires on time.
+    { name: "a cron automation", holds: ["restart", "sleep"], nextAt: (services) => instant(nextCronWakeAt(services)) },
 ];
 
 /** The soonest moment of `purpose` anything promised (ms), or undefined when nothing is. */

@@ -7542,9 +7542,9 @@
             "sandboxUrl": "Sandbox URL",
             "setUp": "Set it up there →",
             "sleep": "Sleep when unused",
-            "sleepOn": "Sleeps when nobody uses it; a schedule due meanwhile runs late, once it wakes",
-            "sleepOff": "Stays running, so schedules fire on time",
-            "sleepTipNote": "Wakes when somebody opens it."
+            "sleepOn": "Sleeps when nobody uses it, and wakes for its schedules and when opened",
+            "sleepOff": "Stays running even when nobody uses it",
+            "sleepTipNote": "Frees its memory while unused."
         },
         "sandboxPersonas": {
             "accountsSpeaksThroughStay": "The accounts it speaks through stay connected and signed in. Any automation pinned to this persona stops posting until you give it another one.",

@@ -10,6 +10,9 @@ import type { Logger } from "pino";
 //   moves the streak's start forward rather than breaking it, as idle-stop reads it.
 // - nextWakeAt: the soonest moment the sandbox promised somebody (a one-time automation, a booked send), which a sleep
 //   would silently miss; absent when none.
+// - personAt: the last moment a person was here since this boot (connected to the editor, typing in a terminal, or with
+//   a workspace app open), 0 for none; said whatever else is true. What tells the keeper a sandbox it woke only for a
+//   schedule may sleep again soon after the scheduled work is done (ic: the alarm's short grace).
 // - keepAwake: the owner switched sleep off for this sandbox (settings `sleepWhenUnused`, 2026-10-18). Then no streak is
 //   kept and no `quietSince` is said whatever else is true, so no keeper's verdict can come out as sleep; the flag says
 //   why to a keeper that reads it (ic names it), where one that does not reads a sandbox that never went quiet.
@@ -30,6 +33,7 @@ export interface QuietProbes {
 export interface QuietReading {
     readonly quietSince?: number;
     readonly nextWakeAt?: number;
+    readonly personAt?: number;
     readonly keepAwake?: true;
 }
 
@@ -43,7 +47,8 @@ export interface QuietWatch {
 
 const CHECK_INTERVAL_MS = 60_000;
 
-const same = (a: QuietReading, b: QuietReading): boolean => a.quietSince === b.quietSince && a.nextWakeAt === b.nextWakeAt && a.keepAwake === b.keepAwake;
+const same = (a: QuietReading, b: QuietReading): boolean =>
+    a.quietSince === b.quietSince && a.nextWakeAt === b.nextWakeAt && a.personAt === b.personAt && a.keepAwake === b.keepAwake;
 
 export const startQuietWatch = (
     probes: QuietProbes,
@@ -52,6 +57,8 @@ export const startQuietWatch = (
     const now = options.now ?? Date.now;
     // When the streak began; undefined while something needs the sandbox.
     let streakStart: number | undefined;
+    // The last moment a person was seen here since this boot; 0 for none.
+    let personAt = 0;
     let reading: QuietReading = {};
     const busy = (): boolean => probes.connected() > 0 || probes.working() > 0;
 
@@ -68,6 +75,9 @@ export const startQuietWatch = (
             options.logger.warn({ err: error }, "quiet watch: the next promised wake could not be read");
             return 0;
         });
+        if (probes.connected() > 0) {
+            personAt = now();
+        }
         const promised = wakeAt > 0 ? { nextWakeAt: wakeAt } : {};
         // A settings file that cannot be read is no switch: the sandbox sleeps as it did before there was one.
         const kept = await probes.keepAwake().catch((error) => {
@@ -76,23 +86,24 @@ export const startQuietWatch = (
         });
         if (kept) {
             streakStart = undefined;
-            settle({ ...promised, keepAwake: true });
+            settle({ ...promised, personAt, keepAwake: true });
             return;
         }
         if (busy()) {
             streakStart = undefined;
-            settle(promised);
+            settle({ ...promised, personAt });
             return;
         }
         const [activityAt, inUse] = await Promise.all([probes.terminalActivityAt(), probes.appsInUse()]);
+        personAt = Math.max(personAt, activityAt, inUse ? now() : 0);
         // Asked again after the awaits: somebody may have connected while tmux and the socket tables were read.
         if (busy() || inUse) {
             streakStart = undefined;
-            settle(promised);
+            settle({ ...promised, personAt });
             return;
         }
         streakStart ??= now();
-        settle({ quietSince: Math.max(streakStart, activityAt), ...promised });
+        settle({ quietSince: Math.max(streakStart, activityAt), ...promised, personAt });
     };
 
     // A probe that failed (tmux could not list its panes) changes nothing: guessing either way is worse than a minute late.

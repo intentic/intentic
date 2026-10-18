@@ -51,16 +51,16 @@ afterEach(() => {
 test("a sandbox on its owner's machine says it sleeps, and flipping the switch keeps it running", async () => {
     const el = await mount();
     expect(el.textContent).toContain(`Sleep when unused`);
-    expect(el.textContent).toContain(`runs late, once it wakes`);
+    expect(el.textContent).toContain(`wakes for its schedules`);
     expect(toggle(el)?.checked).toBe(true);
     toggle(el)?.click();
     expect(patch).toHaveBeenCalledWith({ sleepWhenUnused: false });
 });
 
-test("switched off, it says schedules fire on time", async () => {
+test("switched off, it says it stays running", async () => {
     sleepWhenUnused.value = false;
     const el = await mount();
-    expect(el.textContent).toContain(`schedules fire on time`);
+    expect(el.textContent).toContain(`Stays running even when nobody uses it`);
     expect(toggle(el)?.checked).toBe(false);
 });
 

@@ -15,6 +15,8 @@ test("the body is one JSON line ic reads with serde", () => {
     expect(workSignalBody(1, 5, undefined, {})).toBe('{"liveTurns":1,"at":5}\n');
     // Sleep switched off by the owner: no quietSince, and the flag that tells the keeper why.
     expect(workSignalBody(0, 5, undefined, { keepAwake: true })).toBe('{"liveTurns":0,"at":5,"keepAwake":true}\n');
+    // When a person was last here rides beside it, 0 included: a daemon that says it at all says it every time.
+    expect(workSignalBody(0, 5, undefined, { quietSince: 3, personAt: 0 })).toBe('{"liveTurns":0,"at":5,"quietSince":3,"personAt":0}\n');
 });
 
 // 2026-10-05: the keeper sees a restart storm as the daemon does, from the same facts, beside the fields it already reads.

@@ -182,6 +182,7 @@ fn what_ic_reads_it_finds_in_the_daemons_example() {
             live_turns: turns,
             quiet_since: Some(number(&signal["quietSince"])),
             next_wake_at: Some(number(&signal["nextWakeAt"])),
+            person_at: None,
             keep_awake: false,
         }
     );

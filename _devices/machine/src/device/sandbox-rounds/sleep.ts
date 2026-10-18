@@ -13,7 +13,10 @@ import { type IcRun, lastLine, type Rounds, startRounds } from "./ic-rounds.js";
    Waking is the other half, and the platform cannot do it: it never calls a machine. A browser that finds a sleeping
    sandbox asks the platform to wake it, and this agent asks the platform for such requests every fifteen seconds while
    anything of its sleeps (`ic sandbox wakes`), starting what was asked for. While nothing is known to sleep it still asks
-   every five minutes, for a sandbox somebody put to sleep by hand. */
+   every five minutes, for a sandbox somebody put to sleep by hand.
+   An ALARM wakes it too (2026-10-18): ic records, as it puts a sandbox to sleep, the soonest moment its daemon promised
+   (a cron, a one-time automation), and the same `ic sandbox wakes` starts it a little ahead of that moment, off this
+   machine's clock alone, so what it scheduled runs on time. Nothing here changes for it but what the log says. */
 
 // How long a sandbox goes unneeded before it sleeps, unless machine.json says otherwise; 0 there is never.
 export const DEFAULT_SLEEP_MINUTES = 30;
@@ -39,8 +42,8 @@ export const WAKES_DEADLINE_MS = 5 * 60_000;
 export const WAKE_POLL_MS = 15_000;
 export const IDLE_POLL_MS = 5 * 60_000;
 
-const SleptSchema = z.object({ slug: z.string(), slept: z.boolean(), why: z.string().optional() });
-const WokeSchema = z.object({ slug: z.string(), woke: z.boolean(), error: z.string().optional() });
+const SleptSchema = z.object({ slug: z.string(), slept: z.boolean(), why: z.string().optional(), wakeAt: z.number().optional() });
+const WokeSchema = z.object({ slug: z.string(), woke: z.boolean(), error: z.string().optional(), for: z.literal("alarm").optional() });
 const AsleepSchema = z.object({ asleep: z.number().int().nonnegative() });
 
 const linesAs = <T>(schema: z.ZodType<T>, output: string): T[] =>
@@ -53,7 +56,10 @@ const linesAs = <T>(schema: z.ZodType<T>, output: string): T[] =>
             return parsed === undefined ? [] : [parsed];
         });
 
-export type SleepReading = { readonly unavailable: string } | { readonly slept: readonly string[] };
+// `alarms`: the moment each sleep's alarm is set for, by slug, for the ones that set one.
+export type SleepReading =
+    | { readonly unavailable: string }
+    | { readonly slept: readonly string[]; readonly alarms: readonly { readonly slug: string; readonly at: number }[] };
 
 // An ic that answered no line of the shape and failed is one without the verb (or no ic at all). Pure.
 export const readSleepRun = (run: IcRun): SleepReading => {
@@ -61,13 +67,19 @@ export const readSleepRun = (run: IcRun): SleepReading => {
     if (run.code !== 0 && answers.length === 0) {
         return { unavailable: lastLine(run.output)?.trim() ?? `ic exited with ${run.code}` };
     }
-    return { slept: answers.filter((answer) => answer.slept).map((answer) => answer.slug) };
+    const slept = answers.filter((answer) => answer.slept);
+    return {
+        slept: slept.map((answer) => answer.slug),
+        alarms: slept.flatMap((answer) => (answer.wakeAt === undefined ? [] : [{ slug: answer.slug, at: answer.wakeAt }])),
+    };
 };
 
 export type WakesReading =
     | { readonly unavailable: string }
     | {
           readonly woke: readonly string[];
+          // Of `woke`, the ones started ahead of their alarm rather than for somebody opening them.
+          readonly alarmed: readonly string[];
           readonly failed: readonly { readonly slug: string; readonly error: string }[];
           readonly asleep: number | undefined;
       };
@@ -80,6 +92,7 @@ export const readWakesRun = (run: IcRun): WakesReading => {
     }
     return {
         woke: answers.filter((answer) => answer.woke).map((answer) => answer.slug),
+        alarmed: answers.filter((answer) => answer.woke && answer.for === "alarm").map((answer) => answer.slug),
         failed: answers.filter((answer) => !answer.woke).map((answer) => ({ slug: answer.slug, error: answer.error ?? "it did not start" })),
         asleep,
     };
@@ -122,7 +135,12 @@ export const runSleep = async (sleepers: Sleepers, seams: SleepSeams, said: Map<
     said.delete(":sleep");
     for (const slug of reading.slept) {
         sleepers.slugs.add(slug);
-        log(`keeper ${slug}: nobody needed it for ${minutes} min, so it is asleep; it starts again when somebody opens it.`);
+        const alarm = reading.alarms.find((set) => set.slug === slug);
+        const after =
+            alarm === undefined
+                ? "it starts again when somebody opens it."
+                : `it starts again when somebody opens it, or ahead of what it has scheduled at ${new Date(alarm.at).toISOString()}.`;
+        log(`keeper ${slug}: nobody needed it for ${minutes} min, so it is asleep; ${after}`);
     }
     sleepers.counted = Math.max(sleepers.counted, sleepers.slugs.size);
     return reading.slept;
@@ -162,7 +180,11 @@ export const runWakeRound = async (state: WakeState, sleepers: Sleepers, seams: 
     state.said.delete(":wakes");
     for (const slug of reading.woke) {
         sleepers.slugs.delete(slug);
-        log(`keeper ${slug}: somebody opened it, so it is starting again.`);
+        log(
+            reading.alarmed.includes(slug)
+                ? `keeper ${slug}: something it scheduled is due, so it is starting ahead of it.`
+                : `keeper ${slug}: somebody opened it, so it is starting again.`,
+        );
     }
     for (const { slug, error } of reading.failed) {
         log(`keeper ${slug}: somebody opened it, but it did not start — ${error}`);

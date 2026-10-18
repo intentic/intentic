@@ -283,7 +283,7 @@ export const SandboxSettingsSchema = z.object({
         .boolean()
         .default(true)
         .describe(
-            "Let the computer this sandbox runs on put it to sleep after a stretch nobody needs it (no editor open, no agent working, no terminal typed in, no app of it open), which frees its memory; it starts again when somebody opens it. A sleeping sandbox runs nothing on a clock: a scheduled automation that comes due fires once, late, when it next starts. Off keeps it running, so schedules fire on time. Applies only to a sandbox on your own computer.",
+            "Let the computer this sandbox runs on put it to sleep after a stretch nobody needs it (no editor open, no agent working, no terminal typed in, no app of it open), which frees its memory. It starts again when somebody opens it, and a few minutes before anything it has scheduled comes due, so automations still run on time. Off keeps it running. Applies only to a sandbox on your own computer.",
         ),
     hashlineEdits: z
         .boolean()

@@ -228,7 +228,7 @@ fn power_all(power: Power, container: &str, sidecar: Option<&str>) -> Result<()>
 wake starts it again (sleep.rs), and the fix engine reads it as well rather than as a stop to ask about. Not a repair
 the keeper's restart limit counts (ledger.rs SLEEP). The caller holds the sandbox's lock and has seen it running.
 Answers whether a tunnel sidecar went down with it. */
-pub(crate) fn sleep(slug: &str) -> Result<bool> {
+pub(crate) fn sleep(slug: &str, alarm: Option<u64>) -> Result<bool> {
     let container = container_of(slug);
     remember_key(slug, &container);
     let tunnel = format!("{TUNNEL_PREFIX}{slug}");
@@ -241,7 +241,7 @@ pub(crate) fn sleep(slug: &str) -> Result<bool> {
         "put to sleep: nothing was working in it and it had been quiet past the idle limit; the next wake starts it again.",
     );
     power_all(Power::Stop, &container, sidecar)?;
-    rest(slug, Rest::Asleep);
+    settle(slug, Rest::Asleep, alarm);
     Ok(sidecar.is_some())
 }
 
@@ -271,9 +271,16 @@ the mirror first, so a stale record on this side is never stamped as the newest.
 (Docker Desktop's Stop button) is recorded here too once the fix engine has seen it (fix/chain.rs), and a sandbox found
 running again is the decision reversed — a sleep's as much as a stop's. */
 pub(crate) fn rest(slug: &str, rest: Rest) {
+    settle(slug, rest, None);
+}
+
+/// `rest`, with the alarm a sleep sets (sleep.rs). Any other change of rest clears the alarm, and the mark of a start
+/// made for one: a sandbox started, stopped or put to sleep again is past that alarm.
+fn settle(slug: &str, rest: Rest, alarm: Option<u64>) {
     let saved = mirror::reconcile(slug);
     let (held, asleep) = rest.flags();
-    if saved.held == held && saved.asleep == asleep {
+    let alarm = alarm.filter(|_| asleep);
+    if saved.held == held && saved.asleep == asleep && saved.wake_at == alarm {
         return;
     }
     if record::write(
@@ -281,6 +288,8 @@ pub(crate) fn rest(slug: &str, rest: Rest) {
         &record::ChannelRecord {
             held,
             asleep,
+            wake_at: alarm,
+            alarm_woke_at: None,
             ..saved
         },
     )

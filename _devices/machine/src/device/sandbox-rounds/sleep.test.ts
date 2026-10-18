@@ -32,16 +32,28 @@ describe("what ic says", () => {
     });
 
     test("a sleep run names what fell asleep; an ic without the verb is unavailable, not a sleep of nothing", () => {
-        expect(readSleepRun(run([{ slug: "a", slept: true }, { slug: "b", slept: false, why: "busy" }]))).toEqual({ slept: ["a"] });
+        expect(readSleepRun(run([{ slug: "a", slept: true }, { slug: "b", slept: false, why: "busy" }]))).toEqual({ slept: ["a"], alarms: [] });
         expect(readSleepRun({ code: 2, output: CLAP })).toEqual({ unavailable: "Usage: ic sandbox <COMMAND>" });
-        expect(readSleepRun(run([]))).toEqual({ slept: [] });
+        expect(readSleepRun(run([]))).toEqual({ slept: [], alarms: [] });
+        // A sleep that set an alarm says for when; one that stayed awake sets none whatever it carries.
+        expect(readSleepRun(run([{ slug: "a", slept: true, wakeAt: 9_000 }, { slug: "b", slept: false, wakeAt: 5_000 }]))).toEqual({
+            slept: ["a"],
+            alarms: [{ slug: "a", at: 9_000 }],
+        });
     });
 
     test("a wakes run names what it started, what would not, and how many still sleep", () => {
         expect(readWakesRun(run([{ slug: "a", woke: true }, { slug: "b", woke: false, error: "docker said no" }, { asleep: 1 }]))).toEqual({
             woke: ["a"],
+            alarmed: [],
             failed: [{ slug: "b", error: "docker said no" }],
             asleep: 1,
+        });
+        expect(readWakesRun(run([{ slug: "a", woke: true, for: "alarm" }, { slug: "b", woke: false, for: "alarm" }, { asleep: 0 }]))).toEqual({
+            woke: ["a"],
+            alarmed: ["a"],
+            failed: [{ slug: "b", error: "it did not start" }],
+            asleep: 0,
         });
         expect("unavailable" in readWakesRun({ code: 2, output: CLAP })).toBe(true);
     });
@@ -88,6 +100,16 @@ describe("the keeper puts unneeded sandboxes to sleep", () => {
         expect(asked).toEqual([30]);
         expect([...state.sleepers.slugs]).toEqual([SLUG]);
         expect(lines.some((line) => line.includes(`${SLUG}: nobody needed it for 30 min, so it is asleep`))).toBe(true);
+    });
+
+    test("a sleep that set an alarm says when its sandbox comes back for what it scheduled", async () => {
+        const { fake, lines, round, answer } = setup();
+        fake.records = [SLUG];
+        answer(run([{ slug: SLUG, slept: true, wakeAt: Date.UTC(2026, 9, 19, 7, 0) }]));
+        await round(NOW + MIN);
+        expect(lines).toContain(
+            `keeper ${SLUG}: nobody needed it for 30 min, so it is asleep; it starts again when somebody opens it, or ahead of what it has scheduled at 2026-10-19T07:00:00.000Z.`,
+        );
     });
 
     test("a sleeping sandbox's dead link is never a repair", async () => {
@@ -146,6 +168,13 @@ describe("the wake round", () => {
         expect(calls()).toBe(2);
         expect(sleepers.slugs.size).toBe(0);
         expect(lines).toEqual([`keeper ${SLUG}: somebody opened it, so it is starting again.`]);
+    });
+
+    test("a start ahead of an alarm says so, not that somebody opened it", async () => {
+        const { sleepers, lines, round } = setup([run([{ slug: SLUG, woke: true, for: "alarm" }, { asleep: 0 }])]);
+        sleepers.slugs.add(SLUG);
+        await round(NOW);
+        expect(lines).toEqual([`keeper ${SLUG}: something it scheduled is due, so it is starting ahead of it.`]);
     });
 
     test("with nothing known asleep it asks only at the idle pace, and learns of a sleep made by hand", async () => {

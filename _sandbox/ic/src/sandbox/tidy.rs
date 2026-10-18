@@ -177,6 +177,9 @@ pub fn report_only(record: &ChannelRecord) -> bool {
         side: None,
         held: false,
         asleep: false,
+        wake_at: None,
+        alarm_woke_at: None,
+        wake_cost: None,
         ..record.clone()
     };
     bare == ChannelRecord::default()

@@ -142,6 +142,18 @@ pub struct ChannelRecord {
     /// it down, and started again by the next wake (`ic sandbox wakes`), a start, or a restart. Never set together with
     /// `held`: a stop clears it, and every flow that moves the container clears both. (2026-10-10)
     pub asleep: bool,
+    /// (2026-10-18) The alarm a sleep set: the soonest moment the sandbox's daemon had promised somebody (a cron, a
+    /// one-time automation, a booked send, an approved post: its work signal's `nextWakeAt` as it went to sleep), in
+    /// epoch milliseconds. `ic sandbox wakes` starts it that long ahead of this which its wakes have been taking
+    /// (sleep.rs), so the moment comes with it running. Set only beside `asleep`, and cleared with it.
+    pub wake_at: Option<u64>,
+    /// When `ic sandbox wakes` last started it for its alarm rather than for a person, in epoch milliseconds: what lets
+    /// the next sleep come after a short grace once the scheduled work is done, unless a person has been there since.
+    /// Cleared by the next sleep and by every other start.
+    pub alarm_woke_at: Option<u64>,
+    /// How long its last plain start from sleep took, in milliseconds, decaying rather than forgotten (sleep.rs): what
+    /// the alarm's lead is measured from.
+    pub wake_cost: Option<u64>,
     /// The sandbox's host-report key (sandbox/fix/report.rs): derived wherever ic reads the container's env, and
     /// kept here so a later run can still report while Docker is down and the env cannot be read.
     pub report_key: Option<String>,
@@ -254,7 +266,7 @@ pub fn parse(content: &str) -> ChannelRecord {
     // So are a kept target's image, version and environment build, and a swap's keys: a half-written group is no group.
     let mut kept: [[Option<String>; 4]; MAX_KEPT] = Default::default();
     let mut swap: [Option<String>; 11] = Default::default();
-    let mut rest: [Option<String>; 11] = Default::default();
+    let mut rest: [Option<String>; 14] = Default::default();
     for line in content.lines() {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -283,6 +295,9 @@ pub fn parse(content: &str) -> ChannelRecord {
             "previous_env" => &mut rest[8],
             "previous_env_hash" => &mut rest[9],
             "asleep" => &mut rest[10],
+            "wake_at" => &mut rest[11],
+            "alarm_woke_at" => &mut rest[12],
+            "wake_cost" => &mut rest[13],
             "kept_1" => &mut kept[0][0],
             "kept_1_version" => &mut kept[0][1],
             "kept_1_env" => &mut kept[0][2],
@@ -315,7 +330,7 @@ pub fn parse(content: &str) -> ChannelRecord {
         privileged.as_deref(),
         gpus.as_deref(),
     );
-    let [current_version, previous_version, rolled_back_from, written, held, report_key, report_platform, side, previous_env, previous_env_hash, asleep] =
+    let [current_version, previous_version, rolled_back_from, written, held, report_key, report_platform, side, previous_env, previous_env_hash, asleep, wake_at, alarm_woke_at, wake_cost] =
         rest;
     record.current_version = current_version;
     record.previous_version = previous_version;
@@ -324,6 +339,9 @@ pub fn parse(content: &str) -> ChannelRecord {
     record.written = written.and_then(|value| value.parse().ok());
     record.held = held.as_deref() == Some("1");
     record.asleep = asleep.as_deref() == Some("1");
+    record.wake_at = wake_at.and_then(|value| value.parse().ok());
+    record.alarm_woke_at = alarm_woke_at.and_then(|value| value.parse().ok());
+    record.wake_cost = wake_cost.and_then(|value| value.parse().ok());
     record.report_key = report_key.filter(|key| !key.is_empty());
     record.report_platform = report_platform.filter(|url| !url.is_empty());
     record.side = side.filter(|side| !side.is_empty());
@@ -454,6 +472,18 @@ pub fn serialize(record: &ChannelRecord) -> String {
     );
     put("held", record.held.then_some("1"));
     put("asleep", record.asleep.then_some("1"));
+    put(
+        "wake_at",
+        record.wake_at.map(|at| at.to_string()).as_deref(),
+    );
+    put(
+        "alarm_woke_at",
+        record.alarm_woke_at.map(|at| at.to_string()).as_deref(),
+    );
+    put(
+        "wake_cost",
+        record.wake_cost.map(|ms| ms.to_string()).as_deref(),
+    );
     put("report_key", record.report_key.as_deref());
     put("report_platform", record.report_platform.as_deref());
     put("side", record.side.as_deref());
@@ -923,6 +953,28 @@ mod tests {
         assert!(!parse("asleep=\n").asleep);
         assert!(!parse("asleep=true\n").asleep);
         assert!(parse("current=x\nasleep=1\n").asleep);
+    }
+
+    /* THE ALARM, the moment a sleep set and what the wakes measured: numbers, written only when they say something. */
+    #[test]
+    fn an_alarm_and_its_wake_round_trip_and_none_leaves_no_key() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("sandbox-abc.channel");
+        let alarmed = ChannelRecord {
+            asleep: true,
+            wake_at: Some(1_791_240_330_000),
+            alarm_woke_at: Some(1_791_240_000_000),
+            wake_cost: Some(4_200),
+            ..swap("ghcr.io/intentic/sandbox:stable", None)
+        };
+        write_file(&path, &alarmed).expect("write");
+        let read = read_file(&path).expect("read");
+        assert_eq!(read.wake_at, Some(1_791_240_330_000));
+        assert_eq!(read.alarm_woke_at, Some(1_791_240_000_000));
+        assert_eq!(read.wake_cost, Some(4_200));
+        let text = serialize(&ChannelRecord::default());
+        assert!(!text.contains("wake"), "{text}");
+        assert_eq!(parse("wake_at=soon\n").wake_at, None);
     }
 
     #[test]
