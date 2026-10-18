@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { InboundLinkSummary, InboundLinkTermsUpdate, LinkRequest, LinkTerms } from "@intentic/sandbox-contract/schemas/links";
-import { Button, CopyButton, Notice, Picker, type PickerOption, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
+import { Button, CopyButton, InfoHint, Notice, Picker, type PickerOption, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
@@ -163,6 +163,11 @@ const address = computed(() => daemonUrl.value ?? ``);
             :label="t(`sandbox.linkedSandboxes.title`)"
             :count="shown.length === 0 ? undefined : shown.length"
         >
+            <template #info>
+                <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.linkedSandboxes.title`) })">
+                    <span class="block text-xs text-content">{{ t(`sandbox.linkedSandboxes.explain`) }}</span>
+                </InfoHint>
+            </template>
             <template v-for="link in shown" :key="link.id">
                 <Row icon="link" :title="link.label" :description="describe(link)">
                     <template v-if="link.requests.length > 0" #meta>
@@ -231,7 +236,6 @@ const address = computed(() => daemonUrl.value ?? ``);
             <RowNote variant="block">
                 <div class="flex flex-col gap-3">
                     <Notice v-if="rowNotice ?? notice" :of="(rowNotice ?? notice)!" />
-                    <p class="text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.explain`) }}</p>
                     <form class="flex flex-wrap items-center gap-2" @submit.prevent="submit">
                         <input
                             v-model="label"
