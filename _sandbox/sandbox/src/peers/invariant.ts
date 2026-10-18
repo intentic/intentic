@@ -73,7 +73,9 @@ const grantCheck = (name: string, store: Roster, cards: Pick<CapabilitiesStore, 
 // And for machine identity: one OS install of one computer is lent to this sandbox by one card. Two cards holding the
 // same computer's same environment are two grants over one agent, two sets of tools the model sees for one machine and
 // two switches that disagree; the owner removes one card (which one is theirs to say, so this only reports). A derived
-// id is the card's own by construction and never shared, so only ids the agents said count.
+// id is the card's own by construction and never shared, so only ids the agents said count. Since 2026-10-18 the older
+// key of such a pair goes by itself once the newer one connects, and at boot (hosts/host-dedupe.ts), so what stays to
+// report is two in use at once, which the Devices screen also warns about.
 const machineCheck = (store: MachineRoster): InvariantCheck => ({
     name: "one-card-per-machine-environment",
     on: ["boot", "sweep"],

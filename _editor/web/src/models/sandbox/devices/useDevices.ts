@@ -10,6 +10,7 @@ import {
     type SandboxResourcesAsk,
     type SandboxShape,
     type SandboxShapeWhen,
+    type SharedIdentity,
     hostHoldingPath,
     hostRunningSandbox,
 } from "@intentic/sandbox-contract/schemas/devices";
@@ -37,6 +38,8 @@ export function useDevices({ poll = true }: { poll?: boolean } = {}): {
     devices: ComputedRef<Device[]>;
     /** Device keys no capability card holds, which no row stands for; empty from a daemon older than the field. */
     cardlessHosts: ComputedRef<CardlessHost[]>;
+    /** Connections live at once that report one machine identity (hosts/host-dedupe.ts); empty from an older daemon. */
+    sharedIdentities: ComputedRef<SharedIdentity[]>;
     /** When this list landed here: the clock every freshness verdict on a device is judged against. */
     readAt: ComputedRef<number>;
     error: ComputedRef<string | undefined>;
@@ -49,6 +52,7 @@ export function useDevices({ poll = true }: { poll?: boolean } = {}): {
     return {
         devices: computed(() => query.data.value?.devices ?? []),
         cardlessHosts: computed(() => query.data.value?.cardlessHosts ?? []),
+        sharedIdentities: computed(() => query.data.value?.sharedIdentities ?? []),
         // Restored with the cache on reload, so a hydrated list is aged from when it was actually read, not from now.
         readAt: computed(() => query.dataUpdatedAt.value),
         error,

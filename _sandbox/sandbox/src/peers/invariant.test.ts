@@ -80,9 +80,9 @@ test("an enrollment every card still holds reports nothing, connected or not", a
     await expect(run("enrolled-browsers-have-cards", ["my-chrome"], ["my-chrome"])).resolves.toBeUndefined();
 });
 
-test("an enrollment no card holds is named, with where the owner withdraws it", async () => {
+test("an enrollment no card holds is named, with where the owner removes it", async () => {
     await expect(run("enrolled-devices-have-cards", ["laptop", "ghost"], [], [card("laptop", "device")])).rejects.toThrow(
-        /no capability card \(ghost\).*withdraw it from the Devices screen/,
+        /no capability card \(ghost\).*remove it from the Devices screen, which lists it under 'Leftover connections'/,
     );
     await expect(run("enrolled-browsers-have-cards", ["old-chrome"], [], [])).rejects.toThrow(/no capability card \(old-chrome\)/);
 });

@@ -8,7 +8,7 @@ import { startSleepSocket } from "./system/sleep/sleep-socket.js";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
 import { startProviderBoot } from "./agent/providers/provider-registry.js";
 import { declareBootSteps, runBootSteps } from "./bootstrap/boot-chain.js";
-import { armSetupPairings } from "./bootstrap/boot-pairings.js";
+import { armSetupPairings, dropSupersededDeviceKeys } from "./bootstrap/boot-pairings.js";
 import type { BootPhase } from "./bootstrap/boot-phase.js";
 import { startBootRestores } from "./bootstrap/boot-restores.js";
 import { startBootResumes } from "./bootstrap/boot-resumes.js";
@@ -228,6 +228,7 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // Each is fire-and-forget and best-effort: a provider that can't start is a log line, never a failed daemon.
     startProviderBoot(services, role, logger);
     armSetupPairings(phase);
+    dropSupersededDeviceKeys(phase);
 
     // Declares the readiness gate data routes await (app.ts): an early request waits instead of reading half-built
     // state, and a browser is told which step is running. Before the listeners, or a request could slip past it.

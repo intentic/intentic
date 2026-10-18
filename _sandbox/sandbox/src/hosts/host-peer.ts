@@ -23,6 +23,7 @@ import type { PeerHub } from "../peers/peer-hub.js";
 import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
 import { bootstrapEnvironments } from "./environment-bootstrap.js";
+import { revokeSuperseded } from "./host-dedupe.js";
 import { hostCallGate } from "./host-call-gate.js";
 import { hostCallRoute } from "./host-call-route.js";
 import type { HostGuardDeps } from "./host-guard-deps.js";
@@ -215,7 +216,13 @@ export const hostPeerRoutes = (services: Services, guards: HostGuardDeps) =>
         // the rest from here (environment-bootstrap.ts). And the enrollment learns which computer it is on, replacing
         // the id it was derived with, the first time its agent says.
         onConnected: (id, facts) => {
-            void identifyMachine(services, id, facts).catch((err: unknown) => services.logger.warn({ err, id }, "hosts: could not record which machine connected"));
+            // Then, knowing which computer this is, the keys it held before this one go (host-dedupe.ts): the agent keeps
+            // one per sandbox, so an older enrollment of the same machine environment is one nothing can present again.
+            void identifyMachine(services, id, facts)
+                .then(async () => await revokeSuperseded(services, id))
+                .catch((err: Error) =>
+                    services.logger.warn({ err, id }, "hosts: could not record which machine connected, or drop the keys it held before"),
+                );
             bootstrapEnvironments(services, id, facts);
             // The skill was written when the card was applied, before the machine said what it is (an Intentic OS box).
             void refreshDeviceSkill(capabilityCtx(services), id).catch((err: Error) =>

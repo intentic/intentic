@@ -5565,6 +5565,11 @@
             "remove": "Usuń",
             "title": "Pozostałe połączenia"
         },
+        "sharedIdentities": {
+            "detail": "{names} są połączone jednocześnie i zgłaszają tę samą tożsamość, więc ta strona pokazuje je jako jedną maszynę. Zwykle jeden został skopiowany z drugiego, jako obraz VM albo skopiowany folder domowy. Na kopii usuń .intentic/machine/machine-id w folderze domowym i uruchom ponownie jej agenta Intentic: nada sobie nową tożsamość.",
+            "distroOf": "WSL {distro} na \"{card}\"",
+            "title": "Dwa komputery podają się za ten sam"
+        },
         "conflictAsk": {
             "conflicts": "Konflikty",
             "readsBothCopies": "Czyta obie kopie",

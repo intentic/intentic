@@ -1,3 +1,4 @@
+import { revokeSuperseded } from "../hosts/host-dedupe.js";
 import { seedSetupHost } from "../hosts/host-seed.js";
 import type { BootPhase } from "./boot-phase.js";
 
@@ -25,4 +26,17 @@ export const armSetupPairings = ({ config, logger, services }: BootPhase): void 
                 logger.warn({ err: error }, "setup device not connected, add it from Capabilities to manage this machine's sandboxes"),
             );
     }
+};
+
+// (2026-10-18) The device keys a newer pairing of the same computer already replaced, dropped once at boot: what the
+// on-connect pass (host-peer.ts) leaves behind for a machine that has not dialled in since, or from before it existed.
+// Detached, since nothing waits on it, and nothing is connected yet to keep, so each machine environment keeps its newest.
+export const dropSupersededDeviceKeys = ({ logger, services }: BootPhase): void => {
+    void revokeSuperseded(services)
+        .then((revoked) => {
+            if (revoked.length > 0) {
+                logger.info({ revoked }, "boot: dropped device keys a newer pairing of the same computer replaced");
+            }
+        })
+        .catch((error: Error) => logger.warn({ err: error }, "boot: could not check for device keys a newer pairing replaced"));
 };

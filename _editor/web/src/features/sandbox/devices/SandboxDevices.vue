@@ -5,6 +5,7 @@ import { useRoute, useRouter } from "vue-router";
 import AddDeviceDialog from "./AddDeviceDialog.vue";
 import CardlessKeys from "./health/CardlessKeys.vue";
 import ContainerHealthCard from "./health/ContainerHealthCard.vue";
+import SharedIdentities from "./health/SharedIdentities.vue";
 import DeviceBoard from "./board/DeviceBoard.vue";
 import DevicePage from "./DevicePage.vue";
 import { boardRoute, DELETED_ANCHOR, deviceRoute, selectedKey } from "../../../models/sandbox/devices/deviceLinks";
@@ -26,7 +27,7 @@ const router = useRouter();
 // `readAt` is the only clock this tab keeps: when the list landed, not the wall clock. Every machine is judged on
 // what it said when we last heard from it, so a list restored from cache or left on screen cannot age into "gone
 // quiet" by itself, and nothing here re-derives on a tick.
-const { devices, cardlessHosts, readAt, error, isLoading, refetch } = useDevices();
+const { devices, cardlessHosts, sharedIdentities, readAt, error, isLoading, refetch } = useDevices();
 
 // Pairing opens from the board, and from the Workspace's "Open in local editor" shortcut, which lands here
 // with the mint already asked for. Read before the redirects below, which rewrite the query out from under it.
@@ -99,6 +100,9 @@ watch(
     <div class="flex flex-col gap-6">
         <!-- Setup faults qualify both device and sandbox screens. -->
         <ContainerHealthCard />
+
+        <!-- Two live computers under one identity: above the machines, since the board below draws them as one. -->
+        <SharedIdentities :identities="sharedIdentities" />
 
         <DevicePage
             v-if="selected"

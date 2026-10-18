@@ -1,7 +1,7 @@
 // jsdom because the subject is what a row puts on screen, not the derivation behind it (see deviceFacts.test.ts).
 import "@intentic/testing/dom";
 import { listedDevice } from "../../../testing/listedDevice";
-import type { CardlessHost, Device } from "@intentic/sandbox-contract/schemas/devices";
+import type { CardlessHost, Device, SharedIdentity } from "@intentic/sandbox-contract/schemas/devices";
 import { type MemberRole, roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { RouteLocationRaw } from "vue-router";
 import PrimeVue from "primevue/config";
@@ -26,6 +26,8 @@ const devices = ref<Device[]>([]);
 // Device keys no card holds, which the daemon lists beside the rows, and the ones this page was asked to withdraw.
 const cardless = ref<CardlessHost[]>([]);
 const withdrawn: string[] = [];
+// Connections live at once under one machine identity, which the daemon lists beside the rows too.
+const identities = ref<SharedIdentity[]>([]);
 // When the list landed here: the clock every row's freshness is judged against, set by `mount` below.
 const readAt = ref(Date.now());
 // The first read, not the ten-second poll; tests below assume the list has already arrived.
@@ -60,7 +62,7 @@ jest.mock(`../../../models/sandbox/devices/useDevices`, () => {
     // loaded inside a mock factory deadlocks bun's synchronous link of the graph that named it.
     return {
         ...useDevicesOriginal,
-        useDevices: () => ({ devices, cardlessHosts: cardless, readAt, error: ref(undefined), isLoading: devicesLoading, refetch: () => {} }),
+        useDevices: () => ({ devices, cardlessHosts: cardless, sharedIdentities: identities, readAt, error: ref(undefined), isLoading: devicesLoading, refetch: () => {} }),
         withdrawDeviceKey: (id: string) => {
             withdrawn.push(id);
             cardless.value = cardless.value.filter((key) => key.id !== id);
@@ -280,6 +282,7 @@ afterEach(() => {
     agentAnswer = () => Promise.resolve(AGENT_UPDATED);
     revokeCalls.length = 0;
     cardless.value = [];
+    identities.value = [];
     withdrawn.length = 0;
     pairingsAsked.length = 0;
     startedTurns.length = 0;
@@ -1550,6 +1553,33 @@ it(`names the machine a leftover connection belongs to when its old name is that
     const text = el.textContent ?? ``;
     expect(text).toContain(`An earlier connection of rog, under an old name. rog is connected again and doesn't need it.`);
     expect(text).toContain(`WSL archlinux on rog, under an old name.`);
+});
+
+// (2026-10-18) Two live connections under one machine id are kept by the daemon (hosts/host-dedupe.ts), and the board
+// joins machines on that id, so it would draw them as one without a word: the page says why and how the copy gets its own.
+it(`warns when two connected computers report the same identity, naming both`, () => {
+    identities.value = [
+        {
+            machineId: `m-1`,
+            connections: [
+                { id: `rog`, card: `rog`, environment: `native` },
+                { id: `rog-vm`, card: `rog-vm`, environment: `native` },
+            ],
+        },
+        {
+            machineId: `m-1`,
+            connections: [
+                { id: `rog::wsl:archlinux`, card: `rog`, environment: `wsl:archlinux` },
+                { id: `rog-vm::wsl:archlinux`, card: `rog-vm`, environment: `wsl:archlinux` },
+            ],
+        },
+    ];
+    const el = mount([mirrored(`on`)]);
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`Two computers say they are the same one`);
+    expect(text).toContain(`"rog", "rog-vm" are connected at once`);
+    expect(text).toContain(`WSL archlinux on "rog", WSL archlinux on "rog-vm" are connected at once`);
+    expect(text).toContain(`delete .intentic/machine/machine-id`);
 });
 
 // Withdrawing is the daemon's maintainer floor; below it there is nothing to press, so nothing is drawn.

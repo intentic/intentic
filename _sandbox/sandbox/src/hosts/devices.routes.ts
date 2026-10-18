@@ -10,6 +10,7 @@ import type { Services } from "../composition.js";
 import { opt } from "../opt.js";
 import { runDeviceCommand } from "./device-commands.js";
 import { devices, manageDeviceSandbox, runDeviceAgentFlow } from "./device-reports.js";
+import { liveSharedIdentities } from "./host-dedupe.js";
 import { cardlessHosts } from "./host-peer.js";
 
 // The ops that end by restarting the container they name, so a `resumeTurns` ask is about their restart.
@@ -54,8 +55,17 @@ export const createDeviceSystemRoutes = (services: Services) => {
                 services.logger.warn({ err: error }, "devices: could not read which device keys no card holds");
                 return [];
             });
-            const [listed, cardless] = await Promise.all([devices(services), keys]);
-            return { devices: listed, ...opt("cardlessHosts", cardless.length === 0 ? undefined : cardless) };
+            // As is a clash of identities: two live computers this sandbox cannot tell apart (host-dedupe.ts).
+            const clashes = liveSharedIdentities(services).catch((error: Error) => {
+                services.logger.warn({ err: error }, "devices: could not read which connected devices share an identity");
+                return [];
+            });
+            const [listed, cardless, shared] = await Promise.all([devices(services), keys, clashes]);
+            return {
+                devices: listed,
+                ...opt("cardlessHosts", cardless.length === 0 ? undefined : cardless),
+                ...opt("sharedIdentities", shared.length === 0 ? undefined : shared),
+            };
         }),
         // Acts on a sandbox on one of the user's devices, streaming the machine's own output; this door can also delete
         // one. Everything past the gate is the machine's call, including refusing, which arrives as the stream's own

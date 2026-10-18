@@ -6031,6 +6031,11 @@
             "remove": "Remove",
             "title": "Leftover connections"
         },
+        "sharedIdentities": {
+            "detail": "{names} are connected at once and report the same identity, so this page draws them as one machine. Usually one was copied from the other, as a VM image or a copied home folder. On the copy, delete .intentic/machine/machine-id in its home folder and restart its Intentic agent: it makes itself a new identity.",
+            "distroOf": "WSL {distro} on \"{card}\"",
+            "title": "Two computers say they are the same one"
+        },
         "conflictAsk": {
             "conflicts": "Conflicts",
             "readsBothCopies": "Reads both copies",
