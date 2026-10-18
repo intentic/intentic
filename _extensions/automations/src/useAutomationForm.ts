@@ -20,8 +20,7 @@ import { type AvailableSource, listenerSourceOf } from "./catalog";
 import { cronOf, defaultSchedule, instantOf, localInputOf, parseCron } from "./cronSchedule";
 import { t } from "./i18n";
 
-// One automation form for the create dialog and the edit dialog. `load` and `build` are inverse: `build` omits fields
-// at their default, `load` reconstructs the same form so an unchanged save round-trips to an identical automation.
+// Shared create/edit form: `load` and `build` round-trip, omitting fields at their defaults.
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 

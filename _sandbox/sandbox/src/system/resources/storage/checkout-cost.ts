@@ -5,7 +5,7 @@ import { defaultGit, type GitRunner } from "@intentic/base/git";
 // prints every path, which past ~150k files ran over it and read as "size unknown" for exactly the big repositories this
 // estimate exists for. A record here is a dozen bytes, so the same cap holds over a million entries. No path is printed,
 // so a newline can only end a record. Gitlinks (`commit -`) and trees have no blob size and count as nothing.
-export const LS_TREE_ARGS = ["ls-tree", "-r", "--full-tree", "--format=%(objecttype) %(objectsize)"] as const;
+const LS_TREE_ARGS = ["ls-tree", "-r", "--full-tree", "--format=%(objecttype) %(objectsize)"] as const;
 
 export const blobBytes = (listing: string): number =>
     listing.split("\n").reduce((total, record) => {

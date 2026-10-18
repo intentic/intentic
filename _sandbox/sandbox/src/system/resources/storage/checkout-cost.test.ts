@@ -1,5 +1,5 @@
 import type { GitRunner } from "@intentic/base/git";
-import { blobBytes, checkoutCost, LS_TREE_ARGS } from "./checkout-cost.js";
+import { blobBytes, checkoutCost } from "./checkout-cost.js";
 
 // What `ls-tree -r --format='%(objecttype) %(objectsize)'` prints: a file, a symlink (a blob too) and a gitlink, which
 // has no blob size.
@@ -13,7 +13,7 @@ test("checkout cost counts every blob, links included, and skips gitlinks", () =
 test("a tree far past the old path-listing cap is still measured", () => {
     // 300k entries: the path listing this replaced ran past the runner's 16 MiB output cap well before that.
     const big = "blob 1000\n".repeat(300_000);
-    expect(big.length).toBeLessThan(16 * 1024 * 1024);
+    expect(big.length).toBe(3_000_000);
     expect(blobBytes(big)).toBe(300_000_000);
 });
 
@@ -29,7 +29,7 @@ test("concurrent and repeated reads share one tree walk per repository and sha, 
     const storage = runner("storage");
     expect(await Promise.all([checkoutCost("/repo", "a", turn), checkoutCost("/repo", "a", storage)])).toEqual([21, 21]);
     expect(await checkoutCost("/repo", "a", storage)).toBe(21);
-    expect(calls).toEqual([["turn", "/repo", [...LS_TREE_ARGS, "a"]]]);
+    expect(calls).toEqual([["turn", "/repo", ["ls-tree", "-r", "--full-tree", "--format=%(objecttype) %(objectsize)", "a"]]]);
     expect(await checkoutCost("/repo", "b", turn)).toBe(21);
     expect(await checkoutCost("/other", "a", turn)).toBe(21);
     expect(calls.length).toBe(3);

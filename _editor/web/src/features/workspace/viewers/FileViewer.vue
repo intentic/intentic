@@ -170,8 +170,7 @@ const firstWindow = ref<WorkspaceFileWindow | undefined>(undefined);
 // True when this file came from the shared tree despite a scoped view; text reads only carry this fact.
 const fromShared = ref(false);
 
-// The one surface where a missing file is exceptional: elsewhere a read of nothing is ordinary, but an open tab
-// going missing is news, handled once here instead of at every call site.
+// A missing open tab is exceptional, handled once here instead of at every read call site.
 class FileGone extends Error {}
 const gone = (err: unknown): boolean => err instanceof FileGone;
 
