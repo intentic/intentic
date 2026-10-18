@@ -4,6 +4,7 @@ import { HISTORY_ROOT } from "@intentic/constants";
 import { startRoomSocket } from "./workload/room-socket.js";
 import { startWorkSignal, type WorkSignal } from "./workload/work-signal.js";
 import { startQuietWatch } from "./system/quiet-watch.js";
+import { startSleepSocket } from "./system/sleep/sleep-socket.js";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
 import { startProviderBoot } from "./agent/providers/provider-registry.js";
 import { declareBootSteps, runBootSteps } from "./bootstrap/boot-chain.js";
@@ -19,7 +20,7 @@ import { startDaemonMetrics } from "./bootstrap/daemon-metrics.js";
 import { wireDependencyCoordinator } from "./bootstrap/deps-coordination.js";
 import { requireNetdSockets, startNetdDoor } from "./bootstrap/netd-door.js";
 import { startCredentialGateway } from "./capabilities/broker/broker-server.js";
-import { quietProbes, startPlatformPresence } from "./bootstrap/platform-presence.js";
+import { quietProbes, startPlatformPresence, startPlatformSleep, subscribeSleepChanges } from "./bootstrap/platform-presence.js";
 import { commitStateAtBoot, convergeStateAtBoot } from "./bootstrap/state-boot.js";
 import { startVersionWatches } from "./bootstrap/version-watches.js";
 import { startWorkspaceApps } from "./bootstrap/workspace-apps.js";
@@ -171,6 +172,9 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
         const ticks: WorkSignalSlot = {};
         const quiet = startQuietWatch(quietProbes(services), { logger, onChange: () => void ticks.signal?.tick() });
         shutdown.push(() => quiet.stop());
+        shutdown.push(subscribeSleepChanges(services, quiet.invalidate));
+        const sleep = await startSleepSocket(quiet, () => workingNow(services, "idle-stop").length, logger);
+        shutdown.push(() => sleep.close());
         // How much a restart would cut, for the host's keeper, which then asks before it restarts this sandbox (work-signal.ts).
         const signal = startWorkSignal({
             working: () => workingNow(services, "restart").length,
@@ -242,11 +246,13 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
 
 // Starts one phase past the gate, so a phase that throws is named in the log and the phases after it still start: none
 // of them needs another to have started, and one failure must not silently leave restores, schedulers and watches off.
-const startPhase = (logger: BootPhase["logger"], name: string, start: () => void): void => {
+const startPhase = (logger: BootPhase["logger"], name: string, start: () => void): boolean => {
     try {
         start();
+        return true;
     } catch (error) {
         logger.error({ err: error, phase: name }, "boot: a phase past the gate failed to start; the phases after it still start");
+        return false;
     }
 };
 
@@ -284,8 +290,11 @@ const pastGate = async ({ phase, runnerEnv, prewarm, stop }: Ready, fault: BootF
 
     startPhase(logger, "sweeps", () => startBootSweeps(phase));
     startPhase(logger, "restores", () => startBootRestores(phase));
-    startPhase(logger, "schedulers", () => startBootSchedulers(phase));
-    startPhase(logger, "resumes", () => startBootResumes(phase));
+    const schedulersStarted = startPhase(logger, "schedulers", () => startBootSchedulers(phase));
+    const resumesStarted = startPhase(logger, "resumes", () => startBootResumes(phase));
+    if (schedulersStarted && resumesStarted) {
+        startPhase(logger, "sleep", () => startPlatformSleep(phase));
+    }
     startPhase(logger, "version watches", () => startVersionWatches(phase));
     startPhase(logger, "change reactions", () => startChangeReactions(phase));
 

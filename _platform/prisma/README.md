@@ -13,6 +13,9 @@ flowchart LR
 
 - Tables include Better Auth's users and sessions, sandboxes and their members, the hosted lane (machines, pool,
   builds, usage, plan), the wallet and admin stats. The comments in `schema.prisma` say what each column means.
+- A sandbox's `scheduledWakeAt` and `scheduledWakeRetryAt` keep its hosted sleep alarm and the next permitted wake
+  attempt in Postgres (`20261018120000_scheduled_wake`). The api claims attempts against the unchanged deadline and
+  the ready daemon cancels it. (2026-10-18: an in-process timer would disappear on an api restart.)
 - Some database state lives only in SQL. `20261002120000_platform_memory` adds a trigger on `sandbox` that
   writes a `sandbox_tombstone` for the tunnel id of every deleted row and rotated token (cascades included), and the
   one `platform_identity` row that migration minted for its database. Neither appears in a `migrate diff`, and both are

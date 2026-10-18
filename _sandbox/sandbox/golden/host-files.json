@@ -78,5 +78,8 @@
       "quietSince": 1791240300000,
       "nextWakeAt": 1791247530000
     }
+  },
+  "sleepProbe": {
+    "path": "/run/intentic/sleep.sock"
   }
 }

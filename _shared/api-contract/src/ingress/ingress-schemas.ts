@@ -245,6 +245,9 @@ export type BootReportBody = z.input<typeof BootReportBodySchema>;
 // What a route that only takes something answers once it has.
 export const IngressOkSchema = z.object({ ok: z.literal(true) });
 
+// A hosted daemon must obtain this durable alarm's acknowledgement before stopping. Null cancels its previous alarm.
+export const WakeAlarmBodySchema = z.object({ at: z.number().int().positive().max(8_640_000_000_000_000).nullable() });
+
 // An announce the platform took: which database took it, from a platform new enough to say (GET /api/identity).
 // `identityKey` is the public half of the key this platform signs identity assertions with (sandbox-contract
 // policy/identity-assertion.ts), in SPKI PEM: the daemon keeps the newest it was answered, so a sandbox started by any

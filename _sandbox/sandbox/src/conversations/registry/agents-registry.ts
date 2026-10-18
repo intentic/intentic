@@ -828,6 +828,27 @@ const checkFailureClearer =
         books.broadcast();
     };
 
+const activateLoadedFleet = (
+    entries: readonly PersistedAgent[],
+    conversations: Pick<ConversationActors, "queued">,
+    broadcast: () => void,
+    reprobe: () => Promise<boolean>,
+): void => {
+    // Queues survive sleep on the entries; the schedulers enumerate actors. Restore those actors before any
+    // wake reader can cancel a platform alarm or report a sandbox quiet with its booked messages unseen.
+    for (const entry of entries) { conversations.queued(entry.id); }
+    // Broadcast before probing, since a fresh boot's verdict cache is empty and the probe spawns git per live agent.
+    broadcast();
+    void reprobe()
+        .then((moved) => {
+            if (moved) {
+                broadcast();
+            }
+        })
+        // allow(silent-catch): reprobe never throws; a broadcast that does leaves the next change to carry the standings.
+        .catch(() => undefined);
+};
+
 export const createFleet = (
     store: FleetStore,
     standings: LandStandings,
@@ -1224,17 +1245,7 @@ export const createFleet = (
     const agents: AgentsRegistry = {
         init: async () => {
             entries = store.agents.load().map(restored);
-            // Broadcasts immediately on load, before standings are probed, since a fresh boot's verdict cache is empty
-            // and probing first would hold the whole boot behind a git spawn per live agent.
-            broadcast();
-            void reprobe()
-                .then((moved) => {
-                    if (moved) {
-                        broadcast();
-                    }
-                })
-                // allow(silent-catch): reprobe never throws; a broadcast that does leaves the next change to carry the standings.
-                .catch(() => undefined);
+            activateLoadedFleet(entries, conversations, broadcast, reprobe);
         },
         adopted: (ids) => {
             const arrived = new Set(ids);

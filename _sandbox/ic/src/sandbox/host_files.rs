@@ -12,7 +12,7 @@ use serde_json::Value;
 use super::fix::chain;
 use super::outcome::{self, Kind, Outcome};
 use super::preparing::{self, Phase};
-use super::{inside, intent, probation, resume};
+use super::{inside, intent, probation, resume, sleep};
 
 const HOST_FILES: &str = include_str!("../../../sandbox/golden/host-files.json");
 const UPDATE_OUTCOME: &str =
@@ -37,6 +37,7 @@ fn every_path_ic_reads_or_writes_is_the_one_the_daemon_uses() {
     assert_eq!(files["bootFailure"]["path"], probation::BOOT_FAILURE_FILE);
     assert_eq!(files["daemonExit"]["path"], probation::DAEMON_EXIT_FILE);
     assert_eq!(files["workSignal"]["path"], chain::WORK_SIGNAL);
+    assert_eq!(files["sleepProbe"]["path"], sleep::SLEEP_SOCKET);
 }
 
 /// The restart intent (intent.rs), held to the contract's RestartIntentSchema through the daemon's golden file: the path, an

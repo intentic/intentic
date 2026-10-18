@@ -1,5 +1,5 @@
 import type { ReachPosture } from "../system/listeners/reach-posture.js";
-import { DEFAULT_PROBES, lastTerminalActivity, startIdleStop } from "../system/idle-stop.js";
+import { DEFAULT_PROBES, lastTerminalActivity, startIdleStop } from "../system/sleep/idle-stop.js";
 import { connectedCount } from "../system/presence.js";
 import type { QuietProbes } from "../system/quiet-watch.js";
 import { anyConnected } from "../ports/established.js";
@@ -7,12 +7,25 @@ import { fileRestartResume } from "../system/restart-resume.js";
 import type { BootPhase } from "./boot-phase.js";
 import { nextPromisedWake } from "./promised-wakes.js";
 import { workingNow } from "./working-now.js";
+import { createHostedSleep } from "../system/sleep/hosted-sleep.js";
 import { join } from "node:path";
 import { fileMembersStore, membersDocument } from "../auth/auth.js";
 import { revokeHeld } from "../auth/members/revoke-held.js";
 import { reconcileOrgRoster } from "../org/org-roster.js";
 import { settingsDocument } from "../settings/settings-store.js";
-import { subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
+import { subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
+
+// Webhooks have no durable ingress outside this daemon; gateway listeners need their live connection. Keep receiving
+// until the owner disables them (or they expire), rather than acknowledging an always-on automation that sleeps.
+export const continuousReception = async (services: Pick<BootPhase["services"], "automations">): Promise<boolean> =>
+    (await services.automations.list()).some((automation) => automation.enabled &&
+        (automation.expiresAt === undefined || automation.expiresAt > Date.now()) &&
+        (automation.trigger.kind === "event" || automation.trigger.kind === "listener"));
+
+export const subscribeSleepChanges = (services: BootPhase["services"], changed: () => void): (() => void) => {
+    const stops = [services.agents.subscribe(changed), subscribeWorkspaceChanges(() => changed()), subscribeUnwatchedWrites(changed)];
+    return () => { for (const stop of stops) { stop(); } };
+};
 
 // The soonest moment this sandbox promised somebody that a stop for idleness must not sleep through, 0 for none: one list
 // (promised-wakes.ts), shared with the automatic update's.
@@ -28,7 +41,7 @@ export const quietProbes = (services: BootPhase["services"]): QuietProbes => ({
     terminalActivityAt: lastTerminalActivity,
     appsInUse: () => anyConnected(services.processes.ports()),
     nextWakeAt: async () => (await nextPromisedWake(services, "sleep")) ?? 0,
-    keepAwake: async () => !(await services.sandboxSettings.get()).sleepWhenUnused,
+    keepAwake: async () => !(await services.sandboxSettings.get()).sleepWhenUnused || await continuousReception(services),
 });
 
 // What the daemon does when the organisation policy or a file it pins moves, started at boot beside the policy's own
@@ -68,8 +81,19 @@ export const startPlatformPresence = ({ config, logger, role, services, shutdown
         services.orgPolicy.start();
     }
 
-    // 0 means always-on. A wake due before a stopped machine could be back keeps it up, since only a visit would restart it.
-    if (config.idleStopMinutes > 0 && role.container) {
+    // Unawaited and self-swallowing: a platform that never answers means no trial offered.
+    if (role.container) {
+        void services.trial.refresh();
+    }
+};
+
+// Only after the schedulers and resumers have started: cancelling the previous alarm during a failed boot would lose
+// its recovery attempt. 0 means always-on; a distant deadline needs the platform's durable acknowledgement.
+export const startPlatformSleep = ({ config, logger, role, services, shutdown }: BootPhase): void => {
+    if (!role.container || (config.idleStopMinutes === 0 && !config.sandbox.vm)) { return; }
+    // Always-on hosted boots also retract an earlier alarm, even when idle-stop was disabled since the last sleep.
+    const alarm = createHostedSleep(config, logger);
+    if (config.idleStopMinutes > 0) {
         shutdown.push(
             startIdleStop(
                 { minutes: config.idleStopMinutes, logger },
@@ -77,6 +101,9 @@ export const startPlatformPresence = ({ config, logger, role, services, shutdown
                     ...DEFAULT_PROBES,
                     working: () => workingNow(services, "idle-stop").length,
                     nextPromisedWakeAt: () => nextPromisedWakeAt(services),
+                    keepAwake: quietProbes(services).keepAwake,
+                    prepareSleep: alarm.prepare,
+                    cancelSleep: alarm.cancel,
                 },
                 // Named as the initiator before the SIGTERM main.ts answers, so the stop and the next boot say why.
                 () => {
@@ -89,10 +116,5 @@ export const startPlatformPresence = ({ config, logger, role, services, shutdown
                 },
             ),
         );
-    }
-
-    // Unawaited and self-swallowing: a platform that never answers means no trial offered.
-    if (role.container) {
-        void services.trial.refresh();
     }
 };

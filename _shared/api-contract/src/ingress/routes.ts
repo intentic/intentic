@@ -35,6 +35,7 @@ import {
     WalletEnsureBodySchema,
     WalletSignatureSchema,
     WalletSignBodySchema,
+    WakeAlarmBodySchema,
 } from "./ingress-schemas.js";
 
 /* EVERY ROUTE A MACHINE CALLS ON THE PLATFORM, outside the editor's oRPC contract under /rpc: the sandbox daemon, `ic`
@@ -122,6 +123,10 @@ export const PLATFORM_INGRESS = {
         answer: "json",
         input: AnnounceBodySchema,
         output: AnnounceAcceptedSchema,
+    },
+    wakeAlarm: {
+        method: "POST", path: "/sandbox/wake-alarm", auth: "connect", body: "json", answer: "json",
+        input: WakeAlarmBodySchema, output: IngressOkSchema,
     },
     // A row made again for a sandbox the registry has no record of, on its owner's ticket.
     adopt: { method: "POST", path: "/sandbox/adopt", auth: "connect", body: "json", answer: "json", input: AdoptionBodySchema, output: AdoptedSchema },

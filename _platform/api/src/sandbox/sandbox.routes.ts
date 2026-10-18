@@ -1,5 +1,5 @@
 import { type AnnounceRefusal, apiContract, type BootReport, HostedStatusSchema, type SetupReport } from "@intentic/api-contract";
-import { FREE_TIER, hostedTier } from "@intentic/constants";
+import { FREE_TIER } from "@intentic/constants";
 import type { Prisma } from "@intentic/prisma";
 import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import { GrantedRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
@@ -15,18 +15,16 @@ import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
 import { edgeTransports } from "./edge-transports.js";
 import { getMachine, isFlyGone } from "./hosted/fly/fly.js";
 import {
-    forgetHostedMachine,
     HostedAppNotOurs,
     HostedNothingKept,
     hostedEnabled,
     HostedSlotsExhausted,
     provisionHosted,
     rollbackHosted,
-    wakeHosted,
 } from "./hosted/hosted.js";
 import { HostedBuildRefused, hostedBuildStatus, rebuildOnMovedBase, requestHostedBuild } from "./hosted/build/hosted-build.js";
 import { HostedAtCapacity, hostedCapacity } from "./hosted/hosted-capacity.js";
-import { HostedImageKept, HostedMachineBusy } from "./hosted/gate/state-gate.js";
+import { HostedImageKept } from "./hosted/gate/state-gate.js";
 import { kickHostedPool } from "./hosted/hosted-pool.js";
 import {
     assertHostedIdentity,
@@ -38,7 +36,7 @@ import {
 import { hostedPlanEnabled, hostedSlotUse, onHostedPlan } from "./hosted/plan/hosted-plan.js";
 import { recordHostedProvision } from "./hosted/abuse/hosted-source.js";
 import { hostedSuspensionOf } from "./hosted/abuse/hosted-standing.js";
-import { hostedArrivalBudget, hostedBudgetOf, settleHostedStretch } from "./hosted/hosted-usage.js";
+import { hostedArrivalBudget } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { hostReportsOf, mintFixCode } from "./host-report.js";
 import { duplicateCopiesOf } from "./announce-copies.js";
@@ -50,10 +48,11 @@ import { sendSetupLinkEmail } from "./setup-email.js";
 import { mintOwnerTicket, OWNER_TICKET_TTL_MS } from "@intentic/sandbox-contract/owner-ticket";
 import { arrivalTier, hostedArrivalFor, offeredMachines } from "./hosted/free-lane.js";
 import { mintIdentityAssertionFor } from "./identity-assertion.js";
+import { wakeHostedSandbox } from "./hosted/wake/hosted-wake.js";
 import { ingressEnabled } from "./reachability.js";
 import { ADOPTION_TICKET_TTL_MS, mintAdoptionTicket, standingsOf } from "./recovery.js";
 import { hostedSummaryOf } from "./hosted/fly/hosted-state.js";
-import { buildRefusal, hoursOf, hoursSpent, paymentRequired } from "./hosted-refusals.js";
+import { buildRefusal, hoursOf } from "./hosted-refusals.js";
 import {
     assertHostedAllowance,
     keptVersion,
@@ -587,57 +586,7 @@ export const sandboxRoutes = {
             return { ok: true };
         }
         const { hosted } = sandbox;
-        await requireHostedStanding(context, sandbox.ownerId);
-        await settleHostedStretch(context.prisma, context.config, context.logger, { ...sandbox.hosted, ownerId: sandbox.ownerId });
-        const budget = await hostedBudgetOf(context.prisma, context.config, { sandboxId: sandbox.id, ownerId: sandbox.ownerId });
-        if (budget.metered && budget.remainingMinutes === 0) {
-            // Addressed as the owner's hours, not "your": the reader may not be the account that spent them.
-            throw paymentRequired(hoursSpent(budget, `anyone`));
-        }
-        try {
-            // What a re-applied config is composed from, as a restart composes it; the owner's address and not the
-            // caller's, since a member may be the one waking it.
-            const healed = await wakeHosted(
-                context.config,
-                hosted,
-                () => ({
-                    sandboxId: sandbox.id,
-                    connectToken: decryptSecret(context.config, sandbox.token),
-                    ownerEmail: sandbox.owner.email.toLowerCase(),
-                    region: hosted.region,
-                    tier: hostedTier(hosted.tier).id,
-                }),
-                context.logger,
-                { prisma: context.prisma, hostedMachineId: hosted.id, sandboxId: sandbox.id },
-            );
-            if (healed) {
-                context.logger.info(
-                    { app: hosted.appName, sandboxId: sandbox.id },
-                    `hosted wake: the machine's tunnel grant or edge address was missing or stale; its config was re-applied`,
-                );
-            }
-        } catch (error) {
-            // Fly saying the machine is gone is terminal, not a bad minute: this wake reflex is the only moment
-            // anything asks about it, so the row and the sandbox's address are dropped here rather than left to the
-            // nightly sweep.
-            if (isFlyGone(error)) {
-                await forgetHostedMachine(context.prisma, { ...sandbox.hosted, ownerId: sandbox.ownerId });
-                context.logger.warn(
-                    { app: sandbox.hosted.appName, sandboxId: sandbox.id },
-                    `hosted wake: the provider has no such machine; the row and the sandbox's address are dropped`,
-                );
-                throw new ORPCError(`NOT_FOUND`, {
-                    message: `the machine this sandbox ran on no longer exists; give it a new one from setup`,
-                });
-            }
-            // A restart or rebuild holds the machine: nothing was started or billed, and the browser's next wake finds it done.
-            if (error instanceof HostedMachineBusy) {
-                throw new ORPCError(`CONFLICT`, { message: error.message });
-            }
-            throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `waking the machine failed` });
-        }
-        // Only after a start that actually succeeded; a failed wake must not be billed.
-        await openStretchOrStop(context, sandbox.hosted, sandbox.ownerId);
+        await wakeHostedSandbox(context, { ...sandbox, hosted });
         return { ok: true };
     }),
     // Whether this platform mints addresses, the same switch setupCode enforces; asked here so the wizard never draws a

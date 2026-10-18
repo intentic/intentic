@@ -20,7 +20,7 @@ import { hoursSpent, paymentRequired } from "./hosted-refusals.js";
 
 // The hosted lane is switched off for the machine's OWNER (hosted-standing.ts): FORBIDDEN, in the suspension's own
 // words, for every act that would start a machine. Checked before anything is settled, counted or built.
-export const requireHostedStanding = async (context: OrpcContext, ownerId: string): Promise<void> => {
+export const requireHostedStanding = async (context: Pick<OrpcContext, "prisma" | "config">, ownerId: string): Promise<void> => {
     try {
         await assertHostedStanding(context.prisma, context.config, ownerId);
     } catch (error) {
@@ -132,7 +132,7 @@ export const stopForChange = async (
 
 // A row gone mid-start (trash, release, the idle sweep) leaves nothing to bill the run, so the machine is stopped again.
 export const openStretchOrStop = async (
-    context: OrpcContext,
+    context: Pick<OrpcContext, "prisma" | "config" | "logger">,
     hosted: { id: string; sandboxId: string; appName: string; machineId: string },
     ownerId: string,
 ): Promise<void> => {

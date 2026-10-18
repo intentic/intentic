@@ -26,6 +26,8 @@ export const JOB_EDGE_CERTIFICATE = 10;
 export const JOB_HOSTED_PROBATION = 11;
 // Mails the owner of a setup run that failed unwatched; two replicas reading the same failure would mail it twice.
 export const JOB_SETUP_FAILURE_MAIL = 12;
+// Durable hosted wake alarms: one sweep across replicas, with a compare-and-set per attempt as well.
+export const JOB_HOSTED_WAKE = 13;
 
 export const runExclusive = async (config: Config, key: number, fn: () => Promise<void>): Promise<void> => {
     const client = new Client({ connectionString: config.database.url });

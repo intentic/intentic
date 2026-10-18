@@ -10,6 +10,7 @@ import { RESTART_ACTIONS, RESTART_INITIATORS, RESTART_SIDES, RestartIntentSchema
 import { RESTART_INTENT_FILE } from "./boot/restarts/restart-record.js";
 import { restartResumeDocument } from "./restart-resume.js";
 import { updateOutcomeDocument, updatePreparingDocument } from "./updates/staged-update.js";
+import { SLEEP_SOCKET_PATH } from "./sleep/sleep-socket.js";
 
 // The files the host and this daemon share across the container's edge, spelled once here: `ic` writes some for the
 // daemon to read and reads the rest, by path and field name, from Rust. golden/host-files.json is each one's path in
@@ -77,6 +78,8 @@ const files = {
             }, { quietSince: AT - 30_000, nextWakeAt: AT + 7_200_000 }),
         ) as unknown,
     },
+    // The host asks for a fresh work signal here immediately before sleep; failure means leave it awake.
+    sleepProbe: { path: SLEEP_SOCKET_PATH },
 };
 
 test("golden/host-files.json is each shared file's path and example, as the host reads and writes them", () => {

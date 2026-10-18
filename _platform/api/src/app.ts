@@ -13,6 +13,7 @@ import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
 import { acmeChallengeHolds, CloudflareTokenError, ensureLocalDnsRecord, setAcmeChallenge } from "./sandbox/cloudflare.js";
 import { edgeCertificateFor } from "./sandbox/edge-certificate.js";
 import { hostReportHttpRoutes } from "./sandbox/host-report.js";
+import { hostedWakeAlarmRoutes } from "./sandbox/hosted/wake/hosted-wake-alarm.js";
 import { ingressEnabled, sandboxHostname } from "./sandbox/reachability.js";
 import { DaemonVersionSchema } from "./sandbox/daemon-version.js";
 import { identityField, isTombstoned } from "./sandbox/recovery.js";
@@ -240,6 +241,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     // What `ic sandbox fix` found on the machine a sandbox runs on: `/host-report/claim` redeems the recovery panel's fix
     // code for the report key, `/host-report` takes a report under that key (sandbox/host-report.ts).
     app.route(`/host-report`, hostReportHttpRoutes({ config, prisma }));
+    app.route(`/`, hostedWakeAlarmRoutes({ prisma, config }));
 
     // The daemon's phone-home, authenticated by the connect token. A token with no row answers 410 when its id has a
     // deletion record, else 404: the second is what a registry that forgot the sandbox says, and the daemon keeps
@@ -341,7 +343,6 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         return removed.count === 0 ? kit.refuse(404, `unknown sandbox`) : kit.answer({ ok: true });
     });
 
-    // A bound sandbox's organisation policy, through the same door as announce (org/org-policy-http.ts).
     app.route(`/`, orgPolicyHttpRoutes({ prisma }));
 
     /* The sandbox presents itself through the same sessionless credentialed door as announce. */

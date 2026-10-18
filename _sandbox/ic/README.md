@@ -105,13 +105,15 @@ flowchart LR
 - **Held and asleep.** `ic sandbox stop` marks the sandbox `held` in its channel record: stopped on purpose, so
   `ic sandbox fix` only starts it again after a yes. `ic sandbox sleep [<slug>]` stops it the same way but marks it
   `asleep` instead, never both; `--idle <minutes>` (the machine agent's keeper) sleeps only the sandboxes this side
-  keeps whose daemon's work signal (`/run/intentic/work.json`) has said `quietSince` for that long, with nothing
-  working, no `keepAwake` (its owner switched sleep off in its settings) and no `nextWakeAt` due within the alarm's
+  keeps whose daemon confirms through the private `/run/intentic/sleep.sock` that it has been quiet for that long,
+  with nothing working, no `keepAwake` (settings or an enabled, unexpired webhook/listener automation) and no `nextWakeAt` due within the alarm's
   lead and five minutes, and never one mid-update, parked, held or locked by another ic run. A sandbox the alarm woke
   that no person has used since (the signal's `personAt`) needs five minutes of quiet rather than the whole limit. A dev sandbox (one whose container carries `SANDBOX_DEV_ROOT`) first asks that checkout's
   `_sandbox/sandbox/scripts/dev-before-sleep.mjs <slug>` through a login shell, with a one-minute limit. Exit 75 keeps
   it awake, with the script's last line as the reason, while the script rebuilds an image that lacks a dependency the
-  checkout's daemon needs. Any other answer lets it sleep. Each sleep posts a host report with `asleep: true`. `ic sandbox wakes` (polled by the agent while anything
+  checkout's daemon needs. Any other answer lets it sleep after a second fresh confirmation. A failed confirmation
+  leaves it awake, including for an explicit sleep. (2026-10-18: the minute-old `work.json` heartbeat alone was rejected
+  because a booking saved after it could lose its alarm.) Each sleep posts a host report with `asleep: true`. `ic sandbox wakes` (polled by the agent while anything
   sleeps, run by the desktop app the moment its page asks, and asking docker nothing when nothing does) sends the asleep sandboxes' report keys to the platform's
   `POST /host-report/wakes` and starts each one somebody has opened, as a person's start, reporting `fixing` then
   `done` around it; `--json` ends on `{"asleep": n}`. **The alarm** (2026-10-18): a sleep stores the signal's

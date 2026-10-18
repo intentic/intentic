@@ -383,6 +383,18 @@ flowchart LR
   automatic update, a device rebuild asked to wait, the host's keeper reading `/run/intentic/work.json`'s `liveTurns`)
   waits for turns, lands, running subagents and workflow steps; idle-stop waits for those and for parked subagents and
   armed watches, which only this daemon's clock moves on. The device rebuild used to wait for turns alone.
+- Sleep keeps every promised clock in `bootstrap/promised-wakes.ts`: cron and one-time automations, scheduled
+  messages, held countdowns and approved actions. Nearby deadlines keep a hosted machine awake; before a distant
+  deadline can sleep, `system/sleep/hosted-sleep.ts` obtains the platform's durable alarm acknowledgement. The watchdog
+  rechecks clocks, work, receivers and terminal activity after that write, cancelling the alarm if sleep is refused.
+  Its previous alarm is cancelled at boot only after the schedulers and resumers have started.
+  Fleet initialization restores queued conversations before clocks are read, so a persisted booking is visible
+  before any browser opens its chat.
+  Locally, `system/quiet-watch.ts` refreshes on bookings and workspace writes, and `ic` asks
+  `/run/intentic/sleep.sock` for a fresh reading immediately before stopping. Any failed read keeps the sandbox awake.
+  Enabled, unexpired webhook and listener automations also keep it awake: their ingress lives in the daemon.
+  (2026-10-18: sleeping through a distant booking or cron and catching up at the next visit was rejected; each
+  promise needs an alarm outside the sleeping process. The minute heartbeat alone could miss a newly saved booking.)
 - `conversations.db` never keeps the daemon down (`store/conversations-db-recovery.ts`): after a run that died
   unannounced it is quick-checked before anything reads it, and a file that fails to open or to pass is moved aside with
   its sidecars as `conversations.db.corrupt-<ms>` (never deleted), what still reads of it is copied into a new file with

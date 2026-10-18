@@ -1,6 +1,6 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import { pino } from "pino";
-import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import { advanceTimersByTimeAsync, SETTLES, waitFor } from "@intentic/testing/bun";
 import type { ApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
 import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
 import type { TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
@@ -17,8 +17,10 @@ import { openConversationsDb } from "../store/conversations-db.js";
 import { createFleet } from "../conversations/registry/agents-registry.js";
 import type { LandStandings } from "../conversations/land/standing.js";
 import type { Services } from "../composition.js";
-import { startIdleStop } from "../system/idle-stop.js";
-import { nextPromisedWakeAt, quietProbes } from "./platform-presence.js";
+import { startIdleStop } from "../system/sleep/idle-stop.js";
+import { continuousReception, nextPromisedWakeAt, quietProbes, subscribeSleepChanges } from "./platform-presence.js";
+import { startQuietWatch } from "../system/quiet-watch.js";
+import { quietProbesOf } from "../system/quiet-watch.testing.js";
 import { nextPromisedWake, PROMISED_WAKES } from "./promised-wakes.js";
 import { workingNow } from "./working-now.js";
 
@@ -159,7 +161,7 @@ describe("the one list of promised wakes", () => {
             ["a scheduled message, or a held turn booked for its allowance's reset", ["idle-stop", "restart", "sleep"]],
             ["an approved post or action", ["idle-stop", "restart", "sleep"]],
             ["a held automation wake counting down", ["idle-stop", "restart", "sleep"]],
-            ["a cron automation", ["restart", "sleep"]],
+            ["a cron automation", ["idle-stop", "restart", "sleep"]],
         ]);
     });
 
@@ -200,10 +202,10 @@ describe("the one list of promised wakes", () => {
         expect(await nextPromisedWake(promising({ holds: [asking] }), "idle-stop")).toBeUndefined();
     });
 
-    it("a cron holds the automatic update's restart and a local sleep's alarm, and not idle-stop", async () => {
+    it("a cron is included in both hosted and local alarms and the automatic update's restart", async () => {
         const services = promising({ automations: [nightly("nightly")] });
-        expect(await nextPromisedWake(services, "idle-stop")).toBeUndefined();
         const cronAt = await nextPromisedWake(services, "restart");
+        expect(await nextPromisedWake(services, "idle-stop")).toBe(cronAt);
         expect(cronAt).toBeGreaterThan(Date.now());
         expect(cronAt).toBeLessThanOrEqual(Date.now() + 24 * 3_600_000);
         expect(await nextPromisedWake(services, "sleep")).toBe(cronAt);
@@ -235,9 +237,11 @@ describe("the one list of promised wakes", () => {
         dispose();
     });
 
-    it("stops an idle machine whose only approved post is due further out than one window", async () => {
+    it("arms the approved post's distant deadline before stopping an idle machine", async () => {
         jest.useFakeTimers();
-        const services = promising({ approvals: [approved("post", Date.now() + 6 * 3_600_000)] });
+        const at = Date.now() + 6 * 3_600_000;
+        const services = promising({ approvals: [approved("post", at)] });
+        const prepareSleep = jest.fn(async () => true);
 
         // The watchdog stops with the machine it stops, so a stop is one call however long the suite waits after it.
         let dispose = (): void => {};
@@ -249,6 +253,7 @@ describe("the one list of promised wakes", () => {
                 terminalActivityAt: async () => 0,
                 working: () => workingNow(services, "idle-stop").length,
                 nextPromisedWakeAt: () => nextPromisedWakeAt(services),
+                prepareSleep,
             },
             stop,
         );
@@ -256,6 +261,41 @@ describe("the one list of promised wakes", () => {
             await advanceTimersByTimeAsync(60_000);
         }
         expect(stop).toHaveBeenCalledTimes(1);
+        expect(prepareSleep).toHaveBeenCalledWith(at);
         dispose();
     });
+});
+
+test.each(["event", "listener"] as const)("an enabled %s receiver holds both hosted and local sleep until disabled or expired", async (kind) => {
+    const record = automationRecord("receiver", { trigger: kind === "event" ? { kind } : { kind, provider: "discord" } });
+    const services = promising({ automations: [record] });
+    expect(await continuousReception(services)).toBe(true);
+    expect(await quietProbes(services).keepAwake()).toBe(true);
+    await services.automations.setEnabled("receiver", false);
+    expect(await continuousReception(services)).toBe(false);
+    expect(await quietProbes(services).keepAwake()).toBe(false);
+    await services.automations.upsert({ ...record, enabled: true, expiresAt: Date.now() - 1 });
+    expect(await continuousReception(services)).toBe(false);
+    expect(await quietProbes(services).keepAwake()).toBe(false);
+});
+
+test("booked messages immediately refresh the alarm when added, re-timed or cancelled, alongside automations", async () => {
+    const services = promising({ automations: [once("later", inMinutes(90))] });
+    await services.agents.init();
+    await beginTurn(services.conversations, { conversationId: "booked", isolated: true, prompt: "first", profile: PROFILE }, NOW);
+    await services.conversations.send("booked", { kind: "settle" }, NOW).settled;
+    const watch = startQuietWatch(quietProbesOf({ nextWakeAt: quietProbes(services).nextWakeAt }), { logger, now: () => NOW, checkMs: 1e9 });
+    const unsubscribe = subscribeSleepChanges(services, watch.invalidate);
+    try {
+        await watch.check();
+        expect(watch.read().nextWakeAt).toBe(inMinutes(90));
+        await services.conversations.send("booked", { kind: "queue-scheduled", booking: { until: inMinutes(60) }, item: {
+            id: "m1", voice: "person", queuedAt: NOW, turn: { conversationId: "booked", prompt: "later" },
+        } }, NOW).settled;
+        await waitFor(() => expect(watch.read().nextWakeAt).toBe(inMinutes(60)), SETTLES);
+        await services.conversations.send("booked", { kind: "queue-rescheduled", booking: { until: inMinutes(30) }, ids: ["m1"] }, NOW).settled;
+        await waitFor(() => expect(watch.read().nextWakeAt).toBe(inMinutes(30)), SETTLES);
+        await services.conversations.send("booked", { kind: "queue-taken", ids: ["m1"] }, NOW).settled;
+        await waitFor(() => expect(watch.read().nextWakeAt).toBe(inMinutes(90)), SETTLES);
+    } finally { unsubscribe(); watch.stop(); }
 });

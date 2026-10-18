@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 
 use crate::docker;
 use crate::record::ChannelRecord;
-use crate::sandbox::fix::chain::{self, Env, WorkSignal};
+use crate::sandbox::fix::chain::{Env, WorkSignal};
 use crate::sandbox::fix::host::Os;
 use crate::sandbox::fix::model::{self, Check, Fix, Outcome, Source, Stage, CONTAINER};
 use crate::sandbox::fix::report::{self, Poster, Target};
@@ -56,8 +56,32 @@ pub enum Verdict {
 
 /// The why of a daemon that is not quiet: it is busy, or too old to say (an older daemon writes no `quietSince`).
 const NOT_QUIET: &str = "no quiet signal (busy, or an older daemon)";
-/// The why of a sandbox whose owner switched sleep off in its own settings (the signal's `keepAwake`).
-const KEPT_AWAKE: &str = "its owner switched sleep off for it";
+/// Settings or a continuous event/listener automation holds this sandbox awake (the signal's `keepAwake`).
+const KEPT_AWAKE: &str = "its settings or an enabled receiver requires it to stay awake";
+
+// A heartbeat may predate a newly booked send. Ask the daemon itself immediately before sleep; an older daemon or
+// an unreadable clock cannot certify it, so an unattended sleep leaves it running.
+pub(super) const SLEEP_SOCKET: &str = "/run/intentic/sleep.sock";
+const SLEEP_PROBE: &str = r#"const c=require('node:net').connect(process.argv[1]);c.setTimeout(10000,()=>{c.destroy();process.exitCode=1});c.on('data',b=>process.stdout.write(b));c.on('error',()=>{process.exitCode=1});"#;
+
+fn confirmed_signal(container: &str) -> Option<WorkSignal> {
+    confirmed_signal_with(container, docker::run_bounded)
+}
+
+fn confirmed_signal_with(
+    container: &str,
+    run: impl FnOnce(&str, &[&str], std::time::Duration) -> Result<docker::Bounded>,
+) -> Option<WorkSignal> {
+    let ran = run(
+        "docker",
+        &["exec", container, "node", "-e", SLEEP_PROBE, SLEEP_SOCKET],
+        std::time::Duration::from_secs(12),
+    )
+    .ok()?;
+    (ran.code == Some(0) && !ran.timed_out)
+        .then(|| WorkSignal::parse(&ran.stdout))
+        .flatten()
+}
 
 /// The shortest sleep worth taking: a moment due sooner than the alarm's lead and this keeps the sandbox awake, since
 /// stopping it only to start it again a minute later frees nothing and costs a boot.
@@ -291,9 +315,10 @@ fn sleep_now(slug: Option<String>, json: bool, source: Source) -> Result<()> {
         // A person's sleep keeps the schedule's alarm as the keeper's does, so what it promised still comes on time; one
         // already overdue is left for the next visit rather than starting it straight back up under their hand.
         let now = now_ms();
-        alarm = chain::read_work_signal(&container)
-            .and_then(|signal| signal.next_wake_at)
-            .filter(|at| *at > now);
+        let signal = confirmed_signal(&container).ok_or_else(|| {
+            crate::util::Fail("the daemon could not confirm its wake alarm; left awake".to_string())
+        })?;
+        alarm = signal.next_wake_at.filter(|at| *at > now);
         put_to_sleep(&slug, source, alarm).err().map(|fail| fail.0)
     };
     if let Some(refused) = refused {
@@ -368,7 +393,7 @@ fn considered(slug: &str, idle_ms: u64, source: Source) -> (bool, String, Option
     if let Some(why) = held_back(&record, docker::container_exists(&parked_of(slug)), true) {
         return (false, why.to_string(), None);
     }
-    let signal = chain::read_work_signal(&container);
+    let signal = confirmed_signal(&container);
     let now = now_ms();
     let idle_ms = idle_limit(&record, signal, idle_ms);
     match sleep_verdict(signal, now, idle_ms, wake_lead(&record)) {
@@ -376,6 +401,13 @@ fn considered(slug: &str, idle_ms: u64, source: Source) -> (bool, String, Option
         Verdict::Sleep => {
             if let Some(why) = dev_checkout_holds_awake(slug, &container) {
                 return (false, why, None);
+            }
+            // The checkout's pre-sleep hook can take a minute. Revalidate after it, so a booking made during that wait
+            // replaces the alarm and work that began in it keeps the container up.
+            let signal = confirmed_signal(&container);
+            let now = now_ms();
+            if let Verdict::Awake(why) = sleep_verdict(signal, now, idle_ms, wake_lead(&record)) {
+                return (false, why.to_string(), None);
             }
             let quiet = quiet_for(signal, now);
             let _why = crate::sandbox::intent::Reason::hold(
@@ -704,6 +736,57 @@ mod tests {
 
     /// The lead every verdict below is asked with: the floor, as a sandbox that has never been woken has.
     const LEAD: u64 = LEAD_FLOOR_MS;
+
+    #[test]
+    fn the_sleep_confirmation_asks_the_live_daemon_with_a_bounded_host_only_probe() {
+        let signal = confirmed_signal_with("sandbox-test", |program, args, limit| {
+            assert_eq!(program, "docker");
+            assert_eq!(args, ["exec", "sandbox-test", "node", "-e", SLEEP_PROBE, SLEEP_SOCKET]);
+            assert_eq!(limit, std::time::Duration::from_secs(12));
+            Ok(docker::Bounded {
+                code: Some(0), timed_out: false, stderr: String::new(),
+                stdout: json!({ "liveTurns": 0, "at": NOW, "quietSince": NOW - 45 * MIN, "nextWakeAt": NOW + 60 * MIN }).to_string(),
+            })
+        }).expect("a fresh signal");
+        assert_eq!(signal.next_wake_at, Some(NOW + 60 * MIN));
+        assert_eq!(
+            sleep_verdict(Some(signal), NOW, 30 * MIN, LEAD),
+            Verdict::Sleep
+        );
+    }
+
+    #[test]
+    fn a_failed_or_partial_confirmation_never_becomes_a_sleep_without_an_alarm() {
+        let valid = json!({ "liveTurns": 0, "at": NOW, "quietSince": NOW - 45 * MIN }).to_string();
+        for (code, timed_out, stdout) in [
+            (Some(1), false, valid.as_str()),
+            (None, true, valid.as_str()),
+            (Some(0), true, valid.as_str()),
+            (Some(0), false, r#"{"error":"could not confirm sleep"}"#),
+            (Some(0), false, ""),
+            (Some(0), false, r#"{"liveTurns":0,"at":"#),
+        ] {
+            let signal = confirmed_signal_with("sandbox-test", |_, _, _| {
+                Ok(docker::Bounded {
+                    code,
+                    timed_out,
+                    stdout: stdout.to_string(),
+                    stderr: String::new(),
+                })
+            });
+            assert_eq!(
+                sleep_verdict(signal, NOW, 30 * MIN, LEAD),
+                Verdict::Awake("unreadable")
+            );
+        }
+        let signal = confirmed_signal_with("sandbox-test", |_, _, _| {
+            Err(crate::util::Fail("Docker unavailable".to_string()))
+        });
+        assert_eq!(
+            sleep_verdict(signal, NOW, 30 * MIN, LEAD),
+            Verdict::Awake("unreadable")
+        );
+    }
 
     #[test]
     fn a_sandbox_quiet_long_enough_with_nothing_due_sleeps() {

@@ -75,7 +75,7 @@ describe("startIdleStop", () => {
         dispose();
     });
 
-    it("a wake due inside the window keeps the machine up, since only a visit would restart it", async () => {
+    it("a wake due inside the window keeps the machine up through its deadline", async () => {
         const stop = jest.fn();
         // Due in three minutes, inside a five-minute window: stopping now is how that wake arrives late.
         const dueAt = Date.now() + 3 * 60 * 1000;
@@ -85,7 +85,7 @@ describe("startIdleStop", () => {
         dispose();
     });
 
-    it("a wake further out than the window is slept through: an always-awake machine costs more than the lateness", async () => {
+    it("a distant wake without an external alarm keeps the machine up", async () => {
         const stop = jest.fn();
         const dispose = startIdleStop(
             { minutes: 5, logger },
@@ -93,6 +93,110 @@ describe("startIdleStop", () => {
             stop,
         );
         await minutes(5);
+        expect(stop).toHaveBeenCalledTimes(0);
+        dispose();
+    });
+
+    it("stops only after its distant deadline has been acknowledged outside the machine", async () => {
+        const stop = jest.fn();
+        const at = Date.now() + 6 * 3_600_000;
+        let acknowledged = false;
+        const prepareSleep = jest.fn(async () => acknowledged);
+        const dispose = startIdleStop({ minutes: 5, logger }, probesOf({
+            nextPromisedWakeAt: async () => at, prepareSleep,
+        }), stop);
+        await minutes(5);
+        expect(prepareSleep).toHaveBeenCalledWith(at);
+        expect(stop).toHaveBeenCalledTimes(0);
+        acknowledged = true;
+        await minutes(1);
+        expect(stop).toHaveBeenCalledTimes(1);
+        dispose();
+    });
+
+    it.each(["retimed", "cancelled", "receiver", "work", "terminal"])("rechecks a %s change while registering the alarm", async (change) => {
+        const stop = jest.fn();
+        let at = Date.now() + 6 * 3_600_000;
+        let receiver = false;
+        let work = 0;
+        let typed = 0;
+        const saved = Promise.withResolvers<boolean>();
+        const prepareSleep = jest.fn(() => saved.promise);
+        const cancelSleep = jest.fn(async () => true);
+        const dispose = startIdleStop({ minutes: 1, logger }, probesOf({
+            nextPromisedWakeAt: async () => at, keepAwake: async () => receiver,
+            working: () => work, terminalActivityAt: async () => typed, prepareSleep, cancelSleep,
+        }), stop);
+        await minutes(1);
+        expect(prepareSleep).toHaveBeenCalledTimes(1);
+        if (change === "retimed") { at += 60_000; }
+        if (change === "cancelled") { at = 0; }
+        if (change === "receiver") { receiver = true; }
+        if (change === "work") { work = 1; }
+        if (change === "terminal") { typed = Date.now(); }
+        saved.resolve(true);
+        await advanceTimersByTimeAsync(0);
+        expect(stop).toHaveBeenCalledTimes(0);
+        expect(cancelSleep).toHaveBeenCalledTimes(1);
+        dispose();
+    });
+
+    it("retracts the alarm and stays awake if the final clock read fails", async () => {
+        const stop = jest.fn();
+        const cancelSleep = jest.fn(async () => true);
+        let failed = false;
+        const dispose = startIdleStop({ minutes: 1, logger }, probesOf({
+            nextPromisedWakeAt: async () => {
+                if (failed) { throw new Error("unreadable"); }
+                return Date.now() + 6 * 3_600_000;
+            },
+            prepareSleep: async () => { failed = true; return true; },
+            cancelSleep,
+        }), stop);
+        await minutes(1);
+        expect(stop).not.toHaveBeenCalled();
+        expect(cancelSleep).toHaveBeenCalledTimes(1);
+        dispose();
+    });
+
+    it("serializes slow checks and cannot stop after disposal", async () => {
+        const stop = jest.fn();
+        const saved = Promise.withResolvers<boolean>();
+        const prepareSleep = jest.fn(() => saved.promise);
+        const dispose = startIdleStop({ minutes: 1, logger }, probesOf({ prepareSleep }), stop);
+        await minutes(5);
+        expect(prepareSleep).toHaveBeenCalledTimes(1);
+        dispose();
+        saved.resolve(true);
+        await advanceTimersByTimeAsync(0);
+        expect(stop).toHaveBeenCalledTimes(0);
+    });
+
+    it("enabled continuous reception keeps the machine up until disabled", async () => {
+        const stop = jest.fn();
+        let enabled = true;
+        const dispose = startIdleStop({ minutes: 2, logger }, probesOf({ keepAwake: async () => enabled }), stop);
+        await minutes(5);
+        expect(stop).toHaveBeenCalledTimes(0);
+        enabled = false;
+        await minutes(2);
+        expect(stop).toHaveBeenCalledTimes(1);
+        dispose();
+    });
+
+    it("a failed clock read breaks the quiet streak, and recovery waits a new window", async () => {
+        const stop = jest.fn();
+        let failed = true;
+        const dispose = startIdleStop({ minutes: 3, logger }, probesOf({ nextPromisedWakeAt: async () => {
+            if (failed) { throw new Error("unreadable"); }
+            return 0;
+        } }), stop);
+        await minutes(5);
+        expect(stop).toHaveBeenCalledTimes(0);
+        failed = false;
+        await minutes(2);
+        expect(stop).toHaveBeenCalledTimes(0);
+        await minutes(1);
         expect(stop).toHaveBeenCalledTimes(1);
         dispose();
     });
@@ -107,14 +211,14 @@ describe("startIdleStop", () => {
 
     // Simulates the terminal probe being an in-flight subprocess: unlike the other tests' already-settled promise, this
     // lets something become busy while the check awaits it.
-    const held = (): { probe: () => Promise<number>; settle: (at: number) => Promise<void> } => {
+    const held = () => {
         let resolve: ((at: number) => void) | undefined;
         return {
             probe: () =>
                 new Promise<number>((r) => {
                     resolve = r;
                 }),
-            settle: async (at) => {
+            settle: async (at: number) => {
                 resolve?.(at);
                 // Let the suspended check resume and reach its verdict.
                 await advanceTimersByTimeAsync(0);

@@ -98,6 +98,15 @@ volume with it at the next daily pass, and a backlog after an outage never clear
 
 ## Hosted sandboxes
 
+Hosted sleep has a durable clock outside the machine (2026-10-18): before idle-stop, the daemon saves its earliest
+automation, scheduled message, held countdown or approved action through `POST /sandbox/wake-alarm`. The platform
+stores it on `Sandbox`, sweeps every 15 seconds with a two-minute boot lead, and retries failed starts after a minute
+([`hosted-wake-alarm.ts`](../../_platform/api/src/sandbox/hosted/wake/hosted-wake-alarm.ts)). An unchanged-deadline claim and
+the sweep's advisory lock prevent duplicate attempts across replicas. The alarm survives until the booted daemon's
+schedulers and resumers start and it cancels the alarm. Every alarm wake uses the browser's standing, budget, Fly and
+metering path. Sleeping through a distant promise until the next browser visit was rejected; only the daemon's
+existing schedulers deliver the work, so waking twice does not create two deliveries.
+
 [`hosted.ts`](../../_platform/api/src/sandbox/hosted/hosted.ts) gives each hosted sandbox its own Fly app, machine and volume, booting the same public sandbox image every other lane runs, in a region chosen by where the owner is. The platform starts and stops machines (they stop when idle; a wake also re-applies the config of a machine whose tunnel grant or edge address is missing or stale), resizes and moves them, keeps a pool of warm machines, and meters awake time ([`hosted-usage.ts`](../../_platform/api/src/sandbox/hosted/hosted-usage.ts)): every awake minute is charged either to the account's free hours, one allowance a month shared by every machine the account has off a paid slot, or to one machine's own month on a paid slot of the hosted plan ([`hosted-plan.ts`](../../_platform/api/src/sandbox/hosted/plan/hosted-plan.ts)), a Stripe subscription for a bigger machine than the free one. A sandbox on its owner's own computer is never metered. The tier ladder is in [`hosted-tiers.ts`](../../_tools/constants/src/hosted-tiers.ts).
 
 The free machine, the free trial and the desktop Repair agent need a Google sign-in linked to the account. An account that signs in only by email is told so (`hostedOffer.needsGoogle`) and can link Google, buy a machine on a paid slot, or run the sandbox on its own computer.

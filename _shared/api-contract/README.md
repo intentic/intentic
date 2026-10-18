@@ -22,6 +22,10 @@ flowchart LR
   already read. A request field is added optional, and a label a machine sends about itself is dropped when it does
   not parse rather than refusing the call. Its test pins the old body shapes, and the Rust and shell callers'
   spellings of the paths and of `CONNECT_TOKEN_HEADER`.
+- `wakeAlarm` is the hosted daemon's durable sleep promise: `POST /sandbox/wake-alarm`, authenticated by its connect
+  token, takes `{ at: <epoch milliseconds> }` or `{ at: null }` to cancel, and answers `{ ok: true }` after storage.
+  A daemon requires that acknowledgement before it sleeps; an older or unreachable platform leaves it awake.
+  (2026-10-18: accepting sleep before a platform alarm exists could strand a distant scheduled message or automation.)
 - `src/schemas.ts` holds the platform's own shapes: users, hosted plans, invites, tokens, the admin reads. It
   re-exports nothing of the daemon's: a daemon wire shape is imported from `@intentic/sandbox-contract`, so which
   contract a type belongs to is read off its import. A platform shape may still be built from a daemon one (a member's

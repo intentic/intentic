@@ -1162,7 +1162,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_platform/api/src/sandbox/sandbox.routes.ts": {
-        "count": 703,
+        "count": 653,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_platform/api/src/trial/trial-pool.ts#call#cognitive": {
@@ -1643,7 +1643,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/automations/scheduler.ts": {
-        "count": 1289,
+        "count": 1286,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/automations/scheduler.ts#runFire#cognitive": {

@@ -10,7 +10,7 @@ import { devices, manageDeviceSandbox } from "../hosts/device-reports.js";
 import { hostRunningSelf, ownSlug } from "../hosts/self-host.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { isDevBuild } from "../version.js";
-import { lastTerminalActivity } from "../system/idle-stop.js";
+import { lastTerminalActivity } from "../system/sleep/idle-stop.js";
 import { connectedCount, peopleAtEditor, subscribePresence } from "../system/presence.js";
 import { type AutoUpdateActivity, type AutoUpdateOffer, createAutoUpdater, holdAutoUpdater } from "../system/updates/auto-update.js";
 import { breakingNotes } from "../system/updates/release-notes.js";

@@ -980,7 +980,7 @@ export const nextRunOf = (automation: AutomationRecord, sandbox: Zone): number |
 
 // The soonest one-time wake, for the idle-stop watchdog; 0 when none is armed. Stopped, this daemon is the only thing
 // that could fire one and only a visit brings it back, so the watchdog holds the machine up rather than sleeping
-// through a moment somebody was promised (system/idle-stop.ts).
+// through a moment somebody was promised (system/sleep/idle-stop.ts).
 // Only `once` counts, deliberately. A cron whose moment passes while the machine sleeps fires once, late, the next time
 // the daemon starts (`catchUp`), and a hosted machine held awake all month so a nightly chore is punctual costs more
 // than the chore; a one-time wake is a moment somebody was promised, and holds the machine for at most one window,
@@ -994,10 +994,8 @@ export const nextOneTimeWakeAt = async (services: Services): Promise<number> => 
     return due.length === 0 ? 0 : Math.min(...due);
 };
 
-// The soonest moment a cron fires, for whoever must not restart through it (bootstrap/promised-wakes.ts); 0 when none is
-// armed. Held apart from `nextOneTimeWakeAt` because the two are promises of different weight: a cron that comes due while
-// the machine sleeps is caught up once, late, at the next start, so idle-stop does not stay up for it, but a restart landing
-// on a cron's minute would fire it late for nothing.
+// The soonest moment a cron fires, for the sleep alarm and anyone restarting through it (bootstrap/promised-wakes.ts);
+// 0 when none is armed. One-time wakes carry their instant directly; a cron needs its next run on the sandbox's clock.
 export const nextCronWakeAt = async (services: Services): Promise<number> => {
     const zone = await sandboxZone(services);
     const due = (await services.automations.list()).flatMap((automation) =>
@@ -1201,10 +1199,9 @@ const releaseCountdownHolds = async (services: Services, now: number): Promise<v
 // polls. Event automations fire from the fire route instead.
 // Every pass of a started scheduler also sets one timer for the soonest moment due within a poll (schedule-zone.ts),
 // so a schedule fires on its minute rather than up to a poll late.
-// What happened while nothing was running is the start's to settle (`catchUp`): a hosted sandbox stops itself when
-// nobody is connected (system/idle-stop.ts) and is not woken for a cron, so a machine asleep at the same hour every day
-// would otherwise never run its nightly chore at all. Each schedule that missed a moment fires ONCE, however many it
-// missed, late and saying so, through the same gates as any fire: the sessions bar, the guard, an approval hold. A
+// What happened while nothing was running is the start's to settle (`catchUp`): a host or platform outage can miss even
+// a promised alarm. Each schedule that missed a moment fires ONCE, however many it missed, late and saying so, through
+// the same gates as any fire: the sessions bar, the guard, an approval hold. A
 // schedule asks for its work to be done regularly, not for a backlog to be replayed.
 export const createAutomationsScheduler = (services: Services, intervalMs = 30_000): AutomationsScheduler => {
     // Where the first poll's window opens, and so where the catch-up's ends: a moment is one pass's or the other's.

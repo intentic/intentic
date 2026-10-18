@@ -13,7 +13,7 @@ import type { Services } from "../composition.js";
 // Armed watches (agent/verification/watchers.ts) are not on this list: a watch has no moment, it polls, so it is work in
 // flight rather than a promise (bootstrap/working-now.ts holds the machine for as long as one is armed).
 
-// - idle-stop: the machine stops until somebody visits, so a wake due within its window keeps it up (system/idle-stop.ts).
+// - idle-stop: nearby promises hold the machine up; distant ones arm a durable platform alarm before it stops.
 // - restart: this container restarts for an automatic update, and waits for a quiet moment before a promised one.
 // - sleep: the computer this sandbox runs on puts it to sleep and sets an alarm for the soonest of these, started again
 //   ahead of it (ic's `sandbox sleep` and `sandbox wakes`, 2026-10-18), read off the work signal's `nextWakeAt`.
@@ -44,11 +44,7 @@ export const PROMISED_WAKES: readonly PromisedWake[] = [
     },
     { name: "an approved post or action", holds: EVERY, nextAt: (services) => nextApprovedAt(services) },
     { name: "a held automation wake counting down", holds: EVERY, nextAt: (services) => instant(nextCountdownWakeAt(services)) },
-    // Not for idle-stop: a cron that comes due while the machine sleeps is caught up once, late, at the next start, and an
-    // always-awake machine to keep a nightly chore punctual costs more than the chore is worth. A restart landing on its
-    // minute would fire it late for nothing, so the automatic update waits it out. A local sandbox's sleep is another
-    // matter: its alarm wakes it a minute or two ahead for the price of a boot, so the cron fires on time.
-    { name: "a cron automation", holds: ["restart", "sleep"], nextAt: (services) => instant(nextCronWakeAt(services)) },
+    { name: "a cron automation", holds: EVERY, nextAt: (services) => instant(nextCronWakeAt(services)) },
 ];
 
 /** The soonest moment of `purpose` anything promised (ms), or undefined when nothing is. */

@@ -265,6 +265,9 @@ model Sandbox {
     // does not host), and null once that machine's keeper has heard it (POST /host-report/wakes) or nobody asked. The
     // platform never calls the machine: its agent asks here while any sandbox of its sleeps (api host-report.ts).
     wakeRequestedAt    DateTime?
+    // The hosted daemon's durable alarm, acknowledged before idle-stop; retried until the daemon cancels it at boot.
+    scheduledWakeAt    DateTime?
+    scheduledWakeRetryAt DateTime?
     // The last two distinct copies of this sandbox that announced, as [{instance, host, os, firstAt, at}] (api
     // announce-copies.ts): an `instance` is minted once per container start, so two that keep announcing side by side
     // are two containers holding one connect token, which is what pasting the setup command into PowerShell and into
@@ -308,6 +311,7 @@ model Sandbox {
     // sandbox.list's owned-sandboxes findMany is the hottest platform query.
     @@index([ownerId])
     @@index([orgId])
+    @@index([scheduledWakeAt])
     hostedUsage      HostedUsage[]
 
     @@map("sandbox")

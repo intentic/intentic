@@ -81,6 +81,15 @@ flowchart LR
 - The hosted lane is one Fly app, machine and volume per sandbox, named `<HOSTED_APP_PREFIX>-<id>`. The background
   jobs started in `src/main.ts` (warm pool, meter, abuse watch, builds, health) take a Postgres advisory lock per run
   (`src/jobs-lock.ts`), so two replicas never double-bill or double-provision.
+- A hosted daemon saves its earliest promised wake through connect-token-authenticated `POST /sandbox/wake-alarm`
+  before idle-stop; `at: null` cancels it. `Sandbox.scheduledWakeAt` and `scheduledWakeRetryAt` survive api restarts.
+  The alarm sweep (`src/sandbox/hosted/wake/hosted-wake-alarm.ts`) runs every 15 seconds, starts machines two minutes before their deadline,
+  and retries failures after a minute. Each attempt claims the unchanged deadline before starting. The alarm remains
+  until the ready daemon cancels it, after its schedulers and resumers have started. Browser and alarm wakes share
+  `wakeHostedSandbox`, including the owner's standing, hours, state gate and metering. A platform with hosted waking
+  disabled refuses new alarms with 503, so a daemon cannot sleep on an acknowledgement it cannot honour.
+  (2026-10-18: relying on the next browser visit for distant bookings and crons was rejected. The database owns the
+  alarm; the sleeping machine owns the scheduled work and delivers it through its existing schedulers after wake.)
 - Destruction needs a record (2026-10-05; [platform.md](../../docs/architecture/platform.md#when-the-platform-forgets)).
   The daily orphan reaper (`reapHostedOrphans`) destroys an app no row names only when its sandbox's tunnel id is in
   `SandboxTombstone`, or when every machine in it is unclaimed warm stock this platform stamped. Any other unknown app
