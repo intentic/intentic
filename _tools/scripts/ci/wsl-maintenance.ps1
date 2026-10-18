@@ -39,7 +39,8 @@
     History: 2026-09-27 CI-safe (no compaction during a job; docker integration restored
     afterwards); 2026-10-01 compaction on request of the fleet janitor; 2026-10-16 sparse disks,
     hourly fstrim, compaction decided by freed space instead of free space on C:, images
-    pruned after 48h instead of 7 days. The previous version is kept beside the installed copy
+    pruned after 48h instead of 7 days; 2026-10-18 superseded ghcr.io/intentic release images go by count, not
+    age, and the guard over budget also takes unused volumes. The previous version is kept beside the installed copy
     as wsl-maintenance.ps1.bak-<date>.
 #>
 [CmdletBinding()]
@@ -59,6 +60,8 @@ param(
     [int]$DockerBudgetGB = 120,
     [int]$BuildCacheGB = 20,
     [int]$ImageMaxAgeHours = 48,
+    # Per ghcr.io/intentic repository, how many of the newest release images stay whatever their age.
+    [int]$KeepReleases = 3,
     [string]$JanitorFlag = '/var/lib/intentic-ci/compact-requested',
     [string]$JanitorUnit = 'intentic-ci-janitor.service',
     [switch]$NoCompact,
@@ -376,6 +379,37 @@ function Remove-UnusedVolumes {
     Write-Log ("volumes: removed {0} unused" -f $names.Count)
 }
 
+# Release images (ghcr.io/intentic/*: the sandbox in each variant, api, web, ingress, ci-*), which CI pulls and
+# publishes several times a day, a sandbox image about 12 GB a release. The age rules never reached them: on 2026-10-18
+# docker's disk held 140-150 GB against its 120 GB budget while every hourly prune freed 0 B, every release image being
+# younger than the 24h the guard waits. Per repository the newest -KeepReleases images stay (`docker image ls` lists
+# newest first) and the tags of older ones go, never an image a container (a sandbox, a runner, a job) is made from.
+# Removing a tag frees only the layers nothing else holds: ic's rollback pins (versions.rs) are tags of their own.
+function Remove-SupersededReleases {
+    $used = @{}
+    $containers = Invoke-Docker @('ps', '-aq', '--no-trunc') -TimeoutSec 120 -Quiet
+    $ids = @(($containers -split "`r?`n") | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($ids.Count -gt 0) {
+        $images = Invoke-Docker (@('inspect', '--format', '{{.Image}}') + $ids) -TimeoutSec 120 -Quiet
+        # Unknown containers: removing nothing is the only safe answer.
+        if ($null -eq $images) { Write-Log 'releases: could not read which images containers use; none removed' 'WARN'; return }
+        foreach ($line in ($images -split "`r?`n")) { if ($line.Trim()) { $used[$line.Trim()] = $true } }
+    }
+    $listed = Invoke-Docker @('image', 'ls', '--no-trunc', '--filter', 'reference=ghcr.io/intentic/*', '--format', '{{.Repository}}|{{.Tag}}|{{.ID}}') -TimeoutSec 120 -Quiet
+    if ($null -eq $listed) { return }
+    $kept = @{}
+    $removed = 0
+    foreach ($row in ($listed -split "`r?`n" | Where-Object { $_.Trim() })) {
+        $repo, $tag, $id = $row.Trim() -split '\|', 3
+        if (-not $kept.ContainsKey($repo)) { $kept[$repo] = New-Object System.Collections.Generic.List[string] }
+        $newest = $kept[$repo]
+        if ($newest.Contains($id) -or $newest.Count -lt $KeepReleases) { if (-not $newest.Contains($id)) { $newest.Add($id) }; continue }
+        if ($tag -eq '<none>' -or $used.ContainsKey($id)) { continue }
+        if ($null -ne (Invoke-Docker @('image', 'rm', "${repo}:${tag}") -TimeoutSec 300 -Quiet)) { $removed += 1 }
+    }
+    Write-Log ("releases: removed {0} superseded tag(s), keeping the newest {1} image(s) of each ghcr.io/intentic repository" -f $removed, $KeepReleases)
+}
+
 function Invoke-BuilderPrune {
     param([long]$CapBytes)
     foreach ($b in (Get-Builders)) {
@@ -391,13 +425,16 @@ function Invoke-Prune {
     $keepSandboxes = "label!=$IntenticKindLabel"
     switch ($Level) {
         'light' {
-            Write-Log 'pruning: light (unused images older than 24h, build cache capped)'
+            Write-Log 'pruning: light (superseded release images, unused images older than 24h, build cache capped, unused volumes)'
+            Remove-SupersededReleases
             Invoke-Docker @('image', 'prune', '-af', '--filter', 'until=24h') | Out-Null
             Invoke-BuilderPrune ($BuildCacheGB * 1GB)
+            Remove-UnusedVolumes
         }
         'routine' {
             Write-Log "pruning: routine (stopped containers > 24h, unused images > ${ImageMaxAgeHours}h, build cache capped at ${BuildCacheGB}GB, unused volumes)"
             Invoke-Docker @('container', 'prune', '-f', '--filter', 'until=24h', '--filter', $keepSandboxes) | Out-Null
+            Remove-SupersededReleases
             Invoke-Docker @('image', 'prune', '-af', '--filter', "until=${ImageMaxAgeHours}h") | Out-Null
             Invoke-BuilderPrune ($BuildCacheGB * 1GB)
             Remove-UnusedVolumes
