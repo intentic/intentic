@@ -30,7 +30,7 @@ export const RETENTION_KINDS: readonly RetentionKind[] = ["transcripts", "restor
 // Which setting each kind reads.
 const SETTING = {
     transcripts: "transcriptDays",
-    restorePoints: "restorePointDays",
+    restorePoints: "restorePointKeepDays",
     privacyVault: "privacyVaultDays",
     caches: "cacheDays",
     rawOutput: "rawOutputDays",

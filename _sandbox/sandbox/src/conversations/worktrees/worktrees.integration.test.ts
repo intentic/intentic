@@ -920,7 +920,7 @@ test("disk admission guards fresh, joined and retired checkouts but lets standin
 
 test("the predicted checkout cost refuses a write even above the free-space floor", async () => {
     const git: GitRunner = async (dir, args) =>
-        args[0] === "ls-tree" ? { stdout: "100644 blob abc123 13000000000\tbackup\0", stderr: "" } : defaultGit(dir, args);
+        args[0] === "ls-tree" ? { stdout: "blob 13000000000\n", stderr: "" } : defaultGit(dir, args);
     const { worktrees } = await setup(async () => ({ freeBytes: 10_000_000_000, totalBytes: 100 * 1024 ** 3 }), git);
     await expect(worktrees.ensure("c1", [], undefined, undefined, [])).rejects.toThrow(
         "The sandbox's disk has 10 GB free, too little to give this conversation its own copy of the workspace (about 13 GB).",

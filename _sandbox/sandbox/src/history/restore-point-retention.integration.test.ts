@@ -1,12 +1,13 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { createLogger } from "../logger.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { createWorkspaceHistory, type HistoryGitRunner } from "./history.js";
+import { RETENTION_GRACE_MS } from "./restore-point-retention.js";
 
 // Restore-point retention against real git: what is cut must leave the disk, and every point kept must still list,
 // diff and restore. Commit times are set through git's own date variables, so a month of snapshots takes no waiting.
@@ -25,13 +26,28 @@ afterEach(async () => {
 const DAY = 24 * 60 * 60 * 1000;
 const START = Date.parse("2026-01-01T12:00:00Z");
 
-// A runner whose commits are dated `clock.at`, as the history's own runner would date them at that moment.
-const datedHistory = (work: string, historyRoot: string, failFirstGc = false) => {
+// A runner whose commits are dated `clock.at`, as the history's own runner would date them at that moment. Collected
+// with `--prune=now` unless a test asks for the real grace, since the objects here were all written a moment ago.
+interface DatedOptions {
+    readonly failFirstGc?: boolean;
+    readonly graceMs?: number;
+    // Called with each retention collection's arguments before it runs (not a snapshot's `gc --auto`); may hold it.
+    readonly onGc?: (args: readonly string[], signal: AbortSignal | undefined) => Promise<void>;
+    // Every non-gc call's options, to see which carry a signal.
+    readonly calls?: { args: readonly string[]; signal: boolean }[];
+}
+
+const datedHistory = (work: string, historyRoot: string, { failFirstGc = false, graceMs = 0, onGc, calls }: DatedOptions = {}) => {
     const clock = { at: START };
+    let failGc = failFirstGc;
     const git: HistoryGitRunner = async (args, options) => {
-        if (failFirstGc && args.includes("--prune=now")) {
-            failFirstGc = false;
-            throw new Error("collection interrupted");
+        calls?.push({ args, signal: options.signal !== undefined });
+        if (args.some((arg) => arg.startsWith("--prune="))) {
+            await onGc?.(args, options.signal);
+            if (failGc) {
+                failGc = false;
+                throw new Error("collection interrupted");
+            }
         }
         const date = `${String(Math.floor(clock.at / 1000))} +0000`;
         const { stdout, stderr } = await exec("git", ["-c", "core.fileMode=true", ...args], {
@@ -40,7 +56,8 @@ const datedHistory = (work: string, historyRoot: string, failFirstGc = false) =>
         });
         return { stdout, stderr };
     };
-    return { clock, history: createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot, logger }, git) };
+    const history = createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot, logger, retentionGraceMs: graceMs, now: () => clock.at }, git);
+    return { clock, history };
 };
 
 // Whether a scope's object store still holds these bytes, packed or loose.
@@ -150,17 +167,101 @@ test("collection interrupted after the boundary is written is retried on the nex
     const work = join(base, "work");
     const historyRoot = join(base, "history");
     await mkdir(work, { recursive: true });
-    const { clock, history } = datedHistory(work, historyRoot, true);
+    const { clock, history } = datedHistory(work, historyRoot, { failFirstGc: true });
     for (const [day, text] of [[0, "old"], [1, "base"], [40, "newest"]] as const) {
         clock.at = START + day * DAY;
         await writeFile(join(work, "a.txt"), `${text}\n`);
         await history.snapshot("turn", text);
     }
     const gitDir = join(historyRoot, "scopes", "root.git");
-    expect(await history.prune(START + 10 * DAY)).toBe(0);
+    // The cut stands (two points off the timeline) though its collection did not run.
+    expect(await history.prune(START + 10 * DAY)).toBe(2);
     expect(existsSync(join(gitDir, "retention-gc-pending"))).toBe(true);
+    expect(await holds(gitDir, "old\n")).toBe(true);
     expect(await history.prune(START + 10 * DAY)).toBe(0);
     expect(existsSync(join(gitDir, "retention-gc-pending"))).toBe(false);
     expect(await holds(gitDir, "old\n")).toBe(false);
     expect((await history.list()).map(({ label }) => label)).toEqual(["newest"]);
+});
+
+// Every file under a scope's object store dated `ms` in the past, as objects written that long ago would be.
+const ageObjects = async (gitDir: string, ms: number): Promise<void> => {
+    const at = new Date(Date.now() - ms);
+    for (const entry of await readdir(join(gitDir, "objects"), { recursive: true, withFileTypes: true })) {
+        if (entry.isFile()) {
+            await utimes(join(entry.parentPath, entry.name), at, at);
+        }
+    }
+};
+
+test("with the real grace, a cut's objects leave the disk on the collection a grace after the first, which only loosens", async () => {
+    const work = join(base, "work");
+    const historyRoot = join(base, "history");
+    await mkdir(work, { recursive: true });
+    const gcs: string[][] = [];
+    const { clock, history } = datedHistory(work, historyRoot, { graceMs: RETENTION_GRACE_MS, onGc: async (args) => void gcs.push([...args]) });
+    for (const [day, text] of [[0, "old"], [1, "base"], [40, "newest"]] as const) {
+        clock.at = START + day * DAY;
+        await writeFile(join(work, "a.txt"), `${text}\n`);
+        await history.snapshot("turn", text);
+    }
+    const gitDir = join(historyRoot, "scopes", "root.git");
+    const mark = join(gitDir, "retention-gc-pending");
+
+    expect(await history.prune(START + 10 * DAY)).toBe(2);
+    expect(gcs.at(-1)).toContain(`--prune=${String(RETENTION_GRACE_MS / 1000)}.seconds.ago`);
+    // Written a moment ago, the cut's objects are inside the grace: kept for now, and the mark says a collection ran.
+    expect(await holds(gitDir, "old\n")).toBe(true);
+    expect((await readFile(mark, "utf8")).trim()).toBe(`gc ${String(clock.at)}`);
+    expect((await history.list()).map(({ label }) => label)).toEqual(["newest"]);
+
+    // Still inside the grace of that first collection: the mark stays, still naming it.
+    clock.at += RETENTION_GRACE_MS / 2;
+    const first = await readFile(mark, "utf8");
+    expect(await history.prune(START + 10 * DAY)).toBe(0);
+    expect(await readFile(mark, "utf8")).toBe(first);
+
+    // A grace later, with everything the cut left older than the horizon: gone, and the mark with it.
+    await ageObjects(gitDir, 2 * RETENTION_GRACE_MS);
+    clock.at += RETENTION_GRACE_MS;
+    expect(await history.prune(START + 10 * DAY)).toBe(0);
+    expect(existsSync(mark)).toBe(false);
+    expect(await holds(gitDir, "old\n")).toBe(false);
+    expect(await holds(gitDir, "newest\n")).toBe(true);
+    expect((await history.list()).map(({ label }) => label)).toEqual(["newest"]);
+});
+
+test("the collection runs outside the history lock, and only it carries the budget's signal", async () => {
+    const work = join(base, "work");
+    await mkdir(work, { recursive: true });
+    let started!: () => void;
+    const gcStarted = new Promise<void>((resolve) => {
+        started = resolve;
+    });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const calls: { args: readonly string[]; signal: boolean }[] = [];
+    const { clock, history } = datedHistory(work, join(base, "history"), {
+        calls,
+        onGc: async () => {
+            started();
+            await held;
+        },
+    });
+    for (const [day, text] of [[0, "old"], [1, "base"], [40, "newest"]] as const) {
+        clock.at = START + day * DAY;
+        await writeFile(join(work, "a.txt"), `${text}\n`);
+        await history.snapshot("turn", text);
+    }
+    const pruning = history.prune(START + 10 * DAY);
+    await gcStarted;
+    // A snapshot (what every git action of the owner's takes first) is not held behind the gc.
+    await writeFile(join(work, "a.txt"), "during the gc\n");
+    expect(await history.snapshot("user", "during")).toEqual(expect.any(String));
+    release();
+    expect(await pruning).toBe(2);
+    expect((await history.list()).map(({ label }) => label)).toEqual(["during", "newest"]);
+    expect(calls.filter((call) => call.signal).map((call) => call.args.includes("gc"))).toEqual([true]);
 });

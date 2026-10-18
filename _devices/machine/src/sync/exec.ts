@@ -54,11 +54,22 @@ const QUIET_CHECK_MS = 5_000;
 // started again from nothing on the next pass, and a laptop's drive filled with abandoned packs. Watched instead: the
 // command is stopped once neither stream has said anything for `quietMs` (git with `--progress` reports several times a
 // second while data moves), and in any case at `ceilingMs`. The whole process tree goes, as with every bound here.
-export const runWatched = async (
-    command: string,
-    args: readonly string[],
-    options: { readonly cwd?: string | undefined; readonly quietMs: number; readonly ceilingMs: number; readonly signal?: AbortSignal | undefined },
-): Promise<WatchedResult> => {
+// A command with a stretch it is known to spend without a word (git checking a received history is whole) names what it
+// says just before that stretch (`quietAfter.said`); from then on the silence allowed is `quietAfter.quietMs`.
+export interface WatchedOptions {
+    readonly cwd?: string | undefined;
+    // The child's whole environment; absent inherits this process's.
+    readonly env?: NodeJS.ProcessEnv | undefined;
+    readonly quietMs: number;
+    readonly quietAfter?: { readonly said: RegExp; readonly quietMs: number } | undefined;
+    readonly ceilingMs: number;
+    readonly signal?: AbortSignal | undefined;
+}
+
+// How much of the latest output is kept to match `quietAfter.said` against, so words split across two chunks still match.
+const SAID_TAIL_CHARS = 512;
+
+export const runWatched = async (command: string, args: readonly string[], options: WatchedOptions): Promise<WatchedResult> => {
     const stop = new AbortController();
     const relay = (): void => stop.abort();
     if (options.signal?.aborted === true) {
@@ -66,25 +77,35 @@ export const runWatched = async (
     }
     options.signal?.addEventListener("abort", relay, { once: true });
     let heard = Date.now();
+    let allowance = options.quietMs;
     let stalled = false;
     const quiet = setInterval(
         () => {
-            if (Date.now() - heard >= options.quietMs) {
+            if (Date.now() - heard >= allowance) {
                 stalled = true;
                 stop.abort();
             }
         },
         Math.min(QUIET_CHECK_MS, options.quietMs),
     );
+    const later = options.quietAfter;
+    let tail = "";
+    const mark = (chunk: Buffer | string): void => {
+        heard = Date.now();
+        if (later !== undefined && allowance !== later.quietMs) {
+            tail = `${tail}${chunk.toString()}`.slice(-SAID_TAIL_CHARS);
+            if (later.said.test(tail)) {
+                allowance = later.quietMs;
+            }
+        }
+    };
     try {
         const result = await runBounded(command, args, {
             cwd: options.cwd,
+            env: options.env,
             timeoutMs: options.ceilingMs,
             signal: stop.signal,
             onSpawn: (child) => {
-                const mark = (): void => {
-                    heard = Date.now();
-                };
                 child.stdout?.on("data", mark);
                 child.stderr?.on("data", mark);
             },

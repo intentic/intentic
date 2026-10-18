@@ -25,7 +25,7 @@ const list = (items: readonly string[]): string => items.map((item) => `- ${item
 
 const CATEGORY_ORDER: readonly MeasureCategory[] = ["confidentiality", "minimisation", "integrity", "accountability", "transparency", "availability"];
 
-const RETENTION_KEYS = ["transcriptDays", "restorePointDays", "privacyVaultDays", "cacheDays", "rawOutputDays"] as const satisfies readonly (keyof RetentionSettings)[];
+const RETENTION_KEYS = ["transcriptDays", "restorePointKeepDays", "privacyVaultDays", "cacheDays", "rawOutputDays"] as const satisfies readonly (keyof RetentionSettings)[];
 
 interface Context {
     readonly facts: ComplianceFacts;
@@ -82,14 +82,14 @@ const retentionLabels = (pl: boolean): Readonly<Record<(typeof RETENTION_KEYS)[n
     pl
         ? {
               transcriptDays: "Zapisy rozmów z agentem",
-              restorePointDays: "Punkty przywracania przestrzeni roboczej",
+              restorePointKeepDays: "Punkty przywracania przestrzeni roboczej",
               privacyVaultDays: "Pamięć osłony prywatności (wartości i ich tokeny)",
               cacheDays: "Kopie dokumentów przekonwertowanych na tekst (PDF, pliki biurowe, skany)",
               rawOutputDays: "Pełne wyniki poleceń",
           }
         : {
               transcriptDays: "Agent conversation transcripts",
-              restorePointDays: "Workspace restore points",
+              restorePointKeepDays: "Workspace restore points",
               privacyVaultDays: "The privacy shield's memory (values and their tokens)",
               cacheDays: "Documents converted to text (PDFs, office files, scans)",
               rawOutputDays: "Full command output",

@@ -28,15 +28,21 @@ export const HeldCheckoutDaysSchema = z
 export const RETENTION_DAYS_MAX = 3650;
 const retentionDays = () => z.number().int().min(0).max(RETENTION_DAYS_MAX).default(0);
 
+// Restore points' own default, and what an earlier release's stored zero becomes (settings-history.ts): that copy grows
+// without bound on disk, and thirty days still covers recovering a deleted file.
+export const RESTORE_POINT_KEEP_DAYS_DEFAULT = 30;
+
 // One field per kind of copy the sandbox keeps of what people and agents wrote. Zero keeps that kind forever, which is
-// what every sandbox did before this block existed. A positive value DELETES (it does not archive) once the copy is
-// older than that many days, so a person's data asked to be forgotten is gone from every place it sat.
+// what every sandbox did before this block existed, restore points aside. A positive value DELETES (it does not archive)
+// once the copy is older than that many days, so a person's data asked to be forgotten is gone from every place it sat.
+// (2026-10-18) `restorePointKeepDays` was `restorePointDays`, whose stored zero meant the old default as often as a
+// choice, since the settings page saves every field: renamed so a zero stored from now on is the owner's own.
 export const RetentionSettingsSchema = z.object({
     transcriptDays: retentionDays().describe(
         "How many days a conversation's transcript is kept after its last message. After that the transcript and its backups are deleted for good, not archived. Zero keeps them forever.",
     ),
-    restorePointDays: retentionDays()
-        .default(30)
+    restorePointKeepDays: retentionDays()
+        .default(RESTORE_POINT_KEEP_DAYS_DEFAULT)
         .describe(
             "How many days the workspace's restore points are kept. These are the snapshots taken every minute while agents work, so files deleted from the workspace stay recoverable until then. Zero keeps every restore point.",
         ),

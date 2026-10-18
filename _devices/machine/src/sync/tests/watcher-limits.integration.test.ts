@@ -1,8 +1,18 @@
 import { join } from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import type { Pairing } from "../config.js";
-import { diskFloor, FLOOR_MAX_BYTES, FLOOR_MIN_BYTES, lowDiskStep, readDisk, RESUME_MARGIN_BYTES, writesToDisk } from "../low-disk.js";
+import type { LowDiskPause, Pairing } from "../config.js";
+import {
+    diskFloor,
+    FLOOR_MAX_BYTES,
+    FLOOR_MIN_BYTES,
+    guardDisks,
+    type LowDiskSeams,
+    lowDiskStep,
+    readDisk,
+    RESUME_MARGIN_BYTES,
+    writesToDisk,
+} from "../low-disk.js";
 import { runWatched } from "../exec.js";
 
 // The two limits the watcher keeps on what it may spend on this computer: a command that may run as long as it keeps
@@ -34,6 +44,24 @@ describe("runWatched", () => {
         const result = await runWatched(command, args, { quietMs: 400, ceilingMs: 1_500 });
         expect(result.ending).toBe("ceiling");
         expect(result.stdout.length).toBeGreaterThan(10);
+    });
+
+    it("allows a longer silence once the command has said it reached a stretch it spends without a word", async () => {
+        // Says the marker, split across two writes, then goes quiet for longer than the first allowance.
+        const [command, args] = script("process.stderr.write('Resolving del'); process.stderr.write('tas: 100%\\n'); setTimeout(() => console.log('done'), 1200)");
+        const result = await runWatched(command, args, {
+            quietMs: 400,
+            quietAfter: { said: /Resolving deltas: 100%/, quietMs: 5_000 },
+            ceilingMs: 20_000,
+        });
+        expect(result.ending).toBe("exited");
+        expect(result.stdout.trim()).toBe("done");
+    });
+
+    it("keeps the first allowance while the marker has not been said", async () => {
+        const [command, args] = script("process.stderr.write('Receiving objects: 40%'); setTimeout(() => console.log('done'), 3000)");
+        const result = await runWatched(command, args, { quietMs: 400, quietAfter: { said: /Resolving deltas: 100%/, quietMs: 5_000 }, ceilingMs: 20_000 });
+        expect(result.ending).toBe("stalled");
     });
 
     it("stops when the caller's signal says so, and calls that its own ending", async () => {
@@ -82,6 +110,68 @@ describe("writesToDisk", () => {
         expect(writesToDisk({ ...base, project: true, remoteDir: "/work/app" })).toBe(false);
         expect(writesToDisk({ ...base, projectsHost: true })).toBe(false);
         expect(writesToDisk({ ...base, mode: "mirror" })).toBe(false);
+    });
+});
+
+describe("guardDisks", () => {
+    const total = 500 * GIB; // floor 10 GiB
+    const base: Pairing = { sandboxUrl: "https://s.example.dev", sandboxId: "s", mode: "sync", localDir: "/home/me/intentic/s" };
+    // A drive that reads `free`, and a Mutagen whose `running` sessions a pause takes; what each seam was asked is kept.
+    const seamsFor = (free: number, running: readonly string[]) => {
+        const records: (LowDiskPause | undefined)[] = [];
+        const resumed: string[][] = [];
+        let resumedAll = 0;
+        const seams: LowDiskSeams = {
+            read: async () => await Promise.resolve({ freeBytes: free, totalBytes: total }),
+            pause: () => running,
+            resume: (names) => {
+                resumed.push([...names]);
+            },
+            resumeAll: () => {
+                resumedAll += 1;
+            },
+            record: async (_key, pause) => {
+                records.push(pause);
+                await Promise.resolve();
+            },
+        };
+        return { seams, records, resumed, resumedAll: () => resumedAll };
+    };
+
+    it("keeps the names of what it paused, and its lifting resumes those alone, never a session paused by hand", async () => {
+        // The workspace session runs; the owner had paused the backup by hand, so a pause finds only the first running.
+        const low = seamsFor(9 * GIB, ["intentic-s"]);
+        expect([...(await guardDisks("mutagen", [base], 1, () => undefined, low.seams))]).toEqual(["s"]);
+        expect(low.records[0]?.paused).toEqual(["intentic-s"]);
+        const paused = { ...base, fileSyncLowDisk: low.records[0] };
+        const roomy = seamsFor(10 * GIB + RESUME_MARGIN_BYTES, []);
+        expect([...(await guardDisks("mutagen", [paused], 2, () => undefined, roomy.seams))]).toEqual([]);
+        expect(roomy.records).toEqual([undefined]);
+        expect(roomy.resumed).toEqual([["intentic-s"]]);
+        expect(roomy.resumedAll()).toBe(0);
+    });
+
+    it("resumes nothing when every session was already paused as the drive filled", async () => {
+        const low = seamsFor(9 * GIB, []);
+        await guardDisks("mutagen", [base], 1, () => undefined, low.seams);
+        const roomy = seamsFor(20 * GIB, []);
+        await guardDisks("mutagen", [{ ...base, fileSyncLowDisk: low.records[0] }], 2, () => undefined, roomy.seams);
+        expect(roomy.resumed).toEqual([[]]);
+    });
+
+    it("adds to its list a session resumed while the drive is still short, so it runs again once there is room", async () => {
+        const held: LowDiskPause = { since: 1, freeBytes: 9 * GIB, totalBytes: total, paused: ["intentic-s"] };
+        const still = seamsFor(9 * GIB, ["intentic-s-state"]);
+        await guardDisks("mutagen", [{ ...base, fileSyncLowDisk: held }], 12, () => undefined, still.seams);
+        expect(still.records[0]?.paused).toEqual(["intentic-s", "intentic-s-state"]);
+    });
+
+    it("leaves sessions another pause holds to that pause's own lifting", async () => {
+        const held: LowDiskPause = { since: 1, freeBytes: 9 * GIB, totalBytes: total, paused: ["intentic-s"] };
+        const roomy = seamsFor(20 * GIB, []);
+        await guardDisks("mutagen", [{ ...base, fileSyncLowDisk: held, fileSyncAutoPaused: true }], 2, () => undefined, roomy.seams);
+        expect(roomy.resumed).toEqual([]);
+        expect(roomy.resumedAll()).toBe(0);
     });
 });
 

@@ -36,7 +36,16 @@ import { PROJECT_IGNORES } from "../ssh.js";
 import { join } from "node:path";
 import { baseDir } from "../../config.js";
 import { childEnv, isMutagenCommand, mutagenDataDir, mutagenEnv } from "../mutagen-env.js";
-import { movePlan, registrationIsOurs, type StoredSession, stopsOldDaemon } from "../mutagen-move.js";
+import {
+    type MoveSeams,
+    movePlan,
+    moveSessions,
+    type MutagenCall,
+    openShared,
+    registrationIsOurs,
+    type StoredSession,
+    stopsOldDaemon,
+} from "../mutagen-move.js";
 
 // COPY-FIRST: a project folder syncs one way into the sandbox unless its owner opted into two-way, and a session in the
 // other mode is drift like any other, recreated in the mode the pairing now has.
@@ -575,31 +584,146 @@ describe("movePlan", () => {
     ];
     const forwards: StoredSession[] = [{ name: "intentic-fwd-sbx1-5173", identifier: "fwd_a" }];
 
-    it("ends this agent's sessions and forwards, flushing the running ones and carrying the paused ones", () => {
+    it("moves this agent's sessions and forwards, each sync session with whether it was paused", () => {
         expect(movePlan(sync, forwards, owner)).toEqual({
-            flush: ["sync_a"],
-            terminateSync: ["sync_a", "sync_b"],
+            sync: [
+                { name: "intentic-sbx1", target: "sync_a", identifier: "sync_a", paused: false },
+                { name: "intentic-sbx1-state", target: "sync_b", identifier: "sync_b", paused: true },
+            ],
             terminateForwards: ["fwd_a"],
-            paused: ["intentic-sbx1-state"],
             othersRemain: true,
         });
     });
 
     it("never takes another owner's session nor the user's own", () => {
-        const plan = movePlan(sync, forwards, owner);
-        expect(plan.terminateSync).not.toContain("sync_c");
-        expect(plan.terminateSync).not.toContain("sync_d");
+        const targets = movePlan(sync, forwards, owner).sync.map((session) => session.target);
+        expect(targets).not.toContain("sync_c");
+        expect(targets).not.toContain("sync_d");
     });
 
     it("says nothing else remains when the old directory held only this agent's", () => {
         expect(movePlan(sync.slice(0, 2), forwards, owner).othersRemain).toBe(false);
-        expect(movePlan([], [], owner)).toEqual({ flush: [], terminateSync: [], terminateForwards: [], paused: [], othersRemain: false });
+        expect(movePlan([], [], owner)).toEqual({ sync: [], terminateForwards: [], othersRemain: false });
     });
 
     it("stops the old daemon only when it is empty, or when the move started it", () => {
         expect(stopsOldDaemon({ othersRemain: false }, false)).toBe(true);
         expect(stopsOldDaemon({ othersRemain: true }, false)).toBe(false);
         expect(stopsOldDaemon({ othersRemain: true }, true)).toBe(true);
+    });
+});
+
+// A Mutagen whose shared-directory answers are scripted by the call's leading words (anything else succeeds empty), whose
+// own daemon holds `own`, and which can carry the state of `carriable`. Every call is kept, in order.
+const fakeMutagen = (answers: Record<string, MutagenCall> = {}, own: readonly string[] = [], carriable: readonly string[] = []) => {
+    const calls: string[] = [];
+    const ok: MutagenCall = { ok: true, stdout: "", stderr: "" };
+    const ran = (line: string): void => {
+        calls.push(line);
+    };
+    const seams: MoveSeams = {
+        shared: (args, autostart = false) => {
+            const line = `${autostart ? "shared+start" : "shared"} ${args.join(" ")}`;
+            ran(line);
+            const key = Object.keys(answers).find((prefix) => line.startsWith(prefix));
+            return (key === undefined ? undefined : answers[key]) ?? ok;
+        },
+        own: (args) => {
+            ran(`own ${args.join(" ")}`);
+            return true;
+        },
+        startOwn: () => {
+            ran("own daemon start");
+            return true;
+        },
+        ownSessions: (names) => names.filter((name) => own.includes(name)),
+        carry: async (identifier) => {
+            ran(`carry ${identifier}`);
+            return await Promise.resolve(carriable.includes(identifier));
+        },
+        restartTheirs: () => {
+            ran("theirs daemon start");
+            return true;
+        },
+    };
+    return { calls, seams };
+};
+
+describe("moveSessions", () => {
+    const plan = movePlan(
+        [
+            { name: "intentic-a", identifier: "sync_a", labels: { "intentic-owner": owner } },
+            { name: "intentic-a-state", identifier: "sync_b", paused: true },
+        ],
+        [{ name: "intentic-fwd-a-5173", identifier: "fwd_a" }],
+        owner,
+    );
+
+    it("pauses, carries the state, ends the old sessions, then reloads this agent's daemon and resumes what was running", async () => {
+        const { calls, seams } = fakeMutagen({}, [], ["sync_a", "sync_b"]);
+        const moved = await moveSessions(seams, plan);
+        expect(moved).toMatchObject({ ended: true, remade: [] });
+        expect(moved.carried.map((session) => session.name)).toEqual(["intentic-a", "intentic-a-state"]);
+        expect(calls).toEqual([
+            "shared sync pause sync_a",
+            "own daemon start",
+            "carry sync_a",
+            "carry sync_b",
+            "shared sync terminate sync_a sync_b",
+            "shared forward terminate fwd_a",
+            "own daemon stop",
+            "own daemon start",
+            // The backup stays paused, as it was.
+            "own sync resume intentic-a",
+        ]);
+    });
+
+    it("makes again what it cannot carry, and carries nothing beside a session of that name this agent already holds", async () => {
+        const { calls, seams } = fakeMutagen({}, ["intentic-a"], ["sync_b"]);
+        const moved = await moveSessions(seams, plan);
+        expect(moved.carried.map((session) => session.name)).toEqual(["intentic-a-state"]);
+        expect(moved.remade.map((session) => session.name)).toEqual(["intentic-a"]);
+        expect(calls).not.toContain("carry sync_a");
+        expect(calls.filter((line) => line.startsWith("own sync resume"))).toEqual([]);
+    });
+
+    it("carries nothing when the old daemon would not pause its sessions, and still ends them", async () => {
+        const { calls, seams } = fakeMutagen({ "shared sync pause": { ok: false, stdout: "", stderr: "Error" } }, [], ["sync_a", "sync_b"]);
+        const moved = await moveSessions(seams, plan);
+        expect(moved.carried).toEqual([]);
+        expect(calls.some((line) => line.startsWith("carry"))).toBe(false);
+        expect(calls).toContain("shared sync terminate sync_a sync_b");
+        expect(calls).not.toContain("own daemon stop");
+    });
+});
+
+describe("openShared", () => {
+    const list = (sessions: readonly StoredSession[]): MutagenCall => ({ ok: true, stdout: JSON.stringify(sessions), stderr: "" });
+    const mismatch: MutagenCall = { ok: false, stdout: "", stderr: "Error: unable to connect to daemon: client/daemon version mismatch (daemon restart recommended)" };
+
+    it("reads a running daemon as it is, starting nothing", () => {
+        const { calls, seams } = fakeMutagen({ "shared sync list": list([{ name: "intentic-a" }]), "shared forward list": list([]) });
+        expect(openShared(seams)).toMatchObject({ startedByMove: false, displaced: false, sync: [{ name: "intentic-a" }] });
+        expect(calls.some((line) => line.startsWith("shared+start"))).toBe(false);
+    });
+
+    it("stops a daemon of another version and reads the directory with this agent's own, rather than giving up on it", () => {
+        const { calls, seams } = fakeMutagen({
+            "shared sync list": mismatch,
+            "shared+start sync list": list([{ name: "intentic-a" }]),
+            "shared forward list": list([]),
+        });
+        expect(openShared(seams)).toMatchObject({ startedByMove: true, displaced: true });
+        expect(calls.slice(0, 3)).toEqual(["shared sync list --template {{json .}}", "shared daemon stop", "shared+start sync list --template {{json .}}"]);
+    });
+
+    it("starts a daemon that was down, and gives up on one that answered with anything else", () => {
+        const down: MutagenCall = { ok: false, stdout: "", stderr: "Error: unable to connect to daemon: connection refused (is the daemon running?)" };
+        const started = fakeMutagen({ "shared sync list": down, "shared+start sync list": list([]), "shared forward list": list([]) });
+        expect(openShared(started.seams)).toMatchObject({ startedByMove: true, displaced: false });
+        const odd = fakeMutagen({ "shared sync list": { ok: false, stdout: "", stderr: "Error: something else" } });
+        expect(openShared(odd.seams)).toBeUndefined();
+        expect(odd.calls.some((line) => line.includes("daemon stop") || line.startsWith("shared+start"))).toBe(false);
     });
 });
 

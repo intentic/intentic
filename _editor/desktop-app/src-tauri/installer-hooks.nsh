@@ -93,10 +93,10 @@ Var IntenticReinstall
 ;   - FOLDER SYNC ENDS WITH THE APP (2026-10-18), whatever the answer above, and in a passive or a silent uninstall,
 ;     which asks nothing. A PC whose owner uninstalled the app went on syncing a sandbox's /work into her profile
 ;     through Mutagen until her disk filled: the silent answer was no, so the agent stayed, and so did its sessions.
-;     Whenever the agent stays, `intentic-machine sync uninstall` ends every Mutagen session and forward the agent
-;     made, stops and unregisters its Mutagen daemon, and drops its sync pairings, so a kept agent goes on hosting
-;     sandboxes but makes no file sync again by itself. The synced folders keep their files. Not on a reinstall, which
-;     is an update (below).
+;     Whenever the agent stays, `intentic-machine sync uninstall --folders` unpairs every pairing that syncs a folder
+;     to this PC and ends its Mutagen sessions, so a kept agent makes no file sync again by itself. Port mirroring
+;     (mirror-only pairings, and the projects host, which holds no folder) is what keeps sandboxes connected, and stays
+;     with its enrollments. The synced folders keep their files. Not on a reinstall, which is an update (below).
 ;   - the platform session, in the webview's cookie store (`$LOCALAPPDATA\<identifier>\EBWebView`), which stayed signed
 ;     in unless "Delete app data" was ticked. The app's own sign-out (account.rs `signed_off`) deletes the session
 ;     cookie and empties roster.json; the uninstaller cannot reach the platform with a cookie Chromium keeps
@@ -149,10 +149,16 @@ Var IntenticReinstall
         ; APP, above). A Yes that went through has ended it already.
         ${If} $IntenticAgentKept = 1
           DetailPrint "Stopping folder sync to this PC..."
-          nsExec::ExecToLog /TIMEOUT=120000 '"$PROFILE\.intentic\machine\bin\intentic-machine.exe" sync uninstall'
+          nsExec::ExecToLog /TIMEOUT=120000 '"$PROFILE\.intentic\machine\bin\intentic-machine.exe" sync uninstall --folders'
           Pop $0
+          ; An agent older than `--folders` refuses the flag: the whole `sync uninstall` then, since a folder still
+          ; syncing after the app is gone is what this step exists to prevent.
           ${If} $0 <> 0
-            DetailPrint "Folder sync did not stop ($0). Run: intentic-machine sync uninstall"
+            nsExec::ExecToLog /TIMEOUT=120000 '"$PROFILE\.intentic\machine\bin\intentic-machine.exe" sync uninstall'
+            Pop $0
+          ${EndIf}
+          ${If} $0 <> 0
+            DetailPrint "Folder sync did not stop ($0). Run: intentic-machine sync uninstall --folders"
           ${EndIf}
         ${EndIf}
       ${EndIf}

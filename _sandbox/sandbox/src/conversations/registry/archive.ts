@@ -299,7 +299,36 @@ export const heldCheckoutByAge = (agent: AgentSummary, now: number, retentionMs:
     agent.unsentAt === undefined &&
     now - agent.updatedAt >= retentionMs;
 
-export const sweepHeldCheckouts = async (deps: AgentArchiveDeps, now: number, retentionMs: number): Promise<string[]> => {
+// WHAT STILL WORKS IN A HELD CHECKOUT, which the reclaim must not pull the working copy out from under (2026-10-18). The
+// card being quiet says nothing of what it left running: a background command kept for the person (a dev server, a
+// preview) runs from that checkout, a child it spawned may still run, be paused on a wall or wait on a card, and lands
+// into it when it ends, and a re-run booked for the conversation itself opens a turn in it. Any of these leaves the
+// checkout for a later sweep; nothing is stopped for the disk's sake.
+const stillWorking = (deps: AgentArchiveDeps, runningJobs: RunningJobs, id: string): string | undefined => {
+    if (runningJobs(id) > 0) {
+        return "a background command still runs in it";
+    }
+    const booked = deps.conversations.state(id)?.resume.held;
+    if (booked !== undefined && !booked.fired) {
+        return "a re-run is booked for it";
+    }
+    const family = familyBelow(deps, [id]);
+    const live = family?.members.find(({ child }) => {
+        const kid = family.records.get(child);
+        if (kid !== undefined && (kid.running || kid.held !== undefined || kid.paused !== undefined || kid.pending !== undefined)) {
+            return true;
+        }
+        const held = deps.conversations.state(child)?.resume.held;
+        return deps.conversations.running(child) || (held !== undefined && !held.fired);
+    });
+    return live === undefined ? undefined : `its child ${live.child} still has work under way`;
+};
+
+// How many of a conversation's background commands still run (agent/tools/jobs `runningJobsOf`), handed in by the
+// composition: the registry does not reach into the agent's tools.
+export type RunningJobs = (conversationId: string) => number;
+
+export const sweepHeldCheckouts = async (deps: AgentArchiveDeps, now: number, retentionMs: number, runningJobs: RunningJobs): Promise<string[]> => {
     const reclaimed: string[] = [];
     for (const agent of deps.agents.list()) {
         if (!heldCheckoutByAge(agent, now, retentionMs) || deps.conversations.running(agent.id)) {
@@ -314,7 +343,15 @@ export const sweepHeldCheckouts = async (deps: AgentArchiveDeps, now: number, re
         if (current === undefined || !heldCheckoutByAge(current, now, retentionMs) || deps.conversations.running(agent.id)) {
             continue;
         }
+        const working = stillWorking(deps, runningJobs, agent.id);
+        if (working !== undefined) {
+            deps.logger.info({ id: agent.id, why: working }, "agents: held checkout kept for now: work still runs in it");
+            continue;
+        }
         try {
+            // Nothing of its own runs now; what is left (an idle terminal, a viewer, a stray process) goes before its
+            // directory does. Not forced: a terminal a person is attached to right now stays theirs.
+            await deps.reaper?.reapConversation(agent.id);
             await deps.agentWorktrees.retire(agent.id, entry.placement.repos, entry.social.title?.text);
             reclaimed.push(agent.id);
             deps.logger.info({ id: agent.id }, "agents: reclaimed held conversation checkout and overlay; work kept on branch");

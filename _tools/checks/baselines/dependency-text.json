@@ -3,7 +3,6 @@
     "_devices/keyring/src/backends.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_devices/keyring/src/consent/consent-posix.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_devices/keyring/src/typing/mac.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
-    "_devices/machine/src/sync/mutagen.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_editor/ui/src/composables/useAsyncAction.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_editor/web/src/app/clientDiagnostics.ts": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",
     "_editor/web/src/features/chat/transcript/cards/ChatChildAgentAsk.vue": "standing when dependency-text was introduced (2026-10-17): read the structure instead, or say why the words stay with allow(dependency-text)",

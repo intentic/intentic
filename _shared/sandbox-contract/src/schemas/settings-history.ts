@@ -3,6 +3,7 @@ import { at, drop, dropAll, fold, isJsonObject, type JsonObject, mapValue, retyp
 import { type ModelRole, ModelRoleSchema } from "../models/model-roles.js";
 import { setupsFromRoleLists } from "../models/model-setups.js";
 import { ModelPinSchema, type ModelPin } from "./agent.js";
+import { RESTORE_POINT_KEEP_DAYS_DEFAULT } from "./data-protection.js";
 import type { KeepWarmSettings, RuleSchema } from "./settings.js";
 
 // The conversions the settings shape has had, oldest first: what brings any earlier release's settings to
@@ -101,6 +102,21 @@ const roleListsIntoSetups = transform("folds modelRoles and modelDefault into se
     return { ...rest, modelSetups, roleSetups };
 });
 
+const restorePointsKept = fold("carries restorePointDays into restorePointKeepDays, a stored zero taking the 30-day default", {
+    from: ["restorePointDays"],
+    into: "restorePointKeepDays",
+    applies: (retention) => Object.hasOwn(retention, "restorePointDays"),
+    convert: ({ restorePointDays }, retention) => {
+        // A file that already names the new key (a definition written for both) keeps it.
+        const kept = FlatNumber.safeParse(retention["restorePointKeepDays"]);
+        if (kept.success) {
+            return kept.data;
+        }
+        const chosen = FlatNumber.safeParse(restorePointDays);
+        return chosen.success && chosen.data > 0 ? chosen.data : RESTORE_POINT_KEEP_DAYS_DEFAULT;
+    },
+});
+
 export const SETTINGS_HISTORY = [
     // Every setting a release since 2026-08-10 had and this one does not (read off the contract lock's history):
     // retired, so passthrough stops carrying them, a definition naming one still applies, and no later setting may
@@ -154,4 +170,8 @@ export const SETTINGS_HISTORY = [
     ...dropAll(["toolResultClearing", "toolResultClearingHoldout"]),
     at("modelRoles", refactorsFromChores),
     roleListsIntoSetups,
+    // Restore points kept 30 days by default (2026-10-18). `restorePointDays` held zero both where the owner chose to keep
+    // every point and where the settings page had saved the old default, which no reading could tell apart: the key is
+    // retired, a positive choice carries over, and a stored zero takes the new default.
+    at("retention", restorePointsKept),
 ] as const;

@@ -2,8 +2,8 @@ import { statfs } from "node:fs/promises";
 import { dirname } from "node:path";
 import { errnoCode } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
-import { isProjectPairing, type Pairing, pairingKey, projectDirection, setFileSyncLowDisk } from "./config.js";
-import { pauseRunningSync, resumeWatcherPausedSync } from "./mutagen.js";
+import { isProjectPairing, type LowDiskPause, type Pairing, pairingKey, projectDirection, setFileSyncLowDisk } from "./config.js";
+import { pauseRunningSessions, resumeNamedSessions, resumeWatcherPausedSync } from "./mutagen.js";
 
 // THE DRIVE A FOLDER SYNCS ONTO HAS A FLOOR (2026-10-18). Nothing on this side ever asked how much room was left: a
 // laptop whose drive filled with what this agent wrote kept receiving until every write on it failed, the owner's own
@@ -75,31 +75,68 @@ const otherwiseHeld = (pairing: Pairing): boolean =>
 
 const gigabytes = (bytes: number): string => `${(bytes / GIB).toFixed(1)} GB`;
 
-// Measures, and acts for, one pairing; answers whether it is held for the drive after this pass.
-const guardOne = async (mutagen: string, pairing: Pairing & { readonly localDir: string }, tick: number, say: Log): Promise<boolean> => {
+// What the guard acts through: the drive's reading, Mutagen's pause and resume, and the pairing's record. Injectable so
+// which sessions a lift resumes is checkable without a Mutagen daemon.
+export interface LowDiskSeams {
+    readonly read: (dir: string) => Promise<DiskReading | undefined>;
+    // Pauses the running sessions and answers which (undefined: Mutagen did not answer).
+    readonly pause: (pairing: Pairing) => readonly string[] | undefined;
+    readonly resume: (names: readonly string[]) => void;
+    // Every session of the pairing, for a record from before the pause kept its own list.
+    readonly resumeAll: (pairing: Pairing) => void;
+    readonly record: (key: string, pause: LowDiskPause | undefined) => Promise<void>;
+}
+
+const mutagenSeams = (mutagen: string): LowDiskSeams => ({
+    read: readDisk,
+    pause: (pairing) => pauseRunningSessions(mutagen, pairing),
+    resume: (names) => {
+        resumeNamedSessions(mutagen, names);
+    },
+    resumeAll: (pairing) => {
+        resumeWatcherPausedSync(mutagen, pairing);
+    },
+    record: setFileSyncLowDisk,
+});
+
+// Measures, and acts for, one pairing; answers whether it is held for the drive after this pass. The pause keeps the
+// names of the sessions it paused, and its lifting resumes those alone: a session the owner had paused by hand was not
+// running when the drive filled, so it stays paused once the drive has room.
+const guardOne = async (seams: LowDiskSeams, pairing: Pairing & { readonly localDir: string }, tick: number, say: Log): Promise<boolean> => {
     const key = pairingKey(pairing);
-    const reading = await readDisk(pairing.localDir);
-    const step = lowDiskStep(reading, pairing.fileSyncLowDisk !== undefined);
+    const reading = await seams.read(pairing.localDir);
+    const held = pairing.fileSyncLowDisk;
+    const step = lowDiskStep(reading, held !== undefined);
     if (step === "pause" && reading !== undefined) {
-        pauseRunningSync(mutagen, pairing);
-        await setFileSyncLowDisk(key, { since: Date.now(), ...reading });
+        // A Mutagen that did not answer paused nothing yet; the reassertion below pauses and lists them.
+        const paused = seams.pause(pairing) ?? [];
+        await seams.record(key, { since: Date.now(), ...reading, paused });
         say(
             `  ${key}: the drive holding ${pairing.localDir} has ${gigabytes(reading.freeBytes)} free, under its floor of ${gigabytes(diskFloor(reading.totalBytes))}; paused file sync and the git bridge until it has room again.`,
         );
         return true;
     }
     if (step === "resume" && reading !== undefined) {
-        await setFileSyncLowDisk(key, undefined);
+        await seams.record(key, undefined);
         const lifted = { ...pairing, fileSyncLowDisk: undefined };
         if (!otherwiseHeld(lifted)) {
-            resumeWatcherPausedSync(mutagen, lifted);
+            if (held?.paused === undefined) {
+                seams.resumeAll(lifted);
+            } else {
+                seams.resume(held.paused);
+            }
         }
         say(`  ${key}: the drive holding ${pairing.localDir} has ${gigabytes(reading.freeBytes)} free again; file sync and the git bridge carry on.`);
         return false;
     }
     if (step === "hold") {
-        if (tick % REASSERT_EVERY_TICKS === 0) {
-            pauseRunningSync(mutagen, pairing);
+        // Put back what was resumed meanwhile (another pause's lifting, the owner by hand, a session made since), and
+        // added to the list: it was running, so it runs again once the drive has room.
+        if (tick % REASSERT_EVERY_TICKS === 0 && held !== undefined) {
+            const added = (seams.pause(pairing) ?? []).filter((name) => held.paused?.includes(name) !== true);
+            if (added.length > 0 && held.paused !== undefined) {
+                await seams.record(key, { ...held, paused: [...held.paused, ...added] });
+            }
         }
         return true;
     }
@@ -108,11 +145,17 @@ const guardOne = async (mutagen: string, pairing: Pairing & { readonly localDir:
 
 // One pass over every pairing that writes here, answering the keys held for want of room: their git bridge waits, and
 // no other pause's lifting resumes them this pass.
-export const guardDisks = async (mutagen: string, pairings: readonly Pairing[], tick: number, say: Log): Promise<ReadonlySet<string>> => {
+export const guardDisks = async (
+    mutagen: string,
+    pairings: readonly Pairing[],
+    tick: number,
+    say: Log,
+    seams: LowDiskSeams = mutagenSeams(mutagen),
+): Promise<ReadonlySet<string>> => {
     const held = new Set<string>();
     for (const pairing of pairings.filter(writesToDisk)) {
         // one statfs each, in order, as every pass here
-        if (await guardOne(mutagen, pairing, tick, say)) {
+        if (await guardOne(seams, pairing, tick, say)) {
             held.add(pairingKey(pairing));
         }
     }

@@ -59,7 +59,7 @@ const statusOf = (measures: readonly Measure[], id: Measure["id"]): Measure["sta
 describe("defaults", () => {
     it("keep earlier policies except the thirty-day restore-point window", () => {
         const settings = defaults();
-        expect(settings.retention).toEqual({ transcriptDays: 0, restorePointDays: 30, privacyVaultDays: 0, cacheDays: 0, rawOutputDays: 0 });
+        expect(settings.retention).toEqual({ transcriptDays: 0, restorePointKeepDays: 30, privacyVaultDays: 0, cacheDays: 0, rawOutputDays: 0 });
         expect(settings.audit.recordReads).toBe(false);
         expect(settings.productAnalytics).toBe(true);
         expect(settings.aiNotice.show).toBe(false);

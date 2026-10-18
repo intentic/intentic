@@ -153,11 +153,14 @@ export interface BridgeHold {
     readonly retryAt: number;
 }
 
-// The drive reading that paused a pairing for want of room: when, and how much was free of how much.
+// The drive reading that paused a pairing for want of room: when, and how much was free of how much. And the sessions
+// this pause itself paused, the only ones its lifting resumes: one the owner had paused by hand (`sync pause`, which keeps
+// no record of its own) was not running when the drive filled, so it is not on the list and stays paused.
 export interface LowDiskPause {
     readonly since: number;
     readonly freeBytes: number;
     readonly totalBytes: number;
+    readonly paused?: readonly string[] | undefined;
 }
 
 // Who said a sandbox is gone: the platform's edge, or this machine's own ic.

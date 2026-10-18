@@ -174,7 +174,10 @@ flowchart LR
   are paused, an hour counted from `unreachableSince` in `sync.json` (2026-10-05: it was counted in memory, so an agent
   restarted more often than hourly never paused a dead sandbox's sessions). A sandbox that no longer exists is another
   matter: see [Sandboxes that are gone](#sandboxes-that-are-gone). `sync uninstall` ends every session and forward of
-  this agent's and stops its Mutagen daemon, which serves this agent alone (below); the synced folders keep their files.
+  this agent's and stops its Mutagen daemon, which serves this agent alone (below), starting it first if it was down so
+  every session is really ended; the synced folders keep their files. `sync uninstall --folders` (what the desktop app's
+  uninstaller runs) unpairs only the pairings that sync a folder here: mirror-only pairings and the projects host keep
+  their ports and their enrollments.
 - Symbolic links travel only where the device can create them ([`sync/symlinks.ts`](src/sync/symlinks.ts)). A
   Windows PC without Developer Mode refuses every link, and Mutagen would try again on every cycle, so its sessions
   use `--symlink-mode ignore`. Turning Developer Mode on brings them back at the agent's next start.
@@ -556,11 +559,16 @@ whose it is.
   minute), so `status`, reports and listings never bring one back, and read a stopped daemon as not answering. The
   daemon has no sign-in entry of its own any more: the resident agent, started at sign-in, starts it. Once per
   environment the watcher (and `sync uninstall`) moves off the old directory
-  ([`sync/mutagen-move.ts`](src/sync/mutagen-move.ts)): this agent's sessions there are flushed (60 s at most) and
-  terminated, its forwards terminated, the old daemon stopped only when nothing else is left in it or the move started
-  it, and Mutagen's own sign-in registration removed only where it starts this agent's copy. The watcher then makes the
-  sessions again from its pairings; over folders that agree that is a rescan. A session that was paused is made paused
-  (`mutagen-moved.json` holds the names until then).
+  ([`sync/mutagen-move.ts`](src/sync/mutagen-move.ts)): each of this agent's sync sessions there is carried, not made
+  again. It is paused, its state files (`sessions/<id>` and `archives/<id>`, the last state both sides agreed on) are
+  copied into the new directory, it is terminated in the old one, and this agent's daemon, started again, loads it and
+  resumes what was running. Made again from nothing, a two-way session would bring back what one side deleted while it
+  could not sync and read a one-sided edit as a conflict; nothing could be flushed first, since the move runs before the
+  transport is up. Forwards are terminated and made again. A session that cannot be carried is terminated and made again
+  by the watcher, paused if it was (`mutagen-moved.json` holds the names until then). The old daemon is stopped only
+  when nothing else is left in it or the move started it; one of another Mutagen version is stopped and started with
+  this agent's copy for the move, then started again with the owner's own Mutagen where one is on PATH. Mutagen's own
+  sign-in registration is removed only where it starts this agent's copy.
 - **The orphan sweep is standing**: every minute, not only at the watcher's start, a setup and a revocation.
 - **Mutagen is this agent's pinned copy** (0.18.1, downloaded into its own bin), with a Mutagen on PATH used only while
   that download cannot be had. A daemon of another version refuses every client ("client/daemon version mismatch"),

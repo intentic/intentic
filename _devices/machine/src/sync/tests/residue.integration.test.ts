@@ -1,8 +1,10 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IGNORES } from "../ssh.js";
+import { carryState } from "../mutagen-move.js";
 import {
     absentInSandbox,
     absentProbeArgv,
@@ -306,5 +308,30 @@ describe("clearConflictResidue", () => {
         });
         expect(outcome.removed).toEqual([]);
         expect(outcome.standing).toBe(1);
+    });
+});
+
+// What else of Mutagen's sits on this disk: the state files the move off its shared data directory carries rather than
+// making a session again (mutagen-move.ts); the rest of the move is checked without a disk in mutagen.test.ts.
+describe("carryState", () => {
+    it("copies a session's file and its last agreed state, and nothing for a session with no file", async () => {
+        const root = await mkdtemp(join(tmpdir(), "mutagen-carry-"));
+        try {
+            const from = join(root, "old");
+            const to = join(root, "new");
+            await mkdir(join(from, "sessions"), { recursive: true });
+            await mkdir(join(from, "archives"), { recursive: true });
+            await writeFile(join(from, "sessions", "sync_a"), "session");
+            await writeFile(join(from, "archives", "sync_a"), "ancestor");
+            await writeFile(join(from, "sessions", "sync_b"), "never synced");
+            expect(await carryState(from, to, "sync_a")).toBe(true);
+            expect(await readFile(join(to, "archives", "sync_a"), "utf8")).toBe("ancestor");
+            expect(await carryState(from, to, "sync_b")).toBe(true);
+            expect(existsSync(join(to, "archives", "sync_b"))).toBe(false);
+            expect(await carryState(from, to, "sync_missing")).toBe(false);
+            expect(existsSync(join(to, "sessions", "sync_missing"))).toBe(false);
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
     });
 });

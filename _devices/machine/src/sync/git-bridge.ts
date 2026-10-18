@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { HISTORY_ROOT, STATE_DIR } from "@intentic/constants";
 import { GIT_GLOBAL_ARGS } from "@intentic/base/git";
+import { untranslatedEnv } from "@intentic/base/process";
 import type { Log } from "@intentic/local-agent";
 import { type BridgeHold, type BridgeHoldReason, isProjectPairing, type Pairing, pairingKey, pruneBridgeHolds, setBridgeHold } from "./config.js";
 import { runProcess, runWatched } from "./exec.js";
@@ -45,10 +46,19 @@ export interface FetchResult {
 const EXEC_TIMEOUT_MS = 120_000;
 
 // The fetch's allowances: three minutes without a word from git is a stall (with `--progress` it reports several times
-// a second while bytes move, and the quietest stretch, the sandbox counting a huge repo's objects, reports too), and
-// three hours is past what any connection should spend on one repo's history in one go.
+// a second while bytes move, and the sandbox counting a huge repo's objects reports too), and three hours is past what
+// any connection should spend on one repo's history in one go.
 const FETCH_QUIET_MS = 3 * 60_000;
 const FETCH_CEILING_MS = 3 * 60 * 60_000;
+
+// THE ONE STRETCH GIT SPENDS WITHOUT A WORD: once the pack is in, `fetch` checks that the history it received is whole
+// before it moves a ref, and prints nothing while it does, which for a large history this clone never saw is minutes on
+// a slow disk. Stopped there, the fetch has already kept its finished pack (a `pack-*`, never a `tmp_*` to clear) and
+// moved no ref, so the next try would take it all again. From the end of the transfer the silence allowed is longer.
+// allow(dependency-text): git's own progress words for the transfer's end (index-pack, read with messages pinned to
+// English by untranslatedEnv); an unmatched wording keeps the three-minute allowance, which is how a fetch ran before.
+const TRANSFER_DONE = /(?:Receiving objects|Resolving deltas): 100%/;
+const FETCH_SETTLING_QUIET_MS = 30 * 60_000;
 
 // Every git here runs in the user's own repo, perhaps while their editor or terminal runs git in it too: the shared
 // GIT_GLOBAL_ARGS keep a read off index.lock (`--no-optional-locks`, which leaves the locks a write takes alone) and read
@@ -61,7 +71,15 @@ export const realBridgeExec: BridgeExec = {
         return result.status === 0 ? result.stdout : undefined;
     },
     fetch: async (args, cwd, signal) => {
-        const result = await runWatched("git", [...GIT_GLOBAL_ARGS, ...args], { cwd, quietMs: FETCH_QUIET_MS, ceilingMs: FETCH_CEILING_MS, signal });
+        // Messages in English whatever the owner's locale: the transfer's end and a shallow refusal are read off them.
+        const result = await runWatched("git", [...GIT_GLOBAL_ARGS, ...args], {
+            cwd,
+            env: untranslatedEnv(process.env),
+            quietMs: FETCH_QUIET_MS,
+            quietAfter: { said: TRANSFER_DONE, quietMs: FETCH_SETTLING_QUIET_MS },
+            ceilingMs: FETCH_CEILING_MS,
+            signal,
+        });
         const outcome: FetchOutcome =
             result.ending === "stalled"
                 ? "stalled"
@@ -80,7 +98,8 @@ export const realBridgeExec: BridgeExec = {
 // HOW LONG A HELD REPO WAITS. The first wait after a stall or a plain failure is ten minutes and each later one twice
 // the last, up to half a day: a sandbox that was briefly unreachable is followed again soon, and a fetch that will
 // never fit costs a couple of tries a day instead of one a pass. A fetch still moving at its ceiling starts at half a
-// day, since the next one will be as long; a shallow refusal at a day, since nothing on this side changes it.
+// day, since the next one will be as long; a shallow sandbox copy at a day, since nothing on this side changes it (and
+// for it the next try only asks the sandbox again, fetching nothing: `sandboxIsShallow`).
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
@@ -136,8 +155,9 @@ const pairingMemory = (pairing: Pairing): BridgeMemory => {
 
 // WHAT A FETCH THAT DID NOT FINISH LEFT BEHIND. Git receives a pack into `objects/pack/tmp_pack_*` (with `tmp_idx_*`
 // and `tmp_rev_*` beside it) and renames it only once it is whole; killed, it leaves the temporary files, and nothing but
-// a `git gc` two weeks later removes them. Removed here are the temporary files that appeared during the fetch, and any
-// older than an hour (an earlier agent's, or a fetch that died with its machine). Never a finished `pack-*`: one that
+// a `git gc` two weeks later removes them. Removed here are the temporary files that appeared during the fetch, and, once
+// an hour per repo, any older than an hour (an earlier agent's, a fetch this agent's own restart or update cut off, or one
+// that died with its machine). Never a finished `pack-*`: one that
 // appeared during the fetch could as well be the owner's own `git fetch` running in the same clone, and its objects are
 // theirs. And never a file still growing, which is some other git's receive in progress: each is measured twice, a
 // moment apart, and only what held still goes.
@@ -210,8 +230,10 @@ const clearStranded = async (packs: PackFs, packDir: string, before: ReadonlySet
     return freed;
 };
 
-// Pack folders this process has already swept for an earlier agent's leftovers: once each is enough.
-const sweptPackDirs = new Set<string>();
+// When each repo's pack folder was last swept for leftovers. Hourly rather than once a process: a fetch this agent's own
+// update or restart cut off left files minutes old when it started again, not yet stale, and they must still go once they
+// are, whether or not that repo ever needs another fetch.
+const sweptAt = new Map<string, number>();
 
 const gigabytes = (bytes: number): string => `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 
@@ -258,6 +280,7 @@ export const listSandboxRepos = async (exec: BridgeExec, alias: string): Promise
 // What one fetch needs besides the repo it fetches into.
 interface FetchSeams {
     readonly exec: BridgeExec;
+    readonly alias: string;
     readonly packs: PackFs;
     readonly memory: BridgeMemory;
     readonly now: () => number;
@@ -272,11 +295,40 @@ const packDirOf = async (exec: BridgeExec, dir: string): Promise<string | undefi
     return out === undefined || out === "" ? undefined : resolve(dir, out);
 };
 
+// WHETHER THE SANDBOX'S COPY IS SHALLOW, asked of its git dir over the alias the fetch rides; undefined when it could not
+// be asked. Asked before a clone with a full history of its own fetches, never after: git refuses refs that would make
+// that clone shallow only once it has received the whole pack, and keeps the pack, so every try that fetched left
+// another whole copy of the history on this drive.
+const sandboxIsShallow = async (exec: BridgeExec, alias: string, repo: string): Promise<boolean | undefined> => {
+    const gitDir = `${HISTORY_ROOT}/gits/${encodeURIComponent(repo)}`;
+    const said = (await exec.run("ssh", ["-o", "BatchMode=yes", alias, "git", `--git-dir=${gitDir}`, "rev-parse", "--is-shallow-repository"]))?.trim();
+    return said === "true" ? true : said === "false" ? false : undefined;
+};
+
+// Leftovers in one repo's pack folder, at most once an hour: everything there now counts as before this sweep, so only
+// what is over an hour old (and holding still) goes.
+const sweepLeftovers = async (seams: Pick<FetchSeams, "exec" | "packs" | "now" | "log">, dir: string, repo: string): Promise<void> => {
+    const { exec, packs, now, log } = seams;
+    const at = now();
+    if (at - (sweptAt.get(dir) ?? Number.NEGATIVE_INFINITY) < STALE_TEMP_MS) {
+        return;
+    }
+    sweptAt.set(dir, at);
+    const packDir = await packDirOf(exec, dir);
+    if (packDir === undefined) {
+        return;
+    }
+    const freed = await clearStranded(packs, packDir, new Set((await packs.temps(packDir)).map((temp) => temp.name)), at);
+    if (freed > 0) {
+        log(`  ${repo}: removed ${gigabytes(freed)} of half-received git packs an earlier fetch left behind`);
+    }
+};
+
 // ONE FETCH OF THE SANDBOX'S BRANCH, and everything that follows from how it ended: true when the objects are here.
 // A clone the bridge itself started (no commits yet) or one already shallow may take the sandbox's shallow boundary as
 // its own (`--update-shallow`); a clone with a full history of its own is never made shallow behind its owner's back, so
-// for it a shallow sandbox copy is a hold that says so. Whatever did not finish has its temporary files cleared and the
-// repo held; a fetch this agent stopped holds nothing.
+// for it a shallow sandbox copy is a hold that says so, found by asking before fetching (`sandboxIsShallow`). Whatever did
+// not finish has its temporary files cleared and the repo held; a fetch this agent stopped holds nothing.
 const fetchFromSandbox = async (
     seams: FetchSeams,
     dir: string,
@@ -286,17 +338,15 @@ const fetchFromSandbox = async (
     hold: BridgeHold | undefined,
 ): Promise<boolean> => {
     const { exec, packs, memory, now, log } = seams;
-    const packDir = await packDirOf(exec, dir);
-    if (packDir !== undefined && !sweptPackDirs.has(packDir)) {
-        sweptPackDirs.add(packDir);
-        // An earlier agent's leftovers first: everything there now counts as before this run, so only the stale goes.
-        const freed = await clearStranded(packs, packDir, new Set((await packs.temps(packDir)).map((temp) => temp.name)), now());
-        if (freed > 0) {
-            log(`  ${repo}: removed ${gigabytes(freed)} of half-received git packs an earlier fetch left behind`);
-        }
-    }
-    const before = new Set(packDir === undefined ? [] : (await packs.temps(packDir)).map((temp) => temp.name));
     const shallowOk = head === undefined || (await exec.run("git", ["rev-parse", "--is-shallow-repository"], dir))?.trim() === "true";
+    if (!shallowOk && (await sandboxIsShallow(exec, seams.alias, repo)) === true) {
+        const next = nextHold(repo, hold, "shallow", now());
+        await memory.record(repo, next);
+        log(`  ${repo}: not fetched from the sandbox (${HOLD_SAID.shallow}); asking again in ${untilWhen(next.retryAt, now())}`);
+        return false;
+    }
+    const packDir = await packDirOf(exec, dir);
+    const before = new Set(packDir === undefined ? [] : (await packs.temps(packDir)).map((temp) => temp.name));
     const refspec = `+refs/heads/${branch}:refs/remotes/sandbox/${branch}`;
     const fetched = await exec.fetch(["fetch", "--progress", ...(shallowOk ? ["--update-shallow"] : []), "sandbox", refspec], dir, seams.signal);
     if (fetched.outcome === "fetched") {
@@ -363,6 +413,7 @@ export const bridgeRepo = async (
     if (!exec.exists(dir) || !(await prepareClone(exec, alias, dir, repo, log))) {
         return;
     }
+    await sweepLeftovers({ exec, packs, now, log }, dir, repo);
     // The one round trip a quiet repo pays for: answers branch, tip, and reachability together.
     const symref = (await exec.run("git", ["ls-remote", "--symref", "sandbox", "HEAD"], dir)) ?? "";
     const branch = /^ref:\s+refs\/heads\/(\S+)\s+HEAD/m.exec(symref)?.[1];
@@ -392,7 +443,7 @@ export const bridgeRepo = async (
     if (hold !== undefined && now() < hold.retryAt) {
         return; // said when it was held, and in the report since: not again every pass
     }
-    if (!(await fetchFromSandbox({ exec, packs, memory, now, log, signal: options.signal }, dir, repo, branch, head, hold))) {
+    if (!(await fetchFromSandbox({ exec, alias, packs, memory, now, log, signal: options.signal }, dir, repo, branch, head, hold))) {
         return;
     }
     // Re-reads the tip from the fetch's ref, not the probe's: the sandbox may have committed again meanwhile.

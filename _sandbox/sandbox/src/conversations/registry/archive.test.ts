@@ -24,6 +24,7 @@ import {
 } from "./archive.js";
 import { createLogger } from "../../logger.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
+import type { ChildRecord } from "../../agent/subagents/children.js";
 import { memoryWatchJournal } from "../../store/journals/watch-journal.js";
 import { armWatcher, cancelWatchersFor, listWatchers, startWatcherRuntime } from "../../agent/verification/watchers.js";
 
@@ -424,6 +425,76 @@ test("a held card touched while its checkout is probed is left in place", async 
         }),
         logger,
     });
-    expect(await sweepHeldCheckouts(deps, now, now)).toEqual([]);
+    expect(await sweepHeldCheckouts(deps, now, now, () => 0)).toEqual([]);
     expect(retire).toHaveBeenCalledTimes(0);
+});
+
+// The held reclaim's seams, every one a sweep can reach: a quiet `ready` card whose checkout stands, nothing running in
+// it unless a case says so.
+const heldDeps = (
+    overrides: {
+        readonly jobs?: number;
+        readonly family?: { readonly child: string; readonly running?: boolean; readonly turnRunning?: boolean };
+    } = {},
+) => {
+    const order: string[] = [];
+    const retire = jest.fn(async () => {
+        order.push("retire");
+    });
+    const reapConversation = jest.fn(async () => {
+        order.push("reap");
+    });
+    const { family } = overrides;
+    // Only the fields the reclaim reads off a supervised child; any other read throws.
+    const records = new Map<string, ChildRecord>(
+        family?.running === undefined
+            ? []
+            : [[family.child, unstubbed<ChildRecord>("child", { running: family.running, held: undefined, paused: undefined, pending: undefined })]],
+    );
+    const deps = unstubbed<AgentArchiveDeps>("archive", {
+        agents: unstubbed<AgentArchiveDeps["agents"]>("agents", { list: () => [card({ status: "ready" })], entry: () => isolatedAgent([]) }),
+        conversations: unstubbed<AgentArchiveDeps["conversations"]>("conversations", {
+            running: (id) => family?.turnRunning === true && id === family.child,
+            state: () => undefined,
+        }),
+        agentWorktrees: unstubbed<AgentWorktrees>("worktrees", { presence: async () => "present", retire }),
+        reaper: { reapConversation },
+        turns: { stop: async () => ({ stopped: false }) },
+        turnEngine: {
+            ...watchEngine,
+            familyOf: () => ({ heads: ["c1"], members: family === undefined ? [] : [{ child: family.child, parent: "c1" }], records }),
+        },
+        logger,
+    });
+    // How many of the card's background commands still run, as the composition counts them (runningJobsOf).
+    const runningJobs = (): number => overrides.jobs ?? 0;
+    return { deps, retire, reapConversation, order, runningJobs };
+};
+
+describe("sweepHeldCheckouts never pulls a checkout out from under live work", () => {
+    const now = 14 * DAY;
+
+    it("keeps the checkout while a background command it started still runs", async () => {
+        const { deps, retire, reapConversation, runningJobs } = heldDeps({ jobs: 1 });
+        expect(await sweepHeldCheckouts(deps, now, now, runningJobs)).toEqual([]);
+        expect(retire).not.toHaveBeenCalled();
+        expect(reapConversation).not.toHaveBeenCalled();
+    });
+
+    it("keeps the checkout while a child it spawned is running, supervised or not", async () => {
+        const supervised = heldDeps({ family: { child: "kid", running: true } });
+        expect(await sweepHeldCheckouts(supervised.deps, now, now, supervised.runningJobs)).toEqual([]);
+        expect(supervised.retire).not.toHaveBeenCalled();
+        // Known only from the registry's record of who started whom, with its own turn running.
+        const unsupervised = heldDeps({ family: { child: "kid", turnRunning: true } });
+        expect(await sweepHeldCheckouts(unsupervised.deps, now, now, unsupervised.runningJobs)).toEqual([]);
+        expect(unsupervised.retire).not.toHaveBeenCalled();
+    });
+
+    it("reclaims once nothing runs, a finished child included, reaping what is left before the directory goes", async () => {
+        const { deps, retire, order, runningJobs } = heldDeps({ family: { child: "kid", running: false } });
+        expect(await sweepHeldCheckouts(deps, now, now, runningJobs)).toEqual(["c1"]);
+        expect(retire).toHaveBeenCalledTimes(1);
+        expect(order).toEqual(["reap", "retire"]);
+    });
 });

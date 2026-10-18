@@ -38,7 +38,8 @@ export type LiveSessions = ReadonlyMap<string, LiveSession>;
 // Mutagen was consulted. Each only while it holds, as the rest of a resting pairing says nothing.
 const withHolds = (row: DevicePairing, pairing: Pairing): DevicePairing => {
     if (pairing.fileSyncLowDisk !== undefined) {
-        row.lowDisk = pairing.fileSyncLowDisk;
+        const { since, freeBytes, totalBytes } = pairing.fileSyncLowDisk;
+        row.lowDisk = { since, freeBytes, totalBytes };
     }
     if (pairing.bridgeHolds !== undefined && pairing.bridgeHolds.length > 0) {
         row.bridgeHolds = [...pairing.bridgeHolds];

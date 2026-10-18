@@ -27,7 +27,7 @@ export interface PresetState {
 // What a retention of zero means (keep forever) makes "shorter" the wrong comparison for it: zero is the longest.
 export const PUBLIC_OFFICE_RETENTION: RetentionSettings = {
     transcriptDays: 90,
-    restorePointDays: 30,
+    restorePointKeepDays: 30,
     privacyVaultDays: 90,
     cacheDays: 30,
     rawOutputDays: 30,
@@ -62,8 +62,10 @@ interface PresetEntry {
     readonly write: (draft: Draft, value: PresetValue) => void;
 }
 
-const retentionEntry = (key: keyof RetentionSettings): PresetEntry => ({
-    id: `retention.${key}`,
+// The item's id is its measure's name, kept when the setting under it is renamed: an id is what an applied preset, a
+// pin's drift and the page's words are filed under (restore points' is still `retention.restorePointDays`).
+const retentionEntry = (key: keyof RetentionSettings, id = `retention.${key}`): PresetEntry => ({
+    id,
     group: "retention",
     owner: false,
     current: ({ settings }) => settings.retention[key],
@@ -130,7 +132,7 @@ const ENTRIES: readonly PresetEntry[] = [
         },
     },
     retentionEntry("transcriptDays"),
-    retentionEntry("restorePointDays"),
+    retentionEntry("restorePointKeepDays", "retention.restorePointDays"),
     retentionEntry("privacyVaultDays"),
     retentionEntry("cacheDays"),
     retentionEntry("rawOutputDays"),

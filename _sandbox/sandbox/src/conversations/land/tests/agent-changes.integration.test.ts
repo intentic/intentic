@@ -398,13 +398,17 @@ test("a held ready checkout is reclaimed without losing review, land or the next
     await writeFile(join(conversation.cwd, "added.ts"), "held work\n");
     const deps = unstubbed<AgentArchiveDeps>("archive", {
         agents: unstubbed<AgentArchiveDeps["agents"]>("agents", { list: () => [card], entry: () => entry }),
-        conversations: unstubbed<AgentArchiveDeps["conversations"]>("conversations", { running: () => false }),
+        conversations: unstubbed<AgentArchiveDeps["conversations"]>("conversations", { running: () => false, state: () => undefined }),
+        // A card that spawned nothing: its family below is empty.
+        turns: { stop: async () => await Promise.resolve({ stopped: false }) },
+        reaper: { reapConversation: async () => await Promise.resolve() },
+        turnEngine: unstubbed<NonNullable<AgentArchiveDeps["turnEngine"]>>("engine", { familyOf: () => ({ heads: ["c1"], members: [], records: new Map() }) }),
         agentWorktrees: worktrees,
         logger,
     });
     const window = 14 * 24 * 60 * 60_000;
-    expect(await sweepHeldCheckouts(deps, window - 1, window)).toEqual([]);
-    expect(await sweepHeldCheckouts(deps, window, window)).toEqual(["c1"]);
+    expect(await sweepHeldCheckouts(deps, window - 1, window, () => 0)).toEqual([]);
+    expect(await sweepHeldCheckouts(deps, window, window, () => 0)).toEqual(["c1"]);
     expect(existsSync(conversation.cwd)).toBe(false);
     expect(existsSync(overlay)).toBe(false);
     expect(entry.archivedAt).toBeUndefined();

@@ -225,16 +225,22 @@ export const sayDaemonEventsTo = (log: Log | undefined): void => {
     daemonLog = log;
 };
 
+// What a failed call's stderr says of the daemon it asked: another version than the client, or not running. Read by the
+// recovery below and by the move off the shared data directory (mutagen-move.ts).
+// allow(dependency-text): Mutagen 0.18's client words a version mismatch only so; an unmatched wording reads as a plain failure, which restarts nothing and moves nothing
+export const saysVersionMismatch = (stderr: string): boolean => VERSION_MISMATCH.test(stderr);
+// allow(dependency-text): Mutagen 0.18's client says no more than these words; an unmatched wording leaves the daemon down until the watcher's next start, which starts it outright
+export const saysDaemonDown = (stderr: string): boolean => DAEMON_DOWN.test(stderr) && !saysVersionMismatch(stderr);
+
 // Whether a failed call's stderr is a version mismatch, and the restart that answers it was made now. Exported for the
 // rule's own test.
 export const restartsDaemonFor = (stderr: string, now: number, lastRestart: number): boolean =>
-    VERSION_MISMATCH.test(stderr) && now - lastRestart >= DAEMON_RESTART_MS;
+    saysVersionMismatch(stderr) && now - lastRestart >= DAEMON_RESTART_MS;
 
 // Whether a failed call's stderr is a daemon that is not running, and this process is the watcher, due to start it.
 // Exported for the rule's own test.
 export const startsDaemonFor = (stderr: string, watcher: boolean, now: number, lastStart: number): boolean =>
-    // allow(dependency-text): Mutagen 0.18's client says no more than these words; an unmatched wording leaves the daemon down until the watcher's next start, which starts it outright
-    watcher && DAEMON_DOWN.test(stderr) && !VERSION_MISMATCH.test(stderr) && now - lastStart >= DAEMON_START_MS;
+    watcher && saysDaemonDown(stderr) && now - lastStart >= DAEMON_START_MS;
 
 // Starts this agent's Mutagen daemon, or finds it running: `daemon start` returns at once when one holds the data
 // directory. The only call that starts one (mutagen-env.ts): setup, the watcher's start, and the recovery below.
@@ -734,6 +740,36 @@ export const pauseRunningSync = (mutagen: string, pairing: Pairing): boolean => 
     return result.status === 0;
 };
 
+// Pauses those of a pairing's sessions that are running, and answers which: what a pause that keeps its own list may
+// later resume, and nothing else, so a session somebody paused by hand stays as they left it. Empty when none was
+// running (or the pairing has none); undefined when Mutagen did not answer or refused the pause.
+export const pauseRunningSessions = (mutagen: string, pairing: Pairing): readonly string[] | undefined => {
+    if (pairing.mode !== "sync") {
+        return [];
+    }
+    const names = existingSyncSessions(mutagen, syncSessionNames(pairing));
+    if (names === undefined) {
+        return undefined;
+    }
+    const running = names.filter((name) => readSessionState(mutagen, name).paused !== true);
+    if (running.length === 0) {
+        return [];
+    }
+    return runProcessSync(mutagen, ["sync", "pause", ...running], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true }).status === 0 ? running : undefined;
+};
+
+// Resumes the named sessions that still exist: the counterpart of `pauseRunningSessions`.
+export const resumeNamedSessions = (mutagen: string, names: readonly string[]): boolean => {
+    if (names.length === 0) {
+        return true;
+    }
+    const held = existingSyncSessions(mutagen, names);
+    if (held === undefined) {
+        return false;
+    }
+    return held.length === 0 || runProcessSync(mutagen, ["sync", "resume", ...held], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true }).status === 0;
+};
+
 // Lifts the pause a swap of the sandbox put on its file sync. Every session the pairing has: that pause paused them all.
 // Not while the drive holding its folder is short of room (low-disk.ts), whose own lifting resumes it.
 export const resumeSwapPausedSync = (mutagen: string, pairing: Pairing): boolean => {
@@ -1229,7 +1265,7 @@ const PATH_LOOKUP_TIMEOUT_MS = 10_000;
 
 // Where PATH's copy of a command is at this moment. A bare name is resolved again every time it is run, against a
 // PATH this agent does not control, which is how an autostart entry keeps starting a binary from a retired install.
-const resolveOnPath = (command: string): string | undefined => {
+export const resolveOnPath = (command: string): string | undefined => {
     const whereExe = join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "where.exe");
     const found =
         process.platform === "win32"

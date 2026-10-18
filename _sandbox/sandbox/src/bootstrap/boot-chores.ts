@@ -3,6 +3,7 @@ import { panelKeyOf } from "@intentic/sandbox-contract/session-names";
 import { dockerPruneChore } from "../capabilities/handlers/docker-prune.js";
 import { parkedRefRetentionChore } from "../conversations/land/parked-ref-retention.js";
 import { sweepAgedAgents, sweepHeldCheckouts } from "../conversations/registry/archive.js";
+import { runningJobsOf } from "../agent/tools/jobs/background-jobs.js";
 import { deleteAgedConversations } from "../conversations/registry/transcript-retention.js";
 import { cacheDirsOf, rawOutputDirsOf, type RetentionDeps, type RetentionKind, type RetentionPass, runRetentionSweep } from "../retention/retention-sweep.js";
 import { orphanCheckoutsChore } from "../conversations/worktrees/orphan-checkouts.js";
@@ -114,7 +115,7 @@ export const retentionChores = (phase: BootPhase): Chore[] => {
                       run: async (): Promise<void> => {
                           const { agentRetentionDays, heldCheckoutDays } = await services.sandboxSettings.get();
                           await sweepAgedAgents(services, Date.now(), agentRetentionDays * DAY_MS);
-                          await sweepHeldCheckouts(services, Date.now(), heldCheckoutDays * DAY_MS);
+                          await sweepHeldCheckouts(services, Date.now(), heldCheckoutDays * DAY_MS, (id) => runningJobsOf(services.conversations, id).length);
                       },
                   },
                   { name: "state-aged", everyMs: HOUR_MS, run: () => sweepAgedState(services.workspace.root, Date.now(), logger) },

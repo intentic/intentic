@@ -1,11 +1,10 @@
 import { mkdir, readdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { clearWindowsRunValue, explain, type Footnote, homeDir, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
+import { explain, type Footnote, homeDir, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
 import { environmentKeyOf } from "@intentic/sandbox-contract/schemas/hosts";
 import { projectDirNameOf } from "@intentic/sandbox-contract/ids/project-dir";
 import { sandboxIdFromUrl } from "@intentic/sandbox-contract/ids/hostnames";
@@ -26,7 +25,6 @@ import {
     pairingKey,
     pairingRemoteDir,
     readState,
-    removePairing,
     setAutoHealOff,
     setMirrorOff,
     setPortIgnored,
@@ -35,9 +33,8 @@ import {
     upsertPairing,
 } from "./config.js";
 import { type TransportAsk, transportFor } from "./endpoint.js";
-import { runProcess } from "./exec.js";
 import { overlappingPairing } from "./folders.js";
-import { retireMirroredPort, retirePairingMirror, teardownAllForwards } from "./mirror.js";
+import { retireMirroredPort, retirePairingMirror } from "./mirror.js";
 import { asidePrefix } from "./project/adopt.js";
 import { attachCommands } from "./attach-commands.js";
 import { projectCommands } from "./project/project-commands.js";
@@ -45,9 +42,6 @@ import {
     ensureMutagen,
     existingSyncSessions,
     healDerivedConflicts,
-    MUTAGEN_CALL_TIMEOUT_MS,
-    MUTAGEN_RUN_VALUE,
-    ownMutagenPath,
     retireOrphanSessions,
     runMutagen,
     sessionName,
@@ -55,7 +49,7 @@ import {
     syncSessionNames,
 } from "./mutagen.js";
 import { forget } from "./forget-command.js";
-import { moveOffSharedMutagen } from "./mutagen-move.js";
+import { revokeEnrollment, syncsAFolder, uninstallPairings } from "./uninstall.js";
 import { refuseAcrossPc } from "./siblings.js";
 import { syncSshPort, tunnelReady } from "./tunnel.js";
 import {
@@ -65,7 +59,6 @@ import {
     mutagenSshPath,
     pairingSshConfig,
     probeSshTransport,
-    removeManagedSshConfig,
     replaceKnownHost,
     sanitizeId,
     sshAlias,
@@ -193,18 +186,6 @@ export const enrollKey = async (
     // What the daemon granted: "sync" is file sync plus mirroring (one holder), "mirror" is ports only (any number). The
     // sshd host key, when a sandbox hands it over, is what this machine pins for it (ssh.ts, replaceKnownHost).
     return { syncToken: body.syncToken, mode: body.mode ?? "sync", hostKey: hostKeyOf(body.hostKey) };
-};
-
-// Self-revoke this machine's enrollment (uninstall): DELETE /system/authorized-key authed by the sync token. A 404 is
-// an enrollment the sandbox no longer holds; any other refusal leaves this machine's key authorized there.
-const revokeEnrollment = async (sandboxUrl: string, syncToken: string): Promise<void> => {
-    const response = await fetch(`${sandboxUrl.replace(/\/$/, "")}/system/authorized-key`, {
-        method: "DELETE",
-        headers: { "x-intentic-sync": syncToken },
-    });
-    if (!response.ok && response.status !== 404) {
-        throw new Error(`HTTP ${response.status}`);
-    }
 };
 
 interface SetupFlags {
@@ -946,103 +927,40 @@ const autoheal = buildRouteMap({
     docs: { brief: "Whether this device clears its own build output when it blocks a deletion, for one sandbox or all" },
 });
 
-// One dropped pairing's sessions, and its sandbox's forwards with the first of its pairings. The pair goes together: a
-// surviving backup session would keep mirroring a sandbox this device has just unpaired, writing into a folder the
-// owner considers released.
-const endPairingSessions = async (mutagen: string, pairing: Pairing, firstOfSandbox: boolean): Promise<void> => {
-    if (pairing.mode === "sync" && syncSessionNames(pairing).length > 0) {
-        await runProcess(mutagen, ["sync", "terminate", ...syncSessionNames(pairing)], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
-    }
-    if (firstOfSandbox) {
-        await retirePairingMirror(mutagen, pairing.sandboxId);
-    }
-};
-
-// The sync half's teardown, callable from the top-level `uninstall` too. With a selector it unpairs ONE
-// sandbox and leaves every other pairing served; bare, it removes everything, self-revoking each dropped
-// enrollment so a device walking away cleans up after itself. Narrates through `say` and answers the verdict, for the
-// caller to settle its one live line with.
-// `forGood` is the top-level `uninstall`, which retires the agent whatever this device hosts.
-export const syncUninstall = async (say: Narration, sandbox?: string, { forGood = false }: { readonly forGood?: boolean } = {}): Promise<string> => {
+// The sync half's teardown, callable from the top-level `uninstall` too (uninstall.ts). With a selector it unpairs ONE
+// sandbox and leaves every other pairing served; with `foldersOnly` (the app's uninstaller), every pairing that syncs a
+// folder here, leaving port mirroring and the projects host; bare, it removes everything, self-revoking each dropped
+// enrollment so a device walking away cleans up after itself.
+export const syncUninstall = async (
+    say: Narration,
+    sandbox?: string,
+    { forGood = false, foldersOnly = false }: { readonly forGood?: boolean; readonly foldersOnly?: boolean } = {},
+): Promise<string> => {
     const state = await readState();
-    const dropped = selectPairings(state, sandbox);
-    // Nothing paired and no copy of this agent's Mutagen means no session of its own anywhere: an uninstall from a PC
-    // that never synced downloads nothing to find that out.
-    const mutagen = state.pairings.length === 0 && !existsSync(ownMutagenPath()) ? undefined : await ensureMutagen();
-    // What older builds left in Mutagen's shared data directory ends first, so an uninstall leaves nothing of this
-    // agent's there either, even where no watcher ever ran this build (mutagen-move.ts).
-    if (mutagen !== undefined) {
-        await moveOffSharedMutagen(mutagen, say.note);
-    }
-    const remaining = state.pairings.filter((held) => !dropped.some((pairing) => pairingKey(pairing) === pairingKey(held)));
-    // One enrollment per sandbox, however many of its pairings go (its projects host and its attached folders).
-    const revoked = new Set<string>();
-
-    // Self-revoke each dropped enrollment so its sandbox drops the key + token. An unreachable sandbox doesn't block
-    // local teardown, but the owner is told the key is still authorized there.
-    for (const pairing of dropped) {
-        const firstOfSandbox = !revoked.has(pairing.sandboxId);
-        revoked.add(pairing.sandboxId);
-        if (pairing.syncToken !== undefined && firstOfSandbox) {
-            // Drops are sequenced so failures identify one sandbox.
-            await revokeEnrollment(pairing.sandboxUrl, pairing.syncToken).catch((error: unknown) =>
-                say.warn(
-                    `${pairing.sandboxUrl} could not be told to forget this device (${errorMessage(error)}), so its sync key is still authorized there. Remove this device from that sandbox's Devices view.`,
-                ),
-            );
-        }
-        if (mutagen !== undefined) {
-            // state is a single file; serial keeps the writes ordered
-            await endPairingSessions(mutagen, pairing, firstOfSandbox);
-        }
-        // ditto
-        await removePairing(pairingKey(pairing));
-        say.note(`Unpaired ${pairingKey(pairing)}${pairing.localDir === undefined ? "" : `; ${pairing.localDir} is no longer synced`}.`);
-    }
-
-    if (remaining.length > 0) {
-        // Sync stays: regenerate the ssh fragment for pairings still live. The agent is left running — it re-reads its
-        // pairing list every tick (mirror.ts), and restarting it would drop this device's socket to every linked
-        // sandbox, which is the connection an unpair asked for from a sandbox travels over. Mutagen's daemon is left
-        // alone too.
-        await writeManagedSshConfig(pairingSshConfig(remaining));
-        await ensureResident(say.note, { forGood });
-        return `Unpaired ${plural(dropped.length, "pairing")}. Still syncing ${plural(remaining.length, "pairing")}: ${named(remaining)}.`;
-    }
-
-    // Nothing left to sync: sync's residue goes (forwards, transport, ssh include); the agent retires only when this
-    // environment holds nothing at all.
-    await ensureResident(say.note, { forGood });
-    await removeManagedSshConfig();
-    await retireOwnMutagen(mutagen, say);
-    return dropped.length === 0 ? "Nothing was syncing. Removed any leftovers." : "Stopped syncing on this device.";
+    const dropped = selectPairings(state, sandbox).filter((pairing) => !foldersOnly || syncsAFolder(pairing));
+    return await uninstallPairings(say, state, dropped, { forGood });
 };
 
-// Every session and forward of this agent's goes with the daemon that holds them. That daemon serves this agent's own
-// data directory alone (mutagen-env.ts), whichever Mutagen binary runs it, so stopping it is always this agent's to do;
-// a Mutagen of the user's own runs over its own directory and is not touched. Terminating leaves each synced folder's
-// files where they are. The Run value older builds wrote for the daemon goes too (mutagen.ts MUTAGEN_RUN_VALUE).
-const retireOwnMutagen = async (mutagen: string | undefined, say: Narration): Promise<void> => {
-    if (process.platform === "win32") {
-        clearWindowsRunValue(MUTAGEN_RUN_VALUE);
-    }
-    if (mutagen === undefined) {
-        say.note("Removed the ssh-config include. This agent has no Mutagen here, so there was no daemon to stop.");
-        return;
-    }
-    await teardownAllForwards(mutagen, say.note);
-    retireOrphanSessions(mutagen, [], say.note);
-    await runProcess(mutagen, ["daemon", "stop"], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
-    say.note("Removed the ssh-config include, and stopped this agent's Mutagen daemon. The synced folders keep their files.");
-};
+interface UninstallFlags extends SandboxFlags {
+    readonly folders: boolean;
+}
 
-const uninstall = buildCommand<SandboxFlags>({
+const uninstall = buildCommand<UninstallFlags>({
     docs: { brief: "Unpair a sandbox (--sandbox), or stop syncing every sandbox on this device" },
-    parameters: { flags: sandboxFlag },
-    async func(this: CommandContext, flags: SandboxFlags) {
+    parameters: {
+        flags: {
+            ...sandboxFlag,
+            folders: {
+                kind: "boolean",
+                default: false,
+                brief: "Only the pairings that sync a folder here; port mirroring and the projects host stay (the app's uninstaller)",
+            },
+        },
+    },
+    async func(this: CommandContext, flags: UninstallFlags) {
         const ui = machineUi(this.process);
-        ui.act(flags.sandbox === undefined ? "Stopping sync on this device" : `Unpairing ${flags.sandbox}`);
-        ui.done(await syncUninstall(ui, flags.sandbox));
+        ui.act(flags.folders ? "Stopping folder sync on this device" : flags.sandbox === undefined ? "Stopping sync on this device" : `Unpairing ${flags.sandbox}`);
+        ui.done(await syncUninstall(ui, flags.sandbox, { foldersOnly: flags.folders }));
     },
 });
 

@@ -457,7 +457,7 @@ describe("bridgeRepo holds", () => {
         const { handlers, existing } = behind("stall");
         const { calls, exec } = scripted(handlers, existing, [{ outcome: "stalled", stderr: "" }]);
         const { holds, memory } = remembered();
-        // Listings: the once-a-process sweep (two reads), before the fetch, then the two reads after it.
+        // Listings: the hourly sweep (two reads), before the fetch, then the two reads after it.
         const { packs, removed } = packFolder([[old], [old], [old], [old, left], [old, left]]);
         const said: string[] = [];
         await bridgeRepo(exec, ALIAS, LOCAL, "stall", (line) => said.push(line), { memory, packs, now: () => NOW });
@@ -496,6 +496,37 @@ describe("bridgeRepo holds", () => {
         expect(holds.get("shallow")?.retryAt).toBe(NOW + 24 * 60 * MINUTE);
     });
 
+    it("asks the sandbox first, and fetches nothing while its copy is shallow and this clone's history is full", async () => {
+        const { handlers, existing } = behind("probed", { ssh: "true\n" });
+        const { calls, exec } = scripted(handlers, existing);
+        const { holds, memory } = remembered();
+        const said: string[] = [];
+        await bridgeRepo(exec, ALIAS, LOCAL, "probed", (line) => said.push(line), { memory, packs: packFolder([[]]).packs, now: () => NOW });
+        expect(calls).toContain(`ssh -o BatchMode=yes ${ALIAS} git --git-dir=/history/gits/probed rev-parse --is-shallow-repository`);
+        expect(calls.some((line) => line.startsWith("git fetch"))).toBe(false);
+        expect(holds.get("probed")).toMatchObject({ reason: "shallow", failures: 1, retryAt: NOW + 24 * 60 * MINUTE });
+        expect(said.join("\n")).toContain("not fetched from the sandbox");
+        // Once its wait is over it asks again, still without fetching, and waits twice as long.
+        await bridgeRepo(exec, ALIAS, LOCAL, "probed", () => undefined, { memory, packs: packFolder([[]]).packs, now: () => NOW + 25 * 60 * MINUTE });
+        expect(calls.some((line) => line.startsWith("git fetch"))).toBe(false);
+        expect(holds.get("probed")).toMatchObject({ failures: 2, retryAt: NOW + 25 * 60 * MINUTE + 48 * 60 * MINUTE });
+    });
+
+    it("fetches once the sandbox says its copy is whole", async () => {
+        const { handlers, existing } = behind("whole", { ssh: "false\n" });
+        const { calls, exec } = scripted(handlers, existing);
+        await bridgeRepo(exec, ALIAS, LOCAL, "whole", () => undefined, { memory: remembered().memory, packs: packFolder([[]]).packs, now: () => NOW });
+        expect(calls).toContain("git fetch --progress sandbox +refs/heads/main:refs/remotes/sandbox/main");
+        expect(calls).toContain(`git reset -q ${TIP}`);
+    });
+
+    it("never asks the sandbox when the clone may take a shallow boundary anyway", async () => {
+        const { handlers, existing } = behind("thin2", { "git rev-parse --is-shallow-repository": "true\n" });
+        const { calls, exec } = scripted(handlers, existing);
+        await bridgeRepo(exec, ALIAS, LOCAL, "thin2", () => undefined, { memory: remembered().memory, packs: packFolder([[]]).packs, now: () => NOW });
+        expect(calls.some((line) => line.startsWith("ssh"))).toBe(false);
+    });
+
     it("lets an already-shallow clone take the sandbox's shallow boundary", async () => {
         const { handlers, existing } = behind("thin", { "git rev-parse --is-shallow-repository": "true\n" });
         const { calls, exec } = scripted(handlers, existing);
@@ -518,7 +549,7 @@ describe("bridgeRepo holds", () => {
         expect(holds.size).toBe(0);
     });
 
-    it("clears an earlier agent's stale leftovers once per process, before its first fetch there", async () => {
+    it("clears an earlier agent's stale leftovers before its first fetch there, and not again within the hour", async () => {
         const { handlers, existing } = behind("leftovers");
         const stale = { name: "tmp_pack_ancient", size: 2 * 1024 ** 3, modifiedAt: NOW - 2 * STALE_TEMP_MS };
         const { packs, removed } = packFolder([[stale, old], [stale, old], [stale, old], [old]]);
@@ -528,6 +559,20 @@ describe("bridgeRepo holds", () => {
         expect(removed).toEqual([join(LOCAL, "leftovers", ".git", "objects", "pack", "tmp_pack_ancient")]);
         expect(said.join("\n")).toContain("removed 2.0 GB of half-received git packs an earlier fetch left behind");
         await bridgeRepo(scripted(handlers, existing).exec, ALIAS, LOCAL, "leftovers", () => undefined, options);
+        expect(removed).toHaveLength(1);
+    });
+
+    it("sweeps a quiet repo again an hour later, so a fetch its own restart cut off minutes ago still goes", async () => {
+        const { handlers, existing } = behind("cutoff", { "git rev-parse -q --verify HEAD": `${TIP}\n` });
+        const cut = { name: "tmp_pack_cut", size: 1024 ** 3, modifiedAt: NOW - 10 * MINUTE };
+        const { packs, removed } = packFolder([[cut]]);
+        const pass = async (at: number): Promise<void> =>
+            await bridgeRepo(scripted(handlers, existing).exec, ALIAS, LOCAL, "cutoff", () => undefined, { memory: remembered().memory, packs, now: () => at });
+        await pass(NOW);
+        expect(removed).toEqual([]);
+        await pass(NOW + STALE_TEMP_MS);
+        expect(removed).toEqual([join(LOCAL, "cutoff", ".git", "objects", "pack", "tmp_pack_cut")]);
+        await pass(NOW + STALE_TEMP_MS + MINUTE);
         expect(removed).toHaveLength(1);
     });
 });

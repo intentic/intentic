@@ -557,9 +557,10 @@ flowchart LR
   remove the Intentic machine agent from this PC?" where one is installed. Yes runs `intentic-machine uninstall`, which
   removes this PC's links, sync pairings and login entry, the keeper that starts Docker Desktop at every sign-in with
   them, and never a container. Never asked on an update or a passive uninstall; a silent one answers no. Folder sync
-  ends whatever the answer (2026-10-18): where the agent stays, `intentic-machine sync uninstall` ends every Mutagen
-  session and forward it made, stops its Mutagen daemon and drops its sync pairings, so a kept agent goes on hosting
-  sandboxes without syncing files again by itself; the synced folders keep their files. A reinstall does neither. It signs out on
+  ends whatever the answer (2026-10-18): where the agent stays, `intentic-machine sync uninstall --folders` unpairs
+  every pairing that syncs a folder here and ends its Mutagen sessions, so a kept agent goes on hosting sandboxes and
+  mirroring their ports without syncing files again by itself (an agent older than the flag runs the whole
+  `sync uninstall`); the synced folders keep their files. A reinstall does neither. It signs out on
   this PC: the webview's cookie files (`%LOCALAPPDATA%\dev.intentic.desktop\EBWebView`) and `roster.json` go, whether or
   not "Delete app data" is ticked; the platform's own record of the session is left to expire, since the uninstaller has
   no way to send it. Its last page says what stays: the sandboxes and their files, in Docker, which `ic sandbox list`

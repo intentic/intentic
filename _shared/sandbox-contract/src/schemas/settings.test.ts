@@ -212,8 +212,36 @@ test("disk retention defaults bound checkouts and restore points while preservin
     const defaults = SandboxSettingsSchema.parse({});
     expect(defaults.agentRetentionDays).toBe(3);
     expect(defaults.heldCheckoutDays).toBe(14);
-    expect(defaults.retention.restorePointDays).toBe(30);
-    const existing = SandboxSettingsSchema.parse({ heldCheckoutDays: 0, retention: { restorePointDays: 0 } });
+    expect(defaults.retention.restorePointKeepDays).toBe(30);
+    const existing = SandboxSettingsSchema.parse({ heldCheckoutDays: 0, retention: { restorePointKeepDays: 0 } });
     expect(existing.heldCheckoutDays).toBe(0);
-    expect(existing.retention.restorePointDays).toBe(0);
+    expect(existing.retention.restorePointKeepDays).toBe(0);
+});
+
+describe(`restore points' retention, renamed so a stored zero is the owner's own (2026-10-18)`, () => {
+    const read = (retention: Record<string, unknown>) => {
+        const converted = convertDocument(SETTINGS_HISTORY, `object`, { retention: { transcriptDays: 7, ...retention } }, true);
+        return { retention: SandboxSettingsSchema.parse(converted.value).retention, changes: converted.changes };
+    };
+
+    test(`an earlier release's stored zero, which the settings page wrote for the old default, takes the 30-day default`, () => {
+        const { retention, changes } = read({ restorePointDays: 0 });
+        expect(retention.restorePointKeepDays).toBe(30);
+        expect(retention.transcriptDays).toBe(7);
+        expect(changes.map((change) => change.at)).toEqual([`retention`]);
+    });
+
+    test(`a positive choice carries over`, () => {
+        expect(read({ restorePointDays: 90 }).retention.restorePointKeepDays).toBe(90);
+    });
+
+    test(`a zero stored under the new key is kept, and read again changes nothing`, () => {
+        const { retention, changes } = read({ restorePointKeepDays: 0 });
+        expect(retention.restorePointKeepDays).toBe(0);
+        expect(changes).toEqual([]);
+    });
+
+    test(`a file naming both keeps the new one`, () => {
+        expect(read({ restorePointDays: 0, restorePointKeepDays: 5 }).retention.restorePointKeepDays).toBe(5);
+    });
 });

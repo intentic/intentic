@@ -19,6 +19,7 @@ const said = (item: Item | undefined): string | undefined =>
 const pairingLine = (pairing: DevicePairing): string => said(pairingItem(pairing))!;
 const linkLine = (link: Parameters<typeof linkItem>[0]): string => said(linkItem(link))!;
 import { enrollKey, placementChange, placementOf, projectAskedWithoutFlag, selectPairings, syncSwitchPlan, transportFor } from "../commands.js";
+import { sandboxesLeft, syncsAFolder } from "../uninstall.js";
 import type { Pairing, SyncState } from "../config.js";
 import { syncSessionNames } from "../mutagen.js";
 
@@ -608,5 +609,23 @@ describe("conflictItems", () => {
 
     it("says in words the one conflict that has no path: the folder itself", () => {
         expect(conflictLines(stuck({ conflicts: 1, conflictedPaths: [{ path: "" }] })).join("\n")).toContain("the folder itself");
+    });
+});
+
+// What the desktop app's uninstaller ends when the machine agent stays (`sync uninstall --folders`): folder sync, never
+// the port mirroring that keeps sandboxes connected, and never the enrollment a kept pairing of the same sandbox rides.
+describe("folders-only uninstall", () => {
+    const own: Pairing = { sandboxUrl: "https://a.example.dev/", sandboxId: "a", mode: "sync", localDir: "/home/me/intentic/a" };
+    const host: Pairing = { sandboxUrl: "https://b.example.dev/", sandboxId: "b", mode: "sync", projectsHost: true };
+    const attached: Pairing = { ...host, projectsHost: undefined, key: "b~app", localDir: "/home/me/code/app", remoteDir: `${WORKSPACE_ROOT}/app`, project: true };
+    const ports: Pairing = { sandboxUrl: "https://c.example.dev/", sandboxId: "c", mode: "mirror" };
+
+    it("takes the pairings that sync a folder, never a mirror-only one or the projects host", () => {
+        expect([own, host, attached, ports].filter(syncsAFolder)).toEqual([own, attached]);
+    });
+
+    it("leaves a sandbox only once none of its pairings stays, so a kept projects host keeps its enrollment", () => {
+        expect([...sandboxesLeft([own, attached], [host, ports])]).toEqual(["a"]);
+        expect([...sandboxesLeft([own, host, attached, ports], [])].toSorted()).toEqual(["a", "b", "c"]);
     });
 });

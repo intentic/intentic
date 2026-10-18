@@ -11,18 +11,18 @@ import {
     SnapshotTriggerSchema,
     type SnapshotTrigger,
 } from "@intentic/sandbox-contract/schemas/history";
-import { cancellableGit, defaultGit } from "@intentic/base/git";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
-import type { Logger } from "pino";
 import { MAX_FILE_DIFF_BYTES, partialDiff } from "../git/changes/diff-partial.js";
 import { checkoutGeneration } from "../git/feed/checkout-feed.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { discoverRepos, hasGitEntry, isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { COMMON_EXCLUDES, EMPTY_TREE, repoGitDir, syncRootExcludes } from "../workspace/layout/git-layout.js";
 import { largeFilesConfig, leaveOutLargeFiles } from "./large-files.js";
-import { pruneScopes, retentionBases, retentionGit } from "./restore-point-retention.js";
-import type { WorkspacePaths } from "../workspace/workspace.js";
+import { collectScopes, cutScopes, retentionBases } from "./restore-point-retention.js";
+import { defaultRunner, type HistoryGitRunner, type WorkspaceHistoryOptions } from "./history-git.js";
 import { bareIn, sanitizeLabel, type Scope, type ScopeCommit, scopeNamer } from "./history-scopes.js";
+
+export type { HistoryGitRunner, WorkspaceHistoryOptions } from "./history-git.js";
 
 // Daemon-owned workspace history: each scope (/work root or a discovered repo) gets a bare git dir under
 // <historyRoot>/scopes via a private index; the agent's repos, branches and HEAD are never touched. The timeline shows
@@ -37,16 +37,6 @@ const USER_WRITE_DEBOUNCE_MS = 2_000;
 const INDEX_MAX_MS = 60_000;
 // The triggers that surface as timeline checkpoints; "interval" captures are hidden safety sweeps.
 const VISIBLE_TRIGGERS: ReadonlySet<SnapshotTrigger> = new Set(["turn", "user", "pre-restore", "restore"]);
-// Runs git with the scope's detached-worktree env; injectable so command sequences are unit-testable without a real
-// repo.
-export type HistoryGitRunner = (
-    args: readonly string[],
-    options: { readonly cwd: string; readonly env: Readonly<Record<string, string>>; readonly signal?: AbortSignal },
-) => Promise<{ readonly stdout: string; readonly stderr: string }>;
-// Through the daemon's git helper rather than a fork of the daemon itself. `core.fileMode=true` overrides the helper's
-// global false: a snapshot must keep an executable bit, or a restore strips it from every script added since.
-const defaultRunner: HistoryGitRunner = (args, options) =>
-    (options.signal === undefined ? defaultGit : cancellableGit(options.signal))(options.cwd, ["-c", "core.fileMode=true", ...args], options.env);
 
 // Tells its listener something in the workspace may have changed; returns how to stop listening.
 export type ChangeFeed = (changed: () => void) => () => void;
@@ -67,7 +57,8 @@ export interface WorkspaceHistory {
     readonly fileBlob: (id: string, scope: string, path: string, side: "before" | "after") => Promise<{ dir: string; spec: string } | undefined>;
     readonly restore: (id: string) => Promise<boolean>;
     // Deletes every restore point taken before `before` (epoch ms) so its content leaves the disk; returns how many
-    // snapshot commits it removed. Restores of the points it keeps work as before (see pruneScope).
+    // snapshot commits it removed. Restores of the points it keeps work as before (see restore-point-retention.ts). The
+    // cut holds the history lock; the gc that frees the disk runs after it, beside snapshots.
     readonly prune: (before: number) => Promise<number>;
 }
 
@@ -99,7 +90,7 @@ const overCap = (side: CheckpointSide | undefined): boolean =>
     side !== undefined && side.bytes !== undefined && side.content === undefined && side.binary !== true;
 
 export const createWorkspaceHistory = (
-    options: { readonly workspace: WorkspacePaths; readonly historyRoot: string; readonly logger: Logger },
+    options: WorkspaceHistoryOptions,
     git: HistoryGitRunner = defaultRunner,
 ): WorkspaceHistory => {
     const { workspace, historyRoot, logger } = options;
@@ -310,7 +301,7 @@ export const createWorkspaceHistory = (
         readonly groups: SnapshotGroup[];
     }
 
-    // Caches historyIndex(): invalidated when a snapshot records a change or a restore runs, and past INDEX_MAX_MS.
+    // Caches historyIndex() while `indexRead` is fresh: `indexRead.changed()` (a change, a restore, a cut) or INDEX_MAX_MS ends it.
     let indexCache: HistoryIndex | undefined;
     const indexRead = freshness({ maxAgeMs: INDEX_MAX_MS });
 
@@ -448,7 +439,6 @@ export const createWorkspaceHistory = (
             }
         }
         if (changed) {
-            indexCache = undefined;
             indexRead.changed();
         }
         return changed ? id : undefined;
@@ -487,7 +477,6 @@ export const createWorkspaceHistory = (
         }
         // Record the restore point; history is append-only, never rewound.
         await snapshotAll("restore");
-        indexCache = undefined;
         indexRead.changed();
     };
 
@@ -614,13 +603,16 @@ export const createWorkspaceHistory = (
             await serialize(() => restoreAll(group));
             return true;
         },
-        prune: (before) =>
-            serialize(async () => {
-                const removed = await pruneScopes({ git: retentionGit(git), logger, scopes: await knownScopes(), bareOf: bare }, before);
-                // A failed collection can still have moved the boundary, so even a zero tally invalidates the list.
-                indexCache = undefined;
+        prune: async (before) => {
+            // The cut under the lock (a failed one can still have moved the boundary, so the list is read again); the gc
+            // after it, outside: pruned with a grace, it never takes what a snapshot beside it is writing.
+            const cut = await serialize(async () => {
+                const outcome = await cutScopes({ git, logger, scopes: await knownScopes(), bareOf: bare }, before);
                 indexRead.changed();
-                return removed;
-            }),
+                return outcome;
+            });
+            await collectScopes({ git, logger, bareOf: bare, graceMs: options.retentionGraceMs, now: options.now }, cut.collect);
+            return cut.removed;
+        },
     };
 };

@@ -32,7 +32,7 @@ type Kind = keyof RetentionSettings;
 // Built in a computed, not a table at import: `t` reads the active language when it is called.
 const ROWS = computed((): { key: Kind; icon: IconName; title: string; description: string }[] => [
     { key: `transcriptDays`, icon: `comments`, title: t(`sandbox.retention.transcripts`), description: t(`sandbox.retention.transcriptsNote`) },
-    { key: `restorePointDays`, icon: `history`, title: t(`sandbox.retention.restorePoints`), description: t(`sandbox.retention.restorePointsNote`) },
+    { key: `restorePointKeepDays`, icon: `history`, title: t(`sandbox.retention.restorePoints`), description: t(`sandbox.retention.restorePointsNote`) },
     { key: `privacyVaultDays`, icon: `eye-slash`, title: t(`sandbox.retention.privacyVault`), description: t(`sandbox.retention.privacyVaultNote`) },
     { key: `cacheDays`, icon: `image`, title: t(`sandbox.retention.caches`), description: t(`sandbox.retention.cachesNote`) },
     { key: `rawOutputDays`, icon: `align-left`, title: t(`sandbox.retention.rawOutput`), description: t(`sandbox.retention.rawOutputNote`) },

@@ -25,7 +25,7 @@ afterEach(async () => {
 
 // Every store a sweep could touch throws if reached; a test provides the ones its settings name.
 const depsWith = (retention: Partial<RetentionSettings>, provided: Partial<RetentionDeps> = {}): RetentionDeps => ({
-    settings: async () => RetentionSettingsSchema.parse({ restorePointDays: 0, ...retention }),
+    settings: async () => RetentionSettingsSchema.parse({ restorePointKeepDays: 0, ...retention }),
     now: () => NOW,
     logger,
     transcripts: unstubbed<{ run: RetentionDeps["transcripts"] }>("transcripts", {}).run,
@@ -55,7 +55,7 @@ test("each positive setting reaches its own store with its own cut, and each pas
     const recorded: RetentionPass[] = [];
     const passes = await runRetentionSweep({
         ...depsWith(
-            { transcriptDays: 30, restorePointDays: 7, privacyVaultDays: 90 },
+            { transcriptDays: 30, restorePointKeepDays: 7, privacyVaultDays: 90 },
             {
                 transcripts: async (now, maxAgeMs) => {
                     calls.push(`transcripts ${String(maxAgeMs / DAY)} at ${String(now === NOW)}`);
@@ -91,7 +91,7 @@ test("each positive setting reaches its own store with its own cut, and each pas
 test("a kind not asked for is not run, and one that fails leaves the rest running", async () => {
     const passes = await runRetentionSweep(
         depsWith(
-            { transcriptDays: 30, restorePointDays: 7, privacyVaultDays: 90 },
+            { transcriptDays: 30, restorePointKeepDays: 7, privacyVaultDays: 90 },
             {
                 transcripts: async () => {
                     throw new Error("the database is locked");

@@ -195,13 +195,20 @@
         "count": 126,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_devices/machine/src/sync/commands.ts": 1052,
+    "_devices/machine/src/sync/commands.ts": {
+        "count": 970,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
     "_devices/machine/src/sync/commands.ts#runSetup#cognitive": {
         "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_devices/machine/src/sync/commands.ts#runSetup#lines": {
         "count": 101,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/machine/src/sync/git-bridge.ts": {
+        "count": 617,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_devices/machine/src/sync/git-bridge.ts#bridgeRepo#cognitive": {
@@ -2105,7 +2112,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/history/history.ts": {
-        "count": 626,
+        "count": 618,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/history/history.ts#createWorkspaceHistory#cognitive": {
