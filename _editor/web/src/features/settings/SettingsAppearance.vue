@@ -172,8 +172,9 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
         </RowGroup>
 
-        <!-- Look: whole-workspace appearance choices. -->
-        <RowGroup :label="t(`settings.appearance.look.group`)" equal-rows>
+        <!-- Look: whole-workspace appearance choices. A 3.5rem floor keeps title-only rows at the settings baseline;
+             descriptions and wrapped controls grow naturally without setting every other row's height. -->
+        <RowGroup :label="t(`settings.appearance.look.group`)">
             <!-- First in the group: it decides what every other row on this page is written in. -->
             <Row
                 data-setting="language"
@@ -195,7 +196,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                     />
                 </template>
             </Row>
-            <Row data-setting="theme" :icon="THEME_ICON[themeChoice]" :title="t(`settings.appearance.look.theme`)">
+            <Row data-setting="theme" :icon="THEME_ICON[themeChoice]" :title="t(`settings.appearance.look.theme`)" class="md:min-h-14">
                 <template #control
                     ><SegmentedControl :model-value="themeChoice" :options="themeOptions" @update:model-value="setThemeChoice"
                 /></template>
@@ -217,6 +218,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 icon="palette"
                 :title="t(`settings.appearance.look.colour`)"
                 :description="skin === `sanctum` ? t(`settings.appearance.look.colourSanctumHint`) : undefined"
+                class="md:min-h-14"
                 wide-control
             >
                 <template #control>
@@ -232,13 +234,13 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 <template #control><SegmentedControl :model-value="motion" :options="motionOptions" @update:model-value="setMotion" /></template>
             </Row>
             <!-- Above the rail row: this one moves the whole workspace, that one moves a column of it. -->
-            <Row data-setting="text-size" icon="expand" :title="t(`settings.appearance.look.textSize`)">
+            <Row data-setting="text-size" icon="expand" :title="t(`settings.appearance.look.textSize`)" class="md:min-h-14">
                 <template #control
                     ><SegmentedControl :model-value="textSize" :options="textSizeOptions" @update:model-value="setTextSize"
                 /></template>
             </Row>
             <!-- A phone has no rail to size: its sections are the tab bar and the Menu page. -->
-            <Row v-if="!mobile" data-setting="icon-rail" icon="sliders-h" :title="t(`settings.appearance.look.iconRail`)">
+            <Row v-if="!mobile" data-setting="icon-rail" icon="sliders-h" :title="t(`settings.appearance.look.iconRail`)" class="md:min-h-14">
                 <template #control>
                     <SegmentedControl
                         :model-value="iconRailSize"
