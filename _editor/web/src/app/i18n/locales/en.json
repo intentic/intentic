@@ -6022,12 +6022,14 @@
             "notResponding": "not responding"
         },
         "cardlessKeys": {
-            "caption": "Each one still lets a computer knock on this sandbox, though no device card lists it any more, so it is refused at the door. Withdraw it unless you mean to add that card back.",
-            "couldntWithdraw": "Couldn't withdraw that key.",
-            "distroOfCard": "WSL {distro} of \"{card}\", a device card that no longer exists",
-            "ofCard": "for \"{card}\", a device card that no longer exists",
-            "title": "Keys with no device card",
-            "withdraw": "Withdraw"
+            "caption": "Left behind when a device was removed or renamed. None of them can reach this sandbox now, but one would get back in by itself if a device with its old name were added again. Remove each unless you mean to add that device back.",
+            "couldntWithdraw": "Couldn't remove that connection.",
+            "distroEarlierOf": "WSL {distro} on {device}, under an old name. {device} is connected again and doesn't need it.",
+            "distroOfGone": "WSL {distro} on \"{card}\", a device that's no longer here.",
+            "earlierOf": "An earlier connection of {device}, under an old name. {device} is connected again and doesn't need it.",
+            "ofGone": "A computer once connected as \"{card}\", a device that's no longer here.",
+            "remove": "Remove",
+            "title": "Leftover connections"
         },
         "conflictAsk": {
             "conflicts": "Conflicts",

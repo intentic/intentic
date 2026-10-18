@@ -1527,22 +1527,37 @@ it(`asks before unpairing, then tells the machine to do it`, async () => {
 
 // (2026-10-15) A key no device card holds lets a computer knock and no row stands for it: the daemon's invariant named
 // `radarsu-rog` on every boot, with nothing on screen that could withdraw it. Listed apart, with the button that does.
-it(`lists a device key no card holds, and withdraws it on the owner's word`, async () => {
-    cardless.value = [{ id: `radarsu-rog`, card: `radarsu-rog`, environment: `native` }];
+// (2026-10-18) In the owner's words: a leftover connection, removed with "Remove", not a key withdrawn.
+it(`lists a leftover connection no card holds, and removes it on the owner's word`, async () => {
+    cardless.value = [{ id: `old-desk`, card: `old-desk`, environment: `native` }];
     const el = mount([mirrored(`on`)]);
-    expect(el.textContent).toContain(`Keys with no device card`);
-    expect(el.textContent).toContain(`radarsu-rog`);
-    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).trim() === `Withdraw`)?.click();
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`Leftover connections`);
+    expect(text).toContain(`A computer once connected as "old-desk", a device that's no longer here.`);
+    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).trim() === `Remove`)?.click();
     await nextTick();
-    expect(withdrawn).toEqual([`radarsu-rog`]);
+    expect(withdrawn).toEqual([`old-desk`]);
+});
+
+// The case the owner met: the card was named after the computer's hostname, then became "rog" with a fresh pairing, so
+// the old one is that same computer under its old name, and the row says which machine on the board it belongs to.
+it(`names the machine a leftover connection belongs to when its old name is that machine's hostname`, () => {
+    cardless.value = [
+        { id: `radarsu-rog`, card: `radarsu-rog`, environment: `native` },
+        { id: `radarsu-rog::wsl:archlinux`, card: `radarsu-rog`, environment: `wsl:archlinux` },
+    ];
+    const el = mount([{ ...mirrored(`on`), key: `rog`, label: `rog`, report: { ...mirrored(`on`).report!, hostname: `radarsu-rog` } }]);
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`An earlier connection of rog, under an old name. rog is connected again and doesn't need it.`);
+    expect(text).toContain(`WSL archlinux on rog, under an old name.`);
 });
 
 // Withdrawing is the daemon's maintainer floor; below it there is nothing to press, so nothing is drawn.
-it(`does not offer a key with no card to a member below maintainer`, () => {
+it(`does not offer a leftover connection to a member below maintainer`, () => {
     role.value = `writer`;
     cardless.value = [{ id: `radarsu-rog`, card: `radarsu-rog`, environment: `native` }];
     const el = mount([mirrored(`on`)]);
-    expect(el.textContent).not.toContain(`Keys with no device card`);
+    expect(el.textContent).not.toContain(`Leftover connections`);
 });
 
 // Replaces a button that used to revoke every paired device at once.

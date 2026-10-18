@@ -100,9 +100,6 @@ watch(
         <!-- Setup faults qualify both device and sandbox screens. -->
         <ContainerHealthCard />
 
-        <!-- Keys no device card holds, which no machine below stands for: on both screens, since a one-machine fleet opens on its page. -->
-        <CardlessKeys :keys="cardlessHosts" :refetch="refetch" />
-
         <DevicePage
             v-if="selected"
             :key="selected.key"
@@ -122,6 +119,10 @@ watch(
             :read-at="readAt"
             @add="adding = true"
         />
+
+        <!-- Connections no device card holds, left behind by a removed or renamed device: housekeeping, so under the
+             machines rather than above them, and on both screens, since a one-machine fleet opens on its page. -->
+        <CardlessKeys :keys="cardlessHosts" :machines="rows" :refetch="refetch" />
 
         <AddDeviceDialog v-model:open="adding" />
     </div>

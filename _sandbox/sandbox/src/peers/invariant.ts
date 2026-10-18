@@ -108,7 +108,7 @@ export const checks = (deps: PeerRegistryDeps): readonly InvariantCheck[] => [
         deps.hosts,
         deps.capabilities,
         "device",
-        "a key into this sandbox that no device row stands for: withdraw it from the Devices screen, which lists it as a key with no device card",
+        "a key into this sandbox that no device row stands for: remove it from the Devices screen, which lists it under 'Leftover connections'",
     ),
     grantCheck(
         "enrolled-browsers-have-cards",

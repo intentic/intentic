@@ -5556,12 +5556,14 @@
             "notResponding": "nie odpowiada"
         },
         "cardlessKeys": {
-            "caption": "Każdy z nich wciąż pozwala komputerowi pukać do tego sandboxa, choć żadna karta urządzenia go już nie wymienia, więc jest odrzucany przy wejściu. Wycofaj go, chyba że zamierzasz dodać tę kartę z powrotem.",
-            "couldntWithdraw": "Nie udało się wycofać tego klucza.",
-            "distroOfCard": "WSL {distro} z \"{card}\", karty urządzenia, która już nie istnieje",
-            "ofCard": "dla \"{card}\", karty urządzenia, która już nie istnieje",
-            "title": "Klucze bez karty urządzenia",
-            "withdraw": "Wycofaj"
+            "caption": "Zostały po usuniętym lub przemianowanym urządzeniu. Żadne z nich nie ma teraz dostępu do tego sandboxa, ale odzyskałoby go samo, gdyby znów dodać urządzenie o jego starej nazwie. Usuń każde, chyba że zamierzasz dodać to urządzenie z powrotem.",
+            "couldntWithdraw": "Nie udało się usunąć tego połączenia.",
+            "distroEarlierOf": "WSL {distro} na {device}, pod starą nazwą. {device} jest już połączony na nowo i go nie potrzebuje.",
+            "distroOfGone": "WSL {distro} na \"{card}\", urządzeniu, którego już tu nie ma.",
+            "earlierOf": "Wcześniejsze połączenie {device}, pod starą nazwą. {device} jest już połączony na nowo i go nie potrzebuje.",
+            "ofGone": "Komputer połączony kiedyś jako \"{card}\", urządzenie, którego już tu nie ma.",
+            "remove": "Usuń",
+            "title": "Pozostałe połączenia"
         },
         "conflictAsk": {
             "conflicts": "Konflikty",
