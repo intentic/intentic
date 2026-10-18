@@ -10,6 +10,9 @@ import type { Logger } from "pino";
 //   moves the streak's start forward rather than breaking it, as idle-stop reads it.
 // - nextWakeAt: the soonest moment the sandbox promised somebody (a one-time automation, a booked send), which a sleep
 //   would silently miss; absent when none.
+// - keepAwake: the owner switched sleep off for this sandbox (settings `sleepWhenUnused`, 2026-10-18). Then no streak is
+//   kept and no `quietSince` is said whatever else is true, so no keeper's verdict can come out as sleep; the flag says
+//   why to a keeper that reads it (ic names it), where one that does not reads a sandbox that never went quiet.
 // Checked once a minute: tmux is a subprocess, and a sleep is measured in tens of minutes.
 
 export interface QuietProbes {
@@ -20,11 +23,14 @@ export interface QuietProbes {
     readonly appsInUse: () => Promise<boolean>;
     // The soonest promised wake, in ms; 0 for none.
     readonly nextWakeAt: () => Promise<number>;
+    // Whether the owner keeps this sandbox awake (sleep switched off in its settings).
+    readonly keepAwake: () => Promise<boolean>;
 }
 
 export interface QuietReading {
     readonly quietSince?: number;
     readonly nextWakeAt?: number;
+    readonly keepAwake?: true;
 }
 
 export interface QuietWatch {
@@ -37,7 +43,7 @@ export interface QuietWatch {
 
 const CHECK_INTERVAL_MS = 60_000;
 
-const same = (a: QuietReading, b: QuietReading): boolean => a.quietSince === b.quietSince && a.nextWakeAt === b.nextWakeAt;
+const same = (a: QuietReading, b: QuietReading): boolean => a.quietSince === b.quietSince && a.nextWakeAt === b.nextWakeAt && a.keepAwake === b.keepAwake;
 
 export const startQuietWatch = (
     probes: QuietProbes,
@@ -63,6 +69,16 @@ export const startQuietWatch = (
             return 0;
         });
         const promised = wakeAt > 0 ? { nextWakeAt: wakeAt } : {};
+        // A settings file that cannot be read is no switch: the sandbox sleeps as it did before there was one.
+        const kept = await probes.keepAwake().catch((error) => {
+            options.logger.warn({ err: error }, "quiet watch: whether sleep is switched off could not be read");
+            return false;
+        });
+        if (kept) {
+            streakStart = undefined;
+            settle({ ...promised, keepAwake: true });
+            return;
+        }
         if (busy()) {
             streakStart = undefined;
             settle(promised);

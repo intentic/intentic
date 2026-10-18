@@ -38,8 +38,9 @@ export interface WorkSignalDeps {
     readonly working: () => number;
     // This boot's facts once known; absent for a daemon that keeps no boot record.
     readonly boot?: () => Promise<WorkSignalBoot | undefined>;
-    // Since when nobody has needed the sandbox, and its soonest promised wake (system/quiet-watch.ts): what the host's
-    // keeper puts a sandbox to sleep on (ic: `sandbox sleep --idle`). Absent for a daemon that offers no sleep.
+    // Since when nobody has needed the sandbox, its soonest promised wake, and whether its owner switched sleep off
+    // (system/quiet-watch.ts): what the host's keeper puts a sandbox to sleep on (ic: `sandbox sleep --idle`). Absent
+    // for a daemon that offers no sleep.
     readonly quiet?: () => QuietReading;
     readonly events: Pick<DomainEvents, "subscribe">;
     readonly logger: Pick<Logger, "warn">;
@@ -54,7 +55,7 @@ export interface WorkSignal {
 }
 
 // `liveTurns` and `at` first and always, as every keeper reads them; the boot's facts after, when known, then the quiet
-// reading, whose fields are absent whenever they say nothing (busy, no wake promised).
+// reading, whose fields are absent whenever they say nothing (busy, no wake promised, sleep not switched off).
 export const workSignalBody = (liveTurns: number, at: number, boot?: WorkSignalBoot, quiet?: QuietReading): string =>
     `${JSON.stringify({
         liveTurns,
@@ -66,6 +67,7 @@ export const workSignalBody = (liveTurns: number, at: number, boot?: WorkSignalB
         ...opt("lastRestartAt", boot?.restartAskedAt),
         ...opt("quietSince", quiet?.quietSince),
         ...opt("nextWakeAt", quiet?.nextWakeAt),
+        ...opt("keepAwake", quiet?.keepAwake),
     })}\n`;
 
 export const startWorkSignal = ({ working, events, logger, boot, quiet, path = WORK_SIGNAL_PATH, now = Date.now }: WorkSignalDeps): WorkSignal => {
@@ -82,7 +84,10 @@ export const startWorkSignal = ({ working, events, logger, boot, quiet, path = W
         const liveTurns = working();
         const at = now();
         const reading = quiet?.();
-        const quietSame = written?.quiet?.quietSince === reading?.quietSince && written?.quiet?.nextWakeAt === reading?.nextWakeAt;
+        const quietSame =
+            written?.quiet?.quietSince === reading?.quietSince &&
+            written?.quiet?.nextWakeAt === reading?.nextWakeAt &&
+            written?.quiet?.keepAwake === reading?.keepAwake;
         if (written !== undefined && written.liveTurns === liveTurns && quietSame && at - written.at < REFRESH_MS) {
             return;
         }

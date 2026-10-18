@@ -356,12 +356,15 @@ const WORK_SIGNAL_STALE_MS: u64 = 3 * 60_000;
 /// The signal, read whole. `at` and `liveTurns` come from every daemon that writes it; `quietSince` (since when nothing
 /// has needed the sandbox, present only while that is so) and `nextWakeAt` (the soonest one-time wake it promised
 /// somebody) from one that says whether it may sleep (sleep.rs), and are absent otherwise, in epoch milliseconds.
+/// `keepAwake` (2026-10-18) says its owner switched sleep off in its settings; such a daemon writes no `quietSince`
+/// either, so an ic that predates the flag keeps it awake just the same, only without naming why.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WorkSignal {
     pub at: u64,
     pub live_turns: u32,
     pub quiet_since: Option<u64>,
     pub next_wake_at: Option<u64>,
+    pub keep_awake: bool,
 }
 
 impl WorkSignal {
@@ -376,6 +379,7 @@ impl WorkSignal {
                 .and_then(|n| u32::try_from(n).ok())?,
             quiet_since: value.get("quietSince").and_then(Value::as_u64),
             next_wake_at: value.get("nextWakeAt").and_then(Value::as_u64),
+            keep_awake: value.get("keepAwake").and_then(Value::as_bool) == Some(true),
         })
     }
 
@@ -1506,6 +1510,7 @@ mod tests {
                 live_turns: 0,
                 quiet_since: Some(4_000),
                 next_wake_at: Some(9_000),
+                keep_awake: false,
             })
         );
         assert_eq!(
@@ -1515,7 +1520,25 @@ mod tests {
                 live_turns: 1,
                 quiet_since: None,
                 next_wake_at: None,
+                keep_awake: false,
             })
+        );
+        assert_eq!(
+            WorkSignal::parse(r#"{"liveTurns":0,"at":5000,"keepAwake":true}"#),
+            Some(WorkSignal {
+                at: 5_000,
+                live_turns: 0,
+                quiet_since: None,
+                next_wake_at: None,
+                keep_awake: true,
+            }),
+            "sleep switched off by the owner"
+        );
+        assert_eq!(
+            WorkSignal::parse(r#"{"liveTurns":0,"at":5000,"keepAwake":"yes"}"#)
+                .map(|s| s.keep_awake),
+            Some(false),
+            "only a true keeps it awake"
         );
         assert_eq!(
             WorkSignal::parse(r#"{"liveTurns":0,"at":5000,"quietSince":"soon"}"#)

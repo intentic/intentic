@@ -732,7 +732,12 @@ The keeper now puts an unneeded sandbox to sleep and wakes it when somebody open
   The desktop app on the same computer runs the same command the moment its workspace page has asked
   (`--source app`, the app's `sandbox_wakes.rs`), so a sandbox opened there need not wait for this round.
 - **The setting** is this environment's `sandboxSleepMinutes` in `machine.json`: absent means 30, `0` means never. Set
-  it with `intentic-machine sandbox sleep-after <minutes|off>` and read it with `sleep-after status`.
+  it with `intentic-machine sandbox sleep-after <minutes|off>` and read it with `sleep-after status`. One sandbox can
+  be kept awake from its own editor instead (Overview, "Sleep when unused", settings `sleepWhenUnused`, 2026-10-18):
+  its daemon then never says it is quiet, and its signal's `keepAwake` is the reason ic gives.
+- **Clocks.** Nothing here wakes a sandbox for a clock. A one-time wake (a one-time automation, a scheduled send, an
+  approved post) due within the window keeps the sandbox up; one due later, and every cron, is missed while it sleeps
+  and fires once, late, when it next starts (the sandbox scheduler's catch-up).
   `intentic-machine sandbox sleep <slug>` puts one sandbox to sleep now. An `ic` without the verbs is said once and
   nothing sleeps.
 

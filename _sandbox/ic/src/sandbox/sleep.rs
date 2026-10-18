@@ -47,9 +47,12 @@ pub enum Verdict {
 
 /// The why of a daemon that is not quiet: it is busy, or too old to say (an older daemon writes no `quietSince`).
 const NOT_QUIET: &str = "no quiet signal (busy, or an older daemon)";
+/// The why of a sandbox whose owner switched sleep off in its own settings (the signal's `keepAwake`).
+const KEPT_AWAKE: &str = "its owner switched sleep off for it";
 
 /// The decision, pure over the signal and the clock: a signal that reads, written within the last three minutes, with
-/// nothing working, quiet for at least `idle_ms`, and no wake promised before that long from now. A wake promised
+/// nothing working, sleep not switched off by its owner, quiet for at least `idle_ms`, and no wake promised before that
+/// long from now. A wake promised
 /// further out does not hold it awake, and nothing on this computer starts a sleeping sandbox for a clock: that is the
 /// window's trade. Pure.
 pub fn sleep_verdict(signal: Option<WorkSignal>, now_ms: u64, idle_ms: u64) -> Verdict {
@@ -61,6 +64,9 @@ pub fn sleep_verdict(signal: Option<WorkSignal>, now_ms: u64, idle_ms: u64) -> V
     }
     if signal.live_turns > 0 {
         return Verdict::Awake("busy");
+    }
+    if signal.keep_awake {
+        return Verdict::Awake(KEPT_AWAKE);
     }
     let Some(quiet_since) = signal.quiet_since else {
         return Verdict::Awake(NOT_QUIET);
@@ -512,6 +518,7 @@ mod tests {
             live_turns: 0,
             quiet_since: Some(NOW - minutes * MIN),
             next_wake_at: None,
+            keep_awake: false,
         }
     }
 
@@ -590,6 +597,19 @@ mod tests {
                 idle
             ),
             Verdict::Awake(NOT_QUIET)
+        );
+        assert_eq!(
+            sleep_verdict(
+                Some(WorkSignal {
+                    quiet_since: None,
+                    keep_awake: true,
+                    ..quiet(45)
+                }),
+                NOW,
+                idle
+            ),
+            Verdict::Awake(KEPT_AWAKE),
+            "sleep switched off is named rather than read as a daemon that never went quiet"
         );
         assert_eq!(
             sleep_verdict(Some(quiet(29)), NOW, idle),

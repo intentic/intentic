@@ -1,5 +1,8 @@
 import type { ReachPosture } from "../system/listeners/reach-posture.js";
-import { DEFAULT_PROBES, startIdleStop } from "../system/idle-stop.js";
+import { DEFAULT_PROBES, lastTerminalActivity, startIdleStop } from "../system/idle-stop.js";
+import { connectedCount } from "../system/presence.js";
+import type { QuietProbes } from "../system/quiet-watch.js";
+import { anyConnected } from "../ports/established.js";
 import { fileRestartResume } from "../system/restart-resume.js";
 import type { BootPhase } from "./boot-phase.js";
 import { nextPromisedWake } from "./promised-wakes.js";
@@ -14,6 +17,18 @@ import { subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js
 // The soonest moment this sandbox promised somebody that a stop for idleness must not sleep through, 0 for none: one list
 // (promised-wakes.ts), shared with the automatic update's.
 export const nextPromisedWakeAt = async (services: BootPhase["services"]): Promise<number> => (await nextPromisedWake(services, "idle-stop")) ?? 0;
+
+// What the quiet watch asks for the host's keeper that puts an unneeded sandbox to sleep (system/quiet-watch.ts): the
+// same questions idle-stop asks, plus whether a workspace app is in use and whether the owner switched sleep off for this
+// sandbox (settings `sleepWhenUnused`).
+export const quietProbes = (services: BootPhase["services"]): QuietProbes => ({
+    connected: connectedCount,
+    working: () => workingNow(services, "idle-stop").length,
+    terminalActivityAt: lastTerminalActivity,
+    appsInUse: () => anyConnected(services.processes.ports()),
+    nextWakeAt: () => nextPromisedWakeAt(services),
+    keepAwake: async () => !(await services.sandboxSettings.get()).sleepWhenUnused,
+});
 
 // What the daemon does when the organisation policy or a file it pins moves, started at boot beside the policy's own
 // fetch loop (below). Both are no-ops for a personal sandbox: no policy, nothing to reconcile or pin.

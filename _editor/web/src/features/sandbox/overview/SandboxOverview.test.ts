@@ -55,6 +55,8 @@ jest.mock(`../../../models/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: (
 jest.mock(`./version/SandboxUpdateCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 jest.mock(`./version/SandboxBehindCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 jest.mock(`./manifest/SandboxManifestCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+// Reads the daemon's settings; pinned in SandboxSleepRow.test.ts.
+jest.mock(`./SandboxSleepRow.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 // jsdom has no 2d canvas context; stubs the resize and asserts only which fit (`contain`) was requested.
 const fileToSquareDataUrl = jest.fn<(file: File, fit: `cover` | `contain`) => Promise<string>>().mockResolvedValue(`data:image/webp;base64,NEW`);
 jest.mock(`../../../lib/imageDataUrl`, () => ({ fileToSquareDataUrl }));

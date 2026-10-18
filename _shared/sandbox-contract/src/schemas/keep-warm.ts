@@ -131,3 +131,37 @@ export type PromptFingerprint = z.infer<typeof PromptFingerprintSchema>;
 /** Which parts differ between two fingerprints, by name; empty when they match. */
 export const changedParts = (before: PromptFingerprint, after: PromptFingerprint): string[] =>
     [...new Set([...Object.keys(before.parts), ...Object.keys(after.parts)])].filter((name) => before.parts[name] !== after.parts[name]).toSorted();
+
+// keep-warm's knobs, one object since each only means anything beside the others (cache-keepwarm.ts).
+export const KeepWarmSettingsSchema = z.object({
+    auto: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Keep a Claude conversation's prompt cache warm after each turn a person asked for. Each refresh re-reads the cached context at the cache price and adds nothing to the conversation.",
+        ),
+    hours: z
+        .number()
+        .min(1)
+        .max(8)
+        .default(4)
+        .describe(
+            "How long an idle conversation is kept warm after its last turn, in hours, and what a press on one offers first. Shortened where refreshing would cost more than the cold resume it saves, and at midnight where the agent runs, when the date in its prompt changes.",
+        ),
+    minTokens: z
+        .number()
+        .int()
+        .min(0)
+        .default(100_000)
+        .describe("Only conversations at least this large, in tokens, are kept warm by `auto`: a small one is cheap to re-read anyway."),
+    reserve: z
+        .number()
+        .int()
+        .min(0)
+        .max(90)
+        .default(15)
+        .describe(
+            "How much of an account's usage limit, in percent, keeping conversations warm must leave untouched for real work. Refreshing stops once any limit that account's model spends is fuller than that.",
+        ),
+});
+export type KeepWarmSettings = z.infer<typeof KeepWarmSettingsSchema>;

@@ -9,6 +9,7 @@ const probesOf = (over: Partial<QuietProbes>): QuietProbes => ({
     terminalActivityAt: () => Promise.resolve(0),
     appsInUse: () => Promise.resolve(false),
     nextWakeAt: () => Promise.resolve(0),
+    keepAwake: () => Promise.resolve(false),
     ...over,
 });
 
@@ -70,6 +71,34 @@ describe("startQuietWatch", () => {
         await watch.check();
         expect(watch.read()).toEqual({ quietSince: 1_000, nextWakeAt: 5_000_000 });
         expect(changes).toHaveLength(2);
+        watch.stop();
+    });
+
+    test("sleep switched off says so and keeps no streak, so switching it back on starts the quiet over", async () => {
+        let clock = 0;
+        let kept = false;
+        const watch = startQuietWatch(probesOf({ keepAwake: () => Promise.resolve(kept), nextWakeAt: () => Promise.resolve(9_000_000) }), {
+            logger,
+            now: () => clock,
+            checkMs: 1e9,
+        });
+        await watch.check();
+        expect(watch.read()).toEqual({ quietSince: 0, nextWakeAt: 9_000_000 });
+        kept = true;
+        clock = 60_000;
+        await watch.check();
+        expect(watch.read()).toEqual({ nextWakeAt: 9_000_000, keepAwake: true });
+        kept = false;
+        clock = 120_000;
+        await watch.check();
+        expect(watch.read()).toEqual({ quietSince: 120_000, nextWakeAt: 9_000_000 });
+        watch.stop();
+    });
+
+    test("a switch that cannot be read lets the sandbox sleep as before", async () => {
+        const watch = startQuietWatch(probesOf({ keepAwake: () => Promise.reject(new Error("unreadable")) }), { logger, now: () => 5, checkMs: 1e9 });
+        await watch.check();
+        expect(watch.read()).toEqual({ quietSince: 5 });
         watch.stop();
     });
 });

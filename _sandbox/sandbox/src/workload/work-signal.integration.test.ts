@@ -13,6 +13,8 @@ test("the body is one JSON line ic reads with serde", () => {
     // The quiet reading rides at the end, and only what it says: a busy sandbox's absent quietSince stays absent.
     expect(workSignalBody(0, 5, undefined, { quietSince: 3, nextWakeAt: 9 })).toBe('{"liveTurns":0,"at":5,"quietSince":3,"nextWakeAt":9}\n');
     expect(workSignalBody(1, 5, undefined, {})).toBe('{"liveTurns":1,"at":5}\n');
+    // Sleep switched off by the owner: no quietSince, and the flag that tells the keeper why.
+    expect(workSignalBody(0, 5, undefined, { keepAwake: true })).toBe('{"liveTurns":0,"at":5,"keepAwake":true}\n');
 });
 
 // 2026-10-05: the keeper sees a restart storm as the daemon does, from the same facts, beside the fields it already reads.

@@ -106,8 +106,8 @@ flowchart LR
   `ic sandbox fix` only starts it again after a yes. `ic sandbox sleep [<slug>]` stops it the same way but marks it
   `asleep` instead, never both; `--idle <minutes>` (the machine agent's keeper) sleeps only the sandboxes this side
   keeps whose daemon's work signal (`/run/intentic/work.json`) has said `quietSince` for that long, with nothing
-  working and no `nextWakeAt` due within the window, and never one mid-update, parked, held or locked by another ic
-  run. A dev sandbox (one whose container carries `SANDBOX_DEV_ROOT`) first asks that checkout's
+  working, no `keepAwake` (its owner switched sleep off in its settings) and no `nextWakeAt` due within the window, and
+  never one mid-update, parked, held or locked by another ic run. A dev sandbox (one whose container carries `SANDBOX_DEV_ROOT`) first asks that checkout's
   `_sandbox/sandbox/scripts/dev-before-sleep.mjs <slug>` through a login shell, with a one-minute limit. Exit 75 keeps
   it awake, with the script's last line as the reason, while the script rebuilds an image that lacks a dependency the
   checkout's daemon needs. Any other answer lets it sleep. Each sleep posts a host report with `asleep: true`. `ic sandbox wakes` (polled by the agent while anything

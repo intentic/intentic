@@ -6,6 +6,7 @@ import { CommandJudgeModeSchema, ProjectInstallModeSchema } from "../policy/safe
 import { ModelRoleSchema } from "../models/model-roles.js";
 import { MODEL_SETUP_ID, ModelSetupSchema } from "../models/model-setups.js";
 import { AdmissionPolicySchema, AdmissionRuleSchema } from "./agent.js";
+import { KeepWarmSettingsSchema } from "./keep-warm.js";
 import { LimitHandoffSchema } from "./providers/handoff.js";
 import { SessionsPlacementSchema } from "./offload.js";
 import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema } from "./turn-break.js";
@@ -211,39 +212,8 @@ export type SkillSwitch = z.infer<typeof SkillSwitchSchema>;
 // picks rather than failing whole. A setting removed or reshaped here gets its conversion in settings-history.ts, which
 // also names every retired setting, none of whose names may come back.
 
-// keep-warm's knobs, one object since each only means anything beside the others (cache-keepwarm.ts).
-export const KeepWarmSettingsSchema = z.object({
-    auto: z
-        .boolean()
-        .default(false)
-        .describe(
-            "Keep a Claude conversation's prompt cache warm after each turn a person asked for. Each refresh re-reads the cached context at the cache price and adds nothing to the conversation.",
-        ),
-    hours: z
-        .number()
-        .min(1)
-        .max(8)
-        .default(4)
-        .describe(
-            "How long an idle conversation is kept warm after its last turn, in hours, and what a press on one offers first. Shortened where refreshing would cost more than the cold resume it saves, and at midnight where the agent runs, when the date in its prompt changes.",
-        ),
-    minTokens: z
-        .number()
-        .int()
-        .min(0)
-        .default(100_000)
-        .describe("Only conversations at least this large, in tokens, are kept warm by `auto`: a small one is cheap to re-read anyway."),
-    reserve: z
-        .number()
-        .int()
-        .min(0)
-        .max(90)
-        .default(15)
-        .describe(
-            "How much of an account's usage limit, in percent, keeping conversations warm must leave untouched for real work. Refreshing stops once any limit that account's model spends is fuller than that.",
-        ),
-});
-export type KeepWarmSettings = z.infer<typeof KeepWarmSettingsSchema>;
+// keep-warm's knobs live with its clock (keep-warm.ts); re-exported, as every settings reader imports them from here.
+export { type KeepWarmSettings, KeepWarmSettingsSchema } from "./keep-warm.js";
 
 // Who the editor's screens are written for: `developer` reads git's own words (branch, land, commit), `maker` plain ones
 // (draft, accept, save) over the same mechanisms. The editor's vocabulary, never anything an agent does. A person's own
@@ -305,6 +275,15 @@ export const SandboxSettingsSchema = z.object({
         .default(true)
         .describe(
             "Keep the text of every document in the workspace (pdf, Word, OpenDocument, spreadsheets, presentations, epub, and scans where OCR is installed) ready to search. In the background, one low-priority process at a time, each document is rendered to text when it appears or changes, so `rg` and iq find what documents say under their own paths, cited by page. Off, nothing renders until someone opens a document, and searches skip them.",
+        ),
+    // Whether the daemon tells its host it is unneeded (system/quiet-watch.ts): off, the work signal carries no
+    // `quietSince` and says `keepAwake`, so the machine's keeper never puts it to sleep (ic's `sandbox sleep`). Only a
+    // sandbox on somebody's own computer sleeps that way; a hosted machine's idle stop is the plan's and ignores this.
+    sleepWhenUnused: z
+        .boolean()
+        .default(true)
+        .describe(
+            "Let the computer this sandbox runs on put it to sleep after a stretch nobody needs it (no editor open, no agent working, no terminal typed in, no app of it open), which frees its memory; it starts again when somebody opens it. A sleeping sandbox runs nothing on a clock: a scheduled automation that comes due fires once, late, when it next starts. Off keeps it running, so schedules fire on time. Applies only to a sandbox on your own computer.",
         ),
     hashlineEdits: z
         .boolean()

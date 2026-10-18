@@ -31,6 +31,7 @@ import { useRole } from "../../../client/sandbox/useRole";
 import SandboxBackupCard from "./backup/SandboxBackupCard.vue";
 import SandboxBehindCard from "./version/SandboxBehindCard.vue";
 import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
+import SandboxSleepRow from "./SandboxSleepRow.vue";
 import SandboxStorageCard from "./storage/SandboxStorageCard.vue";
 import SandboxUpdateCard from "./version/SandboxUpdateCard.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -360,6 +361,8 @@ const removeLogo = async (): Promise<void> => {
                     </dd>
                 </div>
                 <p v-if="resizeFailed !== undefined" class="text-warning">{{ resizeFailed }}</p>
+                <!-- Whether the machine it stands on may put it to sleep while nobody needs it; self-hides for a hosted one. -->
+                <SandboxSleepRow />
             </dl>
         </Card>
 

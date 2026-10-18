@@ -7540,7 +7540,11 @@
             "sandboxName": "Sandbox name",
             "sandboxSmallStarterMachine": "This sandbox is a small starter machine we host for you. When it feels tight, move it to",
             "sandboxUrl": "Sandbox URL",
-            "setUp": "Set it up there →"
+            "setUp": "Set it up there →",
+            "sleep": "Sleep when unused",
+            "sleepOn": "Sleeps when nobody uses it; a schedule due meanwhile runs late, once it wakes",
+            "sleepOff": "Stays running, so schedules fire on time",
+            "sleepTipNote": "Wakes when somebody opens it."
         },
         "sandboxPersonas": {
             "accountsSpeaksThroughStay": "The accounts it speaks through stay connected and signed in. Any automation pinned to this persona stops posting until you give it another one.",

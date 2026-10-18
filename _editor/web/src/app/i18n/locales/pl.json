@@ -7146,7 +7146,11 @@
             "sandboxName": "Nazwa sandboxa",
             "sandboxSmallStarterMachine": "Ten sandbox to mała maszyna startowa, którą dla Ciebie hostujemy. Kiedy zrobi się ciasno, przenieś go na",
             "sandboxUrl": "Adres sandboxa",
-            "setUp": "Skonfiguruj go tam →"
+            "setUp": "Skonfiguruj go tam →",
+            "sleep": "Usypiaj, gdy nieużywany",
+            "sleepOn": "Usypia się, gdy nikt z niego nie korzysta; harmonogram przypadający w tym czasie uruchomi się z opóźnieniem, po przebudzeniu",
+            "sleepOff": "Działa cały czas, więc harmonogramy uruchamiają się punktualnie",
+            "sleepTipNote": "Budzi się przy otwarciu."
         },
         "sandboxRecovery": {
             "gateHeading": "Uruchom go ponownie",

@@ -3,9 +3,6 @@ import { DisposableStore } from "@intentic/base/lifecycle";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { startRoomSocket } from "./workload/room-socket.js";
 import { startWorkSignal, type WorkSignal } from "./workload/work-signal.js";
-import { anyConnected } from "./ports/established.js";
-import { lastTerminalActivity } from "./system/idle-stop.js";
-import { connectedCount } from "./system/presence.js";
 import { startQuietWatch } from "./system/quiet-watch.js";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
 import { startProviderBoot } from "./agent/providers/provider-registry.js";
@@ -22,7 +19,7 @@ import { startDaemonMetrics } from "./bootstrap/daemon-metrics.js";
 import { wireDependencyCoordinator } from "./bootstrap/deps-coordination.js";
 import { requireNetdSockets, startNetdDoor } from "./bootstrap/netd-door.js";
 import { startCredentialGateway } from "./capabilities/broker/broker-server.js";
-import { nextPromisedWakeAt, startPlatformPresence } from "./bootstrap/platform-presence.js";
+import { quietProbes, startPlatformPresence } from "./bootstrap/platform-presence.js";
 import { commitStateAtBoot, convergeStateAtBoot } from "./bootstrap/state-boot.js";
 import { startVersionWatches } from "./bootstrap/version-watches.js";
 import { startWorkspaceApps } from "./bootstrap/workspace-apps.js";
@@ -168,20 +165,11 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
         setRunnerEnv({ SSH_AUTH_SOCK: services.sshAgent.owner });
         const room = await startRoomSocket(services.resources, logger, undefined, services.perf);
         shutdown.push(() => room.close());
-        // Since when nobody has needed the sandbox, for the host's keeper that puts an unused one to sleep (quiet-watch.ts);
-        // a change is written at once rather than on the signal's next beat.
+        // Since when nobody has needed the sandbox, for the host's keeper that puts an unused one to sleep unless its owner
+        // said not to (quiet-watch.ts); a change is written at once rather than on the signal's next beat.
         // The work signal starts after the quiet watch it reads, so the watch's change reaches it through this slot.
         const ticks: WorkSignalSlot = {};
-        const quiet = startQuietWatch(
-            {
-                connected: connectedCount,
-                working: () => workingNow(services, "idle-stop").length,
-                terminalActivityAt: lastTerminalActivity,
-                appsInUse: () => anyConnected(services.processes.ports()),
-                nextWakeAt: () => nextPromisedWakeAt(services),
-            },
-            { logger, onChange: () => void ticks.signal?.tick() },
-        );
+        const quiet = startQuietWatch(quietProbes(services), { logger, onChange: () => void ticks.signal?.tick() });
         shutdown.push(() => quiet.stop());
         // How much a restart would cut, for the host's keeper, which then asks before it restarts this sandbox (work-signal.ts).
         const signal = startWorkSignal({
