@@ -197,7 +197,16 @@
         "keptBy": "kept by {side} on this computer",
         "portLeftAlone": "not on localhost: left alone on purpose",
         "portBusy": "not on localhost: another program here already uses it",
-        "portHeldBy": "not on localhost: {holder} has it"
+        "portHeldBy": "not on localhost: {holder} has it",
+        "diskFull": "paused: drive nearly full",
+        "diskFullHint": "Its drive has {free} free of {total}. File sync and git history are paused so this computer's disk does not fill up, and carry on by themselves once there is room again.",
+        "historyBehind": "git history behind in {count} repo | git history behind in {count} repos",
+        "historyBehindTitle": "Files still sync; only the local git history lags",
+        "historyStalled": "the last fetch stopped moving",
+        "historyTooLong": "the last fetch ran out of time",
+        "historyShallow": "the sandbox's copy is a shallow clone",
+        "historyFailed": "git refused the last fetch",
+        "historyRetry": "next try {when}"
     },
     "imageView": {
         "actualSize": "Actual size",

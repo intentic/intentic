@@ -20,8 +20,8 @@ import { turnCliEnv } from "./harness/turn-env.js";
 import type { Services } from "../../composition.js";
 import { REPO_SYNC_NOTE_TITLE, type RepoSync, syncAdvisory, syncWorkspaceRepos } from "../../workspace/layout/sync-repos.js";
 import { startAnchor, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
-import { NamespaceSetupError, withSetupRetry } from "../../workload/namespace-holder.js";
-import { retryNote, type SetupRefusal, setupRefusalOf } from "./placement/setup-refusal.js";
+import { withSetupRetry } from "../../workload/namespace-holder.js";
+import { retryNote, type SetupRefusal, withSetupRefusal } from "./placement/setup-refusal.js";
 import { startDomainAnchor } from "../../conversations/worktrees/domain-anchor.js";
 import { authRootOf } from "../../state-paths.js";
 import { type PersistedAgent, worktreeOf } from "../../conversations/registry/agents-store.js";
@@ -319,6 +319,7 @@ async function* runConversationTurn(
             conversationId,
             placementOf(services, input, admission, signal, steering, { id: conversationId, snapshot, runner, isolated, coldTrimBasis }),
             turnCloser(services, conversationId, steering, signal),
+            input.unattended === true,
         );
     } finally {
         unregister?.();
@@ -566,19 +567,6 @@ interface Preflight {
 const carriedOffOf = (input: RoutedTurn, held: HeldTurn | undefined): boolean =>
     held !== undefined && (input.resume === "carried" || input.resume === "trimmed") && held.input.account !== input.account;
 
-// A holder that did not come up in time even on its second try is the sandbox too loaded to set the turn up: refused
-// at the door, nothing having run (setup-refusal.ts). Any other placement failure fails the turn as before.
-const placementOrRefusal = async (...args: Parameters<typeof isolationOf>): Promise<Awaited<ReturnType<typeof isolationOf>> | SetupRefusal> => {
-    try {
-        return await isolationOf(...args);
-    } catch (error) {
-        if (!(error instanceof NamespaceSetupError) || !error.transient) {
-            throw error;
-        }
-        return setupRefusalOf(args[0], args[1], error);
-    }
-};
-
 const preflight = async (
     services: Services,
     input: RoutedTurn,
@@ -599,7 +587,7 @@ const preflight = async (
     }
     // Two paths: `localCwd` is the daemon's tree; `effectiveCwd` is the root as the agent sees it.
     const localCwd = worktree?.cwd ?? services.workspace.root;
-    const placed = await placementOrRefusal(services, input, executionScope.mode, worktree, localCwd, cliEnv);
+    const placed = await withSetupRefusal(services, input, () => isolationOf(services, input, executionScope.mode, worktree, localCwd, cliEnv));
     if (placed !== undefined && "refused" in placed) {
         return placed;
     }

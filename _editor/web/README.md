@@ -429,3 +429,7 @@ pnpm --filter @intentic/web typecheck
 ## Local shell: Repair
 
 `/repair` (`local/repair/LocalRepair.vue`) is the Repair view in the desktop app's local shell (no rail tile). Copy: `local.repair.*` in `src/app/i18n/locales/en.json`.
+
+The sandbox Storage card warns when the history volume falls below its checkout floor, separately from the workspace
+volume. It also names repositories whose full checkout costs at least 1 GiB and links to Personas → Runs on → Carries.
+The same cost appears beside those repositories in a persona's selection controls.

@@ -13,7 +13,13 @@ import { SessionsPlacementSchema } from "./offload.js";
 import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema } from "./turn-break.js";
 import { ZoneSchema } from "../time/zone.js";
 import { VoiceSettingsSchema } from "./voice.js";
-import { AiNoticeSchema, AuditSettingsSchema, RetentionSettingsSchema } from "./data-protection.js";
+import {
+    AiNoticeSchema,
+    AuditSettingsSchema,
+    RetentionSettingsSchema,
+    HeldCheckoutDaysSchema,
+    AgentRetentionDaysSchema,
+} from "./data-protection.js";
 // Which prompt base the agent runs before this turn composes anything on top: Intentic's own (default), Claude Code's
 // preset, or the owner's text. Declared out here since both the daemon and the browser branch on it.
 // Kept in the daemon's auth root, never in SandboxSettings: an agent cannot edit its execution boundary.
@@ -398,14 +404,8 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Which repositories keep a changelog, and so get a user-facing note written alongside each merge. A list rather than a switch, and empty by default, because the commit writer's standing rule is to copy the house style rather than impose one, and a repository that has never written such a note gives it nothing to copy.",
         ),
-    agentRetentionDays: z
-        .number()
-        .min(0)
-        .max(365)
-        .default(3)
-        .describe(
-            "How many days a finished conversation stays on the board before being put away. Zero means never. The one setting here that defaults on, because each card left behind is a real working copy on disk, not just a row.",
-        ),
+    agentRetentionDays: AgentRetentionDaysSchema,
+    heldCheckoutDays: HeldCheckoutDaysSchema,
     // One answer per ending, never a set of switches over the same event: the chat's own question and these rows are
     // the same question at two scopes. Every ending defaults to `wait`, because a re-run spends the reader's allowance
     // on a turn they sent once.
@@ -543,10 +543,10 @@ export const SandboxSettingsSchema = z.object({
     voice: VoiceSettingsSchema.prefault({}).describe(
         "How the agent's replies are spoken aloud: whether a hands-free conversation is answered out loud, which voice speaks each language, and a speech provider of your own if you connected one.",
     ),
-    // What a data protection officer asks about (schemas/data-protection.ts). Every default is the behaviour from before
-    // these existed; the public-office preset on the data protection page is what turns them on, never a default.
+    // What a data protection officer asks about (schemas/data-protection.ts). Restore points default to thirty days;
+    // the other policies preserve the earlier behaviour until the owner changes them or applies the public-office preset.
     retention: RetentionSettingsSchema.prefault({}).describe(
-        "How long this sandbox keeps each kind of copy it makes of what people and agents wrote: transcripts, restore points, the privacy shield's memory, converted documents and raw command output. Each defaults to forever.",
+        "How long this sandbox keeps each kind of copy it makes of what people and agents wrote: transcripts, restore points, the privacy shield's memory, converted documents and raw command output. Restore points default to 30 days; the other copies default to forever.",
     ),
     audit: AuditSettingsSchema.prefault({}).describe(
         "The audit trail: who changed a policy, a member, a gate or a setting, and optionally who read what. How long it is kept, and where a copy is sent.",

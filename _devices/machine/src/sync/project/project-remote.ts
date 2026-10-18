@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { parseJsonWith } from "@intentic/base/json";
 import { z } from "zod";
 import { type RemoteShell, remoteShell, type SandboxEndpoint } from "../endpoint.js";
+import { childEnv } from "../mutagen-env.js";
 import { type Listing, parseListing } from "./project-files.js";
 
 // THE SANDBOX'S SIDE of a copy-first project, reached the way file sync reaches it: over the pairing's ssh alias, one
@@ -39,7 +40,8 @@ const STDERR_TAIL = 4096;
 export const realProjectRunner: ProjectRunner = {
     spawn: (command, args, options) => {
         // windowsHide: no console window for a child of a console-less parent (the desktop app runs these).
-        const child = spawn(command, [...args], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+        // A Mutagen session's calls run with this agent's own Mutagen environment (mutagen-env.ts).
+        const child = spawn(command, [...args], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env: childEnv(command) });
         let stderr = "";
         child.stderr.setEncoding("utf8");
         child.stderr.on("data", (chunk: string) => {

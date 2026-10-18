@@ -135,7 +135,16 @@
         "show": "verlo",
         "startPutsItBack": "Iniciar lo restaura",
         "stopped": "detenido",
-        "syncPaused": "Sincronía en pausa"
+        "syncPaused": "Sincronía en pausa",
+        "diskFull": "en pausa: disco casi lleno",
+        "diskFullHint": "Al disco le quedan {free} libres de {total}. La sincronización de archivos y del historial de git está en pausa para que el disco de este equipo no se llene, y sigue sola cuando vuelve a haber espacio.",
+        "historyBehind": "historial de git atrasado en {count} repositorio | historial de git atrasado en {count} repositorios",
+        "historyBehindTitle": "Los archivos siguen sincronizándose; solo se atrasa el historial de git local",
+        "historyStalled": "la última descarga dejó de avanzar",
+        "historyTooLong": "la última descarga se quedó sin tiempo",
+        "historyShallow": "la copia del sandbox es un clon superficial",
+        "historyFailed": "git rechazó la última descarga",
+        "historyRetry": "próximo intento {when}"
     },
     "imageView": {
         "actualSize": "Tamaño real",

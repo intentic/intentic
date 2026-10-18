@@ -10,8 +10,8 @@ import type { PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/pri
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 
 // The public-office preset: the stricter settings an office under GDPR, KRI and the AI Act switches on, one item each,
-// so the owner picks which. Never a default, and never applied without being named: most sandboxes are a developer's,
-// and every value here takes something away from one.
+// so the owner picks which. The preset is never applied without being named; restore points already use its
+// thirty-day period by default, while the other measures wait for the owner.
 //
 // No item ever loosens anything. Where the sandbox is already stricter than the preset (an action already refused, a
 // shorter retention, a longer audit trail) the item proposes what is there, so applying the whole preset to a stricter

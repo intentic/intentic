@@ -173,9 +173,8 @@ flowchart LR
   minutes has its forwards taken off localhost, and they come back with its first answer; after an hour its sessions
   are paused, an hour counted from `unreachableSince` in `sync.json` (2026-10-05: it was counted in memory, so an agent
   restarted more often than hourly never paused a dead sandbox's sessions). A sandbox that no longer exists is another
-  matter: see [Sandboxes that are gone](#sandboxes-that-are-gone). `sync uninstall` stops and unregisters Mutagen's
-  daemon only when it is this agent's own copy and no Mutagen the user installed is on PATH, since one daemon serves
-  both.
+  matter: see [Sandboxes that are gone](#sandboxes-that-are-gone). `sync uninstall` ends every session and forward of
+  this agent's and stops its Mutagen daemon, which serves this agent alone (below); the synced folders keep their files.
 - Symbolic links travel only where the device can create them ([`sync/symlinks.ts`](src/sync/symlinks.ts)). A
   Windows PC without Developer Mode refuses every link, and Mutagen would try again on every cycle, so its sessions
   use `--symlink-mode ignore`. Turning Developer Mode on brings them back at the agent's next start.
@@ -549,6 +548,19 @@ whose it is.
   a label to an existing session, so an unlabelled one is recreated only when that is safe (the sandbox answers, and a
   two-way session has settled, as for any replacement) and at most one per pass (`RelabelBudget`): a recreate over two
   copies that agree rescans and copies nothing. Forwards get labels when they are next created.
+- **Mutagen's state is this agent's own** (2026-10-18, [`sync/mutagen-env.ts`](src/sync/mutagen-env.ts)). Every Mutagen
+  this agent runs has `MUTAGEN_DATA_DIRECTORY=~/.intentic/machine/mutagen`, so its daemon, sessions and forwards no
+  longer sit in the user's shared `~/.mutagen`, beside their own Mutagen's, where deleting `~/.intentic` left them
+  registered and the next `mutagen` anything resumed them. Every call also has `MUTAGEN_DISABLE_AUTOSTART=1`: only
+  `daemon start` starts the daemon (setup, the watcher's start, and the watcher finding it down, at most once a
+  minute), so `status`, reports and listings never bring one back, and read a stopped daemon as not answering. The
+  daemon has no sign-in entry of its own any more: the resident agent, started at sign-in, starts it. Once per
+  environment the watcher (and `sync uninstall`) moves off the old directory
+  ([`sync/mutagen-move.ts`](src/sync/mutagen-move.ts)): this agent's sessions there are flushed (60 s at most) and
+  terminated, its forwards terminated, the old daemon stopped only when nothing else is left in it or the move started
+  it, and Mutagen's own sign-in registration removed only where it starts this agent's copy. The watcher then makes the
+  sessions again from its pairings; over folders that agree that is a rescan. A session that was paused is made paused
+  (`mutagen-moved.json` holds the names until then).
 - **The orphan sweep is standing**: every minute, not only at the watcher's start, a setup and a revocation.
 - **Mutagen is this agent's pinned copy** (0.18.1, downloaded into its own bin), with a Mutagen on PATH used only while
   that download cannot be had. A daemon of another version refuses every client ("client/daemon version mismatch"),
@@ -560,6 +572,25 @@ whose it is.
   top of that the watcher marks its progress at every step; one that has made none for 20 minutes is abandoned, says so
   in one line ("no progress for 20 minutes (it was at: ...); restarting it"), releases its tunnels and is replaced by a
   fresh loop. Its heartbeat going stale is what `status` reports meanwhile.
+- **A git fetch that cannot finish is not run again every pass** (2026-10-18, [`sync/git-bridge.ts`](src/sync/git-bridge.ts)).
+  The bridge's fetch shared the two-minute bound of every other command and ran again on the next pass when cut off;
+  a repository whose history did not fit in two minutes over the owner's connection was killed mid-transfer every time,
+  and each killed fetch left its half-received `tmp_pack_*` in `.git/objects/pack`, which git never removes by itself.
+  A Windows laptop's drive filled with hundreds of GB of them. Now the fetch runs with `--progress` for as long as git
+  keeps reporting (stopped after 3 minutes of silence, and at 3 hours in any case, `runWatched` in
+  [`sync/exec.ts`](src/sync/exec.ts)), beside the watcher's pass rather than in it, one per sandbox at a time
+  (`startBridge` in [`sync/mirror.ts`](src/sync/mirror.ts)). One that ends unfinished has the temporary files it left
+  removed (never a finished pack, never a file still growing, which may be the owner's own git), and the repo is held
+  (`bridgeHolds` on the pairing) for a wait that starts at 10 minutes and doubles to half a day; a fetch that ran out
+  of time starts at half a day, and a shallow sandbox copy refused by a clone with full history of its own at a day,
+  up to a week. A clone the bridge started, or one already shallow, takes the sandbox's shallow boundary
+  (`--update-shallow`), so a shallow sandbox repo no longer leaves a whole refused pack behind on every pass. Leftovers
+  older than an hour from an earlier agent are cleared once per process. Holds are in `status` and the report.
+- **A nearly full drive pauses folder sync** (2026-10-18, [`sync/low-disk.ts`](src/sync/low-disk.ts)). Every pass
+  measures the drive holding each folder whose session writes there (not a copy-first project, which only sends).
+  Under 2% of the drive, clamped to 5–20 GiB, the pairing's sessions and git bridge pause (`fileSyncLowDisk`); they
+  resume once the floor and 2 GiB more are free. While paused, no other pause's lifting resumes them, and the pause is
+  put back once a minute in case one did. `status` and the device card say why, with the numbers.
 - **Keys and enrollments per environment.** A newly made key is commented `<hostname>-<environment>`, so the sandbox
   files a new enrollment under that name. An existing key keeps its comment (a sandbox older than this agent would read
   a changed comment on the same key as a second machine holding sync); the sandbox tells existing ones apart by machine
@@ -770,8 +801,8 @@ login entries once and then stood in for every later cleanup too (2026-10-05).
   - this agent's own login entry, written again where it differs from what this build writes, a logon task's action
     and settings included ([local-agent](../local-agent)); an entry launching another install's command is left on
     Linux and macOS, as at start. Only the installed agent checks it, never a `doctor` run from a checkout;
-  - `IntenticMutagenDaemon` on Windows: removed once no pairing needs Mutagen, written again (by sync's own
-    `registerMutagenAutostart`) while one does and this agent's own Mutagen copy is the one in use;
+  - `IntenticMutagenDaemon` on Windows, the Run value older builds wrote to start Mutagen's daemon: removed (the
+    resident agent starts the daemon itself now);
   - `~/.intentic/machine/trash` entries older than 30 days, by the stamp in their name (a moved folder keeps its old
     times), deleted; a name with no stamp is left and reported;
   - `audit.jsonl` set aside at 8 MB;

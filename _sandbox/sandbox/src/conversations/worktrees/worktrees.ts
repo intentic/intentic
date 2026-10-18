@@ -8,6 +8,8 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import { commonDirOf, gitDirOf } from "../../git/git-dir.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
+import { reserveCompositionSpace, selectedComposition } from "./composition-space.js";
+import type { HistorySpace } from "../../system/resources/storage/checkout-space.js";
 import type { PerfTracker } from "../../system/resources/perf.js";
 import { ensureLines } from "../../store/plain-files/text-file.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
@@ -16,7 +18,7 @@ import { branchSha, dropAgentRef, parkAgentRefs, unparkAgentRef } from "../../gi
 import { withConversationTrailer } from "../../git-identity.js";
 import { claudeStoreOf, type StoreOwner } from "../../sessions/session-store.js";
 import { mirroredDirs, overlaysDir, PACKAGE_STORE, type TurnIsolation } from "./isolation.js";
-import { coneFor, fencedComposition } from "./worktree-cone.js";
+import { coneFor } from "./worktree-cone.js";
 import { addCheckoutOver } from "./checkout-aside.js";
 import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
 
@@ -167,6 +169,7 @@ export const createAgentWorktrees = (
         readonly isolation: TurnIsolation;
         readonly logger: Logger;
         readonly perf: PerfTracker;
+        readonly historySpace?: () => Promise<HistorySpace>;
     },
     git: GitRunner = defaultGit,
 ): AgentWorktrees => {
@@ -716,47 +719,44 @@ export const createAgentWorktrees = (
             // in either case only the ones the fence reaches.
             // Read live, not off the record, so a repo cloned since the last turn is seen whether or not the
             // conversation is selected.
-            const wanted = async (): Promise<readonly { repo: string; base: string | undefined }[]> => {
-                const live = base === undefined ? (await liveRepos()).map((repo) => ({ repo, base: undefined })) : base;
-                const picked = selection === undefined ? live : live.filter(({ repo }) => repo === "root" || selection.includes(repo));
-                const reachable = new Set(
-                    fencedComposition(
-                        fence,
-                        picked.map(({ repo }) => repo),
-                    ),
-                );
-                return picked.filter(({ repo }) => reachable.has(repo));
-            };
-            if (recorded.length > 0) {
-                await eachRepo(recorded, "root-first", (repo) => withRepoLock(repo, () => repairOne(id, repo)));
-                // An unselected, unfenced conversation keeps every repo it was born with and takes in any composable
-                // since: a project folder whose repo was unborn when it began, a repo cloned after. Anything narrowed
-                // goes to what it should now hold, so an edited area moves the checkout on the next turn.
-                const unnarrowed = selection === undefined && fence === undefined;
-                const repos = await reconcile(id, recorded, await wanted(), unnarrowed);
+            const available = base ?? (await liveRepos()).map((repo) => ({ repo, base: undefined }));
+            const live = selectedComposition(available, selection, fence);
+            const releaseSpace = await reserveCompositionSpace(id, recorded, live, { ...options, mainDir, worktreeDir, head: composableHead, git });
+            try {
+                if (recorded.length > 0) {
+                    await eachRepo(recorded, "root-first", (repo) => withRepoLock(repo, () => repairOne(id, repo)));
+                    // An unselected, unfenced conversation keeps every repo it was born with and takes in any composable
+                    // since: a project folder whose repo was unborn when it began, a repo cloned after. Anything narrowed
+                    // goes to what it should now hold, so an edited area moves the checkout on the next turn.
+                    const unnarrowed = selection === undefined && fence === undefined;
+                    const repos = await reconcile(id, recorded, live, unnarrowed);
+                    await sparsenComposition(id, repos, fence);
+                    await linkComposition(id, repos, namespaced);
+                    // Asked only on the repair path: a checkout this call just created stands on `branch` by construction.
+                    return { cwd: conversationDir(id), branch, repos, fence, elsewhere: await elsewhereIn(id, repos) };
+                }
+                // Root first: its checkout creates the dir nested worktrees mount into (root excludes each repo dir).
+                const created = new Map<string, { repo: string; base: string }>();
+                await eachRepo(live, "root-first", async (repo) => {
+                    const pinned = live.find((entry) => entry.repo === repo)?.base;
+                    const made = await withRepoLock(repo, () => createOne(id, repo, pinned));
+                    if (made !== undefined) {
+                        created.set(repo, made);
+                    }
+                });
+                // Read back in discovery order, not completion order: root leads the composition, recorded for later
+                // repairs.
+                const repos = live
+                    .map(({ repo }) => created.get(repo))
+                    .filter((entry): entry is { repo: string; base: string } => entry !== undefined);
+                // Narrowed before the mirrors go in: `worktree add` checks the repository out whole, so the window where
+                // a fenced conversation's folders exist on disk closes before its first turn can run.
                 await sparsenComposition(id, repos, fence);
                 await linkComposition(id, repos, namespaced);
-                // Asked only on the repair path: a checkout this call just created stands on `branch` by construction.
-                return { cwd: conversationDir(id), branch, repos, fence, elsewhere: await elsewhereIn(id, repos) };
+                return { cwd: conversationDir(id), branch, repos, fence, elsewhere: [] };
+            } finally {
+                releaseSpace();
             }
-            // Root first: its checkout creates the dir nested worktrees mount into (root excludes each repo dir).
-            const live = await wanted();
-            const created = new Map<string, { repo: string; base: string }>();
-            await eachRepo(live, "root-first", async (repo) => {
-                const pinned = live.find((entry) => entry.repo === repo)?.base;
-                const made = await withRepoLock(repo, () => createOne(id, repo, pinned));
-                if (made !== undefined) {
-                    created.set(repo, made);
-                }
-            });
-            // Read back in discovery order, not completion order: root leads the composition, recorded for later
-            // repairs.
-            const repos = live.map(({ repo }) => created.get(repo)).filter((entry): entry is { repo: string; base: string } => entry !== undefined);
-            // Narrowed before the mirrors go in: `worktree add` checks the repository out whole, so the window where
-            // a fenced conversation's folders exist on disk closes before its first turn can run.
-            await sparsenComposition(id, repos, fence);
-            await linkComposition(id, repos, namespaced);
-            return { cwd: conversationDir(id), branch, repos, fence, elsewhere: [] };
         },
         remove: async (id, recorded) => {
             await eachRepo(recorded, "root-last", (repo) =>

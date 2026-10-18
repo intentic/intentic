@@ -19,6 +19,15 @@ const pairing = (overrides: Partial<Pairing> & Pick<Pairing, "sandboxId">): Pair
 const report = (state: SyncState) => buildReport(state, undefined, AGENT, 1_700_000_000_000);
 
 describe("buildReport", () => {
+    // Read off the record, not Mutagen, so said even when Mutagen was not consulted.
+    it("says a pairing is paused for want of room, and which repos' history it stopped fetching", () => {
+        const lowDisk = { since: 1, freeBytes: 3 * 1024 ** 3, totalBytes: 953 * 1024 ** 3 };
+        const bridgeHolds = [{ repo: "firma-backup", reason: "stalled" as const, failures: 3, since: 2, retryAt: 3 }];
+        const built = report({ pairings: [pairing({ sandboxId: "work", localDir: "/home/me/intentic/work", fileSyncLowDisk: lowDisk, bridgeHolds })] });
+        expect(built.pairings[0]?.lowDisk).toEqual(lowDisk);
+        expect(built.pairings[0]?.bridgeHolds).toEqual(bridgeHolds);
+    });
+
     it("names the folder each paired sandbox syncs into", () => {
         const built = report({ pairings: [pairing({ sandboxId: "work", localDir: "/home/me/intentic/work" })] });
         // `mirroring: "on"` is stated even untouched, since an absent port list would otherwise mean both "off" and

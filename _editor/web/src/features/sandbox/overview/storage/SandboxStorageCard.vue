@@ -19,6 +19,10 @@ const t = useT();
 const storage = useSandboxStorage();
 const scan = computed(() => storage.report.value?.scan);
 const scanning = storage.scanning;
+const historyDisk = computed(() => storage.report.value?.historyDisk);
+// Nested repos only: a persona can leave one of those out of its conversations, while the workspace's own repo is the
+// directory every other one mounts into and is always carried, so the remedy this warning names does not reach it.
+const largeCheckouts = computed(() => (storage.report.value?.repositoryCheckouts ?? []).filter((repo) => repo.repo !== `root` && repo.bytes >= 1024 ** 3));
 
 // A measurement is kept across restarts, so it can be days old: past a day the age is said in the warning tone, since
 // sizes that old are a guide to where the space went rather than what the disk holds now.
@@ -198,6 +202,24 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
         <Notice v-if="storage.scanNotice.value" :of="storage.scanNotice.value" />
         <Notice v-if="storage.cleanNotice.value" :of="storage.cleanNotice.value" />
         <Notice v-if="cleanedNotice" :of="cleanedNotice" />
+        <Notice
+            v-if="historyDisk?.low"
+            :of="{
+                tone: `warning`,
+                title: t(`sandbox.sandboxStorageCard.historyLow`, {
+                    free: formatBytes(historyDisk.freeBytes),
+                    floor: formatBytes(historyDisk.floorBytes),
+                }),
+            }"
+        />
+        <div v-for="repo in largeCheckouts" :key="repo.repo" class="flex flex-col gap-1">
+            <Notice
+                :of="{ tone: `warning`, title: t(`sandbox.sandboxStorageCard.largeCheckout`, { repo: repo.repo, bytes: formatBytes(repo.bytes) }) }"
+            />
+            <RouterLink to="/sandbox/personas?repositories=true" class="text-xs text-link hover:underline">{{
+                t(`sandbox.sandboxStorageCard.chooseRepositories`)
+            }}</RouterLink>
+        </div>
 
         <p v-if="!scan && !scanning" class="text-xs leading-relaxed text-muted">{{ t(`sandbox.sandboxStorageCard.intro`) }}</p>
         <p v-else-if="!scan" class="text-xs leading-relaxed text-muted">{{ t(`sandbox.sandboxStorageCard.firstScan`) }}</p>

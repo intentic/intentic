@@ -11,7 +11,7 @@ import {
     SnapshotTriggerSchema,
     type SnapshotTrigger,
 } from "@intentic/sandbox-contract/schemas/history";
-import { defaultGit } from "@intentic/base/git";
+import { cancellableGit, defaultGit } from "@intentic/base/git";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import { MAX_FILE_DIFF_BYTES, partialDiff } from "../git/changes/diff-partial.js";
@@ -20,7 +20,7 @@ import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { discoverRepos, hasGitEntry, isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { COMMON_EXCLUDES, EMPTY_TREE, repoGitDir, syncRootExcludes } from "../workspace/layout/git-layout.js";
 import { largeFilesConfig, leaveOutLargeFiles } from "./large-files.js";
-import { pruneScopes, retentionBases } from "./restore-point-retention.js";
+import { pruneScopes, retentionBases, retentionGit } from "./restore-point-retention.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import { bareIn, sanitizeLabel, type Scope, type ScopeCommit, scopeNamer } from "./history-scopes.js";
 
@@ -41,11 +41,12 @@ const VISIBLE_TRIGGERS: ReadonlySet<SnapshotTrigger> = new Set(["turn", "user", 
 // repo.
 export type HistoryGitRunner = (
     args: readonly string[],
-    options: { readonly cwd: string; readonly env: Readonly<Record<string, string>> },
+    options: { readonly cwd: string; readonly env: Readonly<Record<string, string>>; readonly signal?: AbortSignal },
 ) => Promise<{ readonly stdout: string; readonly stderr: string }>;
 // Through the daemon's git helper rather than a fork of the daemon itself. `core.fileMode=true` overrides the helper's
 // global false: a snapshot must keep an executable bit, or a restore strips it from every script added since.
-const defaultRunner: HistoryGitRunner = (args, options) => defaultGit(options.cwd, ["-c", "core.fileMode=true", ...args], options.env);
+const defaultRunner: HistoryGitRunner = (args, options) =>
+    (options.signal === undefined ? defaultGit : cancellableGit(options.signal))(options.cwd, ["-c", "core.fileMode=true", ...args], options.env);
 
 // Tells its listener something in the workspace may have changed; returns how to stop listening.
 export type ChangeFeed = (changed: () => void) => () => void;
@@ -615,11 +616,10 @@ export const createWorkspaceHistory = (
         },
         prune: (before) =>
             serialize(async () => {
-                const removed = await pruneScopes({ git, logger, scopes: await knownScopes(), bareOf: bare }, before);
-                if (removed > 0) {
-                    indexCache = undefined;
-                    indexRead.changed();
-                }
+                const removed = await pruneScopes({ git: retentionGit(git), logger, scopes: await knownScopes(), bareOf: bare }, before);
+                // A failed collection can still have moved the boundary, so even a zero tally invalidates the list.
+                indexCache = undefined;
+                indexRead.changed();
                 return removed;
             }),
     };

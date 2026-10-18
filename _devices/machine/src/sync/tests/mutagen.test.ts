@@ -6,7 +6,6 @@ import {
     conflictsFrom,
     convergePlan,
     forwardSessionName,
-    isOwnMutagen,
     labelArgs,
     listedSessions,
     type LiveSession,
@@ -17,6 +16,7 @@ import {
     relabelBudget,
     restartsDaemonFor,
     sessionLabels,
+    startsDaemonFor,
     terminateTargetsIn,
     terminationTargets,
     parseForwardNames,
@@ -33,6 +33,10 @@ import {
     syncSessionNames,
 } from "../mutagen.js";
 import { PROJECT_IGNORES } from "../ssh.js";
+import { join } from "node:path";
+import { baseDir } from "../../config.js";
+import { childEnv, isMutagenCommand, mutagenDataDir, mutagenEnv } from "../mutagen-env.js";
+import { movePlan, registrationIsOurs, type StoredSession, stopsOldDaemon } from "../mutagen-move.js";
 
 // COPY-FIRST: a project folder syncs one way into the sandbox unless its owner opted into two-way, and a session in the
 // other mode is drift like any other, recreated in the mode the pairing now has.
@@ -107,22 +111,6 @@ describe("a project's sync mode", () => {
         expect(settlesFirst({ mode: "one-way-safe" }, [{ mode: "two-way-safe" }])).toBe(false);
         expect(settlesFirst({ mode: "two-way-safe" }, [{ mode: "one-way-safe" }])).toBe(false);
         expect(settlesFirst({ mode: "one-way-replica" }, [{ mode: "one-way-replica" }])).toBe(false);
-    });
-});
-
-// `sync uninstall` stops and unregisters Mutagen's daemon only when it is this agent's own copy: a user's own install,
-// found on PATH, may hold sessions of theirs. The old check compared against a bare name ensureMutagen never answers.
-describe("isOwnMutagen", () => {
-    it("is this agent's downloaded copy only, never an install found on PATH", () => {
-        expect(isOwnMutagen("/home/ada/.intentic/machine/bin/mutagen", "/home/ada/.intentic/machine/bin/mutagen", "linux")).toBe(true);
-        expect(isOwnMutagen("/usr/local/bin/mutagen", "/home/ada/.intentic/machine/bin/mutagen", "linux")).toBe(false);
-        expect(isOwnMutagen("/opt/homebrew/bin/mutagen", "/Users/ada/.intentic/machine/bin/mutagen", "darwin")).toBe(false);
-    });
-
-    it("compares Windows paths the way Windows does", () => {
-        const own = "C:\\Users\\Ada\\.intentic\\machine\\bin\\mutagen.exe";
-        expect(isOwnMutagen("c:\\users\\ada\\.intentic\\machine\\bin\\MUTAGEN.EXE", own, "win32")).toBe(true);
-        expect(isOwnMutagen("C:\\Program Files\\Mutagen\\mutagen.exe", own, "win32")).toBe(false);
     });
 });
 
@@ -534,5 +522,96 @@ describe("restartsDaemonFor", () => {
         expect(
             restartsDaemonFor("Error: unable to connect to daemon: connection timed out (is the daemon running?)", 0, Number.NEGATIVE_INFINITY),
         ).toBe(false);
+    });
+});
+
+describe("startsDaemonFor", () => {
+    const down = "Error: unable to connect to daemon: connection timed out (is the daemon running?)";
+
+    it("starts a daemon that is down from the watcher alone, at most once a minute", () => {
+        expect(startsDaemonFor(down, true, 600_000, Number.NEGATIVE_INFINITY)).toBe(true);
+        expect(startsDaemonFor(down, true, 600_000, 570_000)).toBe(false);
+        expect(startsDaemonFor(down, true, 600_000, 540_000)).toBe(true);
+        // status, a report, a one-shot command: the daemon stays down and is read as down.
+        expect(startsDaemonFor(down, false, 600_000, Number.NEGATIVE_INFINITY)).toBe(false);
+    });
+
+    it("leaves a version mismatch to the restart, and every other failure alone", () => {
+        const mismatch = "Error: unable to connect to daemon: client/daemon version mismatch (daemon restart recommended)";
+        expect(startsDaemonFor(mismatch, true, 0, Number.NEGATIVE_INFINITY)).toBe(false);
+        expect(startsDaemonFor("Error: unable to locate requested sessions", true, 0, Number.NEGATIVE_INFINITY)).toBe(false);
+    });
+});
+
+// The move off Mutagen's shared data directory (mutagen-move.ts) and the environment every Mutagen of this agent runs with
+// (mutagen-env.ts).
+const owner = "pc-1/native";
+
+describe("mutagenEnv", () => {
+    it("points every Mutagen of this agent at its own data directory, with autostart off", () => {
+        const env = mutagenEnv({ PATH: "/bin", MUTAGEN_DATA_DIRECTORY: "/home/me/.mutagen" });
+        expect(env).toEqual({ PATH: "/bin", MUTAGEN_DATA_DIRECTORY: join(baseDir, "mutagen"), MUTAGEN_DISABLE_AUTOSTART: "1" });
+        expect(mutagenDataDir).toBe(join(baseDir, "mutagen"));
+    });
+
+    it("is applied to a Mutagen binary alone, unless the caller hands its own", () => {
+        expect(isMutagenCommand("C:\\Users\\dev\\.intentic\\machine\\bin\\mutagen.exe")).toBe(true);
+        expect(isMutagenCommand("/usr/local/bin/mutagen")).toBe(true);
+        expect(isMutagenCommand("/usr/bin/ssh")).toBe(false);
+        expect(isMutagenCommand("fake-mutagen")).toBe(false);
+        expect(childEnv("/usr/bin/git")).toBeUndefined();
+        expect(childEnv("/usr/local/bin/mutagen")?.["MUTAGEN_DISABLE_AUTOSTART"]).toBe("1");
+        const own = { PATH: "/bin" };
+        expect(childEnv("/usr/local/bin/mutagen", own)).toBe(own);
+    });
+});
+
+describe("movePlan", () => {
+    const sync: StoredSession[] = [
+        { name: "intentic-sbx1", identifier: "sync_a", labels: { "intentic-owner": owner } },
+        { name: "intentic-sbx1-state", identifier: "sync_b", paused: true },
+        { name: "intentic-sbx2", identifier: "sync_c", labels: { "intentic-owner": "other-pc/native" } },
+        { name: "my-own-project", identifier: "sync_d" },
+    ];
+    const forwards: StoredSession[] = [{ name: "intentic-fwd-sbx1-5173", identifier: "fwd_a" }];
+
+    it("ends this agent's sessions and forwards, flushing the running ones and carrying the paused ones", () => {
+        expect(movePlan(sync, forwards, owner)).toEqual({
+            flush: ["sync_a"],
+            terminateSync: ["sync_a", "sync_b"],
+            terminateForwards: ["fwd_a"],
+            paused: ["intentic-sbx1-state"],
+            othersRemain: true,
+        });
+    });
+
+    it("never takes another owner's session nor the user's own", () => {
+        const plan = movePlan(sync, forwards, owner);
+        expect(plan.terminateSync).not.toContain("sync_c");
+        expect(plan.terminateSync).not.toContain("sync_d");
+    });
+
+    it("says nothing else remains when the old directory held only this agent's", () => {
+        expect(movePlan(sync.slice(0, 2), forwards, owner).othersRemain).toBe(false);
+        expect(movePlan([], [], owner)).toEqual({ flush: [], terminateSync: [], terminateForwards: [], paused: [], othersRemain: false });
+    });
+
+    it("stops the old daemon only when it is empty, or when the move started it", () => {
+        expect(stopsOldDaemon({ othersRemain: false }, false)).toBe(true);
+        expect(stopsOldDaemon({ othersRemain: true }, false)).toBe(false);
+        expect(stopsOldDaemon({ othersRemain: true }, true)).toBe(true);
+    });
+});
+
+describe("registrationIsOurs", () => {
+    const own = "C:\\Users\\dev\\.intentic\\machine\\bin\\mutagen.exe";
+
+    it("is Mutagen's own registration only where it starts this agent's copy", () => {
+        expect(registrationIsOurs(`"${own.toUpperCase()}" daemon run`, own, "win32")).toBe(true);
+        expect(registrationIsOurs('"C:\\Program Files\\Mutagen\\mutagen.exe" daemon run', own, "win32")).toBe(false);
+        expect(registrationIsOurs(undefined, own, "win32")).toBe(false);
+        const mac = "/Users/dev/.intentic/machine/bin/mutagen";
+        expect(registrationIsOurs(`<string>${mac}</string>`, mac, "darwin")).toBe(true);
+        expect(registrationIsOurs("<string>/opt/homebrew/bin/mutagen</string>", mac, "darwin")).toBe(false);
     });
 });

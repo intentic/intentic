@@ -27,7 +27,8 @@ export const archiveVanishedWorktrees = async (deps: VanishedWorktreeDeps, now: 
         }
         probed.set(id, await agentWorktrees.presence(id));
     }
-    const offDisk = [...probed.values()].filter((presence) => presence === "restorable" || presence === "gone").length;
+    // Intentionally reclaimed held checkouts still have their refs; they are not evidence of an outage.
+    const offDisk = [...probed.values()].filter((presence) => presence === "gone").length;
     if (massAbsence(offDisk, probed.size)) {
         logger.error({ offDisk, probed: probed.size }, "agents: most checkouts read missing at once, taken for an outage; nothing is archived");
         return [];

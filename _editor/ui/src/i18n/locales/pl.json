@@ -197,7 +197,16 @@
         "keptBy": "utrzymywany przez {side} na tym komputerze",
         "portLeftAlone": "nie na localhost: celowo pominięty",
         "portBusy": "nie na localhost: używa go już inny program na tym komputerze",
-        "portHeldBy": "nie na localhost: zajmuje go {holder}"
+        "portHeldBy": "nie na localhost: zajmuje go {holder}",
+        "diskFull": "wstrzymane: dysk prawie pełny",
+        "diskFullHint": "Na dysku zostało {free} wolnego z {total}. Synchronizacja plików i historii git jest wstrzymana, żeby nie zapełnić dysku tego komputera, i wznowi się sama, gdy znów będzie miejsce.",
+        "historyBehind": "historia git opóźniona w {count} repozytorium | historia git opóźniona w {count} repozytoriach | historia git opóźniona w {count} repozytoriach",
+        "historyBehindTitle": "Pliki nadal się synchronizują; opóźniona jest tylko lokalna historia git",
+        "historyStalled": "ostatnie pobieranie przestało postępować",
+        "historyTooLong": "ostatniemu pobieraniu skończył się czas",
+        "historyShallow": "kopia w sandboksie to płytki klon",
+        "historyFailed": "git odrzucił ostatnie pobieranie",
+        "historyRetry": "kolejna próba {when}"
     },
     "imageView": {
         "actualSize": "Rozmiar rzeczywisty",

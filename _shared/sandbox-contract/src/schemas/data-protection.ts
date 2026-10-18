@@ -1,11 +1,29 @@
 // data-protection: what a sandbox needs to run under a data protection officer's rules (GDPR/RODO, Poland's KRI, the
 // AI Act): how long what it keeps is kept, what its audit trail records and for how long, whether the product's own
-// analytics may watch it, and the notice its members read about working with an AI. Every default here is what the
-// sandbox did before these settings existed. A public office switches them on with the public-office preset on the
-// data protection page, never through a changed default: most sandboxes belong to developers and individuals, and a
-// stricter default would take away something they rely on.
+// analytics may watch it, and the notice its members read about working with an AI. Defaults preserve the earlier
+// behaviour except for restore points: that copy grows without bound on disk. Thirty days still covers recovering a
+// deleted file; zero remains available for people who want every snapshot. The public-office preset sets the rest.
 import { z } from "zod";
 import type { AdmissionRule } from "./agent.js";
+
+export const AgentRetentionDaysSchema = z
+    .number()
+    .min(0)
+    .max(365)
+    .default(3)
+    .describe(
+        "How many days a finished conversation stays on the board before being put away. Zero means never. Defaults on because each card left behind is a real working copy on disk, not just a row.",
+    );
+
+export const HeldCheckoutDaysSchema = z
+    .number()
+    .int()
+    .min(0)
+    .max(365)
+    .default(14)
+    .describe(
+        "How many quiet days a held conversation keeps its checkout and dependency overlay. Each held card is a real working copy on disk. After that its work is committed to its branch and the working copy is freed; the conversation stays, and its next turn brings the copy back. Zero means never.",
+    );
 
 export const RETENTION_DAYS_MAX = 3650;
 const retentionDays = () => z.number().int().min(0).max(RETENTION_DAYS_MAX).default(0);
@@ -17,9 +35,11 @@ export const RetentionSettingsSchema = z.object({
     transcriptDays: retentionDays().describe(
         "How many days a conversation's transcript is kept after its last message. After that the transcript and its backups are deleted for good, not archived. Zero keeps them forever.",
     ),
-    restorePointDays: retentionDays().describe(
-        "How many days the workspace's restore points are kept. These are the snapshots taken every minute while agents work, so files deleted from the workspace stay recoverable until then. Zero keeps every restore point.",
-    ),
+    restorePointDays: retentionDays()
+        .default(30)
+        .describe(
+            "How many days the workspace's restore points are kept. These are the snapshots taken every minute while agents work, so files deleted from the workspace stay recoverable until then. Zero keeps every restore point.",
+        ),
     privacyVaultDays: retentionDays().describe(
         "How many days the privacy shield remembers a personal value after it last saw it. After that the value and its token are deleted, and the value is matched as new if it comes back. Zero remembers them forever.",
     ),

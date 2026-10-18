@@ -1,3 +1,4 @@
+import { CheckoutSpaceRefused } from "../../../system/resources/storage/checkout-space.js";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import type { RepoSync } from "../../../conversations/land/sync.js";
@@ -126,7 +127,12 @@ describe("a placed turn", () => {
     test("that throws is observed as failed with the error's own words, rethrown, and still finished", async () => {
         const { steps, conversations } = recorded();
         const run = drain(
-            placedTurn(conversations, "c", placement(steps, stream([{ kind: "delta", text: "hi" }], new Error("the harness crashed"))), closer(steps)),
+            placedTurn(
+                conversations,
+                "c",
+                placement(steps, stream([{ kind: "delta", text: "hi" }], new Error("the harness crashed"))),
+                closer(steps),
+            ),
         );
 
         await expect(run).rejects.toThrow("the harness crashed");
@@ -378,11 +384,48 @@ describe("a runner's mirror", () => {
             { repo: "web", base: "b".repeat(40) },
             { repo: "root", base: "a".repeat(40) },
         ]);
-        const opened = runnerPlacement({} as never, { conversationId: "c", snapshot: { conversationId: "c", index: 0 }, runner: "box" }, {
-            compose: async () => mirror,
-            dispatch: stream([]),
-        }).open();
+        const opened = runnerPlacement(
+            {} as never,
+            { conversationId: "c", snapshot: { conversationId: "c", index: 0 }, runner: "box" },
+            {
+                compose: async () => mirror,
+                dispatch: stream([]),
+            },
+        ).open();
         expect((await opened.next()).value).toStrictEqual({ kind: "worktree", branch: "agent/c", base: "aaaaaaa", remote: "box" });
         await opened.return(stream([])());
     });
+});
+
+test("a disk refusal before composition reaches chat once, settles, and does not run or land", async () => {
+    const { conversations, steps } = recorded();
+    const error = new CheckoutSpaceRefused(3_100_000_000, 13_000_000_000);
+    const place: Placement = {
+        ...placement(steps, stream([])),
+        async *open () {
+            yield* [];
+            throw error;
+        },
+    };
+    const frame = { kind: "error", code: "sandbox-disk-low", message: error.message } as const;
+    expect(await drain(placedTurn(conversations, "c", place))).toEqual([frame, { kind: "done" }]);
+    expect(steps).toEqual([
+        ["frame", "c", frame],
+        ["close", true],
+        ["settle", "c"],
+        ["settled", "failed"],
+    ]);
+});
+
+
+test("an unattended checkout refusal does not imply a person's composer holds the message", async () => {
+    const { conversations, steps } = recorded();
+    const error = new CheckoutSpaceRefused(3_100_000_000, 13_000_000_000);
+    const place: Placement = { ...placement(steps, stream([])), async *open () {
+        yield* [];
+        throw error;
+    } };
+    expect(await drain(placedTurn(conversations, "c", place, undefined, true))).toEqual([
+        { kind: "error", code: "sandbox-disk-low", message: error.message, unattended: true }, { kind: "done" },
+    ]);
 });

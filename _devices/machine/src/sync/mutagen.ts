@@ -8,22 +8,15 @@ import { plural } from "@intentic/base/format";
 import { parseJsonOr } from "@intentic/base/json";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { DeviceConflict, DeviceConflictChange, DeviceConflictNature } from "@intentic/sandbox-contract/schemas/devices";
-import {
-    type CliLauncher,
-    clearWindowsRunValue,
-    type Log,
-    quotedCommandLine,
-    setWindowsRunValue,
-    stubCommand,
-    windowsLaunchStub,
-} from "@intentic/local-agent";
+import type { Log } from "@intentic/local-agent";
 import { binDir } from "../config.js";
 import { archToken, download, exe, osToken, renameIfPresent } from "../release.js";
 import { adoptFolder } from "./project/adopt.js";
-import { clearAdoptFolder, isProjectPairing, mutagenDaemonLogPath, type Pairing, pairingKey, pairingRemoteDir, projectDirection } from "./config.js";
+import { clearAdoptFolder, isProjectPairing, type Pairing, pairingKey, pairingRemoteDir, projectDirection } from "./config.js";
 import { dockerEndpointAnswers, liveIdentity, mutagenForwardUrl, mutagenUrl, pairingEndpoint, type SandboxEndpoint } from "./endpoint.js";
 import { labelValue, sessionOwner } from "./environment.js";
 import { runProcess, runProcessSync, type SyncExecResult } from "./exec.js";
+import { carriedPause, dropCarriedPause, mutagenEnv } from "./mutagen-env.js";
 import { projectShell, realProjectRunner, sandboxCopy } from "./project/project-remote.js";
 import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./residue.js";
 import { BACKUP_IGNORES, ignoresFor, mutagenSshPath, sanitizeId, sshTransportAnswers } from "./ssh.js";
@@ -45,7 +38,7 @@ export const MUTAGEN_CALL_TIMEOUT_MS = 60_000;
 export const MUTAGEN_CREATE_TIMEOUT_MS = 5 * 60_000;
 
 // Prefix every session this agent creates carries, sync and forward alike, so they're all findable again.
-const SESSION_PREFIX = "intentic-";
+export const SESSION_PREFIX = "intentic-";
 
 // WHO OWNS A SESSION, said by the session itself (2026-10-05). One Mutagen daemon serves every Mutagen client of a user:
 // this agent's sessions sit beside the owner's own, and "ours" meant a name starting with `intentic-` and nothing more.
@@ -207,17 +200,26 @@ export const parseOrphanSyncNames = (listed: string, keep: readonly string[], ow
 const LIST_TEMPLATE = `{{range .}}{{.Name}}@{{index .Labels "${OWNER_LABEL}"}}@{{.Identifier}} {{end}}`;
 
 // THE DAEMON THAT ANSWERS IS NOT ALWAYS THIS AGENT'S VERSION. A Mutagen daemon refuses every client of another version
-// ("client/daemon version mismatch (daemon restart recommended)"), and an owner's own Mutagen, or this agent's previous
-// copy, may be the one that started it. Every listing failed that way, and every failed listing read as "no sessions":
-// the report said nothing synced, a session about to be converged read as missing and was created again, and the sweep
-// found nothing to retire. Now a failed listing is a failure (undefined, which every caller reads as "skip this"), and a
-// version mismatch restarts the daemon with this agent's copy, at most once per DAEMON_RESTART_MS so an owner's own
-// Mutagen restarting it back is not a fight every pass. Sessions are kept on disk by the daemon and come back with it.
+// ("client/daemon version mismatch (daemon restart recommended)"), and this agent's previous copy may be the one that
+// started it. Every listing failed that way, and every failed listing read as "no sessions": the report said nothing
+// synced, a session about to be converged read as missing and was created again, and the sweep found nothing to
+// retire. Now a failed listing is a failure (undefined, which every caller reads as "skip this"), and a version mismatch
+// restarts the daemon with this agent's copy, at most once per DAEMON_RESTART_MS. Sessions are kept on disk by the
+// daemon and come back with it.
 const VERSION_MISMATCH = /version mismatch/i;
 const DAEMON_RESTART_MS = 30 * 60_000;
 let daemonRestartedAt = Number.NEGATIVE_INFINITY;
 
-// Where the restart is said, set by the watcher (mirror.ts); a one-shot command says nothing of it.
+// A DAEMON THAT IS NOT RUNNING, as a client with autostart off says it (mutagen-env.ts): the connection to it fails.
+// Only the watcher brings one back, at most once per DAEMON_START_MS, since a daemon that will not start would
+// otherwise be tried on every listing of every pass. Everything else (status, a report read by the desktop app, a
+// one-shot command) reads the daemon as down and says so.
+const DAEMON_DOWN = /unable to connect to daemon|is the daemon running/i;
+const DAEMON_START_MS = 60_000;
+let daemonStartedAt = Number.NEGATIVE_INFINITY;
+
+// Where the daemon's events are said, set by the watcher (mirror.ts); a one-shot command says nothing of them. Set is
+// also what makes this process the one that starts a daemon that went down (above).
 let daemonLog: Log | undefined;
 export const sayDaemonEventsTo = (log: Log | undefined): void => {
     daemonLog = log;
@@ -228,19 +230,36 @@ export const sayDaemonEventsTo = (log: Log | undefined): void => {
 export const restartsDaemonFor = (stderr: string, now: number, lastRestart: number): boolean =>
     VERSION_MISMATCH.test(stderr) && now - lastRestart >= DAEMON_RESTART_MS;
 
+// Whether a failed call's stderr is a daemon that is not running, and this process is the watcher, due to start it.
+// Exported for the rule's own test.
+export const startsDaemonFor = (stderr: string, watcher: boolean, now: number, lastStart: number): boolean =>
+    // allow(dependency-text): Mutagen 0.18's client says no more than these words; an unmatched wording leaves the daemon down until the watcher's next start, which starts it outright
+    watcher && DAEMON_DOWN.test(stderr) && !VERSION_MISMATCH.test(stderr) && now - lastStart >= DAEMON_START_MS;
+
+// Starts this agent's Mutagen daemon, or finds it running: `daemon start` returns at once when one holds the data
+// directory. The only call that starts one (mutagen-env.ts): setup, the watcher's start, and the recovery below.
+export const startMutagenDaemon = (mutagen: string): boolean =>
+    runProcessSync(mutagen, ["daemon", "start"], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true }).status === 0;
+
 const recoverDaemon = (mutagen: string, stderr: string): boolean => {
     const now = Date.now();
+    if (startsDaemonFor(stderr, daemonLog !== undefined, now, daemonStartedAt)) {
+        daemonStartedAt = now;
+        const started = startMutagenDaemon(mutagen);
+        daemonLog?.(`the Mutagen daemon was not running; ${started ? "started it again" : "could not start it, and will try again shortly"}.`);
+        return started;
+    }
     if (!restartsDaemonFor(stderr, now, daemonRestartedAt)) {
         return false;
     }
     daemonRestartedAt = now;
     // `daemon stop` connects without the version check, so it reaches a daemon of any version.
     runProcessSync(mutagen, ["daemon", "stop"], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
-    const started = runProcessSync(mutagen, ["daemon", "start"], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
+    const started = startMutagenDaemon(mutagen);
     daemonLog?.(
-        `the Mutagen daemon running here is another version than this agent's (${mutagen}); ${started.status === 0 ? "restarted it with this agent's copy" : "could not restart it"}. Its sessions are kept on disk and come back with it.`,
+        `the Mutagen daemon running here is another version than this agent's (${mutagen}); ${started ? "restarted it with this agent's copy" : "could not restart it"}. Its sessions are kept on disk and come back with it.`,
     );
-    return started.status === 0;
+    return started;
 };
 
 // One blocking Mutagen listing: stdout when it answered, undefined when it did not. A version mismatch restarts the
@@ -716,7 +735,11 @@ export const pauseRunningSync = (mutagen: string, pairing: Pairing): boolean => 
 };
 
 // Lifts the pause a swap of the sandbox put on its file sync. Every session the pairing has: that pause paused them all.
+// Not while the drive holding its folder is short of room (low-disk.ts), whose own lifting resumes it.
 export const resumeSwapPausedSync = (mutagen: string, pairing: Pairing): boolean => {
+    if (pairing.fileSyncLowDisk !== undefined) {
+        return false;
+    }
     const names = existingSyncSessions(mutagen, syncSessionNames(pairing));
     if (names === undefined || names.length === 0) {
         return false;
@@ -725,7 +748,7 @@ export const resumeSwapPausedSync = (mutagen: string, pairing: Pairing): boolean
 };
 
 export const resumeAutoPausedSync = (mutagen: string, pairing: Pairing): boolean => {
-    if (pairing.mode !== "sync" || pairing.fileSyncAutoPaused !== true) {
+    if (pairing.mode !== "sync" || pairing.fileSyncAutoPaused !== true || pairing.fileSyncLowDisk !== undefined) {
         return false;
     }
     const names = existingSyncSessions(mutagen, syncSessionNames(pairing));
@@ -1092,8 +1115,18 @@ const convergeSession = async (
         );
         await runProcess(mutagen, ["sync", "terminate", ...terminationTargets(sessions, spec.name)], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
     }
-    await runMutagenAsync(mutagen, mutagenCreateArgs(spec, live?.paused === true), log);
+    await createSession(mutagen, spec, live, log);
     return true;
+};
+
+// Made paused where the session it replaces was, or where the move off the shared data directory ended one of this
+// name paused (mutagen-move.ts), whose pause then has been carried.
+const createSession = async (mutagen: string, spec: SyncSessionSpec, replaced: LiveSession | undefined, log: Log): Promise<void> => {
+    const carried = replaced === undefined && (await carriedPause(spec.name));
+    await runMutagenAsync(mutagen, mutagenCreateArgs(spec, replaced?.paused === true || carried), log);
+    if (carried) {
+        await dropCarriedPause(spec.name);
+    }
 };
 
 // One ssh round trip asking whether a handful of directories still exist; generous enough for a loaded laptop, bounded
@@ -1211,21 +1244,6 @@ const resolveOnPath = (command: string): string | undefined => {
 // The copy this agent downloads and runs.
 export const ownMutagenPath = (): string => join(binDir, `mutagen${exe}`);
 
-// Whether a resolved Mutagen is that copy, rather than the user's own install found on PATH: only this agent's copy's
-// daemon is this agent's to stop and unregister, since the user's may hold sessions of their own. Paths compare as the
-// platform does (case-insensitively on Windows).
-export const isOwnMutagen = (mutagen: string, own: string = ownMutagenPath(), platform: NodeJS.Platform = process.platform): boolean => {
-    const fold = (path: string): string => (platform === "win32" ? path.replaceAll("/", "\\").toLowerCase() : path);
-    return fold(mutagen) === fold(own);
-};
-
-// A Mutagen the user installed for themselves, on PATH, or undefined. Its daemon is the same daemon this agent talks to
-// (one per user), so its presence is what makes stopping that daemon somebody else's business too (`sync uninstall`).
-export const userMutagenOnPath = (): string | undefined => {
-    const found = resolveOnPath("mutagen");
-    return found === undefined || isOwnMutagen(found) ? undefined : found;
-};
-
 // WHICH MUTAGEN THIS AGENT RUNS: its own pinned copy, downloaded when absent or another version, and an absolute path
 // either way (see resolveOnPath). (2026-10-05) A Mutagen on PATH used to win, so the version that drove every session
 // was whatever the owner had installed, and a daemon started by one version refused every client of another: each
@@ -1287,7 +1305,7 @@ export const runMutagenAsync = async (mutagen: string, args: readonly string[], 
 // terminal, so nothing it leaves behind can hold a pipe open, and a process group of its own would take it out of
 // reach of their Ctrl-C.
 export const runMutagen = (mutagen: string, args: string[]): SpawnSyncReturns<Buffer> => {
-    const result = spawnSync(mutagen, args, { stdio: "inherit", windowsHide: true, timeout: MUTAGEN_CREATE_TIMEOUT_MS });
+    const result = spawnSync(mutagen, args, { stdio: "inherit", windowsHide: true, timeout: MUTAGEN_CREATE_TIMEOUT_MS, env: mutagenEnv() });
     if (result.error !== undefined) {
         throw result.error;
     }
@@ -1297,36 +1315,9 @@ export const runMutagen = (mutagen: string, args: string[]): SpawnSyncReturns<Bu
     return result;
 };
 
-// This agent's own Windows Run value for Mutagen's daemon, distinct from Mutagen's own `Mutagen` key, so
-// uninstalling this agent doesn't touch a user's own registration.
+// The Windows Run value older builds wrote to start Mutagen's daemon at sign-in (through the launch stub, so no console
+// flashed). Retired (2026-10-18): it started `mutagen daemon start` with nothing to say which data directory, so it
+// brought back the shared daemon this agent has moved off (mutagen-move.ts), and it is not needed: every session rides
+// the transport the resident agent holds (tunnel.ts), and that agent, itself started at sign-in, starts the daemon as
+// its watcher starts. Taken away wherever it is found (upkeep/login.ts, mutagen-move.ts, `sync uninstall`).
 export const MUTAGEN_RUN_VALUE = "IntenticMutagenDaemon";
-
-// Registers Mutagen's daemon to survive reboot; on Windows, `daemon start` opens a console window unless run
-// through our stub launcher. Unregisters first so two registrations can't coexist; Linux has no register verb.
-export const registerMutagenAutostart = (mutagen: string, launcher: CliLauncher, log: Log): void => {
-    if (process.platform === "linux") {
-        return;
-    }
-    try {
-        const stub = windowsLaunchStub(launcher);
-        if (stub === undefined) {
-            runMutagen(mutagen, ["daemon", "register"]);
-            return;
-        }
-        runProcessSync(mutagen, ["daemon", "unregister"], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
-        setWindowsRunValue(MUTAGEN_RUN_VALUE, quotedCommandLine(stubCommand(stub, mutagenDaemonLogPath, [mutagen, "daemon", "start"])));
-    } catch (error) {
-        log(`Could not register the Mutagen daemon for autostart (${errorMessage(error)}); it still runs while you're signed in.`);
-    }
-};
-
-// Clears both spellings unconditionally: which one got registered depends on what this machine could do at the
-// time, and leaving the other behind resurrects the daemon at next login.
-export const unregisterMutagenAutostart = (mutagen: string): void => {
-    if (process.platform === "win32") {
-        clearWindowsRunValue(MUTAGEN_RUN_VALUE);
-    }
-    if (process.platform !== "linux") {
-        runProcessSync(mutagen, ["daemon", "unregister"], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
-    }
-};

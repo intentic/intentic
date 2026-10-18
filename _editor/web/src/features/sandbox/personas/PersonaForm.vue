@@ -19,6 +19,8 @@ import PersonaPowersFields from "../../../components/PersonaPowersFields.vue";
 import type { BrowserAccount } from "../../extensions/useBrowserAccounts";
 import type { PersonaGrantable, PersonaPowersDraft } from "../../../models/sandbox/personas/personaRules";
 import { useRepos } from "../../../models/workspace/tree/useRepos";
+import { formatBytes } from "@intentic/ui/format";
+import { useSandboxStorage } from "../overview/storage/useSandboxStorage";
 import { useT } from "@intentic/ui/i18n";
 
 // Persona editor: one of five questions shown at a time via SegmentedControl, replacing a ~30-control scroll. The folder
@@ -53,8 +55,9 @@ export interface PersonaDraft extends PersonaPowersDraft {
     omitNotes: TurnBriefingNoteId[];
 }
 
-const { draft, accounts, connected, grantables, error } = defineProps<{
+const { draft, accounts, connected, grantables, error, showRepositories } = defineProps<{
     draft: PersonaDraft;
+    showRepositories?: boolean;
     /** Logged-in browser profiles, one per account, so a twice-connected site appears twice. */
     accounts: readonly BrowserAccount[];
     /** Which of those are signed in far enough to act. */
@@ -77,8 +80,14 @@ const SECTIONS = computed(
 );
 type Section = (typeof SECTIONS.value)[number][`value`];
 
-// Local, reset on reopen rather than remembered, so a persona always opens on the pill that says who it is.
-const section = ref<Section>(`identity`);
+// Storage links open the repository controls; other visits start with who the persona is.
+const section = ref<Section>(showRepositories ? `runs` : `identity`);
+const checkoutStorage = useSandboxStorage();
+const checkoutCosts = computed(() => new Map((checkoutStorage.report.value?.repositoryCheckouts ?? []).map((repo) => [repo.repo, repo.bytes])));
+const largeCheckout = (repo: string): number | undefined => {
+    const bytes = checkoutCosts.value.get(repo);
+    return bytes !== undefined && bytes >= 1024 ** 3 ? bytes : undefined;
+};
 
 // What a chip adds beyond the account's own id: the site only when the id doesn't already say it (avoids "reddit" over
 // "Reddit"), and "not signed in" always, since that's never redundant.
@@ -381,7 +390,12 @@ const configure = (pin: ModelPin): void => {
                             {{ t(`sandbox.personaForm.workspaceNoNestedRepositories`) }}
                         </p>
                         <label v-for="repo in nested" :key="repo" class="flex items-center justify-between gap-3 pl-4">
-                            <span class="truncate text-sm text-content">{{ repo }}</span>
+                            <span class="flex min-w-0 flex-col">
+                                <span class="truncate text-sm text-content">{{ repo }}</span>
+                                <span v-if="largeCheckout(repo) !== undefined" class="text-xs text-warning">{{
+                                    t(`sandbox.personaForm.checkoutCost`, { bytes: formatBytes(largeCheckout(repo) ?? 0) })
+                                }}</span>
+                            </span>
                             <ToggleSwitch
                                 class="shrink-0"
                                 :model-value="draft.carries.includes(repo)"

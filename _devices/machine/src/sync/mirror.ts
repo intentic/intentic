@@ -31,6 +31,7 @@ import { retireSandbox } from "./retire.js";
 import { readSwaps } from "../device/sandbox-rounds/ic-swaps.js";
 import { type PublishedPorts, publishedPortsReader } from "./docker-ports.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
+import { guardDisks } from "./low-disk.js";
 import {
     ensureMutagen,
     ensureSyncSession,
@@ -50,9 +51,11 @@ import {
     runMutagenAsync,
     sayDaemonEventsTo,
     sessionLabels,
+    startMutagenDaemon,
     syncMode,
     syncSessionNames,
 } from "./mutagen.js";
+import { moveOffSharedMutagen } from "./mutagen-move.js";
 import { quieted } from "./repeats.js";
 import { deviceReport, scopedReport } from "./report.js";
 import { pairingSshConfig, writeManagedSshConfig } from "./ssh.js";
@@ -643,7 +646,57 @@ interface PairingTracking {
     readonly unreachable: Map<string, Unreachable>;
     readonly repos: Map<string, readonly string[]>;
     readonly sessionsPending: Set<string>;
+    // The git bridge run in flight for each sandbox, if any (`startBridge`).
+    readonly bridges: Map<string, BridgeRun>;
 }
+
+// One sandbox's git bridge, running beside the passes: what ends it, and when it has.
+interface BridgeRun {
+    readonly stop: AbortController;
+    readonly done: Promise<void>;
+}
+
+/* THE GIT BRIDGE RUNS BESIDE THE PASS, NOT IN IT (2026-10-18). A fetch may now take as long as it keeps moving
+   (git-bridge.ts), which for a big repository over a home connection is hours: awaited by the pass, it held every other
+   pairing's ports, the reports and the heartbeat behind it, and the stall check below would have restarted the watcher
+   under it. So each sandbox has at most one bridge run in flight, started by a pass and left be by the passes after it
+   until it ends. It is stopped when its pairing pauses or goes, and with the watcher it belongs to. */
+const startBridge = (tracking: PairingTracking, pairing: Pairing, tick: number, say: Log): void => {
+    const id = pairing.sandboxId;
+    if (tracking.bridges.has(id)) {
+        return;
+    }
+    const stop = new AbortController();
+    const known = tick % REPO_LIST_EVERY_TICKS === 0 ? undefined : tracking.repos.get(id);
+    const done = guard(say, `${id}: git bridge`, async () => {
+        const listed = await runGitBridge(realBridgeExec, pairing, say, known, { signal: stop.signal });
+        if (listed === undefined) {
+            tracking.repos.delete(id);
+        } else {
+            tracking.repos.set(id, listed);
+        }
+    }).then(() => {
+        if (tracking.bridges.get(id)?.stop === stop) {
+            tracking.bridges.delete(id);
+        }
+    });
+    tracking.bridges.set(id, { stop, done });
+};
+
+// Ends one sandbox's bridge run, if it has one; its fetch is stopped and what it had received is cleared.
+const stopBridge = (tracking: PairingTracking, sandboxId: string): void => {
+    tracking.bridges.get(sandboxId)?.stop.abort();
+    tracking.bridges.delete(sandboxId);
+};
+
+// Ends the bridge runs of sandboxes no pairing names any more (unpaired, retired, revoked), or all of them.
+const stopBridges = (tracking: PairingTracking, pairings?: readonly Pairing[]): void => {
+    for (const id of tracking.bridges.keys()) {
+        if (pairings === undefined || !pairings.some((held) => held.sandboxId === id)) {
+            stopBridge(tracking, id);
+        }
+    }
+};
 
 // What a failed pass does to the pairing: `drop` means gone, move to the next one; `paused` means file sync just
 // stopped, so the git bridge below must not immediately undo it.
@@ -907,6 +960,8 @@ interface PassContext {
     readonly bases: DaemonBases;
     // Pairings whose sandbox is mid-swap on this machine, held still this pass.
     readonly swapHeld: ReadonlySet<string>;
+    // Pairings (by key) paused because the drive holding their folder is short of room (low-disk.ts).
+    readonly diskHeld: ReadonlySet<string>;
     // What this machine's Docker publishes, and when each port a pass found busy was first seen free again.
     readonly holders: HolderMemory;
     // How a sandbox's fate is acted on (gone-watch.ts), and how many legacy sessions this pass may relabel.
@@ -924,8 +979,9 @@ interface PassContext {
 // business.
 const runPairingPass = async (context: PassContext, pairing: Pairing, base: string): Promise<void> => {
     const { mutagen, tick, claimedBy, holding, tracking, bases, swapHeld, fate, say } = context;
-    const { rejectedPolls, unreachable, repos } = tracking;
+    const { rejectedPolls, unreachable } = tracking;
     const swapping = swapHeld.has(pairing.sandboxId);
+    const short = context.diskHeld.has(pairingKey(pairing));
     let pausedThisPass = false;
     try {
         const mirrored = await servePairing(context, pairing, base);
@@ -940,8 +996,8 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
             await setUnreachableSince(pairing.sandboxId, undefined);
         }
         // Still pending if it was: a replacement put off while the sandbox slept is owed now that it answers. Not while
-        // its sandbox is mid-swap, which holds that sync still whoever paused it.
-        if (!swapping && resumeAutoPausedSync(mutagen, pairing)) {
+        // its sandbox is mid-swap, which holds that sync still whoever paused it, nor while its drive is short of room.
+        if (!swapping && !short && resumeAutoPausedSync(mutagen, pairing)) {
             await setFileSyncAutoPaused(pairingKey(pairing), false);
             say(`  ${pairingKey(pairing)}: reachable again; resumed its automatically paused file sync`);
         }
@@ -969,27 +1025,19 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         // A transient tunnel blip must not kill the agent, log and try again next tick.
         say(`  ${pairingKey(pairing)}: reconcile skipped: ${errorMessage(error)}`);
     }
-    // Auto-paused pairings still get the probe above but skip the SSH-heavy git bridge below, as do those mid-swap, and
-    // those the watcher holds still for a reason of its own (a gone sandbox among them, until it answered just now).
-    if (pairing.fileSyncAutoPaused === true || pairing.fileSyncPausedFor !== undefined || pausedThisPass || swapping) {
+    // Auto-paused pairings still get the probe above but skip the SSH-heavy git bridge below, as do those mid-swap, those
+    // whose drive is short of room, and those the watcher holds still for a reason of its own (a gone sandbox among them,
+    // until it answered just now). A bridge run already in flight for one of them is stopped with it.
+    if (pairing.fileSyncAutoPaused === true || pairing.fileSyncPausedFor !== undefined || pausedThisPass || swapping || short) {
+        stopBridge(tracking, pairing.sandboxId);
         return;
     }
     // Before the bridge, and guarded like it: a conflict standing here blocks the very deletions the bridge's
     // fast-forward has already recorded in the local index, so the two disagree until this clears.
     await healPairing(mutagen, pairing, tick, say);
-    // The bridge gets its own catch: it rides ssh, while the ports read above rides https (which 502s through
+    // The bridge has its own catch inside: it rides ssh, while the ports read above rides https (which 502s through
     // Cloudflare often enough), so one must not cost the other a whole pass.
-    try {
-        const known = tick % REPO_LIST_EVERY_TICKS === 0 ? undefined : repos.get(pairing.sandboxId);
-        const listed = await runGitBridge(realBridgeExec, pairing, say, known);
-        if (listed === undefined) {
-            repos.delete(pairing.sandboxId);
-        } else {
-            repos.set(pairing.sandboxId, listed);
-        }
-    } catch (error) {
-        say(`  ${pairing.sandboxId}: git bridge skipped: ${errorMessage(error)}`);
-    }
+    startBridge(tracking, pairing, tick, say);
 };
 
 // WHICH PAIRINGS POLL their sandbox's ports, which is also how a sandbox's liveness and a revoked enrollment are
@@ -1020,15 +1068,16 @@ const followSandbox = async (context: PassContext, pairing: Pairing): Promise<vo
     // The outage as the poller's pass recorded it, or as it stands on disk from before this agent started.
     const down = tracking.unreachable.get(pairing.sandboxId)?.since ?? pairing.unreachableSince;
     const swapping = swapHeld.has(pairing.sandboxId);
+    const short = context.diskHeld.has(pairingKey(pairing));
     if (down === undefined) {
-        if (!swapping && resumeAutoPausedSync(mutagen, pairing)) {
+        if (!swapping && !short && resumeAutoPausedSync(mutagen, pairing)) {
             await setFileSyncAutoPaused(pairingKey(pairing), false);
             say(`  ${pairingKey(pairing)}: reachable again; resumed its automatically paused file sync`);
         }
     } else if (await pauseIfLongUnreachable(mutagen, pairing, Date.now() - down, say)) {
         return;
     }
-    if (pairing.fileSyncAutoPaused === true || swapping) {
+    if (pairing.fileSyncAutoPaused === true || swapping || short) {
         return;
     }
     await healPairing(mutagen, pairing, tick, say);
@@ -1160,7 +1209,7 @@ export const WATCHER_STALL_MS = 20 * 60_000;
 const STALL_CHECK_MS = 30_000;
 
 // Whether a loop last seen moving at `progress` counts as stuck. Longer than any one bounded step (a create is five
-// minutes, a git fetch two), so only a step that will never end trips it.
+// minutes; the git bridge's fetch, which may run for hours, runs beside the pass), so only a step that will never end trips it.
 export const watcherStalled = (progress: number, now: number): boolean => now - progress >= WATCHER_STALL_MS;
 
 /** One run of the loop, and how its stall check reads it. */
@@ -1257,11 +1306,17 @@ const startWatch = async (log: Log, generation: Generation): Promise<Watch | und
     // through the quiet rule (repeats.ts) rather than once per tick per pairing.
     const say = quieted(log);
     sayDaemonEventsTo(say);
+    await guard(say, "moving off Mutagen's shared data directory", async () => await moveOffSharedMutagen(mutagen, say));
     // Nothing paired is terminal, logged once, not spammed every tick for the life of the session.
     const initial = await readState();
     if (initial.pairings.length === 0) {
         log("no sandboxes are paired: nothing to mirror. Enable it from a sandbox's Desktop sync card.");
         return undefined;
+    }
+    // The one place a sign-in, a reboot or a crash of the daemon is answered from: no other call starts it
+    // (mutagen-env.ts), and a listing that finds it down later in this run starts it again (mutagen.ts recoverDaemon).
+    if (!startMutagenDaemon(mutagen)) {
+        say("Mutagen's daemon did not start; trying again as the watcher asks after its sessions.");
     }
     // This process puts the sandbox's sshd on loopback (tunnel.ts) before any session needs it; reconciled again
     // every tick so a pairing added or dropped mid-run gains or loses its transport without a restart.
@@ -1281,7 +1336,15 @@ const startWatch = async (log: Log, generation: Generation): Promise<Watch | und
         async () => await tunnels.reconcile(tunnelTargets(await dialedPairings(initial.pairings, bases))),
     );
     // Per-sandbox state keyed by sandbox id, and the sessions still owed by pairing key; entries come and go with them.
-    const tracking: PairingTracking = { rejectedPolls: new Map(), unreachable: new Map(), repos: new Map(), sessionsPending: new Set() };
+    const tracking: PairingTracking = {
+        rejectedPolls: new Map(),
+        unreachable: new Map(),
+        repos: new Map(),
+        sessionsPending: new Set(),
+        bridges: new Map(),
+    };
+    // An abandoned run's bridge fetches end with it: the run that replaces it starts its own.
+    generation.signal.addEventListener("abort", () => stopBridges(tracking), { once: true });
     // Sandboxes with no machine-report route, retired from reporting for this watcher's lifetime.
     const reportUnsupported = new Set<string>();
     const fate: FateSeams = { mutagen, releaseForwards: async (sandboxId) => await retirePairingMirror(mutagen, sandboxId), say };
@@ -1341,6 +1404,7 @@ const watchTick = async (watch: Watch, tick: number): Promise<"next" | "stop"> =
     if (state.pairings.length === 0) {
         // Nothing left to sync: stops this half for good rather than polling empty forever. A pairing revoked mid-loop
         // lands here next tick.
+        stopBridges(tracking);
         await watch.tunnels.stopAll();
         watch.log("no sandboxes are paired any more: sync stopping. Re-enable from a sandbox's Desktop sync card.");
         return "stop";
@@ -1379,6 +1443,11 @@ const watchTick = async (watch: Watch, tick: number): Promise<"next" | "stop"> =
     await guard(say, "holding file sync still during swaps", async () => {
         swapHeld = await holdSyncDuringSwaps(mutagen, state.pairings, tracking.unreachable, say);
     });
+    let diskHeld: ReadonlySet<string> = new Set();
+    await guard(say, "measuring the drives synced folders are on", async () => {
+        diskHeld = await guardDisks(mutagen, state.pairings, tick, say);
+    });
+    stopBridges(tracking, state.pairings);
     // Ports this tick's earlier pairings already own, so a later one is told who holds a port it wanted. And whose
     // forward each port is meanwhile, so a pairing listed before its holder does not file it as busy.
     const context: PassContext = {
@@ -1389,6 +1458,7 @@ const watchTick = async (watch: Watch, tick: number): Promise<"next" | "stop"> =
         tracking,
         bases: watch.bases,
         swapHeld,
+        diskHeld,
         holders: watch.holders,
         fate,
         relabels,

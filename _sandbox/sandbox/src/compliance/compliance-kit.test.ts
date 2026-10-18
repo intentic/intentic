@@ -57,9 +57,9 @@ const state = (settings: SandboxSettings = defaults(), privacy: PrivacyShieldPol
 const statusOf = (measures: readonly Measure[], id: Measure["id"]): Measure["status"] | undefined => measures.find((measure) => measure.id === id)?.status;
 
 describe("defaults", () => {
-    it("change nothing: every data protection setting reads as the sandbox behaved before it existed", () => {
+    it("keep earlier policies except the thirty-day restore-point window", () => {
         const settings = defaults();
-        expect(settings.retention).toEqual({ transcriptDays: 0, restorePointDays: 0, privacyVaultDays: 0, cacheDays: 0, rawOutputDays: 0 });
+        expect(settings.retention).toEqual({ transcriptDays: 0, restorePointDays: 30, privacyVaultDays: 0, cacheDays: 0, rawOutputDays: 0 });
         expect(settings.audit.recordReads).toBe(false);
         expect(settings.productAnalytics).toBe(true);
         expect(settings.aiNotice.show).toBe(false);
@@ -117,7 +117,7 @@ describe("measures", () => {
     it("reads a default sandbox as mostly available but off", () => {
         const measures = measuresOf(factsWith(defaults()));
         expect(statusOf(measures, "privacy-shield")).toBe("off");
-        expect(statusOf(measures, "retention")).toBe("off");
+        expect(statusOf(measures, "retention")).toBe("partial");
         expect(statusOf(measures, "audit-reads")).toBe("off");
         expect(statusOf(measures, "product-analytics")).toBe("off");
         expect(statusOf(measures, "ai-notice")).toBe("off");

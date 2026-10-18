@@ -11,6 +11,7 @@ import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { repoGitDir } from "../../workspace/layout/git-layout.js";
 import { createLogger } from "../../logger.js";
 import { createPerfTracker } from "../../system/resources/perf.js";
+import { opt } from "../../opt.js";
 import { workspacePaths } from "../../workspace/workspace.js";
 import { createAgentWorktrees } from "./worktrees.js";
 
@@ -28,7 +29,10 @@ afterEach(async () => {
 
 // A production-shaped workspace: /work with a --separate-git-dir root repo and one nested intent role repo, real git
 // dirs on the history volume that worktrees must operate over.
-const setup = async (): Promise<{ work: string; historyRoot: string; worktrees: ReturnType<typeof createAgentWorktrees> }> => {
+const setup = async (
+    historySpace?: () => Promise<{ freeBytes: number; totalBytes: number }>,
+    git: GitRunner = defaultGit,
+): Promise<{ work: string; historyRoot: string; worktrees: ReturnType<typeof createAgentWorktrees> }> => {
     const base = await mkdtemp(join(tmpdir(), "intentic-worktrees-"));
     tempDirs.push(base);
     const work = join(base, "work");
@@ -46,14 +50,18 @@ const setup = async (): Promise<{ work: string; historyRoot: string; worktrees: 
     await writeFile(join(work, "CLAUDE.md"), "workspace notes\n");
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "baseline");
-    const worktrees = createAgentWorktrees({
-        workspace,
-        worktreesRoot: join(historyRoot, "worktrees"),
-        historyRoot,
-        isolation: noIsolation(work, historyRoot),
-        logger,
-        perf,
-    });
+    const worktrees = createAgentWorktrees(
+        {
+            workspace,
+            worktreesRoot: join(historyRoot, "worktrees"),
+            historyRoot,
+            isolation: noIsolation(work, historyRoot),
+            logger,
+            perf,
+            ...opt("historySpace", historySpace),
+        },
+        git,
+    );
     return { work, historyRoot, worktrees };
 };
 
@@ -882,4 +890,40 @@ test("ensure reports the checkouts it found standing elsewhere, and still leaves
     expect(again.branch).toBe("agent/c1");
     // Reported, not repaired: the checkout is where the turn left it.
     expect(await sh(join(first.cwd, "intent"), "symbolic-ref", "--short", "HEAD")).toBe("ci/push-me");
+});
+
+test("disk admission guards fresh, joined and retired checkouts but lets standing ones run", async () => {
+    let freeBytes = 100 * 1024 ** 3;
+    let reads = 0;
+    const { worktrees } = await setup(async () => {
+        reads += 1;
+        return { freeBytes, totalBytes: 200 * 1024 ** 3 };
+    });
+    const first = await worktrees.ensure("c1", [], undefined, undefined, []);
+    expect(reads).toBe(1);
+    freeBytes = 3_100_000_000;
+    const standing = await worktrees.ensure("c1", first.repos, undefined, undefined, []);
+    expect(standing.repos).toEqual(first.repos);
+    expect(reads).toBe(1);
+    await expect(worktrees.ensure("c2", [])).rejects.toThrow("The sandbox's disk has 3.1 GB free");
+    expect(existsSync(worktrees.conversationDir("c2"))).toBe(false);
+    await expect(worktrees.ensure("c1", first.repos, undefined, undefined, ["intent"])).rejects.toThrow(
+        "too little to give this conversation its own copy",
+    );
+    expect(existsSync(worktrees.worktreeDir("c1", "intent"))).toBe(false);
+    await worktrees.retire("c1", first.repos, undefined);
+    await expect(worktrees.ensure("c1", first.repos, undefined, undefined, [])).rejects.toThrow("Free space in Settings → Storage, then send again.");
+    expect(existsSync(worktrees.conversationDir("c1"))).toBe(false);
+    freeBytes = 100 * 1024 ** 3;
+    expect((await worktrees.ensure("c1", first.repos, undefined, undefined, [])).repos).toEqual(first.repos);
+});
+
+test("the predicted checkout cost refuses a write even above the free-space floor", async () => {
+    const git: GitRunner = async (dir, args) =>
+        args[0] === "ls-tree" ? { stdout: "100644 blob abc123 13000000000\tbackup\0", stderr: "" } : defaultGit(dir, args);
+    const { worktrees } = await setup(async () => ({ freeBytes: 10_000_000_000, totalBytes: 100 * 1024 ** 3 }), git);
+    await expect(worktrees.ensure("c1", [], undefined, undefined, [])).rejects.toThrow(
+        "The sandbox's disk has 10 GB free, too little to give this conversation its own copy of the workspace (about 13 GB).",
+    );
+    expect(existsSync(worktrees.conversationDir("c1"))).toBe(false);
 });

@@ -90,6 +90,13 @@ Var IntenticReinstall
 ;     login entry and never a container: it has no flag about sandboxes because it touches none, which is the rule
 ;     (a container is never deleted silently). Never asked on an update or a passive uninstall, and a silent one
 ;     answers no.
+;   - FOLDER SYNC ENDS WITH THE APP (2026-10-18), whatever the answer above, and in a passive or a silent uninstall,
+;     which asks nothing. A PC whose owner uninstalled the app went on syncing a sandbox's /work into her profile
+;     through Mutagen until her disk filled: the silent answer was no, so the agent stayed, and so did its sessions.
+;     Whenever the agent stays, `intentic-machine sync uninstall` ends every Mutagen session and forward the agent
+;     made, stops and unregisters its Mutagen daemon, and drops its sync pairings, so a kept agent goes on hosting
+;     sandboxes but makes no file sync again by itself. The synced folders keep their files. Not on a reinstall, which
+;     is an update (below).
 ;   - the platform session, in the webview's cookie store (`$LOCALAPPDATA\<identifier>\EBWebView`), which stayed signed
 ;     in unless "Delete app data" was ticked. The app's own sign-out (account.rs `signed_off`) deletes the session
 ;     cookie and empties roster.json; the uninstaller cannot reach the platform with a cookie Chromium keeps
@@ -125,16 +132,27 @@ Var IntenticReinstall
   ${If} $UpdateMode <> 1
     ${If} ${FileExists} "$PROFILE\.intentic\machine\bin\intentic-machine.exe"
       StrCpy $IntenticAgentKept 1
-      ${If} $PassiveMode <> 1
-      ${AndIf} $IntenticReinstall <> 1
-        ${If} ${Cmd} `MessageBox MB_YESNO|MB_ICONQUESTION "Also remove the Intentic machine agent from this PC?$\r$\n$\r$\nIt keeps your sandboxes connected and starts Docker Desktop when you sign in. Your sandboxes and their files are not deleted either way." /SD IDNO IDYES`
-          DetailPrint "Removing the Intentic machine agent..."
-          nsExec::ExecToLog /TIMEOUT=120000 '"$PROFILE\.intentic\machine\bin\intentic-machine.exe" uninstall'
+      ${If} $IntenticReinstall <> 1
+        ${If} $PassiveMode <> 1
+          ${If} ${Cmd} `MessageBox MB_YESNO|MB_ICONQUESTION "Also remove the Intentic machine agent from this PC?$\r$\n$\r$\nIt keeps your sandboxes connected and starts Docker Desktop when you sign in. Folder sync to this PC stops either way; your sandboxes and the synced folders' files are not deleted." /SD IDNO IDYES`
+            DetailPrint "Removing the Intentic machine agent..."
+            nsExec::ExecToLog /TIMEOUT=120000 '"$PROFILE\.intentic\machine\bin\intentic-machine.exe" uninstall'
+            Pop $0
+            ${If} $0 == 0
+              StrCpy $IntenticAgentKept 0
+            ${Else}
+              DetailPrint "The machine agent did not uninstall ($0). Run: intentic-machine uninstall"
+            ${EndIf}
+          ${EndIf}
+        ${EndIf}
+        ; Folder sync ends whatever the answer, and in a passive or silent uninstall too (see FOLDER SYNC ENDS WITH THE
+        ; APP, above). A Yes that went through has ended it already.
+        ${If} $IntenticAgentKept = 1
+          DetailPrint "Stopping folder sync to this PC..."
+          nsExec::ExecToLog /TIMEOUT=120000 '"$PROFILE\.intentic\machine\bin\intentic-machine.exe" sync uninstall'
           Pop $0
-          ${If} $0 == 0
-            StrCpy $IntenticAgentKept 0
-          ${Else}
-            DetailPrint "The machine agent did not uninstall ($0). Run: intentic-machine uninstall"
+          ${If} $0 <> 0
+            DetailPrint "Folder sync did not stop ($0). Run: intentic-machine sync uninstall"
           ${EndIf}
         ${EndIf}
       ${EndIf}
@@ -333,7 +351,7 @@ Var IntenticReinstall
   ${AndIf} $IntenticReinstall <> 1
   ${AndIf} ${FileExists} "$PROFILE\.intentic\ic\bin\ic.exe"
     ${If} $IntenticAgentKept = 1
-      MessageBox MB_OK|MB_ICONINFORMATION "Intentic is removed, and you are signed out on this PC.$\r$\n$\r$\nYour sandboxes and their files stay on this PC, in Docker. In a terminal, ic sandbox list shows them and ic sandbox remove <name> removes one (it stays recoverable for a week).$\r$\n$\r$\nThe machine agent stays too. intentic-machine uninstall removes it." /SD IDOK
+      MessageBox MB_OK|MB_ICONINFORMATION "Intentic is removed, and you are signed out on this PC.$\r$\n$\r$\nYour sandboxes and their files stay on this PC, in Docker. In a terminal, ic sandbox list shows them and ic sandbox remove <name> removes one (it stays recoverable for a week).$\r$\n$\r$\nFolder sync to this PC has stopped; the synced folders keep their files. The machine agent stays, to keep your sandboxes connected. intentic-machine uninstall removes it." /SD IDOK
     ${Else}
       MessageBox MB_OK|MB_ICONINFORMATION "Intentic is removed, and you are signed out on this PC.$\r$\n$\r$\nYour sandboxes and their files stay on this PC, in Docker. In a terminal, ic sandbox list shows them and ic sandbox remove <name> removes one (it stays recoverable for a week)." /SD IDOK
     ${EndIf}

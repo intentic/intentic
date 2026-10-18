@@ -170,3 +170,7 @@ barrel's namespace, and refuses two modules exporting different schemas under on
 pnpm --filter @intentic/sandbox-contract lock   # rebuild, then rewrite contract.lock.json
 pnpm --filter @intentic/sandbox-contract test
 ```
+
+Storage reports include optional current history-volume admission figures and per-repository HEAD checkout estimates.
+A `sandbox-disk-low` error turns a new checkout's turn away before the model runs; it stays held for a person to resend
+once space is available, rather than retrying automatically as a workspace-setup hold does.

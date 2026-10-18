@@ -132,7 +132,16 @@
         "show": "anzeigen",
         "startPutsItBack": "Start stellt es wieder her",
         "stopped": "gestoppt",
-        "syncPaused": "Sync pausiert"
+        "syncPaused": "Sync pausiert",
+        "diskFull": "pausiert: Laufwerk fast voll",
+        "diskFullHint": "Auf dem Laufwerk sind {free} von {total} frei. Dateisync und Git-Verlauf sind pausiert, damit die Festplatte dieses Computers nicht vollläuft, und laufen von selbst weiter, sobald wieder Platz ist.",
+        "historyBehind": "Git-Verlauf in {count} Repo im Rückstand | Git-Verlauf in {count} Repos im Rückstand",
+        "historyBehindTitle": "Dateien synchronisieren weiter; nur der lokale Git-Verlauf hinkt hinterher",
+        "historyStalled": "der letzte Abruf kam nicht mehr voran",
+        "historyTooLong": "dem letzten Abruf ging die Zeit aus",
+        "historyShallow": "die Kopie in der Sandbox ist ein flacher Klon",
+        "historyFailed": "Git hat den letzten Abruf abgelehnt",
+        "historyRetry": "nächster Versuch {when}"
     },
     "imageView": {
         "actualSize": "Originalgröße",

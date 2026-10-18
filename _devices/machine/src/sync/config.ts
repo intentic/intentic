@@ -24,11 +24,6 @@ export const sshConfigName = "intentic-machine.conf";
 export const sshConfigPath = join(sshDir, sshConfigName);
 export const userSshConfigPath = join(sshDir, "config");
 
-// Where `mutagen daemon start` writes when we are the ones starting it at logon (Windows): Mutagen's own
-// registration is a console command in the Run key, which flashes a terminal at every boot; ours goes through
-// the launcher stub instead.
-export const mutagenDaemonLogPath = join(baseDir, "mutagen-daemon.log");
-
 // When the watcher last completed a pass; a live pid is not the same fact. The watcher holds its tunnel
 // listeners on the event agent, so a rejection that escapes it leaves the process alive while the agent is gone:
 // the pidfile stays claimed and mirroring, the git bridge and file sync are silently stopped. Stamped at the
@@ -135,6 +130,34 @@ export interface Pairing {
     // compared them yet: the agent makes the folder agree with the sandbox's copy (adopt.ts) before the first session,
     // then clears it. Never on a project pairing, whose folder is the copy that counts.
     readonly adoptFolder?: true | undefined;
+    // (2026-10-18) The repos whose git history the bridge stopped fetching for a while, and why (git-bridge.ts). Kept on
+    // disk because the wait between tries is what keeps a fetch that cannot finish from running again every pass, and an
+    // agent restarted between two tries must not start the count over; and because `status` and the report read it.
+    readonly bridgeHolds?: readonly BridgeHold[] | undefined;
+    // (2026-10-18) Set while the drive holding `localDir` is nearly full and this pairing's file sync and git bridge are
+    // paused for it (low-disk.ts), with the reading that paused it. Lifted only by the watcher, once the drive has room.
+    readonly fileSyncLowDisk?: LowDiskPause | undefined;
+}
+
+// Why the bridge stopped fetching one repo: git went quiet mid-fetch (`stalled`), the fetch was still moving at its
+// ceiling (`too-long`), the sandbox's copy is a shallow clone this folder's full history cannot take (`shallow`), or git
+// refused for another reason (`failed`).
+export type BridgeHoldReason = "stalled" | "too-long" | "shallow" | "failed";
+
+// One held repo: how many fetches in a row did not finish, since when, and when the next one may start.
+export interface BridgeHold {
+    readonly repo: string;
+    readonly reason: BridgeHoldReason;
+    readonly failures: number;
+    readonly since: number;
+    readonly retryAt: number;
+}
+
+// The drive reading that paused a pairing for want of room: when, and how much was free of how much.
+export interface LowDiskPause {
+    readonly since: number;
+    readonly freeBytes: number;
+    readonly totalBytes: number;
 }
 
 // Who said a sandbox is gone: the platform's edge, or this machine's own ic.
@@ -313,10 +336,19 @@ export const readState = async (): Promise<SyncState> => {
 // Read-modify-write the pairing list: every mutation re-reads first, so a caller mutates what is on disk now.
 // This is NOT cross-process exclusion (`setup` stops the watcher before writing, which is what keeps them
 // apart); it bounds a lost update to one tick's port baseline rather than a sibling's whole pairing.
+// Within this process the writes queue behind each other: the git bridge now runs beside the watcher's pass
+// (mirror.ts `startBridge`), and two read-modify-writes interleaved there would let one drop the other's change.
+let writing: Promise<unknown> = Promise.resolve();
+
 export const updateState = async (mutate: (state: SyncState) => SyncState): Promise<void> => {
-    const next = mutate(await readState());
-    assertPairings(next.pairings);
-    await writeSecretFile(configPath, baseDir, JSON.stringify(next, undefined, 2));
+    const run = writing.then(async () => {
+        const next = mutate(await readState());
+        assertPairings(next.pairings);
+        await writeSecretFile(configPath, baseDir, JSON.stringify(next, undefined, 2));
+    });
+    // allow(silent-catch): the caller below awaits `run` and gets its error; the queue only needs to move on.
+    writing = run.catch(() => undefined);
+    await run;
 };
 
 // Add a pairing, or replace the one already held under its key (re-running setup rotates its token). Every other
@@ -385,6 +417,26 @@ export const clearAdoptFolder = async (key: string): Promise<void> =>
 
 export const setFileSyncPausedFor = async (key: string, reason: WatcherPause | undefined): Promise<void> =>
     await updatePairing(key, (held) => ({ ...held, fileSyncPausedFor: reason }));
+
+// The low-disk pause and its reading; undefined lifts it.
+export const setFileSyncLowDisk = async (key: string, pause: LowDiskPause | undefined): Promise<void> =>
+    await updatePairing(key, (held) => ({ ...held, fileSyncLowDisk: pause }));
+
+// One repo's hold set or cleared; the key is absent once nothing is held, as the resting state carries no field.
+export const setBridgeHold = async (key: string, repo: string, hold: BridgeHold | undefined): Promise<void> =>
+    await updatePairing(key, (held) => {
+        const { bridgeHolds = [], ...rest } = held;
+        const next = [...bridgeHolds.filter((entry) => entry.repo !== repo), ...(hold === undefined ? [] : [hold])];
+        return next.length === 0 ? rest : { ...rest, bridgeHolds: next };
+    });
+
+// Holds for repos the sandbox no longer lists: a repo deleted there has nothing left to wait for.
+export const pruneBridgeHolds = async (key: string, repos: readonly string[]): Promise<void> =>
+    await updatePairing(key, (held) => {
+        const { bridgeHolds = [], ...rest } = held;
+        const next = bridgeHolds.filter((entry) => repos.includes(entry.repo));
+        return next.length === 0 ? rest : { ...rest, bridgeHolds: next };
+    });
 
 // Every pairing of one sandbox rewritten together: what is true of the SANDBOX (that it is gone, since when it has not
 // answered, which slug ic keeps it under) is said on each of its pairings, so a folder attached to it reads it off its

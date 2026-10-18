@@ -494,15 +494,20 @@ flowchart LR
   (`conversations/land/parked-ref-retention.ts`), `/history/trash` past 14 days hourly, checkouts and overlays no
   conversation owns daily (`conversations/worktrees/orphan-checkouts.ts`), and the agents' dockerd's stopped
   containers and dangling images daily when it already runs (`capabilities/handlers/docker-prune.ts`).
+- Held conversations (`ready`, `error`, `interrupted`, `conflict`) release their checkout and overlay after
+  `heldCheckoutDays` quiet days (14 by default, zero disables), on the hourly archive pass. Work is committed first;
+  the branch and board card stay, review and land read the refs, and the next turn restores the checkout. Watches,
+  running turns, queued messages and unsent drafts prevent reclaim.
 - Data retention (`retention/retention-sweep.ts`, 2026-10-13) makes `settings.retention` real, on the same clock:
   each positive `*Days` DELETES that kind of copy once it is older (nothing is archived or set aside first), and every
-  value is 0 by default, which runs nothing. Transcripts (`conversations/registry/transcript-retention.ts`): a
-  conversation whose last message is past the window goes the way the archive's Empty takes it, its checkout, rows,
+  value is 0 by default except restore points, which default to 30 days. Zero runs nothing.
+  Transcripts (`conversations/registry/transcript-retention.ts`): a conversation whose last message is past the window goes the way the archive's Empty takes it, its checkout, rows,
   history unit, runtime session files, transcript backup, pages, uploads only it named and phrase-index rows, with no
   tombstone left; one running, queued, held, asking, holding unlanded work, or the parent of a child that stays is
   kept. Restore points (`history/restore-point-retention.ts`): cut with git's shallow boundary at the newest snapshot
   before the window, which stays hidden as the state later points restore to, then `gc --prune=now`; a deleted
-  repo's scope with nothing newer goes whole. Privacy vault: found values not matched since (`seen`, kept to the day)
+  repo's scope with nothing newer goes whole. A live scope's newest snapshot always stays visible. Pruning's git work
+  has a thirty-second budget; interrupted collection is retried on the next pass. Privacy vault: found values not matched since (`seen`, kept to the day)
   and the masked pictures beside them; taught lists stay until forgotten. Caches (fileq's `derived/`, `rendered/`,
   `derived-blobs/`, thumbnails) and raw output (`logs/raw-output`, `output-cache`, `terminals`, and each overlay's) by
   write time. Hourly, restore points daily, and everything within a tick of the settings changing; each run logs
@@ -611,6 +616,11 @@ keeps its existing limits; only the model-facing copy is cleaned in the daemon.
 Cold Claude Code follow-ups can resume a trimmed session copy under the `coldTrim` experiment; both eligible arms
 are measured on opening prompt size and failed calls. The cache clock includes keep-warm refreshes; unknown clocks
 leave sessions whole. [The cache and hand-off rules](../../docs/architecture/sandbox.md) describe the boundaries.
+
+New conversation checkouts reserve room on the history filesystem before any repository is written. The free-space
+floor is 2% of that volume, clamped to 5–20 GiB; the estimated checkout must leave that floor free. Existing checkouts
+and workspace conversations keep running. Storage reports current history space and each live repository's tracked
+blob sizes at HEAD, cached per repository and commit, so a large repository's cost is visible before another copy.
 
 ## Key files
 

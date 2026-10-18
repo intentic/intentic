@@ -1,4 +1,6 @@
-import { lstat } from "node:fs/promises";
+import { checkoutSpace } from "./checkout-space.js";
+import { defaultGit } from "@intentic/base/git";
+import { lstat, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
@@ -23,7 +25,7 @@ const routesOver = (roots: StorageRoots) =>
         {
             config: unstubbed<Services["config"]>("config", { historyRoot: roots.history }),
             workspace: unstubbed<Services["workspace"]>("workspace", { root: roots.workspace }),
-            logger: unstubbed<Services["logger"]>("logger", { info: () => {} }),
+            logger: unstubbed<Services["logger"]>("logger", { info: () => {}, debug: () => {} }),
         },
         async () => {
             throw new Error("no package store in this tree");
@@ -41,7 +43,19 @@ const plantSandbox = async (roots: StorageRoots): Promise<void> => {
 
 test("before any scan the report holds none, and nothing is running", async () => {
     const { roots } = await storageTree();
-    expect(await call(routesOver(roots).storage, undefined, { context })).toEqual({ scanning: false });
+    const report = await call(routesOver(roots).storage, undefined, { context });
+    expect(report).toEqual({
+        scanning: false,
+        repositoryCheckouts: [],
+        historyDisk: {
+            freeBytes: expect.any(Number),
+            totalBytes: expect.any(Number),
+            floorBytes: expect.any(Number),
+            low: expect.any(Boolean),
+        },
+    });
+    const disk = report.historyDisk!;
+    expect({ floorBytes: disk.floorBytes, allowed: !disk.low }).toEqual(checkoutSpace(disk, 0));
 });
 
 test("a scan sizes every category, names its biggest parts, and says what a clean would free now", async () => {
@@ -87,7 +101,10 @@ test("a scan sizes every category, names its biggest parts, and says what a clea
         },
     ]);
     // The last scan is what a later read answers with, walking nothing.
-    expect(await call(routes.storage, undefined, { context })).toEqual(report);
+    const reread = await call(routes.storage, undefined, { context });
+    expect(reread.scan).toEqual(report.scan);
+    expect(reread.scanning).toBe(false);
+    expect(reread.repositoryCheckouts).toEqual([]);
 });
 
 test("a clean frees what the scan said it would, and the next scan no longer counts it", async () => {
@@ -126,4 +143,25 @@ test("a category the contract does not know is refused before anything runs", as
     await expect(call(routesOver(roots).cleanStorage, { category: "everything" } as never, { context })).rejects.toMatchObject({
         code: "BAD_REQUEST",
     });
+});
+
+
+test("Storage exposes each live repository's committed checkout cost, changing with HEAD", async () => {
+    const { roots } = await storageTree();
+    const repo = join(roots.workspace, "backup");
+    await mkdir(repo);
+    await defaultGit(repo, ["init", "-q"]);
+    await writeFile(join(repo, "data"), "123456");
+    await defaultGit(repo, ["add", "data"]);
+    const commit = () => defaultGit(repo, ["-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "-qm", "data"]);
+    await commit();
+    const head = (await defaultGit(repo, ["rev-parse", "HEAD"])).stdout.trim();
+    const routes = routesOver(roots);
+    expect((await call(routes.storage, undefined, { context })).repositoryCheckouts).toEqual([{ repo: "backup", head, bytes: 6 }]);
+    await writeFile(join(repo, "data"), "12345678");
+    expect((await call(routes.storage, undefined, { context })).repositoryCheckouts).toEqual([{ repo: "backup", head, bytes: 6 }]);
+    await defaultGit(repo, ["add", "data"]);
+    await commit();
+    const next = (await defaultGit(repo, ["rev-parse", "HEAD"])).stdout.trim();
+    expect((await call(routes.storage, undefined, { context })).repositoryCheckouts).toEqual([{ repo: "backup", head: next, bytes: 8 }]);
 });

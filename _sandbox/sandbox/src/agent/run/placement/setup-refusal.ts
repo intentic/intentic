@@ -2,7 +2,7 @@ import type { MemoryReading } from "@intentic/constants/memory-room";
 import { breakArmed } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { Services } from "../../../composition.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
-import type { NamespaceSetupError } from "../../../workload/namespace-holder.js";
+import { NamespaceSetupError } from "../../../workload/namespace-holder.js";
 import { breakPolicyFor } from "../turn/turn-resume.js";
 
 // A TURN WHOSE OWN VIEW OF THE WORKSPACE DID NOT COME UP IN TIME. Its namespace holder said nothing for the whole quiet
@@ -84,3 +84,19 @@ export const retryNote =
             "turn placement: the conversation's namespace did not come up in time, trying once more",
         );
     };
+
+// A second stalled placement is refused before anything runs; other placement failures keep their own error.
+export const withSetupRefusal = async <T>(
+    services: Parameters<typeof setupRefusalOf>[0],
+    input: RoutedTurn,
+    place: () => Promise<T>,
+): Promise<T | SetupRefusal> => {
+    try {
+        return await place();
+    } catch (error) {
+        if (!(error instanceof NamespaceSetupError) || !error.transient) {
+            throw error;
+        }
+        return setupRefusalOf(services, input, error);
+    }
+};

@@ -5388,6 +5388,9 @@
         },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Apply completed work directly to workspace as uncommitted changes.",
+            "heldCheckout": "Free held conversations’ working copies",
+            "heldCheckoutNote": "After quiet days, keep the work on its branch and free the checkout and dependency overlay. The card stays; its next turn restores the working copy. Choose Never to keep working copies.",
+            "held14Days": "14 days",
             "archiveFinishedAgents": "Archive finished agents",
             "archiveQuietAgentsReclaim": "Archive quiet agents and reclaim worktrees (diffs and history are kept).",
             "commitWhatEachLanded": "Commit what each landed agent changed, under a subject written for it, and your own edits before the next agent starts.",
@@ -7043,6 +7046,7 @@
             "countMoreAlwaysSent": "{count} more is always sent | {count} more are always sent"
         },
         "personaForm": {
+            "checkoutCost": "About {bytes} for each conversation",
             "addAnother": "Add another",
             "addModelPersona": "Add a model for this persona",
             "backendWorkOnApi": "Backend work on the api and billing services",
@@ -8042,6 +8046,9 @@
             "cleaning": "Cleaning {category}"
         },
         "sandboxStorageCard": {
+            "historyLow": "The history disk has {free} free, below the {floor} kept free for new conversations. Free space here, then send again.",
+            "largeCheckout": "Every conversation gets its own full copy of {repo} (about {bytes}). Leave it out of conversations that don't need it with a persona's repository selection.",
+            "chooseRepositories": "Choose repositories on a persona's Carries controls",
             "changedTodayOrInUse": "Changed today or in use",
             "heading": "Disk",
             "measured": "Measured {when}",

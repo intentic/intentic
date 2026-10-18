@@ -97,7 +97,9 @@ export const SandboxUsageSchema = z.object({
             countedFileCacheBytes: z
                 .number()
                 .optional()
-                .describe("File cache counted in resident usage (memory.stat file less inactive_file), in bytes. Absent unless both counters are valid."),
+                .describe(
+                    "File cache counted in resident usage (memory.stat file less inactive_file), in bytes. Absent unless both counters are valid.",
+                ),
             kernelBytes: z
                 .number()
                 .optional()
@@ -163,7 +165,9 @@ export const SandboxMetricsSchema = z.object({
         .optional()
         .describe("How long the CPU figures were measured over, in milliseconds. Absent on a first reading, and then so is every CPU figure."),
     sandbox: SandboxUsageSchema.describe("The sandbox as a whole, including the daemon."),
-    daemon: DaemonUsageSchema.describe("The daemon's own usage, included in the sandbox total and process count but excluded from roles and session sums."),
+    daemon: DaemonUsageSchema.describe(
+        "The daemon's own usage, included in the sandbox total and process count but excluded from roles and session sums.",
+    ),
     sessions: z
         .record(z.string(), SessionMetricsSchema)
         .describe(
@@ -273,8 +277,29 @@ export const StorageScanSchema = z.object({
 export type StorageScan = z.infer<typeof StorageScanSchema>;
 
 export const StorageReportSchema = z.object({
-    scan: StorageScanSchema.optional().describe("The last scan that finished, kept across restarts; its `finishedAt` says how old it is. Absent until one has."),
+    scan: StorageScanSchema.optional().describe(
+        "The last scan that finished, kept across restarts; its `finishedAt` says how old it is. Absent until one has.",
+    ),
     scanning: z.boolean().describe("Whether a scan is running now."),
+    historyDisk: z
+        .object({
+            freeBytes: z.number().describe("Space available to the sandbox on the history volume, measured now."),
+            totalBytes: z.number().describe("The history volume's total size."),
+            floorBytes: z.number().describe("Space kept free before a new checkout: 2% of this volume clamped to 5–20 GiB."),
+            low: z.boolean().describe("Whether available history space is below the checkout floor."),
+        })
+        .optional()
+        .describe("The filesystem holding conversation checkouts, independent of the workspace volume. Absent if unreadable."),
+    repositoryCheckouts: z
+        .array(
+            z.object({
+                repo: z.string().describe("The live repository's workspace-relative id, or root for the workspace repository."),
+                head: z.string().describe("The commit whose tracked blobs were measured."),
+                bytes: z.number().describe("The sum of blob sizes at this HEAD: the estimated bytes for one full checkout."),
+            }),
+        )
+        .optional()
+        .describe("Live repositories' checkout costs, cached per repository and commit. Repositories without a readable HEAD are omitted."),
 });
 export type StorageReport = z.infer<typeof StorageReportSchema>;
 

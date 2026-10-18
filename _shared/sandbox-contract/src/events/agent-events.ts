@@ -331,6 +331,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 // before anything ran: the sandbox too loaded to set it up. Held like a memory hold, and sent again by
                 // itself once the sandbox has had room for a while (the memory wall's answer).
                 "workspace-setup",
+                // The history volume cannot fit a new conversation checkout while keeping its free-space floor.
+                "sandbox-disk-low",
                 // The runtime hit its own iteration ceiling and stopped; the work may be half done, so the user
                 // decides.
                 "turn-cap",

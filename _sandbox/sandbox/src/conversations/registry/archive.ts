@@ -287,3 +287,40 @@ export const sweepAgedAgents = async (deps: AgentArchiveDeps, now: number, reten
     deps.logger.info({ count: archived.length, failed: failed.length }, "agents: archived aged-out agents");
     return archived;
 };
+
+// Held work stays on the board. Review and land read the parked refs without a checkout, and ensure unparks them
+// and brings the working copy back on the next turn. Watches, queued words and unsent drafts still need their working copy.
+export const heldCheckoutByAge = (agent: AgentSummary, now: number, retentionMs: number): boolean =>
+    retentionMs > 0 &&
+    agent.archivedAt === undefined &&
+    ["ready", "error", "interrupted", "conflict"].includes(agent.status) &&
+    (agent.watches ?? []).length === 0 &&
+    (agent.queue?.items.length ?? 0) === 0 &&
+    agent.unsentAt === undefined &&
+    now - agent.updatedAt >= retentionMs;
+
+export const sweepHeldCheckouts = async (deps: AgentArchiveDeps, now: number, retentionMs: number): Promise<string[]> => {
+    const reclaimed: string[] = [];
+    for (const agent of deps.agents.list()) {
+        if (!heldCheckoutByAge(agent, now, retentionMs) || deps.conversations.running(agent.id)) {
+            continue;
+        }
+        const entry = deps.agents.entry(agent.id);
+        if (entry === undefined || !isIsolated(entry) || (await deps.agentWorktrees.presence(agent.id)) !== "present") {
+            continue;
+        }
+        // Earlier reclaims and the disk probe yield: somebody may have used this card since the pass began.
+        const current = deps.agents.list().find((card) => card.id === agent.id);
+        if (current === undefined || !heldCheckoutByAge(current, now, retentionMs) || deps.conversations.running(agent.id)) {
+            continue;
+        }
+        try {
+            await deps.agentWorktrees.retire(agent.id, entry.placement.repos, entry.social.title?.text);
+            reclaimed.push(agent.id);
+            deps.logger.info({ id: agent.id }, "agents: reclaimed held conversation checkout and overlay; work kept on branch");
+        } catch (error) {
+            deps.logger.warn({ err: error, id: agent.id }, "agents: held checkout reclaim failed, left for the next sweep");
+        }
+    }
+    return reclaimed;
+};

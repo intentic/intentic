@@ -364,6 +364,18 @@ describe("pairingLine", () => {
         expect(pairingItem(synced({ mutagenStatus: undefined })).tone).toBe("fail");
     });
 
+    // The pause the owner can end by freeing room says so, with the numbers; a held repo's history is a warning, since its
+    // files still sync.
+    it("says why a pairing is paused when its drive is short of room, and which repos' history lags", () => {
+        const lowDisk = { since: 1, freeBytes: 3.2 * 1024 ** 3, totalBytes: 953 * 1024 ** 3 };
+        const low = pairingLine(synced({ paused: true, lowDisk }));
+        expect(low).toContain("its drive has 3.2 GB free of 953 GB; resumes by itself once there is room");
+        expect(pairingItem(synced({ paused: true, lowDisk })).tone).toBe("fail");
+        const held = synced({ bridgeHolds: [{ repo: "firma-backup", reason: "stalled", failures: 2, since: 1, retryAt: Date.now() + 30 * 60_000 }] });
+        expect(pairingLine(held)).toContain("git history of firma-backup not following the sandbox (the last fetch stopped moving); next try in 30 min");
+        expect(pairingItem(held).tone).toBe("warn");
+    });
+
     it("says paused when it is paused, over whatever Mutagen last reported", () => {
         expect(pairingLine(synced({ paused: true }))).toContain("· paused");
         expect(pairingItem(synced({ paused: true })).tone).toBe("warn");

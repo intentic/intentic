@@ -14,6 +14,7 @@ import { opt } from "../../../opt.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import type { PlacedTurnEnding, TurnCloser } from "./turn-close.js";
 import { keepLandFailure, landedFrame, settleLandBooks, settleParentBooks } from "../../../conversations/land/turn-landing.js";
+import { CheckoutSpaceRefused } from "../../../system/resources/storage/checkout-space.js";
 import type { ReachWatch } from "./turn-reach.js";
 
 // Where a conversation's turn runs, as the one value its lifecycle is parameterized by: the runner, the main tree, or a
@@ -46,6 +47,7 @@ export async function* placedTurn(
     conversationId: string,
     placement: Placement,
     closer?: TurnCloser,
+    unattended = false,
 ): AsyncGenerator<AgentEvent> {
     let failed = false;
     let stopped = false;
@@ -72,11 +74,22 @@ export async function* placedTurn(
         yield* placement.land(failed, awaiting);
     } catch (error) {
         stopped = isAbort(error);
-        if (!stopped) {
+        if (!stopped && !(error instanceof CheckoutSpaceRefused)) {
             failed = true;
-            conversations.send(conversationId, { kind: "frame", frame: { kind: "error", message: error instanceof Error ? error.message : placement.thrown } });
+            conversations.send(conversationId, {
+                kind: "frame",
+                frame: { kind: "error", message: error instanceof Error ? error.message : placement.thrown },
+            });
         }
-        throw error;
+        if (error instanceof CheckoutSpaceRefused) {
+            failed = true;
+            const frame = { kind: "error", code: "sandbox-disk-low", message: error.message, ...opt("unattended", unattended ? true : undefined) } as const;
+            conversations.send(conversationId, { kind: "frame", frame });
+            yield frame;
+            yield { kind: "done" };
+        } else {
+            throw error;
+        }
     } finally {
         awaiting = await armOnce();
         // A close that throws still lets the conversation settle and the turn announce its ending: an unsettled one

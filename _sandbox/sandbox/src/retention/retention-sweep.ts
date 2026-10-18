@@ -14,8 +14,7 @@ import { removeAgedFiles } from "./aged-files.js";
 
 // THE DATA RETENTION SWEEP (2026-10-13): settings.retention made real. Each positive `*Days` DELETES the copies of one
 // kind older than that many days, for good: nothing is archived or moved to a trash first, since a copy kept anywhere
-// is a copy a person asked to be forgotten is still in. Every value is 0 by default, and 0 runs nothing, so a sandbox
-// that never set one keeps everything as it always did. Each kind is applied by the code that owns its store:
+// is a copy a person asked to be forgotten is still in. Zero runs nothing; restore points default to 30 days, and the other copies default to zero. Each kind is applied by the code that owns its store:
 // - transcripts: conversations/registry/transcript-retention.ts (a conversation and every copy of what was said in it)
 // - restore points: history/restore-point-retention.ts (the workspace snapshots, cut with git's shallow boundary)
 // - privacy vault: privacy/privacy-vault.ts `expire` (values not seen since), with the masked pictures beside it

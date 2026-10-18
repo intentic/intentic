@@ -195,10 +195,7 @@
         "count": 126,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_devices/machine/src/sync/commands.ts": {
-        "count": 1042,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
+    "_devices/machine/src/sync/commands.ts": 1052,
     "_devices/machine/src/sync/commands.ts#runSetup#cognitive": {
         "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
@@ -220,7 +217,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_devices/machine/src/sync/mutagen.ts": {
-        "count": 1332,
+        "count": 1319,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_devices/machine/src/sync/retire.ts#retireSandbox#cognitive": {
@@ -284,7 +281,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/ui/src/components/sandbox/deviceDetail.ts": {
-        "count": 791,
+        "count": 705,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/ui/src/composables/useHighlighter.ts#highlightSliced#cognitive": {
@@ -1521,7 +1518,7 @@
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/stream-agent.ts": 1062,
+    "_sandbox/sandbox/src/agent/run/stream-agent.ts": 1052,
     "_sandbox/sandbox/src/agent/run/stream-agent.ts#preflight#cyclomatic": {
         "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
@@ -3292,7 +3289,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/schemas/devices.ts": {
-        "count": 765,
+        "count": 740,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/schemas/git/git.ts": {

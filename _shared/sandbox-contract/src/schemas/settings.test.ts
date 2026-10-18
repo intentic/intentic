@@ -207,3 +207,13 @@ describe(`per-job model lists`, () => {
         expect(convertDocument(SETTINGS_HISTORY, `object`, { modelSetups: [{ id: `low`, pins: [haiku] }], roleSetups: {} }, true).changes).toEqual([]);
     });
 });
+
+test("disk retention defaults bound checkouts and restore points while preserving explicit zero", () => {
+    const defaults = SandboxSettingsSchema.parse({});
+    expect(defaults.agentRetentionDays).toBe(3);
+    expect(defaults.heldCheckoutDays).toBe(14);
+    expect(defaults.retention.restorePointDays).toBe(30);
+    const existing = SandboxSettingsSchema.parse({ heldCheckoutDays: 0, retention: { restorePointDays: 0 } });
+    expect(existing.heldCheckoutDays).toBe(0);
+    expect(existing.retention.restorePointDays).toBe(0);
+});

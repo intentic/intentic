@@ -22,6 +22,7 @@ const TURNED_AWAY: ReadonlySet<string> = new Set([
     "sandbox-memory-low",
     // The conversation's own view of the workspace could not be set up in time: nothing was started in it.
     "workspace-setup",
+    "sandbox-disk-low",
     "trial-unavailable",
     "trial-model-unavailable",
     "trial-exhausted",

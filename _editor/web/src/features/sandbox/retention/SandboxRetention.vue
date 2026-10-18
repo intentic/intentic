@@ -16,7 +16,7 @@ import AuditKeeping from "../audit/AuditKeeping.vue";
 // Retention: how long this sandbox keeps each kind of record, in one table, so "how long do we keep it" has one answer.
 // The copies of what people and agents wrote (settings.retention) were Agent ▸ Finishing, beside the archive row, and
 // the audit trail's period was Audit log ▸ How it is kept, until 2026-10-16. They differ in one thing said on the rows:
-// every copy starts at forever (0) and deletes once a number is set, while the audit trail is always kept for a period,
+// restore points start at 30 days, other copies at forever (0), and positive periods delete, while the audit trail is always kept for a period,
 // at least a month, since a trail that could be switched off records nothing. Below the table, the rest of how the audit
 // trail is kept (whether reads are recorded, where a copy goes), which was the audit log's second part until 2026-10-17:
 // the log is a part of Activity now, the records alone, and every setting about keeping a record is here.

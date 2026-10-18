@@ -8,7 +8,7 @@ import { createLogger } from "../logger.js";
 import { removeAgedFiles } from "./aged-files.js";
 import { type RetentionDeps, type RetentionPass, runRetentionSweep } from "./retention-sweep.js";
 
-// The sweep deletes for good, so the default must do nothing at all, and each positive setting must reach exactly its
+// Zero disables a kind; each positive setting must reach exactly its
 // own kind with the right cut.
 
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
@@ -25,7 +25,7 @@ afterEach(async () => {
 
 // Every store a sweep could touch throws if reached; a test provides the ones its settings name.
 const depsWith = (retention: Partial<RetentionSettings>, provided: Partial<RetentionDeps> = {}): RetentionDeps => ({
-    settings: async () => RetentionSettingsSchema.parse(retention),
+    settings: async () => RetentionSettingsSchema.parse({ restorePointDays: 0, ...retention }),
     now: () => NOW,
     logger,
     transcripts: unstubbed<{ run: RetentionDeps["transcripts"] }>("transcripts", {}).run,
@@ -44,7 +44,7 @@ const aged = async (path: string, ageMs: number): Promise<void> => {
     await utimes(path, at, at);
 };
 
-test("with every setting at its default the sweep touches nothing", async () => {
+test("with every setting at zero the sweep touches nothing", async () => {
     const recorded: RetentionPass[] = [];
     expect(await runRetentionSweep({ ...depsWith({}), record: (pass) => recorded.push(pass) })).toEqual([]);
     expect(recorded).toEqual([]);
@@ -127,4 +127,22 @@ test("caches and raw output lose the files written before the cut, at any depth,
 
 test("removeAgedFiles on a folder that does not exist removes nothing", async () => {
     expect(await removeAgedFiles(join(dir, "nowhere"), NOW)).toBe(0);
+});
+
+test("defaults prune only restore points after thirty days", async () => {
+    const cuts: number[] = [];
+    const deps = depsWith(
+        {},
+        {
+            history: {
+                prune: async (before) => {
+                    cuts.push(before);
+                    return 0;
+                },
+            },
+        },
+    );
+    const passes = await runRetentionSweep({ ...deps, settings: async () => RetentionSettingsSchema.parse({}) });
+    expect(cuts).toEqual([NOW - 30 * DAY]);
+    expect(passes).toEqual([{ kind: "restorePoints", days: 30, before: NOW - 30 * DAY, deleted: 0 }]);
 });

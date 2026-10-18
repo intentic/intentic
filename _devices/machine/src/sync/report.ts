@@ -34,6 +34,18 @@ const agentState = async (installed: string | undefined): Promise<DeviceAgent> =
 // report. Undefined when Mutagen was not consulted at all, which is not the same as a daemon holding nothing.
 export type LiveSessions = ReadonlyMap<string, LiveSession>;
 
+// What the record says holds a pairing back, beside whatever Mutagen says: read off the pairing, so stated whether or not
+// Mutagen was consulted. Each only while it holds, as the rest of a resting pairing says nothing.
+const withHolds = (row: DevicePairing, pairing: Pairing): DevicePairing => {
+    if (pairing.fileSyncLowDisk !== undefined) {
+        row.lowDisk = pairing.fileSyncLowDisk;
+    }
+    if (pairing.bridgeHolds !== undefined && pairing.bridgeHolds.length > 0) {
+        row.bridgeHolds = [...pairing.bridgeHolds];
+    }
+    return row;
+};
+
 const pairingReport = (sessions: LiveSessions | undefined, pairing: Pairing): DevicePairing => {
     // Stated on every pairing rather than inferred from an empty port list: "nothing is listening" and "this device
     // was told not to" look identical otherwise, and only one has anything for a reader to do.
@@ -50,7 +62,7 @@ const pairingReport = (sessions: LiveSessions | undefined, pairing: Pairing): De
     // A mirror-only enrollment has no file sync to ask about; the absent status is a fact about the mode, not a
     // failed read. Nor has the projects host, whose folders are pairings of their own.
     if (pairing.mode !== "sync" || sessions === undefined || pairing.projectsHost === true) {
-        return { sandboxId: pairing.sandboxId, mode: pairing.mode, localDir: pairing.localDir, ...remote, ...kind, mirroring };
+        return withHolds({ sandboxId: pairing.sandboxId, mode: pairing.mode, localDir: pairing.localDir, ...remote, ...kind, mirroring }, pairing);
     }
     // A sync pairing with no session is carried as the absence of a status, not a word for it, so every reader
     // renders it the same way instead of inventing a default. sessionStateOf resolves Mutagen's omitted zero.
@@ -58,20 +70,23 @@ const pairingReport = (sessions: LiveSessions | undefined, pairing: Pairing): De
     // The state backup reads the same way: no status means no session, so the sandbox is the only copy of its state. A
     // project pairing has none by design, which the remote dir beside it says; its absence here is not a failure.
     const backup = isProjectPairing(pairing) ? undefined : sessionStateOf(sessions.get(backupSessionName(pairingKey(pairing))));
-    return {
-        sandboxId: pairing.sandboxId,
-        mode: pairing.mode,
-        localDir: pairing.localDir,
-        ...remote,
-        ...kind,
-        mirroring,
-        mutagenStatus: session.status,
-        conflicts: session.conflicts,
-        // The stuck paths, not just a count: a number names nothing to look at.
-        conflictedPaths: session.conflictedPaths,
-        paused: session.paused,
-        backupStatus: backup?.status,
-    };
+    return withHolds(
+        {
+            sandboxId: pairing.sandboxId,
+            mode: pairing.mode,
+            localDir: pairing.localDir,
+            ...remote,
+            ...kind,
+            mirroring,
+            mutagenStatus: session.status,
+            conflicts: session.conflicts,
+            // The stuck paths, not just a count: a number names nothing to look at.
+            conflictedPaths: session.conflictedPaths,
+            paused: session.paused,
+            backupStatus: backup?.status,
+        },
+        pairing,
+    );
 };
 
 // Both halves of one pairing's port picture: what reached localhost, and what wanted to but couldn't.

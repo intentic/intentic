@@ -4922,6 +4922,9 @@
         },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Wprowadzaj skończoną pracę wprost do przestrzeni roboczej jako niezacommitowane zmiany.",
+            "heldCheckout": "Zwalniaj kopie robocze wstrzymanych rozmów",
+            "heldCheckoutNote": "Po dniach bez aktywności zachowaj pracę na gałęzi i zwolnij kopię roboczą oraz nakładkę zależności. Karta zostaje; następna tura odtworzy kopię. Wybierz Nigdy, aby zachować kopie robocze.",
+            "held14Days": "14 dni",
             "archiveFinishedAgents": "Archiwizuj skończone agenty",
             "archiveQuietAgentsReclaim": "Archiwizuj ciche agenty i odzyskuj ich worktree (diffy i historia zostają).",
             "commitWhatEachLanded": "Commituj to, co zmienił każdy scalony agent, pod tematem napisanym dla niego, oraz Twoje własne zmiany, zanim ruszy następny agent.",
@@ -6599,6 +6602,7 @@
             "countMoreAlwaysSent": "{count} kolejna jest wysyłana zawsze | {count} kolejne są wysyłane zawsze | {count} kolejnych jest wysyłanych zawsze"
         },
         "personaForm": {
+            "checkoutCost": "Około {bytes} na każdą rozmowę",
             "accountNotSignedIn": "niezalogowane",
             "addAnother": "Dodaj kolejny",
             "addModelPersona": "Dodaj model dla tej persony",
@@ -7247,6 +7251,9 @@
             "onYourComputers": "Na twoich komputerach"
         },
         "sandboxStorageCard": {
+            "historyLow": "Na dysku historii pozostało {free} wolnego miejsca, poniżej progu {floor} wymaganego dla nowych rozmów. Zwolnij tutaj miejsce, a następnie wyślij ponownie.",
+            "largeCheckout": "Każda rozmowa otrzymuje własną pełną kopię repozytorium {repo} (około {bytes}). Pomiń je w rozmowach, które go nie potrzebują, wybierając repozytoria na karcie persony.",
+            "chooseRepositories": "Wybierz repozytoria w polu „Niesie” na karcie persony",
             "changedTodayOrInUse": "Zmienione dziś lub w użyciu",
             "clean": "Wyczyść",
             "confirmHeader": "Wyczyścić „{category}”?",

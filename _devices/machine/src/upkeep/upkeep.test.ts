@@ -3,7 +3,7 @@ import type { UpkeepItem } from "./reconcile.js";
 import { reportOf, summaryLine } from "./reconcile.js";
 import { doctorItem } from "./doctor.js";
 import { isInside, trashedAt, trashStamp } from "./trash.js";
-import { loginEntryFinding, mutagenRunDecision } from "./login.js";
+import { loginEntryFinding } from "./login.js";
 import { MANIFEST } from "./manifest.js";
 import { expiredRunLogs, expiredTrash, isShimPart, RUN_LOG_KEEP_MS, RUN_LOGS_KEPT, TRASH_KEEP_MS } from "./retention.js";
 import { legacyAutostart } from "./retired.js";
@@ -81,22 +81,6 @@ test("this agent's login entry is written again when stale or missing, left when
     expect(loginEntryFinding({ kind: "task", state: "unknown" }, repair)).toEqual({
         what: 'the "IntenticMachine" logon task',
         why: "it could not be read, so it is left as it is",
-    });
-});
-
-test("Mutagen's Run value goes once no pairing needs it, is written while one does and this agent's copy runs, else is left", () => {
-    const own = "C:\\Users\\dev\\.intentic\\machine\\bin\\mutagen.exe";
-    const ours = `"C:\\Users\\dev\\.intentic\\machine\\bin\\intentic-launch.exe" "--" "${own}" "daemon" "start"`;
-    expect(mutagenRunDecision({ pairings: 0, value: ours, own, ownInUse: true })).toBe("retire");
-    expect(mutagenRunDecision({ pairings: 0, value: undefined, own, ownInUse: true })).toBeUndefined();
-    expect(mutagenRunDecision({ pairings: 2, value: undefined, own, ownInUse: true })).toBe("repair");
-    expect(mutagenRunDecision({ pairings: 2, value: '"C:\\old\\mutagen.exe" "daemon" "start"', own, ownInUse: true })).toBe("repair");
-    expect(mutagenRunDecision({ pairings: 2, value: ours.toUpperCase(), own, ownInUse: true })).toBeUndefined();
-    // The user's own Mutagen is theirs to start.
-    expect(mutagenRunDecision({ pairings: 2, value: undefined, own, ownInUse: false })).toBeUndefined();
-    // A sync.json that does not read says nothing about whether a pairing needs it: nothing goes on a guess.
-    expect(mutagenRunDecision({ pairings: new SyntaxError("bad json"), value: ours, own, ownInUse: true })).toEqual({
-        why: "sync.json does not read (bad json), so whether a pairing needs it is not known",
     });
 });
 

@@ -14,6 +14,18 @@ import type { HistoryGitRunner } from "./history.js";
 // snapshot on every run; the boundary costs one file. Rejected: grafts or replace refs, which keep the objects. A
 // deleted repo's scope with nothing newer than the cut is removed whole: nothing it holds is inside the window.
 
+// A first pass over an old store may repack a lot, and it holds the history lock throughout (a `gc --prune=now` beside a
+// snapshot being written could drop that snapshot's objects), so snapshots wait while it runs. Bounded, so a stuck git
+// cannot hold them off for good; generous, because the store this exists for is the multi-GB one, whose repack takes
+// minutes, and a budget it can never finish in would cut the collection off every day and free nothing. A pass cut off
+// leaves its pending mark, and the next day's finishes it.
+const RETENTION_GIT_BUDGET_MS = 15 * 60_000;
+
+export const retentionGit = (git: HistoryGitRunner): HistoryGitRunner => {
+    const signal = AbortSignal.timeout(RETENTION_GIT_BUDGET_MS);
+    return (args, options) => git(args, { ...options, signal });
+};
+
 export interface RetentionScope {
     readonly name: string;
     readonly gitDir: string;
@@ -40,15 +52,6 @@ interface PruneDeps {
     readonly logger: Pick<Logger, "info" | "warn">;
 }
 
-const commitsOf = async ({ git, bare }: PruneDeps): Promise<{ sha: string; at: number }[]> => {
-    const { stdout } = await git(["log", "--format=%H %ct", "refs/snapshots/head"], bare);
-    return stdout
-        .split("\n")
-        .map((line) => line.split(" "))
-        .filter((parts): parts is [string, string] => parts.length === 2 && parts[0] !== "")
-        .map(([sha, seconds]) => ({ sha, at: Number(seconds) * 1000 }));
-};
-
 // Removes a scope's snapshots taken before `before` (epoch ms); returns how many it took off the timeline.
 const pruneScope = async (deps: PruneDeps, before: number): Promise<number> => {
     const { git, scope, bare, logger } = deps;
@@ -56,28 +59,45 @@ const pruneScope = async (deps: PruneDeps, before: number): Promise<number> => {
         return 0;
     }
     // A scope with no snapshot yet has no head to log, and nothing to prune.
-    const commits = await commitsOf(deps).catch(() => []); // allow(silent-catch): an unborn head is an empty timeline.
-    const firstOld = commits.findIndex((commit) => commit.at < before);
-    const base = commits[firstOld];
-    if (base === undefined) {
+    const head = (await git(["log", "-1", "--format=%ct", "refs/snapshots/head"], bare).catch(() => ({ stdout: "" }))).stdout.trim();
+    if (head === "") {
         return 0;
     }
-    if (firstOld === 0 && scope.name !== "root" && !(await pathExists(scope.worktree))) {
+    if (Number(head) * 1000 < before && scope.name !== "root" && !(await pathExists(scope.worktree))) {
+        const count = Number((await git(["rev-list", "--count", "refs/snapshots/head"], bare)).stdout.trim());
         await rm(scope.gitDir, { recursive: true, force: true });
-        logger.info({ scope: scope.name, snapshots: commits.length }, "history: removed a deleted repo's restore points past retention");
-        return commits.length;
+        logger.info({ scope: scope.name, snapshots: count }, "history: removed a deleted repo's restore points past retention");
+        return count;
     }
-    const behind = commits.length - firstOld - 1;
-    const hidden = (await retentionBases(scope.gitDir)).has(base.sha);
-    if (behind === 0 && hidden) {
+    // Never hide the newest snapshot, even when the whole store is old. Ask git for one boundary and a count rather
+    // than bringing weeks of minute-by-minute history into the daemon's heap.
+    const sha = (
+        await git(["log", "-1", "--format=%H", `--before=${String(Math.ceil(before / 1000) - 1)}`, "refs/snapshots/head^"], bare).catch(() => ({
+            stdout: "",
+        }))
+    ).stdout.trim();
+    if (sha === "") {
         return 0;
+    }
+    const base = { sha };
+    const behind = Number((await git(["rev-list", "--count", sha], bare)).stdout.trim()) - 1;
+    const hidden = (await retentionBases(scope.gitDir)).has(base.sha);
+    const pendingGc = join(scope.gitDir, "retention-gc-pending");
+    if (behind === 0 && hidden && !(await pathExists(pendingGc))) {
+        return 0;
+    }
+    const collect = behind > 0 || (await pathExists(pendingGc));
+    // Record the collection before the cut, so a crash between the two writes still retries it.
+    if (collect) {
+        await writeFileAtomic(pendingGc, "pending\n");
     }
     const shallow = join(scope.gitDir, "shallow");
     await writeFileAtomic(shallow, `${base.sha}\n`);
-    if (behind > 0) {
+    if (collect) {
         await git(["reflog", "expire", "--expire=now", "--all"], bare);
         // A cruft pack would keep what the cut left unreachable; --prune=now with -a drops it instead.
         await git(["-c", "gc.cruftPacks=false", "gc", "--prune=now", "-q"], bare);
+        await rm(pendingGc, { force: true });
     }
     return behind + (hidden ? 0 : 1);
 };

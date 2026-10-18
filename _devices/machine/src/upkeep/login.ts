@@ -1,16 +1,14 @@
-import { existsSync } from "node:fs";
 import { autostart, clearWindowsRunValue, type EntryInspection } from "@intentic/local-agent";
 import { MACHINE_AUTOSTART } from "../autostart/autostart.js";
 import { agentPath } from "../release.js";
 import { machineLauncher } from "../resident/supervision.js";
-import { readState } from "../sync/config.js";
-import { MUTAGEN_RUN_VALUE, ownMutagenPath, registerMutagenAutostart } from "../sync/mutagen.js";
+import { MUTAGEN_RUN_VALUE } from "../sync/mutagen.js";
 import { readRegistryValue } from "../windows-registry.js";
-import type { Finding, UpkeepContext, UpkeepEntry } from "./entry.js";
+import type { Finding, UpkeepEntry } from "./entry.js";
 
 /* THE LOGIN ENTRIES THIS AGENT WRITES, kept as this build writes them: its own (which the start's repair also checks,
-   but only at a start, and a machine that never restarts never converged), and Mutagen's daemon's Run value on Windows,
-   which nothing ever took away once the last pairing went. */
+   but only at a start, and a machine that never restarts never converged), and the Run value older builds wrote for
+   Mutagen's daemon on Windows, taken away. */
 
 // The supervisors a login entry stands for; the Windows side (a supervised distro) and "none" have no entry here.
 const ENTRY_SUPERVISORS: ReadonlySet<string> = new Set(["task", "run-key", "systemd", "launchd", "xdg"]);
@@ -68,102 +66,29 @@ const ownLoginEntry: UpkeepEntry = {
     },
 };
 
-/* IntenticMutagenDaemon, the Run value `sync setup` writes so Mutagen's daemon (holding every sync and forward session)
-   starts at sign-in. Wanted while a pairing needs Mutagen and this agent's own copy is the Mutagen in use; while only a
-   Mutagen of the user's own stands in, starting it is theirs. Nothing took it away once the last pairing went, so a PC that stopped syncing
-   still started this agent's Mutagen daemon at every sign-in. Windows only: elsewhere `sync setup` registers nothing. */
+/* IntenticMutagenDaemon, the Run value older builds' `sync setup` wrote so Mutagen's daemon started at sign-in. It
+   started a daemon over Mutagen's shared data directory, which this agent no longer uses (sync/mutagen-env.ts), and the
+   resident agent starts its own daemon now (sync/mutagen.ts MUTAGEN_RUN_VALUE). Windows only: elsewhere `sync setup`
+   registered nothing of its own. */
 
 // The key as PowerShell's registry drive names it.
 const WINDOWS_RUN_KEY = "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-
-// The Run value's data as stored (windows-registry.ts: reg.exe's listing would come in the OEM code page, and a path
-// under a non-ASCII profile would never match this agent's own), or undefined when there is none. One that cannot be
-// read reads as none, as it did through reg.exe: the worst that follows is the value written again.
-const readRunValue = async (name: string): Promise<string | undefined> =>
-    // allow(silent-catch): an unreadable Run value is taken for an absent one, whose repair only writes it again
-    (await readRegistryValue(WINDOWS_RUN_KEY, name).catch(() => undefined))?.data;
-
-export interface MutagenRunReading {
-    // How many pairings this environment holds, or why sync.json could not be read.
-    readonly pairings: number | Error;
-    // The Run value's data, undefined when there is none.
-    readonly value: string | undefined;
-    // This agent's own Mutagen copy, and whether it is the Mutagen in use.
-    readonly own: string;
-    readonly ownInUse: boolean;
-}
-
-// What to do about the Run value: take it away, write it again, or nothing; or why it is left. Pure.
-export const mutagenRunDecision = (reading: MutagenRunReading): "retire" | "repair" | { readonly why: string } | undefined => {
-    if (reading.pairings instanceof Error) {
-        return reading.value === undefined
-            ? undefined
-            : { why: `sync.json does not read (${reading.pairings.message}), so whether a pairing needs it is not known` };
-    }
-    if (reading.pairings === 0) {
-        return reading.value === undefined ? undefined : "retire";
-    }
-    if (!reading.ownInUse) {
-        return undefined;
-    }
-    return reading.value?.toLowerCase().includes(reading.own.toLowerCase()) === true ? undefined : "repair";
-};
-
-const mutagenReading = async (): Promise<MutagenRunReading> => {
-    const own = ownMutagenPath();
-    return {
-        // allow(silent-catch): an unreadable sync.json is carried as the reason, not swallowed (mutagenRunDecision)
-        pairings: await readState().then(
-            (state) => state.pairings.length,
-            (error: unknown) => (error instanceof Error ? error : new Error(String(error))),
-        ),
-        value: await readRunValue(MUTAGEN_RUN_VALUE),
-        own,
-        // The pinned copy is the Mutagen this agent runs whenever it is there (sync/mutagen.ts, ensureMutagen); PATH's
-        // stands in only while it cannot be fetched.
-        ownInUse: existsSync(own),
-    };
-};
-
-const mutagenFinding = async (context: UpkeepContext, wanted: "retire" | "repair"): Promise<Finding[]> => {
-    if (context.platform !== "win32") {
-        return [];
-    }
-    const reading = await mutagenReading();
-    const decision = mutagenRunDecision(reading);
-    const what = `the "${MUTAGEN_RUN_VALUE}" Run value`;
-    if (decision === undefined || (typeof decision === "string" && decision !== wanted)) {
-        return [];
-    }
-    if (typeof decision === "object") {
-        // Said once, by the entry that would have taken it away.
-        return wanted === "retire" ? [{ what, why: decision.why }] : [];
-    }
-    return [
-        {
-            what,
-            act:
-                decision === "retire"
-                    ? async () => await Promise.resolve(clearWindowsRunValue(MUTAGEN_RUN_VALUE))
-                    : async () => await Promise.resolve(registerMutagenAutostart(reading.own, machineLauncher(), context.log)),
-        },
-    ];
-};
 
 const mutagenRetire: UpkeepEntry = {
     id: "mutagen-autostart-unused",
     kind: "login-entry",
     action: "retire",
-    reason: "the Run value that starts this agent's Mutagen daemon at sign-in, once no pairing here needs Mutagen",
-    find: async (context) => await mutagenFinding(context, "retire"),
+    reason: "the Run value older builds wrote to start Mutagen's daemon at sign-in, which this agent now starts itself",
+    find: async (context) => {
+        if (context.platform !== "win32") {
+            return [];
+        }
+        // allow(silent-catch): an unreadable Run value is taken for an absent one; the next pass reads it again
+        const value = await readRegistryValue(WINDOWS_RUN_KEY, MUTAGEN_RUN_VALUE).catch(() => undefined);
+        return value === undefined
+            ? []
+            : [{ what: `the "${MUTAGEN_RUN_VALUE}" Run value`, act: async () => await Promise.resolve(clearWindowsRunValue(MUTAGEN_RUN_VALUE)) }];
+    },
 };
 
-const mutagenRepair: UpkeepEntry = {
-    id: "mutagen-autostart",
-    kind: "login-entry",
-    action: "repair",
-    reason: "the Run value that starts this agent's Mutagen daemon at sign-in, while a pairing here needs it",
-    find: async (context) => await mutagenFinding(context, "repair"),
-};
-
-export const LOGIN_ENTRIES: readonly UpkeepEntry[] = [ownLoginEntry, mutagenRetire, mutagenRepair];
+export const LOGIN_ENTRIES: readonly UpkeepEntry[] = [ownLoginEntry, mutagenRetire];

@@ -1,5 +1,8 @@
+import { existsSync } from "node:fs";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { sweepHeldCheckouts, type AgentArchiveDeps } from "../../registry/archive.js";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -48,7 +51,7 @@ const writeTree = async (root: string, files: Readonly<Record<string, string>>):
 // `baseline` joins the two files every suite here starts from, committed before the conversation's copy is cut.
 const setup = async (
     baseline: Readonly<Record<string, string>> = {},
-): Promise<{ work: string; worktrees: AgentWorktrees; conversation: ConversationWorktree }> => {
+): Promise<{ work: string; historyRoot: string; worktrees: AgentWorktrees; conversation: ConversationWorktree }> => {
     const base = await mkdtemp(join(tmpdir(), "intentic-present-"));
     tempDirs.push(base);
     const work = join(base, "work");
@@ -69,7 +72,7 @@ const setup = async (
         logger,
         perf,
     });
-    return { work, worktrees, conversation: await worktrees.ensure("c1", []) };
+    return { work, historyRoot, worktrees, conversation: await worktrees.ensure("c1", []) };
 };
 
 // Runs both review steps together: the rows, and how each stands against the main tree.
@@ -375,4 +378,44 @@ test("an ignored file the conversation wrote never lands, and the review lists i
 
     await writeTree(work, { "out/film.mp4": "render" });
     expect(await reviewOf(deps, agent)).not.toHaveProperty("ignored");
+});
+
+test("a held ready checkout is reclaimed without losing review, land or the next turn", async () => {
+    const { work, historyRoot, worktrees, conversation } = await setup();
+    const entry = isolatedAgent(conversation.repos);
+    const card: AgentSummary = {
+        id: "c1",
+        status: "ready",
+        provider: "claude",
+        harness: "native",
+        branch: "agent/c1",
+        updatedAt: 0,
+        attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
+    };
+    const overlay = join(historyRoot, "overlays", "c1");
+    await mkdir(overlay, { recursive: true });
+    await writeFile(join(overlay, "dependency"), "installed");
+    await writeFile(join(conversation.cwd, "added.ts"), "held work\n");
+    const deps = unstubbed<AgentArchiveDeps>("archive", {
+        agents: unstubbed<AgentArchiveDeps["agents"]>("agents", { list: () => [card], entry: () => entry }),
+        conversations: unstubbed<AgentArchiveDeps["conversations"]>("conversations", { running: () => false }),
+        agentWorktrees: worktrees,
+        logger,
+    });
+    const window = 14 * 24 * 60 * 60_000;
+    expect(await sweepHeldCheckouts(deps, window - 1, window)).toEqual([]);
+    expect(await sweepHeldCheckouts(deps, window, window)).toEqual(["c1"]);
+    expect(existsSync(conversation.cwd)).toBe(false);
+    expect(existsSync(overlay)).toBe(false);
+    expect(entry.archivedAt).toBeUndefined();
+    expect(await worktrees.presence("c1")).toBe("restorable");
+    expect(await worktrees.attached("c1", "root")).toBe(false);
+    expect(await sh(work, "show", "agent/c1:added.ts")).toBe("held work");
+    expect(await review(worktrees, entry)).toEqual({ rows: ["added.ts"], landed: [], absorbed: [] });
+    const landed = await landAgent(worktrees, entry);
+    expect(await readFile(join(work, "added.ts"), "utf8")).toBe("held work\n");
+    expect(await review(worktrees, isolatedAgent(landed.repos))).toEqual({ rows: ["added.ts"], landed: ["added.ts"], absorbed: [] });
+    const restored = await worktrees.ensure("c1", conversation.repos);
+    expect(await readFile(join(restored.cwd, "added.ts"), "utf8")).toBe("held work\n");
+    expect(await worktrees.attached("c1", "root")).toBe(true);
 });

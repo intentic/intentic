@@ -388,6 +388,7 @@ describe("unbridgeRepos", () => {
     const ran: string[] = [];
     const exec: BridgeExec = {
         exists: (path) => repos.has(path),
+        fetch: async () => await Promise.resolve({ outcome: "fetched", stderr: "" }),
         run: async (command, args, cwd) => {
             ran.push(`${cwd ?? ""}: ${command} ${args.join(" ")}`);
             if (args[0] === "remote" && args[1] === "get-url") {

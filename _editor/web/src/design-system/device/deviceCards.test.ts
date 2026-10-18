@@ -45,6 +45,24 @@ it(`puts the folder on the Files line with only the news beside it`, () => {
     ]);
 });
 
+// The two holds the device puts on itself: a drive nearly full (a pause the owner ends by freeing room, so a warning, not
+// the quiet word a chosen pause wears) and repos whose git history stopped following while their files still sync.
+it(`says a folder is paused for a full drive, and that some git history lags, as warnings`, () => {
+    const folder = { sandboxId: `a`, mode: `sync` as const, localDir: `/home/ada/a`, mutagenStatus: `watching`, paused: true };
+    const lowDisk = { freeBytes: 3 * 1024 ** 3, totalBytes: 953 * 1024 ** 3 };
+    const parts = filesLine(running(`a`, { folder: { ...folder, lowDisk } }));
+    expect(parts.map((part) => [part.text, part.tone])).toEqual([
+        [`/home/ada/a`, `content`],
+        [`paused: drive nearly full`, `warning`],
+    ]);
+    expect(parts[1]?.hint).toContain(`3.0 GiB free of 953 GiB`);
+    const held = filesLine(running(`a`, { folder: { ...folder, paused: false, bridgeHolds: [{ repo: `firma-backup`, reason: `stalled`, retryAt: Date.now() + 60_000 }] } }));
+    expect(held.map((part) => [part.text, part.tone])).toEqual([
+        [`/home/ada/a`, `content`],
+        [`git history behind in 1 repo`, `warning`],
+    ]);
+});
+
 it(`names the addresses that reached localhost and counts the rest by outcome`, () => {
     const folder = { sandboxId: `a`, mode: `sync` as const, localDir: `/home/ada/a`, mutagenStatus: `watching` };
     const ports = [5173, 3000, 8080, 9229].map((port) => ({ port, sandboxId: `a`, state: `mirrored` as const }));

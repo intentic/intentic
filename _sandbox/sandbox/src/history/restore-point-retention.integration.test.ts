@@ -26,9 +26,13 @@ const DAY = 24 * 60 * 60 * 1000;
 const START = Date.parse("2026-01-01T12:00:00Z");
 
 // A runner whose commits are dated `clock.at`, as the history's own runner would date them at that moment.
-const datedHistory = (work: string, historyRoot: string) => {
+const datedHistory = (work: string, historyRoot: string, failFirstGc = false) => {
     const clock = { at: START };
     const git: HistoryGitRunner = async (args, options) => {
+        if (failFirstGc && args.includes("--prune=now")) {
+            failFirstGc = false;
+            throw new Error("collection interrupted");
+        }
         const date = `${String(Math.floor(clock.at / 1000))} +0000`;
         const { stdout, stderr } = await exec("git", ["-c", "core.fileMode=true", ...args], {
             cwd: options.cwd,
@@ -123,4 +127,40 @@ test("a cut before every restore point removes nothing", async () => {
     expect(await history.prune(START - DAY)).toBe(0);
     expect(existsSync(join(historyRoot, "scopes", "root.git", "shallow"))).toBe(false);
     expect((await history.list()).map((snapshot) => snapshot.label)).toEqual(["only"]);
+});
+
+test("an entirely old store keeps its newest snapshot visible and the current workspace intact", async () => {
+    const work = join(base, "work");
+    await mkdir(work, { recursive: true });
+    const { clock, history } = datedHistory(work, join(base, "history"));
+    await writeFile(join(work, "a.txt"), "old\n");
+    await history.snapshot("turn", "old");
+    clock.at += DAY;
+    await writeFile(join(work, "a.txt"), "newest\n");
+    const newest = await history.snapshot("turn", "newest");
+    await writeFile(join(work, "a.txt"), "current unsnapshotted\n");
+    expect(await history.prune(START + 40 * DAY)).toBe(1);
+    expect((await history.list()).map(({ label }) => label)).toEqual(["newest"]);
+    expect(await readFile(join(work, "a.txt"), "utf8")).toBe("current unsnapshotted\n");
+    expect(await history.restore(newest ?? "")).toBe(true);
+    expect(await readFile(join(work, "a.txt"), "utf8")).toBe("newest\n");
+});
+
+test("collection interrupted after the boundary is written is retried on the next pass", async () => {
+    const work = join(base, "work");
+    const historyRoot = join(base, "history");
+    await mkdir(work, { recursive: true });
+    const { clock, history } = datedHistory(work, historyRoot, true);
+    for (const [day, text] of [[0, "old"], [1, "base"], [40, "newest"]] as const) {
+        clock.at = START + day * DAY;
+        await writeFile(join(work, "a.txt"), `${text}\n`);
+        await history.snapshot("turn", text);
+    }
+    const gitDir = join(historyRoot, "scopes", "root.git");
+    expect(await history.prune(START + 10 * DAY)).toBe(0);
+    expect(existsSync(join(gitDir, "retention-gc-pending"))).toBe(true);
+    expect(await history.prune(START + 10 * DAY)).toBe(0);
+    expect(existsSync(join(gitDir, "retention-gc-pending"))).toBe(false);
+    expect(await holds(gitDir, "old\n")).toBe(false);
+    expect((await history.list()).map(({ label }) => label)).toEqual(["newest"]);
 });

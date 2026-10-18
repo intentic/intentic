@@ -130,7 +130,16 @@
         "show": "l'afficher",
         "startPutsItBack": "Démarrer le rétablit",
         "stopped": "arrêté",
-        "syncPaused": "Synchro en pause"
+        "syncPaused": "Synchro en pause",
+        "diskFull": "en pause : disque presque plein",
+        "diskFullHint": "Il reste {free} libres sur {total} sur ce disque. La synchronisation des fichiers et de l'historique git est en pause pour que le disque de cet ordinateur ne se remplisse pas, et reprend d'elle-même dès qu'il y a de nouveau de la place.",
+        "historyBehind": "historique git en retard dans {count} dépôt | historique git en retard dans {count} dépôts",
+        "historyBehindTitle": "Les fichiers se synchronisent toujours ; seul l'historique git local est en retard",
+        "historyStalled": "la dernière récupération n'avançait plus",
+        "historyTooLong": "la dernière récupération a manqué de temps",
+        "historyShallow": "la copie du sandbox est un clone superficiel",
+        "historyFailed": "git a refusé la dernière récupération",
+        "historyRetry": "prochain essai {when}"
     },
     "imageView": {
         "actualSize": "Taille réelle",

@@ -1,3 +1,5 @@
+import { unstubbed } from "@intentic/testing";
+import { isolatedAgent } from "./agents-store.testing.js";
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { openConversationsDb } from "../../store/conversations-db.js";
@@ -8,7 +10,18 @@ import { noPresences } from "../land/landed-presence.testing.js";
 import type { BeginTurn } from "../actor/conversation-decide.js";
 import { createFleet, type FleetStore } from "./agents-registry.js";
 import { type PersistedAgent, worktreeOf } from "./agents-store.js";
-import { agedFamilies, archivable, archivableByAge, archiveAgents, goesWithParent, purgeArchived, sweepAgedAgents } from "./archive.js";
+import {
+    type AgentArchiveDeps,
+    sweepHeldCheckouts,
+    heldCheckoutByAge,
+    agedFamilies,
+    archivable,
+    archivableByAge,
+    archiveAgents,
+    goesWithParent,
+    purgeArchived,
+    sweepAgedAgents,
+} from "./archive.js";
 import { createLogger } from "../../logger.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 import { memoryWatchJournal } from "../../store/journals/watch-journal.js";
@@ -369,4 +382,48 @@ describe("sweepAgedAgents", () => {
         expect(await sweepAgedAgents({ agents, conversations, agentWorktrees: worktrees, logger }, 100 * DAY, 0)).toEqual([]);
         expect(retire).not.toHaveBeenCalled();
     });
+});
+
+test("held checkout retention leaves every live, watched, queued or unsent conversation alone", () => {
+    const now = 14 * DAY;
+    for (const status of ["ready", "error", "interrupted", "conflict"] as const) {
+        expect(heldCheckoutByAge(card({ status }), now, now)).toBe(true);
+    }
+    for (const status of ["running", "awaiting", "landed", "idle"] as const) {
+        expect(heldCheckoutByAge(card({ status }), now, now)).toBe(false);
+    }
+    expect(heldCheckoutByAge(card({ status: "ready" }), now, 0)).toBe(false);
+    expect(heldCheckoutByAge(card({ status: "ready", updatedAt: 1 }), now, now)).toBe(false);
+    expect(heldCheckoutByAge(card({ status: "ready", archivedAt: 1 }), now, now)).toBe(false);
+    expect(heldCheckoutByAge(card({ status: "ready", unsentAt: 1 }), now, now)).toBe(false);
+    expect(
+        heldCheckoutByAge(card({ status: "ready", watches: [{ id: "watch-k3f9", note: "CI", intervalSeconds: 60, deadlineAt: 1 }] }), now, now),
+    ).toBe(false);
+    expect(
+        heldCheckoutByAge(
+            card({ status: "ready", queue: { revision: 1, items: [{ id: "m1", text: "later", voice: "person", queuedAt: 1, revision: 1 }] } }),
+            now,
+            now,
+        ),
+    ).toBe(false);
+});
+
+test("a held card touched while its checkout is probed is left in place", async () => {
+    let current = card({ status: "ready" });
+    const retire = jest.fn(async () => undefined);
+    const now = 14 * DAY;
+    const deps = unstubbed<AgentArchiveDeps>("archive", {
+        agents: unstubbed<AgentArchiveDeps["agents"]>("agents", { list: () => [current], entry: () => isolatedAgent([]) }),
+        conversations: unstubbed<AgentArchiveDeps["conversations"]>("conversations", { running: () => false }),
+        agentWorktrees: unstubbed<AgentWorktrees>("worktrees", {
+            presence: async () => {
+                current = card({ status: "ready", updatedAt: now });
+                return "present";
+            },
+            retire,
+        }),
+        logger,
+    });
+    expect(await sweepHeldCheckouts(deps, now, now)).toEqual([]);
+    expect(retire).toHaveBeenCalledTimes(0);
 });

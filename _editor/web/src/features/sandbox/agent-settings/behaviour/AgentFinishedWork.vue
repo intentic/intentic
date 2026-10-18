@@ -47,6 +47,11 @@ const RETENTION_OPTIONS = computed(() => [
     { label: t(`sandbox.agentFinishedWork.n1Week`), value: `7` },
     { label: t(`sandbox.words.never`), value: `0` },
 ]);
+const HELD_RETENTION_OPTIONS = computed(() => [
+    ...RETENTION_OPTIONS.value.slice(0, -1),
+    { label: t(`sandbox.agentFinishedWork.held14Days`), value: `14` },
+    ...RETENTION_OPTIONS.value.slice(-1),
+]);
 </script>
 
 <template>
@@ -92,6 +97,15 @@ const RETENTION_OPTIONS = computed(() => [
                     :model-value="String(settings?.agentRetentionDays ?? 3)"
                     :options="RETENTION_OPTIONS"
                     @update:model-value="(days: string) => patch({ agentRetentionDays: Number(days) })"
+                />
+            </template>
+        </Row>
+        <Row icon="box" :title="t(`sandbox.agentFinishedWork.heldCheckout`)" :description="t(`sandbox.agentFinishedWork.heldCheckoutNote`)">
+            <template #control>
+                <SegmentedControl
+                    :model-value="String(settings?.heldCheckoutDays ?? 14)"
+                    :options="HELD_RETENTION_OPTIONS"
+                    @update:model-value="(days: string) => patch({ heldCheckoutDays: Number(days) })"
                 />
             </template>
         </Row>

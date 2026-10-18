@@ -408,7 +408,14 @@ const confirmRemove = async (): Promise<void> => {
                                 :failure="t(`sandbox.personaSelector.couldntRename`)"
                             />
                         </h3>
-                        <PersonaForm :draft="draft" :accounts="accounts" :connected="connected" :grantables="grantables" :error="saveError" />
+                        <PersonaForm
+                            :show-repositories="route.query[`repositories`] === `true`"
+                            :draft="draft"
+                            :accounts="accounts"
+                            :connected="connected"
+                            :grantables="grantables"
+                            :error="saveError"
+                        />
                     </div>
                 </div>
 

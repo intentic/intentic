@@ -18,7 +18,8 @@ export const KIT_SANDBOXES: readonly DeviceSandboxRow[] = [
     { slug: `hold`, name: `hold`, running: true, image: `ghcr.io/intentic/sandbox:2.3.1`, tunnelRunning: true },
 ];
 // Healthy rows state both sync and backup explicitly; omitting one would misread as not backed up.
-// Third row: mirroring off, no ports — an empty list also means a quiet sandbox, not a fault.
+// Third row: mirroring off, no ports — an empty list also means a quiet sandbox, not a fault — and paused because the
+// laptop's drive is nearly full, with one repo whose git history stopped following: the two holds the device sets itself.
 export const KIT_PAIRINGS: readonly DeviceFolderRow[] = [
     { sandboxId: `work-intentic-dev`, mode: `sync`, localDir: `/home/ada/intentic/work`, mutagenStatus: `watching`, backupStatus: `watching` },
     // The conflict shape this product actually produces, and the one it produces most: an agent moved package
@@ -43,6 +44,9 @@ export const KIT_PAIRINGS: readonly DeviceFolderRow[] = [
         mutagenStatus: `watching`,
         backupStatus: `watching`,
         mirroring: `off`,
+        paused: true,
+        lowDisk: { freeBytes: 3.1 * 1024 ** 3, totalBytes: 953 * 1024 ** 3 },
+        bridgeHolds: [{ repo: `firma-backup`, reason: `stalled`, retryAt: Date.UTC(2026, 9, 18, 21, 40) }],
     },
 ];
 // Several ports, not one: a wrapping row of chips is the layout that actually broke.

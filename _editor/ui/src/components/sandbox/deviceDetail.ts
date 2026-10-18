@@ -1,6 +1,7 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { t } from "../../i18n/index.js";
 import { formatUntil } from "../../lib/timeWindow.js";
+import { type DeviceBridgeHoldRow, type DeviceLowDiskRow, diskFullHint, historyHint, holdWarnings } from "./deviceHolds.js";
 import type { Tip, TooltipValue } from "../../lib/tooltip.js";
 import type { StatusVariant } from "../feedback/statusBadge.js";
 
@@ -52,6 +53,10 @@ export interface DeviceFolderRow {
     // Which sandbox folder `localDir` holds when it is not /work itself: a project pairing's `/work/<name>`, the
     // owner's own folder, which never carries a backup; see `backupState`.
     remoteDir?: string | undefined;
+    // What the device holds back by itself: a sync paused for a nearly full drive, and repos whose git history stopped
+    // following for a while (deviceHolds.ts).
+    lowDisk?: DeviceLowDiskRow | undefined;
+    bridgeHolds?: readonly DeviceBridgeHoldRow[] | undefined;
 }
 
 export interface DeviceSandboxShape {
@@ -278,109 +283,8 @@ export const backupTone = (state: string | undefined): `success` | `warning` | `
 export const folderTone = (state: string | undefined): `success` | `warning` | `neutral` =>
     state === `watching` ? `success` : state?.startsWith(`halted`) === true ? `warning` : `neutral`;
 
-// What a conflict actually is, since a bare count names no file, cause or remedy. Says what happened,
-// what it costs (nothing overwritten, just paused), and what ends it, then the paths.
-const CONFLICT_ROWS_MAX = 6;
-
-type ConflictChange = NonNullable<DeviceConflictRow[`local`]>;
-
-// `untracked` never reads as somebody's edit, which is what the old wording made of it: a reader told their own
-// `node_modules` was "created on this device" goes looking for a difference in content that does not exist.
-// Built when read, so the words follow the language on screen.
-const onDevice = (change: ConflictChange): string =>
-    ({
-        created: t(`ui.deviceDetail.createdOnDevice`),
-        modified: t(`ui.deviceDetail.changedOnDevice`),
-        deleted: t(`ui.deviceDetail.deletedOnDevice`),
-        untracked: t(`ui.deviceDetail.buildOutputOnDevice`),
-    })[change];
-
-const inSandbox = (change: ConflictChange): string =>
-    ({
-        created: t(`ui.deviceDetail.createdInSandbox`),
-        modified: t(`ui.deviceDetail.changedInSandbox`),
-        deleted: t(`ui.deviceDetail.deletedInSandbox`),
-        untracked: t(`ui.deviceDetail.buildOutputInSandbox`),
-    })[change];
-
-export interface ConflictLine {
-    /** The lead counts conflicts, never rows: the machine and Mutagen both cap what they report. */
-    readonly path: string;
-    /** Relative to the synced folder, so it reads the same against the path above and against /work. */
-    readonly note: string;
-}
-
-export interface FolderConflicts {
-    /** The sentence over the list: what happened to those paths, and what ends it. */
-    readonly lead: string;
-    readonly rows: readonly ConflictLine[];
-    // How many conflicts these rows do NOT account for, counted against the machine's own total.
-    readonly more: number;
-    /** What happened on each side, as far as the machine reported it; empty when it reported neither. */
-    readonly note?: string;
-    // How many of the reported paths are the device's own build output blocking a deletion. A button clears exactly
-    // these, so a reader is never offered one for a conflict it cannot settle.
-    readonly clearable: number;
-    // How many need a person, which is what the agent turn is for. Counted off the ROWS, so neither number ever claims
-    // anything about the conflicts the report had to leave out.
-    readonly disputed: number;
-}
-
-const conflictLine = (conflict: DeviceConflictRow): ConflictLine => ({
-    // Why there's no list at all: an agent older than the field reports only the count. Absent whenever
-    // there is a list, however short.
-    path: conflict.path === `` ? t(`ui.deviceDetail.folderItself`) : conflict.path,
-    note: [
-        conflict.local === undefined ? undefined : onDevice(conflict.local),
-        conflict.sandbox === undefined ? undefined : inSandbox(conflict.sandbox),
-    ]
-        .filter((side) => side !== undefined)
-        .join(` · `),
-});
-
-// Whether this one is the device's own build output blocking a deletion, rather than two copies of something real.
-// Tested FOR the derived shape and never against the other, since an agent older than the classification reports no
-// nature at all and everything it sends must read as needing a person.
-const isDerived = (conflict: DeviceConflictRow): boolean =>
-    conflict.nature === `derived-leftover` && conflict.local === `untracked` && conflict.sandbox === `deleted`;
-
-// TWO UNLIKE THINGS WERE BEING SAID IN ONE SENTENCE, and the common one was being described as the rare one. "Both
-// ends changed it, make the copies match" is true of a genuine collision and false of the conflict this view actually
-// shows most: a directory the sandbox deleted that this device cannot follow, because build output nothing syncs is
-// still sitting in it. Nothing there disagrees, nothing is at stake, and telling somebody to reconcile two copies
-// sends them looking for a difference in content that does not exist.
-// Kept to two clauses on purpose: at the width this card is read on, the sentence it replaced ran to eight lines
-// before the first path, and half of those explained how the sync decides rather than what is stuck.
-const derivedLead = (count: number): string => t(`ui.deviceDetail.derivedLead`, { count }, count);
-
-const disputedLead = (count: number): string => t(`ui.deviceDetail.disputedLead`, { count }, count);
-
-export const folderConflicts = (folder: DeviceFolderRow | undefined): FolderConflicts | undefined => {
-    const count = folder?.conflicts ?? 0;
-    if (folder === undefined || count === 0) {
-        return undefined;
-    }
-    const listed = folder.conflictedPaths ?? [];
-    const rows = listed.slice(0, CONFLICT_ROWS_MAX).map(conflictLine);
-    const clearable = listed.filter(isDerived).length;
-    const disputed = listed.length - clearable;
-    // Counted off what the machine actually listed, so an unclassified report (an older agent, or paths the report had
-    // to drop) falls to the sentence that asks for a person rather than to the one offering a button.
-    const lead =
-        clearable === 0
-            ? disputedLead(count)
-            : disputed === 0
-              ? derivedLead(clearable)
-              : t(`ui.deviceDetail.derivedAndDisputedLead`, { lead: derivedLead(clearable), count: disputed }, disputed);
-    return {
-        lead,
-        rows,
-        more: count - rows.length,
-        ...(rows.length === 0 ? { note: t(`ui.sandboxDeviceDetail.devicesAgentDoesntReport`) } : {}),
-        clearable,
-        disputed,
-    };
-};
+// What a folder's conflicts say, and what ends them (deviceConflicts.ts).
+export { type ConflictLine, type FolderConflicts, folderConflicts } from "./deviceConflicts.js";
 
 // An empty path is the synced folder itself, what Mutagen reports for a root-level conflict.
 export interface GroupSummary {
@@ -445,6 +349,7 @@ const summaryWarnings = (group: DeviceSandboxGroup): string[] => {
     if (group.folder?.conflicts) {
         warnings.push(t(`ui.deviceDetail.conflicts`, { count: group.folder.conflicts }, group.folder.conflicts));
     }
+    warnings.push(...holdWarnings(group.folder));
     // Silent while mirroring is off: that's not a fault, and the fact above already names the remedy.
     if (group.sandbox?.tunnelRunning === false) {
         warnings.push(t(`ui.deviceDetail.tunnelOff`));
@@ -537,6 +442,9 @@ const folderChips = (group: DeviceSandboxGroup): GroupChip[] => {
     const folder = group.folder;
     if (folder === undefined || folder.mode !== `sync`) {
         return [];
+    }
+    if (folder.lowDisk !== undefined) {
+        return [{ key: `folder`, icon: `pause`, text: ``, label: t(`ui.deviceDetail.diskFull`), hint: diskFullHint(folder.lowDisk), tone: `warning` }];
     }
     if (folder.paused === true) {
         return [{ key: `folder`, icon: `pause`, text: ``, label: t(`ui.deviceDetail.fileSyncingPaused`), hint: t(`ui.deviceDetail.syncPaused`), tone: `quiet` }];
@@ -635,7 +543,9 @@ export const filesLine = (group: DeviceSandboxGroup): CardPart[] => {
             ? { key: `path`, text: t(`ui.deviceDetail.noFolderSynced`), tone: `muted` }
             : { key: `path`, text: folder.localDir, tone: `content`, mono: true, hint: folder.localDir },
     ];
-    if (folder.paused === true) {
+    if (folder.lowDisk !== undefined) {
+        parts.push({ key: `paused`, text: t(`ui.deviceDetail.diskFull`), tone: `warning`, hint: diskFullHint(folder.lowDisk) });
+    } else if (folder.paused === true) {
         parts.push({ key: `paused`, text: t(`ui.deviceDetail.paused`), tone: `muted`, hint: t(`ui.deviceDetail.syncPaused`) });
     } else if (folder.mutagenStatus === undefined) {
         // A pairing with no session moves nothing, and a bare path beside it would read as a folder in step.
@@ -646,6 +556,10 @@ export const filesLine = (group: DeviceSandboxGroup): CardPart[] => {
     if ((folder.conflicts ?? 0) > 0) {
         const count = folder.conflicts ?? 0;
         parts.push({ key: `conflicts`, text: t(`ui.deviceDetail.conflicts`, { count }, count), tone: `warning` });
+    }
+    const held = folder.bridgeHolds ?? [];
+    if (held.length > 0) {
+        parts.push({ key: `history`, text: t(`ui.deviceDetail.historyBehind`, { count: held.length }, held.length), tone: `warning`, hint: historyHint(held) });
     }
     return parts;
 };

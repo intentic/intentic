@@ -1,4 +1,5 @@
 import { mkdir, readdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
@@ -18,7 +19,6 @@ import { machineId } from "../machine-id.js";
 import { wslEnvironment } from "../environments/wsl.js";
 import { ensureResident, readResidentBuild, readResidentPid } from "../resident/resident.js";
 import { MACHINE_VERSION } from "../version.js";
-import { machineLauncher } from "../resident/supervision.js";
 import {
     isAttachedPairing,
     isProjectPairing,
@@ -37,7 +37,6 @@ import {
 import { type TransportAsk, transportFor } from "./endpoint.js";
 import { runProcess } from "./exec.js";
 import { overlappingPairing } from "./folders.js";
-import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { retireMirroredPort, retirePairingMirror, teardownAllForwards } from "./mirror.js";
 import { asidePrefix } from "./project/adopt.js";
 import { attachCommands } from "./attach-commands.js";
@@ -46,18 +45,17 @@ import {
     ensureMutagen,
     existingSyncSessions,
     healDerivedConflicts,
-    isOwnMutagen,
     MUTAGEN_CALL_TIMEOUT_MS,
     MUTAGEN_RUN_VALUE,
-    registerMutagenAutostart,
+    ownMutagenPath,
     retireOrphanSessions,
     runMutagen,
     sessionName,
+    startMutagenDaemon,
     syncSessionNames,
-    unregisterMutagenAutostart,
-    userMutagenOnPath,
 } from "./mutagen.js";
 import { forget } from "./forget-command.js";
+import { moveOffSharedMutagen } from "./mutagen-move.js";
 import { refuseAcrossPc } from "./siblings.js";
 import { syncSshPort, tunnelReady } from "./tunnel.js";
 import {
@@ -544,6 +542,9 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     ui.step("sync-starting", "starting the sync engine…");
     // What a late start adds to the ending's footnotes.
     const later: Footnote[] = [];
+    // The daemon holds both sync and forward sessions, so this covers mirror-only too. The resident agent starts it
+    // as its watcher starts as well; started here, the wait below can read it as soon as the watcher makes a session.
+    startMutagenDaemon(mutagen);
     await ensureResident(out);
     await completeSetup(out);
     await proveTransport(out, ui.warn, sandboxId, container);
@@ -558,12 +559,9 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
         later.push(late.later);
     }
     retireOrphanSessions(mutagen, pairings, out);
-    // One bridge pass right away, so a fresh pairing's local repos carry the sandbox's git history from the first
-    // minute rather than waiting out the watcher's cadence.
-    runGitBridge(realBridgeExec, pairing, out, undefined);
-    // Register the Mutagen daemon to autostart and resume sessions across reboots; it holds both sync and forward
-    // sessions, so this covers mirror-only too. Best-effort: already-registered isn't worth failing on.
-    registerMutagenAutostart(mutagen, machineLauncher(), out);
+    // No bridge pass of this command's own: the watcher's next pass, seconds away, starts one, and a first fetch of a big
+    // repository can run for hours (git-bridge.ts), which would hold this command open as long, and two fetches into
+    // one clone at once would only race.
     finishSetup(ui, flags.url, pairing, pairings, later);
 };
 
@@ -948,6 +946,18 @@ const autoheal = buildRouteMap({
     docs: { brief: "Whether this device clears its own build output when it blocks a deletion, for one sandbox or all" },
 });
 
+// One dropped pairing's sessions, and its sandbox's forwards with the first of its pairings. The pair goes together: a
+// surviving backup session would keep mirroring a sandbox this device has just unpaired, writing into a folder the
+// owner considers released.
+const endPairingSessions = async (mutagen: string, pairing: Pairing, firstOfSandbox: boolean): Promise<void> => {
+    if (pairing.mode === "sync" && syncSessionNames(pairing).length > 0) {
+        await runProcess(mutagen, ["sync", "terminate", ...syncSessionNames(pairing)], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
+    }
+    if (firstOfSandbox) {
+        await retirePairingMirror(mutagen, pairing.sandboxId);
+    }
+};
+
 // The sync half's teardown, callable from the top-level `uninstall` too. With a selector it unpairs ONE
 // sandbox and leaves every other pairing served; bare, it removes everything, self-revoking each dropped
 // enrollment so a device walking away cleans up after itself. Narrates through `say` and answers the verdict, for the
@@ -956,7 +966,14 @@ const autoheal = buildRouteMap({
 export const syncUninstall = async (say: Narration, sandbox?: string, { forGood = false }: { readonly forGood?: boolean } = {}): Promise<string> => {
     const state = await readState();
     const dropped = selectPairings(state, sandbox);
-    const mutagen = await ensureMutagen();
+    // Nothing paired and no copy of this agent's Mutagen means no session of its own anywhere: an uninstall from a PC
+    // that never synced downloads nothing to find that out.
+    const mutagen = state.pairings.length === 0 && !existsSync(ownMutagenPath()) ? undefined : await ensureMutagen();
+    // What older builds left in Mutagen's shared data directory ends first, so an uninstall leaves nothing of this
+    // agent's there either, even where no watcher ever ran this build (mutagen-move.ts).
+    if (mutagen !== undefined) {
+        await moveOffSharedMutagen(mutagen, say.note);
+    }
     const remaining = state.pairings.filter((held) => !dropped.some((pairing) => pairingKey(pairing) === pairingKey(held)));
     // One enrollment per sandbox, however many of its pairings go (its projects host and its attached folders).
     const revoked = new Set<string>();
@@ -974,15 +991,9 @@ export const syncUninstall = async (say: Narration, sandbox?: string, { forGood 
                 ),
             );
         }
-        if (pairing.mode === "sync" && syncSessionNames(pairing).length > 0) {
-            // The pair goes together: a surviving backup session would keep mirroring a sandbox this device has just
-            // unpaired, writing into a folder the owner considers released.
+        if (mutagen !== undefined) {
             // state is a single file; serial keeps the writes ordered
-            await runProcess(mutagen, ["sync", "terminate", ...syncSessionNames(pairing)], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
-        }
-        if (firstOfSandbox) {
-            // state is a single file; serial keeps the writes ordered
-            await retirePairingMirror(mutagen, pairing.sandboxId);
+            await endPairingSessions(mutagen, pairing, firstOfSandbox);
         }
         // ditto
         await removePairing(pairingKey(pairing));
@@ -1002,25 +1013,27 @@ export const syncUninstall = async (say: Narration, sandbox?: string, { forGood 
     // Nothing left to sync: sync's residue goes (forwards, transport, ssh include); the agent retires only when this
     // environment holds nothing at all.
     await ensureResident(say.note, { forGood });
-    await teardownAllForwards(mutagen, say.note);
     await removeManagedSshConfig();
-    // Our downloaded Mutagen copy exists only for this agent, so retire its daemon completely. A `mutagen` of the user's
-    // own, found on PATH, may hold their own sessions: leave its daemon alone and say so instead. ensureMutagen answers an
-    // absolute path either way, so which one this is is read off where it lives. (2026-10-05) This agent now runs its own
-    // copy even beside the user's, and one daemon serves both, so the user's install on PATH is what keeps it running.
-    const ownCopy = isOwnMutagen(mutagen) && userMutagenOnPath() === undefined;
-    if (ownCopy) {
-        unregisterMutagenAutostart(mutagen);
-        await runProcess(mutagen, ["daemon", "stop"], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
-        say.note("Removed the ssh-config include, and stopped and unregistered the Mutagen daemon.");
-    } else {
-        if (process.platform === "win32") {
-            // Only this agent's own logon entry for the daemon; Mutagen's own registration is the user's.
-            clearWindowsRunValue(MUTAGEN_RUN_VALUE);
-        }
-        say.note("Removed the ssh-config include. Your own Mutagen install and its daemon are untouched.");
-    }
+    await retireOwnMutagen(mutagen, say);
     return dropped.length === 0 ? "Nothing was syncing. Removed any leftovers." : "Stopped syncing on this device.";
+};
+
+// Every session and forward of this agent's goes with the daemon that holds them. That daemon serves this agent's own
+// data directory alone (mutagen-env.ts), whichever Mutagen binary runs it, so stopping it is always this agent's to do;
+// a Mutagen of the user's own runs over its own directory and is not touched. Terminating leaves each synced folder's
+// files where they are. The Run value older builds wrote for the daemon goes too (mutagen.ts MUTAGEN_RUN_VALUE).
+const retireOwnMutagen = async (mutagen: string | undefined, say: Narration): Promise<void> => {
+    if (process.platform === "win32") {
+        clearWindowsRunValue(MUTAGEN_RUN_VALUE);
+    }
+    if (mutagen === undefined) {
+        say.note("Removed the ssh-config include. This agent has no Mutagen here, so there was no daemon to stop.");
+        return;
+    }
+    await teardownAllForwards(mutagen, say.note);
+    retireOrphanSessions(mutagen, [], say.note);
+    await runProcess(mutagen, ["daemon", "stop"], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
+    say.note("Removed the ssh-config include, and stopped this agent's Mutagen daemon. The synced folders keep their files.");
 };
 
 const uninstall = buildCommand<SandboxFlags>({

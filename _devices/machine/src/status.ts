@@ -2,7 +2,15 @@ import { plural } from "@intentic/base/format";
 import type { Footnote, Item, Tone, Ui } from "@intentic/local-agent";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
-import type { DeviceConflict, DeviceConflictChange, DevicePairing, DevicePort, DeviceReport } from "@intentic/sandbox-contract/schemas/devices";
+import type {
+    DeviceBridgeHold,
+    DeviceConflict,
+    DeviceConflictChange,
+    DeviceLowDisk,
+    DevicePairing,
+    DevicePort,
+    DeviceReport,
+} from "@intentic/sandbox-contract/schemas/devices";
 import type { PeerLinkState } from "@intentic/sandbox-contract/peer-dial";
 import type { CommandContext } from "@stricli/core";
 import { buildCommand, machineUi } from "./cli-ui.js";
@@ -154,7 +162,29 @@ const fileSyncState = (pairing: DeviceReport["pairings"][number]): readonly (rea
         : pairing.backupStatus === undefined
           ? ["fail", "backup not running, this sandbox's own state is not being copied here"]
           : ["ok", `backup ${pairing.backupStatus}`],
+    // Why it is paused, when the drive is the reason: the one pause the owner can end, by freeing room.
+    pairing.lowDisk === undefined ? undefined : ["fail", lowDiskSaid(pairing.lowDisk)],
+    ...(pairing.bridgeHolds ?? []).map((hold): readonly [Tone, string] => ["warn", bridgeHoldSaid(hold, Date.now())]),
 ];
+
+const GIB = 1024 ** 3;
+
+const lowDiskSaid = (low: DeviceLowDisk): string =>
+    `paused: its drive has ${(low.freeBytes / GIB).toFixed(1)} GB free of ${(low.totalBytes / GIB).toFixed(0)} GB; resumes by itself once there is room`;
+
+const HOLD_WHY = {
+    stalled: "the last fetch stopped moving",
+    "too-long": "the last fetch ran out of time",
+    shallow: "the sandbox's copy is a shallow clone",
+    failed: "git refused the last fetch",
+} as const satisfies Record<DeviceBridgeHold["reason"], string>;
+
+// One held repo, said plainly: its files still sync, only its local git history lags.
+const bridgeHoldSaid = (hold: DeviceBridgeHold, now: number): string => {
+    const minutes = Math.max(1, Math.round((hold.retryAt - now) / 60_000));
+    const next = hold.retryAt <= now ? "trying again now" : minutes < 120 ? `next try in ${minutes} min` : `next try in ${Math.round(minutes / 60)} h`;
+    return `git history of ${hold.repo} not following the sandbox (${HOLD_WHY[hold.reason]}); ${next}`;
+};
 
 // The stuck paths themselves, listed under the pairing that counts them: the count is a symptom, the paths are
 // the only part anybody can act on. What happened on each side rides in the words the rest of this output
@@ -352,7 +382,15 @@ const drawSessions = async (ui: Ui, mutagen: string, verbose: boolean): Promise<
     // Both of a pairing's sessions: the workspace and the state backup that rides beside it. Listing only the first
     // would report a healthy sync while the backup was not running at all.
     const wanted = syncing.flatMap((pairing) => syncSessionNames(pairing));
-    const live = new Set(syncing.length === 0 ? [] : existingSyncSessions(mutagen, wanted));
+    const answered = syncing.length === 0 ? [] : existingSyncSessions(mutagen, wanted);
+    // A daemon that is not running is said as that, never started by asking (sync/mutagen-env.ts) and never read as
+    // every session missing; Mutagen's own listings would only fail on it.
+    if (answered === undefined) {
+        ui.section("file sync");
+        ui.warn("Mutagen's daemon is not running, or did not answer, so no session could be read. The agent starts it as it syncs.");
+        return;
+    }
+    const live = new Set(answered);
     const missing = syncing.filter((held) => !syncSessionNames(held).every((name) => live.has(name)));
     if (missing.length > 0) {
         ui.section("file sync");
