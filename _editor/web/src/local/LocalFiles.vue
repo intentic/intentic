@@ -295,7 +295,8 @@ onUnmounted(() => {
         @dragleave="onRootDragLeave"
         @drop="onRootDrop"
     >
-        <aside v-if="treeShown" class="relative flex w-72 shrink-0 flex-col border-r border-line bg-card">
+        <!-- Busy while the folder's listing is out: the outline below says so to the eye, this to a screen reader. -->
+        <aside v-if="treeShown" class="relative flex w-72 shrink-0 flex-col border-r border-line bg-card" :aria-busy="folderLoading">
             <div class="flex h-9 shrink-0 items-center gap-1 border-b border-line pl-1.5 pr-1">
                 <!-- The folder's name, and every other folder and document of this computer behind it (LocalFolderMenu.vue). -->
                 <LocalFolderMenu :leaving="leaving" />

@@ -80,13 +80,21 @@ const pointAt = (face: LocalFace): boolean => {
 };
 
 // One painted frame, as a reader would see it: the rail, the folder named at the head of the explorer, its tree's rows,
-// and whether a sandbox's loopback offer was up.
+// whether its listing was still out (the outline LocalFiles.vue draws, aria-busy), and whether a sandbox's loopback
+// offer was up.
 interface Frame {
     readonly rail: boolean;
     readonly folder: string;
     readonly rows: number;
+    readonly loading: boolean;
     readonly offer: boolean;
+    // Milliseconds since the frames began to be watched, just before the window is pointed at the folder.
+    readonly at: number;
 }
+
+// How long a switch holds the folder being left while the one arriving draws: folderSwitch.ts ARRIVAL_WAIT_MS, which
+// this package does not depend on. A folder shown loading before it means the hold did not hold.
+const ARRIVAL_WAIT_MS = 600;
 declare global {
     interface Window {
         paintedFrames?: Frame[];
@@ -242,6 +250,7 @@ test(`another folder pointed at in the window's place takes it in place: no relo
     const watchFrames = async (): Promise<void> =>
         page.evaluate((offer) => {
             const frames: Frame[] = [];
+            const start = performance.now();
             window.paintedFrames = frames;
             window.sameLoad = true;
             const paint = (): void => {
@@ -249,7 +258,9 @@ test(`another folder pointed at in the window's place takes it in place: no relo
                     rail: document.querySelector(`nav.icon-rail`) !== null,
                     folder: document.querySelector(`aside [aria-haspopup="menu"]`)?.textContent?.trim() ?? ``,
                     rows: document.querySelectorAll(`[role="treeitem"]`).length,
+                    loading: document.querySelector(`aside[aria-busy="true"]`) !== null,
                     offer: document.body.textContent?.includes(offer) === true,
+                    at: performance.now() - start,
                 });
                 requestAnimationFrame(paint);
             };
@@ -262,7 +273,12 @@ test(`another folder pointed at in the window's place takes it in place: no relo
         expect(frames.filter((frame) => !frame.rail), `frames painted without the shell's rail`).toEqual([]);
         const arrived = frames.filter((frame) => frame.folder === arriving);
         expect(arrived.length).toBeGreaterThan(0);
-        expect(arrived.filter((frame) => frame.rows === 0), `frames naming ${arriving} over an empty tree`).toEqual([]);
+        // A folder the sidecar is slow to list is shown loading once the switch stops holding the one it left, and only
+        // then: its outline drawn, never an empty tree. On a loaded CI runner the listing does outlast the hold.
+        expect(
+            arrived.filter((frame) => frame.rows === 0 && !(frame.loading && frame.at >= ARRIVAL_WAIT_MS)),
+            `frames naming ${arriving} over an empty tree`,
+        ).toEqual([]);
         // Nothing a sandbox has that a folder does not: a folder is on loopback already, so no faster way is offered.
         expect(frames.filter((frame) => frame.offer), `frames offering ${arriving} a faster way to a sandbox`).toEqual([]);
     };

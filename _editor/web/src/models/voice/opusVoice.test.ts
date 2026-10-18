@@ -7,9 +7,16 @@ import { phraseEncoder, utteranceDecoder } from "./opusVoice";
 
 // Each encode answers one packet of a tenth of the samples' count in bytes, a tick later; flush waits for them all.
 class FakeEncoder {
+    static last: FakeEncoder | undefined;
     state = `unconfigured`;
     private pending: Promise<void> = Promise.resolve();
-    constructor(private readonly init: { output: (chunk: { byteLength: number; copyTo: (into: ArrayBuffer) => void }) => void }) {}
+    constructor(private readonly init: { output: (chunk: { byteLength: number; copyTo: (into: ArrayBuffer) => void }) => void }) {
+        FakeEncoder.last = this;
+    }
+    // Every packet asked for so far is out, without ending the stream as flush would.
+    async answered(): Promise<void> {
+        await this.pending;
+    }
     configure(): void {
         this.state = `configured`;
     }
@@ -73,7 +80,8 @@ describe(`a phrase's encoder`, () => {
         const encoder = phraseEncoder((packet) => sent.push(packet.byteLength));
         encoder.push(new Float32Array(3200));
         encoder.push(new Float32Array(1600));
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        // Both packets are out of the codec before the begin, however slow the machine: a fixed wait raced them on CI.
+        await FakeEncoder.last?.answered();
         expect(sent).toEqual([]);
         encoder.start();
         expect(sent).toEqual([320, 160]);
