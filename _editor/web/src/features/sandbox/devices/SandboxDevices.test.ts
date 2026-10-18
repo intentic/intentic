@@ -1334,13 +1334,35 @@ it(`takes this sandbox's ports off that device's localhost, and nobody else's`, 
     expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `mirror-off`, sandboxId: `work-abc` }]);
 });
 
-// The CLI's own sentence is kept, naming more than this side knows.
-it(`shows the machine's own answer under the row that was pressed`, async () => {
+// The row says the press landed in the app's words; the CLI's own output is kept, one click away, not dumped under it.
+it(`says the switch worked in one line, with the machine's own answer behind Details`, async () => {
     const el = mount([mirrored(`on`)]);
     await openRow(el, `work`);
     [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).includes(`Stop mirroring`))?.click();
     await settle();
-    expect(el.textContent ?? ``).toContain(`Port mirroring OFF for: work-abc`);
+    expect(el.textContent ?? ``).toContain(`Port mirroring is off.`);
+    expect(el.textContent ?? ``).not.toContain(`Port mirroring OFF for: work-abc`);
+    const details = [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).trim() === `Details`);
+    expect(details?.getAttribute(`aria-expanded`)).toBe(`false`);
+    details?.click();
+    await nextTick();
+    expect(el.querySelector(`pre`)?.textContent).toBe(`Port mirroring OFF for: work-abc`);
+});
+
+// Resume used to leave its whole plain stream under the row: narration, Mutagen's session lines, every pairing's path.
+it(`answers Resume with one line, and puts it away when dismissed`, async () => {
+    const resumed = `intentic: resuming file sync…\nResuming session sync_k3Jx9...\nintentic: Resumed file sync for work-abc:C:\\Users\\ada\\intentic\\work.`;
+    mirrorAnswer = { ok: true, message: resumed };
+    const row = mirrored(`on`);
+    const el = mount([{ ...row, report: { ...row.report!, pairings: [{ ...row.report!.pairings[0]!, paused: true }] } }]);
+    await openRow(el, `work`);
+    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).includes(`Resume syncing`))?.click();
+    await settle();
+    expect(el.textContent ?? ``).toContain(`File syncing resumed.`);
+    expect(el.textContent ?? ``).not.toContain(`sync_k3Jx9`);
+    el.querySelector<HTMLButtonElement>(`button[aria-label="Dismiss"]`)?.click();
+    await nextTick();
+    expect(el.textContent ?? ``).not.toContain(`File syncing resumed.`);
 });
 
 // A refusal is an answer, not a crash: it arrives as the machine explaining itself.

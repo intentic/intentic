@@ -6349,10 +6349,23 @@
             "onDevice": "on that device.",
             "run": "Run"
         },
+        "deviceOpOutcome": {
+            "details": "Details",
+            "hideDetails": "Hide details",
+            "dismiss": "Dismiss"
+        },
         "deviceOpFailure": {
             "runOnYourself": "Or run this on {machine} yourself"
         },
         "deviceOps": {
+            "doneMirrorOff": "Port mirroring is off. File syncing is untouched.",
+            "doneMirrorOn": "Port mirroring is back on. Ports return to localhost within a few seconds.",
+            "doneIgnore": "That port stays off localhost. Every other port keeps being mirrored.",
+            "doneUnignore": "That port is mirrored again. It returns to localhost within a few seconds.",
+            "donePause": "File syncing paused. Ports keep being mirrored.",
+            "doneResume": "File syncing resumed.",
+            "doneUnpair": "Unpaired. The local folder is left exactly as it is.",
+            "doneClean": "Build output cleared. Held-back deletions sync within a few seconds.",
             "askedForget": "Dropping the links that stopped answering. The count here catches up when its loop comes back.",
             "askedRestart": "Restarting. This page catches up when its loop comes back.",
             "askedUpgrade": "Updating. The new version shows here when its loop comes back.",

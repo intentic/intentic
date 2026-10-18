@@ -609,7 +609,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/sandbox/devices/DevicePage.vue": {
-        "count": 783,
+        "count": 781,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/sandbox/devices/phones/phoneRows.ts#phoneRowOf#cognitive": {
@@ -621,7 +621,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/sandbox/devices/runners/deviceOps.ts": {
-        "count": 1071,
+        "count": 1070,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/sandbox/devices/runners/deviceOps.ts#useDeviceOps#cognitive": {

@@ -24,7 +24,7 @@ import {
 import { type DeviceSandboxPayload, manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "../../../../models/sandbox/devices/useDevices";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { t } from "@intentic/ui/i18n";
-import { setupSaid } from "../sync/syncSetup";
+import { type OpOutcome, syncSaid, verdictSaid } from "./opSaid";
 
 // Everything one device page does TO its machine: the container verbs, the two sync switches, the agent's
 // own two ops, and revoking the enrollment. One op at a time per machine, since a mirroring switch racing a
@@ -304,7 +304,7 @@ export interface DeviceOps {
     readonly switchKey: (environment: DeviceRow) => string;
     readonly accessKey: (environment: DeviceRow) => string;
     readonly failure: ComputedRef<OpFailure | undefined>;
-    readonly outcome: ComputedRef<{ key: string; message: string } | undefined>;
+    readonly outcome: ComputedRef<OpOutcome | undefined>;
 
     // Container verbs, through whichever door is open. `choice` names one of the older versions the machine kept for a
     // rollback to go to, rather than the one before (rollbackChoices.ts).
@@ -382,7 +382,7 @@ interface DeviceProgress {
     readonly port?: number;
 }
 
-type DeviceOperation = Operation<{ key: string; message: string } | undefined, OpFailure, DeviceProgress>;
+type DeviceOperation = Operation<OpOutcome | undefined, OpFailure, DeviceProgress>;
 
 export function useDeviceOps(machine: () => MachineRow, refetch: () => void): DeviceOps {
     // The sandbox serving this page, by its container slug on the machine: the daemon's own hostname, same
@@ -402,7 +402,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     // verb under its row, a removal or a batch under the list, a switch under the control that was pressed, a revoke
     // under the environment's access. The newest run is the page's one answer line, as a single slot always was.
     const scope = (): string => `devices/${machine().key}/ops`;
-    const ops = useOperations<{ key: string; message: string } | undefined, OpFailure, DeviceProgress>(scope);
+    const ops = useOperations<OpOutcome | undefined, OpFailure, DeviceProgress>(scope);
     const ROW = (group: DeviceSandboxGroup): string => `row/${group.sandboxId}`;
     const LIST = `list`;
     const SYNC = (key: string): string => `sync/${key}`;
@@ -425,7 +425,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
 
     // The answer line: the newest run's, once it has one. Older runs' answers were replaced by the press that followed.
     const failure = computed<OpFailure | undefined>(() => (latest.value?.state === `failed` ? latest.value.failure : undefined));
-    const outcome = computed<{ key: string; message: string } | undefined>(() => (latest.value?.state === `done` ? latest.value.value : undefined));
+    const outcome = computed<OpOutcome | undefined>(() => (latest.value?.state === `done` ? latest.value.value : undefined));
 
     // The row's own verb while it runs: its own run, or the batch that has reached it (a removal says so by row instead).
     const runningVerb = (group: DeviceSandboxGroup): SandboxVerb | undefined => {
@@ -553,7 +553,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
                     const message = await manageDeviceSandbox(hostId, slug, flow?.op ?? OP[verb], payload);
                     report.progress(settle(true));
                     // A log tail's result line would only restate the pane above it, so it's left to be the answer.
-                    return verb === `logs` ? undefined : { key, message };
+                    return verb === `logs` ? undefined : { key, ...verdictSaid(message) };
                 } catch (error) {
                     report.progress(settle(false));
                     throw error;
@@ -707,7 +707,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
 
     // The run's one answer, under the key the press came from. A refusal names the rows that stayed AND what did come
     // off, since a run that half worked is neither a success nor a failure and must not read as either.
-    const sayRemoval = (label: string, settled: readonly string[], refused: readonly string[]): { key: string; message: string } => {
+    const sayRemoval = (label: string, settled: readonly string[], refused: readonly string[]): OpOutcome => {
         if (refused.length === 0) {
             // Nothing done is still something to say: a poll landing between the dialog and the press can leave a
             // row with neither half still on this machine.
@@ -916,12 +916,11 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
                 });
                 try {
                     const result = await runDeviceCommand(hostId, command, { sandboxId, ...about });
-                    // The machine's own sentence either way: a refusal names the switch to flip rather than throwing.
-                    // Setup answers with the CLI's whole narration; the row keeps only what a reader of it needs (syncSetup.ts).
+                    // A refusal names the switch to flip rather than throwing; an answer is the app's line over the machine's (opSaid.ts).
                     if (!result.ok) {
                         throw new RunRefused({ key, notice: { tone: `warning`, title: commandRefusal(command), detail: result.message }, command: fallback });
                     }
-                    return { key, message: command === `sync-install` ? setupSaid(result.message) : result.message };
+                    return { key, ...syncSaid(command, result.message) };
                 } finally {
                     endMark();
                     // Blocks on a fresh read rather than serving the pre-click list, since the daemon dropped its

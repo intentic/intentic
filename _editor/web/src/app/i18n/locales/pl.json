@@ -5905,10 +5905,23 @@
             "onDevice": "na tamtym urządzeniu.",
             "run": "Uruchom"
         },
+        "deviceOpOutcome": {
+            "details": "Szczegóły",
+            "hideDetails": "Ukryj szczegóły",
+            "dismiss": "Zamknij"
+        },
         "deviceOpFailure": {
             "runOnYourself": "Albo uruchom to na {machine} samodzielnie"
         },
         "deviceOps": {
+            "doneMirrorOff": "Odbijanie portów wyłączone. Synchronizacja plików bez zmian.",
+            "doneMirrorOn": "Odbijanie portów znów działa. Porty wrócą na localhost w ciągu kilku sekund.",
+            "doneIgnore": "Ten port zostaje poza localhostem. Pozostałe porty są nadal odbijane.",
+            "doneUnignore": "Ten port jest znowu odbijany. Wróci na localhost w ciągu kilku sekund.",
+            "donePause": "Synchronizacja plików wstrzymana. Porty są nadal odbijane.",
+            "doneResume": "Synchronizacja plików wznowiona.",
+            "doneUnpair": "Rozparowano. Lokalny folder zostaje bez zmian.",
+            "doneClean": "Wyniki budowania usunięte. Wstrzymane usunięcia zsynchronizują się w ciągu kilku sekund.",
             "askedForget": "Usuwanie powiązań, które przestały odpowiadać. Licznik tutaj nadrobi, gdy jego pętla wróci.",
             "askedRestart": "Restartowanie. Ta strona nadrobi, gdy jego pętla wróci.",
             "askedUpgrade": "Aktualizowanie. Nowa wersja pojawi się tutaj, gdy jego pętla wróci.",

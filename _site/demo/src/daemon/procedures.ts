@@ -24,7 +24,7 @@ import { choresReport, writeLedger } from "../fixture/chores";
 import { demoComplianceReport, demoPresetItems } from "../fixture/data-protection/compliance";
 import { ciJobs, ciRunsResponse } from "../fixture/ci";
 import { DESK_SANDBOX_NAME } from "../fixture/desk";
-import { demoDevices, switchDemoPairings } from "../fixture/devices";
+import { demoCommandSaid, demoDevices, switchDemoPairings } from "../fixture/devices";
 import { inProcessSubagents } from "../fixture/fleet";
 import { demoHealth } from "../fixture/health";
 import { demoLoops } from "../fixture/loops";
@@ -163,7 +163,7 @@ export const procedures = {
         manageDeviceSandbox: ({ slug, op }) => sandboxFlow(slug, op),
         runDeviceCommand: ({ id, command, sandboxId }) => {
             switchDemoPairings(id, command, sandboxId);
-            return { ok: true, refused: false, message: `Ran ${command}${sandboxId === undefined ? `` : ` for ${sandboxId}`}.` };
+            return { ok: true, refused: false, message: demoCommandSaid(command, sandboxId) };
         },
         closeBrowser: ({ name }) => {
             if (name !== OWN_SESSION) {

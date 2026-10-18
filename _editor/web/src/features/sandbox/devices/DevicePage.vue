@@ -27,6 +27,7 @@ import { RouterLink } from "vue-router";
 import DeviceConcern from "./health/DeviceConcern.vue";
 import DeviceEnvironment from "./DeviceEnvironment.vue";
 import DeviceOpFailure from "./runners/DeviceOpFailure.vue";
+import DeviceOpOutcome from "./runners/DeviceOpOutcome.vue";
 import DeviceRunners from "./runners/DeviceRunners.vue";
 import DeviceUpdateProgress from "./runners/DeviceUpdateProgress.vue";
 import SandboxBatchBar from "./batch/SandboxBatchBar.vue";
@@ -350,7 +351,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                 <RowNote v-if="ops.failure.value?.key === ops.switchKey(environment)" variant="block">
                     <DeviceOpFailure :of="ops.failure.value.notice" :command="ops.failure.value.command" :machine="environment.device.label" />
                 </RowNote>
-                <RowNote v-else-if="ops.outcome.value?.key === ops.switchKey(environment)">{{ ops.outcome.value.message }}</RowNote>
+                <RowNote v-else-if="ops.outcome.value?.key === ops.switchKey(environment)"><DeviceOpOutcome v-bind="ops.outcome.value" /></RowNote>
             </template>
 
             <div class="flex flex-col gap-2">
@@ -605,12 +606,8 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                             :command="ops.failure.value.command"
                             :machine="machine.label"
                         />
-                        <!-- Line breaks kept: a machine's answer is a verdict, then what it has to say about this row. An update's
-                             or a rollback's answer is said inside its own card, so not twice. -->
-                        <p
-                            v-else-if="ops.outcome.value?.key === ops.rowKey(group) && !ops.stagedRun(group)"
-                            class="text-xs whitespace-pre-line text-muted"
-                        >{{ ops.outcome.value.message }}</p>
+                        <!-- One line, the machine's output behind Details (opSaid.ts); an update's answer is said in its own card. -->
+                        <DeviceOpOutcome v-else-if="ops.outcome.value?.key === ops.rowKey(group) && !ops.stagedRun(group)" v-bind="ops.outcome.value" />
                     </template>
                 </DeviceDetail>
             </div>

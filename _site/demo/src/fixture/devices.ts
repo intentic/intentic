@@ -110,6 +110,23 @@ export const switchDemoPairings = (hostId: string, command: string, sandboxId: s
     }
 };
 
+// What a machine prints for a switch, as its CLI's plain stream: narration, Mutagen's own session lines, and a verdict
+// naming each pairing with its folder. Pause and resume answer in full, since that answer is what the row has to tame.
+export const demoCommandSaid = (command: string, sandboxId: string | undefined): string => {
+    const target = sandboxId ?? `every sandbox`;
+    if (command === `sync-pause` || command === `sync-resume`) {
+        const verb = command === `sync-pause` ? `pause` : `resume`;
+        const folder = `C:\\Users\\ada\\intentic\\${sandboxId ?? `work`}`;
+        return [
+            `intentic: ${verb === `pause` ? `pausing` : `resuming`} file sync…`,
+            `${verb === `pause` ? `Pausing` : `Resuming`} session sync_k3Jx9AbCdEfGhIjKlMn...`,
+            `${verb === `pause` ? `Pausing` : `Resuming`} session sync_q8Lm2OpQrStUvWxYzAb...`,
+            `intentic: ${verb === `pause` ? `Paused` : `Resumed`} file sync for ${target}:${folder}, ${target}:${folder}#back.`,
+        ].join(`\n`);
+    }
+    return `Ran ${command} for ${target}.`;
+};
+
 // One side's folders as the page last left them.
 const pairingsOn = (hostId: string): Pairing[] =>
     (PAIRED_ON.get(hostId) ?? [])
