@@ -104,22 +104,28 @@ test("while a commit hangs in its hook, the same start joins it, a stage is refu
     await writeFile(join(app, "a.ts"), "export const a = 1;\n");
     const hook = join(app, ".git", "hooks", "pre-commit");
     await mkdir(join(app, ".git", "hooks"), { recursive: true });
-    // `exec` so the hook is the process git waits on; killing git leaves it to finish on its own, harmlessly.
-    await writeFile(hook, "#!/bin/sh\nexec sleep 3\n");
+    // Held until cleanup, so a slow Changes scan cannot outlast the hook and miss the running commit.
+    const releaseHook = join(app, ".git", "release-hook");
+    await writeFile(hook, '#!/bin/sh\nwhile [ -d .git ] && [ ! -f .git/release-hook ]; do sleep 0.05; done\nexit 1\n');
     await chmod(hook, 0o755);
     const head = await sh(app, "rev-parse", "HEAD");
     const client = clientOn(root);
 
-    const first = await client.git.indexRunStart({ repo: "app", op: "commit", target: {}, message: "feat: hung" });
-    await waitFor(async () => expect((await client.git.indexRunState({ repo: "app" })).phase).toBe("committing"), SETTLES);
-    expect((await client.git.indexRunStart({ repo: "app", op: "commit", target: {}, message: "feat: hung" })).id).toBe(first.id);
-    expect(await errorCode(client.git.indexRunStart({ repo: "app", op: "stage" }))).toBe("CONFLICT");
-    // The Changes response says the repo is committing, as it does for the one-request commit.
-    expect((await client.git.changes()).committing).toEqual(["app"]);
+    try {
+        const first = await client.git.indexRunStart({ repo: "app", op: "commit", target: {}, message: "feat: hung" });
+        await waitFor(async () => expect((await client.git.indexRunState({ repo: "app" })).phase).toBe("committing"), SETTLES);
+        expect((await client.git.indexRunStart({ repo: "app", op: "commit", target: {}, message: "feat: hung" })).id).toBe(first.id);
+        expect(await errorCode(client.git.indexRunStart({ repo: "app", op: "stage" }))).toBe("CONFLICT");
+        // The Changes response says the repo is committing, as it does for the one-request commit.
+        expect((await client.git.changes()).committing).toEqual(["app"]);
 
-    const from = Date.now();
-    await client.git.indexRunCancel({ repo: "app" });
-    expect(await settled(client, "app")).toMatchObject({ status: "cancelled", id: first.id });
-    expect(Date.now() - from).toBeLessThan(2_500);
-    expect(await sh(app, "rev-parse", "HEAD")).toBe(head);
+        const from = Date.now();
+        await client.git.indexRunCancel({ repo: "app" });
+        expect(await settled(client, "app")).toMatchObject({ status: "cancelled", id: first.id });
+        expect(Date.now() - from).toBeLessThan(2_500);
+        expect(await sh(app, "rev-parse", "HEAD")).toBe(head);
+    } finally {
+        await client.git.indexRunCancel({ repo: "app" });
+        await writeFile(releaseHook, "release\n");
+    }
 });

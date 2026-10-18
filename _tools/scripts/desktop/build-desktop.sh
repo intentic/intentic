@@ -256,6 +256,7 @@ fi
 # patchelf rather than its own (appimage-env.sh says why for each). Only the Linux pass below runs it.
 if [ "$WINDOWS_ONLY" -eq 0 ] && [ "$ASSEMBLE" -eq 0 ]; then
     appimage_env
+    appimage_fetch_tools
 fi
 
 # The signing key carries no password, and the signer WAITS FOR ONE unless it is told that in the environment:

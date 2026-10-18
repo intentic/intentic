@@ -33,6 +33,10 @@ const SUBJECTS = [
             ["a registry under load", "failed to push: unexpected status: 503 Service Unavailable"],
             ["a dropped connection mid-upload", "failed to push: read tcp: connection reset by peer"],
             [
+                "GHCR refused a blob existence check after login (killed images-platform on 51b5215)",
+                "unknown: unexpected status from HEAD request to https://ghcr.io/v2/intentic/web/blobs/sha256:e2de96513ba9eb53b431787ec8a65cdde380ac4772a3e4c4b714dcfde2a102b5: 401 Unauthorized",
+            ],
+            [
                 "a connect that was never answered (killed 1.254.1)",
                 'docker: Error response from daemon: failed to resolve reference "ghcr.io/intentic/sandbox:1.254.1-amd64": failed to do request: Head "https://ghcr.io/v2/intentic/sandbox/manifests/1.254.1-amd64": dialing ghcr.io:443 container via direct connection because Docker Desktop has no HTTPS proxy: connecting to ghcr.io:443: dial tcp 140.82.121.33:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time.',
             ],
@@ -59,6 +63,7 @@ const SUBJECTS = [
             ["a broken Dockerfile", "ERROR: failed to solve: dockerfile parse error on line 3: unknown instruction: RUNN"],
             ["a missing build context", 'ERROR: failed to solve: failed to compute cache key: "/opt/nothing": not found'],
             ["no login", "ERROR: failed to push: unauthorized: authentication required"],
+            ["a rejected manifest write", "unexpected status from PUT request to https://ghcr.io/v2/intentic/web/manifests/latest: 401 Unauthorized"],
             // Verbatim from a real `docker pull` of a tag nobody pushed: the wrapper is word for word the one a
             // dropped dial arrives in, which is why the dial patterns are anchored on the transport line inside it.
             [
