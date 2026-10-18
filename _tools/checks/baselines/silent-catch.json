@@ -205,7 +205,6 @@
     "_sandbox/sandbox/src/chores/chore-signals.ts": 2,
     "_sandbox/sandbox/src/ci/poller.ts": 1,
     "_sandbox/sandbox/src/ci/projects.ts": 1,
-    "_sandbox/sandbox/src/ci/providers.ts": 1,
     "_sandbox/sandbox/src/ci/webhook.routes.ts": 1,
     "_sandbox/sandbox/src/conversations/land/land.ts": 1,
     "_sandbox/sandbox/src/conversations/land/landed-history.ts": 1,

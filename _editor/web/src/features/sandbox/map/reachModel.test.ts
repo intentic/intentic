@@ -3,7 +3,8 @@ import type { Area } from "@intentic/sandbox-contract/schemas/areas";
 import type { InboundLinkSummary, LinkTerms } from "@intentic/sandbox-contract/schemas/links";
 import type { Member } from "@intentic/sandbox-contract/schemas/members";
 import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
-import { buildReachMap, bundleId, holdersOf, lightingOf, type Principal, type ReachCapability, type ReachInput, relationsOf } from "./reachModel";
+import { bundleId, holdersOf, lightingOf, relationsOf } from "./reachLighting";
+import { buildReachMap, type Principal, type ReachCapability, type ReachInput } from "./reachModel";
 
 // The workspace the cases share: two areas, three personas homed in each and at the root, and a connection of each kind
 // a rule decides differently. Every case asks the map what the daemon would let one principal do.

@@ -9651,6 +9651,7 @@
             "overviewName": "name, rename, logo, icon, picture, title",
             "overviewResources": "memory, ram, cpu, cores, resize, more power, machine size",
             "overviewDisk": "storage, disk space, free up space, clean up, disk full, gigabytes",
+            "overviewSleep": "sleep, idle, stay awake, keep running, always on, schedules on time",
             "secretsAdd": "env vars, environment variables, api key, password, credentials, token, new secret",
             "secretsKeyrings": "keychain, password manager, 1password, credential manager, pair computers",
             "accessPeople": "members, invite, share, collaborators, team, roles, users, permissions",

@@ -2,7 +2,7 @@ import { type Capability, CapabilitySchema, type LocalModelConfig } from "@inten
 import { VAULTED } from "@intentic/sandbox-contract/policy/capability-secrets";
 import { isJsonObject, mapValue, retireEntries, transform } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import type { IdListStore } from "../store/id-list-file.js";
+import type { IdListStore } from "../store/plain-files/id-list-file.js";
 import { openIdList } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 import type { ResolvedContribution } from "./contributions.js";
@@ -52,7 +52,7 @@ export const capabilitiesDocument = defineDocument({
     ],
 });
 
-// JSON file store on the shared id-list store (store/id-list-file.ts): per-entry validation, skipped entries reported,
+// JSON file store on the shared id-list store (store/plain-files/id-list-file.ts): per-entry validation, skipped entries reported,
 // and writes that preserve what this build can't read.
 export const fileCapabilitiesStore = (path: string, onInvalid?: (id: string, reason: string) => void): CapabilitiesStore =>
     openIdList(capabilitiesDocument, path, onInvalid);

@@ -11,7 +11,8 @@ import { forgetNamespaceEntry, registerMountEntry } from "../../workload/namespa
 import { fakeCodexRunner } from "./codex-app-server.testing.js";
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import type { CodexEvent, CodexFailureInfo, CodexItem, CodexRunner, CodexTurn } from "./codex-app-server.js";
-import { createCodexAgent, LIMIT_WAIT_HANDED_OVER, UNGATED_CALL, UNGATED_LIST } from "./codex-agent.js";
+import { createCodexAgent, UNGATED_CALL, UNGATED_LIST } from "./codex-agent.js";
+import { LIMIT_WAIT_HANDED_OVER } from "./turn/limit-wait.js";
 import { RATE_LIMIT_PATIENCE_MS } from "../decorators/vendor-errors.js";
 import { createTurnRelay, type TurnRelay } from "../daemon-tools/turn-relay.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";

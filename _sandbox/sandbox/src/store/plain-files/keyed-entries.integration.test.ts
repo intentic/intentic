@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import { jsonEntries } from "./json-file.js";
+import { jsonEntries } from "../json-file.js";
 import { countResume, keyedEntries } from "./keyed-entries.js";
 
 const dirs: string[] = [];

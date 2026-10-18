@@ -10,7 +10,8 @@ import MapPrincipalRow from "./MapPrincipalRow.vue";
 import { drawMap } from "./mapEdges";
 import type { Flow } from "./mapGeometry";
 import type { PersonaName } from "./mapWords";
-import type { Focus, GroupKey, Lighting, Principal, PrincipalKind, ReachMap } from "./reachModel";
+import type { Focus, Lighting } from "./reachLighting";
+import type { GroupKey, Principal, PrincipalKind, ReachMap } from "./reachModel";
 import { useMapLayout } from "./useMapLayout";
 
 // THE MAP'S STAGE: who gets in on the left, the box in the middle, what it reaches on the right, and the lines between

@@ -9,7 +9,7 @@ import {
 } from "@intentic/sandbox-contract/schemas/loops";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openEntries } from "../store/open-document.js";
-import { countResume, keyedEntries } from "../store/keyed-entries.js";
+import { countResume, keyedEntries } from "../store/plain-files/keyed-entries.js";
 import { stateRelPath } from "../state-paths.js";
 
 // Loop manifest (<workspace>/.intentic/records/loops.json): every loop run, with its iteration history; mirrors the

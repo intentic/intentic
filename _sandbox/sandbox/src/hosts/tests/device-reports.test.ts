@@ -11,7 +11,8 @@ import { ORPCError } from "@orpc/server";
 import { waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import { enrolledFleet, type SyncEnrollmentRow } from "../../peers/desktop-sync.js";
-import { devices, manageDeviceSandbox, mergeDevices, type PullResult, runDeviceAgentFlow, sandboxesFromTool, unreadFromTool } from "../device-reports.js";
+import { devices, manageDeviceSandbox, mergeDevices, type PullResult, runDeviceAgentFlow } from "../device-reports.js";
+import { sandboxesFromTool, unreadFromTool } from "../device-listing.js";
 import { HOST_CARD_RULE } from "../host-peer.js";
 import { recordingLogger } from "../../harness/route-fakes.testing.js";
 

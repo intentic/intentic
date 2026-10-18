@@ -17,7 +17,6 @@ import type { Said, Steer, TurnInput } from "../seams/turn-starter.js";
 import { fileCiStore } from "./ci-store.js";
 import { ciLogsRoot, jobLogPath } from "./logs/job-logs.js";
 import {
-    type FailedJob,
     fixerSettled,
     fixPressed,
     jobFailed,
@@ -27,6 +26,7 @@ import {
     streakFixerFor,
     TURNS_PER_STREAK,
 } from "./main-fixer.js";
+import type { FailedJob } from "./main-streak.js";
 import { ciProjects } from "./projects.js";
 import type { FetchFn } from "./providers.js";
 import { createRunsCache } from "./runs-cache.js";

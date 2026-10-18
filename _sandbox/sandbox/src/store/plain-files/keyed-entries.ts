@@ -1,4 +1,4 @@
-import type { JsonFile } from "./json-file.js";
+import type { JsonFile } from "../json-file.js";
 
 // What every store over entries keyed by one string field repeats: the run ledgers, the saved designs.
 export interface KeyedEntries<E> {

@@ -3,10 +3,10 @@ import { join } from "node:path";
 import { errnoCode, errorMessage, isMissing, undefinedIfMissing } from "@intentic/base/errors";
 import { queueOnFile } from "@intentic/base/fs";
 import { readDocument } from "@intentic/sandbox-contract/documents";
-import { CHECK_SETTLES } from "./evolution/conversions.js";
-import type { DocumentSpec } from "./evolution/documents.js";
-import { asideOf, ManifestUnreadableError, writeJsonFile } from "./json-file.js";
-import { newerBuildRan } from "./newest-run.js";
+import { CHECK_SETTLES } from "../evolution/conversions.js";
+import type { DocumentSpec } from "../evolution/documents.js";
+import { asideOf, ManifestUnreadableError, writeJsonFile } from "../json-file.js";
+import { newerBuildRan } from "../newest-run.js";
 
 // Directory of one JSON file per entry, for a store with a second writer besides the daemon; jsonFile is the
 // single-manifest shape for a daemon-only writer.

@@ -23,7 +23,6 @@ const TOUCH_AFTER_MS = 24 * 60 * 60 * 1000;
 
 const KeptSchema = z.record(z.string(), z.tuple([z.number().int().positive(), z.number().int().positive(), z.number()]));
 
-// allow(module-state): one memory for the page, each entry already keyed by its sandbox
 const held = new Map<string, Map<string, Kept>>();
 const unsaved = new Set<string>();
 

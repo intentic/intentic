@@ -1,6 +1,7 @@
 import { curve, elbow, entryOf, exitOf, type Flow, type Point, portsAlong, type Rect } from "./mapGeometry";
 import type { MapLayout } from "./useMapLayout";
-import type { GroupKey, Lighting, PrincipalKind, ReachHow, ReachMap } from "./reachModel";
+import type { Lighting } from "./reachLighting";
+import type { GroupKey, PrincipalKind, ReachHow, ReachMap } from "./reachModel";
 
 // THE MAP'S LINES, FROM WHERE ITS CARDS LANDED. Every way in runs to a door on the box's leading edge, one door per kind
 // of principal; everything reached runs from a port on its trailing edge, one port per group, so each side reads as a

@@ -32,6 +32,7 @@ import { isToolEvent, sessionOf, stepTokens, tokensOf, toolCards, type TurnView,
 import { errorDetail, executionErrorFrame, type FailureTarget, isModelInvalid, retryFrame } from "./opencode-failures.js";
 import { mcpServersOf, mcpToolNameOf, openCodeMounts, type OpenCodeMounts, sessionToolRules } from "./opencode-mcp.js";
 import { openCodeSubagents } from "./opencode-subagents.js";
+import { commandIn, commandsAt } from "./opencode-commands.js";
 import {
     answerForm,
     type DaemonItem,
@@ -57,7 +58,6 @@ import {
     type TurnQueue,
     type TurnReading,
 } from "./opencode-turn.js";
-import { stripTurnPreamble } from "../../sessions/vocabulary/prompt-envelope.js";
 
 export type { RaisedFrame, TurnAsk } from "./opencode-turn.js";
 
@@ -458,26 +458,6 @@ const instruct = async (c: OpenCodeClient, sessionID: string, turn: OpenCodeTurn
         // allow(silent-catch): a session that never had the entry has nothing to clear
         await c.session.instructions.entry.remove({ sessionID, key: INSTRUCTIONS_KEY }).catch(() => {});
     }
-};
-
-// The slash commands OpenCode offers where the turn runs (its own `init` and `review`, a config's own), for the
-// composer's `/` popover; none where they cannot be read, which costs only the popover.
-const commandsAt = async (c: OpenCodeClient, cwd: string): Promise<AgentCommand[]> => {
-    // allow(silent-catch): an unread list costs the popover its entries, never the turn
-    const listed = await c.command.list({ location: { directory: cwd } }).catch(() => undefined);
-    return (listed?.data ?? []).map((command) => ({ name: command.name, description: command.description ?? "" }));
-};
-
-// A prompt whose words (after the daemon's notes) open with `/name`, naming a command OpenCode offers: the command, the
-// rest of the words as its arguments, and the notes, which ride ahead of it as the session's own context.
-const commandIn = (prompt: string, commands: readonly AgentCommand[]): { name: string; text: string; notes: string } | undefined => {
-    const words = stripTurnPreamble(prompt);
-    const match = /^\/([\w.:-]+)(?:\s+([\s\S]*))?$/u.exec(words.trimStart());
-    const name = match?.[1];
-    if (name === undefined || !commands.some((command) => command.name === name)) {
-        return undefined;
-    }
-    return { name, text: match?.[2] ?? "", notes: prompt.slice(0, prompt.length - words.length).trim() };
 };
 
 // Sends the turn's message: as the command it names, its notes first as context the command's execution takes in, or

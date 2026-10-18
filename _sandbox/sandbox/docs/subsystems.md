@@ -180,7 +180,7 @@ but answers a store it cannot read the way the doors do: unavailable, never unau
 
 ## Shared primitives
 
-Reach for these before writing a new one: `store/keyed-entries.ts` (a ledger keyed by one field, and a counted boot
+Reach for these before writing a new one: `store/plain-files/keyed-entries.ts` (a ledger keyed by one field, and a counted boot
 resume), `resumeCapped` (`loops/loop-runner.ts`), `serialLock`/`keyedLock` (`@intentic/base/async`),
 `http/cli-answer.ts` (what a CLI route answers), `exchangeWithPlatform` (`system/platform-client.ts`, every call to the
 platform) and `restoreTunnels` (`tunnel/tunnel-links.ts`, boot restore of VPNs and network disks). Session names and

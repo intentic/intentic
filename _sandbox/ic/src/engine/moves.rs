@@ -817,20 +817,7 @@ fn move_one(
         .collect();
     if !missing.is_empty() {
         say(slug, "image", json!({ "images": missing }));
-        let mut save: Vec<&str> = vec!["save"];
-        save.extend(missing.iter().map(String::as_str));
-        let total: u64 = missing
-            .iter()
-            .filter_map(|image| image_bytes(source, image))
-            .sum();
-        pipe(
-            docker::command_on(source, &save),
-            docker::command_on(target, &["load", "-q"]),
-            slug,
-            "image",
-            total,
-            log,
-        )?;
+        carry_images(source, target, &missing, slug, log)?;
         for image in &missing {
             if !same_image(source, target, image) {
                 bail!("{image} did not arrive whole on the other engine.");
@@ -877,12 +864,17 @@ fn move_one(
     carry.created_containers.push(sandbox::parked_of(slug));
 
     say(slug, "starting", json!({}));
-    let made = with_engine(target, || {
-        crate::sandbox::recreate::run(
-            crate::sandbox::recreate::Mode::Reshape(crate::shape::Ask::default()),
-            Some(slug.clone()),
-            crate::sandbox::recreate::Preflight::Skip,
-        )
+    // The placeholder carries no bind, so the reshape finds no key mounted on it: handed the key the sandbox had as the
+    // operator's file, it mounts that one, by the same door it mounts its own (at_rest.rs `Source::Given`).
+    let key = key_file(&sandbox.inspect).filter(|path| path.is_file());
+    let made = with_key_file(key.as_deref(), || {
+        with_engine(target, || {
+            crate::sandbox::recreate::run(
+                crate::sandbox::recreate::Mode::Reshape(crate::shape::Ask::default()),
+                Some(slug.clone()),
+                crate::sandbox::recreate::Preflight::Skip,
+            )
+        })
     });
     made.map_err(|Fail(reason)| {
         Fail(format!(
@@ -1170,16 +1162,7 @@ pub fn copy(args: CopyArgs) -> Result<()> {
                 to_name
             ),
         );
-        let mut save: Vec<&str> = vec!["save"];
-        save.extend(missing.iter().map(String::as_str));
-        pipe(
-            docker::command_on(&source, &save),
-            docker::command_on(&target, &["load", "-q"]),
-            "copy",
-            "image",
-            total,
-            &log,
-        )?;
+        carry_images(&source, &target, &missing, "copy", &log)?;
         for image in &missing {
             if !same_image(&source, &target, image) {
                 bail!("{image} did not arrive whole on {}.", to_name);
@@ -1521,6 +1504,128 @@ fn pipe(
     Ok(())
 }
 
+/// How long one image's pull onto the other engine may take: a sandbox image is gigabytes on a home connection.
+const PULL_LIMIT: Duration = Duration::from_secs(90 * 60);
+
+/// Put `images` on `target` as they are on `source`. An image that came from a registry is pulled there by the digest
+/// it was pulled as; the rest go through `docker save | docker load`. Docker Desktop's containerd store keeps the
+/// compressed blob only of a layer it downloaded, not of one another image had already unpacked, and its `docker save`
+/// then exits 0 with the manifests and none of the layers (53 KB for an 8 GB sandbox image, 2026-10-18), so a save
+/// is the last resort, not the first. The caller checks each image arrived whole either way.
+fn carry_images(
+    source: &Target,
+    target: &Target,
+    images: &[String],
+    slug: &str,
+    log: &Log,
+) -> Result<()> {
+    let mut rest: Vec<&str> = Vec::new();
+    for image in images {
+        let pulled = repo_digest(source, image)
+            .is_some_and(|digest| pull_as(target, &digest, image, slug, log))
+            && same_image(source, target, image);
+        if !pulled {
+            rest.push(image);
+        }
+    }
+    if rest.is_empty() {
+        return Ok(());
+    }
+    let total: u64 = rest
+        .iter()
+        .filter_map(|image| image_bytes(source, image))
+        .sum();
+    let mut save: Vec<&str> = vec!["save"];
+    save.extend(rest.iter().copied());
+    pipe(
+        docker::command_on(source, &save),
+        docker::command_on(target, &["load", "-q"]),
+        slug,
+        "image",
+        total,
+        log,
+    )
+}
+
+/// The `repo@sha256:…` `image` was pulled as on `on`, of its own repository; None for an image built or committed
+/// there, which no registry holds.
+fn repo_digest(on: &Target, image: &str) -> Option<String> {
+    let ran = docker::capture_on(
+        on,
+        &[
+            "image",
+            "inspect",
+            "--format",
+            "{{json .RepoDigests}}",
+            image,
+        ],
+        docker::READ_LIMIT,
+    )
+    .ok()
+    .filter(|ran| ran.code == Some(0))?;
+    let digests: Vec<String> = serde_json::from_str(ran.stdout.trim()).ok()?;
+    let repo = repository_of(image);
+    digests
+        .into_iter()
+        .find(|digest| digest.split_once('@').is_some_and(|(name, _)| name == repo))
+}
+
+/// `ghcr.io/intentic/sandbox` of `ghcr.io/intentic/sandbox:latest`: the name less its tag, where a `:` before the
+/// last `/` is a registry's port.
+fn repository_of(image: &str) -> &str {
+    let name = image.split_once('@').map_or(image, |(name, _)| name);
+    match name.rfind(':') {
+        Some(colon) if !name[colon..].contains('/') => &name[..colon],
+        _ => name,
+    }
+}
+
+/// Pull `digest` on `on` and give it `image`'s name, beating the move's heartbeat while the download runs. False when
+/// the registry could not be reached or refused it: the save is what is left.
+fn pull_as(on: &Target, digest: &str, image: &str, slug: &str, log: &Log) -> bool {
+    say(slug, "image", json!({ "pulling": image }));
+    let mut command = docker::command_on(on, &["pull", "-q", digest]);
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    let Ok(mut child) = command.spawn() else {
+        return false;
+    };
+    let said = tail_of(child.stderr.take());
+    let started = Instant::now();
+    let mut last_beat = Instant::now();
+    let pulled = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status.success(),
+            Ok(None) if started.elapsed() > PULL_LIMIT => {
+                kill_pid(child.id());
+                let _ = child.wait();
+                break false;
+            }
+            Ok(None) => {}
+            Err(_) => break false,
+        }
+        if last_beat.elapsed() > Duration::from_secs(30) {
+            last_beat = Instant::now();
+            heartbeat();
+        }
+        std::thread::sleep(Duration::from_secs(2));
+    };
+    let words = said
+        .recv_timeout(Duration::from_secs(5))
+        .unwrap_or_default();
+    log.line(&format!(
+        "pull {digest}: {}",
+        if pulled {
+            "done".to_string()
+        } else {
+            last_words(&words)
+        }
+    ));
+    pulled && run_on(on, &["tag", digest, image], docker::READ_LIMIT).is_ok()
+}
+
 fn tail_of(stream: Option<impl Read + Send + 'static>) -> std::sync::mpsc::Receiver<String> {
     let (send, receive) = std::sync::mpsc::channel();
     if let Some(mut stream) = stream {
@@ -1630,6 +1735,54 @@ fn named_volumes(inspect: &Value) -> Vec<(String, String)> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// The at-rest key file the sandbox mounts (sandbox/at_rest.rs), as a path on this machine. The placeholder a move
+/// recreates from carries named volumes only, and a reshape that finds no key mounted can recover only ic's own key,
+/// and only from the home it runs with: an operator's file, or a key made under another home, would stop the move with
+/// "given an at-rest key that it no longer mounts" (the desktop-windows smoke, 2026-10-18). Read from
+/// `HostConfig.Binds`, which holds the host path as ic handed it to the source engine: `C:\…` to Docker Desktop,
+/// `/mnt/<drive>/…` to ours, which is `<DRIVE>:\…` on this machine. Pure.
+fn key_file(inspect: &Value) -> Option<std::path::PathBuf> {
+    let marker = format!(":{}", sandbox::at_rest::KEY_MOUNT);
+    strings(&inspect["HostConfig"]["Binds"])
+        .iter()
+        .find_map(|bind| {
+            let at = bind.rfind(&marker)?;
+            let after = &bind[at + marker.len()..];
+            (after.is_empty() || after.starts_with(':')).then(|| windows_path_of(&bind[..at]))
+        })
+        .map(std::path::PathBuf::from)
+}
+
+/// Run `work` with `key` as the operator's key file (HOST_FILE_ENV), unless the operator named one on this run, then
+/// take the variable away again.
+fn with_key_file<T>(key: Option<&std::path::Path>, work: impl FnOnce() -> Result<T>) -> Result<T> {
+    let name = sandbox::at_rest::HOST_FILE_ENV;
+    let named = std::env::var(name).is_ok_and(|value| !value.is_empty());
+    let Some(key) = key.filter(|_| !named) else {
+        return work();
+    };
+    std::env::set_var(name, key);
+    let result = work();
+    std::env::remove_var(name);
+    result
+}
+
+/// `/mnt/c/Users/x` as Windows names it, `C:\Users\x`, for Docker Desktop, which takes a Windows path; anything else as it
+/// is. Pure.
+fn windows_path_of(source: &str) -> String {
+    let Some(rest) = source.strip_prefix(intentic_docker_host::wsl_path::DRIVES_ROOT) else {
+        return source.to_string();
+    };
+    let mut parts = rest.split('/');
+    match parts.next() {
+        Some(drive) if drive.len() == 1 && drive.chars().all(|c| c.is_ascii_alphabetic()) => {
+            let tail: Vec<&str> = parts.filter(|part| !part.is_empty()).collect();
+            format!("{}:\\{}", drive.to_ascii_uppercase(), tail.join("\\"))
+        }
+        _ => source.to_string(),
+    }
 }
 
 /// The sandbox, created stopped on the other engine with what the reshape reads off it: its env (the shape and the
@@ -1935,6 +2088,42 @@ fn cli_id(kind: Kind) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_key_file_is_read_off_the_binds_as_this_machine_names_it() {
+        let desktop = json!({ "HostConfig": { "Binds": [
+            "intentic-workspace-a:/work",
+            r"C:\Users\me\.intentic\keys\at-rest-a.key:/run/secrets/intentic-at-rest-key:ro",
+            r"D:\keys\old.key:/run/secrets/intentic-at-rest-previous-key:ro",
+        ] } });
+        let expected = Some(std::path::PathBuf::from(
+            r"C:\Users\me\.intentic\keys\at-rest-a.key",
+        ));
+        assert_eq!(key_file(&desktop), expected);
+        let ours = json!({ "HostConfig": { "Binds": [
+            "/mnt/c/Users/me/.intentic/keys/at-rest-a.key:/run/secrets/intentic-at-rest-key:ro",
+        ] } });
+        assert_eq!(key_file(&ours), expected);
+        assert_eq!(key_file(&json!({ "HostConfig": { "Binds": null } })), None);
+    }
+
+    #[test]
+    fn repository_of_drops_the_tag_and_keeps_a_registry_port() {
+        assert_eq!(
+            repository_of("ghcr.io/intentic/sandbox:latest"),
+            "ghcr.io/intentic/sandbox"
+        );
+        assert_eq!(
+            repository_of("localhost:5000/sandbox:dev"),
+            "localhost:5000/sandbox"
+        );
+        assert_eq!(
+            repository_of("localhost:5000/sandbox"),
+            "localhost:5000/sandbox"
+        );
+        assert_eq!(repository_of("alpine"), "alpine");
+        assert_eq!(repository_of("alpine@sha256:abc"), "alpine");
+    }
 
     fn moved(slug: &str, at: u64, remove_after: u64) -> Moved {
         Moved {

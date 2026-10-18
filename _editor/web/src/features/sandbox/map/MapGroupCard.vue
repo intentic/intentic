@@ -4,7 +4,8 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import MapNodeButton from "./MapNodeButton.vue";
 import { GROUP_ICONS, groupLabel } from "./mapWords";
-import { bundleId, type Focus, type Lighting, type MapGroup, type MapNode, type NodeTone, type ReachHow } from "./reachModel";
+import { bundleId, type Focus, type Lighting } from "./reachLighting";
+import type { MapGroup, MapNode, NodeTone, ReachHow } from "./reachModel";
 
 // ONE KIND OF THING THE SANDBOX REACHES (its services, its accounts, its machines…), as a card on the map's right edge.
 //

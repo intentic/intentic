@@ -8,7 +8,7 @@ import { identityHue } from "../../../lib/identityHue";
 import type { ModelSource } from "../models/modelSources";
 import MapCaption from "./MapCaption.vue";
 import MapStage from "./MapStage.vue";
-import { type Focus, lightingOf } from "./reachModel";
+import { type Focus, lightingOf } from "./reachLighting";
 import { useReachMap } from "./useReachMap";
 
 // SANDBOX ▸ MAP: the sandbox's whole access and reach on one drawing. Who can get in (people, control tokens, other

@@ -9,7 +9,6 @@ import {
     type DeviceReport,
     type DeviceSandbox,
     type DeviceSandboxFlow,
-    DeviceSandboxSchema,
     environmentOf,
     REPORT_QUIET_AFTER_MS,
 } from "@intentic/sandbox-contract/schemas/devices";
@@ -23,7 +22,6 @@ import {
 } from "@intentic/sandbox-contract/schemas/hosts";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { ORPCError } from "@orpc/server";
-import { z } from "zod";
 import type { Services } from "../composition.js";
 import { approvedPath } from "../environment/environment.js";
 import type { SyncEnrollmentRow } from "../peers/desktop-sync.js";
@@ -32,6 +30,7 @@ import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { createRepeatGate } from "../logs/repeat-gate.js";
 import { type HostClient, hostConnections, hostSummaries } from "./host-peer.js";
 import { hostIdFrom, setupHostCard } from "./host-seed.js";
+import { sandboxesFromTool, unreadFromTool } from "./device-listing.js";
 
 // Every machine reachable from this sandbox, via two doors: the desktop-sync agent's volunteered report (free, no
 // capability needed) and a `host` capability's pull (adds containers, never a mounted docker socket). The pull asks the
@@ -82,18 +81,6 @@ const pulled = new Map<string, PullEntry>();
 // fresh answer.
 export const forgetPull = (id: string): void => void pulled.delete(id);
 
-// An answer this build cannot parse is no reading; JSON.parse throws nothing else for a string, and anything else is a bug.
-const safeJson = (text: string): unknown => {
-    try {
-        return JSON.parse(text);
-    } catch (error) {
-        if (error instanceof SyntaxError) {
-            return undefined;
-        }
-        throw error;
-    }
-};
-
 // Text of an MCP tool result, plus whether the machine refused it; a refusal is a value on this path, not a throw.
 const toolText = (answer: unknown): { text: string; refused: boolean } => {
     const result = (answer as { result?: { content?: { text?: unknown }[]; isError?: unknown } }).result;
@@ -121,28 +108,6 @@ export const callTool = async (
             { signal },
         ),
     );
-
-const DeviceSandboxRowsSchema = z.array(DeviceSandboxSchema);
-
-// Containers come only through an approved host capability, never the sync agent. Reads the machine's own
-// list_sandboxes tool; a refusal, a too-old agent or an answer this build cannot read is no reading, never "none there".
-export const sandboxesFromTool = (text: string, refused: boolean): DeviceSandbox[] | undefined => {
-    if (refused) {
-        return undefined;
-    }
-    const rows = DeviceSandboxRowsSchema.safeParse(safeJson(text.trim()));
-    return rows.success ? rows.data : undefined;
-};
-
-// Long enough for the machine's sentence and the reason it quotes; a usage dump after it is not for a card.
-const UNREAD_MAX_CHARS = 300;
-
-// Why a machine that answered did not list: the first line of its refusal or failure ("ic could not list this device's
-// sandboxes: …", a switch that is off). Undefined for a listing, and for silence, which says nothing about why.
-export const unreadFromTool = (text: string, refused: boolean): string | undefined => {
-    const line = refused ? text.split(/\r?\n/).find((part) => part.trim() !== "")?.trim() : undefined;
-    return line === undefined ? undefined : line.slice(0, UNREAD_MAX_CHARS);
-};
 
 // FORBIDDEN is the "Run commands" switch, any other refusal an agent without the call; a transport failure throws.
 const describeMachine = async (client: HostClient, signal: AbortSignal): Promise<{ readonly report: DeviceReport } | { readonly gap: DeviceGap }> => {

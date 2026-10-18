@@ -13,7 +13,7 @@ import { drop, isJsonObject, type JsonObject, nested } from "../store/evolution/
 import { defineDocument } from "../store/evolution/documents.js";
 import { defineStep } from "../store/evolution/state-steps.js";
 import { openEntries } from "../store/open-document.js";
-import { countResume, keyedEntries } from "../store/keyed-entries.js";
+import { countResume, keyedEntries } from "../store/plain-files/keyed-entries.js";
 import { stateRelPath } from "../state-paths.js";
 import { parseJsonOr } from "@intentic/base/json";
 

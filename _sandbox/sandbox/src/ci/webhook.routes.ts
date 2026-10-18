@@ -7,7 +7,8 @@ import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { dispatchCiRun } from "./events.js";
-import { type FailedJob, jobFailed } from "./main-fixer.js";
+import { jobFailed } from "./main-fixer.js";
+import type { FailedJob } from "./main-streak.js";
 import {
     ciClientFor,
     type FetchFn,

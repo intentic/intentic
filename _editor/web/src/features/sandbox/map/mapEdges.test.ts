@@ -1,6 +1,7 @@
 import { drawMap } from "./mapEdges";
 import type { Rect } from "./mapGeometry";
-import { buildReachMap, type Lighting, type ReachCapability, type ReachInput, lightingOf } from "./reachModel";
+import { type Lighting, lightingOf } from "./reachLighting";
+import { buildReachMap, type ReachCapability, type ReachInput } from "./reachModel";
 import type { MapLayout } from "./useMapLayout";
 
 // The lines the stage draws from where its cards landed: one per way in and one per thing reached when the three columns

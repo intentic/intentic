@@ -105,6 +105,7 @@ export const readImageLock = (container) => {
         });
         return parseLock(text);
     } catch {
+        // allow(silent-catch): no lockfile in the container (an image from before the deploy wrote one) is the undefined documented above.
         return undefined;
     }
 };

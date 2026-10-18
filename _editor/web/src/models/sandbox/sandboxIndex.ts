@@ -51,6 +51,14 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         title: () => t(`sandbox.sandboxOverview.resources`),
         terms: () => [t(`sandbox.search.overviewResources`)],
     },
+    // Drawn only for a sandbox on somebody's own machine (SandboxSleepRow.vue); the reader does not know where it runs,
+    // so a hosted sandbox's search finds the page without the row.
+    {
+        id: `overview-sleep`,
+        slug: `overview`,
+        title: () => t(`sandbox.sandboxOverview.sleep`),
+        terms: () => [t(`sandbox.search.overviewSleep`)],
+    },
     // Maintainer-only like the routes behind it; the card hides itself below that.
     {
         id: `overview-disk`,

@@ -7,7 +7,8 @@ import { RouterLink } from "vue-router";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import { identityHue } from "../../../lib/identityHue";
 import { editPath, editWords, GROUP_ICONS, groupLabel, isGround, nodeDetail, nodeLabel, type PersonaName, principalLine } from "./mapWords";
-import { bundleId, type Focus, type Lighting, type MapNode, type Principal, type ReachMap } from "./reachModel";
+import { bundleId, type Focus, type Lighting } from "./reachLighting";
+import type { MapNode, Principal, ReachMap } from "./reachModel";
 
 // WHAT THE MAP IS SAYING RIGHT NOW, IN ONE LINE. Lines and edges show a reach; this says it, so nobody has to count them
 // to know that Jo sees the whole workspace and acts only through Maya, or that nothing that gets in reaches the VPN. With

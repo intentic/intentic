@@ -15,17 +15,14 @@ import {
     useDevice,
 } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
-import { messageOr } from "@intentic/ui/async";
-import { computed, onScopeDispose, ref, useTemplateRef } from "vue";
-import { landRequestWork, requestLandAgent } from "../../../../models/fleet/agentActions";
-import { useOperation } from "../../../../workbench/operations/operations";
-import { refreshAcross } from "../../../../models/sandbox/live/fleetAcross";
+import { computed, ref, useTemplateRef } from "vue";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { useAudience } from "../../../../app/useAudience";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import OriginMark from "../../../../parts/fleet/OriginMark.vue";
 import AgentCardClock from "./AgentCardClock.vue";
 import AgentReactions from "./AgentReactions.vue";
+import { useCardRequests } from "./cardRequests";
 import OwnerMark from "../session/OwnerMark.vue";
 import ParentMark from "../session/ParentMark.vue";
 import { parentOf, sessionMark } from "../../../../models/agent-status/ownership";
@@ -308,38 +305,9 @@ const { canReview, canShip } = useRole();
 // they chose.
 const words = useVocabulary();
 const { maker } = useAudience();
-const { refresh: refreshAgents, notice: agentsNotice, rename } = useAgents();
-// The ask is the card's, in the ledger, shared with its review page's press: either surface holds the other's. A
-// refusal goes on the board's notice strip, and to a reader who already left, as a receipt.
-const landRequest = useOperation(() => landRequestWork(props.agent.id, props.agent.sandboxId));
-const requesting = landRequest.busy;
-let present = true;
-onScopeDispose(() => {
-    present = false;
-});
-const requestLand = async (): Promise<void> => {
-    const { id, sandboxId } = props.agent;
-    const name = displayTitle.value;
-    const outcome = await landRequest.run({
-        what: t(`agents.agentDetail.requestingLand`, { name }),
-        done: () => t(`agents.agentDetail.landRequestSent`, { name }),
-        failed: t(`agents.agentCard.couldntSendLandRequest`),
-        task: async () => {
-            await requestLandAgent(id, sandboxId);
-            await (sandboxId === undefined ? refreshAgents() : Promise.resolve(refreshAcross()));
-        },
-    });
-    // A card gone from the screen meanwhile left it to the receipt.
-    if (present && outcome?.state === `failed`) {
-        agentsNotice.value = outcome.failure?.detail ?? outcome.failure?.title;
-        landRequest.dismiss();
-    }
-};
-// The standing ask, worn for everyone: a collaborator sees it took, a maintainer reads it as the cue to land.
-const landAsk = computed(() => {
-    const request = props.agent.landRequested;
-    return request === undefined ? undefined : t(`agents.agentCard.askedToLand`, { name: request.name ?? request.email });
-});
+const { rename } = useAgents();
+// Request land and Send again go to the daemon from the card itself (cardRequests.ts).
+const { requesting, requestLand, landAsk, resending, sendAgain } = useCardRequests(() => props.agent, () => displayTitle.value);
 // Its own flag, not a wider `landing`, so each button names only its own press; on an `away` card the daemon's
 // `landing` is that press, whichever window made it.
 const relanding = computed(() => props.pending === `reland` || (relandOffered.value && props.agent.status === `landing`));
@@ -430,24 +398,6 @@ const warmAnchor = ref<HTMLElement>();
 const openWarm = (event: MouseEvent): void => {
     warmAnchor.value = event.currentTarget as HTMLElement;
     warmOpen.value = true;
-};
-// Re-runs the exact held turn (useAgents.resumeHeldTurn), not a new message; a local flag, since `pending` names drop
-// actions and this is neither.
-// Cleared in `finally`, not only on success, since a roster frame is about to replace the card either way.
-const resending = ref(false);
-const sendAgain = async (): Promise<void> => {
-    if (resending.value) {
-        return;
-    }
-    resending.value = true;
-    try {
-        await useAgents().resumeHeldTurn(props.agent.id);
-    } catch (caught) {
-        // The card is left as it was and the words are still safe in the composer; the strip says why nothing moved.
-        agentsNotice.value = messageOr(caught, t(`agents.agentCard.couldntSendAgain`));
-    } finally {
-        resending.value = false;
-    }
 };
 // Says which provider runs it exactly once: while the tile wears the provider mark this needs no floor.
 // Once the category glyph replaces that mark, a card with no recorded model would otherwise never say the provider at

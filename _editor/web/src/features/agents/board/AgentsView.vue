@@ -13,9 +13,8 @@ import {
     toneWash,
     ui,
     useDevice,
-    useNarrow,
 } from "@intentic/ui";
-import { computed, inject, nextTick, onMounted, provide, ref } from "vue";
+import { computed, inject, onMounted, provide, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { usePanels } from "../../../models/extensions/usePanels";
@@ -29,7 +28,6 @@ import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
 import { useAuth } from "../../../client/auth/useAuth";
 import { useSandboxSharedAccess } from "../../../models/sandbox/useSandboxSharedAccess";
 import { useAgents } from "../../../models/fleet/useAgents";
-import type { FleetLane } from "../../../models/agent-status/agentStatus-lanes";
 import { agentDisplayTitle } from "../../../models/agent-status/agentStatus-meta";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { listedViewMissing, WORKFLOWS } from "../../../workbench/views/listedViews";
@@ -65,6 +63,7 @@ import { useAttentionAsk } from "./view/attentionAsk";
 import { useBoardPresses } from "./view/boardPresses";
 import { followAcross, useBoardScope } from "../../../models/fleet/board/boardScope";
 import { useBoardView } from "./view/boardView";
+import { PAIRED_PLACE, useBoardGrid } from "./view/boardGrid";
 import { useCardMenu } from "./view/cardMenu";
 import { useFamilyArchive } from "./view/familyArchive";
 import { useCardFocus, useCardRing } from "./view/cardSelection";
@@ -244,49 +243,14 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
     }
     drag.begin(event, agent, card);
 };
-// The board's own width, measured (useNarrow): a container query's `container-type` would contain the fixed drag ghost.
-// THREE SHAPES, NOT TWO. Under 48rem the lanes stack. From there to 72rem (a tablet, a small laptop, a desktop with the
-// chat docked) three columns leave a card about 300px wide, and after its glyph, standing and presses its title kept
-// some 60px of that ("Soft-delet…"); so the board is two columns there: the lanes about work in flight (Attention over
-// Active, both short) share the first, and Finished, the long ledger, has the second. Reading order is the same in all
-// three shapes: Attention, Active, Finished.
-const NARROW_BOARD_REM = 48;
-const PAIRED_BOARD_REM = 72;
 const boardEl = ref<HTMLElement | undefined>(undefined);
-const narrow = useNarrow(boardEl, NARROW_BOARD_REM);
-const underThree = useNarrow(boardEl, PAIRED_BOARD_REM);
-const paired = computed(() => underThree.value && !narrow.value);
-// Where each lane sits in the paired shape: Finished spans both rows of the second column, so the first column's rows
-// size to Attention and Active alone (`grid-rows-[auto_1fr]`: the second row takes whatever Finished needs past them).
-// That needs the rows sized by what they hold: held to the board's height (`h-full`) with the lanes allowed to shrink
-// (`min-h-0`), as three columns in one row can be, a long Attention lane left Active a 0px row and drew it over its cards;
-// so the paired grid only starts at the board's height (`min-h-full`) and its lanes keep their own.
-const PAIRED_PLACE = {
-    attention: `col-start-1 row-start-1`,
-    active: `col-start-1 row-start-2`,
-    finished: `col-start-2 row-span-2 row-start-1`,
-} satisfies Record<FleetLane, string>;
-const laneGrid = computed(() => (narrow.value ? `content-start` : paired.value ? `grid-cols-2 grid-rows-[auto_1fr] items-start lg:gap-6 lg:p-6` : `grid-cols-3 items-start lg:gap-6 lg:p-6`));
+// The lanes' grid at the board's measured width, and the Finished fold that lands on the lane's header (boardGrid.ts).
+const { narrow, paired, laneGrid, toggleFinished } = useBoardGrid({ board: boardEl, view, move });
 const LANES = computed(laneHeads);
 // A wallpaper shows through the lanes (wallpapers.css), so their headers drop the canvas band they pin on; a pinned
 // header with nothing behind it would slide over the cards scrolling under it, so they scroll away with the lane.
 const { wallpaper } = useWallpaper();
 const papered = computed(() => wallpaper.value !== `none`);
-// Folding Finished shrinks the board under the reader, and from its tail that drops them far below the lane; its header
-// is brought back to the top instead, so the fold lands where the lane starts.
-const toggleFinished = async (): Promise<void> => {
-    const folding = view.value.all;
-    move({ kind: `expand` });
-    if (!folding) {
-        return;
-    }
-    await nextTick();
-    const lane = boardEl.value?.querySelector<HTMLElement>(`[data-lane="finished"]`);
-    const scroller = lane?.closest<HTMLElement>(`.overflow-auto`);
-    if (lane && scroller && lane.getBoundingClientRect().top < scroller.getBoundingClientRect().top) {
-        lane.scrollIntoView({ block: `start` });
-    }
-};
 useAttentionAsk({
     board: boardEl,
     filtering,

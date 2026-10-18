@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { lstat, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -14,6 +14,7 @@ import { promisify } from "node:util";
 import { detachedStamp } from "../../seams/workload-stamp.js";
 import { MAIN_MOUNT, PACKAGE_STORE, SHARED_STATE } from "../../workload/worktree-paths.js";
 import { type SandboxLayout, sandboxAvailable, startSandboxAnchor } from "./turn-sandbox.js";
+import { currentBoot, OVERLAY_FS_NAME, overlayOptions, prepareLayer } from "./overlay-layers.js";
 import { type NamespaceEntryReference, registerMountEntry } from "../../workload/namespace-entry.js";
 import {
     type NamespaceHolder,
@@ -32,6 +33,32 @@ import { signalGroup } from "../../workload/process-group.js";
 // state and dependency mirrors are bound back in, everything else is private and dies with the turn.
 
 const execFileAsync = promisify(execFile);
+
+// Whether this kernel mounts an overlay `volatile` (Linux 5.10+), asked once a daemon life in a throwaway namespace.
+let volatileProbe: Promise<boolean> | undefined;
+export const overlayVolatileAvailable = (scratchRoot: string): Promise<boolean> => {
+    volatileProbe ??= (async () => {
+        const dir = join(scratchRoot, ".volatile-probe");
+        try {
+            await rm(dir, { recursive: true, force: true });
+            for (const part of ["lower", "upper", "work", "merged"]) {
+                await mkdir(join(dir, part), { recursive: true });
+            }
+            const options = `${overlayOptions(join(dir, "lower"), join(dir, "upper"), join(dir, "work"))},volatile`;
+            await execFileAsync("unshare", ["--mount", "--propagation", "private", "mount", "-t", "overlay", OVERLAY_FS_NAME, "-o", options, join(dir, "merged")], {
+                timeout: 5_000,
+            });
+            return true;
+        } catch {
+            // allow(silent-catch): a kernel without it mounts the layers as before, synced on unmount.
+            return false;
+        } finally {
+            // allow(silent-catch): the probe's scratch is removed again by the next daemon's first probe.
+            await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+        }
+    })();
+    return volatileProbe;
+};
 
 export { MAIN_MOUNT, PACKAGE_STORE } from "../../workload/worktree-paths.js";
 
@@ -80,23 +107,6 @@ export interface IsolationPlan {
 // convention to drift from this one.
 export const overlaysRoot = (historyRoot: string): string => join(historyRoot, "overlays");
 export const overlaysDir = (historyRoot: string, id: string): string => join(overlaysRoot(historyRoot), id);
-
-// A bind kept one st_dev, letting pnpm hardlink installs into tracked files; an overlay copies-up on first write
-// instead, and a cross-device hardlink throws EXDEV.
-// Shown by `mount`/`df`; named for what it is rather than another anonymous `overlay` row.
-const OVERLAY_FS_NAME = "intentic-modules";
-
-
-// Overlay options are one comma-separated word; the kernel splits on `,`/`:` with no escaping. Refuses a path
-// containing either, so a collision fails loudly (`set -e`) instead of silently mounting the wrong thing.
-const overlayOptions = (lower: string, upper: string, work: string): string => {
-    for (const path of [lower, upper, work]) {
-        if (path.includes(",") || path.includes(":")) {
-            throw new Error(`turn isolation: overlay path cannot contain "," or ":", ${path}`);
-        }
-    }
-    return `lowerdir=${lower},upperdir=${upper},workdir=${work}`;
-};
 
 // Wrapping the agent directly fails: its Bash tool forks tmux panes off the daemon's long-lived server, keeping the
 // daemon's mounts. One anchor builds the namespace once; the agent and every pane join it by pid.
@@ -181,69 +191,6 @@ const ANCHOR_TRAILER = `echo ${ANCHOR_READY}\nexec sleep infinity`;
 export const isolationScript = (fstab: string, trailer: string = ANCHOR_TRAILER): string =>
     ["set -e", "mount --make-rprivate /", `mount -a --fstab ${shellQuote(fstab)} -v`, trailer].join("\n");
 
-// The kernel's id for this boot. A layer mounted volatile is trusted again only within the boot that wrote it.
-const BOOT_ID = "/proc/sys/kernel/random/boot_id";
-// Beside a layer's upper and work: the boot it was last mounted volatile in.
-const LAYER_BOOT = "volatile-boot";
-
-const readTrimmed = (path: string): Promise<string | undefined> =>
-    readFile(path, "utf8").then(
-        (text) => text.trim(),
-        // allow(silent-catch): an absent file is the answer here (no boot recorded, or a kernel that names none).
-        () => undefined,
-    );
-
-// Volatile overlays skip every sync to the upper filesystem, the one on unmount included, which otherwise costs a full
-// syncfs of /history per overlay: a turn's 157 of them took 21 s to tear down on a busy disk (2026-10-13, measured),
-// against 30 to 50 ms volatile. The price is that writes still in memory when the machine goes down are lost, so the
-// kernel leaves a marker in the work dir and refuses the layer until it is cleared. Cleared here within the boot that
-// wrote it, which nothing interrupted; a layer last mounted volatile in an earlier boot is thrown away and starts
-// empty, since what it holds (installs and build output over the main checkout's) is rebuilt, and half-written it would
-// be wrong without saying so.
-export const prepareLayer = async (layer: string, boot: string | undefined): Promise<"kept" | "discarded"> => {
-    const recorded = await readTrimmed(join(layer, LAYER_BOOT));
-    const stale = recorded !== undefined && recorded !== boot;
-    if (stale) {
-        await rm(join(layer, "upper"), { recursive: true, force: true });
-        await rm(join(layer, "work"), { recursive: true, force: true });
-        await rm(join(layer, LAYER_BOOT), { force: true });
-    } else {
-        await rm(join(layer, "work", "work", "incompat"), { recursive: true, force: true });
-    }
-    await mkdir(join(layer, "upper"), { recursive: true });
-    await mkdir(join(layer, "work"), { recursive: true });
-    if (boot !== undefined && (stale || recorded !== boot)) {
-        await writeFile(join(layer, LAYER_BOOT), `${boot}\n`);
-    }
-    return stale ? "discarded" : "kept";
-};
-
-// Whether this kernel mounts an overlay `volatile` (Linux 5.10+), asked once a daemon life in a throwaway namespace.
-let volatileProbe: Promise<boolean> | undefined;
-export const overlayVolatileAvailable = (scratchRoot: string): Promise<boolean> => {
-    volatileProbe ??= (async () => {
-        const dir = join(scratchRoot, ".volatile-probe");
-        try {
-            await rm(dir, { recursive: true, force: true });
-            for (const part of ["lower", "upper", "work", "merged"]) {
-                await mkdir(join(dir, part), { recursive: true });
-            }
-            const options = `${overlayOptions(join(dir, "lower"), join(dir, "upper"), join(dir, "work"))},volatile`;
-            await execFileAsync("unshare", ["--mount", "--propagation", "private", "mount", "-t", "overlay", OVERLAY_FS_NAME, "-o", options, join(dir, "merged")], {
-                timeout: 5_000,
-            });
-            return true;
-        } catch {
-            // allow(silent-catch): a kernel without it mounts the layers as before, synced on unmount.
-            return false;
-        } finally {
-            // allow(silent-catch): the probe's scratch is removed again by the next daemon's first probe.
-            await rm(dir, { recursive: true, force: true }).catch(() => undefined);
-        }
-    })();
-    return volatileProbe;
-};
-
 const isDirectory = (path: string): Promise<boolean> =>
     stat(path).then(
         (entry) => entry.isDirectory(),
@@ -266,7 +213,7 @@ export const prepareMountView = async (plan: IsolationPlan, options: { readonly 
         isDirectory(join(plan.root, SHELF)),
         isDirectory(join(plan.root, PACKAGE_STORE)),
         options.volatile ?? overlayVolatileAvailable(dirname(plan.overlays)),
-        readTrimmed(BOOT_ID),
+        currentBoot(),
     ]);
     const facts = { shelf, store, volatile };
     const table = mountTable(plan, facts);

@@ -1,7 +1,7 @@
 import { type Persona, PersonaSchema } from "@intentic/sandbox-contract/schemas/personas";
 import { drop, nested, rename, retype } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import type { IdListStore } from "../store/id-list-file.js";
+import type { IdListStore } from "../store/plain-files/id-list-file.js";
 import { openIdList } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 

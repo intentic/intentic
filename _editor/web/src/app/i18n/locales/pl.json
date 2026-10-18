@@ -9224,6 +9224,7 @@
             "overviewName": "nazwa, zmień nazwę, logo, ikona, obrazek, tytuł",
             "overviewResources": "pamięć, RAM, CPU, rdzenie, zmień rozmiar, więcej mocy, rozmiar maszyny",
             "overviewDisk": "pamięć masowa, miejsce na dysku, zwolnij miejsce, porządki, pełny dysk, gigabajty",
+            "overviewSleep": "uśpienie, bezczynność, nie usypiaj, zawsze włączony, harmonogramy na czas",
             "secretsAdd": "zmienne środowiskowe, klucz API, hasło, dane logowania, token, nowy sekret",
             "secretsKeyrings": "pęk kluczy, menedżer haseł, 1Password, menedżer poświadczeń, sparuj komputery",
             "accessPeople": "członkowie, zaproś, udostępnij, współpracownicy, zespół, role, użytkownicy, uprawnienia",

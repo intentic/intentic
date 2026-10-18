@@ -43,6 +43,7 @@ import { useProjectHandoff } from "./hostedProject";
 import SetupCompose from "./SetupCompose.vue";
 import SetupAccount from "./SetupAccount.vue";
 import SetupHandoff from "./SetupHandoff.vue";
+import SetupNeedsGoogle from "./SetupNeedsGoogle.vue";
 import SetupNudge from "./SetupNudge.vue";
 import SetupOnMachine from "./SetupOnMachine.vue";
 import SetupRunDetails from "./SetupRunDetails.vue";
@@ -71,7 +72,7 @@ const sandbox = useSandbox();
 const router = useRouter();
 const route = useRoute();
 const { mobile } = useDevice();
-const { user, linkGoogle } = useAuth();
+const { user } = useAuth();
 const { getIdToken, warmIdToken } = useGoogleIdentity();
 // The preferred shell, a persisted singleton shared across screens.
 const { cmdOs } = useOsPreference();
@@ -218,23 +219,10 @@ const resumedLine = computed((): string => {
 });
 // An account that signs in only by email, holding no paid slot: the free machine needs Google linked first (the offer's
 // `needsGoogle`, or the platform's GOOGLE_REQUIRED_REASON at the press), so the ladder's hosted rung gives way to the three
-// ways on: link Google, buy a machine, or run the sandbox on this computer.
+// ways on: link Google, buy a machine, or run the sandbox on this computer (SetupNeedsGoogle.vue).
 const hostedNeedsGoogle = computed(
     () => hostedOffered.value && (hostedOffer.value?.needsGoogle === true || refusedForGoogle.value) && hostedRow.value === null,
 );
-const linkingGoogle = ref(false);
-const linkGoogleError = ref<string>();
-// Google's page, then back to this setup with the account able to take the free machine.
-const linkGoogleHere = async (): Promise<void> => {
-    linkingGoogle.value = true;
-    linkGoogleError.value = undefined;
-    try {
-        await linkGoogle(route.fullPath);
-    } catch (refusal) {
-        linkGoogleError.value = refusal instanceof Error ? refusal.message : t(`auth.useAuth.linkGoogleFailed`);
-        linkingGoogle.value = false;
-    }
-};
 
 // A slow download's way out (DesktopSetupProgress): the picker's "Start instantly" rung, offered only while it could
 // start a machine on this row right now, and taken in one press as an arrival on that rung takes it. The PC's own
@@ -826,27 +814,10 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             </button>
                         </div>
                         <!-- The free machine needs a Google sign-in on this account: the three ways on, in place of its button. -->
-                        <div v-if="hostedNeedsGoogle" class="flex flex-col gap-2 text-left" role="note">
-                            <p class="text-xs leading-snug text-muted">{{ t(`setup.setup.needsGoogleDetail`) }}</p>
-                            <div class="flex flex-wrap gap-2">
-                                <Button :label="t(`setup.setup.linkGoogle`)" size="small" :loading="linkingGoogle" @click="linkGoogleHere">
-                                    <template #icon><Icon name="google" /></template>
-                                </Button>
-                                <Button :as="RouterLink" to="/settings/billing" :label="t(`setup.setup.buyMachine`)" size="small" tier="boring">
-                                    <template #icon><Icon name="credit-card" /></template>
-                                </Button>
-                                <Button
-                                    v-if="ladderOptions.some((option) => option.value === `mine`)"
-                                    :label="t(`setup.setup.runOnThisComputer`)"
-                                    size="small"
-                                    tier="boring"
-                                    v-action="() => chooseMachine(`mine`)"
-                                >
-                                    <template #icon><Icon name="desktop" /></template>
-                                </Button>
-                            </div>
-                            <p v-if="linkGoogleError" class="text-xs text-danger">{{ linkGoogleError }}</p>
-                        </div>
+                        <SetupNeedsGoogle
+                            v-if="hostedNeedsGoogle"
+                            :choose-mine="ladderOptions.some((option) => option.value === `mine`) ? () => chooseMachine(`mine`) : undefined"
+                        />
                     </div>
 
                     <!-- One framed object with the finial (as the sign-in gate wears it): the consequence every choice above leads to. -->

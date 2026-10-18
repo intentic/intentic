@@ -1,7 +1,6 @@
 import { keyedLock } from "@intentic/base/async";
-import { isInfraStep } from "@intentic/constants/ci-infra-steps";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import { CI_FIX_PREFIX, ciFixConversationId, fnvDigest } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { CI_FIX_PREFIX, ciFixConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import {
     type CiMainFailure,
     isPipelineInFlight,
@@ -15,11 +14,12 @@ import type { Services } from "../composition.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { opt } from "../opt.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
-import type { CiFailure, CiFinding } from "./ci-store.js";
-import { FIX_LOG_BYTES, infraLog, startCiFix, WHOLE_LOG } from "./ci-fix.js";
+import type { CiFailure } from "./ci-store.js";
+import { FIX_LOG_BYTES, startCiFix, WHOLE_LOG } from "./ci-fix.js";
 import { digestOf, excerptOf, type JobExcerpt } from "./logs/failure-digest.js";
 import { ciLogsRoot, keepJobLog } from "./logs/job-logs.js";
 import { isMainLine } from "./main-line.js";
+import { type FailedJob, findingOf, fleetFailed, heardOf, withHeard, withJob, workflowOf } from "./main-streak.js";
 import { ciProjects, type CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
 
@@ -51,39 +51,8 @@ export const TURNS_PER_STREAK = 3;
 // end of measuring for nearly every run (verification was done by 41 minutes from the start at p90 across September
 // 2026), and short of a release that a failed clock or perf job does not stop.
 export const RUN_SETTLE_CAP_MS = 45 * 60_000;
-// Failed jobs one streak remembers having heard of.
-const HEARD_KEPT = 200;
-// The workflow of a run whose forge runs one pipeline per commit (GitLab), or that named none.
-const ONE_PIPELINE = "ci";
 // Runs listed at boot, looking for what main did while the daemon was down.
 const RUNS_LISTED = 15;
-// Why GitLab says a job failed, where the runner or the scheduler failed and not the code.
-const GITLAB_FLEET_REASONS: ReadonlySet<string> = new Set([
-    "runner_system_failure",
-    "scheduler_failure",
-    "runner_unsupported",
-    "api_failure",
-    "data_integrity_failure",
-]);
-
-// One job that failed, as the fixer hears of it: from the job's own webhook, from its run's, or from a runs list.
-export interface FailedJob {
-    readonly runId: number;
-    readonly jobId: number;
-    readonly name: string;
-    readonly branch: string;
-    // The workflow it is a job of, where a push starts several (GitHub).
-    readonly workflow?: string | undefined;
-    readonly sha?: string | undefined;
-    // The job's page, else its run's.
-    readonly url?: string | undefined;
-    // The first step it failed in, where the forge names steps (GitHub).
-    readonly step?: string | undefined;
-    // Every step it failed in, in order, where the forge names steps.
-    readonly steps?: readonly string[] | undefined;
-    // Why it failed, in the forge's own word, where it says (GitLab's `failure_reason`).
-    readonly reason?: string | undefined;
-}
 
 // What became of one failed job: somebody's (sent, recorded, or not main's), or the fleet's.
 type Verdict = "code" | "fleet" | "skipped";
@@ -114,13 +83,6 @@ let settleCapMs = RUN_SETTLE_CAP_MS;
 
 const keyOf = (repo: string, branch: string): string => `${repo}\n${branch}`;
 const batchKeyOf = (repo: string, runId: number): string => `${repo}\n${runId}`;
-const heardOf = (job: Pick<FailedJob, "runId" | "jobId">): string => `${job.runId}/${job.jobId}`;
-const workflowOf = (workflow: string | undefined): string => (workflow === undefined || workflow === "" ? ONE_PIPELINE : workflow);
-const findingOf = (workflow: string, job: string): CiFinding => ({
-    id: fnvDigest(`${workflow}\n${job}`),
-    source: workflow,
-    text: job,
-});
 
 // Where a best-effort step failed, for its log line.
 interface Where {
@@ -256,44 +218,6 @@ const followUp = (project: CiProject, streak: CiFailure, branch: string, runId: 
         ].join(" "),
         `--- what failed ---\n${digestOf(parked.map(({ excerpt }) => excerpt))}`,
     ].join("\n\n");
-};
-
-// Whether the fleet failed the job rather than the code: a runner-owned step, the forge's own reason, or a log naming
-// the fleet. Missing evidence never reads as the fleet's.
-const fleetFailed = (job: FailedJob, log: string): boolean =>
-    (job.step !== undefined && isInfraStep(job.step)) || (job.reason !== undefined && GITLAB_FLEET_REASONS.has(job.reason)) || infraLog(log);
-
-// The streak once a run's jobs are handed over: heard, so no later news of them is handed over again.
-const withHeard = (current: CiFailure, jobs: readonly FailedJob[]): CiFailure => ({
-    ...current,
-    heard: [...current.heard, ...jobs.map(heardOf)].slice(-HEARD_KEPT),
-});
-
-// The streak after one more failed job: begun at it when there was none. What the banner shows moves now; the job is
-// heard only once it is handed over (withHeard).
-const withJob = (current: CiFailure | undefined, job: FailedJob, now: number): CiFailure => {
-    const workflow = workflowOf(job.workflow);
-    const streak: CiFailure = current ?? {
-        since: now,
-        findings: [],
-        decisions: [],
-        firstRunId: job.runId,
-        runId: job.runId,
-        count: 0,
-        workflows: {},
-        heard: [],
-        turns: 0,
-        changed: false,
-    };
-    const newest = streak.workflows[workflow];
-    const finding = findingOf(workflow, job.name);
-    return {
-        ...streak,
-        runId: Math.max(streak.runId, job.runId),
-        count: streak.count + (newest === undefined || job.runId > newest ? 1 : 0),
-        workflows: { ...streak.workflows, [workflow]: Math.max(newest ?? 0, job.runId) },
-        findings: streak.findings.some((owed) => owed.id === finding.id) ? streak.findings : [...streak.findings, finding],
-    };
 };
 
 // Puts the streak's fix agent on it, with every job its first failed run failed: a fresh conversation named for the run

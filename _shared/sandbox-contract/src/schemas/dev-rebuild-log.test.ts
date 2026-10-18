@@ -1,4 +1,4 @@
-import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, devRebuildLogPath, readDevRebuildLog } from "./devices.js";
+import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, devRebuildLogPath, readDevRebuildLog } from "./dev-rebuild-log.js";
 
 // The one account a detached rebuild gives of itself. The daemon builds the shell that writes this text and the browser
 // draws what it means, so the grammar is pinned here, where both of them read it.

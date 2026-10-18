@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { z } from "zod";
-import { rename } from "./evolution/conversions.js";
-import { defineDocument } from "./evolution/documents.js";
+import { rename } from "../evolution/conversions.js";
+import { defineDocument } from "../evolution/documents.js";
 import { jsonDir } from "./json-dir.js";
-import { ManifestUnreadableError } from "./json-file.js";
-import { clearNewestRun, recordNewestRun } from "./newest-run.js";
+import { ManifestUnreadableError } from "../json-file.js";
+import { clearNewestRun, recordNewestRun } from "../newest-run.js";
 
 const dirs: string[] = [];
 const tempDir = async (): Promise<string> => {

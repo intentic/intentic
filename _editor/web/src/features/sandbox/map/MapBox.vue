@@ -3,7 +3,8 @@ import { Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, watch } from "vue";
 import MapNodeButton from "./MapNodeButton.vue";
-import { bundleId, type Focus, type Lighting, type MapNode, type ReachHow, type ReachMap } from "./reachModel";
+import { bundleId, type Focus, type Lighting } from "./reachLighting";
+import type { MapNode, ReachHow, ReachMap } from "./reachModel";
 
 // THE SANDBOX ITSELF, drawn as the box the map is about: the ground its workspace is split into (areas, and whatever no
 // area names), the personas that live on that ground, and the secrets it keeps. Everything that gets in arrives at its

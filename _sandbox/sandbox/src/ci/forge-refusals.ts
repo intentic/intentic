@@ -79,6 +79,7 @@ const BODY_TAIL = 300;
 // A forge answer as a value, or its refusal thrown: a spent limit as CiRateLimited, anything else as CiRefused.
 export const throwOn = async (response: Response, what: string): Promise<Response> => {
     if (!response.ok) {
+        // allow(silent-catch): a body that cannot be read leaves the status and headers, which still say the refusal.
         const body = await response.text().catch(() => "");
         const lifts = rateLimitLifts(response, body, Date.now());
         if (lifts !== undefined) {

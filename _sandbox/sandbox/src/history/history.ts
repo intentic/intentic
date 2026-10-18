@@ -4,7 +4,6 @@ import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathExists } from "@intentic/base/fs";
 import { freshness } from "@intentic/base/held";
-import { oneLine } from "@intentic/base/one-line";
 import {
     type FileDiff,
     type Snapshot,
@@ -21,8 +20,9 @@ import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { discoverRepos, hasGitEntry, isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { COMMON_EXCLUDES, EMPTY_TREE, repoGitDir, syncRootExcludes } from "../workspace/layout/git-layout.js";
 import { largeFilesConfig, leaveOutLargeFiles } from "./large-files.js";
-import { type BareRun, pruneScopes, retentionBases } from "./restore-point-retention.js";
+import { pruneScopes, retentionBases } from "./restore-point-retention.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
+import { bareIn, sanitizeLabel, type Scope, type ScopeCommit, scopeNamer } from "./history-scopes.js";
 
 // Daemon-owned workspace history: each scope (/work root or a discovered repo) gets a bare git dir under
 // <historyRoot>/scopes via a private index; the agent's repos, branches and HEAD are never touched. The timeline shows
@@ -37,7 +37,6 @@ const USER_WRITE_DEBOUNCE_MS = 2_000;
 const INDEX_MAX_MS = 60_000;
 // The triggers that surface as timeline checkpoints; "interval" captures are hidden safety sweeps.
 const VISIBLE_TRIGGERS: ReadonlySet<SnapshotTrigger> = new Set(["turn", "user", "pre-restore", "restore"]);
-const MAX_LABEL_LENGTH = 160;
 // Runs git with the scope's detached-worktree env; injectable so command sequences are unit-testable without a real
 // repo.
 export type HistoryGitRunner = (
@@ -71,29 +70,6 @@ export interface WorkspaceHistory {
     readonly prune: (before: number) => Promise<number>;
 }
 
-interface Scope {
-    // "root" or a repo id (root-relative dir, e.g. "clients/foo"); the wire-visible scope name.
-    readonly name: string;
-    readonly gitDir: string;
-    readonly worktree: string;
-}
-
-interface ScopeCommit {
-    readonly sha: string;
-    // Committer time, ms.
-    readonly at: number;
-    readonly id: string;
-    readonly trigger: SnapshotTrigger;
-    readonly label?: string;
-}
-
-// Labels live in commit bodies from free-form prompts; collapsed to one bounded line for git log parsing and the
-// timeline row.
-const sanitizeLabel = (label: string): string | undefined => {
-    const clean = oneLine(label, MAX_LABEL_LENGTH, { ellipsis: false });
-    return clean === "" ? undefined : clean;
-};
-
 // Env for every worktree-touching command; the private index keeps the agent's repos untouched and repeat scans
 // stat-only. cwd must be the worktree.
 const scopeEnv = (scope: Scope): Record<string, string> => ({
@@ -120,21 +96,6 @@ interface CheckpointSide {
 // patch of the changed regions instead of two whole sides.
 const overCap = (side: CheckpointSide | undefined): boolean =>
     side !== undefined && side.bytes !== undefined && side.content === undefined && side.binary !== true;
-
-// Git dir name is the URI-encoded scope name; a nested repo id's slashes become %2F so each scope stays one filesystem
-// entry.
-const scopeNamer =
-    (scopesRoot: string, workspace: WorkspacePaths) =>
-    (name: string): Scope => ({
-        name,
-        gitDir: join(scopesRoot, `${encodeURIComponent(name)}.git`),
-        worktree: name === "root" ? workspace.root : join(workspace.root, name),
-    });
-
-// Tree-to-tree ops (log/diff-tree/cat-file) need no worktree, they must work after a repo is deleted.
-const bareIn =
-    (historyRoot: string) =>
-    (scope: Scope): BareRun => ({ cwd: historyRoot, env: { GIT_DIR: scope.gitDir } });
 
 export const createWorkspaceHistory = (
     options: { readonly workspace: WorkspacePaths; readonly historyRoot: string; readonly logger: Logger },
