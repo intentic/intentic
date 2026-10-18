@@ -1,4 +1,5 @@
 import { resolveIn } from "./markdownFileLinks";
+import { measurePictures, pictureSizeOf, sizedPlaceholder } from "./pictureSizes";
 
 // A picture a markdown document names by a relative path (`![flow](img/flow.png)`) is a file beside the document, which
 // the browser cannot fetch by that name: the page's address is the app's route, not the document's folder. Each one is
@@ -86,6 +87,27 @@ const resolveSrcset = (srcset: string, dir: string, draw: DrawPicture): string =
         })
         .join(`, `);
 
+// One `<img>`: pointed at what `draw` answers for its workspace path, or at a placeholder while that is on its way. A
+// picture this sandbox has drawn before waits in a placeholder of the size it came out at (pictureSizes.ts).
+const resolveImage = (image: HTMLImageElement, dir: string, draw: DrawPicture): void => {
+    const src = image.getAttribute(`src`);
+    if (src === null || src === `` || ADDRESSED.test(src)) {
+        return;
+    }
+    const path = picturePathIn(dir, src);
+    const drawn = path === undefined ? null : draw(path);
+    const known = drawn === undefined && path !== undefined ? pictureSizeOf(path) : undefined;
+    image.setAttribute(`src`, drawn === undefined ? (known === undefined ? PENDING_PICTURE : sizedPlaceholder(known)) : (drawn ?? ``));
+    image.toggleAttribute(`data-md-pending`, drawn === undefined);
+    image.toggleAttribute(`data-md-sized`, known !== undefined);
+    if (path === undefined) {
+        image.removeAttribute(`data-md-picture`);
+        return;
+    }
+    image.setAttribute(`data-md-picture`, path);
+    measurePictures();
+};
+
 // `<source media="(prefers-color-scheme: dark)">`, the way a README offers a dark picture.
 const SCHEME_QUERY = /^\s*\(\s*prefers-color-scheme\s*:\s*(light|dark)\s*\)\s*$/iu;
 
@@ -93,7 +115,9 @@ const SCHEME_QUERY = /^\s*\(\s*prefers-color-scheme\s*:\s*(light|dark)\s*\)\s*$/
  * Points every relative picture in a sanitized document at what `draw` answers for its workspace path, in place.
  * `dir` is the document's folder. While `draw` has nothing yet the `src` is empty, which asks nothing of anyone; a
  * picture that climbs out of the workspace keeps it empty, and `draw` is never asked about it. One still on its way is
- * marked `data-md-pending`, which the stylesheet draws as a loading placeholder in the picture's place. A `<picture>`'s
+ * marked `data-md-pending`, which the stylesheet draws as a loading placeholder in the picture's place: the size it
+ * last loaded at when this sandbox has drawn it before (`data-md-sized`), a picture's usual shape otherwise. Each picture
+ * carries its workspace path as `data-md-picture`, by which its size is kept once it loads. A `<picture>`'s
  * `<source srcset>` resolves the same way, and one offered for a colour scheme answers to `scheme`, the app's look,
  * rather than to the operating system's: a dark app shows a README's dark picture on a light desktop, as GitHub's
  * own theme does.
@@ -105,14 +129,7 @@ export const resolvePictures = (
     scheme?: `light` | `dark`,
 ): void => {
     for (const image of fragment.querySelectorAll(`img`)) {
-        const src = image.getAttribute(`src`);
-        if (src === null || src === `` || ADDRESSED.test(src)) {
-            continue;
-        }
-        const path = picturePathIn(dir, src);
-        const drawn = path === undefined ? null : draw(path);
-        image.setAttribute(`src`, drawn === undefined ? PENDING_PICTURE : (drawn ?? ``));
-        image.toggleAttribute(`data-md-pending`, drawn === undefined);
+        resolveImage(image, dir, draw);
     }
     for (const source of fragment.querySelectorAll(`picture > source`)) {
         const srcset = source.getAttribute(`srcset`);

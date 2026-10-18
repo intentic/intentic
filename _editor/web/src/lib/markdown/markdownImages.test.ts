@@ -7,6 +7,7 @@ import { treeCacheModule } from "../../testing/treeCache";
 jest.mock("../queryPersistence", treeCacheModule);
 
 const { PENDING_PICTURE, picturePathIn } = await import("./markdownImages");
+const { sizedPlaceholder } = await import("./pictureSizes");
 const { fileLinkDecorator } = await import("./renderMarkdown");
 const { renderMarkdown: renderEngine } = await import("@intentic/ui/markdown");
 
@@ -163,5 +164,62 @@ describe(`a picture whose bytes are on their way`, () => {
 
     it(`is never pending when it climbs out of the workspace, since nothing will ever land`, () => {
         expect(pending(renderIn(`docs/`, `![x](../../../etc/secret.png)`))).toEqual([false]);
+    });
+});
+
+describe(`a picture this sandbox has drawn before`, () => {
+
+    // The document as the page holds it, with each picture's bytes landed at the given natural size and its `load` fired.
+    const loadIn = (html: string, width: number, height: number): void => {
+        const holder = document.createElement(`div`);
+        holder.innerHTML = html;
+        document.body.append(holder);
+        for (const image of holder.querySelectorAll(`img`)) {
+            image.removeAttribute(`data-md-pending`);
+            Object.defineProperty(image, `naturalWidth`, { value: width });
+            Object.defineProperty(image, `naturalHeight`, { value: height });
+            image.dispatchEvent(new Event(`load`));
+        }
+        holder.remove();
+    };
+
+    const imageIn = (html: string): HTMLImageElement | null => {
+        const holder = document.createElement(`div`);
+        holder.innerHTML = html;
+        return holder.querySelector(`img`);
+    };
+
+    it(`waits in a placeholder of the size it last loaded at, not a guessed shape`, () => {
+        const first = imageIn(renderIn(`notes/`, `![shot](shot.png)`));
+        expect(first?.getAttribute(`src`)).toBe(PENDING_PICTURE);
+        expect(first?.hasAttribute(`data-md-sized`)).toBe(false);
+        expect(first?.dataset[`mdPicture`]).toBe(`notes/shot.png`);
+
+        landed.value = { "notes/shot.png": `blob:app/shot` };
+        loadIn(renderIn(`notes/`, `![shot](shot.png)`), 640, 480);
+
+        landed.value = {};
+        const again = imageIn(renderIn(`notes/`, `![shot](shot.png)`));
+        expect(again?.getAttribute(`src`)).toBe(sizedPlaceholder({ width: 640, height: 480 }));
+        expect(again?.hasAttribute(`data-md-pending`)).toBe(true);
+        expect(again?.hasAttribute(`data-md-sized`)).toBe(true);
+    });
+
+    it(`keeps the placeholder's own size out of what it remembers`, () => {
+        // A pending picture's load is its placeholder's, one pixel square, and says nothing about the picture.
+        const holder = document.createElement(`div`);
+        holder.innerHTML = renderIn(`other/`, `![x](x.png)`);
+        document.body.append(holder);
+        const image = holder.querySelector(`img`);
+        Object.defineProperty(image, `naturalWidth`, { value: 1 });
+        Object.defineProperty(image, `naturalHeight`, { value: 1 });
+        image?.dispatchEvent(new Event(`load`));
+        holder.remove();
+        expect(imageIn(renderIn(`other/`, `![x](x.png)`))?.getAttribute(`src`)).toBe(PENDING_PICTURE);
+    });
+
+    it(`draws a placeholder whose natural size is the picture's`, () => {
+        const svg = decodeURIComponent(sizedPlaceholder({ width: 1200, height: 300 }).replace(`data:image/svg+xml,`, ``));
+        expect(svg).toBe(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300"/>`);
     });
 });

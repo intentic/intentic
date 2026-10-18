@@ -203,7 +203,7 @@
     border-radius: var(--radius-md);
 }
 
-/* A WORKSPACE PICTURE ON ITS WAY (markdownImages.ts marks it while its bytes load) holds a placeholder of the size it will be, painted as every loading placeholder in the app is (utilities.css `.skeleton`), rather than a broken-image glyph that then pops into a picture and pushes the page down. Its own `width`/`height` size it when it has them; without, it takes a picture's usual shape. */
+/* A WORKSPACE PICTURE ON ITS WAY (markdownImages.ts marks it while its bytes load) holds a placeholder of the size it will be, painted as every loading placeholder in the app is (utilities.css `.skeleton`), rather than a broken-image glyph that then pops into a picture and pushes the page down. Its own `width`/`height` size it when it has them; one this sandbox has drawn before (`data-md-sized`) draws a transparent picture of the size it last loaded at, which sizes it as the real one will; otherwise it takes a picture's usual shape. */
 .md-prose img[data-md-pending] {
     background-color: var(--ui-skeleton-ink, color-mix(in oklab, var(--color-content) 11%, transparent));
     mask-image: var(--ui-skeleton-sheen);
@@ -212,10 +212,10 @@
     color: transparent;
     font-size: 0;
 }
-.md-prose img[data-md-pending]:not([height]) {
+.md-prose img[data-md-pending]:not([height], [data-md-sized]) {
     aspect-ratio: 16 / 9;
 }
-.md-prose img[data-md-pending]:not([width]) {
+.md-prose img[data-md-pending]:not([width], [data-md-sized]) {
     width: min(100%, 32rem);
 }
 
