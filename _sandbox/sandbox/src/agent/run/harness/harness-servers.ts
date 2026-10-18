@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { McpSdkServerConfigWithInstance, McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { type AgentTurn, profileOf } from "@intentic/sandbox-contract/schemas/agent";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -67,7 +68,9 @@ const subjectsOf = (names: readonly string[]): Map<string, { readonly kind: Cred
 };
 
 // Where a lane puts a value, in the words a refusal uses.
-const LANE_PLACE = { shell: "command", code: "script", browser: "page", device: "window", desktop: "window" } as const satisfies Readonly<Record<SecretLane, string>>;
+const LANE_PLACE = { shell: "command", code: "script", browser: "page", device: "window", desktop: "window" } as const satisfies Readonly<
+    Record<SecretLane, string>
+>;
 
 // The one object behind every secret seam this turn gets: the named registry, the use ledger its exits feed (a write
 // that must never fail or slow the tool call that spent the secret), and the two gates bound to this turn: where the
@@ -186,7 +189,12 @@ const watchPlacementOf = (isolation: TurnPlacement | undefined): { readonly plac
 
 // The condition watch: the agent names an outside check command the daemon polls, waking the conversation when it exits
 // 0; a replacement for hand-rolled sleep loops, which can't fire once the turn's process is gone.
-const conditionWatchServer = (deps: HarnessServersDeps, conversationId: string, input: AgentTurn, context: TurnContext): McpSdkServerConfigWithInstance =>
+const conditionWatchServer = (
+    deps: HarnessServersDeps,
+    conversationId: string,
+    input: AgentTurn,
+    context: TurnContext,
+): McpSdkServerConfigWithInstance =>
     watchServer({
         conversations: deps.conversations,
         conversationId,
@@ -234,13 +242,17 @@ export const secretsServerFor = (deps: HarnessServersDeps, turn: TypistTurn): Mc
 export const subagentsServerFor = (deps: HarnessServersDeps, { context, persona }: DaemonServerTurn): McpSdkServerConfigWithInstance =>
     subagentWaitServer({
         conversationId: context.base.spec.conversationId,
+        logsDir: join(deps.config.historyRoot, "logs"),
         conversations: deps.conversations,
         signal: context.base.signal,
         ...opt("children", context.children !== undefined && mayDelegate(persona) ? context.children : undefined),
     });
 
 // Withheld without shell power or a conversation to wake.
-export const watchServerFor = (deps: HarnessServersDeps, { input, context, persona }: DaemonServerTurn): McpSdkServerConfigWithInstance | undefined =>
+export const watchServerFor = (
+    deps: HarnessServersDeps,
+    { input, context, persona }: DaemonServerTurn,
+): McpSdkServerConfigWithInstance | undefined =>
     persona.powers.shell && input.conversationId !== undefined ? conditionWatchServer(deps, input.conversationId, input, context) : undefined;
 
 export const depsServerFor = (deps: HarnessServersDeps, { input, context, persona }: DaemonServerTurn): McpSdkServerConfigWithInstance =>

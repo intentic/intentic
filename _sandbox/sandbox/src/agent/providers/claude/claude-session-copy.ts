@@ -1,6 +1,7 @@
+import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, normalize } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { TRIM_KEEPS_RESULTS } from "@intentic/sandbox-contract/schemas/providers/handoff";
 
@@ -187,7 +188,43 @@ export const resultText = (block: SessionBlock): string => {
 export const stubFor = (call: ToolCall | undefined, text: string): string => {
     const lines = text === "" ? 0 : text.split("\n").length;
     const what = call === undefined ? "tool" : `${call.name}${targetOf(call) === "" ? "" : ` ${targetOf(call)}`}`;
-    return `[Output cleared at hand-off to save context: ${what}, was ${lines} line${lines === 1 ? "" : "s"}. Run it again if you need it.]`;
+    const target = z.string().safeParse(call?.input[call.name === "Read" ? "file_path" : "command"]);
+    const recovery = target.success && call?.name === "Read"
+        ? `Re-read ${target.data} if you need it.`
+        : target.success && call?.name === "Bash"
+            ? `Re-run ${target.data} if you need it.`
+            : "Run it again if you need it.";
+    return `[Output cleared at hand-off to save context: ${what}, was ${lines} line${lines === 1 ? "" : "s"}. ${recovery}]`;
+};
+
+const mainBlocks = (chain: readonly SessionLine[], type: "user" | "assistant"): SessionBlock[] =>
+    chain.flatMap(({ entry }) => isMainEntry(entry) && entry.type === type ? blocksOf(entry) : []);
+
+const fileCall = (block: SessionBlock, calls: ReadonlyMap<string, ToolCall>, succeeded: ReadonlySet<string>) => {
+    const id = String(block["id"]);
+    if (block.type !== "tool_use" || !succeeded.has(id)) {return undefined;}
+    const call = calls.get(id);
+    if (call === undefined || !["Read", "Edit", "Write", "MultiEdit"].includes(call.name)) {return undefined;}
+    const path = z.string().safeParse(call.input["file_path"] ?? call.input["path"]);
+    return path.success ? { id, name: call.name, path: normalize(path.data) } : undefined;
+};
+
+// Later successful reads supersede earlier snapshots; successful edits invalidate them. Compare only named paths,
+// normalized for ./ segments, without guessing a cwd for relative paths or treating other tools as file edits.
+const supersededReads = (chain: readonly SessionLine[]): ReadonlySet<string> => {
+    const succeeded = new Set(mainBlocks(chain, "user")
+        .filter((block) => block.type === "tool_result" && block["is_error"] !== true)
+        .map((block) => String(block["tool_use_id"])));
+    const calls = toolCalls(chain);
+    const later = new Set<string>();
+    const stale = new Set<string>();
+    for (const block of mainBlocks(chain, "assistant").toReversed()) {
+        const call = fileCall(block, calls, succeeded);
+        if (call === undefined) {continue;}
+        if (call.name === "Read" && later.has(call.path)) {stale.add(call.id);}
+        later.add(call.path);
+    }
+    return stale;
 };
 
 const THINKING = new Set(["thinking", "redacted_thinking"]);
@@ -224,17 +261,12 @@ export interface CopyStats {
 // left with no content is removed and its children re-parented, so the uuid chain the CLI resumes along stays whole.
 export const copySession = (chain: readonly SessionLine[], keep: number, sessionId: string): { text: string; stats: CopyStats } => {
     const calls = toolCalls(chain);
-    const resultIds: string[] = [];
-    for (const { entry } of chain) {
-        if (isMainEntry(entry) && entry.type === "user") {
-            for (const block of blocksOf(entry)) {
-                if (block.type === "tool_result") {
-                    resultIds.push(String(block["tool_use_id"]));
-                }
-            }
-        }
-    }
-    const kept = new Set(keep === Number.POSITIVE_INFINITY ? resultIds : resultIds.slice(Math.max(0, resultIds.length - keep)));
+    const resultIds = mainBlocks(chain, "user")
+        .filter((block) => block.type === "tool_result")
+        .map((block) => String(block["tool_use_id"]));
+    const stale = supersededReads(chain);
+    const currentResults = resultIds.filter((id) => !stale.has(id));
+    const kept = new Set(keep === Number.POSITIVE_INFINITY ? resultIds : currentResults.slice(Math.max(0, currentResults.length - keep)));
     const removed = new Map<string, string | null>();
     const out: SessionEntry[] = [];
     const raw: string[] = [];
@@ -300,14 +332,20 @@ export const sessionFileOf = async (store: string, sessionId: string): Promise<s
 
 // What resuming the session would carry, measured on the file: the chain a resume loads, with the refused request's
 // leftovers dropped. Undefined when the store holds no such session, or it holds nothing to carry.
-export const readSessionChain = async (store: string, sessionId: string, dropUnanswered: boolean): Promise<{ path: string; chain: SessionLine[] } | undefined> => {
+export const readSessionChain = async (
+    store: string,
+    sessionId: string,
+    dropUnanswered: boolean,
+): Promise<{ path: string; chain: SessionLine[]; compacted: boolean } | undefined> => {
     const path = await sessionFileOf(store, sessionId);
     if (path === undefined) {
         return undefined;
     }
     const lines = parseSession(await readFile(path, "utf8"));
     const chain = answeredChain(chainBefore(lines, lines.length), dropUnanswered);
-    return chain.some((line) => isMainEntry(line.entry) && line.entry.type === "assistant") ? { path, chain } : undefined;
+    return chain.some((line) => isMainEntry(line.entry) && line.entry.type === "assistant")
+        ? { path, chain, compacted: lines.some(({ entry }) => entry?.isCompactSummary === true || entry?.["subtype"] === "compact_boundary") }
+        : undefined;
 };
 
 // The newest context a call in the chain measured: what resuming it re-reads, give or take the request on top.

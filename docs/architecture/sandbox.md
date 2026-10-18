@@ -41,6 +41,10 @@ flowchart LR
   - The CLI's `plugin-authoring` skill is hidden, since nothing a mod draws shows under the Agent SDK.
   - 2026-10-04: Claude Code's `sec-default` guard alone was rejected. It holds only hooks that managed settings declare, and the daemon's are SDK callbacks, so a mod answering `tool.check` with allow still ran a refused command.
 - A turn nobody is watching when it starts (an automation, a loop, a spawned child) carries `policy.unattended`: the safety judge and the prompt are told, and nothing else changes. Every card it raises, a question, a plan, a held command, a credential's release, an install, waits for the owner like any other (conventions.md, A person's answers).
+- What every request of a Claude Code turn carries is kept small and stable, since cache reads are most of a turn's token cost (70% on this sandbox's ledger, 07-28 to 10-13) and every call of a turn reads the whole prefix again. Each part is measured against a holdout of whole conversations ([`experiments.ts`](../../_sandbox/sandbox/src/agent/run/decide/experiments.ts)), read on Sandbox ▸ Agent ▸ Tools.
+  - Tool search (`toolSearch`): the CLI turns its own tool search off whenever `ANTHROPIC_BASE_URL` is not Anthropic's host, which the privacy shield's loopback gateway never is, so every shielded native Claude turn sent every MCP schema with every request (a median 83k-token prompt before the first tool ran). The gateway relays `tool_reference` blocks and the beta header untouched, so a native Claude turn now sets `ENABLE_TOOL_SEARCH` itself, `true` on the arm and `false` on the holdout ([`agent.ts`](../../_sandbox/sandbox/src/agent/run/agent.ts), `toolSearchEnv`); the servers marked `alwaysLoad` (ui, subagents, code, watch) stay loaded. Judged on the opening request's prompt and on failed calls.
+  - A stable prompt (`stableSystemPrompt`): the guidance paragraphs whose condition moves between turns (whether anyone is watching; which of the owner's computers, browsers and phones are online) leave the system block and ride the message under "Connected right now", said on a turn where they changed and again after a restart or a compaction ([`surroundings.ts`](../../_sandbox/sandbox/src/agent/prompt/surroundings.ts)). In the system block, 46% of back-to-back turns inside the cache window opened under a different prompt and wrote 46.7k tokens against 19.3k; and where Claude Code records a session's system prompt once (the SDK's `snapshot`), a change never reached the model. Judged on what a follow-up turn's first request writes to the cache, and on failed calls.
+  - 2026-10-18: a chosen "hot set" per tool (Headroom's `hr_hot`, which beat both all-loaded and all-deferred in its benchmark) was not built: `alwaysLoad` already is that set, and the holdout says whether deferring the rest pays.
 - A scheduled automation whose moment passed while the daemon was down (a hosted sandbox stops itself when idle, and nothing wakes it for a cron) fires once as the scheduler starts, however many moments it missed, late and saying so, through the same sessions bar, guard and hold as any fire ([`scheduler.ts`](../../_sandbox/sandbox/src/automations/scheduler.ts) `catchUp`). What it owed is measured from the later of its last run and how far the scheduler has accounted for its clock (`.intentic/records/automation-schedule.json`), so one created or switched back on while nothing ran owes nothing from before.
 - A watch is an automation with a check that decides, with no model, whether anything happened: a guard command, or a ready-made source the daemon checks itself, the newest version of an npm package, a GitHub repository's newest release, or a web page's text ([`watch-sources.ts`](../../_sandbox/sandbox/src/automations/watch/watch-sources.ts)). Only a passing check spends anything, and what it saw goes with the wake ([`watch-condition.ts`](../../_sandbox/sandbox/src/automations/watch/watch-condition.ts)).
   - What each check saw last is kept in `.intentic/records/automation-watch.json`. `fireOn: change` fires only when that differs, and its first check only records a baseline. A quiet check writes nothing into the run history, so a watch every few minutes does not bury the runs that mattered.
@@ -313,6 +317,21 @@ The Changes panel stages everything and commits everything as runs, the push's s
   prompt written to cache, against 18.5% kept). Stale `toolResultClearing` settings and `clearingArm` ledger stamps are
   dropped on read, and a gateway address still carrying the clearing flag verifies without it. Context growth is left to
   the CLI's own compaction.
+
+Cold follow-ups can now reuse the held-turn trimmed-copy writer, behind `coldTrim` (on by default) and a
+conversation-stable `coldTrimHoldout` (half held out). Only native Claude Code sessions with measured context above
+`coldTrimMinTokens` (100,000 by default) qualify. Cold means strictly later than the last measured cache instant plus
+its known TTL plus 30 seconds. The clock is captured before the new turn resets its readings, and includes keep-warm
+refreshes. Unknown timing stays whole. Forks, bounded resumes, interrupted-request retries, held-turn hand-offs, missing sessions and transcripts
+with compaction boundaries stay whole too. A daemon restart loses the clock, so it cannot claim a cold resume.
+
+Both eligible arms inspect the same session and stamp `coldTrimArm`; treatment additionally records the number of
+cleared results in `coldTrimmed` when a copy is made. A trim uses the existing transcript hand-off notice, leaves the
+original session untouched and preserves unanswered user text. Reads superseded by a later read or Edit/Write/MultiEdit
+of the same path clear first, even when recent; the newest ten remaining results stay whole. Read and Bash stubs name
+the full path or command to recover the output. These recovery and read-lifecycle improvements also apply to held trims.
+The comparison reads opening-request prompt tokens and failed tool calls on eligible turns, grouped by conversation.
+It does not rewrite a live warm prefix: that is the cost the removed gateway experiment above paid.
 
 ## Leftovers and housekeeping
 

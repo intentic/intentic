@@ -33,10 +33,8 @@ export interface TurnPromptInput {
     readonly mode: SystemPromptMode;
     // SandboxSettings.systemPrompt: the owner's text, meaningful only under "custom".
     readonly systemPrompt: string;
-    // Keep the system prefix byte-stable across the session (nothing session-volatile enters the append).
-    readonly stableSystemPrompt: boolean;
-    // Rides the system append, even under stableSystemPrompt, since a persona doesn't change mid-session and changing
-    // it mints a new prefix anyway. A runtime with no system seam sends it through the user message instead; a custom
+    // Rides the system append, even under a stable prompt, since a persona doesn't change mid-session and changing it
+    // mints a new prefix anyway. A runtime with no system seam sends it through the user message instead; a custom
     // prompt drops it like everything else appended.
     readonly personaNote?: string;
     // The workspace's own standing instructions (workspace-memory.ts), composed here rather than left to the runtime's
@@ -140,7 +138,7 @@ export const turnPromptPlacement = (input: TurnPromptInput): TurnPromptPlacement
         // rules, not a rule, and anything claiming to outrank the owner's own words would be reading its own promotion.
         fieldNotesNote,
         // Last, so the owner's rules sit closest to the conversation. Editing them mid-session mints a new prefix, the
-        // same cost as changing the persona, which is why neither is held back by stableSystemPrompt.
+        // same cost as changing the persona, which is why neither is held back by a stable prompt.
         memoryNote,
     ]);
     return append === "" ? {} : { systemAppend: append };
@@ -182,12 +180,14 @@ export interface SdkSystemPromptInput {
     readonly trim?: PromptTrim;
     // Which tool the guidance names for finding code; absent is `rg`.
     readonly search?: SearchTool;
+    // The volatile guidance (who is watching, what of the owner's is online) rides the turn's message, not this block.
+    readonly stable?: boolean;
 }
 
 // The turn fields the composed prompt reads, in the groups the request holds them in, so both readers — the adapter that
 // sends the prompt and the disclosure that shows it (prompt-disclosure.ts) — map a request one way.
 export interface PromptRequest {
-    readonly spec: Pick<TurnSpec, "model" | "systemPromptMode" | "systemPrompt" | "systemAppend" | "contextTrim" | "search">;
+    readonly spec: Pick<TurnSpec, "model" | "systemPromptMode" | "systemPrompt" | "systemAppend" | "contextTrim" | "search" | "stablePrompt">;
     readonly policy: Pick<TurnPolicy, "unattended">;
     readonly tools: Pick<TurnTools, "browserOutputDir" | "browserAccounts" | "desktop" | "diagnostics" | "hostDevices" | "ownBrowsers" | "ownPhones" | "pages">;
 }
@@ -218,6 +218,7 @@ export const promptInputOf = ({ spec, policy, tools }: PromptRequest, terminal: 
     ownPhones: tools.ownPhones,
     ...(spec.contextTrim === undefined ? {} : { trim: spec.contextTrim }),
     ...(spec.search === undefined ? {} : { search: spec.search }),
+    stable: spec.stablePrompt === true,
 });
 
 // This product's guidance block, then whatever the turn composed. Shared by both built-in bases, so they differ only in
@@ -236,6 +237,7 @@ export const harnessGuidance = ({
     hostDevices,
     ownBrowsers,
     ownPhones,
+    stable = false,
 }: Omit<SdkSystemPromptInput, "mode" | "model" | "custom">): string[] => [
     ...(trim?.guidance === true
         ? []
@@ -254,6 +256,7 @@ export const harnessGuidance = ({
                       ownPhones,
                   },
                   search,
+                  stable,
               ),
           ]),
     ...(append === undefined ? [] : [append]),

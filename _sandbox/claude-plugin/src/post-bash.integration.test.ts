@@ -42,11 +42,13 @@ test("a long output reaches Claude trimmed, in the tool's own shape, with the ra
     expect(answer.hookSpecificOutput.hookEventName).toBe("PostToolUse");
     const output = answer.hookSpecificOutput.updatedToolOutput;
     const raw = join(outputDir(data), "raw-output", "s-1-toolu_1.log");
-    expect(output["stdout"]).toContain(`--- [exit 0, 2s] 300 lines filtered to 81 · full: retrieve-output ${raw} [pattern]`);
+    expect(output["stdout"]).toContain(`--- [exit 0, 2s] 300 lines filtered to 2 · full: retrieve-output ${raw} [pattern]`);
+    expect(output["stdout"]).toContain("… 299 more lines like this (varying: 0..299)");
     // Every field the tool answered with survives; only the text changed.
     expect(output).toMatchObject({ stderr: "", interrupted: false, isImage: false, noOutputExpected: false });
     expect(readFileSync(raw, "utf8")).toBe(LONG.trimEnd());
     const rows = parseStatsFile(readFileSync(join(outputDir(data), "filter-stats.jsonl"), "utf8"));
+    expect(rows[0]?.stageBytes?.["templates"]).toBeGreaterThan(0);
     expect(rows[0]).toMatchObject({ project: "/src/app", session: "s-1", command: "./build.sh", rawBytes: LONG.length });
 });
 

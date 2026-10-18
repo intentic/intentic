@@ -1,3 +1,4 @@
+import { opt } from "../../opt.js";
 import { createHash, randomBytes } from "node:crypto";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { rawRoutePath } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
@@ -71,7 +72,7 @@ export interface TurnLease {
 
 // What the door resolved a request to, or why it would not.
 export type MountReach =
-    | { readonly target: MountTarget; readonly conversationId: string | undefined }
+    | { readonly target: MountTarget; readonly conversationId: string | undefined; readonly cleanOutput?: false }
     // unknown: no live bearer by that value; unleased: a live bearer whose turn holds no server by that name right now.
     | { readonly refused: "unknown" | "unleased" };
 
@@ -79,6 +80,8 @@ export interface LeaseOptions {
     // The runtime keeps one session's MCP config across turns (ACP), so the turn takes its conversation's bearer when no
     // other turn holds it now.
     readonly warmSession?: boolean;
+    // Claude cleans in PostToolUse; its HTTP door must not count held-out output twice.
+    readonly cleanOutput?: boolean;
 }
 
 export interface TurnMounts {
@@ -91,6 +94,7 @@ export interface TurnMounts {
 }
 
 interface Lease {
+    readonly cleanOutput?: false;
     readonly targets: Map<string, MountTarget>;
     readonly openedAt: number;
 }
@@ -129,6 +133,24 @@ const closeLease = (lease: Lease): void => {
         closeTarget(target);
     }
     lease.targets.clear();
+};
+
+const newLease = (openedAt: number, options: LeaseOptions): Lease => ({
+    targets: new Map(),
+    openedAt,
+    ...opt("cleanOutput", options.cleanOutput === false ? (false as const) : undefined),
+});
+
+// Resolve the server and its cleaning policy from the same live lease.
+const reachOf = (mount: Mount, name: string): MountReach => {
+    // One live turn per bearer (acquire), so this is that turn's lease or none.
+    let target: MountTarget | undefined;
+    let cleanOutput: false | undefined;
+    for (const lease of mount.leases.values()) {
+        target = lease.targets.get(name) ?? target;
+        cleanOutput = lease.cleanOutput;
+    }
+    return target === undefined ? { refused: "unleased" } : { target, conversationId: mount.conversationId, ...opt("cleanOutput", cleanOutput) };
 };
 
 export const createTurnMounts = (deps: {
@@ -208,7 +230,7 @@ export const createTurnMounts = (deps: {
                     // the mount in the same tick, so a second turn acquiring after this one sees the bearer held.
                     if (held === undefined) {
                         held = acquire(conversationId, options);
-                        held.mount.leases.set(leaseId, { targets: new Map(), openedAt: now() });
+                        held.mount.leases.set(leaseId, newLease(now(), options));
                     }
                     const lease = held.mount.leases.get(leaseId);
                     if (lease === undefined) {
@@ -254,12 +276,7 @@ export const createTurnMounts = (deps: {
             if (mount === undefined) {
                 return { refused: "unknown" };
             }
-            // One live turn per bearer (acquire), so this is that turn's lease or none.
-            let target: MountTarget | undefined;
-            for (const lease of mount.leases.values()) {
-                target = lease.targets.get(name) ?? target;
-            }
-            return target === undefined ? { refused: "unleased" } : { target, conversationId: mount.conversationId };
+            return reachOf(mount, name);
         },
         reaches: (conversationId, wanted) => {
             for (const mount of mounts.values()) {
@@ -268,7 +285,11 @@ export const createTurnMounts = (deps: {
                 }
                 for (const lease of mount.leases.values()) {
                     for (const target of lease.targets.values()) {
-                        if ((target.kind === "device" || target.kind === "webext" || target.kind === "phone") && target.kind === wanted.kind && target.id === wanted.id) {
+                        if (
+                            (target.kind === "device" || target.kind === "webext" || target.kind === "phone") &&
+                            target.kind === wanted.kind &&
+                            target.id === wanted.id
+                        ) {
                             return true;
                         }
                     }

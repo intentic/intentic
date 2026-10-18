@@ -1,3 +1,6 @@
+import { HISTORY_ROOT } from "@intentic/constants";
+import { join } from "node:path";
+import { retainToolText, type McpOutputOptions } from "../../guard/mcp-output.js";
 import { spawnCatalogText } from "./spawn-catalog.js";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../engines/claude-sdk.js";
@@ -28,7 +31,23 @@ export interface SubagentWaitDeps {
     readonly signal: AbortSignal;
     // The child-agent engine (spawn, steer, answer); absent means the spawn/send/answer tools are not offered.
     readonly children?: ChildSupervisor;
+    readonly logsDir?: string;
 }
+
+// Bound each report before JSON serialization, preserving the surrounding wait status and verification fields.
+export const boundChildReport = (report: string | undefined, options: McpOutputOptions): string | undefined => {
+    if (report === undefined || report.length <= 12_000) {
+        return report;
+    }
+    const path = retainToolText(report, options);
+    if (path === undefined) {
+        return report;
+    }
+    return `${report.slice(0, 4_000)}\n… report middle omitted …\n${report.slice(-7_000)}\n--- ${report.length - 11_000} chars cut · full: retrieve-output ${path} [pattern]`;
+};
+
+const reportOf = (deps: SubagentWaitDeps, childId: string): string | undefined =>
+    boundChildReport(deps.children?.report(childId), { logsDir: deps.logsDir ?? join(HISTORY_ROOT, "logs") });
 
 const UNTIL = z.enum(["blocked", "finished"]);
 
@@ -95,7 +114,7 @@ const FALLBACKS_FIELD = z
 const WAIT_WORDS =
     "Wait until work you started here needs you: a subagent you started, or a command you ran with " +
     "run_in_background. Blocks until the target is blocked on input (a question or permission), or " +
-    "finishes, whichever comes first. For an agent it returns its status, its last report (whole, as " +
+    "finishes, whichever comes first. For an agent it returns its status, its last report (capped at 12k characters with a full-file retrieval handle, as " +
     "`report`, where the row's `summary` is only its head), and " +
     "`verification` — whether anything actually checked the work that report describes (`verified` / " +
     "`unproven` / `failing` / `no-code`, with the check that spoke). Read it before you build on what it " +
@@ -130,7 +149,7 @@ const waitOnMany = async (
     const many = await waitForChildren(deps.conversations, conversationId, { ...opt("targets", targets), timeoutMs, signal: deps.signal });
     const said = childrenWaitAnswer(many, {
         pendingQuestion: (childId) => deps.children?.pendingQuestion(childId),
-        report: (childId) => deps.children?.report(childId),
+        report: (childId) => reportOf(deps, childId),
         landing: (childId) => deps.children?.landing(childId),
     });
     return many.outcome === "unknown-target" ? { ...said, note: NOTHING_TO_WAIT_FOR } : said;
@@ -189,7 +208,9 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                           {
                               prompt: z.string().min(1).describe("The subagent's whole task, self-contained."),
                               description: z.string().max(200).optional().describe("One line naming the task, for the board and the roster."),
-                              provider: AgentProviderSchema.describe("Which provider serves it. Required: see the providers tool for what is connected."),
+                              provider: AgentProviderSchema.describe(
+                                  "Which provider serves it. Required: see the providers tool for what is connected.",
+                              ),
                               model: z
                                   .string()
                                   .min(1)
@@ -352,7 +373,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                     return answer({
                         ...workWaitAnswer(result, {
                             pendingQuestion: (childId) => deps.children?.pendingQuestion(childId),
-                            report: (childId) => deps.children?.report(childId),
+                            report: (childId) => reportOf(deps, childId),
                             landing: (childId) => deps.children?.landing(childId),
                         }),
                         ...(result.outcome === "unknown-target" ? { note: NOTHING_TO_WAIT_FOR } : {}),

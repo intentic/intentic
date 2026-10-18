@@ -38,11 +38,10 @@ import { editDiagnosticsHooks } from "../verification/agent-diagnostics.js";
 import { createShellEditTracker } from "../tools/agent-shell-edits.js";
 import { EDIT_TOOL_NAMES } from "../../rules/edit-tools.js";
 import { installSteeringHooks } from "../providers/agent-installs.js";
-import { redactionHooks } from "../tools/agent-redaction.js";
+import { toolResultHooks } from "../tools/tool-result-hooks.js";
 import { secretCommandHooks } from "../tools/agent-secrets.js";
 import { commandGateHooks } from "../../guard/command-guard.js";
 import { outboundGuardHooks } from "../../guard/outbound-guard.js";
-import { outsideResultHooks } from "../../guard/outside-results.js";
 import { createTurnTaint, publishTurnTaint } from "../../guard/turn-taint.js";
 import { personaScopeHooks } from "../../personas/persona-scope.js";
 import { toolAllowlistHooks } from "../tools/tool-allowlist.js";
@@ -241,7 +240,7 @@ const turnEnv = (request: HarnessRequest) => ({
     // values.
     ...request.tools.cliEnv,
     // IS_SANDBOX plus this turn's credential; a custom endpoint withholds the OAuth token for its own bearer.
-    ...harnessEnv(request.credential, { model: request.spec.model }),
+    ...harnessEnv(request.credential, { model: request.spec.model, toolSearch: request.policy.toolSearch }),
     // Output-cleaner spec/holdout the Bash to tmux-run pipeline reads.
     ...cleanerEnv(request),
     // Delegation ceilings this turn overrides, if any, on top of the harness defaults.
@@ -515,10 +514,6 @@ const baseOptions = (
                     installs: request.hooks.projectInstalls,
                     onImageInstall: request.hooks.onImageInstall,
                 }),
-                // Wraps content pulled in mid-turn (a fetched page, a foreign MCP result); sets the taint the gate reads.
-                outsideResultHooks((source) => {
-                    taint.mark(source);
-                }),
                 // tmux wrapper carries the secret exit so the rewrites compose in order; without tmux the exit stands
                 // alone.
                 tmuxEnabled
@@ -534,8 +529,7 @@ const baseOptions = (
                     : request.tools.secrets !== undefined
                       ? secretCommandHooks(request.tools.secrets)
                       : {},
-                // Masks every stored credential to its reference in any tool result, not just Bash's.
-                request.tools.secrets !== undefined ? redactionHooks(request.tools.secrets.list) : {},
+                toolResultHooks(request, taint),
                 installSteeringHooks(),
                 // Checks classified outbound calls against owner action rules before they run, even under
                 // bypassPermissions.

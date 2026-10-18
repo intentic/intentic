@@ -2,6 +2,7 @@
 // itself, which those settings adopt.
 import { STATE_DIR } from "@intentic/constants";
 import { z } from "zod";
+import { claudeExperimentSettings, iqSearchSettings } from "./settings-experiments.js";
 import { CommandJudgeModeSchema, ProjectInstallModeSchema } from "../policy/safety-policy.js";
 import { ModelRoleSchema } from "../models/model-roles.js";
 import { MODEL_SETUP_ID, ModelSetupSchema } from "../models/model-setups.js";
@@ -243,12 +244,6 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Which clock this sandbox's schedules are set by, as a zone name like Europe/Warsaw. Automations that repeat on a clock fire by this, not by the machine's own time. Leave it empty and they fire by UTC, which is almost certainly not what you meant when you typed a time.",
         ),
-    stableSystemPrompt: z
-        .boolean()
-        .default(false)
-        .describe(
-            "Keep the instructions identical between turns so the provider can cache them, moving anything that varies into the message instead. Cheaper, at the cost of some flexibility.",
-        ),
     skills: z.array(z.string()).default(["lsp", "fileq"]).describe("Which built-in tools are switched on. A skill of your own is not listed here: it is on while the agent's copy of it exists."),
     // One half of the reading a new chat gets between send and its first turn (chat-router.ts): with this on, the
     // message and one line per card are put to the same model that chooses what the chat runs on, in the same call.
@@ -308,18 +303,8 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Your own instructions, used only when the mode above says custom. Then it is the whole of them: both built-in bases go, and so does everything this product would otherwise add, including the guidance the chat's own cards are driven by. That is the price of total control.",
         ),
-    iqSearch: z
-        .boolean()
-        .default(false)
-        .describe("Teach the agent how to use this workspace's own search tool, rather than leaving it to grep around."),
-    iqSearchHoldout: z
-        .number()
-        .min(0)
-        .max(1)
-        .default(0)
-        .describe(
-            "What share of conversations to run without that teaching, so the two can be compared. Whole conversations rather than individual turns, because once the teaching is in a session, withholding it from the next request does not make the model forget it.",
-        ),
+    ...iqSearchSettings,
+    ...claudeExperimentSettings,
     // Rooted at the run's own starting folder (a persona's, an isolated conversation's worktree), not the workspace
     // root — it maps the project containing that folder.
     workspaceMap: z
@@ -717,10 +702,14 @@ export const SavingsArmSchema = z.object({ turns: z.number(), mean: z.number() }
 // openedWithListing: whether a turn listed directories to orient itself, as a share of turns (the project map).
 // callsBeforeTarget: how far a turn walked before touching a file it went on to edit.
 // failedCalls: tool calls that ended in error (the field notes, whose largest section is a failure taxonomy).
+// openingPrompt: tokens a turn's first request sent (cache reads plus cache writes), which is what every later call of
+// the turn reads again (tool search, which moves the tool schemas out of it).
+// openingWrite: tokens a follow-up turn's first request wrote to the cache instead of reading them (the stable prompt).
 // Every reading is the main agent's own: a subagent's calls are counted toward the turn and read for nothing.
-// Never cost: each mechanism moves one small part of a turn's work, inside the noise of the rest.
+// Never cost: each mechanism moves one small part of a turn's work, inside the noise of the rest. The prompt's size is
+// the exception that proves it: it is the part every call pays again, so it is read directly rather than through cost.
 export const TurnMetricReadingSchema = z.object({
-    metric: z.enum(["searchCalls", "openingSearches", "openedWithListing", "callsBeforeTarget", "failedCalls"]),
+    metric: z.enum(["searchCalls", "openingSearches", "openedWithListing", "callsBeforeTarget", "failedCalls", "openingPrompt", "openingWrite"]),
     on: SavingsArmSchema,
     off: SavingsArmSchema,
     // Additional control turns to reach a fixed target resolution, not today's delta (which inherits noise and always
@@ -789,6 +778,9 @@ export const SavingsReportSchema = z.object({
     // Same absence rule as `search`: not measured, never zero.
     map: TurnExperimentSchema.optional(),
     notes: TurnExperimentSchema.optional(),
+    toolSearch: TurnExperimentSchema.optional(),
+    stablePrompt: TurnExperimentSchema.optional(),
+    coldTrim: TurnExperimentSchema.optional(),
 });
 export type SavingsReport = z.infer<typeof SavingsReportSchema>;
 

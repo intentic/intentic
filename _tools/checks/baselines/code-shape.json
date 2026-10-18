@@ -1246,7 +1246,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/output-cleaners/src/cleaners.mjs": {
-        "count": 866,
+        "count": 857,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/privacy-detect/src/contact.ts#isPhone#cognitive": {
@@ -1466,7 +1466,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/agent.ts": {
-        "count": 1084,
+        "count": 1078,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/agent.ts#baseOptions#cognitive": {
@@ -1521,7 +1521,7 @@
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/stream-agent.ts": 1082,
+    "_sandbox/sandbox/src/agent/run/stream-agent.ts": 1062,
     "_sandbox/sandbox/src/agent/run/stream-agent.ts#preflight#cyclomatic": {
         "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
@@ -3308,7 +3308,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/schemas/settings.ts": {
-        "count": 878,
+        "count": 870,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/state/workspace-state.ts": {

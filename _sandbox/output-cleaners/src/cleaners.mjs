@@ -7,19 +7,15 @@ import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, writeFileSync 
 import { basename, dirname, join } from "node:path";
 import * as util from "node:util";
 
-// CSI sequences, OSC sequences (title sets, hyperlinks), and lone two-byte escapes; always stripped as noise.
-export const ANSI = /\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g;
+import { bodyBytes, invocation } from "./cleaner-shapes.mjs";
+import { dedupeRuns, elideWideRuns } from "./repeated-output.mjs";
+import { foldLogTemplates } from "./log-templates.mjs";
+import { compactJsonArrays } from "./json-arrays.mjs";
+import { fairSearch, SEARCH_COMMAND } from "./search-fairness.mjs";
+import { byteBudget, capOutput, FAIL_TAIL, priorityCap, READ_COMMAND, READ_MAX_BYTES } from "./output-cap.mjs";
 
-// A spinner/progress bar redraws one line with \r: keep only the final frame. Always applied as noise.
-export const collapseCr = (line) => {
-    const frames = line.split("\r");
-    for (let i = frames.length - 1; i >= 0; i--) {
-        if (frames[i] !== "") {
-            return frames[i];
-        }
-    }
-    return "";
-};
+export { ANSI, collapseCr, bodyBytes } from "./cleaner-shapes.mjs";
+export { cleanToolText } from "./text-shaping.mjs";
 
 // Success-path per-command noise strippers. Narrow patterns: a false command match strips nothing real.
 const strip = (id, match, patterns) => ({
@@ -27,13 +23,6 @@ const strip = (id, match, patterns) => ({
     match,
     apply: (lines) => lines.filter((line) => !patterns.some((re) => re.test(line))),
 });
-
-// Matches the command word itself, not a filename containing it, even through a launcher's quoting. Lookbehind only
-// excludes being the tail of a path or identifier; `/` stays in so `/usr/bin/pnpm` still matches.
-const invocation = (word) => new RegExp(String.raw`(?<![\w.\-/])(?:${word})(?![\w.-])`);
-
-// Weight of a line array joined with newlines, without building the string each stage.
-export const bodyBytes = (lines) => (lines.length === 0 ? 0 : lines.reduce((sum, line) => sum + line.length, 0) + lines.length - 1);
 
 // Shape cleaners read the text, not the command, since `cd x && …` defeats a command regex. Each self-gates, handing
 // back its input unchanged when it recognizes nothing, so it's safe to run on every success.
@@ -304,42 +293,17 @@ const COMMAND_CLEANERS = [
 
 // Every registry cleaner id plus the global stages: dedup and redact run on all output, wide cuts machine-generated
 // blobs out of a line, cap is head/tail truncation, cache collapses an identical repeat (owned by agent-output-filter).
-export const CLEANERS = [...COMMAND_CLEANERS.map((cleaner) => cleaner.id), "dedup", "wide", "cap", "redact", "cache"];
-
-// Collapses a run of 3+ identical consecutive lines to one line plus a count marker. Lossless on distinct content, so
-// it's safe on both success output and repeated failure traces.
-const dedupeRuns = (lines) => {
-    const out = [];
-    for (let i = 0; i < lines.length;) {
-        let j = i + 1;
-        while (j < lines.length && lines[j] === lines[i]) {
-            j++;
-        }
-        const run = j - i;
-        out.push(lines[i]);
-        if (run >= 3) {
-            out.push(`  … (${run - 1} more identical lines)`);
-        } else {
-            for (let k = 1; k < run; k++) {
-                out.push(lines[i]);
-            }
-        }
-        i = j;
-    }
-    return out;
-};
-
-// An unbroken run of non-space characters this long is machine-generated: minified JSON, a base64 blob, a bundled-JS
-// line, a binary `strings` dump. Prose and code break for a space every few characters, so the RUN is the unit here and
-// not the line: a 2000-character README bullet or a wrapped error message keeps every word, while the blob beside it on
-// the same line is cut. A line-length threshold cannot make that distinction at any setting.
-const WIDE_RUN = 400;
-const WIDE_HEAD = 240;
-const WIDE_TAIL = 80;
-// Head-heavy: a blob's first characters say what it is (the JSON keys, the `data:` prefix), its last say where it ends.
-const elideRun = (run) => `${run.slice(0, WIDE_HEAD)}… ${run.length - WIDE_HEAD - WIDE_TAIL} chars elided …${run.slice(-WIDE_TAIL)}`;
-const WIDE_PATTERN = new RegExp(String.raw`\S{${WIDE_RUN + 1},}`, "g");
-const elideWideRuns = (lines) => lines.map((line) => (line.length > WIDE_RUN ? line.replaceAll(WIDE_PATTERN, elideRun) : line));
+export const CLEANERS = [
+    ...COMMAND_CLEANERS.map((cleaner) => cleaner.id),
+    "templates",
+    "csv-schema",
+    "search",
+    "dedup",
+    "wide",
+    "cap",
+    "redact",
+    "cache",
+];
 
 // Masks common secret shapes before output reaches the model, as defense-in-depth. A secret-shaped NAME is not enough
 // (source often says "token" without holding one), so the VALUE must look like a credential too.
@@ -546,7 +510,11 @@ export const openAtRest = (text, purpose, env = process.env) => {
             continue;
         }
         try {
-            const decipher = createDecipheriv("aes-256-gcm", Buffer.from(hkdfSync("sha256", key, "intentic-at-rest-v1", purpose, 32)), Buffer.from(envelope.iv, "base64"));
+            const decipher = createDecipheriv(
+                "aes-256-gcm",
+                Buffer.from(hkdfSync("sha256", key, "intentic-at-rest-v1", purpose, 32)),
+                Buffer.from(envelope.iv, "base64"),
+            );
             decipher.setAuthTag(Buffer.from(envelope.tag, "base64"));
             return Buffer.concat([decipher.update(Buffer.from(envelope.data, "base64")), decipher.final()]).toString("utf8");
         } catch {
@@ -652,7 +620,10 @@ const harvest = (text, layout) => {
 // unset falls back to .intentic/secrets/auth, matching composition.ts.
 export const secretValues = (env = process.env) => {
     const roots = {
-        auth: env.AGENT_AUTH_DIR !== undefined && env.AGENT_AUTH_DIR !== "" ? env.AGENT_AUTH_DIR : join(env.WORKSPACE_ROOT ?? "/work", ".intentic/secrets/auth"),
+        auth:
+            env.AGENT_AUTH_DIR !== undefined && env.AGENT_AUTH_DIR !== ""
+                ? env.AGENT_AUTH_DIR
+                : join(env.WORKSPACE_ROOT ?? "/work", ".intentic/secrets/auth"),
         desiredState: join(env.WORKSPACE_ROOT ?? "/work", "desired-state"),
     };
     return SECRET_STORES.flatMap(({ root, path, layout }) => readIfChanged(join(roots[root], path), layout, env)).toSorted(
@@ -705,90 +676,36 @@ export const parseCleaners = (spec) => {
     return new Set(CLEANERS.filter((cleaner) => !disabled.has(cleaner)));
 };
 
-// Generic success cap: outputs past MAX keep the first HEAD and last TAIL lines. Failures keep everything up to
-// FAIL_TAIL, since errors live at the end.
-const HEAD = 30;
-const TAIL = 50;
-const MAX = 100;
-const FAIL_TAIL = 500;
-
-// A line is not a unit of size: some commands return few lines of very long ones. These byte budgets are generous
-// enough that ordinary output never meets them, firing only on the long-line shapes the line cap can't see.
-const LOG_MAX_BYTES = 16_000;
-const READ_MAX_BYTES = 96_000;
-// Head/tail split of a byte budget mirrors the line cap's 30/50 bias toward the end, where a log's signal is.
-const BYTE_HEAD_SHARE = 0.375;
-
-// A deliberate read (`cat`, `sed -n`, `awk`, `git diff/show` on a path) is not a log's noise-at-both-ends shape, so it
-// gets the Read tool's own line ceiling instead of the log cap, trimmed from the end where a read naturally stops.
-const READ_MAX = 2000;
-// Narrow on the right: `git log` without `-p` is history, `git log -p` is a read. Permissive on the left: the
-// lookbehind only excludes being the tail of a path or identifier, accepting a quote, `--`, or statement start alike.
-
-// Git's global options before the verb, in two shapes: a flag glued to its value (`--no-pager`) is one token, but
-// several take the value as a separate word. The list is explicit rather than "any flag takes a value", which could
-// swallow the verb itself.
-const GIT_OPTIONS = String.raw`(?:(?:-[Cc]|--(?:git-dir|work-tree|namespace|exec-path|super-prefix))\s+\S+\s+|-\S+\s+)*`;
-const READ_COMMAND = new RegExp(
-    String.raw`(?<![\w.-])(?:cat|bat|sed\s+-n|awk|git\s+${GIT_OPTIONS}(?:diff|show)\b|git\s+${GIT_OPTIONS}log\s+(?:[^;&|]*\s)?-p)\b`,
-);
-
-// Takes whole lines until `budget` bytes are spent; a partial line would misrepresent the output it came from.
-const takeWithinBudget = (source, budget) => {
-    const kept = [];
-    let spent = 0;
-    for (const line of source) {
-        spent += line.length + 1;
-        if (spent > budget) {
-            break;
-        }
-        kept.push(line);
-    }
-    return kept;
-};
-
-const byteBudget = (command) => (READ_COMMAND.test(command) ? READ_MAX_BYTES : LOG_MAX_BYTES);
-
-// Caps on lines OR bytes, whichever policy the command earned. Returns the same array unchanged when nothing is over
-// budget, so the caller can tell "did not fire" from "fired and removed nothing".
-const capOutput = (lines, command) => {
-    const isRead = READ_COMMAND.test(command);
-    const maxLines = isRead ? READ_MAX : MAX;
-    const maxBytes = byteBudget(command);
-    // Lines first: it is the cheaper test and the one whose elision marker reads best.
-    if (lines.length > maxLines) {
-        return isRead
-            ? [...lines.slice(0, maxLines), `… ${lines.length - maxLines} more lines elided: narrow the range or use the Read tool …`]
-            : [...lines.slice(0, HEAD), `… ${lines.length - HEAD - TAIL} lines elided …`, ...lines.slice(-TAIL)];
-    }
-    if (bodyBytes(lines) <= maxBytes) {
-        return lines;
-    }
-    // Over on bytes within the line limit means long lines: take from the end for a read, both ends for a log.
-    if (isRead) {
-        const head = takeWithinBudget(lines, maxBytes);
-        return [...head, `… ${lines.length - head.length} more lines elided (${bodyBytes(lines)} bytes): narrow the range or use the Read tool …`];
-    }
-    const head = takeWithinBudget(lines, Math.round(maxBytes * BYTE_HEAD_SHARE));
-    const tail = takeWithinBudget(lines.toReversed(), maxBytes - bodyBytes(head)).toReversed();
-    // A single line longer than the whole budget leaves both ends empty; keep its head rather than only a marker.
-    if (head.length === 0 && tail.length === 0) {
-        return [`${lines[0].slice(0, maxBytes)}… line truncated at ${maxBytes} bytes …`];
-    }
-    return [...head, `… ${lines.length - head.length - tail.length} lines elided (${bodyBytes(lines)} bytes) …`, ...tail];
-};
-
-// Every claiming cleaner, then the stages that read the text rather than the command. `ran` weighs each one and hands
-// the lines back, so the order here is the order the ledger attributes bytes in.
-const cleanSucceeded = (lines, command, enabled, ran) => {
+const cleanCommandOutput = (lines, command, enabled, ran) => {
     let out = lines;
     for (const cleaner of COMMAND_CLEANERS) {
         // A shape cleaner has no `match`: it is offered every command and decides from the text itself.
-        if (enabled.has(cleaner.id) && (cleaner.match === undefined || cleaner.match.test(command))) {
+        if (cleaner.id !== "hits" && enabled.has(cleaner.id) && (cleaner.match === undefined || cleaner.match.test(command))) {
             out = ran(cleaner.id, cleaner.apply(out));
         }
     }
-    if (enabled.has("dedup")) {
+    return out;
+};
+
+const canFoldTemplates = (lines, command) =>
+    !READ_COMMAND.test(command) && !SEARCH_COMMAND.test(command) && !/^\s*[{[]/.test(lines.find((line) => /\S/.test(line)) ?? "");
+
+// Every claiming cleaner, then the stages that read the text rather than the command. `ran` weighs each one and hands
+// the lines back, so the order here is the order the ledger attributes bytes in.
+const cleanSucceeded = (lines, command, enabled, ran, values) => {
+    let out = lines;
+    if (enabled.has("csv-schema")) {
+        out = ran("csv-schema", compactJsonArrays(out, values, redactText));
+    }
+    const jsonCompacted = out !== lines;
+    if (!jsonCompacted) {
+        out = cleanCommandOutput(out, command, enabled, ran);
+    }
+    // Reads and searches carry source lines, not log events; masking their numbers would hide distinct code.
+    if (enabled.has("templates") && canFoldTemplates(out, command)) {
+        out = ran("templates", foldLogTemplates(out, values, redactText));
+    }
+    if (!jsonCompacted && enabled.has("dedup")) {
         out = ran("dedup", dedupeRuns(out));
     }
     // After dedup, never before: eliding the middle of two long lines can leave them identical, and dedup would then
@@ -797,6 +714,13 @@ const cleanSucceeded = (lines, command, enabled, ran) => {
     // over that budget: output that already fits is shown whole, blob included (`jq -c` asked for exactly that line).
     if (enabled.has("wide") && bodyBytes(out) > byteBudget(command)) {
         out = ran("wide", elideWideRuns(out));
+    }
+    // Fairness needs full file prefixes. Wide runs shrink first, so a blob cut can avoid sampling altogether.
+    if (enabled.has("search") && !jsonCompacted) {
+        out = ran("search", fairSearch(out, command));
+    }
+    if (enabled.has("hits") && !jsonCompacted) {
+        out = ran("hits", foldHitRuns(out));
     }
     if (enabled.has("cap")) {
         const capped = capOutput(out, command);
@@ -807,12 +731,15 @@ const cleanSucceeded = (lines, command, enabled, ran) => {
     return out;
 };
 
-// Failures keep detail verbatim: only collapse long identical runs (lossless) and cap at a generous tail.
+// Failures keep detail verbatim: only collapse long identical runs (lossless) and cap at a generous tail (FAIL_TAIL).
 const cleanFailed = (lines, enabled, ran) => {
     const out = enabled.has("dedup") ? ran("dedup", dedupeRuns(lines)) : lines;
     return out.length > FAIL_TAIL
         ? // Own id, never `cap`: this fires regardless of the spec, so `cap`'s toggle shouldn't get credit for it.
-          ran("failtail", [`… ${out.length - FAIL_TAIL} earlier lines elided …`, ...out.slice(-FAIL_TAIL)])
+          ran(
+              "failtail",
+              priorityCap(out, FAIL_TAIL, READ_MAX_BYTES, [`… ${out.length - FAIL_TAIL} earlier lines elided …`, ...out.slice(-FAIL_TAIL)]),
+          )
         : out;
 };
 
@@ -830,13 +757,10 @@ export const cleanLines = (lines, { command, exitCode, enabled, values = [] }) =
         bytes = after;
         return next;
     };
-    let out = exitCode === "0" ? cleanSucceeded(lines, command, enabled, ran) : cleanFailed(lines, enabled, ran);
+    let out = exitCode === "0" ? cleanSucceeded(lines, command, enabled, ran, values) : cleanFailed(lines, enabled, ran);
     // Redaction runs last on both paths so a leaked secret is masked even inside an error dump.
     if (enabled.has("redact")) {
-        out = ran(
-            "redact",
-            redactLines(out, values),
-        );
+        out = ran("redact", redactLines(out, values));
     }
     return { lines: out, stages };
 };

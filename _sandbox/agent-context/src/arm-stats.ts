@@ -17,7 +17,16 @@ const Z_95 = 1.96;
 // openedWithListing: whether a turn listed directories to orient itself, as a share of turns (the project map).
 // callsBeforeTarget: how far a turn walked before touching a file it went on to edit.
 // failedCalls: tool calls that ended in error (the field notes, whose largest section is a failure taxonomy).
-export type MetricName = "searchCalls" | "openingSearches" | "openedWithListing" | "callsBeforeTarget" | "failedCalls";
+// openingPrompt: tokens the turn's first request sent, which every later call of the turn reads again (tool search).
+// openingWrite: tokens a follow-up turn's first request wrote to the cache rather than read from it (the stable prompt).
+export type MetricName =
+    | "searchCalls"
+    | "openingSearches"
+    | "openedWithListing"
+    | "callsBeforeTarget"
+    | "failedCalls"
+    | "openingPrompt"
+    | "openingWrite";
 
 // The readings whose arm mean is a share of turns, 0 to 1, rather than a count per turn; said as a percentage.
 export const isShareMetric = (metric: MetricName): boolean => metric === "openedWithListing";
@@ -33,6 +42,9 @@ export interface MeasuredTurn {
     readonly openingListings?: number | undefined;
     readonly callsBeforeTarget?: number | undefined;
     readonly failedCalls?: number | undefined;
+    // The first request's cache reads and writes; absent where the runtime reports no per-request usage.
+    readonly openingCacheReadTokens?: number | undefined;
+    readonly openingCacheCreationTokens?: number | undefined;
 }
 
 export type SampleUnit = "turns" | "conversations" | "opening turns";
@@ -108,6 +120,23 @@ const CALLS_BEFORE_TARGET: Metric = { name: "callsBeforeTarget", of: (turn) => t
 // The field notes' headline: the brief's largest section is a taxonomy of what fails, so calls that ended in error is
 // the reading it either moves or does not.
 const FAILED_CALLS: Metric = { name: "failedCalls", of: (turn) => turn.failedCalls, round: round1 };
+// Tool search's headline: what it takes out of the prompt is what every call of the turn stops re-reading. Both halves
+// or neither: a turn that reports only one of them measured half a request.
+const OPENING_PROMPT: Metric = {
+    name: "openingPrompt",
+    of: (turn) =>
+        turn.openingCacheReadTokens === undefined || turn.openingCacheCreationTokens === undefined
+            ? undefined
+            : turn.openingCacheReadTokens + turn.openingCacheCreationTokens,
+    round: Math.round,
+};
+// The stable prompt's headline: a follow-up whose prefix still matched reads it back, one whose prefix moved writes all
+// of it again. Opening turns are left out, since they write their whole prompt whatever either arm does.
+const OPENING_WRITE: Metric = {
+    name: "openingWrite",
+    of: (turn) => (turn.turnIndex === undefined || turn.turnIndex === 0 ? undefined : turn.openingCacheCreationTokens),
+    round: Math.round,
+};
 
 interface Arm {
     readonly turns: number;
@@ -200,6 +229,13 @@ export const MECHANISMS = {
     map: { metrics: [OPENED_WITH_LISTING, CALLS_BEFORE_TARGET], sampleUnit: "opening turns", sample: openingTurn },
     // The brief rides the whole session, so turn 40 is as much evidence as turn 1.
     notes: { metrics: [FAILED_CALLS, CALLS_BEFORE_TARGET], sampleUnit: "conversations", sample: meanOfTurns },
+    // Deferred schemas leave every request of the session, so every turn is evidence; failed calls are the price it
+    // could charge, a model reaching for a tool it has not looked up yet.
+    toolSearch: { metrics: [OPENING_PROMPT, FAILED_CALLS], sampleUnit: "conversations", sample: meanOfTurns },
+    // What moved between turns is said on the message, so the system block stops rewriting the cache; failed calls are
+    // the price it could charge, a turn that did not take a note as seriously as an instruction.
+    stablePrompt: { metrics: [OPENING_WRITE, FAILED_CALLS], sampleUnit: "conversations", sample: meanOfTurns },
+    coldTrim: { metrics: [OPENING_PROMPT, FAILED_CALLS], sampleUnit: "conversations", sample: meanOfTurns },
 } as const satisfies Record<string, Mechanism>;
 
 // One experiment: a mechanism, plus where a row says which arm it ran and which revision of the treatment it saw.

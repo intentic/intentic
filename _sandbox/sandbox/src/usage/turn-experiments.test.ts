@@ -288,3 +288,52 @@ test("a monthly rewrite is a new treatment: only the latest revision's turns are
     expect(notes?.metrics[0].on.mean).toBe(1);
     expect(notes?.metrics[0].on.turns).toBe(MIN_ARM_TURNS);
 });
+
+const toolArms = (on: number, off: number, onPrompt: number, offPrompt: number): UsageTurn[] => [
+    ...Array.from({ length: on }, (_, index) =>
+        turn({ conversationId: `on-${index}`, toolSearchArm: true, openingCacheReadTokens: onPrompt - 1000, openingCacheCreationTokens: 1000, failedCalls: 1 }),
+    ),
+    ...Array.from({ length: off }, (_, index) =>
+        turn({ conversationId: `off-${index}`, toolSearchArm: false, openingCacheReadTokens: offPrompt - 1000, openingCacheCreationTokens: 1000, failedCalls: 1 }),
+    ),
+];
+
+test("tool search is judged on the opening request's prompt, then on failed calls, per conversation", async () => {
+    const { toolSearch } = await readTurnExperiments(storeOf(toolArms(40, 40, 30_000, 80_000)), {});
+    expect(toolSearch?.metrics.map((reading) => reading.metric)).toEqual(["openingPrompt", "failedCalls"]);
+    expect(toolSearch?.sampleUnit).toBe("conversations");
+    expect(toolSearch?.metrics[0]).toMatchObject({ on: { turns: 40, mean: 30_000 }, off: { turns: 40, mean: 80_000 } });
+});
+
+test("a turn that reported only half of its opening request is not read as a prompt", async () => {
+    const rows = [
+        turn({ conversationId: "on", toolSearchArm: true, openingCacheReadTokens: 30_000 }),
+        turn({ conversationId: "off", toolSearchArm: false, openingCacheReadTokens: 70_000, openingCacheCreationTokens: 10_000 }),
+    ];
+    const { toolSearch } = await readTurnExperiments(storeOf(rows), {});
+    expect(toolSearch?.metrics[0]).toMatchObject({ on: { turns: 0 }, off: { turns: 1, mean: 80_000 } });
+});
+
+test("cold trim compares eligible arms on opening prompt and failed calls, including controls that did not trim", async () => {
+    const rows = [
+        ...Array.from({ length: 40 }, (_, i) =>
+            turn({
+                conversationId: `on-${i}`,
+                coldTrimArm: true,
+                coldTrimmed: 20,
+                openingCacheReadTokens: 0,
+                openingCacheCreationTokens: 50_000,
+                failedCalls: 2,
+            }),
+        ),
+        ...Array.from({ length: 40 }, (_, i) =>
+            turn({ conversationId: `off-${i}`, coldTrimArm: false, openingCacheReadTokens: 0, openingCacheCreationTokens: 150_000, failedCalls: 1 }),
+        ),
+        turn({ conversationId: "warm", openingCacheCreationTokens: 999_999, failedCalls: 99 }),
+    ];
+    const { coldTrim } = await readTurnExperiments(storeOf(rows), {});
+    expect(coldTrim?.sampleUnit).toBe("conversations");
+    expect(coldTrim?.metrics.map(({ metric }) => metric)).toEqual(["openingPrompt", "failedCalls"]);
+    expect(coldTrim?.metrics[0]).toMatchObject({ on: { turns: 40, mean: 50_000 }, off: { turns: 40, mean: 150_000 } });
+    expect(coldTrim?.metrics[1]).toMatchObject({ on: { turns: 40, mean: 2 }, off: { turns: 40, mean: 1 } });
+});

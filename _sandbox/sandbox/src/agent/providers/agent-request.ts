@@ -89,6 +89,9 @@ export interface TurnSpec {
     readonly contextTrim?: PromptTrim;
     // Which tool that guidance tells the turn to find code with; absent is `rg`, the one every image carries.
     readonly search?: SearchTool;
+    // The guidance that moves between turns (who is watching, which of the owner's machines are online) rides the
+    // message as a note sent when it changed, so the system block stays the same for the whole session.
+    readonly stablePrompt?: boolean;
     // Mid-turn steering queue; when present the turn streams input and pushed messages inject between tool calls.
     readonly steering?: SteeringQueue;
 }
@@ -127,6 +130,9 @@ export interface TurnPolicy {
     readonly subagentsAtOnce?: number;
     readonly subagentsPerTurn?: number;
     readonly subagentDepth?: number;
+    // Connected tools' schemas deferred behind the CLI's tool search (true) or all sent with every request (false);
+    // undefined leaves the CLI's own rule, which turns it off whenever the base URL is not Anthropic's own host.
+    readonly toolSearch?: boolean;
     // A cache refresh, not a turn: one forked, unsaved request with every tool refused and every hook off.
     readonly keepWarm?: boolean;
     // A sealed request, not a turn (agent/run/sealed/sealed-request.ts): the prompt is everything the model reads. No
@@ -155,6 +161,7 @@ export interface TurnTools {
     readonly cliEnv?: Record<string, string>;
     // Bash output-cleaner spec, forwarded as INTENTIC_OUTPUT_CLEANERS, or 'off' to disable filtering entirely.
     readonly outputCleaners?: string;
+    readonly outputLogsDir?: string;
     // Fraction [0,1] of commands whose output bypasses cleaning, recorded as a baseline; 0/undefined disables it.
     readonly outputHoldout?: number;
     // Every named credential this sandbox stores: masked on read, resolved on shell exit, typed into browser fields.

@@ -186,6 +186,20 @@ describe("what passes untouched", () => {
         expect(fake.privacyLedger.entries[0]?.counts["national-id"]).toBe(1);
     });
 
+    // The one edit every mode makes to an Anthropic request: each tool schema's dialect line, which no model reads.
+    test.each([
+        ["watching", { mode: "watch" as const }],
+        ["masking", { mode: "on" as const }],
+        ["a trusted provider", { mode: "on" as const, trusted: ["claude"] }],
+    ])("%s sends the tools without their dialect lines and everything else as it would have", async (_case, policy) => {
+        const { provider, send } = await harness(policy, "claude");
+        const schema = { type: "object", properties: { url: { type: "string" } } };
+        await send("/v1/messages", { ...request("hello"), tools: [{ name: "open", input_schema: { $schema: "https://json-schema.org/draft/2020-12/schema", ...schema } }] });
+        const sent: unknown = JSON.parse(provider.seen[0]?.body ?? "{}");
+        expect(sent).toMatchObject({ tools: [{ name: "open", input_schema: schema }], messages: expect.arrayContaining([{ role: "user", content: "Who is in the file?" }]) });
+        expect(provider.seen[0]?.body).not.toContain("$schema");
+    });
+
     // Hop-by-hop headers describe the runtime's connection to the gateway and the provider's to it, never the request.
     test("hop-by-hop headers, and any the Connection header names, are not passed on either way", async () => {
         const answer = (): Response =>

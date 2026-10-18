@@ -578,6 +578,7 @@ COPY --chmod=755 _sandbox/sandbox/bin/heavy-shims /opt/sandbox/heavy-shims
 COPY --chmod=755 _sandbox/output-cleaners/src/agent-output-filter.mjs /usr/local/bin/agent-output-filter
 # The cleaner registry the filter imports (./cleaners.mjs resolves next to the renamed binary at /usr/local/bin).
 COPY --chmod=755 _sandbox/output-cleaners/src/cleaners.mjs /usr/local/bin/cleaners.mjs
+COPY --chmod=755 _sandbox/output-cleaners/src/cleaner-shapes.mjs _sandbox/output-cleaners/src/log-templates.mjs _sandbox/output-cleaners/src/json-arrays.mjs _sandbox/output-cleaners/src/search-fairness.mjs _sandbox/output-cleaners/src/output-cap.mjs _sandbox/output-cleaners/src/repeated-output.mjs _sandbox/output-cleaners/src/text-shaping.mjs /usr/local/bin/
 # retrieve-output on PATH — the reversible half of the filter (fetch back elided output; the footer names it).
 COPY --chmod=755 _sandbox/output-cleaners/src/retrieve-output.mjs /usr/local/bin/retrieve-output
 # rtk is not baked: the `rtk` extension's environment fragment adds it for an owner who asks; nothing here execs it.

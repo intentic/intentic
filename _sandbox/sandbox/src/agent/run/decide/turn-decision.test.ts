@@ -213,9 +213,13 @@ test("a gated connector loses its variables from the shell and its skill, and no
 
 // the project map: an opening, non-fork message, and only in the treatment arm of a measured conversation
 
+// Tool search and the stable prompt measure every Claude Code conversation by default; the tables about the other
+// experiments hold them out of the comparison so each reads only its own stamps. Their own tables are further down.
+const TOOLS_UNMEASURED = { toolSearchHoldout: 0, stableSystemPromptHoldout: 0 } as const;
+
 const MAP = "## Map of this project\n\nbilling/ takes the payments; mailer/ sends the receipts.";
-const MAP_ON = SandboxSettingsSchema.parse({ workspaceMap: true });
-const MAP_MEASURED = SandboxSettingsSchema.parse({ workspaceMap: true, workspaceMapHoldout: 0.5 });
+const MAP_ON = SandboxSettingsSchema.parse({ workspaceMap: true, ...TOOLS_UNMEASURED });
+const MAP_MEASURED = SandboxSettingsSchema.parse({ workspaceMap: true, workspaceMapHoldout: 0.5, ...TOOLS_UNMEASURED });
 const MAP_TREATED = conversationIn("workspace-map-or-none", true);
 const MAP_CONTROL = conversationIn("workspace-map-or-none", false);
 const LEAN: Persona = { id: "lean", capabilities: [], briefing: { omit: ["map"] } };
@@ -274,7 +278,7 @@ test.each([
     ],
     [
         "a workspace with the map off",
-        SandboxSettingsSchema.parse({ workspaceMapHoldout: 0.5 }),
+        SandboxSettingsSchema.parse({ workspaceMapHoldout: 0.5, ...TOOLS_UNMEASURED }),
         { conversationId: MAP_TREATED },
         undefined,
         false,
@@ -336,8 +340,8 @@ test("a card that drops the checks note never shows it, even where the facts car
 // the iq teaching: runtimes with no plugin loader, on a conversation's opening turn
 
 const TEACHING = { note: "## iq workspace search\n\nAsk iq before you grep.", cohort: "c0ffee" };
-const SEARCH_ON = SandboxSettingsSchema.parse({ iqSearch: true });
-const SEARCH_MEASURED = SandboxSettingsSchema.parse({ iqSearch: true, iqSearchHoldout: 0.5 });
+const SEARCH_ON = SandboxSettingsSchema.parse({ iqSearch: true, ...TOOLS_UNMEASURED });
+const SEARCH_MEASURED = SandboxSettingsSchema.parse({ iqSearch: true, iqSearchHoldout: 0.5, ...TOOLS_UNMEASURED });
 
 test.each([
     ["native Codex on an opening turn", SEARCH_ON, "codex", "c-iq", undefined, true, { turnIndex: 0 }],
@@ -368,6 +372,41 @@ test.each([
 
     expect(titles(decision).includes(IQ_SEARCH_INSTRUCTION_TITLE)).toBe(sent);
     expect(decision.context.base.spec.notes?.find((note) => note.title === IQ_SEARCH_INSTRUCTION_TITLE)?.text).toBe(sent ? TEACHING.note : undefined);
+    expect(decision.experiments).toEqual(experiments);
+});
+
+// tool search: native Claude on the Claude Code loop draws an arm; the arm is the switch the CLI is handed
+
+const TOOLS_MEASURED = SandboxSettingsSchema.parse({ toolSearch: true, toolSearchHoldout: 0.5, stableSystemPromptHoldout: 0 });
+
+test.each([
+    ["a treated Claude conversation", TOOLS_MEASURED, "claude", conversationIn("tool-search", true), true, { turnIndex: 0, toolSearchArm: true }],
+    ["a control Claude conversation", TOOLS_MEASURED, "claude", conversationIn("tool-search", false), false, { turnIndex: 0, toolSearchArm: false }],
+    ["a Claude conversation with nothing held out", SandboxSettingsSchema.parse({ toolSearchHoldout: 0, stableSystemPromptHoldout: 0 }), "claude", "c-tools", true, { turnIndex: 0 }],
+    ["a Claude conversation with the switch off", SandboxSettingsSchema.parse({ toolSearch: false, stableSystemPromptHoldout: 0 }), "claude", "c-tools", false, { turnIndex: 0 }],
+    ["a Claude turn with no conversation", TOOLS_MEASURED, "claude", undefined, true, {}],
+    ["native Codex, which the switch does not reach", TOOLS_MEASURED, "codex", conversationIn("tool-search", true), undefined, { turnIndex: 0 }],
+] as const)("tool search on %s", (_case, settings, agent, conversationId, toolSearch, experiments) => {
+    const decision = decided({ ...FACTS, settings }, turn({ agent, ...opt("conversationId", conversationId) }));
+
+    expect(decision.context.toolSearch).toBe(toolSearch);
+    expect(decision.experiments).toEqual(experiments);
+});
+
+// the stable prompt: the Claude Code loop draws an arm, and the arm decides where the moving guidance is said
+
+const STABLE_MEASURED = SandboxSettingsSchema.parse({ stableSystemPromptHoldout: 0.5, toolSearchHoldout: 0 });
+
+test.each([
+    ["a treated Claude conversation", STABLE_MEASURED, "claude", conversationIn("stable-system-prompt", true), true, { turnIndex: 0, stablePromptArm: true }],
+    ["a control Claude conversation", STABLE_MEASURED, "claude", conversationIn("stable-system-prompt", false), false, { turnIndex: 0, stablePromptArm: false }],
+    ["a conversation with nothing held out", SandboxSettingsSchema.parse({ stableSystemPromptHoldout: 0, toolSearchHoldout: 0 }), "claude", "c-stable", true, { turnIndex: 0 }],
+    ["a conversation with the switch off", SandboxSettingsSchema.parse({ stableSystemPrompt: false, toolSearchHoldout: 0 }), "claude", "c-stable", false, { turnIndex: 0 }],
+    ["native Codex, whose guidance holds nothing that moves", STABLE_MEASURED, "codex", conversationIn("stable-system-prompt", true), undefined, { turnIndex: 0 }],
+] as const)("the stable prompt on %s", (_case, settings, agent, conversationId, stablePrompt, experiments) => {
+    const decision = decided({ ...FACTS, settings }, turn({ agent, conversationId }));
+
+    expect(decision.context.base.spec.stablePrompt).toBe(stablePrompt);
     expect(decision.experiments).toEqual(experiments);
 });
 
@@ -467,6 +506,7 @@ const ALL_MEASURED = SandboxSettingsSchema.parse({
     workspaceMapHoldout: 0.5,
     fieldNotes: true,
     fieldNotesHoldout: 0.5,
+    ...TOOLS_UNMEASURED,
 });
 const MEASURED_FACTS: AdmittedTurnFacts = { ...FACTS, settings: ALL_MEASURED, iqTeaching: TEACHING, mapNote: MAP, fieldNotes: BRIEF };
 

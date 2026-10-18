@@ -143,6 +143,14 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         terms: () => [t(`sandbox.agentCommandOutput.cleanCommandOutput`), t(`sandbox.search.agentCommandOutput`)],
     },
     {
+        id: `agent-tool-loading`,
+        slug: `agent`,
+        part: `tools`,
+        partLabel: () => t(`sandbox.sandboxAgent.tools`),
+        title: () => t(`sandbox.agentToolLoading.group`),
+        terms: () => [t(`sandbox.agentToolLoading.onDemand`), t(`sandbox.search.agentToolLoading`)],
+    },
+    {
         id: `agent-chat-pages`,
         slug: `agent`,
         part: `tools`,

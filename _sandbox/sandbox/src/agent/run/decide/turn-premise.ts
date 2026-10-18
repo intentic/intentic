@@ -54,8 +54,16 @@ export interface TurnPremise {
         readonly search: boolean | undefined;
         readonly map: boolean | undefined;
         readonly notes: boolean | undefined;
+        readonly toolSearch: boolean | undefined;
+        readonly stablePrompt: boolean | undefined;
     };
     readonly iqSearchEnabled: boolean;
+    // Whether the CLI defers connected tools' schemas behind its tool search; undefined leaves the CLI's own rule, on a
+    // turn the switch does not reach.
+    readonly toolSearch: boolean | undefined;
+    // Whether the guidance that moves between turns rides the message instead of the system block; the Claude Code loop
+    // only, the one runtime whose guidance holds such entries.
+    readonly stablePrompt: boolean | undefined;
     // Workspace-relative: the card's own folder, else the one the conversation latched at its first turn.
     readonly startIn: string | undefined;
     readonly send: { readonly map: boolean; readonly landingChecks: boolean; readonly iqTeaching: boolean };
@@ -79,6 +87,10 @@ const mapDue = (settings: SandboxSettings, arm: boolean | undefined, input: Agen
 const landingChecksDue = (input: AgentTurn, entry: ConversationEntry | undefined, turns: number): boolean =>
     (turns === 0 && input.forkOf === undefined) || compactedSinceLastTurn(entry, turns);
 
+// Native Claude on the Claude Code loop: the one serving that both runs the CLI's tool search and is known to answer its
+// beta. A translator or minted endpoint wears Anthropic's wire over a vendor that may not.
+const toolSearchReaches = (runtime: TurnRuntime): boolean => runtime.provider === "claude" && runtime.capabilities.runtime === "claude-code";
+
 // The Claude Code loop loads the teaching as a plugin; every other runtime is sent it once, then carried by its session.
 const iqTeachingDue = (runtime: TurnRuntime, enabled: boolean): boolean =>
     runtime.capabilities.runtime !== "claude-code" && enabled && runtime.conversationTurns === 0;
@@ -101,11 +113,24 @@ export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRu
     // A conversation the map never reaches is out of the experiment, not in its control group.
     const sendsMap = mapped(briefing, entry);
     const map = sendsMap ? armOf(EXPERIMENTS.workspaceMap, settings, input.conversationId) : undefined;
+    // A conversation the switch never reaches is out of the experiment, not in its control group.
+    const reaches = toolSearchReaches(runtime);
+    const toolSearchArm = reaches ? armOf(EXPERIMENTS.toolSearch, settings, input.conversationId) : undefined;
+    const loop = runtime.capabilities.runtime === "claude-code";
+    const stableArm = loop ? armOf(EXPERIMENTS.stablePrompt, settings, input.conversationId) : undefined;
     return {
         persona,
         briefing,
-        arms: { search, map, notes: armOf(EXPERIMENTS.fieldNotes, settings, input.conversationId) },
+        arms: {
+            search,
+            map,
+            notes: armOf(EXPERIMENTS.fieldNotes, settings, input.conversationId),
+            toolSearch: toolSearchArm,
+            stablePrompt: stableArm,
+        },
         iqSearchEnabled,
+        toolSearch: reaches ? (toolSearchArm ?? EXPERIMENTS.toolSearch.on(settings)) : undefined,
+        stablePrompt: loop ? (stableArm ?? EXPERIMENTS.stablePrompt.on(settings)) : undefined,
         startIn: persona.workspace?.startIn ?? entry?.identity.startIn ?? input.startIn,
         send: {
             map: sendsMap && mapDue(settings, map, input, runtime.conversationTurns),

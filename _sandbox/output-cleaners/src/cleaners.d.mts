@@ -103,3 +103,6 @@ export const collapseCached: (
     store: CacheStore,
     retain?: () => string | undefined,
 ) => { body: string; cached: boolean };
+
+// The generic stages for an MCP tool's text (text-shaping.mjs).
+export { cleanToolText } from "./text-shaping.mjs";

@@ -4902,6 +4902,24 @@
             "notCovered": "Bez czyściciela",
             "runs": "{count} uruchomienie | {count} uruchomienia | {count} uruchomień"
         },
+        "agentToolLoading": {
+            "group": "Co niesie każde zapytanie",
+            "onDemand": "Wczytuj podłączone narzędzia na żądanie",
+            "onDemandDescription": "Nie wysyłaj opisów narzędzi przeglądarek, urządzeń, kont i telefonów z każdym zapytaniem, dopóki agent ich nie wyszuka. Narzędzia, których używa w każdej turze, zostają wczytane.",
+            "onDemandShort": "Na żądanie",
+            "allLoaded": "Wszystkie wczytane",
+            "ofConversationsLoadEverything": "rozmów wczytuje wszystkie narzędzia od razu",
+            "stable": "Utrzymuj instrukcje bez zmian między turami",
+            "stableDescription": "Mów, kto patrzy i które z twoich komputerów, przeglądarek i telefonów są podłączone, w wiadomości i tylko po zmianie, żeby instrukcje zostały w pamięci podręcznej przez całą rozmowę.",
+            "stableShort": "Stałe",
+            "stableMoving": "Przepisywane w każdej turze",
+            "ofConversationsKeepMoving": "rozmów trzyma te wiersze w instrukcjach",
+            "coldTrim": "Przycinaj stare wyniki narzędzi po długiej przerwie",
+            "coldTrimDescription": "Gdy duża rozmowa wraca po wygaśnięciu pamięci podręcznej, wznawiaj ją z wyczyszczonymi starszymi wynikami narzędzi, każdy z notatką, jak go odzyskać. Wszystkie wiadomości i wywołania narzędzi zostają.",
+            "coldTrimShort": "Przycięte",
+            "coldTrimWhole": "Całe",
+            "ofConversationsResumeWhole": "rozmów wznawia się w całości"
+        },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Wprowadzaj skończoną pracę wprost do przestrzeni roboczej jako niezacommitowane zmiany.",
             "archiveFinishedAgents": "Archiwizuj skończone agenty",
@@ -6455,7 +6473,9 @@
                 "callsBeforeTarget": "Wywołania narzędzi przed właściwym plikiem",
                 "failedCalls": "Nieudane wywołania narzędzi na turę",
                 "openedWithListing": "Pierwsze tury z listowaniem katalogów",
+                "openingPrompt": "Tokeny promptu na zapytanie",
                 "openingSearches": "Wyszukiwania przed otwarciem pliku",
+                "openingWrite": "Prompt zapisany ponownie na kolejną turę",
                 "outputReached": "Wyjście docierające do agenta",
                 "searchCalls": "Wyszukiwania na turę"
             },
@@ -6477,7 +6497,9 @@
                 "callsBeforeTarget": "Dotąd około {count} wywołań narzędzi mniej.",
                 "failedCalls": "Dotąd około {count} nieudanych wywołań mniej.",
                 "openedWithListing": "Dotąd około {count} pierwszych tur mniej z listowaniem katalogów.",
+                "openingPrompt": "Dotąd około {count} tokenów promptu mniej.",
                 "openingSearches": "Dotąd około {count} wyszukiwań mniej.",
+                "openingWrite": "Dotąd około {count} tokenów promptu mniej zapisanych ponownie.",
                 "searchCalls": "Dotąd około {count} wyszukiwań mniej."
             },
             "tooEarly": "Za wcześnie, by ocenić",
@@ -7460,6 +7482,9 @@
             "redactSecrets": "zamazuj sekrety",
             "refusedOutputGrew": "odrzucone (wyjście urosło)",
             "retrievalFooter": "stopka do odzyskiwania",
+            "logTemplates": "szablony logów",
+            "jsonTables": "tabele JSON",
+            "searchFairness": "równy podział wyników między pliki",
             "searchHits": "trafienia wyszukiwania",
             "terminalEscapes": "sekwencje sterujące terminala",
             "testRunners": "uruchamiacze testów"
@@ -9164,6 +9189,7 @@
             "agentDocumentSearch": "pdf, word, docx, excel, xlsx, arkusz kalkulacyjny, powerpoint, pliki, dokumenty",
             "agentRepoChecks": "lint, linter, sprawdzanie typów, typecheck, testy, hooki, weryfikacja",
             "agentCommandOutput": "tokeny, przycinanie, logi, kompresja, szum, skróć wynik",
+            "agentToolLoading": "narzędzia, wyszukiwanie narzędzi, schematy, odroczone, rozmiar promptu, tokeny, MCP, pamięć podręczna, stały prompt, instrukcje",
             "agentChatPages": "html, wykres, makieta, mockup, diagram, artefakt, strona w czacie, wizualizacja",
             "agentVoice": "tts, synteza mowy, tekst na mowę, czytaj na głos, mów, bez użycia rąk, odpowiedzi głosowe, tempo mowy",
             "agentSpeechProvider": "elevenlabs, openai, dostawca tts, api głosowe, klucz api, api key",

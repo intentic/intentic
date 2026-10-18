@@ -418,7 +418,8 @@ test("a coded session-probe refusal is not swallowed as permission to resume", a
         { kind: "error", code: "agent-domain-refused", message: "synthetic session execution refused", unattended: true },
         { kind: "done" },
     ]);
-    expect(turn.operations).toEqual(["policy", "environment", "repo-sync", "session-probe"]);
+    // Settings come before the probe: whether a cold follow-up resumes a trimmed copy is decided first (turn/cold-trim.ts).
+    expect(turn.operations).toEqual(["policy", "environment", "repo-sync", "settings", "session-probe"]);
     expect(turn.planned).toEqual([]);
     expect(turn.ran).toEqual([]);
     // Only the refusal's own line (stream-agent.ts runTurn), never the probe-failure warning an ordinary failure gets.

@@ -1,3 +1,5 @@
+import { z } from "zod";
+import type { ToolOutput } from "../../guard/mcp-output.js";
 import type { Context } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import { bearerFrom } from "../../auth/auth.js";
@@ -80,8 +82,14 @@ const answerRpc = async (c: Context<AppEnv>, handle: (message: RpcMessage) => Pr
     return answer === undefined ? c.body(null, 202) : c.json(answer);
 };
 
+const ToolCallSchema = z.object({ name: z.string() });
+
 export const createTurnMountRoute =
-    (mounts: Pick<TurnMounts, "resolve">, endpoints: MountEndpoints) =>
+    (
+        mounts: Pick<TurnMounts, "resolve">,
+        endpoints: MountEndpoints,
+        clean?: (tool: string, result: ToolOutput, conversationId: string | undefined) => Promise<ToolOutput>,
+    ) =>
     async (c: Context<AppEnv>): Promise<Response> => {
         const name = c.req.param("mount") ?? "";
         const reach = mounts.resolve(bearerFrom(c.req.header("authorization")), name);
@@ -96,5 +104,21 @@ export const createTurnMountRoute =
         if (target.kind === "extension") {
             return endpoints.extension(target, c, call);
         }
-        return answerRpc(c, rpcOf(endpoints, target, call));
+        const handle = rpcOf(endpoints, target, call);
+        return answerRpc(c, async (message) => {
+            const answer = await handle(message);
+            // Daemon servers already pass through sealedDoor. Transport messages and notifications are untouched.
+            const toolCall = message.method === "tools/call" ? ToolCallSchema.safeParse(message.params) : undefined;
+            if (
+                reach.cleanOutput === false ||
+                target.kind === "daemon" ||
+                clean === undefined ||
+                toolCall?.success !== true ||
+                answer?.result === undefined
+            ) {
+                return answer;
+            }
+            const result = await clean(`mcp__${name}__${toolCall.data.name}`, answer.result, call.conversationId);
+            return result === answer.result ? answer : { ...answer, result };
+        });
     };

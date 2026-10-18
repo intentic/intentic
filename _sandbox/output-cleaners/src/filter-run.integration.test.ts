@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { filterRun } from "./agent-output-filter.mjs";
 import { CACHE_MARKER } from "./cleaners.mjs";
-import { parseStatsFile } from "./filter-stats.mjs";
+import { parseStatsFile, summarizeStats } from "./filter-stats.mjs";
 
 // filterRun is the pass both runtimes share (the sandbox's pane pipeline and the Claude Code plugin's hook), so these
 // pin what it keeps under logsDir and that a keeping failure never costs the trim itself.
@@ -23,7 +23,7 @@ afterEach(() => {
 
 // Past the generic cap (30 head, an elision marker and 50 tail of anything over 100 lines), so the footer names the
 // retained raw text.
-const LONG = `${Array.from({ length: 300 }, (_, index) => `progress line ${index}`).join("\n")}\n`;
+const LONG = `${Array.from({ length: 300 }, (_, index) => `progress ${index % 2 === 0 ? "started" : "finished"} ${index}`).join("\n")}\n`;
 
 test("keeps the raw text a footer names and ledgers one row per command", () => {
     const logsDir = tempDir();
@@ -76,4 +76,44 @@ test("the same output twice in one session collapses to a pointer at the first",
 test("without a logs directory nothing is kept and the trim still happens", () => {
     const { out } = filterRun(LONG, { command: "./build.sh" });
     expect(out).toContain("--- [exit 0, 0s] 300 lines filtered to 81\n");
+});
+
+test("new stages ledger their own savings and remain absent from holdout rows", () => {
+    const logsDir = tempDir();
+    const samples = [
+        {
+            id: "templates",
+            command: "node worker.js",
+            raw: Array.from({ length: 30 }, (_, index) => `INFO worker processed job ${index} in ${index}ms`).join("\n"),
+        },
+        {
+            id: "csv-schema",
+            command: "gh api",
+            raw: JSON.stringify(Array.from({ length: 20 }, (_, identifier) => ({ identifier, description: "ready", enabled: true }))),
+        },
+        {
+            id: "search",
+            command: "rg -n match",
+            raw: Array.from({ length: 200 }, (_, index) => `src/file${index % 4}.ts:${index + 1}:match text`).join("\n"),
+        },
+    ];
+    for (const sample of samples) {
+        const options = { command: sample.command, enabled: new Set([sample.id]), logsDir, runName: `${sample.id}.log`, now: () => 1234 };
+        const cleaned = filterRun(sample.raw, options);
+        expect(cleaned.stages.find((stage) => stage.id === sample.id)?.saved).toBeGreaterThan(0);
+        const held = filterRun(sample.raw, { ...options, holdout: 1, random: () => 0 });
+        expect(held.out).toBe(sample.raw);
+        expect(held.stages).toEqual([]);
+    }
+    const rows = parseStatsFile(readFileSync(join(logsDir, "filter-stats.jsonl"), "utf8"));
+    expect(rows).toHaveLength(6);
+    for (const [index, sample] of samples.entries()) {
+        expect(rows[index * 2]?.stageBytes?.[sample.id]).toBeGreaterThan(0);
+        expect(rows[index * 2 + 1]?.stageBytes).toEqual({});
+    }
+    const summary = summarizeStats(rows);
+    expect(summary.holdout).toEqual({ cleaned: 3, heldOut: 3 });
+    for (const sample of samples) {
+        expect(summary.perCleaner.find((stage) => stage.id === sample.id)?.savedTokens).toBeGreaterThan(0);
+    }
 });

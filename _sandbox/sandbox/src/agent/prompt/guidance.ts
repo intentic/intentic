@@ -52,7 +52,15 @@ type GuidanceEntry =
     // Said only to a runtime outside the Claude Code loop, in place of a loop entry naming what that runtime has no way to load.
     | { readonly id: string; readonly reach: "outside"; readonly text: string }
     // Names a tool, skill or hook only the Claude Code loop mounts; `when` holds it to the turns that mounted it.
-    | { readonly id: string; readonly reach: "loop"; readonly when?: (facts: LoopFacts) => boolean; readonly text: LoopText };
+    // `volatile` marks an entry whose condition moves between two turns of one conversation (who is watching, which of
+    // the owner's machines is online): under a stable prompt it leaves the system block for the turn's own message.
+    | {
+          readonly id: string;
+          readonly reach: "loop";
+          readonly when?: (facts: LoopFacts) => boolean;
+          readonly text: LoopText;
+          readonly volatile?: true;
+      };
 
 // What the `search` entry says for each tool, as data: the iq teaching's cohort hashes the iq half
 // (iq-search-instruction.ts), since it is part of what that experiment's arm is told.
@@ -256,6 +264,7 @@ const ENTRIES: readonly GuidanceEntry[] = [
     },
     {
         id: "unwatched",
+        volatile: true,
         reach: "loop",
         // An automation, a loop or a scheduled wake: nobody is at the composer when it starts.
         when: ({ unattended }) => unattended,
@@ -454,12 +463,14 @@ const ENTRIES: readonly GuidanceEntry[] = [
     },
     {
         id: "devices",
+        volatile: true,
         reach: "loop",
         when: hasDevices,
         text: (facts) => devicesFull(devicesOf(facts)),
     },
     {
         id: "own-browser",
+        volatile: true,
         // After the devices, so the sentence choosing between the two reads last.
         reach: "loop",
         when: (facts) => browsersOf(facts).browsers.length > 0,
@@ -467,18 +478,21 @@ const ENTRIES: readonly GuidanceEntry[] = [
     },
     {
         id: "unlisted-browser",
+        volatile: true,
         reach: "loop",
         when: (facts) => browsersOf(facts).unlisted.length > 0,
         text: (facts) => unlistedFull(browsersOf(facts)),
     },
     {
         id: "own-phone",
+        volatile: true,
         reach: "loop",
         when: (facts) => phonesOf(facts).phones.length > 0,
         text: (facts) => ownPhoneFull(phonesOf(facts)),
     },
     {
         id: "unlisted-phone",
+        volatile: true,
         reach: "loop",
         when: (facts) => phonesOf(facts).unlisted.length > 0,
         text: (facts) => unlistedPhones(phonesOf(facts)),
@@ -498,7 +512,36 @@ const textOf = (entry: GuidanceEntry, loop: LoopFacts | undefined, turn: TurnFac
     return typeof entry.text === "string" ? entry.text : entry.text(loop);
 };
 
+const isVolatile = (entry: GuidanceEntry): boolean => entry.reach === "loop" && entry.volatile === true;
+
 // The guidance block under its heading. `loop` undefined is a runtime outside the Claude Code loop, which is told only
-// what holds for every runtime.
-export const guidanceBlock = (loop: LoopFacts | undefined, search: SearchTool): string =>
-    [GUIDANCE_HEADER, ...ENTRIES.flatMap((entry) => textOf(entry, loop, { search }) ?? [])].join("\n\n");
+// what holds for every runtime. `stable` leaves the volatile entries out: they ride the turn's message instead
+// (surroundingsNote), so the block reads the same on every turn of a conversation.
+export const guidanceBlock = (loop: LoopFacts | undefined, search: SearchTool, stable = false): string =>
+    [GUIDANCE_HEADER, ...ENTRIES.flatMap((entry) => (stable && isVolatile(entry) ? [] : (textOf(entry, loop, { search }) ?? [])))].join("\n\n");
+
+/* THE VOLATILE ENTRIES AS A NOTE ON THE TURN'S OWN MESSAGE.
+
+   Who is watching and which of the owner's machines, browsers and phones are online change between two turns of one
+   conversation. In the system block every such change rewrote the whole conversation to the provider's cache (2026-10-18:
+   46% of back-to-back turns inside the cache window opened under a different prompt, writing 46.7k tokens against
+   19.3k), and where Claude Code records a session's system prompt once (the SDK's `snapshot`, rolling out per account)
+   the change never reached the model at all. Said on the message, it costs what it says, once, and only when it moved. */
+
+export const SURROUNDINGS_TITLE = "Connected right now";
+const SURROUNDINGS_HEADER = `## ${SURROUNDINGS_TITLE}`;
+
+// What a turn says when an earlier note under this heading named something that no longer holds, and nothing does now.
+export const SURROUNDINGS_CLEARED =
+    `${SURROUNDINGS_HEADER}\n\nNothing an earlier note under this heading named holds any more: none of the owner's own ` +
+    "computers, browsers or phones is connected to this turn, and a person is at the composer.";
+
+// The facts the volatile entries read; every other loop fact is the session's own and stays in the system block.
+export type SurroundingsFacts = Pick<LoopFacts, "unattended" | "hostDevices" | "ownBrowsers" | "ownPhones">;
+
+// The note's text for these facts, under its heading; undefined when no volatile entry applies.
+export const surroundingsText = (facts: SurroundingsFacts): string | undefined => {
+    const loop: LoopFacts = { ...facts, browserOutputDir: undefined, browserAccounts: false, desktop: false, diagnostics: false, terminal: false };
+    const paragraphs = ENTRIES.filter(isVolatile).flatMap((entry) => textOf(entry, loop, { search: "rg" }) ?? []);
+    return paragraphs.length === 0 ? undefined : [SURROUNDINGS_HEADER, ...paragraphs].join("\n\n");
+};

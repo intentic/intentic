@@ -113,6 +113,7 @@ export const trimmedTurn = async <T extends AgentTurn & { readonly sessionId?: s
     services: Pick<Services, "agents" | "agentWorktrees" | "logger">,
     turn: T,
     held: { readonly contextTokens?: number | undefined } | undefined,
+    options?: { readonly dropUnanswered: boolean },
 ): Promise<{ readonly turn: T; readonly event: HandedOff }> => {
     const from = held?.contextTokens;
     if (turn.sessionId === undefined || turn.conversationId === undefined || !runsClaudeCode(turn)) {
@@ -121,7 +122,7 @@ export const trimmedTurn = async <T extends AgentTurn & { readonly sessionId?: s
     try {
         const copy = await writeSessionCopy(sessionStoreOf(services, turn.conversationId), turn.sessionId, {
             keep: TRIM_KEEPS_RESULTS,
-            dropUnanswered: true,
+            dropUnanswered: options?.dropUnanswered ?? true,
         });
         if (copy === undefined) {
             return { turn, event: { mode: "trim", fellBack: true } };

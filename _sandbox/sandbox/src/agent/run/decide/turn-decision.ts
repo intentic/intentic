@@ -1,3 +1,4 @@
+import { compactedSinceLastTurn } from "../../../conversations/registry/agents-store.js";
 import { type AccountRoute, heldForAccountMessage } from "../../providers/accounts/blocked-account.js";
 import { routingFor } from "../../../conversations/registry/routing.js";
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
@@ -148,6 +149,8 @@ const sharedContext = (
     settings,
     conversationTurns: runtime.conversationTurns,
     iqSearchEnabled: premise.iqSearchEnabled,
+    ...opt("toolSearch", premise.toolSearch),
+    ...opt("compacted", compactedSinceLastTurn(facts.entry, runtime.conversationTurns) ? true : undefined),
     ...opt("contextTrim", trim),
     ...opt("iqSearchCohort", facts.iqTeaching?.cohort),
 });
@@ -166,6 +169,9 @@ const experimentsOf = (
         workspaceMap: { arm: premise.arms.map, notes: sent },
         fieldNotes: notes,
         turnContext: facts.turnContext,
+        toolSearch: { arm: premise.arms.toolSearch },
+        stablePrompt: { arm: premise.arms.stablePrompt },
+        coldTrim: undefined,
     });
 
 // A turn acting as a card this workspace lacks runs with nothing, while its prompt still reads as if it had everything.

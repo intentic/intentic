@@ -1,3 +1,4 @@
+import { recordSurroundingsSaid } from "../prompt/surroundings.js";
 import { randomUUID } from "node:crypto";
 import { anySignal } from "@intentic/base/async";
 import { readableProviderText } from "../../engines/provider-error-text.js";
@@ -18,7 +19,6 @@ import { createOutboundSniffer } from "../../activity/outbound.js";
 import { turnCliEnv } from "./harness/turn-env.js";
 import type { Services } from "../../composition.js";
 import { REPO_SYNC_NOTE_TITLE, type RepoSync, syncAdvisory, syncWorkspaceRepos } from "../../workspace/layout/sync-repos.js";
-import { resolveExistingWithin, resolveWithin } from "../../workspace/files/workspace-files-paths.js";
 import { startAnchor, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
 import { NamespaceSetupError, withSetupRetry } from "../../workload/namespace-holder.js";
 import { retryNote, type SetupRefusal, setupRefusalOf } from "./placement/setup-refusal.js";
@@ -28,7 +28,7 @@ import { type PersistedAgent, worktreeOf } from "../../conversations/registry/ag
 import { holdAccount } from "../providers/claude/claude-credentials.js";
 import { ensureComposedWorktree } from "../context/conversation-context.js";
 import { settleLandingInBackground, versionMainTree } from "../../conversations/land/version-landed.js";
-import { handoffHistory, turnStartIndex } from "../../sessions/turn-transcript.js";
+import { turnStartIndex } from "../../sessions/turn-transcript.js";
 import { type ChildSupervisor, childSupervisor, isSpawnedChild, spawnDepthOf } from "../subagents/children.js";
 import { withRuntimeSubagents } from "../subagents/runtime-subagents.js";
 import { checkoutDirtyPaths } from "../tools/agent-shell-edits.js";
@@ -50,10 +50,12 @@ import { beginPulse, endPulse, pulseFrame } from "./turn/turn-pulse.js";
 import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";
 import { editorContextNote } from "./turn/turn-interactions.js";
 import { withRuntimeHistory } from "../../sessions/vocabulary/runtime-history.js";
-import { summaryNote, trimmedTurn } from "../providers/limit-handoff.js";
+import { summaryNote } from "../providers/limit-handoff.js";
 import { handoffStateNote } from "../prompt/handoff-state.js";
 import { nameAgentTitle } from "../models/title-namer.js";
-import { planTurn, type TurnPlan } from "./turn/turn-plan.js";
+import { sessionToResume, handoffOf, attachmentsOf } from "./turn/turn-preflight-input.js";
+import { resumeTrimTurn, trimDelivery, type ColdTrimBasis } from "./turn/cold-trim.js";
+import { planTurn, type TurnPlan, type TurnExperimentStamps } from "./turn/turn-plan.js";
 import { classifyFailure, type ErrorFrame, type FailureContext, type FailureQueries } from "./frames/classify-failure.js";
 import { abortSuppresses, type Attribution, decorateFrame, silenceOf, silentEnding, withSilentEnding } from "./frames/frame-decorators.js";
 import { performFailureWrites, providerAnswered, recordFrame, turnActivity } from "./frames/frame-effects.js";
@@ -182,7 +184,13 @@ const placementOf = (
     admission: AgentExecutionAdmission,
     signal: AbortSignal | undefined,
     steering: SteeringQueue | undefined,
-    conversation: { readonly id: string; readonly snapshot: SnapshotTurn; readonly runner: string | undefined; readonly isolated: boolean },
+    conversation: {
+        readonly id: string;
+        readonly snapshot: SnapshotTurn;
+        readonly runner: string | undefined;
+        readonly isolated: boolean;
+        readonly coldTrimBasis: ColdTrimBasis | undefined;
+    },
 ): Placement => {
     const { id, snapshot, runner } = conversation;
     if (runner !== undefined) {
@@ -199,7 +207,10 @@ const placementOf = (
     // settles, and the whole noted as it closes (turn-reach.ts).
     const reach = reachWatch(services, id);
     if (!conversation.isolated) {
-        return mainTreePlacement(() => runTurn(services, input, admission, signal, undefined, steering, snapshot, reach), reach);
+        return mainTreePlacement(
+            () => runTurn(services, input, admission, signal, undefined, steering, snapshot, reach, conversation.coldTrimBasis),
+            reach,
+        );
     }
     return worktreePlacement(
         services,
@@ -207,7 +218,7 @@ const placementOf = (
         {
             compose: (base) => ensureComposedWorktree(services, input, id, base, entersNamespace(input), true),
             versionMain: (repos) => versionMainTree(services, repos),
-            run: (worktree) => runTurn(services, input, admission, signal, worktree, steering, snapshot, reach),
+            run: (worktree) => runTurn(services, input, admission, signal, worktree, steering, snapshot, reach, conversation.coldTrimBasis),
             settleLanding: (conversationId) => settleLandingInBackground(services, conversationId),
             fix: (span) => runWorktreeFixers(services, id, span),
         },
@@ -276,6 +287,8 @@ async function* runConversationTurn(
         return;
     }
     const isolated = isolatedOf(existing, input, runner);
+    // begin starts fresh turn readings; retain the last measured cache clock, including keep-warm refreshes.
+    const coldTrimBasis = services.conversations.state(conversationId)?.turn;
     const begin = services.conversations.send(conversationId, {
         kind: "begin",
         turn: conversationIdentity(input, conversationId, { isolated, runner }),
@@ -304,7 +317,7 @@ async function* runConversationTurn(
         yield* placedTurn(
             services.conversations,
             conversationId,
-            placementOf(services, input, admission, signal, steering, { id: conversationId, snapshot, runner, isolated }),
+            placementOf(services, input, admission, signal, steering, { id: conversationId, snapshot, runner, isolated, coldTrimBasis }),
             turnCloser(services, conversationId, steering, signal),
         );
     } finally {
@@ -378,60 +391,6 @@ const handoffNoteFor = async (
               checklist: held?.checklist,
               retiredSessionId: held?.sessionId ?? services.agents.entry(input.conversationId)?.sessionId,
           });
-
-// The session to resume, or none if the runtime no longer holds it, which opens a fresh session seeded from the record
-// instead. A store that can't be probed is trusted, not doubted.
-// Only a backstop: which session a turn continues is decided before it gets here, on the runtime and account that minted it
-// (conversations/registry/routing.ts sessionFor). What this probe catches is a session that decision rightly named and the
-// runtime has since lost (a pruned store, a recreated container), never one named for the wrong provider.
-const sessionToResume = async (services: Services, input: RoutedTurn, execution: AgentExecutionContext): Promise<string | undefined> => {
-    const { sessionId } = input;
-    if (sessionId === undefined) {
-        return undefined;
-    }
-    const adapter = services.adapters.for(input.agent, input.harness);
-    const held = await services.perf
-        .track("turn.preflight.session", {}, () => adapter.holdsSession(services, sessionId, execution))
-        .catch((error: unknown) => {
-            if (error instanceof AgentDomainRefusedError) { throw error; }
-            services.logger.warn({ err: error, sessionId }, "session probe failed, resuming as asked");
-            return true;
-        });
-    return held ? sessionId : undefined;
-};
-
-// Resuming no session is a runtime handoff, seeded from the record read before this turn appends its own, less the
-// runs the door turned away before this turn sent their words again: the model never saw those rows.
-const handoffOf = async (services: Services, input: RoutedTurn, resumed: string | undefined): Promise<readonly TranscriptRow[]> => {
-    if (resumed !== undefined || input.conversationId === undefined) {
-        return [];
-    }
-    const rows = await handoffHistory(services, { ...input, conversationId: input.conversationId });
-    const unseen = new Set(input.unseenRuns ?? []);
-    return unseen.size === 0 ? rows : rows.filter((row) => row.run === undefined || !unseen.has(row.run));
-};
-
-// Attachments arrive workspace-relative; resolved to absolute paths for the provider, escapes rejected. The run route
-// refuses these at the door, so reaching a refusal is a turn replayed from a record (resume, fork, a runner). Mentions
-// are a tokenizer's reading of the message, not files the user picked: one that escapes or names nothing is dropped,
-// since a `@path` pasted inside terminal output must not be able to kill the turn.
-const attachmentsOf = async (root: string, input: RoutedTurn): Promise<{ readonly paths: string[] } | { readonly refused: string }> => {
-    const paths: string[] = [];
-    for (const rel of input.attachments ?? []) {
-        const abs = resolveWithin(root, rel);
-        if (abs === undefined) {
-            return { refused: `invalid attachment path: ${rel}` };
-        }
-        paths.push(abs);
-    }
-    const mentioned = await resolveExistingWithin(root, input.mentions);
-    paths.push(...mentioned.filter((abs) => !paths.includes(abs)));
-    // The editor-context chip's file rides workspace-relative too, same escape guard as attachments.
-    if (input.editorContext !== undefined && resolveWithin(root, input.editorContext.file) === undefined) {
-        return { refused: `invalid editor context path: ${input.editorContext.file}` };
-    }
-    return { paths };
-};
 
 // A fenced conversation runs only where its fence holds: inside a sandbox (turn-sandbox.ts), under a runtime whose own
 // state the sandbox can carry. Codex and Cursor keep one sandbox-wide home holding every conversation's sessions, and a
@@ -596,6 +555,7 @@ interface Preflight {
     readonly handoffNotes: readonly TurnNote[];
     // How a spent allowance's held turn continued, where a person had a choice of ways (agent/providers/limit-handoff.ts).
     readonly handedOff: HandedOff | undefined;
+    readonly coldTrimStamps: TurnExperimentStamps;
     readonly repoSync: Promise<RepoSync[]> | undefined;
     readonly carriedOff: boolean;
 }
@@ -627,6 +587,7 @@ const preflight = async (
     worktree: WorktreeRun | undefined,
     steering: SteeringQueue | undefined,
     clock: ReturnType<typeof preflightClock>,
+    coldTrimBasis: ColdTrimBasis | undefined,
 ): Promise<Preflight | { readonly refused: string } | SetupRefusal> => {
     const held = supersedeHeld(services, input.conversationId);
     // Shared with the boot-time condition-watch restore, so a drifted second copy can't quietly stop working.
@@ -656,10 +617,12 @@ const preflight = async (
                   return [];
               });
     // A trimmed hand-off resumes a copy of the session with older tool output cleared, written before the store is asked.
-    const trimmed = input.resume === "trimmed" ? await trimmedTurn(services, input, held) : undefined;
-    const turnInput = trimmed?.turn ?? input;
+    const settings = await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get());
+    const trim = await resumeTrimTurn(services, input, settings, held, coldTrimBasis);
+    const turnInput = trim.turn;
     // Asks the runtime's store whether it still holds the named session: a session id is a claim, not a fact.
     const resumed = await sessionToResume(services, turnInput, execution);
+    const delivery = trimDelivery(trim, resumed);
     const history = await handoffOf(services, turnInput, resumed);
     // What is TRUE beside what was said, measured by the sandbox; rides the request as one more note.
     const handoffNote = await handoffNoteFor(services, input, history, held);
@@ -667,9 +630,9 @@ const preflight = async (
         input.resume === "summarized" && history.length > 0 && input.conversationId !== undefined
             ? await summaryNote(services, execution, { conversationId: input.conversationId, rows: history, contextTokens: held?.contextTokens, signal })
             : undefined;
-    const handedOff = trimmed?.event ?? summarized?.event ?? carriedHandoff(input, held);
+    const handedOff =
+        delivery.event ?? summarized?.event ?? carriedHandoff(input, held);
     clock.mark("history");
-    const settings = await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get());
     const base = baseRequestOf(services, turnInput, { execution, history, cwd: effectiveCwd, isolation, signal, cliEnv, resumed });
     const frames = createTurnFrames(effectiveCwd, resumed);
     const context = {
@@ -684,7 +647,17 @@ const preflight = async (
         ...opt("children", childrenOf(services, input, localCwd)),
     };
     const handoffNotes = [...(summarized?.note === undefined ? [] : [summarized.note]), ...(handoffNote === undefined ? [] : [handoffNote])];
-    return { context, isolation, effectiveCwd, frames, handoffNotes, handedOff, repoSync, carriedOff: carriedOffOf(input, held) };
+    return {
+        context,
+        isolation,
+        effectiveCwd,
+        frames,
+        handoffNotes,
+        handedOff,
+        coldTrimStamps: delivery.stamps,
+        repoSync,
+        carriedOff: carriedOffOf(input, held),
+    };
 };
 
 // A refusal that ran nothing, as the frame the chat draws. `unattended` rides with it because the row it becomes
@@ -802,6 +775,7 @@ async function* prepareTurn(
     worktree: WorktreeRun | undefined,
     steering: SteeringQueue | undefined,
     turn: SnapshotTurn | undefined,
+    coldTrimBasis: ColdTrimBasis | undefined,
 ): AsyncGenerator<AgentEvent, PreparedTurn | undefined> {
     const clock = preflightClock();
     // A summary hand-off asks a model before the turn's own does, which takes a while on a long conversation: said.
@@ -809,7 +783,7 @@ async function* prepareTurn(
     if (summarizing) {
         yield { kind: "agent_status", key: HANDOFF_STATUS, text: "Writing a summary of the conversation for the hand-off…" };
     }
-    const ready = await preflight(services, input, executionScope, signal, worktree, steering, clock);
+    const ready = await preflight(services, input, executionScope, signal, worktree, steering, clock, coldTrimBasis);
     if (summarizing) {
         yield { kind: "agent_status", key: HANDOFF_STATUS, text: null };
     }
@@ -821,7 +795,8 @@ async function* prepareTurn(
     if (ready.handedOff !== undefined) {
         yield { kind: "handoff", ...ready.handedOff };
     }
-    const plan = await planTurn(services, input, ready.context);
+    const planned = await planTurn(services, input, ready.context);
+    const plan = planned.ok ? { ...planned, experiments: { ...planned.experiments, ...ready.coldTrimStamps } } : planned;
     if (!plan.ok) {
         // The outer preparation scope owns release, including a generator return while disclosing this refusal.
         yield refusalFrame(plan, input.unattended === true);
@@ -837,6 +812,7 @@ async function* prepareTurn(
     const wire = wireOf(plan, advisory, checkpoint, ready.handoffNotes);
     yield* preambleDisclosure(wire.notes, wire.trim);
     recordSystemPrompt(services, input, wire.request);
+    recordSurroundingsSaid(services.conversations, input.conversationId, { notes: wire.request.spec.notes, fresh: wire.request.spec.sessionId === undefined });
     // An isolated turn takes no history capture: history covers only the main tree, which it never touches.
     if (worktree === undefined) {
         yield* mainTreeCheckpoint(services, turn);
@@ -965,7 +941,7 @@ const announceRuntime = (services: Services, turn: TurnState, run: LiveRun | und
 
 // Account refresh waits for this runtime's gap. Execution ownership lives in the outer preparation scope, not here:
 // that scope also closes on preflight/planning failure and generator return before a runtime ever starts.
-const holdTurn = (account: string | undefined): (() => void) => account !== undefined ? holdAccount(account) : () => {};
+const holdTurn = (account: string | undefined): (() => void) => (account !== undefined ? holdAccount(account) : () => {});
 
 // One agent turn's body, on the main tree or inside an isolated worktree; the cwd override is the one binding point
 // every adapter and session store follows. Prepared and planned, then every frame through the pipeline (suppressed if
@@ -982,11 +958,14 @@ async function* runTurn(
     turn?: SnapshotTurn,
     // Takes the frames' half of where the work went; its placement reads the rest as the turn closes.
     reach?: ReachWatch,
+    coldTrimBasis?: ColdTrimBasis,
 ): AsyncGenerator<AgentEvent> {
     const executionScope = agentExecutionScope(services.agentExecution, admission);
     try {
-        const prepared = yield* prepareTurn(services, input, executionScope, signal, worktree, steering, turn);
-        if (prepared === undefined) { return; }
+        const prepared = yield* prepareTurn(services, input, executionScope, signal, worktree, steering, turn, coldTrimBasis);
+        if (prepared === undefined) {
+            return;
+        }
         yield* runPreparedTurn(services, input, signal, worktree, prepared, reach);
     } catch (error) {
         if (!(error instanceof AgentDomainRefusedError)) { throw error; }

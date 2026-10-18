@@ -62,7 +62,27 @@ Some things ride only a conversation's first message, so turning them on shows i
 map (`workspaceMap`), and, on OpenCode, Pi, Cursor and ACP, the list of skills (those runtimes cannot read the
 skills folder themselves). The map lists every area of the project with its size and purpose;
 `workspaceMapHoldout` is the share of conversations that open without it. The comparison shares
-(`workspaceMapHoldout`, `iqSearchHoldout`, `fieldNotesHoldout`) assign whole conversations, not turns.
+(`workspaceMapHoldout`, `iqSearchHoldout`, `fieldNotesHoldout`, `toolSearchHoldout`, `stableSystemPromptHoldout`,
+`coldTrimHoldout`) assign whole conversations, not turns.
+
+`toolSearch` (on by default) keeps the descriptions of connected tools (browsers, devices, accounts, phones) out of
+every request until the agent looks one up with ToolSearch; the tools it uses every turn stay loaded. It applies to
+Claude models on the Claude Code loop, shielded or not. `toolSearchHoldout` (half by default) is the share of
+conversations that load every tool up front instead, so the saving is measured: Sandbox ▸ Agent ▸ Tools shows the
+prompt size per request on both sides.
+
+`stableSystemPrompt` (on by default) keeps the instructions identical between turns of a conversation. The paragraphs
+whose condition moves between turns (whether anyone is watching, which of the owner's computers, browsers and phones
+are connected) ride the turn's message under "Connected right now" instead, and only on a turn where they changed, or
+the first one after a restart or a compaction. In the instructions, every such change rewrote the whole conversation to
+the provider's cache. `stableSystemPromptHoldout` (half by default) keeps them in the instructions for that share of
+conversations; the same Tools page shows how much prompt each side wrote again per follow-up turn.
+
+`coldTrim` (on by default) applies to native Claude Code follow-ups above `coldTrimMinTokens` (100,000 measured
+context tokens): once the known cache deadline has passed by 30 seconds, the turn resumes a copy with older tool output
+cleared and recovery directions in its place. Half of conversations carry the whole session instead by default
+(`coldTrimHoldout: 0.5`). Unknown cache timing, forks, held hand-offs and compacted sessions stay whole. A trim is shown
+in the conversation; the original session remains available.
 
 Changing the model within the same provider keeps the conversation's session. Changing the provider, the loop
 (harness) or the account starts a fresh session on the next turn, handed the conversation's record and a "Where the

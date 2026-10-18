@@ -41,6 +41,9 @@ export const DEMO_SETTINGS: SandboxHandlerOutput<`settings`, `get`> = {
     fieldNotes: true,
     fieldNotesBudget: 4000,
     fieldNotesHoldout: 0.2,
+    toolSearch: true,
+    toolSearchHoldout: 0.5,
+    stableSystemPromptHoldout: 0.5,
 };
 
 // What a conversation was told before its first word. Every source at once, because the chip's whole job is to let a

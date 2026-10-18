@@ -80,17 +80,27 @@ const shieldedEnv = (credential: HarnessCredential): Record<string, string> =>
         ? { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", DISABLE_ERROR_REPORTING: "1", DISABLE_TELEMETRY: "1" }
         : {};
 
+// The CLI's tool search, said either way so both arms of the experiment are the switch and not the CLI's own rule, which
+// turns it off for any base URL that is not Anthropic's host, the privacy shield's gateway included. Only for a native
+// Claude credential: the gateway relays `tool_reference` blocks and the beta header as they came, a translator may not.
+const toolSearchEnv = (credential: HarnessCredential, toolSearch: boolean | undefined): Record<string, string> =>
+    toolSearch === undefined || (credential.kind !== "claude-oauth" && credential.kind !== "container")
+        ? {}
+        : { ENABLE_TOOL_SEARCH: toolSearch ? "true" : "false" };
+
 // Env for a Claude Code harness process. `helper` is a sealed request rather than a turn (agent-request.ts
 // `policy.sealed`): a turn tolerates waiting (resumable), a helper should fail fast.
 export const harnessEnv = (
     credential: HarnessCredential,
-    options: { readonly model?: string | undefined; readonly helper?: boolean } = {},
+    options: { readonly model?: string | undefined; readonly helper?: boolean; readonly toolSearch?: boolean | undefined } = {},
 ): Record<string, string> => ({
     IS_SANDBOX: "1",
     // Turn-only: rides out provider blips via retries instead of dying and resuming; helpers and the trial fail fast.
     ...(options.helper === true || credential.kind === "trial" ? {} : { CLAUDE_CODE_RETRY_WATCHDOG: "1" }),
     ...credentialEnv(credential, options.model),
     ...shieldedEnv(credential),
+    // Whether connected tools' schemas wait behind the CLI's tool search (the turn's `policy.toolSearch`).
+    ...toolSearchEnv(credential, options.toolSearch),
 });
 
 // The resolver's answer as the credential a harness request carries: a routed endpoint (the trial is its own kind), a

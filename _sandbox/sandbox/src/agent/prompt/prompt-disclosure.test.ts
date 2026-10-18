@@ -28,7 +28,6 @@ const disclosureOf = (capabilities: typeof CLAUDE, mode: "intentic" | "claude" |
         capabilities,
         mode,
         systemPrompt,
-        stableSystemPrompt: false,
         personaNote: PERSONA,
         fieldNotesNote: FIELD_NOTES,
         memoryNote: MEMORY,
@@ -59,7 +58,6 @@ test("the sections are in the order they were sent", () => {
         capabilities: CLAUDE,
         mode: "intentic",
         systemPrompt: "",
-        stableSystemPrompt: false,
         personaNote: PERSONA,
         fieldNotesNote: FIELD_NOTES,
         memoryNote: MEMORY,
@@ -105,7 +103,7 @@ test("the guidance shown is the block the turn was sent", () => {
         request: {
             spec: {
                 systemPromptMode: "intentic",
-                ...turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false }),
+                ...turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" }),
             },
             policy: {},
             tools: {},

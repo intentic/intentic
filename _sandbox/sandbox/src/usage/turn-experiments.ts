@@ -1,9 +1,11 @@
 import { MECHANISMS, measureExperiment, type Design } from "@intentic/agent-context/arm-stats";
 import type { DayWindowQuery, UsageTurn } from "@intentic/sandbox-contract/schemas/providers/usage";
 import type { SavingsReport } from "@intentic/sandbox-contract/schemas/settings";
+import { opt } from "../opt.js";
 import type { UsageStore } from "./usage-store.js";
 
-// The mechanism experiments (iq search teaching, project map, field notes) measured off the usage ledger.
+// The mechanism experiments (iq search teaching, project map, field notes, tool search, stable prompt) measured off
+// the usage ledger.
 // What each is judged on and the arithmetic over its two arms are @intentic/agent-context's, shared with the Claude Code
 // plugin's stats; this module only says where a ledger row keeps each experiment's arm and treatment revision.
 
@@ -32,19 +34,25 @@ const MAP_DESIGN: Design<UsageTurn> = {
 // wide enough to hold two revisions.
 const NOTES_DESIGN: Design<UsageTurn> = { ...MECHANISMS.notes, arm: (turn) => turn.notesArm, cohort: (turn) => turn.notesCohort };
 
+// No revisions to keep apart: the switch is the CLI's own, and the tool set it defers is whatever the turn mounted.
+const TOOL_SEARCH_DESIGN: Design<UsageTurn> = { ...MECHANISMS.toolSearch, arm: (turn) => turn.toolSearchArm, cohort: () => undefined };
+const STABLE_PROMPT_DESIGN: Design<UsageTurn> = { ...MECHANISMS.stablePrompt, arm: (turn) => turn.stablePromptArm, cohort: () => undefined };
+
+const COLD_TRIM_DESIGN: Design<UsageTurn> = { ...MECHANISMS.coldTrim, arm: (turn) => turn.coldTrimArm, cohort: () => undefined };
+
 const measurable = (turn: UsageTurn): boolean => turn.outcome !== "error" && turn.outcome !== "cancelled";
 
 export const readTurnExperiments = async (
     usage: UsageStore,
     window: DayWindowQuery,
-): Promise<Pick<SavingsReport, "search" | "map" | "notes">> => {
+): Promise<Pick<SavingsReport, "search" | "map" | "notes" | "toolSearch" | "stablePrompt" | "coldTrim">> => {
     const turns = (await usage.turns(window)).filter(measurable);
-    const search = measureExperiment(turns, SEARCH_DESIGN);
-    const map = measureExperiment(turns, MAP_DESIGN);
-    const notes = measureExperiment(turns, NOTES_DESIGN);
     return {
-        ...(search !== undefined ? { search } : {}),
-        ...(map !== undefined ? { map } : {}),
-        ...(notes !== undefined ? { notes } : {}),
+        ...opt("search", measureExperiment(turns, SEARCH_DESIGN)),
+        ...opt("map", measureExperiment(turns, MAP_DESIGN)),
+        ...opt("notes", measureExperiment(turns, NOTES_DESIGN)),
+        ...opt("toolSearch", measureExperiment(turns, TOOL_SEARCH_DESIGN)),
+        ...opt("stablePrompt", measureExperiment(turns, STABLE_PROMPT_DESIGN)),
+        ...opt("coldTrim", measureExperiment(turns, COLD_TRIM_DESIGN)),
     };
 };

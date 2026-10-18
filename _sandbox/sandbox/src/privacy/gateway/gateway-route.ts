@@ -4,6 +4,8 @@ import type { AppEnv } from "../../app-env.js";
 import { REQUEST_REFRAMED, RESPONSE_REFRAMED, forwardHeaders } from "../../http/forward-headers.js";
 import { GATEWAY_PATH, type PrivacyShield } from "../privacy-shield.js";
 import { type GatewayProtocol, protocolOf, restoreResponse, restoreStream, shieldRequest } from "./protocols/index.js";
+import { compactAnthropicTools } from "./protocols/anthropic-tools.js";
+import { type Json, toJson } from "./protocols/walk.js";
 import { emptyTally, maskingShield, watchingShield } from "./request-shield.js";
 import type { GatewaySession } from "./session-token.js";
 import type { ShieldTally } from "./shield-types.js";
@@ -12,7 +14,8 @@ import type { ShieldTally } from "./shield-types.js";
 // provider and the upstream the runtime would otherwise have called; the request goes there with its own headers
 // untouched (the runtime's credential travels as it would have), and only its body changes. Masking happens only for an
 // untrusted provider while the shield is on; watching reads and records but sends the request as it came; anything else
-// is a plain relay. A request that cannot be masked is refused, never sent as it came.
+// is a plain relay. A request that cannot be masked is refused, never sent as it came. Every mode drops one thing from
+// an Anthropic request, the dialect line of each tool's schema (protocols/anthropic-tools.ts), which no model reads.
 
 export interface GatewayRouteDeps {
     readonly shield: PrivacyShield;
@@ -36,6 +39,31 @@ const isJson = (type: string | null): boolean => type !== null && /^application\
 // The request's bytes as the runtime sent them; none for a method that carries no body.
 const requestBody = async (c: Context<AppEnv>): Promise<Uint8Array<ArrayBuffer> | undefined> =>
     c.req.method === "GET" || c.req.method === "HEAD" ? undefined : new Uint8Array(await c.req.arrayBuffer());
+
+// What the relay sends of a body it does not mask: the same bytes, unless it is an Anthropic request whose tools carry a
+// dialect line. Read only when the bytes name one, so every other request goes byte for byte as it came. A body the
+// shield masks is replaced whole further on (maskedBody), so it is left as it came here.
+const relayedBody = (masking: boolean, protocol: GatewayProtocol | undefined, contentType: string | null, raw: Uint8Array<ArrayBuffer> | undefined) => {
+    if (masking || protocol !== "anthropic" || raw === undefined || !isJson(contentType)) {
+        return raw;
+    }
+    const text = new TextDecoder().decode(raw);
+    if (!text.includes('"$schema"')) {
+        return raw;
+    }
+    try {
+        const parsed = toJson(JSON.parse(text));
+        const compacted = compactAnthropicTools(parsed);
+        return compacted === parsed ? raw : new TextEncoder().encode(JSON.stringify(compacted));
+    } catch {
+        // allow(silent-catch): a body this cannot read is the provider's to refuse, exactly as it came.
+        return raw;
+    }
+};
+
+// The masked body as it goes, an Anthropic one less its tools' dialect lines like every relayed one.
+const maskedBody = (protocol: GatewayProtocol, shielded: Json): Uint8Array<ArrayBuffer> =>
+    new TextEncoder().encode(JSON.stringify(protocol === "anthropic" ? compactAnthropicTools(shielded) : shielded));
 
 const isEventStream = (type: string | null): boolean => type !== null && /^text\/event-stream\b/iu.test(type);
 
@@ -94,7 +122,7 @@ export const createGatewayRoute = ({ shield, warn, fetch: send = fetch, now = ()
         const watching = policy.mode === "watch" && !trusted;
         const contentType = c.req.header("content-type") ?? null;
         const raw = await requestBody(c);
-        let body: Uint8Array<ArrayBuffer> | undefined = raw;
+        let body: Uint8Array<ArrayBuffer> | undefined = relayedBody(masking, protocol, contentType, raw);
         let tally: ShieldTally | undefined;
 
         if ((masking || watching) && raw !== undefined && raw.byteLength > 0) {
@@ -126,7 +154,7 @@ export const createGatewayRoute = ({ shield, warn, fetch: send = fetch, now = ()
                     // The tokens the provider is about to read must be on disk before it reads them.
                     await shield.vault.commit();
                     if (masking) {
-                        body = new TextEncoder().encode(JSON.stringify(shielded));
+                        body = maskedBody(protocol, shielded);
                     }
                 } catch (error) {
                     warn("privacy shield: a request could not be masked", error);

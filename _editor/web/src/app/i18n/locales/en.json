@@ -5329,6 +5329,24 @@
             "notCovered": "No cleaner covers",
             "runs": "{count} run | {count} runs"
         },
+        "agentToolLoading": {
+            "group": "What each request carries",
+            "onDemand": "Load connected tools on demand",
+            "onDemandDescription": "Keep the descriptions of browser, device, account and phone tools out of every request until the agent looks one up. The tools it uses every turn stay loaded.",
+            "onDemandShort": "On demand",
+            "allLoaded": "All loaded",
+            "ofConversationsLoadEverything": "of conversations load every tool up front",
+            "stable": "Keep the instructions stable between turns",
+            "stableDescription": "Say who is watching and which of your computers, browsers and phones are connected on the message, only when it changed, so the instructions stay cached for the whole conversation.",
+            "stableShort": "Stable",
+            "stableMoving": "Rewritten each turn",
+            "ofConversationsKeepMoving": "of conversations keep those lines in the instructions",
+            "coldTrim": "Trim old tool output after a long pause",
+            "coldTrimDescription": "When a large conversation comes back after its cache has expired, resume it with older tool output cleared, each with a note on how to get it back. Every message and tool call stays.",
+            "coldTrimShort": "Trimmed",
+            "coldTrimWhole": "Whole",
+            "ofConversationsResumeWhole": "of conversations resume whole"
+        },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Apply completed work directly to workspace as uncommitted changes.",
             "archiveFinishedAgents": "Archive finished agents",
@@ -6860,7 +6878,9 @@
                 "callsBeforeTarget": "Tool calls before the right file",
                 "failedCalls": "Failed tool calls per turn",
                 "openedWithListing": "First turns that listed directories",
+                "openingPrompt": "Prompt tokens per request",
                 "openingSearches": "Searches before opening a file",
+                "openingWrite": "Prompt written again per follow-up",
                 "outputReached": "Output reaching the agent",
                 "searchCalls": "Searches per turn"
             },
@@ -6882,7 +6902,9 @@
                 "callsBeforeTarget": "About {count} fewer tool calls so far.",
                 "failedCalls": "About {count} fewer failed calls so far.",
                 "openedWithListing": "About {count} fewer first turns listed directories so far.",
+                "openingPrompt": "About {count} fewer prompt tokens so far.",
                 "openingSearches": "About {count} fewer searches so far.",
+                "openingWrite": "About {count} fewer prompt tokens written again so far.",
                 "searchCalls": "About {count} fewer searches so far."
             },
             "tooEarly": "Too early to tell",
@@ -7807,6 +7829,9 @@
             "redactSecrets": "redact secrets",
             "refusedOutputGrew": "refused (output grew)",
             "retrievalFooter": "retrieval footer",
+            "logTemplates": "log templates",
+            "jsonTables": "JSON tables",
+            "searchFairness": "search file fairness",
             "searchHits": "search hits",
             "terminalEscapes": "terminal escapes",
             "testRunners": "test runners"
@@ -9591,6 +9616,7 @@
             "agentDocumentSearch": "pdf, word, docx, excel, xlsx, spreadsheet, powerpoint, files",
             "agentRepoChecks": "lint, linter, typecheck, tests, hooks, verify, end of turn checks",
             "agentCommandOutput": "tokens, truncate, logs, compress, noise, shorten output",
+            "agentToolLoading": "tools, tool search, schemas, deferred, prompt size, tokens, MCP, cache, stable prompt, instructions",
             "agentChatPages": "html, chart, mockup, diagram, artifact, inline page, visual",
             "agentVoice": "tts, text to speech, speak, read aloud, talk, hands-free, spoken replies, speech speed",
             "agentSpeechProvider": "elevenlabs, openai, tts provider, voice api, speech api key",

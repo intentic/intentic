@@ -45,6 +45,7 @@ flowchart LR
   subagent's toward the turn and reading nothing off them, and `arm-stats` compares the two arms of each mechanism with
   a Welch margin that withholds a delta until it is real. Beside the current cohort it carries the latest earlier one
   that reached an answer, so a restarted comparison does not wipe a finding off the screen while it is early.
+  Cold session trimming compares opening prompt tokens and failed calls on eligible follow-ups, grouped by conversation.
 - `claude-transcript` reads a Claude Code session, subagents included, into the same turns and calls, so the
   sandbox's benches and the plugin's report count identically. Which user line a person wrote (a prompt, a slash
   command, or a compaction summary, an interruption, a harness line) is `@intentic/iq/transcript`'s `promptOf`, the

@@ -1,4 +1,5 @@
-import type { HookCallbackMatcher, HookEvent, PostToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
+import { cleanMcpResult, type McpOutputOptions } from "./mcp-output.js";
+import type { HookCallback, HookCallbackMatcher, HookEvent, PostToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
 import { classifyCommand } from "@intentic/sandbox-contract/policy/command-classes";
 import { CONTROL_MCP_SERVERS } from "@intentic/sandbox-contract/policy/reserved-servers";
 import { JS_TOOL_NAME } from "../seams/js-tool-names.js";
@@ -145,16 +146,27 @@ export const sealOutside = (toolName: string, toolInput: ToolInput, result: Tool
     return wrapped;
 };
 
-export const outsideResultHooks = (onWrapped: (source: string) => void): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
+export const outsideResultHooks = (
+    onWrapped: (source: string) => void,
+    cleaning?: McpOutputOptions,
+    redact?: HookCallback,
+): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     PostToolUse: [
         {
             // No matcher: every tool, including ones nobody has written yet.
             hooks: [
-                async (input) => {
+                async (input, toolUseId, options) => {
                     if (input.hook_event_name !== "PostToolUse") {
                         return {};
                     }
-                    const wrapped = sealOutside(input.tool_name, input.tool_input, input.tool_response, onWrapped);
+                    // Compose result rewrites: independent SDK hooks each receive the original response.
+                    const redacted = await redact?.(input, toolUseId, options);
+                    const specific = redacted !== undefined && "hookSpecificOutput" in redacted ? redacted.hookSpecificOutput : undefined;
+                    const response =
+                        specific !== undefined && specific.hookEventName === "PostToolUse" && "updatedToolOutput" in specific
+                            ? specific.updatedToolOutput
+                            : input.tool_response;
+                    const wrapped = sealOutside(input.tool_name, input.tool_input, cleanMcpResult(input.tool_name, response, cleaning), onWrapped);
                     if (wrapped === input.tool_response) {
                         return {};
                     }
@@ -173,14 +185,20 @@ const CallParamsSchema = z.object({ name: z.string(), arguments: z.unknown().opt
  * as the Claude loop's PostToolUse hook seals them, under the name the model calls it by (`mcp__<server>__<tool>`):
  * the conformance in outside-results.test.ts holds this path to the same provenance table.
  */
-export const sealedDoor = (server: InProcessServer, serverName: string, onWrapped: (source: string) => void): InProcessServer => ({
+export const sealedDoor = (
+    server: InProcessServer,
+    serverName: string,
+    onWrapped: (source: string) => void,
+    cleaning?: McpOutputOptions,
+): InProcessServer => ({
     handle: async (message, signal) => {
         const answer = await server.handle(message, signal);
         const call = message.method === "tools/call" ? CallParamsSchema.safeParse(message.params) : undefined;
         if (call?.success !== true || answer?.result === undefined) {
             return answer;
         }
-        const result = sealOutside(`mcp__${serverName}__${call.data.name}`, call.data.arguments, answer.result, onWrapped);
+        const tool = `mcp__${serverName}__${call.data.name}`;
+        const result = sealOutside(tool, call.data.arguments, cleanMcpResult(tool, answer.result, cleaning), onWrapped);
         return result === answer.result ? answer : { ...answer, result };
     },
     close: server.close,

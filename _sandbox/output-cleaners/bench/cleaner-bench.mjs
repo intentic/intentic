@@ -3,16 +3,21 @@
 // Fixtures only prove a cleaner still fires; only `corpus` shows what it actually saves.
 //   pnpm --filter @intentic/output-cleaners bench # sweep configs over fixtures
 //   pnpm --filter @intentic/output-cleaners bench corpus [~/.claude/projects] # sweep over real transcripts
+//   pnpm --filter @intentic/output-cleaners bench corpus ~/.claude/projects --all-only # raw/all + stage totals
+//   ... corpus ~/.claude/projects --all-only --baseline-filter /tmp/prior/src/agent-output-filter.mjs # same-snapshot comparison
 //   pnpm --filter @intentic/output-cleaners bench discover <filter-stats.jsonl> # live-run savings + gaps
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { filterOutput } from "../src/agent-output-filter.mjs";
 import { parseCleaners } from "../src/cleaners.mjs";
 import { parseStatsFile, summarizeStats } from "../src/filter-stats.mjs";
 
 // ~4 chars/token, the same heuristic as iq-engine's estimateTokens.
+// Simulate the runtime's raw-output handle without writing corpus contents to disk.
+const retain = () => "/bench/raw";
 const estimateTokens = (text) => Math.ceil(text.length / 4);
 const pad = (value, width) => String(value).padEnd(width);
 const percent = (part, whole) => (whole === 0 ? "0%" : `${Math.round((part / whole) * 100)}%`);
@@ -105,7 +110,8 @@ const FIXTURES = [
         // A search into a generated source file: the hit's own prefix is the answer, the bundled line behind it is not.
         raw: `${Array.from(
             { length: 4 },
-            (ignored, hit) => `_editor/ui/src/icons/iconData.generated.ts:${hit + 1}:export const BUNDLED_ICONS=[{"prefix":"mdi","icons":{${"a".repeat(6000)}}}]`,
+            (ignored, hit) =>
+                `_editor/ui/src/icons/iconData.generated.ts:${hit + 1}:export const BUNDLED_ICONS=[{"prefix":"mdi","icons":{${"a".repeat(6000)}}}]`,
         ).join("\n")}\n`,
     },
     {
@@ -120,23 +126,27 @@ const FIXTURES = [
 const CONFIGS = [
     { name: "off (raw)", spec: "off" },
     { name: "all", spec: "" },
+    { name: "no-templates", spec: "-templates" },
+    { name: "no-csv", spec: "-csv-schema" },
+    { name: "no-search", spec: "-search" },
     { name: "no-cap", spec: "-cap" },
     { name: "no-files", spec: "-files" },
     { name: "no-ls", spec: "-ls" },
     { name: "no-dedup", spec: "-dedup" },
     { name: "no-wide", spec: "-wide" },
     { name: "no-diff", spec: "-diff" },
-    { name: "strip-only", spec: "-cap,-dedup,-redact,-files,-ls,-wide,-diff" },
+    { name: "strip-only", spec: "-cap,-dedup,-redact,-files,-ls,-wide,-diff,-hits,-templates,-csv-schema,-search" },
 ];
 
-const cleanedFor = (raw, command, exitCode, spec) => (spec === "off" ? raw : filterOutput(raw, { command, exitCode, enabled: parseCleaners(spec) }).out);
+const cleanedFor = (raw, command, exitCode, spec) =>
+    spec === "off" ? raw : filterOutput(raw, { command, exitCode, enabled: parseCleaners(spec), retain }).out;
 
 const sweep = (samples, label) => {
     const baseline = samples.reduce((sum, sample) => sum + estimateTokens(sample.raw), 0);
     process.stdout.write(`${label}\n`);
     process.stdout.write(`${pad("config", 14)}${pad("tokens", 10)}${pad("Δ vs raw", 12)}\n`);
     process.stdout.write(`${"-".repeat(36)}\n`);
-    for (const config of CONFIGS) {
+    for (const config of CONFIGS.filter((entry) => !process.argv.includes("--all-only") || entry.spec === "off" || entry.name === "all")) {
         const tokens = samples.reduce((sum, sample) => sum + estimateTokens(cleanedFor(sample.raw, sample.command, sample.exitCode, config.spec)), 0);
         const delta = baseline === 0 ? 0 : Math.round(((tokens - baseline) / baseline) * 100);
         process.stdout.write(`${pad(config.name, 14)}${pad(tokens, 10)}${pad(`${delta > 0 ? "+" : ""}${delta}%`, 12)}\n`);
@@ -152,6 +162,16 @@ const bench = () => {
         const delta = before === 0 ? 0 : Math.round(((after - before) / before) * 100);
         process.stdout.write(`  ${pad(fixture.name, 22)}${before} → ${after} tok (${delta}%)\n`);
     }
+    process.stdout.write("\nstructured probes (stage bytes removed, before footer costs):\n");
+    for (const count of [3, 4, 8, 100]) {
+        const raw = `${Array.from({ length: count }, (_, index) => `INFO worker completed processing job ${index} in ${index}ms and persisted the result to the configured destination`).join("\n")}\n`;
+        const result = filterOutput(raw, { command: "node worker.js", enabled: parseCleaners("templates"), retain });
+        const saved = result.stages.find((stage) => stage.id === "templates")?.saved ?? 0;
+        process.stdout.write(`  templates ${pad(count, 4)}lines: ${saved} B, ${estimateTokens(raw)} → ${estimateTokens(result.out)} tok emitted\n`);
+    }
+    const raw = JSON.stringify(Array.from({ length: 20 }, (_, identifier) => ({ identifier, description: "ready", enabled: true })));
+    const result = filterOutput(raw, { command: "gh api", enabled: parseCleaners("csv-schema"), retain });
+    process.stdout.write(`  csv-schema 20 rows: ${result.stages.find((stage) => stage.id === "csv-schema")?.saved ?? 0} B\n`);
 };
 
 // Corpus mode: replay what the agent actually ran, from session JSONL (tool_use paired with its tool_result). Skip
@@ -242,24 +262,48 @@ const readCorpus = (root) => {
     return samples;
 };
 
-const corpus = (root) => {
+const corpus = async (root) => {
     const samples = readCorpus(root);
     if (samples.length === 0) {
         process.stderr.write(`no Bash results found under ${root}\n`);
         process.exit(1);
     }
     const rawBytes = samples.reduce((sum, sample) => sum + sample.raw.length, 0);
-    sweep(samples, `corpus: ${samples.length} Bash results, ${(rawBytes / 1e6).toFixed(2)} MB raw, from ${root}`);
+    const label = `corpus: ${samples.length} Bash results, ${(rawBytes / 1e6).toFixed(2)} MB raw, from ${root}`;
+    const allOnly = process.argv.includes("--all-only");
+    if (allOnly) {
+        process.stdout.write(`${label}\n`);
+    } else {
+        sweep(samples, label);
+    }
+    // Compare versions on this one in-memory snapshot: active transcripts can grow between separate invocations.
+    const baselineIndex = process.argv.indexOf("--baseline-filter");
+    const baseline = baselineIndex === -1 ? undefined : await import(pathToFileURL(resolve(process.argv[baselineIndex + 1])).href);
+    let baselineBytes = 0;
+    let baselineTokens = 0;
+    let emittedTokens = 0;
 
     // Per-mechanism savings across the corpus; a stage at zero means that cleaner has no payer and can be deleted.
     const stageBytes = new Map();
     let emitted = 0;
     for (const sample of samples) {
-        const result = filterOutput(sample.raw, { command: sample.command, exitCode: sample.exitCode, enabled: parseCleaners("") });
+        const result = filterOutput(sample.raw, { command: sample.command, exitCode: sample.exitCode, enabled: parseCleaners(""), retain });
         emitted += result.out.length;
+        emittedTokens += estimateTokens(result.out);
+        if (baseline !== undefined) {
+            const before = baseline.filterOutput(sample.raw, { command: sample.command, exitCode: sample.exitCode, retain }).out;
+            baselineBytes += before.length;
+            baselineTokens += estimateTokens(before);
+        }
         for (const stage of result.stages) {
             stageBytes.set(stage.id, (stageBytes.get(stage.id) ?? 0) + stage.saved);
         }
+    }
+    if (baseline !== undefined) {
+        process.stdout.write(`baseline all: ${baselineTokens} tok, ${baselineBytes} B\n`);
+    }
+    if (allOnly) {
+        process.stdout.write(`raw: ${samples.reduce((sum, sample) => sum + estimateTokens(sample.raw), 0)} tok; all: ${emittedTokens} tok\n`);
     }
     process.stdout.write(`\nraw ${rawBytes} B → emitted ${emitted} B (saved ${percent(rawBytes - emitted, rawBytes)})\n`);
     process.stdout.write("by mechanism (bytes removed; negative = added):\n");
@@ -302,7 +346,7 @@ if (subcommand === "discover") {
     }
     discover(argument);
 } else if (subcommand === "corpus") {
-    corpus(argument ?? join(homedir(), ".claude", "projects"));
+    await corpus(argument ?? join(homedir(), ".claude", "projects"));
 } else {
     bench();
 }

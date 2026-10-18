@@ -54,8 +54,8 @@ describe("copySession", () => {
         const { text, stats } = copySession(session(), 1, "new");
         expect(stats).toEqual({ cleared: 2, kept: 1, droppedLines: 1 });
         expect(resultsOf(parse(text))).toEqual([
-            "[Output cleared at hand-off to save context: Bash pnpm test, was 3 lines. Run it again if you need it.]",
-            "[Output cleared at hand-off to save context: Bash cat x.ts, was 1 line. Run it again if you need it.]",
+            "[Output cleared at hand-off to save context: Bash pnpm test, was 3 lines. Re-run pnpm test if you need it.]",
+            "[Output cleared at hand-off to save context: Bash cat x.ts, was 1 line. Re-run cat x.ts if you need it.]",
             "diff",
         ]);
     });
@@ -142,4 +142,53 @@ describe("writeSessionCopy", () => {
             await rm(store, { recursive: true, force: true });
         }
     });
+});
+
+test("superseded reads clear even among the newest results, while current results keep their budget", () => {
+    const fileCall = (id: string, name: string, path: string) => ({
+        type: "assistant",
+        message: { content: [{ type: "tool_use", id, name, input: { file_path: path } }] },
+    });
+    const entries = chain([
+        fileCall("r1", "Read", "/a.ts"),
+        result("r1", "old a"),
+        fileCall("r2", "Read", "/b.ts"),
+        result("r2", "old b"),
+        fileCall("r3", "Read", "/a.ts"),
+        result("r3", "new a"),
+        fileCall("e", "Edit", "/b.ts"),
+        result("e", "edited b"),
+    ]);
+    const copied = copySession(entries, 10, "copy");
+    expect(copied.stats).toEqual({ cleared: 2, kept: 2, droppedLines: 0 });
+    expect(resultsOf(parse(copied.text))).toEqual([
+        "[Output cleared at hand-off to save context: Read /a.ts, was 1 line. Re-read /a.ts if you need it.]",
+        "[Output cleared at hand-off to save context: Read /b.ts, was 1 line. Re-read /b.ts if you need it.]",
+        "new a",
+        "edited b",
+    ]);
+    expect(copySession(entries, Infinity, "whole").stats.cleared).toBe(0);
+});
+
+test.each(["Write", "MultiEdit"])("%s invalidates a prior Read", (name) => {
+    const entries = chain([
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "r", name: "Read", input: { file_path: "/a/./b" } }] } },
+        result("r", "old"),
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "w", name, input: { file_path: "/a/b" } }] } },
+        result("w", "written"),
+    ]);
+    expect(copySession(entries, 10, "copy").stats).toEqual({ cleared: 1, kept: 1, droppedLines: 0 });
+});
+
+
+test("failed file edits and failed re-reads leave the earlier snapshot current", () => {
+    const entries = chain([
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "r", name: "Read", input: { file_path: "/a" } }] } },
+        result("r", "current"),
+        ...["Edit", "Read"].flatMap((name) => [
+            { type: "assistant", message: { content: [{ type: "tool_use", id: name, name, input: { file_path: "/a" } }] } },
+            { type: "user", message: { content: [{ type: "tool_result", tool_use_id: name, is_error: true, content: "failed" }] } },
+        ]),
+    ]);
+    expect(copySession(entries, 10, "copy").stats).toEqual({ cleared: 0, kept: 3, droppedLines: 0 });
 });

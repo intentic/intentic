@@ -96,6 +96,15 @@ export const UsageTurnSchema = z.object({
     // Hash of the brief that was sent, recorded on control turns too. Load-bearing rather than decorative: the file is
     // rewritten monthly, so a 30-day window holds two different treatments and pooling them would measure neither.
     notesCohort: z.string().optional(),
+    // Arm of the tool-search experiment, stable per conversation: true loads connected tools' schemas on demand, false
+    // sends them all with every request. Absent where the turn was not a native Claude one on the Claude Code loop.
+    toolSearchArm: z.boolean().optional(),
+    // Arm of the stable-prompt experiment, stable per conversation: true says the guidance that moves between turns on
+    // the message when it changed, false keeps it in the system block. Absent outside the Claude Code loop.
+    stablePromptArm: z.boolean().optional(),
+    // Assigned on cold-eligible follow-ups only, including controls; cleared results only when a copy was resumed.
+    coldTrimArm: z.boolean().optional(),
+    coldTrimmed: z.number().int().min(0).optional(),
     // What became of pre-turn retrieval on this turn, and how long it took. Assignment and DELIVERY are different
     // facts: the first version of this mechanism was assigned to every eligible turn and reached four in five of them,
     // which is the difference between a null result and a mechanism that never ran. Absent means the flag was off, so

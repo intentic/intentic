@@ -1,3 +1,4 @@
+import { experimentArm } from "@intentic/agent-context/experiments";
 import { getEventListeners } from "node:events";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
@@ -86,6 +87,14 @@ const checked: AgentEvent = {
     content: [{ type: "text", text: "2 passed\n--- [exit 0, 3s]" }],
 };
 const windows: UsageWindow[] = [{ kind: "five_hour", utilization: 42, resetsAt: 1_900_000_000, gates: "all" }];
+
+
+// The arms a conversation draws under the default settings (decide/experiments.ts), so a row names them by the draw
+// rather than by a hash's outcome copied in.
+const armsOf = (conversationId: string) => ({
+    toolSearchArm: experimentArm("tool-search", conversationId, 0.5),
+    stablePromptArm: experimentArm("stable-system-prompt", conversationId, 0.5),
+});
 
 test("a clean turn streams every frame once, stamps the ones that name an account, and settles into every store", async () => {
     const input: TurnInput = { prompt: "ship the parser", conversationId: "frames-clean", actor: "ada@example.com" };
@@ -202,6 +211,8 @@ test("a clean turn streams every frame once, stamps the ones that name an accoun
             failedCalls: 0,
             callsBeforeTarget: 0,
             turnIndex: 0,
+            // A Claude Code conversation draws both by default, half held out of each.
+            ...armsOf("frames-clean"),
             autoPicked: undefined,
         },
     ]);
@@ -351,6 +362,7 @@ test("a spent allowance naming its reset is held whole, filed as a limit, and re
             costUsd: 0,
             durationMs: measured,
             turnIndex: 0,
+            ...armsOf("frames-limit"),
             autoPicked: undefined,
         },
     ]);

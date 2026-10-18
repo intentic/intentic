@@ -39,9 +39,16 @@ const {
 
 const emit = defineEmits<{ commit: [fraction: number] }>();
 
-// A share is said as a percentage of the sample, a count per sample to a tenth.
-const average = (value: number | undefined, share: boolean): string =>
-    value === undefined ? `–` : share ? formatPercent(value * 100) : formatFixed(value, 1);
+// A share is said as a percentage of the sample, a token count compactly, any other count per sample to a tenth.
+const average = (value: number | undefined, row: ResultRow): string => {
+    if (value === undefined) {
+        return `–`;
+    }
+    if (row.share === true) {
+        return formatPercent(value * 100);
+    }
+    return row.tokens === true ? formatCompact(value) : formatFixed(value, 1);
+};
 
 // The cleaners' one row is an amount of text, not a count of calls: "less", not "fewer".
 const change = (row: ResultRow, outcome: Outcome & { kind: `lower` | `higher` }): string =>
@@ -134,12 +141,11 @@ const resultOf = (outcome: Outcome, row: ResultRow): string => {
 const lineOf = (row: ResultRow, unit: ResultTable["unit"]): Line => {
     const { outcome } = row;
     const early = outcome.kind === `early`;
-    const share = row.share === true;
     return {
         key: row.key,
         label: t(`sandbox.measurementPanel.metric.${row.key}`),
-        on: early ? `–` : average(row.on, share),
-        off: early ? `–` : average(row.off, share),
+        on: early ? `–` : average(row.on, row),
+        off: early ? `–` : average(row.off, row),
         result: resultOf(outcome, row),
         settled: outcome.kind === `lower` || outcome.kind === `higher`,
         early,

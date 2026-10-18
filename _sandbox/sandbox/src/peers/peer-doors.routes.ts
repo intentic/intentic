@@ -1,3 +1,5 @@
+import { join } from "node:path";
+import { cleanMcpResult } from "../guard/mcp-output.js";
 import { daemonEndpoint, createTurnMountRoute } from "../agent/tools/turn-mounts.routes.js";
 import { judgeIndependentCommand } from "../agent/tools/command-judge.js";
 import { workingNames } from "../bootstrap/working-now.js";
@@ -41,14 +43,30 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
         ...peerRouteTable(RUNNER_PEER, runnerPeerRoutes(services)),
         // Every MCP server a turn mounted in this daemon, behind one door: its browser routers, the machines and browsers
         // it was granted (their peer bridges), and its extension cards' endpoints on the backend host.
-        "ALL /mcp/{mount}": createTurnMountRoute(services.turnMounts, {
-            browser: (target, message, call) => target.router.handle(message, call.signal),
-            daemon: daemonEndpoint,
-            device: hostRoutes.mcp,
-            webext: webextRoutes.mcp,
-            phone: phoneRoutes.mcp,
-            tools: createExtensionToolsEndpoint(services),
-            extension: createExtensionMcpEndpoint(services),
-        }),
+        "ALL /mcp/{mount}": createTurnMountRoute(
+            services.turnMounts,
+            {
+                browser: (target, message, call) => target.router.handle(message, call.signal),
+                daemon: daemonEndpoint,
+                device: hostRoutes.mcp,
+                webext: webextRoutes.mcp,
+                phone: phoneRoutes.mcp,
+                tools: createExtensionToolsEndpoint(services),
+                extension: createExtensionMcpEndpoint(services),
+            },
+            async (tool, result, conversationId) => {
+                // allow(silent-catch): an unavailable settings store costs cleaning, never an already completed tool call.
+                const settings = await services.sandboxSettings.get().catch(() => undefined);
+                if (settings === undefined) {
+                    return result;
+                }
+                return cleanMcpResult(tool, result, {
+                    logsDir: join(services.config.historyRoot, "logs"),
+                    spec: settings.outputCleaners,
+                    holdout: settings.outputHoldout,
+                    conversationId,
+                });
+            },
+        ),
     };
 });

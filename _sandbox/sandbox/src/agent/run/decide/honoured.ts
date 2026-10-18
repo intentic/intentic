@@ -181,7 +181,6 @@ export const honoured = (
     const placement = turnPromptPlacement({
         capabilities,
         ...prompt,
-        stableSystemPrompt: settings.stableSystemPrompt,
         ...opt("personaNote", personaNote(persona)),
         ...opt("memoryNote", facts.memoryNote),
         ...opt("fieldNotesNote", planned.fieldNotes),
@@ -205,6 +204,7 @@ export const honoured = (
             ...opt("systemPrompt", placement.systemPrompt),
             ...opt("systemAppend", placement.systemAppend),
             search: searchToolOf(premise),
+            ...opt("stablePrompt", premise.stablePrompt),
             sessionStore: facts.sessionStore,
             turnCapMs: settings.turnCapMinutes * 60_000,
             ...opt("cwd", startPath),

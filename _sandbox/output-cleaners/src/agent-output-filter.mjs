@@ -48,6 +48,25 @@ const commandNotes = (command, raw) => {
         : [];
 };
 
+const bodyFromLines = (lines, raw, exitCode) => {
+    const body = lines.join("\n");
+    return exitCode === "0" && body.trim() === "" && raw.trim() !== "" ? "(no notable output)" : body;
+};
+
+const CONTENT_CUT_STAGES = new Set(["wide", "templates", "search", "cap", "failtail"]);
+const contentCut = (stages) => stages.filter((stage) => CONTENT_CUT_STAGES.has(stage.id)).reduce((sum, stage) => sum + Math.max(0, stage.saved), 0);
+
+const footerSummary = (dropped, rawCount, kept, stages) => {
+    if (dropped > 0) {
+        return `${rawCount} lines filtered to ${kept}`;
+    }
+    return stages.some((stage) => stage.id === "cap" && stage.saved > 0) ? "output truncated" : "long runs cut inside lines";
+};
+
+const mustSkipSummaries = (stages, retained, footerLength, rawLength) =>
+    stages.some((stage) => (stage.id === "templates" || stage.id === "search") && stage.saved > 0) &&
+    (retained === undefined || footerLength > rawLength);
+
 // Returns emitted text plus `stages` (pipeline order): raw minus the sum of stage.saved equals the result. `ansi`,
 // `footer` and `notes` are named too, though not registry cleaners, so the accounting has no unexplained remainder.
 // `retain(text)` keeps the unfiltered text and returns the path it can be retrieved from; called only when the footer
@@ -67,10 +86,7 @@ export const filterOutput = (
     const cleaned = cleanLines(input, { command, exitCode, enabled, values });
     const lines = cleaned.lines;
     stages.push(...cleaned.stages);
-    let body = lines.join("\n");
-    if (exitCode === "0" && body.trim() === "" && raw.trim() !== "") {
-        body = "(no notable output)";
-    }
+    const body = bodyFromLines(lines, raw, exitCode);
     const masked = maskedFailure(exitCode, pipeline);
     const exit = masked === undefined ? `exit ${exitCode}` : `exit ${exitCode} (pipeline: ${masked} — an earlier stage failed)`;
     // Below rewrites the whole body, weighed the same way the line stages are. `guard`: if the result is longer than
@@ -100,8 +116,9 @@ export const filterOutput = (
     }
     const kept = body === "(no notable output)" ? 0 : lines.length;
     const dropped = Math.max(0, rawCount - kept);
-    // `wide` keeps every line and cuts inside them, so a line count alone would call its output complete.
-    const cut = stages.find((stage) => stage.id === "wide")?.saved ?? 0;
+    // A JSON table can add lines before a later cap removes them; raw versus emitted line counts cannot see that cut.
+    // Wide runs and template summaries also replace content within the surviving lines.
+    const cut = contentCut(stages);
     if (dropped === 0 && cut <= 0) {
         // Nothing removed (ANSI/\r cleanup alone needs no raw-log pointer).
         return emitted(body === "" ? body : `${body}\n`, "footer", false);
@@ -109,8 +126,22 @@ export const filterOutput = (
     // Retrieval pointer only appears once the trim is big enough to be worth its own bytes; the counts always appear.
     const retained = dropped >= RETRIEVAL_MIN_DROPPED || cut > 0 ? keep() : undefined;
     const handle = retained === undefined ? "" : ` · full: retrieve-output ${retained} [pattern]`;
-    const summary = dropped > 0 ? `${rawCount} lines filtered to ${kept}` : "long runs cut inside lines";
+    const summary = footerSummary(dropped, rawCount, kept, stages);
     const withFooter = `${body}\n--- [${exit}, ${durationS}s] ${summary}${handle}\n`;
+    // New lossy summaries must remain retrievable even below twenty dropped lines. If their pointer cannot be
+    // kept or cannot pay for itself, rerun without those stages; the ordinary cleaners retain their own policy.
+    if (mustSkipSummaries(stages, retained, withFooter.length, raw.length)) {
+        return filterOutput(raw, {
+            command,
+            exitCode,
+            durationS,
+            retain,
+            cacheStore,
+            values,
+            pipeline,
+            enabled: new Set([...enabled].filter((id) => id !== "templates" && id !== "search")),
+        });
+    }
     // Below the payoff threshold, it's the pointer that is dropped, not the trim it would have explained.
     return withFooter.length <= raw.length ? emitted(withFooter, "footer", true) : emitted(`${body}\n`, "footer", false);
 };
@@ -121,26 +152,28 @@ const RETAIN_MAX_CHARS = 2_000_000;
 
 // Writes one run's unfiltered output where the footer can point at it, redacted like everything else that leaves
 // here, then prunes the oldest. Undefined when it cannot be written, so no footer names a file that is not there.
-const retainIn = (dir, name, values) => (text) => {
-    try {
-        mkdirSync(dir, { recursive: true });
-        const file = join(dir, name);
-        writeFileSync(file, redactText(text.length > RETAIN_MAX_CHARS ? text.slice(-RETAIN_MAX_CHARS) : text, values));
-        const aged = readdirSync(dir).flatMap((entry) => {
-            try {
-                return [{ entry, at: statSync(join(dir, entry)).mtimeMs }];
-            } catch {
-                return []; // Pruned by a concurrent filter between the listing and the stat.
+export const retainIn =
+    (dir, name, values, maxChars = RETAIN_MAX_CHARS) =>
+    (text) => {
+        try {
+            mkdirSync(dir, { recursive: true });
+            const file = join(dir, name);
+            writeFileSync(file, redactText(text.length > maxChars ? text.slice(-maxChars) : text, values));
+            const aged = readdirSync(dir).flatMap((entry) => {
+                try {
+                    return [{ entry, at: statSync(join(dir, entry)).mtimeMs }];
+                } catch {
+                    return []; // Pruned by a concurrent filter between the listing and the stat.
+                }
+            });
+            for (const { entry } of aged.toSorted((a, b) => b.at - a.at).slice(RETAIN_FILES)) {
+                rmSync(join(dir, entry), { force: true });
             }
-        });
-        for (const { entry } of aged.toSorted((a, b) => b.at - a.at).slice(RETAIN_FILES)) {
-            rmSync(join(dir, entry), { force: true });
+            return file;
+        } catch {
+            return undefined;
         }
-        return file;
-    } catch {
-        return undefined;
-    }
-};
+    };
 
 // One command's whole pass, every input already resolved by the runtime calling it. `logsDir` holds what a pass keeps:
 // `raw-output/` (the unfiltered text a footer points at), `output-cache/` (the per-session repeat detector) and
@@ -177,7 +210,8 @@ export const filterRun = (
         const cacheStore =
             !heldOut && enabled.has("cache") && logsDir !== undefined && sessionKey !== undefined ? openCacheStore(logsDir, sessionKey) : undefined;
         if (!heldOut) {
-            const retain = logsDir !== undefined && runName !== undefined && runName !== "" ? retainIn(join(logsDir, "raw-output"), runName, values) : undefined;
+            const retain =
+                logsDir !== undefined && runName !== undefined && runName !== "" ? retainIn(join(logsDir, "raw-output"), runName, values) : undefined;
             const filtered = filterOutput(raw, { command, exitCode, durationS, retain, enabled, cacheStore, values, pipeline });
             out = filtered.out;
             stages = filtered.stages;

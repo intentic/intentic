@@ -566,6 +566,32 @@ flowchart LR
 More: [subsystems](docs/subsystems.md) (how the parts connect), [environment](docs/env-contract.md) (what the daemon
 reads at start), [debugging](docs/debugging.md) (logs, diagnostics, state on disk).
 
+## Tool output
+
+New MCP text is cleaned before entering model history, using
+[output-cleaners](../output-cleaners/README.md). Claude composes masking, cleaning and outside-content
+wrapping in its PostToolUse callback. Other runtimes use the MCP door; browser and device bridges use
+the same rule. Claude's bridges defer cleaning to its callback so a result is measured once.
+Earlier history is never rewritten. The `outputCleaners` off switch and `outputHoldout` control apply,
+and the Savings view reads the `mcp` stage from the existing filter ledger.
+
+Text above 16,384 characters gets deduplication and a head/tail cap. Snapshots use a higher
+49,152-character trigger, preserve refs at both ends and point to `browser_find` for omitted nodes.
+Each shortened result names its original under `/history/logs/raw-output/` with a `retrieve-output`
+command. The normal raw-output retention applies. Images, non-text blocks, Bash and the structural
+`ui`, `watch`, `code` and secrets servers bypass this pass. Extension endpoints that forward their
+own HTTP transport are passed through; their stream is not rewritten. Direct external MCP URLs in
+other runtimes also bypass the daemon door. Claude’s callback still covers these tools.
+
+Subagent `wait` bounds each child's report separately at 12,000 characters before serializing its
+answer, with a file handle for the full report. Its status, verification and landing fields stay
+structured. This bound also applies when general output cleaning is off. Device shell collection
+keeps its existing limits; only the model-facing copy is cleaned in the daemon.
+
+Cold Claude Code follow-ups can resume a trimmed session copy under the `coldTrim` experiment; both eligible arms
+are measured on opening prompt size and failed calls. The cache clock includes keep-warm refreshes; unknown clocks
+leave sessions whole. [The cache and hand-off rules](../../docs/architecture/sandbox.md) describe the boundaries.
+
 ## Key files
 
 - [src/main.ts](src/main.ts) — the entry point: boot phases in the one order that matters.

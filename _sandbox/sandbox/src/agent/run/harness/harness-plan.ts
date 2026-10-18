@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { profileOf, type RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
@@ -27,6 +28,8 @@ import { opt } from "../../../opt.js";
 import { agentMounts } from "./agent-mounts.js";
 import { harnessHooks, type HarnessHooksDeps } from "./harness-hooks.js";
 import { harnessAccounts, harnessServers, type HarnessServersDeps, turnSecretAccess } from "./harness-servers.js";
+import { surroundingsNote } from "../../prompt/surroundings.js";
+import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 
 // The Claude Code loop's own arm: the request no single provider owns, built for native Claude and every provider routed
 // through the harness. Everything it reads of the daemon is named in HarnessPlanDeps; the planner never imports it.
@@ -71,6 +74,7 @@ const harnessMounts = (deps: HarnessPlanDeps, input: RoutedAgentTurn, granted: r
         deps.perf.track("turn.plan.mounts", {}, () =>
             turnToolsOf(deps, granted, {
                 conversationId: input.conversationId,
+                cleanOutput: false,
                 anonymousBrowser: persona.powers.browser,
                 shell: persona.powers.shell,
                 extensions: persona.powers.extensions,
@@ -102,12 +106,22 @@ const modelOf = (
         ? { model: credentials.endpoint.model }
         : { ...(input.model === undefined && defaultModel !== "" ? { model: defaultModel } : {}), ...(fast === true ? { fast } : {}) };
 
-const harnessSpec = (deps: HarnessPlanDeps, input: RoutedAgentTurn, context: TurnContext, credentials: HarnessCredentials): TurnSpec => {
+const harnessSpec = (
+    deps: HarnessPlanDeps,
+    input: RoutedAgentTurn,
+    context: TurnContext,
+    credentials: HarnessCredentials,
+    surroundings: TurnNote | undefined,
+): TurnSpec => {
     // Split off since the field's absence, not `fast: undefined`, is the meaning; modelOf puts it back where it applies.
     const { fast, ...spec } = context.base.spec;
+    const words = wordsOf(input, context);
+    // Last of the notes, nearest the words: it answers what this turn can reach, which the notes before it do not.
+    const notes = surroundings === undefined ? words.notes : [...(words.notes ?? []), surroundings];
     return {
         ...spec,
-        ...wordsOf(input, context),
+        ...words,
+        ...opt("notes", notes),
         ...modelOf(credentials, input, fast, deps.config.intenticAgentModel),
         ...opt("thinking", input.thinking),
         // Mid-turn steering (the /agent/steer queue streamAgent registered); Claude Code harness only.
@@ -123,8 +137,9 @@ const delegationCaps = (settings: SandboxSettings): Pick<TurnPolicy, "subagentsA
     ...(settings.subagentDepth !== SETTINGS_DEFAULTS.subagentDepth ? { subagentDepth: settings.subagentDepth } : {}),
 });
 
-const harnessPolicy = (base: TurnPolicy, settings: SandboxSettings): TurnPolicy => ({
+const harnessPolicy = (base: TurnPolicy, settings: SandboxSettings, context: TurnContext): TurnPolicy => ({
     ...base,
+    ...opt("toolSearch", context.toolSearch),
     // hashlineEdits owns file mutation via its own MCP server, so native Edit/Write are dropped (Read stays, for viewing
     // images/PDFs).
     ...(settings.hashlineEdits ? { disallowedTools: ["Edit", "Write"] } : {}),
@@ -141,6 +156,22 @@ const shellTools = (deps: HarnessPlanDeps, settings: SandboxSettings): Pick<Turn
     // Read per command like the rules, so sending a kind of work elsewhere binds on the next line.
     ...(offloadRunEnabled() ? { offloadCommands: async () => (await deps.sandboxSettings.get()).offload.commands } : {}),
 });
+
+// Under a stable prompt, who is watching and what of the owner's is online ride the message, and only when they moved.
+const surroundingsOf = (
+    deps: HarnessPlanDeps,
+    input: RoutedAgentTurn,
+    context: TurnContext,
+    tools: Pick<TurnTools, "hostDevices" | "ownBrowsers" | "ownPhones">,
+): TurnNote | undefined =>
+    context.base.spec.stablePrompt === true
+        ? surroundingsNote(
+              deps.conversations,
+              input.conversationId,
+              { fresh: context.base.spec.sessionId === undefined || context.compacted === true },
+              { unattended: context.base.policy.unattended === true, hostDevices: tools.hostDevices, ownBrowsers: tools.ownBrowsers, ownPhones: tools.ownPhones },
+          )
+        : undefined;
 
 // The Claude Code harness: a native Claude turn's subscription OAuth (with mid-turn refresh) or the translator endpoint a
 // routed provider rides. Credentials resolve through harness-credentials.ts; its refusals become the connect-gate's error.
@@ -168,7 +199,7 @@ export const planHarnessTurn = async (
     // A sealed request reads nothing past its prompt: nothing is mounted for it and no hook is wired, so its credential,
     // behind the gateway like a turn's, and the model that credential resolves to are all this arm decides for it.
     if (context.base.policy.sealed === true) {
-        return armPlan(deps.agent, { ...context.base, spec: harnessSpec(deps, input, context, resolved.credentials), credential }, resolved.credentials.account);
+        return armPlan(deps.agent, { ...context.base, spec: harnessSpec(deps, input, context, resolved.credentials, undefined), credential }, resolved.credentials.account);
     }
     // What this turn may reach out of the container, and the owner's own browsers: the cards peerToolsOf mounts, through
     // Services, since the hosts and webext subsystems reach back into this one.
@@ -198,12 +229,14 @@ export const planHarnessTurn = async (
         iqAvailable: iqLoaded,
         ...harnessAccounts(deps, input, context, granted),
         ...shellTools(deps, settings),
+        outputLogsDir: join(deps.config.historyRoot, "logs"),
         // Pages drawn in the chat, unless the owner switched them off; a turn nobody watches still may, its card waiting.
         ...(settings.chatPages ? { pages: { workspaceRoot: deps.workspace.root, apps: mcpToolsOf(granted) } } : {}),
         // Every stored credential masked to its reference in tool results, unconditional since this isn't a saving worth
         // trading away.
         secrets,
     };
+    const surroundings = surroundingsOf(deps, input, context, tools);
     // Hooks in Claude Code's settings files, or in a plugin the image does not ship, that the owner has not approved in
     // this form switch every hook off.
     const gated = await deps.perf.track("turn.plan.hooks", {}, () =>
@@ -211,8 +244,8 @@ export const planHarnessTurn = async (
             deps.config.historyRoot,
             input.conversationId,
             {
-                spec: harnessSpec(deps, input, context, resolved.credentials),
-                policy: harnessPolicy(context.base.policy, settings),
+                spec: harnessSpec(deps, input, context, resolved.credentials, surroundings),
+                policy: harnessPolicy(context.base.policy, settings, context),
             },
             gatedPlugins(mounts),
         ),

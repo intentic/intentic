@@ -124,6 +124,10 @@ flowchart LR
   fails while the lock and the schemas disagree. `_tools/checks/contract-shrink.mjs` fails CI for a pushed branch
   that shrinks it with no commit declaring the break (`type!:` or `Breaking-Note:`); nothing checks the push itself.
 
+The cold-session trim settings (`coldTrim`, `coldTrimHoldout`, `coldTrimMinTokens`) and optional usage stamps
+(`coldTrimArm`, `coldTrimmed`) support comparing eligible Claude Code follow-ups. `SavingsReport.coldTrim` holds
+the reading when either arm has samples.
+
 ## Imports
 
 Import a name from the module that declares it: `@intentic/sandbox-contract/<path under src, without the extension>`,

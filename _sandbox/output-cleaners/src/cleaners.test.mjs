@@ -3,8 +3,8 @@ import { filterOutput } from "./agent-output-filter.mjs";
 import { CACHE_MARKER, CLEANERS, cleanLines, collapseCached, matchedCleaners, parseCleaners, sessionKeyFromLog, surfaceForms } from "./cleaners.mjs";
 
 // The cap's byte budgets are only reachable with blobs intact: `wide` cuts a 2 KB run down to ~340 bytes, so a fixture
-// built to trip the cap never gets there with it on. The cap tests below turn it off to probe the cap alone.
-const WITHOUT_WIDE = new Set(CLEANERS.filter((id) => id !== "wide"));
+// built to trip the cap never gets there with it on. Cap tests disable wide and search fairness to probe the cap alone.
+const WITHOUT_WIDE = new Set(CLEANERS.filter((id) => id !== "wide" && id !== "search"));
 
 // In-memory stand-in for the file-backed cache store, for deterministic tests with no disk access.
 const memoryStore = () => {
@@ -106,11 +106,15 @@ test("wide: an unbroken run is cut to its head and tail, and prose on the same l
 });
 
 test("wide: a blob that fits the budget is shown whole, since it is what the command was asked for", () => {
-    const page = (from) => JSON.stringify({ runs: Array.from({ length: 40 }, (_, i) => ({ id: from + i, conclusion: "failure", name: "ci-audit" })) });
+    const page = (from) =>
+        JSON.stringify({ runs: Array.from({ length: 40 }, (_, i) => ({ id: from + i, conclusion: "success", name: "ci-audit" })) });
     const command = "gh run list --json id,conclusion,name | jq -c .";
-    expect(cleanLines([page(0)], { command, exitCode: "0", enabled: new Set(CLEANERS) }).lines).toEqual([page(0)]);
+    expect(cleanLines([page(0)], { command, exitCode: "0", enabled: parseCleaners("-csv-schema") }).lines).toEqual([page(0)]);
     // Eight such pages are over the budget, and only then are the runs cut.
-    const over = cleanLines(Array.from({ length: 8 }, (_, i) => page(i * 40)), { command, exitCode: "0", enabled: new Set(CLEANERS) }).lines;
+    const over = cleanLines(
+        Array.from({ length: 8 }, (_, i) => page(i * 40)),
+        { command, exitCode: "0", enabled: parseCleaners("-csv-schema") },
+    ).lines;
     expect(over.map((line) => /… \d+ chars elided …/.test(line))).toEqual(Array.from({ length: 8 }, () => true));
 });
 
@@ -327,9 +331,9 @@ test("cleaner: a failing run keeps everything (command cleaners skip on non-zero
 });
 
 test("dedup: collapses a run of >=3 identical lines with a count", () => {
-    const lines = ["warn: retry", "warn: retry", "warn: retry", "warn: retry", "done"];
+    const lines = ["info: retry", "info: retry", "info: retry", "info: retry", "done"];
     expect(cleanLines(lines, { command: "echo", exitCode: "0", enabled: parseCleaners("dedup") }).lines).toEqual([
-        "warn: retry",
+        "info: retry",
         "  … (3 more identical lines)",
         "done",
     ]);
@@ -654,12 +658,21 @@ test("filterOutput: cache collapses a byte-identical success repeat, and is a no
     const store = memoryStore();
     // Must stay over CACHE_MIN_BYTES, or the collapse is declined before the never-worse guard runs.
     const raw = `${Array.from({ length: 20 }, (_, i) => `branch-${i} is up to date with origin/main and tracking it cleanly`).join("\n")}\n`;
-    expect(filterOutput(raw, { command: "git branch -vv", exitCode: "0", durationS: "0", enabled: new Set(CLEANERS), cacheStore: store }).out).toBe(raw);
+    expect(
+        filterOutput(raw, { command: "git branch -vv", exitCode: "0", durationS: "0", enabled: parseCleaners("-templates"), cacheStore: store }).out,
+    ).toBe(raw);
     const retain = () => "/logs/y.log";
-    const repeat = filterOutput(raw, { command: "git branch -vv", exitCode: "0", durationS: "0", retain, enabled: new Set(CLEANERS), cacheStore: store }).out;
+    const repeat = filterOutput(raw, {
+        command: "git branch -vv",
+        exitCode: "0",
+        durationS: "0",
+        retain,
+        enabled: parseCleaners("-templates"),
+        cacheStore: store,
+    }).out;
     expect(repeat).toContain(CACHE_MARKER);
     // Without a store, the same input passes through unchanged.
-    expect(filterOutput(raw, { command: "git branch -vv", exitCode: "0", durationS: "0" }).out).toBe(raw);
+    expect(filterOutput(raw, { command: "git branch -vv", exitCode: "0", durationS: "0", enabled: parseCleaners("-templates") }).out).toBe(raw);
 });
 
 test("filterOutput: a repeat too short to pay for the collapse marker is left alone", () => {
@@ -673,8 +686,16 @@ test("filterOutput: a repeat too short to pay for the collapse marker is left al
 test("filterOutput: cache disabled leaves a repeat untouched", () => {
     const store = memoryStore();
     const raw = `${Array.from({ length: 20 }, (_, i) => `branch-${i} is up to date with origin/main and tracking it cleanly`).join("\n")}\n`;
-    filterOutput(raw, { command: "git branch -vv", exitCode: "0", durationS: "0", enabled: parseCleaners("-cache"), cacheStore: store });
-    expect(filterOutput(raw, { command: "git branch -vv", exitCode: "0", durationS: "0", enabled: parseCleaners("-cache"), cacheStore: store }).out).toBe(raw);
+    filterOutput(raw, { command: "git branch -vv", exitCode: "0", durationS: "0", enabled: parseCleaners("-cache,-templates"), cacheStore: store });
+    expect(
+        filterOutput(raw, {
+            command: "git branch -vv",
+            exitCode: "0",
+            durationS: "0",
+            enabled: parseCleaners("-cache,-templates"),
+            cacheStore: store,
+        }).out,
+    ).toBe(raw);
 });
 
 // The one definition both masking lanes use: the terminal filter here and the daemon's tool results.

@@ -28,6 +28,10 @@ export interface ExperimentReadings {
     readonly fieldNotes: TurnFieldNotes;
     // Undefined when retrieval was never attempted, which is a different fact from a lookup that skipped.
     readonly turnContext: TurnContextOutcome | undefined;
+    // Undefined where the turn is not one the switch reaches (decide/turn-premise.ts toolSearchReaches).
+    readonly toolSearch: { readonly arm: boolean | undefined };
+    readonly stablePrompt: { readonly arm: boolean | undefined };
+    readonly coldTrim: { readonly arm: boolean | undefined; readonly cleared?: number | undefined } | undefined;
 }
 
 interface Experiment<Reading> {
@@ -88,6 +92,27 @@ export const EXPERIMENTS: { readonly [K in keyof ExperimentReadings]: Experiment
         on: (settings) => settings.iqSearch,
         holdout: () => 0,
         stamps: (outcome) => ({ ...opt("turnContext", deliveryOf(outcome)), ...opt("turnContextMs", outcome?.durationMs) }),
+    },
+    // Connected tools' schemas loaded on demand (the arm) against all of them sent with every request (the holdout).
+    toolSearch: {
+        salt: "tool-search",
+        on: (settings) => settings.toolSearch,
+        holdout: (settings) => settings.toolSearchHoldout,
+        stamps: ({ arm }) => opt("toolSearchArm", arm),
+    },
+    // The guidance that moves between turns said on the message when it changed (the arm), against the same paragraphs
+    // in the system block on every turn (the holdout). The Claude Code loop only.
+    stablePrompt: {
+        salt: "stable-system-prompt",
+        on: (settings) => settings.stableSystemPrompt,
+        holdout: (settings) => settings.stableSystemPromptHoldout,
+        stamps: ({ arm }) => opt("stablePromptArm", arm),
+    },
+    coldTrim: {
+        salt: "cold-trim",
+        on: (settings) => settings.coldTrim,
+        holdout: (settings) => settings.coldTrimHoldout,
+        stamps: (reading) => ({ ...opt("coldTrimArm", reading?.arm), ...opt("coldTrimmed", reading?.cleared) }),
     },
 };
 

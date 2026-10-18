@@ -46,7 +46,7 @@ const ACP = capabilitiesOf("some-installed-agent", "native");
 
 test("nothing to append is undefined, not an empty string", () => {
     // The runner spreads this into the request; an empty string would leave a trailing separator on the base prompt.
-    expect(turnPromptPlacement({ capabilities: CLAUDE, mode: "intentic", systemPrompt: "", stableSystemPrompt: false }).systemAppend).toBeUndefined();
+    expect(turnPromptPlacement({ capabilities: CLAUDE, mode: "intentic", systemPrompt: "" }).systemAppend).toBeUndefined();
 });
 
 test("custom replaces everything: nothing is appended to it", () => {
@@ -54,7 +54,6 @@ test("custom replaces everything: nothing is appended to it", () => {
         capabilities: CLAUDE,
         mode: "custom",
         systemPrompt: CUSTOM,
-        stableSystemPrompt: false,
         personaNote: PERSONA,
     });
     expect(placement.systemPrompt).toBe(CUSTOM);
@@ -67,7 +66,7 @@ test("custom replaces everything: nothing is appended to it", () => {
 // Claude Code composes these conventions itself (sdkSystemPrompt), so repeating them in the append would say it twice
 // on the one runtime that already has it.
 test("a runtime outside the Claude Code loop is told the workspace conventions; that loop is not told twice", () => {
-    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
+    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" });
     expect(codex.systemAppend).toContain("`refs/`");
     expect(codex.systemAppend).toContain("`public/`");
     expect(codex.systemAppend).toMatch(/commit only when asked/i);
@@ -75,7 +74,7 @@ test("a runtime outside the Claude Code loop is told the workspace conventions; 
     expect(codex.systemAppend).not.toContain("AskUserQuestion");
     expect(codex.systemAppend).not.toContain("mcp__web__browser");
 
-    const claude = turnPromptPlacement({ capabilities: CLAUDE, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
+    const claude = turnPromptPlacement({ capabilities: CLAUDE, mode: "intentic", systemPrompt: "" });
     expect(claude.systemAppend).toBeUndefined();
 });
 
@@ -83,13 +82,13 @@ test("a runtime outside the Claude Code loop is told the workspace conventions; 
 // an envelope means has to arrive wherever an envelope can.
 test("a runtime outside the Claude Code loop is told what outside content is", () => {
     for (const capabilities of [CODEX, CURSOR]) {
-        const placement = turnPromptPlacement({ capabilities, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
+        const placement = turnPromptPlacement({ capabilities, mode: "intentic", systemPrompt: "" });
         expect(placement.systemAppend).toContain("<untrusted-content");
     }
 });
 
 test("a runtime outside the loop carries the guidance block as its append", () => {
-    const placement = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
+    const placement = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" });
     expect(placement.systemAppend).toBe(guidanceBlock(undefined, "rg"));
 });
 
@@ -98,7 +97,6 @@ test("a custom prompt is added where it cannot replace", () => {
         capabilities: APPENDING,
         mode: "custom",
         systemPrompt: CUSTOM,
-        stableSystemPrompt: false,
     });
     expect(placement.systemPrompt).toBeUndefined();
     expect(placement.systemAppend).toBe(CUSTOM);
@@ -107,8 +105,8 @@ test("a custom prompt is added where it cannot replace", () => {
 // "" is a legal custom prompt on a runtime that replaces (no base at all); on one that can only add, there is simply
 // nothing to add.
 test("an emptied custom prompt replaces with nothing, and adds nothing", () => {
-    expect(turnPromptPlacement({ capabilities: CLAUDE, mode: "custom", systemPrompt: "", stableSystemPrompt: false }).systemPrompt).toBe("");
-    const cursor = turnPromptPlacement({ capabilities: APPENDING, mode: "custom", systemPrompt: "", stableSystemPrompt: false });
+    expect(turnPromptPlacement({ capabilities: CLAUDE, mode: "custom", systemPrompt: "" }).systemPrompt).toBe("");
+    const cursor = turnPromptPlacement({ capabilities: APPENDING, mode: "custom", systemPrompt: "" });
     expect(cursor.systemAppend).toBeUndefined();
     expect(cursor.systemPrompt).toBeUndefined();
 });
@@ -120,25 +118,24 @@ test("a runtime with no system prompt still hears which persona it is wearing", 
         capabilities: ACP,
         mode: "custom",
         systemPrompt: CUSTOM,
-        stableSystemPrompt: false,
         personaNote: PERSONA,
     });
     expect(placement.systemPrompt).toBeUndefined();
     expect(placement.systemAppend).toBeUndefined();
     expect(placement.userNotes).toEqual([{ title: "Who this turn is acting as", text: PERSONA }]);
     // Nothing to say is nothing sent: an empty list would put a bare separator in front of the user's own words.
-    expect(turnPromptPlacement({ capabilities: ACP, mode: "intentic", systemPrompt: "", stableSystemPrompt: false })).toEqual({});
+    expect(turnPromptPlacement({ capabilities: ACP, mode: "intentic", systemPrompt: "" })).toEqual({});
 });
 
 // The whole point of composing memory here: no runtime's own discovery decides whether the owner's rules arrive, so
 // every placement the axis has must carry them.
 test("the workspace's standing rules reach every runtime, whatever seam it has", () => {
     for (const capabilities of [CLAUDE, CODEX, CURSOR]) {
-        const placement = turnPromptPlacement({ capabilities, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, memoryNote: MEMORY });
+        const placement = turnPromptPlacement({ capabilities, mode: "intentic", systemPrompt: "", memoryNote: MEMORY });
         expect(placement.systemAppend).toContain(MEMORY);
     }
     // No system seam at all: the rules ride the user message, as the persona note does.
-    const acp = turnPromptPlacement({ capabilities: ACP, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, memoryNote: MEMORY });
+    const acp = turnPromptPlacement({ capabilities: ACP, mode: "intentic", systemPrompt: "", memoryNote: MEMORY });
     expect(acp.userNotes).toEqual([{ title: "Standing instructions for this workspace", text: MEMORY }]);
 });
 
@@ -149,7 +146,6 @@ test("a custom prompt drops the harness's guidance and keeps the owner's own rul
         capabilities: CLAUDE,
         mode: "custom",
         systemPrompt: CUSTOM,
-        stableSystemPrompt: false,
         personaNote: PERSONA,
         memoryNote: MEMORY,
     });
@@ -158,11 +154,11 @@ test("a custom prompt drops the harness's guidance and keeps the owner's own rul
     // Still suppressed: the persona note is this harness talking, not the owner.
     expect(claude.systemPrompt).not.toContain(PERSONA);
 
-    const cursor = turnPromptPlacement({ capabilities: APPENDING, mode: "custom", systemPrompt: CUSTOM, stableSystemPrompt: false, memoryNote: MEMORY });
+    const cursor = turnPromptPlacement({ capabilities: APPENDING, mode: "custom", systemPrompt: CUSTOM, memoryNote: MEMORY });
     expect(cursor.systemAppend).toBe(`${CUSTOM}\n\n${MEMORY}`);
 
     // An emptied custom prompt is still an empty prompt; the rules are all that is left, with no separator in front.
-    const emptied = turnPromptPlacement({ capabilities: CLAUDE, mode: "custom", systemPrompt: "", stableSystemPrompt: false, memoryNote: MEMORY });
+    const emptied = turnPromptPlacement({ capabilities: CLAUDE, mode: "custom", systemPrompt: "", memoryNote: MEMORY });
     expect(emptied.systemPrompt).toBe(MEMORY);
 });
 
@@ -305,14 +301,14 @@ test("an unattended turn keeps them: a wake nobody watches is where polling cost
 });
 
 test("a runtime outside the Claude Code loop is not told to use seams it has not got", () => {
-    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
+    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" });
     expect(codex.systemAppend).not.toContain("run_in_background");
     expect(codex.systemAppend).not.toContain("mcp__watch__start");
 });
 
 // Which binary is installed is not a loop-specific mechanism, so unlike the seams above it travels to every runtime.
 test("the search-binary steer travels to every runtime, like the other image facts", async () => {
-    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
+    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" });
     expect(codex.systemAppend).toContain("`rg` (ripgrep)");
     const claude = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, append: undefined })) as string;
     expect(claude).toContain("`rg` (ripgrep)");
@@ -351,7 +347,7 @@ test("both built-in bases say what the agent runs inside and where the product's
 
 // The skill lives under /root/.claude/skills, loaded only via the Claude Code loop's settingSources.
 test("a runtime outside the Claude Code loop is not pointed at a skill it cannot load", () => {
-    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
+    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" });
     expect(codex.systemAppend).not.toContain("`intentic` skill");
 });
 
@@ -370,7 +366,7 @@ test("the diagnostics tools are named on the turns that mounted them, and nowher
     // An unattended wake keeps diagnostics: an automation's own failure is exactly what those records answer.
     const unattended = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, unattended: true, diagnostics: true })) as string;
     expect(unattended).toContain("mcp__diagnostics__errors");
-    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
+    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" });
     expect(codex.systemAppend).not.toContain("mcp__diagnostics__");
 });
 
@@ -386,7 +382,7 @@ test("the terminal hand-off is named on the turns that mounted it, and nowhere e
     expect(withheld).not.toContain("mcp__terminal__");
     const preset = (await systemPromptOf({ ...BASE, mode: "claude", custom: undefined, terminal: true })) as { append: string };
     expect(preset.append).toContain("mcp__terminal__request_help");
-    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
+    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" });
     expect(codex.systemAppend ?? "").not.toContain("mcp__terminal__");
 });
 
@@ -532,7 +528,6 @@ test("field notes ride the append, after the persona and before the owner's rule
             capabilities: CODEX,
             mode: "intentic",
             systemPrompt: "",
-            stableSystemPrompt: false,
             personaNote: PERSONA,
             fieldNotesNote: NOTES,
             memoryNote: MEMORY,
@@ -546,7 +541,6 @@ test("a custom prompt drops the field notes and keeps the owner's own rules", ()
         capabilities: CLAUDE,
         mode: "custom",
         systemPrompt: CUSTOM,
-        stableSystemPrompt: false,
         fieldNotesNote: NOTES,
         memoryNote: MEMORY,
     });
@@ -561,7 +555,6 @@ test("a runtime with no system seam gets the field notes through the user messag
         capabilities: ACP,
         mode: "intentic",
         systemPrompt: "",
-        stableSystemPrompt: false,
         fieldNotesNote: NOTES,
         memoryNote: MEMORY,
     });
@@ -584,7 +577,6 @@ test("a lean window drops the workspace conventions from the append and keeps ev
         capabilities: CODEX,
         mode: "intentic",
         systemPrompt: "",
-        stableSystemPrompt: false,
         personaNote: PERSONA,
         memoryNote: MEMORY,
         trim: LEAN,
@@ -609,7 +601,6 @@ test("the smallest window swaps the base, carrying the persona and the owner's r
         capabilities: CLAUDE,
         mode: "intentic",
         systemPrompt: "",
-        stableSystemPrompt: false,
         personaNote: PERSONA,
         memoryNote: MEMORY,
         fieldNotesNote: NOTES,
@@ -633,7 +624,6 @@ test("a custom prompt is untouched by the smallest window", () => {
         capabilities: CLAUDE,
         mode: "custom",
         systemPrompt: CUSTOM,
-        stableSystemPrompt: false,
         memoryNote: MEMORY,
         trim: MINIMAL,
     });

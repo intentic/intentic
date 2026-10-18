@@ -12,6 +12,7 @@ import AgentClock from "../agent-settings/behaviour/AgentClock.vue";
 import AgentCodeSearch from "../agent-settings/behaviour/AgentCodeSearch.vue";
 import AgentDocumentSearch from "../agent-settings/behaviour/AgentDocumentSearch.vue";
 import AgentCommandOutput from "../agent-settings/behaviour/AgentCommandOutput.vue";
+import AgentToolLoading from "../agent-settings/behaviour/AgentToolLoading.vue";
 import AgentFinishedWork from "../agent-settings/behaviour/AgentFinishedWork.vue";
 import AgentInstructions from "../agent-settings/skills/AgentInstructions.vue";
 import AgentMemory from "../agent-settings/skills/AgentMemory.vue";
@@ -151,6 +152,8 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentDocumentSearch />
             <AgentRepoChecks />
             <AgentCommandOutput />
+            <!-- Beside it, the other thing every request carries whether or not the agent needs it: tool descriptions. -->
+            <AgentToolLoading />
             <!-- What it may answer with besides words: a page drawn in the chat, or one it asks on. -->
             <AgentChatPages />
             <!-- Beside it, the other way it answers besides text: out loud, when you talk to it hands-free. -->

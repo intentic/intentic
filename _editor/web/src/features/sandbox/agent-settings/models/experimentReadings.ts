@@ -26,6 +26,8 @@ export interface ResultRow {
     readonly off?: number;
     /** The averages are shares of the sample, 0 to 1, said as percentages. */
     readonly share?: boolean;
+    /** The averages are token counts, said compactly ("83k") rather than to a tenth. */
+    readonly tokens?: boolean;
     /**
      * The samples behind this row, which can be fewer than the table's: the calls before the edited file are read only
      * on turns that edited something.
@@ -80,12 +82,15 @@ export const outcomeOf = (reading: TurnMetricReading, minimum?: number): Outcome
 
 // The readings whose averages are shares of turns rather than counts per turn.
 const SHARE_ROWS: ReadonlySet<RowKey> = new Set([`openedWithListing`]);
+// The readings whose averages are thousands of tokens, where a tenth means nothing.
+const TOKEN_ROWS: ReadonlySet<RowKey> = new Set([`openingPrompt`, `openingWrite`]);
 
 const rowOf = (reading: TurnMetricReading, minimum: number | undefined): ResultRow => ({
     key: reading.metric,
     on: reading.on.mean,
     off: reading.off.mean,
     share: SHARE_ROWS.has(reading.metric),
+    tokens: TOKEN_ROWS.has(reading.metric),
     samples: { on: reading.on.turns, off: reading.off.turns },
     outcome: outcomeOf(reading, minimum),
 });

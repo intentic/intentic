@@ -113,6 +113,16 @@ it(`shows the last comparison that answered under a restarted one, its shares as
     expect(host.textContent).toContain(`A result shows once both groups have at least 30.`);
 });
 
+it(`says a prompt's size compactly in thousands of tokens`, () => {
+    const rows = rowText(
+        mount({
+            metrics: [{ metric: `openingPrompt`, on: { turns: 40, mean: 31_250 }, off: { turns: 40, mean: 83_287 }, deltaPct: -62.5, marginPct: 8 }],
+            minTurns: 30,
+        }),
+    );
+    expect(rows).toContain(`Prompt tokens per request | 31.3K | 83.3K | ↓ 63% fewer`);
+});
+
 it(`drops the earlier comparison once the current one has an answer of its own`, () => {
     const host = mount({ ...SETTLED, previous: RESTARTED.previous });
     expect(host.textContent).not.toContain(`Last result`);

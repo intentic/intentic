@@ -1,3 +1,4 @@
+import { opt } from "../../opt.js";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { browserServersOf, type BrowserTurnTools } from "../../browser/tools/browser-tools.js";
 import { mcpToolsOf } from "../../capabilities/mcp-tools.js";
@@ -43,13 +44,23 @@ export const turnToolsOf = async (
         // The runtime keeps its session's MCP config across turns (ACP): the turn rides the conversation's bearer while
         // no other turn holds it (turn-mounts.ts).
         readonly warmSession?: boolean;
+        readonly cleanOutput?: boolean;
     },
 ): Promise<TurnRemoteTools> => {
-    const lease = services.turnMounts.lease(turn.conversationId, { warmSession: turn.warmSession === true });
+    const lease = services.turnMounts.lease(turn.conversationId, {
+        warmSession: turn.warmSession === true,
+        ...opt("cleanOutput", turn.cleanOutput),
+    });
     try {
         const [extension, browser] = await Promise.all([
             extensionMcpToolsOf(services, granted, lease, turn.extensions),
-            browserServersOf(granted, services.workspace.root, { routers: services.browserRouters, lease }, turn.anonymousBrowser, turn.conversationId),
+            browserServersOf(
+                granted,
+                services.workspace.root,
+                { routers: services.browserRouters, lease },
+                turn.anonymousBrowser,
+                turn.conversationId,
+            ),
         ]);
         // Mounted beside the browsers rather than by browser-tools.ts, since the desktop builds on the browser stack's
         // display: the same pack brings it. It needs the persona's browser power and its shell power (desktop-tools.ts).

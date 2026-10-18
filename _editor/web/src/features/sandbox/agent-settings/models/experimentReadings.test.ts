@@ -91,6 +91,11 @@ describe(`tableOf`, () => {
         expect(table?.rows.map((row) => row.share)).toEqual([true, false]);
     });
 
+    it(`marks a reading whose averages are token counts, and only that one`, () => {
+        const table = tableOf(experiment([reading({ metric: `openingPrompt` }), reading({ metric: `failedCalls` })]));
+        expect(table?.rows.map((row) => row.tokens)).toEqual([true, false]);
+    });
+
     // The calls before the edited file are read only on turns that edited, so that row stands on fewer than the table.
     it(`gives each row the samples it stands on, not the table's`, () => {
         const table = tableOf(

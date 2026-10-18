@@ -102,6 +102,11 @@ export interface TurnContext {
     readonly settings?: SandboxSettings;
     readonly conversationTurns?: number;
     readonly iqSearchEnabled?: boolean;
+    // Whether the CLI defers connected tools' schemas behind its tool search (decide/turn-premise.ts); undefined leaves
+    // the CLI's own rule.
+    readonly toolSearch?: boolean;
+    // The CLI compacted this conversation's session since its last turn: what the history said before is a summary now.
+    readonly compacted?: boolean;
     // What the model's declared window will not pay for (context-trim.ts), resolved once above everything that reads
     // it. Absent means the window is unknown or large enough, which is every model outside a local one's card.
     readonly contextTrim?: TurnTrim;

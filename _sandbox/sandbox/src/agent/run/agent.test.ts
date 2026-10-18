@@ -358,6 +358,31 @@ test("the delegation ceilings reach the CLI only where the turn names one", asyn
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"]).toBe("5");
 });
 
+// The CLI turns its tool search off by itself behind any base URL that is not Anthropic's own (the privacy gateway's
+// loopback address included), so the turn says it either way, and only to a native Claude credential.
+test("tool search reaches the CLI as the turn decided it, and never past a translator", async () => {
+    const captured: Options[] = [];
+    const capture: QueryFn = async function* (args) {
+        captured.push(args.options);
+        // SAFETY: a bare success result is all the stream reads to end the turn; its other fields are never consulted.
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+    const gateway = "http://127.0.0.1:7071/privacy/gateway/s";
+
+    await collect(request, capture);
+    expect(captured.at(-1)?.env?.["ENABLE_TOOL_SEARCH"]).toBe(ambient("ENABLE_TOOL_SEARCH"));
+
+    await collect({ ...request, credential: { kind: "claude-oauth", token: "tok", gateway }, policy: { ...request.policy, toolSearch: true } }, capture);
+    expect(captured.at(-1)?.env?.["ENABLE_TOOL_SEARCH"]).toBe("true");
+
+    await collect({ ...request, policy: { ...request.policy, toolSearch: false } }, capture);
+    expect(captured.at(-1)?.env?.["ENABLE_TOOL_SEARCH"]).toBe("false");
+
+    const routed = { kind: "routed", baseUrl: "http://127.0.0.1:8788", authToken: "router-key" } as const;
+    await collect({ ...request, credential: routed, policy: { ...request.policy, toolSearch: true } }, capture);
+    expect(captured.at(-1)?.env?.["ENABLE_TOOL_SEARCH"]).toBe(ambient("ENABLE_TOOL_SEARCH"));
+});
+
 // Claude Code hides the Task* tools unless CLAUDE_CODE_ENABLE_TASKS is set, while CHECKLIST_GUIDANCE still tells the
 // model to look for them; both halves are asserted together.
 test("every turn pins the checklist tools on, and says so in the prompt it pins them for", async () => {

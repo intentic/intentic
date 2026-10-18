@@ -42,3 +42,6 @@ export interface FilterRunOptions {
 
 // One command's whole pass; never throws, and falls back to the raw text (redacted) on any failure.
 export const filterRun: (raw: string, options?: FilterRunOptions) => { out: string; heldOut: boolean; stages: Stage[] };
+
+// Shared raw-output retention: newest 30 files, at most two million characters per file.
+export const retainIn: (dir: string, name: string, values: readonly SecretValue[], maxChars?: number) => (text: string) => string | undefined;

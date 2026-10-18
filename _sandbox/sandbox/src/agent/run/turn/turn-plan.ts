@@ -35,6 +35,10 @@ export type TurnExperimentStamps = Partial<
         | "notesArm"
         | "notesChars"
         | "notesCohort"
+        | "toolSearchArm"
+        | "stablePromptArm"
+        | "coldTrimArm"
+        | "coldTrimmed"
         | "turnContext"
         | "turnContextMs"
     >

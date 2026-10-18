@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -183,7 +184,15 @@ export const daemonServersFor = (deps: DaemonServersDeps, turn: DaemonServersTur
             : [
                   turn.mounted.lease.open({
                       name,
-                      target: { kind: "daemon", server: sealedDoor(heldDoor(sdkServerDoor(config), relay), name, relay.mark) },
+                      target: {
+                          kind: "daemon",
+                          server: sealedDoor(heldDoor(sdkServerDoor(config), relay), name, relay.mark, {
+                              logsDir: join(deps.config.historyRoot, "logs"),
+                              spec: turn.settings.outputCleaners,
+                              holdout: turn.settings.outputHoldout,
+                              conversationId: input.conversationId,
+                          }),
+                      },
                       ...opt("timeoutMs", TIMEOUTS.get(name)),
                   }),
               ],
