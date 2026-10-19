@@ -6,9 +6,8 @@ import { deliverWake, type WakeDoors } from "../../seams/wake-delivery.js";
 import { bookedRerunWords } from "../../conversations/land/child-lands.js";
 import { childVerification } from "./child-verification.js";
 import { familyEnded } from "./family-cancel.js";
-import { randomUUID } from "node:crypto";
 import { subagentEndingReported, subagentEndingReporter } from "./subagents.js";
-import { noteQueuedReport } from "./queued-reports.js";
+import { noteQueuedReport, queuedChildReportId } from "./queued-reports.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 
@@ -114,7 +113,7 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
         if (subagentEndingReported(deps.conversations, settled.conversationId)) {
             return;
         }
-        const messageId = `child-report-${randomUUID()}`;
+        const messageId = queuedChildReportId(settled.conversationId);
         const receipt = await deliverWake(deps.doors, {
             conversationId: target.parent,
             prompt,

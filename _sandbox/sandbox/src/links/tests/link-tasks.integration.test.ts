@@ -18,19 +18,31 @@ import {
     type LinkTaskDeps,
     messageTask,
     noteLinkTurnSettled,
+    startUnstartedTasks,
     statusOf,
     stopTask,
 } from "../link-tasks.js";
+import { fileStartWindow, turnStartsDocument } from "../../store/start-window.js";
 
 // The taking side of a link: what a task becomes here, held to the terms this sandbox's owner wrote on the link. The model
 // turns are the suite's: every `say` is recorded, and the run a task parks in is held the way the turn engine holds it.
 
 const quiet = { info: () => undefined, warn: () => undefined };
 
-const setup = async (terms: { readonly approve?: boolean; readonly turnsPerHour?: number; readonly actsAs?: string } = {}) => {
-    const links = fileInboundLinks(join(mkdtempSync(join(tmpdir(), "link-tasks-")), inboundLinksDocument.path));
-    const minted = await links.mint("dev", { terms });
-    const resolved = await links.resolve(minted.token);
+interface Daemon {
+    // The history volume this daemon's stores live on; a second daemon on the same one is the first after a restart.
+    readonly history?: string;
+    // The link the earlier daemon minted, whose token it presented; a fresh daemon mints its own.
+    readonly token?: string;
+    // What the turn port answers each say with: started, unless a test makes it die before answering.
+    readonly say?: (words: Said) => Promise<{ readonly delivered: "started"; readonly run: string }>;
+}
+
+const setup = async (terms: { readonly approve?: boolean; readonly turnsPerHour?: number; readonly actsAs?: string } = {}, daemon: Daemon = {}) => {
+    const history = daemon.history ?? mkdtempSync(join(tmpdir(), "link-tasks-"));
+    const links = fileInboundLinks(join(history, inboundLinksDocument.path));
+    const token = daemon.token ?? (await links.mint("dev", { terms })).token;
+    const resolved = await links.resolve(token);
     if (resolved === undefined) {
         throw new Error("a minted link must resolve");
     }
@@ -42,12 +54,13 @@ const setup = async (terms: { readonly approve?: boolean; readonly turnsPerHour?
     const deps: LinkTaskDeps = {
         links,
         conversations,
+        starts: fileStartWindow(join(history, turnStartsDocument.path)),
         notify: (notice) => void notices.push(notice),
         logger: quiet,
         turns: {
             say: async (words) => {
                 said.push(words);
-                return { delivered: "started", run: `run-${said.length}` };
+                return daemon.say === undefined ? { delivered: "started", run: `run-${said.length}` } : daemon.say(words);
             },
             reply: async (reply) => {
                 replies.push(reply);
@@ -65,7 +78,7 @@ const setup = async (terms: { readonly approve?: boolean; readonly turnsPerHour?
         const run = unstubbed<LiveRun>("run", { id: `run-${conversationId}`, rows, done: false, expired: () => false });
         conversations.holdings(RUNS).hold(conversationId, conversationId, run);
     };
-    return { deps, link: resolved, links, said, replies, stops, notices, parkIn };
+    return { deps, link: resolved, links, said, replies, stops, notices, parkIn, history, token };
 };
 
 const asked = (requestId: string, extra: { readonly hops?: number; readonly tainted?: string } = {}) => ({
@@ -199,4 +212,44 @@ test("a link reaches only its own tasks, by the store's own key", async () => {
     const otherLink: ResolvedLink | undefined = await links.resolve(other.token);
     expect(otherLink).toMatchObject({ id: other.id, label: "other" });
     expect(await links.task(other.id, { conversationId: status.conversationId })).toBeUndefined();
+});
+
+// A RESTART is a second daemon on the same history volume: every store opened afresh, nothing of the first one's memory.
+
+test("the hourly allowance still counts the turns started before a restart", async () => {
+    const before = await setup({ turnsPerHour: 2 });
+    ok(await askTask(before.deps, before.link, asked("r1")));
+    ok(await askTask(before.deps, before.link, asked("r2")));
+    const after = await setup({}, { history: before.history, token: before.token });
+    expect(await askTask(after.deps, after.link, asked("r3"))).toMatchObject({ refused: 429 });
+    expect(after.said).toHaveLength(0);
+    expect(await after.links.task(after.link.id, { requestId: "r3" })).toBeUndefined();
+});
+
+test("a task filed but never started before a restart starts at boot, once, without spending the allowance again", async () => {
+    // The daemon dies between filing the task and its turn being said: the turn port never answers.
+    const before = await setup({ turnsPerHour: 1 }, { say: async () => { throw new Error("the daemon stopped"); } });
+    await expect(askTask(before.deps, before.link, asked("r1"))).rejects.toThrow("the daemon stopped");
+    expect(await before.links.task(before.link.id, { requestId: "r1" })).toMatchObject({ state: "running", task: "Check the error rate for r1." });
+
+    const after = await setup({}, { history: before.history, token: before.token });
+    expect(await startUnstartedTasks(after.deps)).toBe(1);
+    // Said under the first try's message id, which the turn engine answers as a duplicate had that try got through.
+    expect(after.said.map((words) => [words.turn.messageId, words.turn.prompt.includes("Check the error rate for r1.")])).toEqual([["link-r1", true]]);
+    const started = await after.links.task(after.link.id, { requestId: "r1" });
+    expect(started).toMatchObject({ state: "running", version: 2 });
+    expect(started?.task).toBeUndefined();
+    // A second boot finds nothing left to start, so the task never runs twice.
+    expect(await startUnstartedTasks(after.deps)).toBe(0);
+    expect(after.said).toHaveLength(1);
+    // Its turn was booked when it was filed: the hour is still spent.
+    expect(await askTask(after.deps, after.link, asked("r2"))).toMatchObject({ refused: 429 });
+});
+
+test("a task held for the owner is not started by a boot, and a started one forgets its words", async () => {
+    const { deps, link, links } = await setup({ approve: true });
+    ok(await askTask(deps, link, asked("held")));
+    expect(await startUnstartedTasks(deps)).toBe(0);
+    await decideTask(deps, link, "held", true);
+    expect((await links.task(link.id, { requestId: "held" }))?.task).toBeUndefined();
 });

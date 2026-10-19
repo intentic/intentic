@@ -88,6 +88,16 @@ describe(`daemon boot order`, () => {
         expect(run.indexOf("booted();")).toBeGreaterThan(run.indexOf("for (const step of BOOT_STEPS)"));
     });
 
+    // A land's version commit a restart cut (conversations/land/version-landed.ts) holds its repos from this step on, so
+    // it is a step: past the fleet loading, which it reads, and before the gate opens, so no turn starts or resumes first.
+    it(`settles the version commits a restart cut once the fleet is loaded, before the gate opens`, () => {
+        const order = declared();
+        expect(order.indexOf("pendingVersions"), "it must still be a declared step").toBeGreaterThan(order.indexOf("agentsRegistry"));
+        expect(order.indexOf("agentsRegistry")).toBeGreaterThan(-1);
+        expect(stepOf("pendingVersions")).toContain("settlePendingVersions(services)");
+        expect(main.indexOf("await runBootSteps(")).toBeLessThan(main.indexOf("services.boot.finish();"));
+    });
+
     // The predicate is unit-tested (system/project-dir.test.ts); what is pinned here is that the step reads it.
     it(`seeds no starter site beside a project folder`, () => {
         expect(stepOf("starterSite")).toContain("&& seedsStarterSite(config)");

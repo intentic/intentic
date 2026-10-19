@@ -2,11 +2,10 @@ import { randomUUID } from "node:crypto";
 import { sleep } from "@intentic/base/async";
 import type { Capability, LinkConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { childReportPrompt } from "@intentic/sandbox-contract/events/agent-words";
-import { LINK_MAX_HOPS, type LinkHello, type LinkTaskStatus } from "@intentic/sandbox-contract/schemas/links";
+import { LINK_MAX_HOPS, type LinkHello, type LinkTask, type LinkTaskStatus } from "@intentic/sandbox-contract/schemas/links";
 import { newConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import type { Logger } from "pino";
-import { z } from "zod";
 import { parentOfActor } from "../auth/principal.js";
 import type { ChildActionResult, ChildParent, ChildSpawnResult, PendingChildCard } from "../agent/subagents/children.js";
 import { noteQueuedReport } from "../agent/subagents/queued-reports.js";
@@ -24,9 +23,8 @@ import type { ConversationActors } from "../conversations/actor/conversation-act
 import type { TurnStanding } from "../conversations/actor/turn-standing.js";
 import { conversationTaintSource, markConversationTaint, taintWords } from "../guard/turn-taint.js";
 import { opt } from "../opt.js";
-import { defineDocument } from "../store/evolution/documents.js";
-import { openDocument } from "../store/open-document.js";
 import { type LinkAnswerOf, linkAnswer, linkAsk, linkHello, linkMessage, linkStatus, linkStop, type LinkTarget } from "../sandboxes/link-client.js";
+import { askedOf, type AskedChild, childrenFile, type ChildrenFile, type StoredChild } from "./linked-children-store.js";
 import { LINK_CONVERSATION_PREFIX } from "./link-tasks.js";
 
 // THE ASKING SIDE OF A LINK: a task this sandbox's agent handed to another of the owner's sandboxes (`delegate`), kept on
@@ -43,35 +41,12 @@ export const LINKED_PREFIX = "linked-";
 // How long a follower waits before asking again when the far side did not answer, growing to the ceiling.
 const RETRY_FIRST_MS = 5_000;
 const RETRY_MAX_MS = 60_000;
-// How many settled tasks the file remembers, newest first; an unsettled one is kept whatever its age.
-const KEPT_SETTLED = 200;
 // Characters of a report a wake says inline; the rest stays over there, and a wait hands it whole.
 const REPORT_CHARS = 4_000;
 // How long `links` waits on each linked sandbox's answer before calling it offline.
 const HELLO_MS = 8_000;
 // How far up a family `hopsOf` walks; nesting stops far below this, it only bounds a corrupt registry's loop.
 const FAMILY_WALK = 32;
-
-const StoredChildSchema = z.object({
-    id: z.string(),
-    parent: z.string(),
-    link: z.string(),
-    // The card's address too, so a renamed card still finds the tasks handed over through it.
-    url: z.string().optional(),
-    sandbox: z.string(),
-    sandboxId: z.string().optional(),
-    remote: z.string(),
-    description: z.string().optional(),
-    startedAt: z.number(),
-    settledAt: z.number().optional(),
-});
-type StoredChild = z.infer<typeof StoredChildSchema>;
-const StoredChildrenSchema = z.object({ children: z.array(StoredChildSchema) });
-type StoredChildren = z.infer<typeof StoredChildrenSchema>;
-
-// On the history volume: which far conversations this sandbox's agents are still waiting on, so a restart picks the
-// following up again and the parent still hears how each one ended.
-export const linkedChildrenDocument = defineDocument({ root: "history", path: "links/linked-children.json", schema: StoredChildrenSchema });
 
 export interface DelegateAsk {
     // The link card's id: the agent's name for the other sandbox.
@@ -138,7 +113,7 @@ export interface LinkedChildren {
 
 // What the follower knows of one task between polls, in memory beside its stored record.
 interface Live {
-    stored: StoredChild;
+    stored: AskedChild;
     last: LinkTaskStatus | undefined;
     report: string | undefined;
     following: AbortController | undefined;
@@ -147,12 +122,10 @@ interface Live {
 type LinkCard = Extract<Capability, { kind: "link" }>;
 
 // Everything the engine's parts share: its deps, the wire, every task it knows, its file, and whether it has closed.
-interface Engine {
+interface Engine extends ChildrenFile {
     readonly deps: LinkedChildrenDeps;
     readonly wire: LinkWire;
     readonly live: Map<string, Live>;
-    readonly read: () => Promise<StoredChildren>;
-    readonly put: (child: StoredChild) => Promise<void>;
     readonly state: { closed: boolean };
 }
 
@@ -178,7 +151,7 @@ const taintOf = (conversationId: string): string | undefined => {
     return source === undefined ? undefined : taintWords(source).slice(0, 500);
 };
 
-const birthOf = (stored: StoredChild, status: LinkedChildBirth["status"], again: boolean): LinkedChildBirth => ({
+const birthOf = (stored: AskedChild, status: LinkedChildBirth["status"], again: boolean): LinkedChildBirth => ({
     id: stored.id,
     ...opt("description", stored.description),
     linked: { link: stored.link, sandbox: stored.sandbox, ...opt("sandboxId", stored.sandboxId), conversationId: stored.remote },
@@ -186,7 +159,7 @@ const birthOf = (stored: StoredChild, status: LinkedChildBirth["status"], again:
     ...opt("again", again ? (true as const) : undefined),
 });
 
-const openRecord = (engine: Engine, stored: StoredChild, status: LinkedChildBirth["status"], again: boolean): void =>
+const openRecord = (engine: Engine, stored: AskedChild, status: LinkedChildBirth["status"], again: boolean): void =>
     openLinkedChild({ conversationId: stored.parent, conversations: engine.deps.conversations, subagentsDir: undefined }, birthOf(stored, status, again));
 
 // The card a task went through: by its name, else by its address, which a rename leaves alone.
@@ -227,6 +200,7 @@ const settle = async (engine: Engine, child: Live, status: "completed" | "failed
     settleSpawnedChild(conversations, stored.id, { status, report, ...opt("error", error) });
     if (stored.settledAt === undefined) {
         stored.settledAt = Date.now();
+        stored.report = report === "" ? undefined : report;
         await engine.put(stored).catch((failure: Error) => logger.warn({ err: failure, child: stored.id }, "linked task: its ending was not filed"));
     }
     const reported = subagentEndingReporter(conversations, stored.id);
@@ -401,36 +375,37 @@ const delegate = async (engine: Engine, parent: ChildParent, ask: DelegateAsk): 
         };
     }
     const id = `${LINKED_PREFIX}${newConversationId()}`;
-    const asked = await engine.wire.ask(targetOf(card), {
+    const asking: LinkTask = {
         requestId: id,
         task: ask.task,
         ...opt("title", ask.description?.slice(0, 80)),
         hops,
         ...opt("tainted", taintOf(parent.conversationId)),
         from: { conversation: parent.conversationId, ...opt("title", engine.deps.entryOf(parent.conversationId)?.title?.slice(0, 200)) },
-    });
-    if (!asked.ok) {
-        return { ok: false, message: `"${sandboxNameOf(card)}" did not take the task: ${asked.message}.` };
-    }
-    const stored: StoredChild = {
+    };
+    const pending: StoredChild = {
         id,
         parent: parent.conversationId,
         link: card.id,
         url: card.config.url,
         sandbox: sandboxNameOf(card),
         ...opt("sandboxId", card.config.sandboxId),
-        remote: asked.value.conversationId,
+        asking,
         ...opt("description", ask.description ?? ask.task.split("\n")[0]?.slice(0, 120)),
         startedAt: Date.now(),
     };
-    await engine.put(stored);
-    const child: Live = { stored, last: undefined, report: undefined, following: undefined };
-    engine.live.set(id, child);
-    const held = asked.value.state === "held";
-    openRecord(engine, stored, held ? "pending" : "running", false);
-    if (!(await take(engine, child, asked.value))) {
-        follow(engine, child);
+    // Filed before it is asked: a daemon that stops between the two asks again at boot (reask), rather than leaving a
+    // task over there that nobody here follows.
+    await engine.put(pending);
+    const asked = await engine.wire.ask(targetOf(card), asking);
+    if (!asked.ok) {
+        await engine.drop(id);
+        return { ok: false, message: `"${sandboxNameOf(card)}" did not take the task: ${asked.message}.` };
     }
+    const child = await adopt(engine, pending, asked.value);
+    const { stored } = child;
+    const held = asked.value.state === "held";
+    await startFollowing(engine, child, asked.value, held ? "pending" : "running");
     engine.deps.logger.info({ child: id, parent: parent.conversationId, link: card.id, remote: stored.remote }, "linked task: handed over");
     const where = held
         ? `Handed to "${stored.sandbox}", where it waits for that sandbox's owner to allow it.`
@@ -480,7 +455,7 @@ const sendTo = async (engine: Engine, child: Live, message: string): Promise<Chi
     }
     // A settled task reopens: its record is live again and the follower picks it back up.
     if (child.stored.settledAt !== undefined || child.following === undefined) {
-        const { settledAt: _settled, ...unsettled } = child.stored;
+        const { settledAt: _settled, report: _report, ...unsettled } = child.stored;
         child.stored = unsettled;
         child.report = undefined;
         await engine.put(child.stored);
@@ -522,13 +497,59 @@ const cancelOf = async (engine: Engine, child: Live): Promise<ChildActionResult>
     return { ok: true, note: `Stopped over there. What it already changed stays in "${child.stored.sandbox}"; send it a message to carry on.` };
 };
 
+// The far side took the task: its conversation there is on file and the ask is not kept any more.
+const adopt = async (engine: Engine, pending: StoredChild, status: LinkTaskStatus): Promise<Live> => {
+    const stored = askedOf(pending, status.conversationId);
+    await engine.put(stored);
+    const child: Live = { stored, last: undefined, report: undefined, following: undefined };
+    engine.live.set(stored.id, child);
+    return child;
+};
+
+// On the parent's roster, then the first status taken and, unless that settled it, followed.
+const startFollowing = async (engine: Engine, child: Live, status: LinkTaskStatus, as: LinkedChildBirth["status"]): Promise<void> => {
+    openRecord(engine, child.stored, as, false);
+    if (!(await take(engine, child, status))) {
+        follow(engine, child);
+    }
+};
+
+// A task filed here whose ask the far side never answered before the daemon stopped: asked again under the same id until
+// the far side answers. One it refuses (or a card since removed) was never taken over there, so its record goes.
+const reask = async (engine: Engine, pending: StoredChild & { asking: LinkTask }): Promise<void> => {
+    let retryMs = RETRY_FIRST_MS;
+    while (!engine.state.closed) {
+        const card = await cardFor(engine, pending.link, pending.url);
+        const asked = card === undefined ? undefined : await engine.wire.ask(targetOf(card), pending.asking);
+        if (asked?.ok === true) {
+            await startFollowing(engine, await adopt(engine, pending, asked.value), asked.value, asked.value.state === "held" ? "pending" : "running");
+            engine.deps.logger.info({ child: pending.id, remote: asked.value.conversationId }, "linked task: handed over after a restart");
+            return;
+        }
+        if (asked === undefined || (asked.status >= 400 && asked.status < 500)) {
+            await engine.drop(pending.id);
+            engine.deps.logger.warn({ child: pending.id, why: asked?.message ?? "its link card was removed" }, "linked task: not taken over there after a restart");
+            return;
+        }
+        await sleep(retryMs, { unref: true });
+        retryMs = Math.min(retryMs * 2, RETRY_MAX_MS);
+    }
+};
+
 const resume = async (engine: Engine): Promise<void> => {
     const stored = (await engine.read()).children;
     for (const entry of stored) {
-        const child: Live = { stored: entry, last: undefined, report: undefined, following: undefined };
+        const { remote, asking } = entry;
+        if (remote === undefined) {
+            void (asking === undefined ? engine.drop(entry.id) : reask(engine, { ...entry, asking })).catch((error: Error) =>
+                engine.deps.logger.warn({ err: error, child: entry.id }, "linked task: not asked again"),
+            );
+            continue;
+        }
+        const child: Live = { stored: { ...entry, remote }, last: undefined, report: entry.report, following: undefined };
         engine.live.set(entry.id, child);
         if (entry.settledAt === undefined) {
-            openRecord(engine, entry, "running", true);
+            openRecord(engine, child.stored, "running", true);
             follow(engine, child);
         }
     }
@@ -536,22 +557,6 @@ const resume = async (engine: Engine): Promise<void> => {
     if (following > 0) {
         engine.deps.logger.info({ following }, "linked tasks: following again after a restart");
     }
-};
-
-// The children's file: the newest KEPT_SETTLED settled ones and every unsettled one.
-const childrenFile = (path: string): Pick<Engine, "read" | "put"> => {
-    const file = openDocument<typeof linkedChildrenDocument, StoredChildren>(linkedChildrenDocument, path, { fallback: () => ({ children: [] }) });
-    return {
-        read: () => file.read(),
-        put: async (child) => {
-            await file.update((stored) => {
-                const others = stored.children.filter((candidate) => candidate.id !== child.id);
-                const settled = others.filter((candidate) => candidate.settledAt !== undefined).toSorted((left, right) => (right.settledAt ?? 0) - (left.settledAt ?? 0));
-                const dropped = new Set(settled.slice(KEPT_SETTLED).map((candidate) => candidate.id));
-                return { children: [...others.filter((candidate) => !dropped.has(candidate.id)), child] };
-            });
-        },
-    };
 };
 
 export const createLinkedChildren = (deps: LinkedChildrenDeps): LinkedChildren => {

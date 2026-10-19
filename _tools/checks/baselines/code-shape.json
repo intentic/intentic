@@ -284,10 +284,7 @@
         "count": 788,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/ui/src/components/sandbox/deviceDetail.ts": {
-        "count": 705,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
+    "_editor/ui/src/components/sandbox/deviceDetail.ts": 706,
     "_editor/ui/src/composables/useHighlighter.ts#highlightSliced#cognitive": {
         "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
@@ -408,14 +405,8 @@
         "count": 186,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/agents/review/AgentDetail.vue": {
-        "count": 822,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_editor/web/src/features/agents/review/AgentReviewPanel.vue": {
-        "count": 1066,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
+    "_editor/web/src/features/agents/review/AgentDetail.vue": 827,
+    "_editor/web/src/features/agents/review/AgentReviewPanel.vue": 1068,
     "_editor/web/src/features/agents/review/pager/swipePager.ts#useSwipePager#lines": {
         "count": 256,
         "why": "standing when the check arrived (2026-10-16)"
@@ -766,22 +757,13 @@
         "count": 184,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/workspace/home/HomeView.vue": {
-        "count": 724,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_editor/web/src/features/workspace/page/WorkspaceDesktop.vue": {
-        "count": 1079,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
+    "_editor/web/src/features/workspace/home/HomeView.vue": 726,
+    "_editor/web/src/features/workspace/page/WorkspaceDesktop.vue": 1080,
     "_editor/web/src/features/workspace/page/WorkspaceDesktop.vue#<anonymous>#lines": {
         "count": 129,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/workspace/page/WorkspaceMobile.vue": {
-        "count": 744,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
+    "_editor/web/src/features/workspace/page/WorkspaceMobile.vue": 746,
     "_editor/web/src/features/workspace/viewers/FileViewer.vue": {
         "count": 869,
         "why": "standing when the check arrived (2026-10-16)"
@@ -1528,7 +1510,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts": {
-        "count": 1107,
+        "count": 1101,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts#rehydrateParkedTurn#lines": {
@@ -1556,7 +1538,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/subagents/children.ts": {
-        "count": 1827,
+        "count": 1821,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/subagents/subagent-wait.ts#subagentWaitServer#lines": {
@@ -1564,7 +1546,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/subagents/subagents.ts": {
-        "count": 1073,
+        "count": 1047,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/subagents/subagents.ts#noteSubagentTask#cognitive": {
@@ -1580,7 +1562,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/tools/jobs/background-jobs.ts": {
-        "count": 863,
+        "count": 848,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/tools/turn-mounts.ts#createTurnMounts#lines": {
@@ -1640,7 +1622,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/automations/scheduler.ts": {
-        "count": 1281,
+        "count": 1268,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/automations/scheduler.ts#runFire#cognitive": {
@@ -1664,8 +1646,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/bootstrap/state-registry.ts#stateDocuments#lines": {
-        "count": 125,
-        "why": "generated, one line per stored document: spawned-children/ and script-runs/ joined it (2026-10-19)"
+        "count": 131,
+        "why": "generated, one line per stored document: spawned-children/, script-runs/, turn-starts.json, kept-jobs/, panels.json, the two automation inboxes and main's own newest joined it (2026-10-19)"
     },
     "_sandbox/sandbox/src/browser/cast/browser-view.ts#createBrowserViewRoute.<anonymous>#lines": {
         "count": 208,
@@ -1835,7 +1817,7 @@
         "count": 115,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/composition.ts": 935,
+    "_sandbox/sandbox/src/composition.ts": 938,
     "_sandbox/sandbox/src/composition.ts#createServices#lines": {
         "count": 273,
         "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
@@ -1897,7 +1879,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/conversations/registry/agents-registry.ts": {
-        "count": 1444,
+        "count": 1436,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/conversations/registry/agents-registry.ts#createFleet#cognitive": {
@@ -2009,7 +1991,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/extensions/extension-updates.ts": {
-        "count": 705,
+        "count": 662,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/extensions/extension-updates.ts#checkExtensionUpdates.<anonymous>#cognitive": {

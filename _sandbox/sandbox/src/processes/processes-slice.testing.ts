@@ -42,6 +42,7 @@ export const fakeProcesses = (
     const stopped: string[] = [];
     return Object.assign(
         unstubbed<ManagedProcesses>("processes", {
+            restore: async () => {},
             start: async (repo, spec) => {
                 started.push({ repo, cwd: spec.cwd });
             },

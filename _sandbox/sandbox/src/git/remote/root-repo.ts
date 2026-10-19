@@ -7,7 +7,7 @@ import { defaultGit, gitInit, gitStageAll, type GitRunner } from "@intentic/base
 import { repoGitDir, rootExcludes, syncRootExcludes } from "../../workspace/layout/git-layout.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
-import { commitIndex, stageAll } from "../changes/changes-index.js";
+import { commitIndex, stageAll, unstagePaths } from "../changes/changes-index.js";
 import { scratchOf, scratchScopeOf } from "../changes/scratch.js";
 import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 import { ignoreFileMode } from "./repo-git-dirs.js";
@@ -121,15 +121,20 @@ const skippedPaths = (error: unknown): void => {
 
 // Every capture of a checkout's remainder, the main tree's included: all but its scratch (scratch.ts), the root's stray
 // gitlinks dropped between staging and commit, no commit hook consulted. `workspaceRoot` is the main tree's root.
+// `leave` names paths that stay out of the commit as they are in the tree: a land's, whose own commit is still to come
+// (version-landed.ts), so this one cannot take them under another subject.
 export const commitWorktreeRemainder = async (
     repo: string,
     dir: string,
     message: string,
     workspaceRoot: string,
     git: GitRunner = defaultGit,
+    leave: readonly string[] = [],
 ): Promise<boolean> => {
     const scratch = await scratchOf(dir, await scratchScopeOf(repo, workspaceRoot), git);
     await stageAll(dir, scratch, git).catch(skippedPaths);
+    // Back to HEAD in the index only: the tree keeps them, uncommitted, for the commit that owes them.
+    await unstagePaths(dir, leave, git);
     if (repo === "root") {
         const gitlinks = await strayGitlinks(dir, git);
         if (gitlinks.length > 0) {

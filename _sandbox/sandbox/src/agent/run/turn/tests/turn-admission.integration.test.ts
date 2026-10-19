@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ATTACHMENT_LIMIT, AgentTurnSchema } from "@intentic/sandbox-contract/schemas/agent";
 import type { AgentDomainPolicy } from "@intentic/sandbox-contract/schemas/settings";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
@@ -87,6 +90,8 @@ const refusedAdmission = async (get: () => Promise<AgentDomainPolicy>) => {
         conversations: fleet.conversations,
         events,
         workspace: unstubbed<Services["workspace"]>("workspace", { root: "/nowhere/domain-admission" }),
+        // Where a journalled run's log is written as it draws (sessions/run-log.ts).
+        config: unstubbed<Services["config"]>("config", { historyRoot: mkdtempSync(join(tmpdir(), "admission-history-")) }),
         agentDomainPolicy: unstubbed<Services["agentDomainPolicy"]>("agentDomainPolicy", { get: policyRead }),
         // The daemon's own issuer over the same protected read, as composition.ts builds it.
         agentExecution: createAgentExecutionService(policyRead),

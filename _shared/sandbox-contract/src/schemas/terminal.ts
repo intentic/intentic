@@ -219,6 +219,14 @@ export const SubagentVerificationSchema = z.object({
         ),
 });
 export type SubagentVerification = z.infer<typeof SubagentVerificationSchema>;
+// Where the Claude runtime keeps an in-process subagent's own record: beside the session it ran in, under the runtime's
+// own id for it. The daemon pairs the two while the subagent runs and writes them onto its delegation's card, so the
+// subagent's whole run reads back from that record after a restart, when nothing in memory still knows where it is.
+export const SubagentSdkRecordSchema = z.object({
+    sessionId: z.string().describe("The provider session the subagent ran in."),
+    agentId: z.string().describe("The runtime's own id for the subagent, which names its record beside that session."),
+});
+export type SubagentSdkRecord = z.infer<typeof SubagentSdkRecordSchema>;
 export const SubagentSessionSchema = z.object({
     id: z
         .string()

@@ -81,7 +81,7 @@ export const checks = ({
             });
             if (unkept.length > 0) {
                 fail(
-                    `${unkept.length} turn(s) held on a spent allowance cannot be written for a restart, so a restart before the reset loses the turn and its booking: ${unkept.join(", ")}`,
+                    `${unkept.length} held turn(s) cannot be written for a restart, so a restart loses the turn and its booking or remedy: ${unkept.join(", ")}`,
                 );
             }
         },

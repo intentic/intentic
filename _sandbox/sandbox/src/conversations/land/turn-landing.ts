@@ -256,7 +256,8 @@ export async function* landTurn(deps: LandingDeps, hooks: LandingHooks, turn: La
     // A clean turn that ended to wait on its own wake skips its land, kept for if that wake goes away without firing
     // (wake-held-land.ts); any other ending clears what an earlier one kept.
     const heldForWake = !turn.failed && !turn.aborted && turn.awaitingWake && isolated;
-    noteLandHeldForWake(deps.conversations, id, heldForWake ? { autoLand: turn.autoLand } : undefined);
+    // On the record, since the wake it waits on outlives a restart.
+    await noteLandHeldForWake(deps, id, heldForWake ? opt("autoLand", turn.autoLand) : undefined);
     if (turn.failed || turn.aborted || turn.awaitingWake || !isolated) {
         return;
     }

@@ -71,7 +71,8 @@ import { checklistSeedOf } from "./task-store.js";
 import { carriedCostOf } from "./carried-cost.js";
 import { promptInputOf, sdkSystemPrompt, terminalMounted } from "../prompt/system-prompt.js";
 import { noteChildWork } from "../subagents/child-verification.js";
-import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
+import { subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
+import { endTurnSubagents, recordInto } from "../subagents/subagent-transcript.js";
 import { ASK_TOOL_NAMES } from "../../sessions/vocabulary/question-answers.js";
 import { uiServer } from "../pages/ui-server.js";
 import { PAGE_TOOL_NAMES } from "../pages/page-names.js";
@@ -562,7 +563,7 @@ const baseOptions = (
                     : {},
                 // Pairs this turn's in-process children with their meta files (type, ask, model, report) and appends what
                 // checked their work to each delegation's result.
-                subagents !== undefined ? subagentHooks(subagents) : {},
+                subagents !== undefined ? subagentHooks(subagents, recordInto(push)) : {},
                 // Drawn in the chat after a call: a connected MCP server's app (mcp-apps.ts), a review's findings (review-findings.ts).
                 appHooks(request, push),
                 reviewHooks(push),
@@ -1056,9 +1057,9 @@ export async function* runAgent(
         } catch (error) {
             push(credential.kind === "trial" ? trialUnavailableFrame() : { kind: "error", message: errorMessage(error, stderr) });
         } finally {
-            // Any child still marked live is closed as `killed` when the turn ends; nothing else reports it.
+            // Every child's card is told where its own record is, and any child still marked live is closed as `killed`.
             if (subagents !== undefined) {
-                for (const frame of closeSubagents(conversations, subagents.conversationId)) {
+                for (const frame of await endTurnSubagents(subagents)) {
                     push(frame);
                 }
             }

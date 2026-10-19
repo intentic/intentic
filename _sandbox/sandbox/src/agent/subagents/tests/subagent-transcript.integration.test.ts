@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import type { SubagentSdkRecord } from "@intentic/sandbox-contract/schemas/terminal";
 import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { startTurnRun } from "../../run/turn/turn-runs.js";
 import { createDomainEvents } from "../../../seams/domain-events.js";
@@ -38,9 +39,9 @@ const delegation = (over: Partial<TranscriptTool> = {}): TranscriptTool => ({
     ...over,
 });
 
-// Deps whose two stores answer as told, recording what they were asked.
-const deps = (own: TranscriptRow[] = [], recorded?: TranscriptTool) => {
-    const asked: { sdk: [string, string][]; record: [string, string][] } = { sdk: [], record: [] };
+// Deps whose stores answer as told, recording what they were asked; `found` is what a search of the session finds.
+const deps = (own: TranscriptRow[] = [], recorded?: TranscriptTool, found?: SubagentSdkRecord) => {
+    const asked: { sdk: [string, string][]; record: [string, string][]; search: string[] } = { sdk: [], record: [], search: [] };
     const value: SubagentTranscriptDeps = {
         conversations: actors,
         sdkMessages: async (sessionId, agentId) => {
@@ -50,6 +51,10 @@ const deps = (own: TranscriptRow[] = [], recorded?: TranscriptTool) => {
         toolCard: async (agent, toolId) => {
             asked.record.push([agent.id, toolId]);
             return recorded;
+        },
+        findSdkRecord: async (toolUseId) => {
+            asked.search.push(toolUseId);
+            return found;
         },
     };
     return { value, asked };
@@ -127,6 +132,51 @@ describe("readSubagentTranscript", () => {
             { role: "user", text: "Explore: Find every caller" },
             { role: "assistant", text: "Two callers: checkout.ts and cart.ts.", tools: [grep] },
         ]);
+    });
+
+    // After a restart, or once newer endings pushed it out of the roster, nothing in memory knows where its record is.
+    describe("once the roster no longer holds it", () => {
+        const own: TranscriptRow[] = [
+            { role: "user", text: "Find every caller of createCheckoutSession" },
+            { role: "assistant", text: "Two callers.", tools: [grep] },
+        ];
+        const settled = (subagent?: TranscriptTool["subagent"]): TranscriptTool => {
+            const card = delegation({ id: "call-gone", status: "completed" });
+            if (subagent !== undefined) {
+                card.subagent = subagent;
+            }
+            return card;
+        };
+
+        it("reads the runtime's record where the card the turn settled into says it is", async () => {
+            const card = settled({ kind: "subagent", status: "completed", sdk: { sessionId: "ses-old", agentId: "a9" } });
+            const { value, asked } = deps(own, card);
+            expect(await readSubagentTranscript(value, "conv-1", "call-gone")).toEqual(own);
+            expect(asked.sdk).toEqual([["ses-old", "a9"]]);
+            expect(asked.search).toEqual([]);
+        });
+
+        it("searches the conversation's session for a card that never said, settled before cards carried it", async () => {
+            const { value, asked } = deps(own, settled({ kind: "subagent", status: "completed" }), { sessionId: "ses-now", agentId: "a3" });
+            expect(await readSubagentTranscript(value, "conv-1", "call-gone")).toEqual(own);
+            expect(asked.search).toEqual(["call-gone"]);
+            expect(asked.sdk).toEqual([["ses-now", "a3"]]);
+        });
+
+        it("searches for a card with no subagent at all, as a turn the daemon died under restores it", async () => {
+            const { value, asked } = deps(own, settled(), { sessionId: "ses-now", agentId: "a3" });
+            expect(await readSubagentTranscript(value, "conv-1", "call-gone")).toEqual(own);
+            expect(asked.search).toEqual(["call-gone"]);
+        });
+
+        it("searches nowhere for a call no card of this conversation has, nor for a spawned subagent's card", async () => {
+            const missing = deps(own, undefined, { sessionId: "ses-now", agentId: "a3" });
+            expect(await readSubagentTranscript(missing.value, "conv-1", "call-gone")).toEqual([]);
+            expect(missing.asked.search).toEqual([]);
+            const spawned = deps(own, settled({ id: "child-1", kind: "spawned", status: "completed" }), { sessionId: "ses-now", agentId: "a3" });
+            await readSubagentTranscript(spawned.value, "conv-1", "call-gone");
+            expect([spawned.asked.search, spawned.asked.sdk]).toEqual([[], []]);
+        });
     });
 
     it("is empty when nothing was recorded yet", async () => {

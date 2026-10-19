@@ -371,8 +371,10 @@ export const CredentialReceiptSchema = z.object({
 });
 export type CredentialReceipt = z.infer<typeof CredentialReceiptSchema>;
 
-// The three requests a turn journal can restore verbatim after a daemon restart. `browser_help`/`terminal_help` are
-// excluded: their Chromium/waiting command dies with the container, so those can only be reported, not restored.
+// The requests a turn journal can restore verbatim after a daemon restart, raised by the turn itself or by a gate it
+// called. `browser_help`/`terminal_help` are excluded: their Chromium/waiting command dies with the container, so those
+// can only be reported, not restored. A gate's offer comes back as a card whose answer is told to a turn of its own,
+// since the call that raised it died with the daemon: a yes is the agent's to act on by asking again.
 export const PlanRequestSchema = z.object({
     kind: z.literal("plan").describe("The agent has written a plan and is waiting for a yes."),
     ...planRequest,
@@ -385,5 +387,41 @@ export const PermissionRequestSchema = PermissionAskSchema.extend({
     kind: z.literal("permission").describe("The agent wants to use a tool it needs permission for."),
     ...permissionRequest,
 });
-export const ParkedRequestSchema = z.discriminatedUnion("kind", [PlanRequestSchema, QuestionRequestSchema, PermissionRequestSchema]);
+export const PageAskRequestSchema = z.object({
+    kind: z.literal("page_ask").describe("The agent has shown a page to be answered on and is waiting."),
+    ...pageAskRequest,
+});
+export const CapabilityOfferRequestSchema = z.object({
+    kind: z.literal("capability_offer").describe("The agent asks for something to be connected."),
+    ...capabilityOfferRequest,
+});
+export const PaymentOfferRequestSchema = z.object({
+    kind: z.literal("payment_offer").describe("The agent asks to pay for something."),
+    ...paymentOfferRequest,
+});
+export const CredentialOfferRequestSchema = z.object({
+    kind: z.literal("credential_offer").describe("The agent asks a named person to release a credential."),
+    ...credentialOfferRequest,
+});
+export const ParkedRequestSchema = z.discriminatedUnion("kind", [
+    PlanRequestSchema,
+    QuestionRequestSchema,
+    PermissionRequestSchema,
+    PageAskRequestSchema,
+    CapabilityOfferRequestSchema,
+    PaymentOfferRequestSchema,
+    CredentialOfferRequestSchema,
+]);
+// Whether a frame is a card the journal keeps for a restart to put back; a record, so a kind added above fails to compile
+// until it is named here.
+const RESTORABLE = {
+    plan: true,
+    question: true,
+    permission: true,
+    page_ask: true,
+    capability_offer: true,
+    payment_offer: true,
+    credential_offer: true,
+} as const satisfies Record<ParkedRequest["kind"], true>;
+export const isRestorableRequest = (event: { readonly kind: string }): event is ParkedRequest => Object.hasOwn(RESTORABLE, event.kind);
 export type ParkedRequest = z.infer<typeof ParkedRequestSchema>;

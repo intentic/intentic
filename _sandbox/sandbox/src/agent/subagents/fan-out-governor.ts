@@ -86,6 +86,8 @@ export interface FanOutGovernor {
     // A child that may go is counted as running on the provider from here, and becomes the lane's canary where it needs
     // one.
     readonly admit: (childId: string, lane: Lane, cap: number | undefined) => Admission;
+    // Counts an already running turn restored at boot before releasing any held starts.
+    readonly adopt: (childId: string, lane: Lane) => void;
     // Queues a start the admission held back.
     readonly hold: (held: HeldStart) => void;
     // Takes a held start back off its lane (a cancel), giving back what it kept; answers whether it was held.
@@ -255,6 +257,7 @@ export const createFanOutGovernor = (now: () => number = Date.now): FanOutGovern
             }
             return verdict;
         },
+        adopt: (childId, lane) => go(governor, childId, lane),
         hold: (held) => {
             stateOf(governor, held.lane).held.push(held);
         },

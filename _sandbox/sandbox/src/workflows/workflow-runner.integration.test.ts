@@ -516,3 +516,68 @@ test("a boot that resumes nothing settles a stranded workflow run and its loop s
     expect((await services.loops.get(conversationId))?.state).toBe("stopped");
     expect(prompts).toEqual([]);
 });
+
+// A step's loop the daemon died under, as the boot after it finds it: the run's record says the step is running, its loop
+// has rounds behind it. Staged through one set of services and resumed through another, since a restart drops
+// everything in memory and keeps only the stores.
+const stagedStepDeath = async (root: string, maxSpendUsd: number, spent: readonly number[]) => {
+    const before = fakeServices(root);
+    const opened = openRun(workflow([step("cut", { maxSpendUsd }), step("after", { needs: ["cut"] })]), REPOS, 1);
+    const conversationId = opened.steps[0]!.conversationId;
+    await before.workflowRuns.start({
+        ...opened,
+        steps: opened.steps.map((entry, index) => (index === 0 ? { ...entry, state: "running" as const, startedAt: 1 } : entry)),
+    });
+    await before.loops.start({ ...loopOf(conversationId), maxSpendUsd }, 2);
+    for (const [index, costUsd] of spent.entries()) {
+        await before.loops.recordIteration(conversationId, { n: index + 1, at: 3 + index, outcome: "continue", changed: true, costUsd });
+    }
+    return { runId: opened.runId, conversationId };
+};
+
+// Claims done on whatever round the brief names, at $0.25 a round.
+const claimingRound = (root: string, prompts: string[]): TurnStarter["stream"] =>
+    async function* turn(input: AgentTurn) {
+        prompts.push(input.prompt);
+        const conversationId = input.conversationId ?? "";
+        const n = /iteration-(\d+)\.json/.exec(input.prompt)?.[1] ?? "1";
+        await mkdir(join(root, LOOP_DIR, conversationId), { recursive: true });
+        await writeFile(join(root, LOOP_DIR, conversationId, `iteration-${n}.json`), JSON.stringify({ done: true, reason: `round ${n}` }));
+        const events: AgentEvent[] = [{ kind: "usage", costUsd: 0.25 }, { kind: "done" }];
+        yield* events;
+    };
+
+test("a step the daemon died under carries its loop on: same record, next round, its spend still counted", async () => {
+    const root = tempRoot();
+    const { runId, conversationId } = await stagedStepDeath(root, 5, [0.5, 0.5]);
+    const services = fakeServices(root);
+    const prompts: string[] = [];
+
+    await resumeWorkflowExecution(drivenBy(services, claimingRound(root, prompts)), { resume: true, asked: false });
+    await waitFor(async () => expect((await services.workflowRuns.get(runId))?.state).toBe("done"), SETTLES);
+
+    const run = await services.workflowRuns.get(runId);
+    const loop = await services.loops.get(conversationId);
+    // Round 3 of the step's loop, then the step after it: no round of the cut step runs twice, and none starts over at 1.
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]).toContain("iteration-3.json");
+    expect(loop?.startedAt).toBe(2);
+    expect(loop?.iterations.map((entry) => entry.n)).toEqual([1, 2, 3]);
+    expect(run?.steps[0]).toMatchObject({ state: "done", iterations: 3, costUsd: 1.25 });
+});
+
+test("a step the daemon died under keeps its spend ceiling: one already reached runs no further round", async () => {
+    const root = tempRoot();
+    const { runId } = await stagedStepDeath(root, 1, [0.5, 0.5]);
+    const services = fakeServices(root);
+    const prompts: string[] = [];
+
+    await resumeWorkflowExecution(drivenBy(services, claimingRound(root, prompts)), { resume: true, asked: false });
+    await waitFor(async () => expect((await services.workflowRuns.get(runId))?.state).not.toBe("running"), SETTLES);
+
+    const run = await services.workflowRuns.get(runId);
+    expect(prompts).toEqual([]);
+    expect(run?.state).toBe("overspent");
+    expect(run?.steps[0]).toMatchObject({ state: "failed", loopState: "overspent", iterations: 2, costUsd: 1 });
+    expect(run?.steps[1]?.state).toBe("skipped");
+});

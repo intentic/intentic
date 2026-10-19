@@ -25,8 +25,10 @@ import type { SenderLane } from "./senders.js";
 import type { JournalledFire } from "../store/journals/turn-journal.js";
 import { opt } from "../opt.js";
 import { TITLE_MAX } from "../seams/conversation-title.js";
-import { continueConversation, expireAutomation, notifyOwner, type TargetOutcome } from "./watch/fire-targets.js";
-import { checkCondition, conditionOutside } from "./watch/watch-condition.js";
+import { continueConversation, endedInstead, expireAutomation, notifyOwner, outsideWakeOf, type TargetOutcome } from "./watch/fire-targets.js";
+import { conditionOutside } from "./watch/watch-condition.js";
+import { perDaemon } from "./durable/daemon-memory.js";
+import { admitFire, admitThenLetGo, checkFireCondition, clearJournalled, forgetHeldWake, journalledFire, queuedFire } from "./durable/fire-admission.js";
 import { withdrawApprovalPush } from "./held-wake-answers.js";
 import { channelAnswerSink } from "../extensions/listener/listener-deliver.js";
 import type { ReleasedWake } from "./held-wakes-store.js";
@@ -119,7 +121,8 @@ interface FireLanes {
     readonly waiting: (() => void)[];
 }
 
-const fireLanes = new Map<string, FireLanes>();
+// Each daemon's lanes, by automation (durable/daemon-memory.ts).
+const fireLanesOf = perDaemon(() => new Map<string, FireLanes>());
 
 const openLanes = (): FireLanes => ({
     all: Promise.resolve(),
@@ -264,6 +267,10 @@ const sessionsGate = (services: Services, automation: AutomationRecord): { reado
 // Everything a fire needs beyond the automation itself; an options object since dispatchers and the tick each set a
 // different subset.
 export interface FireOptions {
+    readonly inboxIds?: readonly string[];
+    readonly admission?: JournalledFire;
+    // Inbox-to-journal handoff; acknowledged only after the admission is durable.
+    readonly accepted?: () => Promise<void>;
     // The trigger's payload, appended to the prompt and handed to the guard as AUTOMATION_PAYLOAD.
     readonly payload?: string;
     // Which pre-wake gate this fire already satisfies, so it is not put through again:
@@ -318,6 +325,7 @@ export interface FireOutcome {
 // Fires one automation, taking its turn among the automation's other fires (FireLanes); owns only that and the overlap
 // policy (refuse or wait), with `runFire` doing the fire itself. Callers run it detached; tests await it directly.
 export const fireAutomation = async (services: Services, automation: AutomationRecord, options: FireOptions = {}): Promise<FireOutcome> => {
+    const fireLanes = fireLanesOf.of(services);
     const lanes = fireLanes.get(automation.id) ?? openLanes();
     const shared = sharedConversationOf(options);
     // Whether this fire has to wait for one already admitted, decided now, before anything after it is admitted.
@@ -339,14 +347,25 @@ export const fireAutomation = async (services: Services, automation: AutomationR
     if (blocked) {
         tellQueued();
     }
+    const entry = options.admission ?? queuedFire(automation.id, mintConversationId(automation.id, Date.now()), options);
+    // Durable before it waits, and only then is its source let go (durable/fire-admission.ts).
+    const admitted = admitThenLetGo(services, automation.id, entry, options.accepted);
+    const run = async (): Promise<FireOutcome> => {
+        if (!(await admitted)) {
+            options.stream?.failed("this message could not be taken in; it will be picked up again");
+            options.stream?.end();
+            return {};
+        }
+        return runFire(services, automation, { ...options, admission: entry });
+    };
     // The lanes are the lock: what a fire waits for never rejects, so a failed fire still lets the next one start.
     const turn =
         shared === undefined
-            ? lanes.all.then(() => runFire(services, automation, options))
+            ? lanes.all.then(run)
             : Promise.all([lanes.alone, lanes.conversations.get(shared)]).then(async () => {
                   await takeSlot(services, lanes, tellQueued);
                   try {
-                      return await runFire(services, automation, options);
+                      return await run();
                   } finally {
                       giveSlot(lanes);
                   }
@@ -382,11 +401,14 @@ export const fireAutomation = async (services: Services, automation: AutomationR
 // Waits until nothing of this automation is running or waiting, every thread's fire included. A recorded run isn't the
 // same as free again, since a fire lets the next one go only when it returns; firing the same automation twice in a
 // row must await this in between. A fire admitted while this waits is waited for too, until one wait finds nothing new.
-export const automationIdle = async (id: string): Promise<void> => {
-    let awaited: Promise<void> | undefined;
-    for (let lanes = fireLanes.get(id); lanes !== undefined && lanes.all !== awaited; lanes = fireLanes.get(id)) {
-        awaited = lanes.all;
-        await awaited;
+// `daemon` narrows it to one daemon's fires (durable/daemon-memory.ts), for a test that runs a second beside a dead first.
+export const automationIdle = async (id: string, daemon?: Pick<Services, "automations">): Promise<void> => {
+    for (const fireLanes of daemon === undefined ? fireLanesOf.all() : [fireLanesOf.of(daemon)]) {
+        let awaited: Promise<void> | undefined;
+        for (let lanes = fireLanes.get(id); lanes !== undefined && lanes.all !== awaited; lanes = fireLanes.get(id)) {
+            awaited = lanes.all;
+            await awaited;
+        }
     }
 };
 
@@ -557,17 +579,6 @@ const tellStream = (stream: TurnStream | undefined, progress: TurnProgressReader
     }
 };
 
-// Takes a fire's own entry off the turn journal, and only its own: another thread of the same automation may be in
-// flight beside it, journalled under its conversation. Nothing to take off for a fire that never journalled one.
-const clearJournalled = async (services: Services, automationId: string, conversationId: string | undefined): Promise<void> => {
-    if (conversationId === undefined) {
-        return;
-    }
-    await services.turnJournal
-        .clearFire(conversationId)
-        .catch((error: unknown) => services.logger.warn({ err: error, automation: automationId }, "turn journal: fire not cleared"));
-};
-
 // Guard, then wake, then record the run; reached only through fireAutomation, which guarantees no two runs on one
 // conversation overlap here, and none at all of an automation whose fire runs alone (FireLanes).
 const runFire = async (
@@ -588,6 +599,7 @@ const runFire = async (
         late,
         observed: replayedObservation,
         held,
+        admission: admissionEntry,
     }: FireOptions,
 ): Promise<FireOutcome> => {
     // This fire's own name, for a delivery that must not be mistaken for another fire's.
@@ -595,20 +607,11 @@ const runFire = async (
     // The conversation this fire's journal entry is filed under, cleared however the fire ends. A re-fire's is known
     // from the start, since the boot pass spent its entry before firing it: one that ends before journalling anew
     // (skipped, refused, expired) still takes that entry off, rather than leaving it to read as interrupted next boot.
-    let journalled = resumedConversationId;
+    let journalled = admissionEntry?.id ?? resumedConversationId;
     try {
         // Past its end date it does nothing but end: switched off, and whoever it was for told. A held wake already
         // released by a person is theirs to have, so a replay goes ahead.
-        if (automation.expiresAt !== undefined && automation.expiresAt <= Date.now() && cleared !== "both") {
-            // Ended before (a press of "Run now" on it): nobody is told again, but the press is answered in its history.
-            if (!(await expireAutomation(services, automation)) && cleared === "approval") {
-                await services.automations.recordRun(automation.id, {
-                    at: Date.now(),
-                    outcome: "skipped",
-                    detail: `It reached its end date (${new Date(automation.expiresAt).toISOString()}): move the end date to run it again.`,
-                });
-            }
-            stream?.failed("this automation reached its end date");
+        if (await endedInstead(services, automation, cleared, stream)) {
             return {};
         }
         let capped = payload?.slice(0, PAYLOAD_MAX);
@@ -616,7 +619,7 @@ const runFire = async (
         // replay carries the check that ran when it was held; it does not run again.
         let observed = replayedObservation;
         let observedOutside = replayedObservation === undefined ? undefined : conditionOutside(automation);
-        let observedValue: string | undefined;
+        let observedValue: string | undefined = admissionEntry?.observedValue;
         // The persona this fire wears: the sender's lane when someone sent it, else the automation's own. Resolved once
         // here so the hold snapshot and the turn cannot disagree.
         const actsAs = lane !== undefined ? lane.actsAs : automation.actsAs;
@@ -651,7 +654,7 @@ const runFire = async (
             // The sessions are a gated fire's payload: what woke it, read by the guard and appended under the prompt.
             capped = gate.listing ?? capped;
             // The check: a guard command or a ready-made source, deciding without a model whether anything happened.
-            const condition = await checkCondition(services, automation, capped);
+            const condition = await checkFireCondition(services, automation, capped, admissionEntry);
             if (condition.kind !== "go") {
                 // A quiet check (nothing moved) stays out of the history, which a frequent watch would fill with it; one
                 // pressed by hand says it anyway, since "nothing changed" is the answer the button asked for.
@@ -669,11 +672,6 @@ const runFire = async (
             observed = condition.observed;
             observedOutside = condition.outside;
             observedValue = condition.value;
-            // Waiting for one thing: it has come, so the automation retires before anything runs, as a one-time wake
-            // does, and a daemon that dies mid-fire cannot fire it again. A held fire is the one it was waiting for.
-            if (automation.until === "first-fire") {
-                await services.automations.setEnabled(automation.id, false);
-            }
             // Holds the wake instead of running; inFlight releases in the finally, so the lock isn't held during the
             // wait.
             if (verdict.effect === "hold" && cleared === undefined) {
@@ -688,6 +686,7 @@ const runFire = async (
                         thread,
                         actsAs,
                     }),
+                    admissionEntry?.id,
                 );
                 void services.activity
                     .append({
@@ -736,11 +735,14 @@ const runFire = async (
         // Journals the fire's trigger inputs, not the resolved turn, so a re-fire re-reads a prompt since fixed. The
         // sender's lane, thread and session ride along: without them a stranger a sender rule put on a narrow persona
         // would come back after a restart wearing the automation's own, on a conversation its thread no longer knows.
-        const conversationId = resumedConversationId ?? mintConversationId(automation.id, Date.now());
-        journalled = conversationId;
+        const conversationId = resumedConversationId ?? admissionEntry?.conversationId ?? mintConversationId(automation.id, Date.now());
+        journalled = admissionEntry?.id ?? conversationId;
         await services.turnJournal
-            .recordFire(journalledFire(automation.id, conversationId, attempts, { payload: capped, origin, title, lane, thread, sessionId: resumedSessionId }))
-            .catch((error: unknown) => services.logger.warn({ err: error, automation: automation.id }, "turn journal: fire not recorded"));
+            .recordFire({
+                ...admissionEntry,
+                ...journalledFire(automation.id, conversationId, attempts, { payload: capped, origin, title, lane, thread, sessionId: resumedSessionId }),
+                state: "running", checked: true, ...opt("observed", observed), ...opt("observedValue", observedValue),
+            });
         const body = wakeBody(automation, capped, late, observed);
         let failure: string | undefined;
         let runtimeSessionId: string | undefined;
@@ -762,11 +764,7 @@ const runFire = async (
             unattended: true,
             // Names the provider when a listener started this turn, for the guard layer; a check that read the outside
             // world names that instead, since its words are in the prompt; other triggers set nothing.
-            ...(automation.trigger.kind === "listener"
-                ? { outsideWake: automation.trigger.provider }
-                : observedOutside !== undefined && observed !== undefined
-                  ? { outsideWake: observedOutside }
-                  : {}),
+            ...opt("outsideWake", outsideWakeOf(automation, observedOutside, observed)),
             // Resumes the provider session on a continuing thread; absent on a first turn or any one-off wake.
             ...opt("sessionId", sessionId),
             ...(allowedTools !== undefined ? { allowedTools: [...allowedTools] } : {}),
@@ -893,33 +891,6 @@ export const fireOnThread = async (
     return settled;
 };
 
-// A fire's journal row: what it was set off with, and whose thread and lane it ran on. Each field is set only when the
-// fire carried it, so a row read back holds exactly what the fire had.
-const journalledFire = (
-    automationId: string,
-    conversationId: string,
-    attempts: number,
-    carried: {
-        readonly payload: string | undefined;
-        readonly origin: AgentOrigin | undefined;
-        readonly title: string | undefined;
-        readonly lane: SenderLane | undefined;
-        readonly thread: string | undefined;
-        readonly sessionId: string | undefined;
-    },
-): JournalledFire => {
-    const row: JournalledFire = { kind: "automation", automationId, conversationId, startedAt: Date.now(), attempts };
-    return {
-        ...row,
-        ...opt("payload", carried.payload),
-        ...opt("origin", carried.origin),
-        ...opt("title", carried.title),
-        ...opt("lane", carried.lane === undefined ? undefined : { ...opt("actsAs", carried.lane.actsAs), requireApproval: carried.lane.requireApproval }),
-        ...opt("thread", carried.thread),
-        ...opt("sessionId", carried.sessionId),
-    };
-};
-
 // The automation's allowlist as it stands now, falling back to the record the fire was handed when it is gone.
 const currentAllowedTools = async (services: Services, automation: AutomationRecord): Promise<readonly string[] | undefined> =>
     (await services.automations.get(automation.id))?.allowedTools ?? automation.allowedTools;
@@ -929,6 +900,7 @@ const currentAllowedTools = async (services: Services, automation: AutomationRec
 // The persona rides back as a lane so the approved run wears what was decided when it was held, not what the
 // automation says now; the hold itself was answered, so the lane asks for none.
 const heldWakeOptions = (held: AutomationApproval, sink: OutboxSink | undefined): ThreadFireOptions => ({
+    overlap: "queue",
     cleared: "both",
     held: held.id,
     lane: { actsAs: held.actsAs, requireApproval: false },
@@ -951,6 +923,14 @@ export const runHeldWake = async (services: Services, automation: AutomationReco
     // Before the release is over: the approve route answers its caller here, and the visitor polling a moment later
     // must find the answer rather than an empty thread.
     await sink?.settled();
+};
+
+// The release store awaits this before deleting the hold or spending the owner's yes.
+export const recordHeldWake = async (services: Services, held: ReleasedWake): Promise<void> => {
+    await admitFire(services, queuedFire(held.automationId, mintConversationId(held.automationId, Date.now()), {
+        ...heldWakeOptions(held, undefined), ...opt("conversationId", held.conversationId),
+        ...opt("sessionId", held.sessionId), ...opt("thread", held.thread),
+    }));
 };
 
 // When this automation is next due, or undefined for one no clock drives (a webhook, a listener, a workspace event)
@@ -1041,11 +1021,14 @@ const fireOnceWake = async (services: Services, automation: AutomationRecord, at
     if (at > now) {
         return;
     }
-    await services.automations.setEnabled(automation.id, false);
     // The sandbox's zone, never a per-automation override: a one-time wake stores an instant and has no zone of its
     // own, and the clock the owner will recognise is the sandbox's.
     const late = now - at >= LATE_WAKE_MS ? { payload: lateWakeNote(at, now, sandbox) } : {};
-    void fireAutomation(services, automation, late).catch((error: unknown) =>
+    // Switched off once the fire is journalled, so a crash in between replays that fire rather than losing the wake.
+    const retire = async (): Promise<void> => {
+        await services.automations.setEnabled(automation.id, false);
+    };
+    void fireAutomation(services, automation, { ...late, accepted: retire }).catch((error: unknown) =>
         services.logger.error({ err: error, automation: automation.id }, "one-time automation run failed"),
     );
 };
@@ -1181,8 +1164,12 @@ const releaseCountdownHolds = async (services: Services, now: number): Promise<v
             continue;
         }
         // Only the release that takes the entry runs it: an approval racing this pass has already fired it.
-        const released = await services.heldWakes.releaseCountdown(held.id, now);
-        if (released === undefined || automation === undefined || !resumable(automation)) {
+        const released = await services.heldWakes.releaseCountdown(held.id, now, (wake) => recordHeldWake(services, wake));
+        if (released === undefined) {
+            continue;
+        }
+        if (automation === undefined || !resumable(automation)) {
+            await forgetHeldWake(services, released.id);
             continue;
         }
         void withdrawApprovalPush(services, held.automationId);

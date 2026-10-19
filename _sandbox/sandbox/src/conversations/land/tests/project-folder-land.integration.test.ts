@@ -71,6 +71,8 @@ const servicesOf = (worktrees: AgentWorktrees, rules: readonly Rule[] = []): Ser
         // SAFETY: versionMainTree reads `rules` alone off the settings; the rest of the document is never touched here.
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => ({ rules }) as never }),
         agentWorktrees: worktrees,
+        // No land here owes a version commit, so the remainder leaves nothing out.
+        agents: unstubbed<Services["agents"]>("agents", { ids: () => [] }),
         logger,
     });
 

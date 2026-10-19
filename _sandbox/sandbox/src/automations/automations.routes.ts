@@ -16,7 +16,8 @@ import type { AutomationRecord } from "./automations-store.js";
 import { sandboxZone } from "./schedule-zone.js";
 import { declineHeldWake, withdrawApprovalPush } from "./held-wake-answers.js";
 import { HeldWakeNotApproved } from "./held-wakes-store.js";
-import { fireAutomation, nextRunOf, runHeldWake } from "./scheduler.js";
+import { fireAutomation, nextRunOf, recordHeldWake, runHeldWake } from "./scheduler.js";
+import { forgetHeldWake } from "./durable/fire-admission.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { guardStateFile, sourceEnv } from "./watch/watch-condition.js";
 import { checkSource, sourceProblem } from "./watch/watch-sources.js";
@@ -39,6 +40,11 @@ const listed = async (services: Services, automation: AutomationRecord, operator
     }
     return door === "automation" ? { ...summary, webhookToken: token } : { ...summary, ingestKey: token };
 };
+
+// The owner's yes, then the release it lets out, journalled as a queued fire before the hold is taken out
+// (held-wakes-store.ts), so a restart in between still runs it.
+const approveAndRelease = async (services: Services, id: string, by: string | undefined) =>
+    (await services.heldWakes.approve(id, by)) ? services.heldWakes.release(id, (wake) => recordHeldWake(services, wake)) : undefined;
 
 // The automations manifest routes. `upsert` validates the cron with the scheduler's own parser, so what's accepted here
 // is exactly what will fire.
@@ -140,10 +146,7 @@ export const createAutomationsRoutes = (services: Services) => {
         // Detached like the /fire webhook: the turn outlives this request.
         approve: i.approve.handler(async ({ input, context }) => {
             await requireMaintainer(services, context.headers, "only the owner or a maintainer, signed in, can release a held wake; a program's token cannot");
-            const pending = await services.heldWakes
-                .approve(input.id, context.identity?.email)
-                .then((found) => (found ? services.heldWakes.release(input.id) : undefined))
-                .catch((error: unknown) => {
+            const pending = await approveAndRelease(services, input.id, context.identity?.email).catch((error: unknown) => {
                     // A hold this build cannot read is never run on a guess at what it snapshotted; the message names the file.
                     if (error instanceof ManifestUnreadableError || error instanceof HeldWakeNotApproved) {
                         throw new ORPCError("CONFLICT", { message: error.message });
@@ -158,6 +161,7 @@ export const createAutomationsRoutes = (services: Services) => {
             // The ask is answered, so it comes off the lock screen whatever happens next.
             void withdrawApprovalPush(services, pending.automationId);
             if (automation === undefined) {
+                await forgetHeldWake(services, pending.id);
                 throw new ORPCError("NOT_FOUND", { message: "the automation for that approval no longer exists" });
             }
             // Everything the hold snapshotted rides runHeldWake, the same release the scheduler's countdown scan uses.

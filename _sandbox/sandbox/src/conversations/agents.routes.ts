@@ -31,9 +31,8 @@ import { assignVerdict, fenceVerdict, isMemberAddress } from "./ownership.js";
 import { provenanceOf, refuseUnlessVisible, visibleTo } from "../auth/fleet-scope.js";
 import { armKeepWarm, dropKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
 import { sandboxBreakPolicy } from "../agent/run/turn/break-policy.js";
-import { readSubagentTranscript } from "../agent/subagents/subagent-transcript.js";
+import { subagentTranscriptOf } from "../agent/subagents/subagent-transcript.js";
 import { cancelFamily, familyOf } from "../agent/subagents/children.js";
-import { readSubagentSession } from "../sessions/sessions.js";
 
 // Fleet routes: list/get the registry, review a worktree's delta against its recorded bases, land it, archive it, or
 // discard it. Unknown id is NOT_FOUND; land/discard/archive on a running turn is CONFLICT.
@@ -187,17 +186,8 @@ export const createAgentsRoutes = (services: Services) => {
         // A subagent the conversation's runtime ran in-process, as a transcript of its own. Seen by whoever may see the
         // conversation whose turn it ran in, since its work is that conversation's.
         subagentTranscript: i.subagentTranscript.handler(async ({ input, context }) => {
-            entryFor(input.id, context);
-            const messages = await readSubagentTranscript(
-                {
-                    conversations: services.conversations,
-                    sdkMessages: (sessionId, agentId) => readSubagentSession(services.workspace.root, sessionId, agentId),
-                    toolCard: (agent, toolId) => services.transcripts.toolCard(agent, toolId),
-                },
-                input.id,
-                input.subagentId,
-            );
-            return { messages };
+            const parent = entryFor(input.id, context);
+            return { messages: await subagentTranscriptOf(services, parent, sdkSessionIdOf(parent), input.subagentId) };
         }),
         // The turn's other half, which the transcript never carries. Absent for a conversation whose last turn predates
         // the record; the base's own text is filled in here rather than stored, since it belongs to the sandbox, not to

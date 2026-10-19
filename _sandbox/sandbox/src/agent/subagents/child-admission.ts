@@ -73,7 +73,7 @@ const describe = (move: { readonly kind: ChildMoveKind; readonly parent: string;
    it again once a child ended; a fan-out wider than the ceiling (twenty-five reviewers under a ceiling of twenty) lost
    its tail. A spawn past the ceiling now waits as pending, in the order it was asked, and starts by itself as a seat
    among its parent's children frees. The lifetime budget is still a refusal: nothing ends to free it. In this process's
-   memory, like a start held on its lane: a restart forgets the wait, and the parent's wait on it says so. */
+   memory, rebuilt at boot from the held starts in spawned-children.ts. */
 
 export interface SeatWaiter {
     readonly childId: string;
@@ -102,9 +102,11 @@ export const seatLine = (): SeatLine => {
         releasing.add(parent);
         try {
             const line = lines.get(parent);
-            const next = line?.shift();
-            if (line !== undefined && next !== undefined && !(await next.start())) {
-                line.unshift(next);
+            for (let next = line?.shift(); next !== undefined; next = line?.shift()) {
+                if (!(await next.start())) {
+                    line?.unshift(next);
+                    break;
+                }
             }
             if (line?.length === 0) {
                 lines.delete(parent);

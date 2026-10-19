@@ -11,8 +11,11 @@ import type { AppEnv } from "../../app-env.js";
 import { listSubagentSessions } from "../../agent/subagents/subagents.js";
 import type { Said } from "../../seams/turn-starter.js";
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
+import { memoryStartWindow } from "../../store/start-window.testing.js";
 import { fileInboundLinks, type InboundLinks, inboundLinksDocument } from "../inbound-links.js";
-import { createLinkedChildren, type LinkedChildren, linkedChildrenDocument } from "../linked-children.js";
+import { createLinkedChildren, type LinkedChildren, type LinkWire } from "../linked-children.js";
+import { linkedChildrenDocument } from "../linked-children-store.js";
+import { linkAnswer, linkAsk, linkHello, linkMessage, linkStatus, linkStop } from "../../sandboxes/link-client.js";
 import { createLinkRoutes } from "../links.routes.js";
 import { noteLinkTurnSettled } from "../link-tasks.js";
 
@@ -41,6 +44,7 @@ const opsSandbox = async (): Promise<Ops> => {
     const routes = createLinkRoutes({
         links,
         conversations: memoryFleet().conversations,
+        starts: memoryStartWindow(),
         notify: () => undefined,
         logger: quiet,
         auth: undefined,
@@ -79,7 +83,9 @@ interface Dev {
 }
 
 // The asking sandbox: one link card pointing at ops, and a turn port that records what wakes its conversations.
-const devSandbox = (card: Capability, hops?: number): Dev => {
+// `restart` puts it on an earlier daemon's history volume, and `ask` stands in for the wire's ask (a daemon that dies
+// around handing a task over).
+const devSandbox = (card: Capability, hops?: number, restart: { readonly history?: string; readonly ask?: LinkWire["ask"] } = {}): Dev => {
     const { conversations } = memoryFleet();
     const wakes: Said[] = [];
     const linked = createLinkedChildren({
@@ -98,7 +104,8 @@ const devSandbox = (card: Capability, hops?: number): Dev => {
             },
         },
         logger: quiet,
-        historyPath: join(mkdtempSync(join(tmpdir(), "dev-")), linkedChildrenDocument.path),
+        historyPath: join(restart.history ?? mkdtempSync(join(tmpdir(), "dev-")), linkedChildrenDocument.path),
+        wire: { hello: linkHello, ask: restart.ask ?? linkAsk, status: linkStatus, message: linkMessage, answer: linkAnswer, stop: linkStop },
     });
     return { linked, wakes, roster: () => listSubagentSessions(conversations) };
 };
@@ -215,4 +222,70 @@ test("work that already came over a link is handed on once more at most, and nev
     expect(deep).toMatchObject({ ok: false, message: expect.stringContaining("never handed on past 2") });
     expect(ops.said).toHaveLength(0);
     expect(await dev.linked.delegate(PARENT, { to: "nowhere", task: "x" })).toMatchObject({ ok: false, message: expect.stringContaining("Linked here: ops") });
+});
+
+// A RESTART on the asking side is a second follower on the same history volume, with nothing of the first one's memory.
+
+const died = (): never => {
+    throw new Error("the daemon stopped");
+};
+
+test("a task filed here but never asked before the daemon stopped is asked at boot, once, and followed", async () => {
+    const card = await cardFor();
+    const history = mkdtempSync(join(tmpdir(), "dev-"));
+    const before = devSandbox(card, undefined, { history, ask: async () => died() });
+    await expect(before.linked.delegate(PARENT, { to: "ops", task: "Count the open incidents." })).rejects.toThrow("the daemon stopped");
+    before.linked.close();
+    expect(ops.said).toHaveLength(0);
+
+    dev = devSandbox(card, undefined, { history });
+    await dev.linked.resume();
+    await until("the task is followed again", () => dev?.roster()[0]?.status === "running");
+    expect(ops.said).toHaveLength(1);
+    const [child] = dev.roster();
+    expect(child?.linked?.conversationId).toBe(ops.said[0]?.turn.conversationId);
+    expect(dev.linked.owns(child?.id ?? "")).toBe(true);
+});
+
+test("a task the far side took before the daemon stopped, unfiled here, is not asked twice: the re-ask finds it", async () => {
+    const card = await cardFor();
+    const history = mkdtempSync(join(tmpdir(), "dev-"));
+    // The ask reaches the far side, and the daemon dies before its answer is filed here.
+    const before = devSandbox(card, undefined, { history, ask: async (target, task) => {
+            await linkAsk(target, task);
+            return died();
+        },
+    });
+    await expect(before.linked.delegate(PARENT, { to: "ops", task: "Count the open incidents." })).rejects.toThrow("the daemon stopped");
+    before.linked.close();
+    expect(ops.said).toHaveLength(1);
+
+    dev = devSandbox(card, undefined, { history });
+    await dev.linked.resume();
+    await until("the task is followed again", () => dev?.roster()[0]?.status === "running");
+    // The same task over there, followed here: one turn, never a second.
+    expect(ops.said).toHaveLength(1);
+    expect(dev.roster()[0]?.linked?.conversationId).toBe(ops.said[0]?.turn.conversationId);
+    await noteLinkTurnSettled({ links: ops.links, logger: quiet }, { conversationId: ops.said[0]?.turn.conversationId ?? "", actor: undefined, speaker: undefined, failure: undefined, closing: "Three." });
+    await until("the child settles", () => dev?.roster()[0]?.status === "completed");
+});
+
+test("a task that settled before the daemon stopped still hands its report after it", async () => {
+    const card = await cardFor();
+    const history = mkdtempSync(join(tmpdir(), "dev-"));
+    const before = devSandbox(card, undefined, { history });
+    const handed = await before.linked.delegate(PARENT, { to: "ops", task: "What is the p99?" });
+    if (!handed.ok) {
+        throw new Error(handed.message);
+    }
+    await noteLinkTurnSettled({ links: ops.links, logger: quiet }, { conversationId: ops.said[0]?.turn.conversationId ?? "", actor: undefined, speaker: undefined, failure: undefined, closing: "p99 is 210ms." });
+    await until("the child settles", () => before.roster()[0]?.status === "completed");
+    before.linked.close();
+
+    dev = devSandbox(card, undefined, { history });
+    await dev.linked.resume();
+    expect(dev.linked.owns(handed.id)).toBe(true);
+    expect(dev.linked.report(handed.id)).toBe("p99 is 210ms.");
+    // Settled: nothing is asked or followed again.
+    expect(ops.said).toHaveLength(1);
 });

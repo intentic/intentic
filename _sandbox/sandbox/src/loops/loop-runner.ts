@@ -128,6 +128,20 @@ const unpricedEnding = (record: LoopRecord, usage: UsageFrame | undefined): { re
               detail: `This runtime reports no cost, so the $${record.maxSpendUsd.toFixed(2)} spend ceiling cannot be held. Use a runtime that reports cost, or remove the ceiling.`,
           };
 
+// The unchanged rounds a record already ends on. A loop the daemon died under carries its streak on: one with a stall
+// limit of 3 and 2 idle rounds behind it has one round left, not three.
+const trailingStalls = (iterations: readonly LoopIteration[]): number => iterations.length - 1 - iterations.findLastIndex((entry) => entry.changed);
+
+const stalledEnding = (stalls: number, failure: string | undefined) => ({
+    state: "stalled" as const,
+    // Says so when the stall was every turn being refused, not a wedged agent; otherwise "N iterations changed nothing"
+    // would hide that the provider never ran.
+    detail:
+        failure === undefined
+            ? `${stalls} iterations in a row changed nothing in the tree.`
+            : `${stalls} iterations in a row changed nothing, the last one failed: ${failure}`,
+});
+
 export const runLoop = async (services: Services, record: LoopRecord): Promise<LoopSettlement> => {
     const { conversationId } = record;
     const loops = services.conversations.holdings(LOOPS);
@@ -144,7 +158,10 @@ export const runLoop = async (services: Services, record: LoopRecord): Promise<L
 
     let iteration = record.iterations.length;
     let spentUsd = record.iterations.reduce((total, entry) => total + (entry.costUsd ?? 0), 0);
-    let stalls = 0;
+    // Rebuilt off the record, so a resumed loop neither forgets its idle rounds nor gets a fresh allowance of them. The
+    // round a restart cut is in neither: it never recorded, and what it spent the daemon never heard (its usage frame
+    // comes at the turn's end), so it runs again as the same round.
+    let stalls = trailingStalls(record.iterations);
     // `continue` mode carries on in the conversation's own session where the runtime its job routes to minted it, which the door
     // decides once that routing is known (routing.ts sessionFor); `fresh` never does. The session the last iteration reported is
     // kept only for a conversation not on record, which the door takes at its word.
@@ -162,6 +179,11 @@ export const runLoop = async (services: Services, record: LoopRecord): Promise<L
             }
             if (iteration >= record.maxIterations) {
                 ended = { state: "exhausted", detail: `Ran ${iteration} iterations without meeting the goal.` };
+                break;
+            }
+            // Only a resumed record can already be past it: a fresh loop's streak is checked as each round records.
+            if (stalls >= record.stallLimit) {
+                ended = stalledEnding(stalls, undefined);
                 break;
             }
             if (record.maxSpendUsd !== undefined && spentUsd >= record.maxSpendUsd) {
@@ -241,15 +263,7 @@ export const runLoop = async (services: Services, record: LoopRecord): Promise<L
             }
             // Checked after recording the iteration, so the history shows the unchanged runs that earned this verdict.
             if (stalls >= record.stallLimit) {
-                // Says so when the stall was every turn being refused, not a wedged agent; otherwise "N iterations
-                // changed nothing" would hide that the provider never ran.
-                ended = {
-                    state: "stalled",
-                    detail:
-                        outcome.failure === undefined
-                            ? `${stalls} iterations in a row changed nothing in the tree.`
-                            : `${stalls} iterations in a row changed nothing, the last one failed: ${outcome.failure}`,
-                };
+                ended = stalledEnding(stalls, outcome.failure);
             }
         }
     } catch (error) {

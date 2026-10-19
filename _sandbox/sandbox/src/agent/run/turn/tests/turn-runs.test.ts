@@ -19,6 +19,8 @@ import { fleetStoreOver, memoryFleet } from "../../../../conversations/registry/
 import { commandsOf, resetCommands } from "../../../providers/agent-commands.js";
 import { MAX_BACKLOG_FRAMES } from "../../../../seams/frame-backlog.js";
 import { startedByOf, startTurnRun, type TurnRun } from "../turn-runs.js";
+import type { TranscriptPatch } from "@intentic/sandbox-contract/events/transcript";
+import { NO_RUN_LOG, type RunLog, type RunLogHead } from "../../../../sessions/run-log.js";
 
 // Where every run here is filed and announced: one fleet's actors, one bus.
 const deps = { conversations: memoryFleet().conversations, events: createDomainEvents(() => {}) };
@@ -577,6 +579,91 @@ describe(`turn runs`, () => {
         second.push({ kind: `done` });
         second.close();
         await waitFor(() => expect(writes).toEqual([`record`, `record`, `record:sess-2`, `clear:c-next`]));
+    });
+
+    // A run's log as it is opened, written and closed, held in memory (sessions/run-log.ts writes the real one).
+    interface HeardLog {
+        head: RunLogHead | undefined;
+        readonly patches: TranscriptPatch[];
+        flushes: number;
+        closed: boolean | undefined;
+    }
+    const heardLog = () => {
+        const heard: HeardLog = { head: undefined, patches: [], flushes: 0, closed: undefined };
+        const log = (head: RunLogHead): RunLog => {
+            heard.head = head;
+            return {
+                append: (patches) => void heard.patches.push(...patches),
+                flush: async () => void (heard.flushes += 1),
+                close: async (recorded) => void (heard.closed = recorded),
+            };
+        };
+        return { heard, log };
+    };
+
+    // The rows a run draws go to disk as it draws them, so a death mid-turn leaves them for the boot to record.
+    it(`writes a journalled run's rows to its log as it draws them, and takes the log away once the record has them`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        const { journalDeps, beginning, conversations } = journalledFleet();
+        const { heard, log } = heardLog();
+        const transcript = jest.fn(async () => true);
+        startTurnRun(journalDeps, beginning(turnFn), turn(`c-logged`), { journalled: true, transcript, log });
+        push({ kind: `delta`, text: `halfway` });
+        const run = turnRunOf(conversations, `c-logged`)!;
+        await waitFor(() => expect(heard.patches.some((patch) => patch.op === `text` && patch.text === `halfway`)).toBe(true));
+        expect(heard.head).toMatchObject({ run: run.id, startedAt: run.startedAt });
+        // A card parks the turn: what it drew goes to disk at once rather than on the next tick.
+        push({ kind: `question`, requestId: `r-q`, questions: [{ question: `which?`, header: `Pick`, multiSelect: false, options: [] }] });
+        await waitFor(() => expect(heard.flushes).toBeGreaterThan(0));
+        push({ kind: `resolved`, requestId: `r-q` });
+        push({ kind: `done` });
+        close();
+        await waitFor(() => expect(heard.closed).toBe(true));
+    });
+
+    it(`keeps no log for a run the journal does not hold`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        const { journalDeps, beginning, conversations } = journalledFleet();
+        const log = jest.fn(() => NO_RUN_LOG);
+        startTurnRun(journalDeps, beginning(turnFn), turn(`c-unlogged`), { journalled: false, log });
+        push({ kind: `done` });
+        close();
+        await waitFor(() => expect(turnRunOf(conversations, `c-unlogged`)!.done).toBe(true));
+        expect(log).not.toHaveBeenCalled();
+    });
+
+    // A record that refused the settled rows used to cost the turn: the journal let it go all the same.
+    it(`keeps a turn whose record refused it journalled as settled, and its log for whoever writes the record next`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        const { entries, writes, journalDeps, beginning } = journalledFleet();
+        const { heard, log } = heardLog();
+        const transcript = jest.fn(async () => false);
+        startTurnRun(journalDeps, beginning(turnFn), turn(`c-refused`), { journalled: true, transcript, log });
+        push({ kind: `delta`, text: `shipped` });
+        push({ kind: `done` });
+        close();
+        await waitFor(() => expect(entries.at(-1)).toMatchObject({ run: { rows: expect.any(Array), settled: true } }));
+        expect(writes).not.toContain(`clear:c-refused`);
+        // Kept, not taken away: the next writer of this conversation's record writes these rows first.
+        expect(heard.closed).toBe(false);
+    });
+
+    // A gate raises its card outside the turn generator, onto the run itself; a restart must find it all the same.
+    it(`journals a card a gate pushed onto the run, and takes it off when it resolves`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        const { entries, journalDeps, beginning, conversations } = journalledFleet();
+        startTurnRun(journalDeps, beginning(turnFn), turn(`c-gated`), { journalled: true });
+        push({ kind: `session`, sessionId: `sess-g` });
+        await waitFor(() => expect(entries.at(-1)?.sessionId).toBe(`sess-g`));
+        const run = turnRunOf(conversations, `c-gated`)!;
+        const offer = { url: `https://api.test/report`, payTo: `0xabc`, network: `eip155:8453`, asset: `0xusdc`, assetName: `USDC`, amountUsd: `0.10`, spentTodayUsd: `0`, dailyCapUsd: `5` };
+        run.push({ kind: `payment_offer`, requestId: `r-pay`, offer });
+        expect(entries.at(-1)?.parked?.map((card) => card.requestId)).toEqual([`r-pay`]);
+        run.push({ kind: `resolved`, requestId: `r-pay` });
+        expect(entries.at(-1)?.parked).toBeUndefined();
+        push({ kind: `done` });
+        close();
+        await waitFor(() => expect(run.done).toBe(true));
     });
 
     it(`journals a raised card, keeps the session beside it, and takes the card back off when it resolves`, async () => {

@@ -1,9 +1,10 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { noteChildWork } from "../child-verification.js";
+import { endTurnSubagents, findSubagentRecord, recordInto } from "../subagent-transcript.js";
 import { closeSubagents, listSubagentSessions, noteSpawnedChild, noteSubagentSpawn, noteSubagentTask, openSpawnedChild, pairLiveSubagents, resetSubagents, settleSpawnedChild, subagentHooks, subagentInParentTree, subagentEndingReported, KEEP_SETTLED, waitForSubagent, type SubagentTaskMessage, type SubagentTurn } from "../subagents.js";
 import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { startTurnRun } from "../../run/turn/turn-runs.js";
@@ -33,9 +34,16 @@ const started = (over: { [K in keyof SubagentTaskMessage]?: SubagentTaskMessage[
         ...over,
     }) as SubagentTaskMessage;
 
-// agent_transcript_path names the .jsonl; the registry actually reads its .meta.json sibling.
-const stopped = async (dir: string, agentId: string, lastAssistantMessage?: string): Promise<void> => {
-    await subagentHooks(turn()).SubagentStop?.[0]?.hooks[0]?.(
+// agent_transcript_path names the .jsonl; the registry actually reads its .meta.json sibling. `handle` and `push` are the
+// turn's own, for a test that follows what the hook says into its stream.
+const stopped = async (
+    dir: string,
+    agentId: string,
+    lastAssistantMessage?: string,
+    handle: SubagentTurn = turn(),
+    push?: (frame: AgentEvent) => void,
+): Promise<void> => {
+    await subagentHooks(handle, push === undefined ? undefined : recordInto(push)).SubagentStop?.[0]?.hooks[0]?.(
         {
             hook_event_name: "SubagentStop",
             agent_transcript_path: join(dir, `agent-${agentId}.jsonl`),
@@ -265,6 +273,64 @@ describe("the roster", () => {
         }
         const listed = listSubagentSessions(actors).map((session) => session.id);
         expect([listed.length, listed[0], listed.includes("call-1"), listed.at(-1)]).toEqual([KEEP_SETTLED + 1, "live-1", false, "done-0"]);
+    });
+});
+
+// Where the Claude runtime keeps each in-process child's own record, written onto the child's card through the turn's
+// stream, so its whole run reads back after a restart or once the roster has let it go.
+describe("where a child's own record is", () => {
+    // A session's children directory, `<store>/projects/<project>/<session>/subagents`, as the CLI lays it out.
+    const sessionDir = async (session = "ses-1"): Promise<{ store: string; dir: string }> => {
+        const store = await mkdtemp(join(tmpdir(), "subagents-record-"));
+        const dir = join(store, "projects", "-work", session, "subagents");
+        await mkdir(dir, { recursive: true });
+        return { store, dir };
+    };
+    const metaFor = (dir: string, agentId: string, toolUseId: string): Promise<void> =>
+        writeFile(join(dir, `agent-${agentId}.meta.json`), JSON.stringify({ toolUseId, agentType: "Explore" }));
+    const said = (frames: readonly AgentEvent[]): unknown[] => frames.filter((frame) => frame.kind === "subagent_update" && frame.sdk !== undefined);
+
+    it("is said through the turn's stream the moment SubagentStop pairs the child, and only once", async () => {
+        const { dir } = await sessionDir();
+        const handle: SubagentTurn = { conversationId: "conv-1", conversations: actors, subagentsDir: dir };
+        noteSubagentTask(handle, started());
+        await metaFor(dir, "xyz", "call-1");
+        const pushed: AgentEvent[] = [];
+        await stopped(dir, "xyz", undefined, handle, (frame) => pushed.push(frame));
+        expect(pushed).toEqual([{ kind: "subagent_update", id: "call-1", sdk: { sessionId: "ses-1", agentId: "xyz" } }]);
+        expect(said(await endTurnSubagents(handle))).toEqual([]);
+    });
+
+    // A backgrounded child often outlives SubagentStop, and no list may have paired it: the turn's end does.
+    it("is said for every child the turn's end pairs, ahead of closing the ones still live", async () => {
+        const { dir } = await sessionDir();
+        const handle: SubagentTurn = { conversationId: "conv-1", conversations: actors, subagentsDir: dir };
+        noteSubagentTask(handle, started());
+        await metaFor(dir, "bg1", "call-1");
+        expect(await endTurnSubagents(handle)).toEqual([
+            { kind: "subagent_update", id: "call-1", sdk: { sessionId: "ses-1", agentId: "bg1" } },
+            expect.objectContaining({ kind: "subagent_update", id: "call-1", status: "killed" }),
+        ]);
+    });
+
+    it("is said only for the children this turn started, never an earlier turn's", async () => {
+        const { dir } = await sessionDir();
+        const earlier: SubagentTurn = { conversationId: "conv-1", conversations: actors, subagentsDir: dir };
+        noteSubagentTask(earlier, started());
+        noteSubagentTask(earlier, { subtype: "task_updated", task_id: "task-a", patch: { status: "completed" } });
+        await metaFor(dir, "old", "call-1");
+        expect(said(await endTurnSubagents({ conversationId: "conv-1", conversations: actors, subagentsDir: dir }))).toEqual([]);
+    });
+
+    it("is found in the session's own folder by the call that started it, for a card that never said", async () => {
+        const { store, dir } = await sessionDir("ses-9");
+        await metaFor(dir, "a1", "call-other");
+        await metaFor(dir, "a2", "call-1");
+        expect(await findSubagentRecord(store, "ses-9", "call-1")).toEqual({ sessionId: "ses-9", agentId: "a2" });
+        expect(await findSubagentRecord(store, "ses-9", "call-missing")).toBeUndefined();
+        expect(await findSubagentRecord(store, "ses-unknown", "call-1")).toBeUndefined();
+        // Never joined into a path unless it is a session id.
+        expect(await findSubagentRecord(store, "../ses-9", "call-1")).toBeUndefined();
     });
 });
 

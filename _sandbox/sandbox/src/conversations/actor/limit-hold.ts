@@ -10,10 +10,13 @@ import type { Services } from "../../composition.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
 import type { HeldRecord } from "./conversation-state.js";
 
-// A spent allowance's held turn, as the conversation's entry keeps it so a restart keeps the booking. Every other hold
-// is the daemon's memory, gone with it: a stopped turn or an outage is re-asked by the next press. A limit hold is
-// different: the owner answered "send again" (or "move") for a reset hours away, and a restart in between used to drop
-// the turn and the booking with it, leaving the card in Attention under a clock nothing would act on (2026-10-07).
+// A held turn, as the conversation's entry keeps it so a restart keeps its booking and its remedy. A limit hold was the
+// first: the owner answered "send again" (or "move") for a reset hours away, and a restart in between used to drop the
+// turn and the booking with it, leaving the card in Attention under a clock nothing would act on (2026-10-07). Every
+// other wall is kept the same way (2026-10-19): a stopped turn's ladder (its rungs and how many it has climbed), an
+// outage's wait for the provider, an overflow's fresh session, and a flagged turn's fork point before the stopped
+// response, which a press without it would send the classifier again. A refused credential's hold alone stays memory:
+// its re-mint has a minute, and the token it must supersede is not written to disk.
 // Written by the actor whenever the hold changes (conversation-decide.ts, keepLimitHold) and put back at boot
 // (restoreLimitHolds below, first at boot). Only an unfired hold is kept: a fired one has started its turn, which the turn
 // journal covers from there.
@@ -38,9 +41,16 @@ const HeldInputSchema = z.intersection(
 
 const RoutingPickSchema = z.object({ account: z.string(), carry: z.boolean() });
 
+// Every wall a hold is kept for but a spent allowance's, which is the absent reason an older build wrote.
+const KEPT_REASONS = ["door", "stopped", "outage", "overflow", "flagged"] as const;
+
 export const StoredLimitHoldSchema = z.object({
     // Absent for a spent allowance's, the only kind an older build kept.
-    reason: z.literal("door").optional(),
+    reason: z.enum(KEPT_REASONS).optional(),
+    // How many rungs of its ladder a stopped turn has climbed, so a restart neither forgets them nor climbs them again.
+    tries: z.number().int().nonnegative().optional(),
+    // A flagged turn's session entry before the stopped response (refusal-fork.ts), where a press resumes it.
+    forkAt: z.string().optional(),
     input: HeldInputSchema,
     run: z.string().optional(),
     sessionId: z.string().optional(),
@@ -64,8 +74,8 @@ export const StoredLimitHoldSchema = z.object({
 });
 export type StoredLimitHold = z.infer<typeof StoredLimitHoldSchema>;
 
-/** Whether this hold is one the entry keeps: a spent allowance's or one the door turned away, not yet fired. */
-export const keptHold = (held: HeldRecord | undefined): held is HeldRecord => (held?.reason === "limit" || held?.reason === "door") && !held.fired;
+/** Whether this hold is one the entry keeps: any wall but a refused credential's, not yet fired. */
+export const keptHold = (held: HeldRecord | undefined): held is HeldRecord => held !== undefined && held.reason !== "auth" && !held.fired;
 
 /**
  * The hold as the entry stores it, through the schema so nothing it cannot read back is written; undefined for a hold
@@ -81,8 +91,13 @@ const parsedHold = (held: HeldRecord | undefined) => {
     if (!keptHold(held)) {
         return undefined;
     }
-    const { reason, fired: _fired, tries: _tries, remint: _remint, resumeAt: _resumeAt, ...kept } = held;
-    return StoredLimitHoldSchema.safeParse(reason === "door" ? { ...kept, reason } : kept);
+    const { reason, fired: _fired, tries, remint: _remint, resumeAt, ...kept } = held;
+    return StoredLimitHoldSchema.safeParse({
+        ...kept,
+        ...opt("reason", reason === "limit" ? undefined : reason),
+        ...opt("tries", tries > 0 ? tries : undefined),
+        ...opt("forkAt", resumeAt),
+    });
 };
 
 /**
@@ -105,12 +120,10 @@ export const restoredLimitHold = (entry: PersistedAgent | undefined): HeldRecord
     if (stored === undefined || entry === undefined || entry.archivedAt !== undefined) {
         return undefined;
     }
-    const { ending } = entry;
-    const standsBehind = stored.reason === "door" ? ending.kind === "failed" && turnedAwayCode(ending.code) : ending.kind === "limited";
-    if (!standsBehind) {
+    if (!standsBehind(stored, entry.ending)) {
         return undefined;
     }
-    const { standing, input, run, sessionId, reopensAt, reason, ...rest } = stored;
+    const { standing, input, run, sessionId, reopensAt, reason, tries, forkAt, ...rest } = stored;
     const { speaker, actor, unseenRuns, resume, resumeAt, ...turn } = input;
     return {
         ...rest,
@@ -125,11 +138,30 @@ export const restoredLimitHold = (entry: PersistedAgent | undefined): HeldRecord
             ...opt("resume", resume),
             ...opt("resumeAt", resumeAt),
         },
-        ...(standing === undefined ? {} : { standing: { state: standing.state, paths: standing.paths, check: standing.check } }),
+        ...opt("standing", standing === undefined ? undefined : { state: standing.state, paths: standing.paths, check: standing.check }),
+        ...opt("resumeAt", forkAt),
         reason: reason ?? "limit",
         fired: false,
-        tries: 0,
+        tries: tries ?? 0,
     };
+};
+
+// Whether the entry still ends in the wall that held the turn: a hold an older build left under a later turn is not one.
+const standsBehind = (stored: StoredLimitHold, ending: PersistedAgent["ending"]): boolean => {
+    switch (stored.reason) {
+        case undefined:
+            return ending.kind === "limited";
+        case "door":
+            return ending.kind === "failed" && turnedAwayCode(ending.code);
+        case "flagged":
+            return ending.kind === "failed" && ending.code === "safeguard-flagged";
+        // Booked to come back at once, so its failure reads as work in progress (conversation-decide.ts comingBackNow):
+        // the entry is left as the turn before it left it, or failed where the wall said so.
+        case "stopped":
+        case "outage":
+        case "overflow":
+            return ending.kind === "failed" || ending.kind === "idle";
+    }
 };
 
 /**
@@ -148,7 +180,7 @@ export const restoreLimitHolds = (services: Pick<Services, "agents" | "conversat
         }
     }
     if (restored > 0) {
-        services.logger.info({ restored }, "boot: held turns a spent allowance or a door stranded were put back, with their bookings");
+        services.logger.info({ restored }, "boot: held turns were put back with their bookings and remedies (a spent allowance, a door, a stop, an outage, an overflow, a flag)");
     }
     return restored;
 };

@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { isAwaitingDecision, type TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import {
@@ -13,9 +14,10 @@ import { newConversationId } from "@intentic/sandbox-contract/ids/conversation-i
 import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import type { Logger } from "pino";
 import type { ConversationActors } from "../conversations/actor/conversation-actors.js";
-import type { Holding, Holdings } from "../conversations/actor/conversation-holdings.js";
 import { liveRunOf } from "../conversations/actor/conversation-holdings.js";
 import { opt } from "../opt.js";
+import type { Services } from "../composition.js";
+import { fileStartWindow, type StartWindow, turnStartsDocument } from "../store/start-window.js";
 import type { DomainEventMap } from "../seams/domain-events.js";
 import type { TurnInput, TurnStarter } from "../seams/turn-starter.js";
 import { spokenBy } from "../seams/turn-speaker.js";
@@ -37,19 +39,29 @@ const speakerToken = (label: string): string => `${label} (linked sandbox)`;
 // and a glance at the live run, both cheap.
 export const STATUS_WAIT_MAX_S = 30;
 const STATUS_LOOK_MS = 1_000;
-const WINDOW_MS = 3_600_000;
-
-// When each link started a turn, held by none, keyed by the link's id: the hourly allowance its terms set.
-const STARTS: Holding<readonly number[]> = { name: "link turn starts" };
 
 export interface LinkTaskDeps {
     readonly links: InboundLinks;
     readonly turns: Pick<TurnStarter, "say" | "reply" | "stop">;
     readonly conversations: Pick<ConversationActors, "holdings">;
+    // Where each link's started turns are booked against its hourly allowance: on disk, so a restart hands out no fresh hour.
+    readonly starts: StartWindow;
     readonly notify: (notification: PushNotification) => void;
     readonly logger: Pick<Logger, "info" | "warn">;
     readonly now?: () => number;
 }
+
+export type LinkServices = Pick<Services, "inboundLinks" | "turns" | "conversations" | "pushSender" | "logger" | "config">;
+
+/** What a link's tasks run on, read off the daemon's services: the doors' and the boot pass's alike. */
+export const linkTaskDepsOf = (services: LinkServices): LinkTaskDeps => ({
+    links: services.inboundLinks,
+    turns: services.turns,
+    conversations: services.conversations,
+    starts: fileStartWindow(join(services.config.historyRoot, turnStartsDocument.path)),
+    notify: (notification) => void services.pushSender.notifyIfAway(notification),
+    logger: services.logger,
+});
 
 // A refusal, with the status the link door answers it with: a task that cannot go (400), no such task of this link (404),
 // one that cannot be acted on now (409), or a link past its hourly allowance (429).
@@ -63,15 +75,7 @@ const refusal = (refused: LinkRefusal["refused"], message: string): LinkRefusal 
 const nowOf = (deps: LinkTaskDeps): number => (deps.now ?? Date.now)();
 
 // True, and booked, when the link may start one more turn this hour.
-const spendTurn = (starts: Holdings<readonly number[]>, link: ResolvedLink, now: number): boolean => {
-    const recent = (starts.get(link.id) ?? []).filter((at) => now - at < WINDOW_MS);
-    if (recent.length >= link.terms.turnsPerHour) {
-        starts.hold(undefined, link.id, recent);
-        return false;
-    }
-    starts.hold(undefined, link.id, [...recent, now]);
-    return true;
-};
+const spendTurn = (deps: LinkTaskDeps, link: ResolvedLink): Promise<boolean> => deps.starts.spend(`link:${link.id}`, link.terms.turnsPerHour, nowOf(deps));
 
 const overAllowance = (link: ResolvedLink): LinkRefusal =>
     refusal(
@@ -192,7 +196,7 @@ export const askTask = async (deps: LinkTaskDeps, link: ResolvedLink, asked: Lin
     }
     const held = link.terms.approve;
     // A held task spends its turn when the owner lets it go, not while it waits.
-    if (!held && !spendTurn(deps.conversations.holdings(STARTS), link, nowOf(deps))) {
+    if (!held && !(await spendTurn(deps, link))) {
         return overAllowance(link);
     }
     const filed = await deps.links.addTask(
@@ -237,7 +241,7 @@ export const decideTask = async (
         return (await deps.links.moveTask(link.id, task.conversationId, { state: "declined", forgetTask: true }, nowOf(deps))) ?? task;
     }
     // Spent now, as it starts; past the allowance it stays waiting, so the owner can try again within the hour.
-    if (!spendTurn(deps.conversations.holdings(STARTS), link, nowOf(deps))) {
+    if (!(await spendTurn(deps, link))) {
         return overAllowance(link);
     }
     return (await startTurn(deps, link, task, task.task ?? "")) ?? task;
@@ -258,7 +262,7 @@ export const messageTask = async (
     }
     // Words into a turn already running cost nothing; only a turn they would start is counted against the allowance.
     const live = liveRunOf(deps.conversations, task.conversationId) !== undefined;
-    if (!live && !spendTurn(deps.conversations.holdings(STARTS), link, nowOf(deps))) {
+    if (!live && !(await spendTurn(deps, link))) {
         return overAllowance(link);
     }
     const said = await deps.turns.say({
@@ -339,6 +343,23 @@ export const statusAfter = async (
             );
         });
     }
+};
+
+/**
+ * At boot: every task filed to run whose first turn was never said (the daemon stopped between filing it and starting it)
+ * is started now, from the words it still holds. Its turn was booked against the link's allowance when it was filed, so
+ * nothing is spent again. Said under the same message id as the first try, so one whose turn did start before the stop
+ * answers as a duplicate and runs once; one the turn port refuses now fails with the reason, which the asking side reads.
+ */
+export const startUnstartedTasks = async (deps: LinkTaskDeps): Promise<number> => {
+    const unstarted = await deps.links.unstarted();
+    for (const { link, task } of unstarted) {
+        await startTurn(deps, link, task, task.task ?? "");
+    }
+    if (unstarted.length > 0) {
+        deps.logger.info({ tasks: unstarted.length }, "link: tasks filed before a restart were started");
+    }
+    return unstarted.length;
 };
 
 /** A linked conversation's turn ended: its closing message becomes the report the asking sandbox reads. */

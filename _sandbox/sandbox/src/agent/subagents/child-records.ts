@@ -115,8 +115,10 @@ const endingOf = (row: SubagentRecordLike | undefined): SpawnedChild["ending"] =
 type SubagentRecordLike = Pick<SubagentRecord, "status" | "summary" | "error" | "verification" | "endedAt" | "activityAt">;
 
 // A child as its file states it: its record, and how its roster row last ended.
+let startOrder = Date.now() * 1_000;
+
 const childOnFile = (kid: ChildRecord, row: SubagentRecordLike | undefined, now: number): SpawnedChild => {
-    const state = kid.paused !== undefined ? "paused" : kid.running ? "running" : "settled";
+    const state = kid.startHold !== undefined ? "held" : kid.paused !== undefined ? "paused" : kid.running ? "running" : "settled";
     const entry: SpawnedChild = {
         parent: kid.parent,
         spec: specOnFile(kid.spec),
@@ -129,6 +131,9 @@ const childOnFile = (kid: ChildRecord, row: SubagentRecordLike | undefined, now:
     };
     if (kid.sessionId !== undefined) {
         entry.sessionId = kid.sessionId;
+    }
+    if (kid.startHold !== undefined) {
+        entry.startHold = kid.startHold;
     }
     const ending = state === "settled" ? endingOf(row) : undefined;
     if (ending !== undefined) {
@@ -146,13 +151,23 @@ const childOnFile = (kid: ChildRecord, row: SubagentRecordLike | undefined, now:
     return entry;
 };
 
+/** Binds the history writer without changing a restored record before its turn has been adopted. */
+export const bindChildFile = (services: KeepDeps, childId: string, kid: ChildRecord): void => {
+    kid.persist = () => ledgerOf(services).write(childId, childOnFile(kid, services.conversations.holdings(ROSTER).get(childId), Date.now()));
+};
+
 /** Writes a child down as it stands now: what the next boot restores it from. Never throws, never waits. */
 export const keepChild = (services: KeepDeps, childId: string): void => {
     const kid = services.conversations.holdings(CHILDREN).get(childId);
     if (kid === undefined) {
         return;
     }
-    ledgerOf(services).write(childId, childOnFile(kid, services.conversations.holdings(ROSTER).get(childId), Date.now()));
+    if (kid.held === "seat" || kid.held === "lane" || kid.held === "start") {
+        kid.startHold ??= { kind: kid.held, order: ++startOrder };
+        startOrder = Math.max(startOrder, kid.startHold.order);
+    }
+    bindChildFile(services, childId, kid);
+    kid.persist?.();
 };
 
 /**
@@ -204,3 +219,15 @@ export const childResultDoor = (services: KeepDeps, conversationId: string | und
 
 /** A child's last settled turn's result, for the wait that hands its ending over; undefined for one spawned without a schema. */
 export const childResultOf = (actors: Actors, childId: string): ChildRecord["result"] => actors.holdings(CHILDREN).get(childId)?.result;
+
+// A refused or cancelled start must not reappear as held on the next boot, even before its conversation exists.
+export const closeUnstarted = (actors: Pick<ConversationActors, "holdings">, id: string): void => {
+    const kid = actors.holdings(CHILDREN).get(id);
+    if (kid !== undefined) {
+        kid.running = false;
+        kid.held = undefined;
+        kid.startHold = undefined;
+        kid.persist?.();
+        actors.holdings(CHILDREN).drop(id);
+    }
+};

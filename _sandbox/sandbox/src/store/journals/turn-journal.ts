@@ -31,7 +31,13 @@ const inFlightSince = { startedAt: z.number(), attempts: z.number() };
 // The run itself, so a turn parked on a person comes back AS that run rather than a new one telling it again: its id,
 // which every row it drew is stamped with and which a window already showing it redraws in place (transcriptState.ts
 // attachRun), and, while it is parked, the rows it had drawn, which no other store holds until it settles.
-const JournalledRunSchema = z.object({ id: z.string(), rows: z.array(TranscriptRowSchema).optional() });
+const JournalledRunSchema = z.object({
+    id: z.string(),
+    rows: z.array(TranscriptRowSchema).optional(),
+    // The run ended, but the record did not take its rows: a boot records it (its run's log, else `rows`) and never runs
+    // it again (turn-resume.ts, recordSettledTurn).
+    settled: z.literal(true).optional(),
+});
 export type JournalledRun = z.infer<typeof JournalledRunSchema>;
 
 const JournalledTurnSchema = z.object({
@@ -50,9 +56,26 @@ export type JournalledTurn = z.infer<typeof JournalledTurnSchema>;
 // A sender lane as journalled: an absent persona is the full toolbox reaching no account, as in the lane itself.
 const JournalledLaneSchema = z.object({ actsAs: z.string().optional(), requireApproval: z.boolean() });
 
-const JournalledFireSchema = z.object({
+export const JournalledFireSchema = z.object({
     ...inFlightSince,
     kind: z.literal("automation"),
+    // A fire journalled at admission (automations/durable/fire-admission.ts) has its own key, since several may wait on one
+    // conversation, and is `queued` until it runs. Absent on a row from before admissions were journalled.
+    id: z.string().optional(),
+    state: z.enum(["queued", "running"]).optional(),
+    // The conversation id was minted at admission rather than handed by a thread, so a replay mints its own seat.
+    minted: z.boolean().optional(),
+    // The fire's own options, so a queued one replays as it was admitted (scheduler.ts, FireOptions).
+    cleared: z.enum(["approval", "both"]).optional(),
+    late: z.string().optional(),
+    held: z.string().optional(),
+    allowedTools: z.array(z.string()).optional(),
+    // Its check passed, with what it saw: a replay carries the pass rather than checking against a moved baseline.
+    checked: z.boolean().optional(),
+    observed: z.string().optional(),
+    observedValue: z.string().optional(),
+    // The inbox rows (automations/durable/inbox-store.ts) this fire took over, dropped at boot before the inbox is replayed.
+    inboxIds: z.array(z.string()).optional(),
     automationId: z.string(),
     // The stable conversation this fire opened; reused by restart so an interrupted wake resumes the same fleet card.
     conversationId: z.string(),
@@ -90,7 +113,7 @@ type JournalDeps = Pick<Services, "turnJournal" | "logger">;
 // Takes the entry off the journal, its interruption left standing on whatever record it has.
 export const consumeEntry = async (services: JournalDeps, entry: JournalEntry): Promise<void> => {
     const clear =
-        entry.kind === "turn" ? services.turnJournal.clearTurn(entry.turn.conversationId) : services.turnJournal.clearFire(entry.conversationId);
+        entry.kind === "turn" ? services.turnJournal.clearTurn(entry.turn.conversationId) : services.turnJournal.clearFire(entry.id ?? entry.conversationId);
     await clear.catch((error: unknown) => services.logger.warn({ err: error }, "turn journal: interrupted entry not cleared"));
 };
 
@@ -177,7 +200,7 @@ export const turnJournalRows = ({ db }: ConversationsDb): TurnJournalRows => {
 
 // The run a row names, read on its own so a run this build cannot read costs only itself, never the entry: rows that no
 // longer parse leave the id, and a column stamped with another start belongs to a turn before this one.
-const StoredRunSchema = z.object({ id: z.string(), startedAt: z.number(), rows: z.unknown().optional() });
+const StoredRunSchema = z.object({ id: z.string(), startedAt: z.number(), rows: z.unknown().optional(), settled: z.literal(true).optional() });
 const runOf = (row: TurnRow): JournalledRun | undefined => {
     if (row.run === undefined || row.run === null) {
         return undefined;
@@ -186,7 +209,7 @@ const runOf = (row: TurnRow): JournalledRun | undefined => {
     if (!stored.success || stored.data.startedAt !== row.started_at) {
         return undefined;
     }
-    const run: JournalledRun = { id: stored.data.id };
+    const run: JournalledRun = { id: stored.data.id, ...opt("settled", stored.data.settled) };
     const rows = z.array(TranscriptRowSchema).safeParse(stored.data.rows);
     if (stored.data.rows !== undefined && rows.success) {
         run.rows = rows.data;
@@ -230,6 +253,9 @@ export const sqliteTurnJournal = (conversations: ConversationsDb): TurnJournal =
     const rows = turnJournalRows(conversations);
     const selectTurns = db.prepare("SELECT * FROM turn_journal ORDER BY started_at");
     const selectFires = db.prepare("SELECT * FROM fire_journal_by_conversation ORDER BY started_at");
+    const selectAdmissions = db.prepare("SELECT entry FROM fire_admission ORDER BY position");
+    const putAdmission = db.prepare("INSERT INTO fire_admission(id, entry) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET entry = excluded.entry");
+    const deleteAdmission = db.prepare("DELETE FROM fire_admission WHERE id = ?");
     const upsertFire = db.prepare(`
         INSERT INTO fire_journal_by_conversation(conversation_id, automation_id, started_at, attempts, payload, origin, title, lane, thread, session_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -238,13 +264,23 @@ export const sqliteTurnJournal = (conversations: ConversationsDb): TurnJournal =
             lane = excluded.lane, thread = excluded.thread, session_id = excluded.session_id
     `);
     const deleteFire = db.prepare("DELETE FROM fire_journal_by_conversation WHERE conversation_id = ?");
+    const admissions = (): JournalledFire[] => {
+        // SAFETY: this query selects the NOT NULL TEXT entry column; its contents are validated below.
+        const admissionRows = selectAdmissions.all() as { entry: string }[];
+        return admissionRows.map((row) => JournalledFireSchema.parse(JSON.parse(row.entry)));
+    };
     return {
         list: async () => [
             ...(selectTurns.all() as unknown as TurnRow[]).flatMap(turnOf),
             ...(selectFires.all() as unknown as FireRow[]).flatMap(fireOf),
+            ...admissions(),
         ],
         recordTurn: async (turn) => rows.putTurn(turn),
         recordFire: async (fire) => {
+            if (fire.id !== undefined) {
+                putAdmission.run(fire.id, JSON.stringify(fire));
+                return;
+            }
             upsertFire.run(
                 fire.conversationId,
                 fire.automationId,
@@ -260,6 +296,7 @@ export const sqliteTurnJournal = (conversations: ConversationsDb): TurnJournal =
         },
         clearTurn: async (conversationId) => rows.deleteTurn(conversationId),
         clearFire: async (conversationId) => {
+            deleteAdmission.run(conversationId);
             deleteFire.run(conversationId);
         },
     };

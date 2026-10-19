@@ -10,7 +10,6 @@ import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import {
     type ExtensionAdvisory,
     ExtensionAdvisorySchema,
-    type ExtensionHealth,
     ExtensionHealthSchema,
     type ExtensionUpdate,
     type ExtensionUpdatePolicy,
@@ -31,8 +30,8 @@ import type { JsonFile } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 import { readExtensionEnablement, writeExtensionEnablement } from "../capabilities/extension-inventory/extension-enablement.js";
-import { processesDesired, reconcileListenerProcesses, startAutoStartProcesses } from "./extension-processes.js";
-import { extensionRuntimeAbsent } from "../capabilities/extension-inventory/extension-readiness.js";
+import { EARLY_PROBE_MS, FINAL_PROBE_MS, type HealthVerdicts, scheduleHealthProbes } from "./extension-health.js";
+import { reconcileListenerProcesses, startAutoStartProcesses } from "./extension-processes.js";
 import { installedExtensions } from "../capabilities/extension-inventory/installed-extensions.js";
 
 // Update lifecycle for git-installed extensions; five verbs share one fact base:
@@ -49,6 +48,7 @@ const RecordSchema = z.object({
     update: ExtensionUpdateSchema.optional(),
     advisory: ExtensionAdvisorySchema.optional(),
     health: ExtensionHealthSchema.optional(),
+    healthWatch: z.object({ id: z.string(), autoRevert: z.boolean() }).optional(),
 });
 type UpdateRecord = z.infer<typeof RecordSchema>;
 const StateSchema = z.object({ checkedAt: z.string().optional(), extensions: z.record(z.string(), RecordSchema) });
@@ -353,90 +353,47 @@ export const revertExtensionUpdate = async (services: Services, id: string): Pro
         services.extensionBackend.restart();
         void reconcileListenerProcesses(services);
         // Clears the health record; the next check re-lists the sha as an ordinary update instead of an alarm.
-        await patchRecord(root, extensionIdOf(previousManifest), ({ health: _health, ...rest }) => rest);
+        await patchRecord(root, extensionIdOf(previousManifest), ({ health: _health, healthWatch: _watch, ...rest }) => rest);
         return { ref: previousRef };
     } finally {
         applying.delete(id);
     }
 };
 
-// Health: for a minute after a swap, checks that what the new version declared actually came up.
-// Two probes (early, then final) give a slow boot a fair chance; autoRevert is the auto rung's failure path.
+// Health: for a minute after a swap, extension-health.ts checks that what the new version declared actually came up.
+const healthVerdicts = (services: Services): HealthVerdicts => ({
+    record: (identity, health) =>
+        patchRecord(services.workspace.root, identity, ({ health: _previous, healthWatch: _watch, ...rest }) => (health === undefined ? rest : { ...rest, health })),
+    revert: revertExtensionUpdate,
+});
 
-const EARLY_PROBE_MS = 15_000;
-const FINAL_PROBE_MS = 60_000;
-
-// What is wrong with the extension's backend half, by the supervisor's last word on it: an activation that threw, or one
-// that stands and says it is not serving, which is as much a failed update.
-const backendProblem = (services: Services, id: string): string | undefined => {
-    const backend = services.extensionBackend.statusOf(id);
-    if (backend?.state === "error") {
-        return `its backend failed to activate${backend.detail !== undefined ? `: ${backend.detail}` : ""}`;
-    }
-    const health = backend !== undefined && "health" in backend ? backend.health : undefined;
-    if (health?.state === "failed") {
-        return `its backend reports it is not serving${health.detail !== undefined ? `: ${health.detail}` : ""}`;
-    }
-    return undefined;
+// Resolves once the watch is on disk; timers can be rebuilt from that record after a crash.
+const watchExtensionHealth = async (services: Services, id: string, identity: string, fromRef: string, autoRevert: boolean): Promise<void> => {
+    await patchRecord(services.workspace.root, identity, (record) => ({
+        ...record,
+        health: { state: "watching", fromRef, at: new Date().toISOString() },
+        healthWatch: { id, autoRevert },
+    }));
+    scheduleHealthProbes(services, healthVerdicts(services), { id, identity, fromRef, autoRevert });
 };
 
-const healthProblem = async (services: Services, id: string): Promise<string | undefined | "stop"> => {
-    const extension = (await installedExtensions(services)).find((candidate) => candidate.id === id);
-    // Removed or switched off mid-watch: the owner intervened, and the watch has nothing left to judge.
-    if (extension === undefined || !extension.enabled) {
-        return "stop";
+/** At boot, after extension startup: every unfinished watch gets both probes back, including its revert path. */
+export const resumeExtensionHealthWatches = async (services: Services, earlyMs = EARLY_PROBE_MS, finalMs = FINAL_PROBE_MS): Promise<void> => {
+    const state = await readExtensionUpdateState(services.workspace.root);
+    const targets = await installedTargets(services);
+    for (const [identity, record] of Object.entries(state.extensions)) {
+        if (record.health?.state !== "watching") {
+            continue;
+        }
+        const id = record.healthWatch?.id ?? targets.find((target) => target.identity === identity)?.id;
+        if (id === undefined) {
+            await patchRecord(services.workspace.root, identity, ({ health: _health, healthWatch: _watch, ...rest }) => rest);
+            continue;
+        }
+        // Older records predate the saved decision; they get a verdict but never gain permission to revert.
+        const watch = { id, identity, fromRef: record.health.fromRef, autoRevert: record.healthWatch?.autoRevert === true };
+        scheduleHealthProbes(services, healthVerdicts(services), watch, earlyMs, finalMs);
     }
-    if (!(await extensionRuntimeAbsent(extension)) && (await processesDesired(services, extension))) {
-        for (const process of extension.manifest.contributes?.processes ?? []) {
-            if (process.autoStart === true && !services.serviceProcesses.running(extensionProcessKey(id, process.name))) {
-                return `its declared process "${process.name}" is not running`;
-            }
-        }
-    }
-    return extension.manifest.server === undefined ? undefined : backendProblem(services, id);
-};
-
-// Resolves once the watch is ARMED (the "watching" record is on disk); the probes themselves stay on timers.
-const watchExtensionHealth = (services: Services, id: string, identity: string, fromRef: string, autoRevert: boolean): Promise<void> => {
-    const root = services.workspace.root;
-    const record = (health: ExtensionHealth | undefined): Promise<void> =>
-        patchRecord(root, identity, ({ health: previous, ...rest }) => {
-            void previous;
-            return health === undefined ? rest : { ...rest, health };
-        });
-    // A watch whose record or probe fails would otherwise sit at "watching" forever with nobody told why.
-    const failed = (error: unknown): void => services.logger.warn({ err: error, extension: id }, "extension update: health watch failed");
-    const armed = record({ state: "watching", fromRef, at: new Date().toISOString() }).catch(failed);
-    const probe = async (final: boolean): Promise<void> => {
-        const problem = await healthProblem(services, id);
-        if (problem === "stop") {
-            await record(undefined);
-            return;
-        }
-        if (problem !== undefined) {
-            if (autoRevert) {
-                // A failed watch auto-reverts and records that; a failed revert just leaves the unhealthy verdict.
-                try {
-                    await revertExtensionUpdate(services, id);
-                    await record({ state: "unhealthy", detail: problem, fromRef, at: new Date().toISOString(), autoReverted: true });
-                    return;
-                } catch (error) {
-                    services.logger.warn({ err: error, extension: id }, "extension update: auto-revert failed");
-                }
-            }
-            await record({ state: "unhealthy", detail: problem, fromRef, at: new Date().toISOString() });
-            return;
-        }
-        if (final) {
-            await record({ state: "healthy", fromRef, at: new Date().toISOString() });
-        } else {
-            const timer = setTimeout(() => void probe(true).catch(failed), FINAL_PROBE_MS - EARLY_PROBE_MS);
-            timer.unref();
-        }
-    };
-    const timer = setTimeout(() => void probe(false).catch(failed), EARLY_PROBE_MS);
-    timer.unref();
-    return armed;
 };
 
 // Agent-prepared rung: runs the update card's diff-read unprompted the moment the check records a new sha.

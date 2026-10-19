@@ -117,3 +117,34 @@ export const expireAutomation = async (services: Services, automation: Automatio
     void (target.kind === "notify" ? services.pushSender.notify(notice) : services.pushSender.notifyIfAway(notice));
     return true;
 };
+
+// Past its end date a fire does nothing but end the automation; true when that is what happened.
+export const endedInstead = async (
+    services: Services,
+    automation: AutomationRecord,
+    cleared: "approval" | "both" | undefined,
+    stream: { readonly failed: (reason: string) => void } | undefined,
+): Promise<boolean> => {
+    if (automation.expiresAt === undefined || automation.expiresAt > Date.now() || cleared === "both") {
+        return false;
+    }
+    // Ended before (a press of "Run now" on it): nobody is told again, but the press is answered in its history.
+    if (!(await expireAutomation(services, automation)) && cleared === "approval") {
+        await services.automations.recordRun(automation.id, {
+            at: Date.now(),
+            outcome: "skipped",
+            detail: `It reached its end date (${new Date(automation.expiresAt).toISOString()}): move the end date to run it again.`,
+        });
+    }
+    stream?.failed("this automation reached its end date");
+    return true;
+};
+
+// Which outside world a wake's words came from, for the guard layer: the listener's provider, else a check that read
+// outside the sandbox when its words are in the prompt; other triggers set nothing.
+export const outsideWakeOf = (automation: AutomationRecord, outside: string | undefined, observed: string | undefined): string | undefined => {
+    if (automation.trigger.kind === "listener") {
+        return automation.trigger.provider;
+    }
+    return observed === undefined ? undefined : outside;
+};

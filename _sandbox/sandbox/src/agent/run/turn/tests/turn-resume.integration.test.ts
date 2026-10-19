@@ -1,4 +1,5 @@
 import { mkdtempSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
@@ -38,8 +39,12 @@ import { createDomainEvents } from "../../../../seams/domain-events.js";
 import type { Said, StartedRun, TurnInput, TurnStarter } from "../../../../seams/turn-starter.js";
 import type { BeginRefusal } from "../../../../conversations/actor/conversation-decide.js";
 import { createTurnResumeScheduler, fireHeldResume, type HeldTurn, resumeInterruptedTurns, startConversationTurn } from "../turn-resume.js";
+import { TurnRun } from "../turn-runs.js";
+import { openRunLog, readRunLog, unrecordedRuns } from "../../../../sessions/run-log.js";
+import { conversationUnit } from "../../../../store/conversation-units.js";
 import { parkedCards } from "../../../../conversations/actor/parked-cards.js";
 import { opt } from "../../../../opt.js";
+import type { Caller } from "../../../../auth/auth.js";
 import { restartResume } from "../restart-resume-policy.js";
 
 // `takes` answers each abandon attempt (false: the turn is still unwinding); `armed`/`limitArmed` are per-conversation
@@ -94,10 +99,13 @@ const fakeServices = (
         events: createDomainEvents(() => {}),
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {} }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+        // Where each conversation's unit is, and with it the log its running turn writes (run-log.ts).
+        config: unstubbed<Services["config"]>("config", { historyRoot: root }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", {
             append: (agent: TranscriptAgent, messages: readonly TranscriptRow[]) => record.append(agent.id, messages),
             // Real record, not stubbed, so this suite reads transcripts in the same order the daemon does.
             count: (agent: TranscriptAgent) => record.count(agent.id),
+            page: (agent: TranscriptAgent, window = {}) => record.window(agent.id, window),
         }),
     });
 };
@@ -163,6 +171,7 @@ const withProviders = (services: Services, connected: readonly string[]): Servic
         providerModules: PROVIDER_MODULES,
         providerReadiness: () => providerReadiness(wired),
         config: unstubbed<Services["config"]>("config", {
+            historyRoot: services.config.historyRoot,
             translator: { url: "http://translator.test", token: "tok" },
             claudeCodeOauthToken: "",
             anthropicApiKey: "",
@@ -991,6 +1000,110 @@ test("a resumed restart keeps the user's message on the record, under the re-run
     expect(rows[0]).toMatchObject({ sentAt: 10_000, messageId: "m-report" });
 });
 
+// What a run drew, written as a live daemon writes it: the run's log in its conversation's unit (run-log.ts).
+const loggedRun = async (root: string, conversationId: string, events: readonly AgentEvent[], settled = false): Promise<TurnRun> => {
+    const run = new TurnRun([{ role: "user", text: "finish the report", sentAt: 10_000, messageId: "m-report" }], 10_000);
+    const log = openRunLog(conversationUnit(root, conversationId), { run: run.id, startedAt: run.startedAt, rows: [...run.rows] }, () => {});
+    run.tap = log.append;
+    for (const event of events) {
+        run.push(event);
+    }
+    if (settled) {
+        await log.close(false);
+        return run;
+    }
+    // The daemon died with the log open: what it had written stays, as the file a live run leaves.
+    const file = join(conversationUnit(root, conversationId), "running.jsonl");
+    await log.flush();
+    const written = await readFile(file, "utf8");
+    await log.close(true);
+    await writeFile(file, written);
+    return run;
+};
+
+const codexWork: AgentEvent[] = [
+    { kind: "delta", text: "Two chapters in." },
+    { kind: "tool_call", id: "t1", name: "Bash", category: "execute", status: "completed", target: "pnpm build", content: [{ type: "text", text: "built" }] },
+    { kind: "steer", text: "and add the appendix", sentAt: 20_000, messageId: "m-steer" },
+];
+
+// A Codex, Cursor or Gemini turn the daemon died under kept nothing but its prompt: no provider store is read for them.
+test("a turn cut mid-run is recorded from its run's log, whatever runtime ran it, and the log goes", async () => {
+    const root = mkdtempSync(join(tmpdir(), "restart-"));
+    const services = await journalServices(root, false);
+    const run = await loggedRun(root, "rs-logged", codexWork);
+    await services.turnJournal.recordTurn(
+        journalled("rs-logged", { turn: { prompt: "finish the report", messageId: "m-report", conversationId: "rs-logged", isolated: true, agent: "codex" }, run: { id: run.id } }),
+    );
+    await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
+
+    const rows = await fileTranscriptRecord(root).read("rs-logged");
+    expect(rows.slice(0, -1)).toEqual([...run.rows]);
+    expect(rows.at(-1)).toMatchObject({ role: "notice", noticeCode: { code: "restartInterrupted" } });
+    expect(await readRunLog(conversationUnit(root, "rs-logged"), run.id)).toBeUndefined();
+    expect(await services.turnJournal.list()).toEqual([]);
+});
+
+// The steer may never have reached the CLI before the daemon died; the re-run is told, whatever its session holds.
+test("a cut turn's re-run hears what was said into it while it ran", async () => {
+    const root = mkdtempSync(join(tmpdir(), "restart-"));
+    const services = await journalServices(root);
+    const run = await loggedRun(root, "rs-steered", codexWork);
+    await services.turnJournal.recordTurn(journalled("rs-steered", { sessionId: "s-partial", run: { id: run.id } }));
+    const prompts: string[] = [];
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT);
+
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    expect(prompts[0]).toContain("- and add the appendix");
+    expect(withoutResumeNote(prompts[0] ?? "")).toBe("finish the report");
+});
+
+// A crash between the record taking the run and the journal letting it go: the boot finds the entry, not a second copy.
+test("a cut turn whose rows are already on the record is not written a second time", async () => {
+    const root = mkdtempSync(join(tmpdir(), "restart-"));
+    const services = await journalServices(root, false);
+    const run = await loggedRun(root, "rs-twice", codexWork);
+    await fileTranscriptRecord(root).append("rs-twice", [...run.rows]);
+    await services.turnJournal.recordTurn(journalled("rs-twice", { run: { id: run.id } }));
+    await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
+
+    expect(await fileTranscriptRecord(root).read("rs-twice")).toEqual([...run.rows]);
+});
+
+// A record that refused a settled turn's rows: the boot writes them from the log the run kept, and runs nothing.
+test("a settled turn the record refused is recorded at the next boot, never run again", async () => {
+    const root = mkdtempSync(join(tmpdir(), "restart-"));
+    const services = await journalServices(root);
+    const run = await loggedRun(root, "rs-settled", [...codexWork, { kind: "delta", text: "Done." }], true);
+    await services.turnJournal.recordTurn(journalled("rs-settled", { run: { id: run.id, rows: [...run.rows], settled: true } }));
+    const prompts: string[] = [];
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT);
+
+    expect(prompts).toEqual([]);
+    expect(await fileTranscriptRecord(root).read("rs-settled")).toEqual([...run.rows]);
+    expect(await services.turnJournal.list()).toEqual([]);
+    expect(await unrecordedRuns(conversationUnit(root, "rs-settled"))).toEqual([]);
+});
+
+// Turns land in the order they ran: an earlier one the record missed goes first, the next one beneath it.
+test("a turn's rows wait behind an earlier run the record missed, which goes down first", async () => {
+    const root = mkdtempSync(join(tmpdir(), "restart-"));
+    const services = await journalServices(root);
+    const missed = await loggedRun(root, "rs-order", [{ kind: "delta", text: "the first answer" }], true);
+    const started = made(
+        await startConversationTurn(services, fakeWake([], [{ kind: "delta", text: "the second answer" }, { kind: "done" }]), {
+            prompt: "and now this",
+            conversationId: "rs-order",
+            isolated: true,
+        }),
+    );
+    await started.waitUntilRecorded();
+
+    const texts = (await fileTranscriptRecord(root).read("rs-order")).map((row) => row.text);
+    expect(texts).toEqual(["finish the report", "the first answer", "and now this", "the second answer"]);
+    expect(missed.id).not.toBe(started.id);
+});
+
 test("a resumed restart whose record write fails keeps the journal entry and runs nothing yet", async () => {
     const root = mkdtempSync(join(tmpdir(), "restart-"));
     const base = await journalServices(root);
@@ -1498,6 +1611,46 @@ test("answering the restored question resumes with the picks, worded as a live a
     expect(prompts[0]).toMatch(/user answered/i);
     expect(prompts[0]).toContain("Yes");
     await settle(services, "pk-q");
+});
+
+// A page the agent asked on, put back as itself: nothing runs until the person answers, and the answer is told as the
+// ask tool would have told it.
+test("answering a restored page ask resumes with the page's own answer", async () => {
+    const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
+    const page: ParkedRequest = { kind: "page_ask", requestId: "r-page", page: { id: "p-palette", title: "Pick a palette", path: "pages/palette.html" } };
+    await services.turnJournal.recordTurn(parkedEntry("pk-page", [page]));
+    const prompts: string[] = [];
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT);
+    await cardsUp(observed, "page_ask");
+
+    expect(services.cards.resolve({ kind: "page_ask", requestId: "r-page", value: '{"palette":"dusk"}' })).toBe("settled");
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    expect(prompts[0]).toContain('The user answered on the page "Pick a palette":\n{"palette":"dusk"}');
+    await settle(services, "pk-page");
+});
+
+// A gate's card comes back too; what its yes would release is not released by the restored card, and only the people
+// the card names may answer it.
+test("a restored credential card takes its answer only from the people it names, and a yes sends the agent to ask again", async () => {
+    const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
+    const offer: ParkedRequest = {
+        kind: "credential_offer",
+        requestId: "r-cred",
+        offer: { subject: "DATABASE_URL", kind: "secret", lane: "shell", approvers: ["ops@example.com"], scope: "use" },
+    };
+    await services.turnJournal.recordTurn(parkedEntry("pk-cred", [offer]));
+    const prompts: string[] = [];
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT);
+    await cardsUp(observed, "credential_offer");
+
+    const stranger: Caller = { email: "someone@example.com", role: "collaborator" };
+    expect(services.cards.resolve({ kind: "credential_offer", requestId: "r-cred", approve: true }, stranger)).toEqual({ refused: expect.stringContaining("ops@example.com") });
+    const approver: Caller = { email: "ops@example.com", role: "collaborator" };
+    expect(services.cards.resolve({ kind: "credential_offer", requestId: "r-cred", approve: true }, approver)).toBe("settled");
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    expect(prompts[0]).toContain('ops@example.com released "DATABASE_URL"');
+    expect(prompts[0]).toContain("Make the same call again");
+    await settle(services, "pk-cred");
 });
 
 // A starter that does not wait behind the promised resume (an automation's fire, a re-run) can take the conversation in

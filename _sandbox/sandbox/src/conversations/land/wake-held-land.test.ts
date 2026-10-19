@@ -4,7 +4,10 @@ import { pino } from "pino";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { isolatedAgent } from "../registry/agents-store.testing.js";
-import { memoryFleet } from "../registry/agents-registry.testing.js";
+import { IN_MEMORY } from "@intentic/base/sqlite";
+import { fleetStoreOver, memoryFleet } from "../registry/agents-registry.testing.js";
+import type { Fleet, FleetStore } from "../registry/agents-registry.js";
+import { openConversationsDb } from "../../store/conversations-db.js";
 import { joined, NO_QUEUE, type TurnQueue } from "../actor/conversation-queue.js";
 import { type ConversationState, idleConversation } from "../actor/conversation-state.js";
 import type { IsolatedAgent, PersistedAgent } from "../registry/agents-store.js";
@@ -26,21 +29,34 @@ interface Held {
 const ID = "c1";
 const finished = isolatedAgent([{ repo: "root", base: "b0" }], { id: ID });
 
-// One fleet's holdings, which hold what each close kept; every other reading is the case's own.
-const fleet = memoryFleet().conversations;
+// A daemon's registry over one conversations database: the real store, so what a close keeps is on the record, and a
+// second one over the same database is what the next boot reads.
+const daemonOver = async (store: FleetStore, entry: PersistedAgent): Promise<Fleet["agents"]> => {
+    if (!store.agents.has(entry.id)) {
+        store.agents.save([entry]);
+    }
+    const { agents } = memoryFleet(store);
+    await agents.init();
+    return agents;
+};
 
-const deps = (held: Held = {}): WakeHeldLandDeps => {
-    const entry = held.entry ?? finished;
+let store: FleetStore;
+beforeEach(() => {
+    store = fleetStoreOver(openConversationsDb(IN_MEMORY));
+});
+
+const deps = async (held: Held = {}, over: FleetStore = store): Promise<WakeHeldLandDeps> => {
+    const agents = await daemonOver(over, held.entry ?? finished);
     return unstubbed<WakeHeldLandDeps>("services", {
         logger: pino({ level: "silent" }),
         agents: unstubbed<Services["agents"]>("agents", {
-            entry: (id: string) => (id === entry.id ? entry : undefined),
+            entry: agents.entry,
+            amendLandMarks: agents.amendLandMarks,
             standingOf: () => held.standing ?? "ready",
         }),
         conversations: unstubbed<Services["conversations"]>("conversations", {
             state: () => held.state ?? idleConversation(),
             queued: () => held.queue ?? NO_QUEUE,
-            holdings: fleet.holdings,
         }),
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", { worktreeDir: () => "/nowhere" }),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
@@ -60,43 +76,54 @@ const landing = () => {
 const watching: ConversationState = { ...idleConversation(), watches: [{ id: "w1", note: "CI", intervalSeconds: 60, deadlineAt: 1 }] };
 const running: ConversationState = { ...idleConversation(), phase: { kind: "running", startedAt: 1, parked: [], stopping: undefined } };
 
-afterEach(() => {
-    takeLandHeldForWake(fleet, ID);
-});
-
 describe("the land a wake held", () => {
     it("runs once the wake is gone, for a conversation at rest whose clean turn left its work on its branch", async () => {
-        noteLandHeldForWake(fleet, ID, { autoLand: true });
+        const services = await deps();
+        await noteLandHeldForWake(services, ID, { autoLand: true });
         const { land, landed } = landing();
-        await landHeldForWake(deps(), ID, land);
+        await landHeldForWake(services, ID, land);
         expect(landed).toEqual([ID]);
         // Once: a second disarm has nothing left to land.
-        await landHeldForWake(deps(), ID, land);
+        await landHeldForWake(services, ID, land);
+        expect(landed).toEqual([ID]);
+    });
+
+    // The watch a turn armed comes back with the daemon (watchers.ts); the land its close skipped for it must too, or the
+    // restored watch's disarm lands nothing and the work waits on its branch for a press.
+    it("runs after a restart, read off the record by a daemon that never saw the close, and only once", async () => {
+        await noteLandHeldForWake(await deps(), ID, { autoLand: true });
+        const { land, landed } = landing();
+        const rebooted = await deps({}, store);
+        await landHeldForWake(rebooted, ID, land);
+        expect(landed).toEqual([ID]);
+        // Taken off the record as it ran: a further restart's disarm lands nothing twice.
+        await landHeldForWake(await deps({}, store), ID, land);
         expect(landed).toEqual([ID]);
     });
 
     it("waits, keeping it, while another wake or a turn is still to come: that turn's own close decides", async () => {
-        noteLandHeldForWake(fleet, ID, { autoLand: true });
+        await noteLandHeldForWake(await deps(), ID, { autoLand: true });
         const { land, landed } = landing();
-        await landHeldForWake(deps({ state: watching }), ID, land);
-        await landHeldForWake(deps({ state: running }), ID, land);
+        await landHeldForWake(await deps({ state: watching }), ID, land);
+        await landHeldForWake(await deps({ state: running }), ID, land);
         expect(landed).toEqual([]);
-        await landHeldForWake(deps(), ID, land);
+        await landHeldForWake(await deps(), ID, land);
         expect(landed).toEqual([ID]);
     });
 
     it("lands nothing for a conversation whose close held nothing", async () => {
         const { land, landed } = landing();
-        await landHeldForWake(deps(), ID, land);
+        await landHeldForWake(await deps(), ID, land);
         expect(landed).toEqual([]);
     });
 
     it("lands nothing, and forgets it, where the turn asked not to land by itself", async () => {
-        noteLandHeldForWake(fleet, ID, { autoLand: false });
+        const services = await deps();
+        await noteLandHeldForWake(services, ID, { autoLand: false });
         const { land, landed } = landing();
-        await landHeldForWake(deps(), ID, land);
+        await landHeldForWake(services, ID, land);
         expect(landed).toEqual([]);
-        expect(takeLandHeldForWake(fleet, ID)).toBeUndefined();
+        expect(await takeLandHeldForWake(services, ID)).toBeUndefined();
     });
 
     it.each([
@@ -105,18 +132,20 @@ describe("the land a wake held", () => {
         ["the work is no longer held on its branch", { standing: "landed" as const }],
         ["the land already met a conflict", { standing: "conflict" as const }],
     ])("lands nothing, and forgets it, when %s", async (_case, held: Held) => {
-        noteLandHeldForWake(fleet, ID, { autoLand: true });
+        const services = await deps(held);
+        await noteLandHeldForWake(services, ID, { autoLand: true });
         const { land, landed } = landing();
-        await landHeldForWake(deps(held), ID, land);
+        await landHeldForWake(services, ID, land);
         expect(landed).toEqual([]);
-        expect(takeLandHeldForWake(fleet, ID)).toBeUndefined();
+        expect(await takeLandHeldForWake(services, ID)).toBeUndefined();
     });
 
     it("never throws for a land that broke: the disarm that asked must not fail on it", async () => {
-        noteLandHeldForWake(fleet, ID, { autoLand: true });
+        const services = await deps();
+        await noteLandHeldForWake(services, ID, { autoLand: true });
         const broken = async (): Promise<LandResult> => {
             throw new Error("index.lock");
         };
-        await expect(landHeldForWake(deps(), ID, broken)).resolves.toBeUndefined();
+        await expect(landHeldForWake(services, ID, broken)).resolves.toBeUndefined();
     });
 });

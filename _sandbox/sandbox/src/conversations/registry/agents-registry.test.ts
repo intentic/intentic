@@ -3004,6 +3004,41 @@ it("keeps a fired resend that low memory turned away at the door across a restar
     expect(stranded?.record).toMatchObject({ reason: "door", fired: false, ran: false, run: "run-2", input: { conversationId: "c1", prompt: "p", resume: "limit" } });
 });
 
+// Every wall but a refused credential's is kept as the spent allowance's is (2026-10-19): a flagged turn's fork point,
+// without which a press sends the classifier's stopped response again, and a stopped turn's ladder, its rungs climbed.
+it("a restarted fleet keeps a flagged turn's fork point and a stopped turn's climbed ladder", async () => {
+    const store = memoryStore();
+    const { agents: registry, conversations } = createFleet(store, standings(), presences());
+    await registry.init();
+    await beginTurn(conversations, turn({ conversationId: "flag" }), 1_000);
+    conversations.send("flag", { kind: "frame", frame: { kind: "error", code: "safeguard-flagged", message: "flagged", autoResume: "available", held: { ran: true } } });
+    conversations.send("flag", {
+        kind: "turn-held",
+        held: { input: { conversationId: "flag", prompt: "p" }, reason: "flagged", ran: true, sessionId: "s-flag", resumeAt: "entry-before-stop" },
+    });
+    await conversations.send("flag", { kind: "settle" }, 2_000).settled;
+    await beginTurn(conversations, turn({ conversationId: "stop" }), 1_000);
+    conversations.send("stop", { kind: "frame", frame: { kind: "error", message: "the CLI died", autoResume: "scheduled", held: { ran: true } } });
+    conversations.send("stop", { kind: "turn-held", held: { input: { conversationId: "stop", prompt: "p" }, reason: "stopped", ran: true, sessionId: "s-stop" } });
+    await conversations.send("stop", { kind: "settle" }, 2_000).settled;
+    // The ladder climbed one rung, and was stopped again: the hold it holds now has one try behind it.
+    const first = conversations.state("stop")?.resume.held;
+    if (first === undefined) {
+        throw new Error("expected a hold");
+    }
+    await conversations.send("stop", { kind: "held-fired", ladder: true, judged: first }).settled;
+    await beginTurn(conversations, turn({ conversationId: "stop" }), 3_000);
+    conversations.send("stop", { kind: "frame", frame: { kind: "error", message: "the CLI died again", autoResume: "scheduled", held: { ran: true } } });
+    conversations.send("stop", { kind: "turn-held", held: { input: { conversationId: "stop", prompt: "p" }, reason: "stopped", ran: true, sessionId: "s-stop" } });
+    await conversations.send("stop", { kind: "settle" }, 4_000).settled;
+
+    const { agents: restarted, conversations: after } = createFleet(store, standings(), presences());
+    await restarted.init();
+    expect(restoreLimitHolds({ agents: restarted, conversations: after, logger: silent })).toBe(2);
+    expect(after.state("flag")?.resume.held).toMatchObject({ reason: "flagged", fired: false, sessionId: "s-flag", resumeAt: "entry-before-stop" });
+    expect(after.state("stop")?.resume.held).toMatchObject({ reason: "stopped", fired: false, tries: 1, sessionId: "s-stop" });
+});
+
 // A kept hold an older build left standing under a later turn is not this ending's: it is taken off, never fired.
 it("drops a kept hold whose entry no longer ends in that spent allowance", async () => {
     const stale = conversationEntry({

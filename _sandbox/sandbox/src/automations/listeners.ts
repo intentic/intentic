@@ -1,3 +1,7 @@
+import { randomUUID } from "node:crypto";
+import { perDaemon } from "./durable/daemon-memory.js";
+import { addListenerMessage, consumeInbox, listenerBacklog } from "./durable/inbox-store.js";
+import { channelAnswerSink } from "../extensions/listener/listener-deliver.js";
 import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
 import type { ListenerMessage, ListenerStop, ListenerStopAnswer } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import type { Trigger } from "@intentic/sandbox-contract/schemas/automations";
@@ -36,6 +40,9 @@ export const DEBOUNCE_MS = 750;
 // What a triggering message contributes to the conversation it opens or resumes: origin, board title, thread key, and
 // the live reply sink when the source streams back.
 export interface MessageContext {
+    // The durable inbox rows (durable/inbox-store.ts) this message, or batch, stands for: let go once a fire journalled them,
+    // the running turn took them, or they were dropped on purpose.
+    readonly inboxIds?: readonly string[];
     readonly origin: AgentOrigin;
     readonly title: string;
     // Thread-sessions key for this message's thread (or channel) and lane, computed at push time; a batch's key is its
@@ -58,6 +65,8 @@ export interface MessageBatcher {
 export interface BatcherOptions {
     readonly steer?: (conversationId: string, line: string, context: MessageContext) => Promise<boolean>;
     readonly onIdle?: () => void;
+    // A message the running turn took: no fire of its own will journal it, so its inbox row goes here.
+    readonly consumed?: (context: MessageContext) => Promise<void>;
 }
 
 // Batches lines into one wake per debounce window; lines arriving mid-run go into the running turn when `steer` takes
@@ -104,13 +113,15 @@ export const createMessageBatcher = (
     };
     const enqueue = (line: string, context: MessageContext): void => {
         pending.push(line);
+        // The batch stands for every message folded into it, whichever context wins.
+        const inboxIds = [...(pendingContext?.inboxIds ?? []), ...(context.inboxIds ?? [])];
         const carried = pendingContext?.stream;
         if (context.stream !== undefined) {
             // Ends the superseded sink so its held-open response isn't left hanging on a stream that won't fire.
             carried?.end();
         }
         // Reply sink carries from the newest message with one; a follow-up can't drop an earlier held-open response.
-        pendingContext = context.stream === undefined && carried !== undefined ? { ...context, stream: carried } : context;
+        pendingContext = { ...context, inboxIds, ...opt("stream", context.stream ?? carried) };
         void quiet.trigger(flush);
     };
     // Into the running turn, when its runtime takes words and the sender needs nobody's release; a message the turn did
@@ -127,6 +138,7 @@ export const createMessageBatcher = (
             return;
         }
         // The running turn answers it through its own sink; this message's sink only hears that it was taken.
+        await options.consumed?.(context);
         context.stream?.steered?.();
         context.stream?.end();
     };
@@ -154,9 +166,9 @@ const joinNewestWithin = (lines: string[], max: number): string => {
     return kept.length > 0 ? kept.join("\n") : (lines.at(-1) as string).slice(0, max);
 };
 
-// Per-thread queues (a thread key names the automation and the lane too), a module singleton so every dispatch path
-// shares the same serialization. A batcher with nothing pending and nothing running lets itself go.
-const batchers = new Map<string, MessageBatcher>();
+// Per-thread queues (a thread key names the automation and the lane too), one set per daemon (durable/daemon-memory.ts) so
+// every dispatch path shares the same serialization. A batcher with nothing pending and nothing running lets itself go.
+const batchersOf = perDaemon(() => new Map<string, MessageBatcher>());
 
 // A channel is a door strangers knock on too, so it holds the same two ceilings as the webhook and the public doors
 // (door-admission.ts): messages a minute per sender, so one person flooding a channel cannot drive a wake per line, and
@@ -218,7 +230,8 @@ const listenerBatcher = (services: Services, id: string, provider: ListenerMessa
             steer: async (conversationId, line, context) =>
                 (await admittedUnheld(services, id, context.lane)) &&
                 (await services.turns.steer(conversationId, { text: steerText(line, provider), voice: "sandbox", outside: provider })) === true,
-            onIdle: () => batchers.delete(key),
+            onIdle: () => batchersOf.of(services).delete(key),
+            consumed: (context) => consumeInbox(services, context.inboxIds ?? []),
         },
     );
 
@@ -245,12 +258,14 @@ const fireBatch = async (services: Services, id: string, payload: string, contex
     if (fresh === undefined || !fresh.enabled || fresh.trigger.kind !== "listener") {
         // Disabled or deleted since dispatch: end the sink so a streamed caller isn't left awaiting a dead turn.
         context.stream?.end();
+        await consumeInbox(services, context.inboxIds ?? []);
         return;
     }
     // The day's budget is spent per wake, not per message: a burst the batcher folds into one turn costs one. Over it,
     // the batch is dropped and the run history says why.
     if (ceilings.overDailyCeiling(id, LISTENER_DAILY_MAX, Date.now())) {
         context.stream?.end();
+        await consumeInbox(services, context.inboxIds ?? []);
         await services.automations.recordRun(id, {
             at: Date.now(),
             outcome: "skipped",
@@ -266,6 +281,8 @@ const fireBatch = async (services: Services, id: string, payload: string, contex
         { key: context.thread, ttlMs: context.ttlMs, mint: () => mintConversationId(id, openedAt) },
         {
             payload,
+            inboxIds: context.inboxIds ?? [],
+            accepted: () => consumeInbox(services, context.inboxIds ?? []),
             // Queues rather than drops: the blocking run may be an approved wake or a restart's re-fire, not the batcher's.
             overlap: "queue",
             lane: context.lane,
@@ -331,12 +348,12 @@ export const dispatchListenerMessage = async (
             continue;
         }
         const key = threadKey(message.provider, automation.id, roomOf(message), lane.actsAs);
-        let batcher = batchers.get(key);
-        if (batcher === undefined) {
-            batcher = listenerBatcher(services, automation.id, message.provider, debounceMs, key);
-            batchers.set(key, batcher);
-        }
-        batcher.push(line, messageContext(message, automation.id, key, lane, makeStream?.(automation.id)));
+        const context = messageContext(message, automation.id, key, lane, makeStream?.(automation.id));
+        // Durable before the sender is answered: what waits in the debounce or behind a running fire survives a restart.
+        const inboxId = randomUUID();
+        const { stream: _live, ...saved } = context;
+        await addListenerMessage(services, { id: inboxId, automationId: automation.id, line, context: saved });
+        pushListener(services, automation.id, message.provider, debounceMs, key, line, { ...context, inboxIds: [inboxId] });
         matched.push(automation.id);
     }
     if (reached) {
@@ -416,4 +433,31 @@ export const stopChannelTurn = async (
         })
         .catch((error: Error) => services.logger.warn({ err: error }, "activity append failed"));
     return { stopped: true };
+};
+
+// Into the thread's batcher, opening one when the thread has none.
+const pushListener = (services: Services, id: string, provider: ListenerMessage["provider"], debounceMs: number, key: string, line: string, context: MessageContext): void => {
+    const batchers = batchersOf.of(services);
+    let batcher = batchers.get(key);
+    if (batcher === undefined) {
+        batcher = listenerBatcher(services, id, provider, debounceMs, key);
+        batchers.set(key, batcher);
+    }
+    batcher.push(line, context);
+};
+
+// At boot (fire-resume.ts), after the journalled fires: every message still in the inbox goes back into its thread's
+// batcher, in arrival order, and fires like a fresh one. The sender's live stream died with the daemon, so the answer
+// goes where a held wake's does: a Visitor chat's outbox, else the channel's thread.
+export const resumeListenerInbox = async (services: Services): Promise<void> => {
+    for (const entry of await listenerBacklog(services)) {
+        const { origin, thread, lane } = entry.context;
+        const sink = services.outboxStreamFor(origin) ?? channelAnswerSink(services, origin);
+        pushListener(services, entry.automationId, origin.provider, DEBOUNCE_MS, thread, entry.line, {
+            ...entry.context,
+            lane: { actsAs: lane.actsAs, requireApproval: lane.requireApproval },
+            inboxIds: [entry.id],
+            ...opt("stream", sink?.stream),
+        });
+    }
 };

@@ -1,6 +1,7 @@
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
+import { memoryStartWindow } from "../../store/start-window.testing.js";
 import { beginTurn } from "../actor/conversation-actors.testing.js";
 import { conversationEntry } from "../registry/agents-store.testing.js";
 import { memoryFleet } from "../registry/agents-registry.testing.js";
@@ -87,6 +88,6 @@ test("a message that opens a turn on its target continues the target's session o
         logger: unstubbed<Services["logger"]>("logger", { info: () => {} }),
     });
 
-    expect(await messageConversation(services, "sender", "target", "ready when you are")).toMatchObject({ ok: true, to: "target", delivery: "turn" });
+    expect(await messageConversation(services, "sender", "target", "ready when you are", memoryStartWindow())).toMatchObject({ ok: true, to: "target", delivery: "turn" });
     expect(started.map((turn) => [turn.conversationId, turn.agent, turn.sessionId])).toEqual([["target", "codex", "sess-codex"]]);
 });

@@ -113,6 +113,22 @@ describe("foldTurn", () => {
         ]);
     });
 
+    // What a reader needs once nothing in memory remembers the subagent: the card the turn settles into keeps it.
+    it("keeps where the runtime holds an in-process subagent's own record on its card", () => {
+        const events: AgentEvent[] = [
+            { kind: "tool_call", id: "task-1", name: "Agent", category: "other", status: "in_progress" },
+            { kind: "subagent", id: "task-1", subagentKind: "subagent", agentType: "Explore" },
+            { kind: "subagent_update", id: "task-1", sdk: { sessionId: "ses-1", agentId: "a1b2" } },
+            { kind: "subagent_update", id: "task-1", status: "completed" },
+        ];
+        expect(foldOf("delegate", events).at(-1)?.tools?.[0]?.subagent).toEqual({
+            kind: "subagent",
+            agentType: "Explore",
+            status: "completed",
+            sdk: { sessionId: "ses-1", agentId: "a1b2" },
+        });
+    });
+
     // A spawned subagent is named by its own conversation, not the call that started it; the spawn answers with that
     // name, which is how its card is found, so it reads on its card exactly as an in-process one does.
     it("puts a spawned subagent on the card of the call whose result names it", () => {

@@ -27,6 +27,7 @@ import { defineDocument } from "../../store/evolution/documents.js";
 import { type ManifestProblem, recordManifestProblems } from "../../store/manifest/manifest-problems.js";
 import { TurnQueueSchema } from "../actor/conversation-queue.js";
 import { StoredLimitHoldSchema } from "../actor/limit-hold.js";
+import { LandMarksSchema } from "./land-marks.js";
 import { opt } from "../../opt.js";
 
 // The persisted half of the fleet registry: one record per conversation, what must survive a restart, as nested records
@@ -233,6 +234,8 @@ export const PersistedAgentSchema = z.object({
     // The turn a spent allowance holds, unfired, as its actor last wrote it (actor/limit-hold.ts): what lets a booked
     // resend or move outlive a restart. Read back only while `ending` is still that spent allowance.
     limitHold: StoredLimitHoldSchema.optional(),
+    // What a land still owes once the daemon is back: its version commit, or the land a wake held (land-marks.ts).
+    landMarks: LandMarksSchema.optional(),
 });
 export type PersistedAgent = z.infer<typeof PersistedAgentSchema>;
 

@@ -15,7 +15,7 @@ import { defineStep } from "./evolution/state-steps.js";
 export const conversationsDbPath = (historyRoot: string): string => join(historyRoot, "conversations.db");
 
 // Parent before child, the order rows are copied in and the order a reader walks them.
-export const CONVERSATION_TABLES = ["conversation", "conversation_repo", "checkpoint", "turn_journal", "watch", "fire_journal", "fire_journal_by_conversation"] as const;
+export const CONVERSATION_TABLES = ["conversation", "conversation_repo", "checkpoint", "turn_journal", "watch", "fire_journal", "fire_journal_by_conversation", "fire_admission"] as const;
 
 const SCHEMA = `
 /* One row per conversation: its registry record (agents-store.ts) as JSON, less the repos its checkout carries. */
@@ -124,6 +124,14 @@ export const CONVERSATIONS_STEPS: readonly SqliteStep[] = [
                     FROM fire_journal ORDER BY started_at;
                 DELETE FROM fire_journal;
             `),
+    },
+    {
+        describe: "journals automation admissions in FIFO order before they wait for a lane",
+        up: (db) => db.exec(`CREATE TABLE IF NOT EXISTS fire_admission (
+            position INTEGER PRIMARY KEY AUTOINCREMENT,
+            id TEXT NOT NULL UNIQUE,
+            entry TEXT NOT NULL CHECK (json_valid(entry))
+        ) STRICT;`),
     },
 ];
 

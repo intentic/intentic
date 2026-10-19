@@ -29,6 +29,7 @@ import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-messag
 import type { ConversationUnits } from "../../store/conversation-units.js";
 import { type ConversationActors, type ConversationBooks, createConversationActors } from "../actor/conversation-actors.js";
 import { activateLoadedFleet } from "./fleet-activation.js";
+import { type LandMarkBooks, type LandMarks, landMarksAmender, markedOnLand } from "./land-marks.js";
 import type { BeginTurn, SettleFlush } from "../actor/conversation-decide.js";
 import { unfinishedOf } from "./unfinished-work.js";
 import { activityLive, awaitingWake, type ConversationState, NO_USAGE, type TurnUsage, nextPromptDayAt } from "../actor/conversation-state.js";
@@ -586,6 +587,8 @@ export interface AgentsRegistry {
     // record said of it before: a delivery speaks for one land, so the next land that moves the tips clears it
     // (recordLanded), and only this writes one.
     readonly recordDelivery: (id: string, delivery: LandingDelivery) => Promise<void>;
+    // Rewrites what a land still owes once the daemon is back (land-marks.ts); written at once, never broadcast.
+    readonly amendLandMarks: (id: string, change: (marks: LandMarks) => LandMarks) => Promise<void>;
     // Somebody about to take changes out of the main tree by hand (a discard in the Changes panel), for the presence
     // probe to name if landed work goes with them (landed-presence.ts).
     readonly noteRemover: (remover: Remover) => void;
@@ -681,14 +684,12 @@ const landFailureOnCard = ({ reason, code, at }: NonNullable<Landing["failure"]>
     at,
 });
 
+// The registry's own books, as the land recorders below write through them.
+type RecordBooks = LandMarkBooks & { readonly broadcast: () => void };
+
 // AgentsRegistry.recordLandFailure over the registry's own books: the land that broke onto the record, published.
 const landFailureRecorder =
-    (books: {
-        readonly entryOf: (id: string) => PersistedAgent | undefined;
-        readonly replace: (next: PersistedAgent) => void;
-        readonly persist: () => Promise<void>;
-        readonly broadcast: () => void;
-    }): AgentsRegistry["recordLandFailure"] =>
+    (books: RecordBooks): AgentsRegistry["recordLandFailure"] =>
     async (id, failure) => {
         const entry = books.entryOf(id);
         if (entry === undefined || !isIsolated(entry)) {
@@ -707,12 +708,7 @@ const landFailureRecorder =
 
 // AgentsRegistry.recordDelivery over the registry's own books: the delivery onto the record whole, published.
 const deliveryRecorder =
-    (books: {
-        readonly entryOf: (id: string) => PersistedAgent | undefined;
-        readonly replace: (next: PersistedAgent) => void;
-        readonly persist: () => Promise<void>;
-        readonly broadcast: () => void;
-    }): AgentsRegistry["recordDelivery"] =>
+    (books: RecordBooks): AgentsRegistry["recordDelivery"] =>
     async (id, delivery) => {
         const entry = books.entryOf(id);
         if (entry === undefined || !isIsolated(entry)) {
@@ -725,12 +721,7 @@ const deliveryRecorder =
 
 // AgentsRegistry.clearCheckFailure over the registry's own books.
 const checkFailureClearer =
-    (books: {
-        readonly entryOf: (id: string) => PersistedAgent | undefined;
-        readonly replace: (next: PersistedAgent) => void;
-        readonly persist: () => Promise<void>;
-        readonly broadcast: () => void;
-    }): AgentsRegistry["clearCheckFailure"] =>
+    (books: RecordBooks): AgentsRegistry["clearCheckFailure"] =>
     async (id) => {
         const entry = books.entryOf(id);
         if (entry === undefined || !isIsolated(entry) || entry.landing.failure?.check !== true) {
@@ -1370,7 +1361,7 @@ export const createFleet = (
             const { landedInto: before, ...checkout } = placement;
             const landedInto = moved ? outcome.into : before;
             replace({
-                ...entry,
+                ...markedOnLand(entry, outcome),
                 placement: { ...checkout, repos: [...outcome.repos], ...opt("landedInto", landedInto) },
                 landing: {
                     ...opt("message", moved ? undefined : landing.message),
@@ -1392,6 +1383,7 @@ export const createFleet = (
         recordLandFailure: landFailureRecorder({ entryOf, replace, persist, broadcast }),
         clearCheckFailure: checkFailureClearer({ entryOf, replace, persist, broadcast }),
         recordDelivery: deliveryRecorder({ entryOf, replace, persist, broadcast }),
+        amendLandMarks: landMarksAmender({ entryOf, replace, persist }),
         noteRemover: presences.note,
         markLandingAbsorbed: async (id, repo, landedHead, landedTip, size) => {
             const entry = entryOf(id);

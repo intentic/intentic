@@ -3,7 +3,7 @@ import { type LiveRun, liveRunOf } from "../../../conversations/actor/conversati
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 import type { TurnStarter } from "../../../seams/turn-starter.js";
-import { openingRows, openTurnTranscript, recordTurnTranscript } from "../../../sessions/turn-transcript.js";
+import { openingRows, openTurnTranscript, recordTurnTranscript, recordUnrecordedRuns, runLogFor } from "../../../sessions/turn-transcript.js";
 import { createAdmission } from "./turn-admission.js";
 import { applyReply, steerComposed } from "./turn-interactions.js";
 import { fireHeldResume, startConversationTurn } from "./turn-resume.js";
@@ -91,7 +91,10 @@ export const turnDoors = (services: () => Services, body: TurnStarter["stream"])
                     return options?.continuing === true ? onItsSession(daemon, routed) : routed;
                 },
                 opening: (startedAt) => openingRows(sent, daemon.workspace.root, startedAt),
-                transcript: (rows, steerRows) => recordTurnTranscript(daemon, sent, rows, steerRows),
+                log: runLogFor(daemon, sent.conversationId),
+                // Whatever an earlier run of this conversation could not write goes first, so the record keeps turns in order.
+                transcript: async (rows, steerRows) =>
+                    (await recordUnrecordedRuns(daemon, sent.conversationId)) && recordTurnTranscript(daemon, sent, rows, steerRows),
             });
             if (run === "archived") {
                 daemon.logger.info({ conversationId: sent.conversationId }, "run not started: the conversation is archived, and only a person reopens it");

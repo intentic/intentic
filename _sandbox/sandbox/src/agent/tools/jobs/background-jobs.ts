@@ -14,24 +14,15 @@ import { publishRuntimeChange } from "../../../seams/runtime-feed.js";
 import { endSession } from "../../../seams/session-processes.js";
 import { opt } from "../../../opt.js";
 import { followRun, inputWaitAt } from "./input-wait-follow.js";
-import { appendRunFile, readRunFile, renameRunFile, writeRunFile } from "./run-files.js";
+import { readRunFile, renameRunFile, writeRunFile } from "./run-files.js";
+import { forgetKeptJob, rememberKeptJob } from "./kept-job-records.js";
+import { COMMAND_FILE, JOB_FILE, NEVER_RAN, OUTPUT_FILE, STATUS_FILE } from "./job-files.js";
 import { jobRunnerPids } from "./job-processes.js";
+
+export { settleLostRuns } from "./job-files.js";
 
 // Every `run_in_background` Bash call, which outlives the per-turn CLI in its own pane, held by its conversation's
 // actor, whose card lists it (`jobs-shown`).
-
-// Published by atomic rename by bin/tmux-run once the command has exited; its existence is completion.
-const STATUS_FILE = "status";
-// The pane's combined output, tee'd as it runs.
-const OUTPUT_FILE = "out";
-// Written by bin/tmux-run before it touches tmux; its absence once the turn is gone means the command never ran.
-const COMMAND_FILE = "cmd";
-// The status body of a job whose command never ran, which no exit code can be.
-const NEVER_RAN = "never-ran";
-// The status body of a run a restart took down mid-command, which left no exit code to read.
-const LOST = "lost";
-// The job itself, rewritten whole as it is named and adopted, so a restarted daemon can take it back.
-const JOB_FILE = "job.json";
 
 // Longest a job may hold a terminal and an armed watch, in ms, whether or not it ever exits; a job left running for the
 // person (`handed`) is theirs, and holds its terminal until it exits or they stop it.
@@ -70,6 +61,7 @@ export interface BackgroundJobSeed {
     readonly conversations: Actors;
     // Where the job's dir is made: a fenced turn's own temp dir, the only one its sandbox sees; the daemon's otherwise.
     readonly tmp?: string;
+    readonly historyRoot?: string;
 }
 
 // A job file is read back by a later daemon, so it is validated, never trusted. `turn` holds the opening turn's profile.
@@ -87,6 +79,7 @@ const JobFileSchema = z.object({
     adopted: z.boolean().optional(),
     // Left running for the person instead (job-fates.ts); never adopted, restart or not.
     handed: z.boolean().optional(),
+    kept: z.string().optional(),
     ports: z.array(z.number().int()).optional(),
     // The watch it was handed to, which a stop disarms before it ends the job.
     watch: z.string().optional(),
@@ -120,6 +113,7 @@ type JobFate = "awaited" | "handed" | "stopped";
 export type JobStopper = NonNullable<AgentJob["stoppedBy"]>;
 
 interface JobRecord {
+    readonly historyRoot: string | undefined;
     readonly job: BackgroundJob;
     fate: JobFate | undefined;
     shellId: string | undefined;
@@ -135,7 +129,7 @@ interface JobRecord {
     ports: readonly number[] | undefined;
     stoppedBy: JobStopper | undefined;
     // Why the agent kept it for the person (the `keep` tool), the one fact that hands a job over as its turn ends.
-    // Held here only: no turn survives a restart, so a restored job has nothing left to decide by it.
+    // Persisted immediately: a journalled turn can resume before its ending hands the job over.
     kept: string | undefined;
     // A foreground call filed as a job when it ran past its time. The CLI never knew it as a task, so no completion
     // notice marks its end read: one that finished inside its turn was the agent's to look at, and wakes nobody after.
@@ -227,6 +221,7 @@ const noteEnded = (actors: Actors, record: JobRecord): boolean => {
     if (ended(actors, job)) {
         return false;
     }
+    forgetKeptJob(record.historyRoot, job.id);
     const endings = actors.holdings(ENDINGS);
     endings.hold(job.conversationId, job.id, endOf(record));
     // A server left for the person is on the ports list by its job's name (ports.routes.ts), which this takes off.
@@ -314,12 +309,16 @@ const persist = (record: JobRecord): void => {
     const { dir: _dir, profile, ...job } = record.job;
     const { dir } = record.job;
     try {
+        if (record.kept !== undefined || record.fate === "handed") {
+            rememberKeptJob(record.historyRoot, record.job);
+        }
         writeRunFile(
             dir,
             `${JOB_FILE}.tmp`,
             JSON.stringify({
                 ...job,
                 turn: profile,
+                ...opt("kept", record.kept),
                 ...(record.shellId === undefined ? {} : { shellId: record.shellId }),
                 ...(record.fate === "awaited" ? { adopted: true } : {}),
                 ...(record.fate === "handed" ? { handed: true } : {}),
@@ -331,7 +330,7 @@ const persist = (record: JobRecord): void => {
         );
         renameRunFile(dir, `${JOB_FILE}.tmp`, JOB_FILE);
     } catch {
-        // allow(silent-catch): the record lives on in memory; only a restart under the job would miss what this write carried.
+        // allow(silent-catch): the record lives on in memory; only a restart under the job (or a recreate, for the receipt) would miss what this write carried.
     }
 };
 
@@ -375,7 +374,7 @@ const fileJob = (
         startedAt: spec.startedAt,
         profile: seed.profile,
     };
-    const record: JobRecord = { ...UNJUDGED, job, shellId: undefined, toolUseId: spec.toolUseId, overran };
+    const record: JobRecord = { ...UNJUDGED, historyRoot: seed.historyRoot, job, shellId: undefined, toolUseId: spec.toolUseId, overran };
     const actors = seed.conversations;
     actors.holdings(JOBS).hold(job.conversationId, job.id, record);
     persist(record);
@@ -410,6 +409,7 @@ export const fileOverrunCommand = (
 
 // A record as its job starts: nothing decided about it, nothing it waits on, nobody told of its end.
 const UNJUDGED = {
+    historyRoot: undefined,
     fate: undefined,
     notice: "none",
     unwatch: undefined,
@@ -428,12 +428,13 @@ const recordOf = (dir: string): JobRecord | undefined => {
         if (!parsed.success) {
             return undefined;
         }
-        const { shellId, adopted, handed, ports, watch, turn, overran, ...rest } = parsed.data;
+        const { shellId, adopted, handed, kept, ports, watch, turn, overran, ...rest } = parsed.data;
         return {
             ...UNJUDGED,
             job: { ...rest, dir, profile: profileOf(turn) },
             fate: handed === true ? "handed" : adopted === true ? "awaited" : undefined,
             shellId,
+            kept,
             toolUseId: undefined,
             watch,
             ports,
@@ -445,48 +446,9 @@ const recordOf = (dir: string): JobRecord | undefined => {
     }
 };
 
-// Every agent run's capture dir, a job's (`intentic-run-job-`) or a foreground call's filed as one when it ran past its
-// time (`intentic-run-`), under the tmp sweep's prefix.
-const RUN_DIR_PREFIX = "intentic-run-";
-
-/**
- * Once at boot, before the watches come back: every run filed as a job that has no status and no runner left was taken
- * down by the restart, so nothing will ever publish its end. Its end is written down for it (status `lost`, never run
- * when it never started), and the watch its conversation was handed reports that at its first look, instead of waiting
- * out its six hours on a file no runner is left to write. On 2026-10-04 a container restart did that to a watch on an
- * `npm exec` that had died with the container: re-armed for two and a half more hours, to wake a conversation whose
- * work had already landed. A runner still alive (the daemon restarted, the panes did not) is left to run.
- */
-export const settleLostRuns = async (root: string = tmpdir(), procRoot = "/proc"): Promise<readonly string[]> => {
-    const unfinished = readdirSync(root, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory() && entry.name.startsWith(RUN_DIR_PREFIX))
-        .map((entry) => join(root, entry.name))
-        .filter((dir) => existsSync(join(dir, JOB_FILE)) && !existsSync(join(dir, STATUS_FILE)));
-    if (unfinished.length === 0) {
-        return [];
-    }
-    const alive = await jobRunnerPids(unfinished, procRoot);
-    const lost = unfinished.filter((dir) => !alive.has(dir));
-    for (const dir of lost) {
-        const started = existsSync(join(dir, COMMAND_FILE)) || existsSync(join(dir, OUTPUT_FILE));
-        try {
-            appendRunFile(
-                dir,
-                OUTPUT_FILE,
-                started ? "\n--- intentic: the sandbox restarted while this ran, and the command did not survive the restart\n" : "--- intentic: this command never reached a terminal, so it never ran\n",
-            );
-            writeRunFile(dir, `${STATUS_FILE}.part`, `${started ? LOST : NEVER_RAN}\n`);
-            renameRunFile(dir, `${STATUS_FILE}.part`, STATUS_FILE);
-        } catch {
-            // allow(silent-catch): a dir that cannot be written is one the tmp sweep is already taking; its watch reads that as broken.
-        }
-    }
-    return lost;
-};
-
 // Whether a job is past its time: one left running for the person is theirs to stop, so it never is (2026-10-05: kept
 // servers were forgotten after six hours, and with them the session the reaper spared for them).
-const expired = (record: JobRecord, now: number): boolean => record.fate !== "handed" && now - record.job.startedAt > JOB_MAX_MS;
+const expired = (record: JobRecord, now: number): boolean => record.fate !== "handed" && record.kept === undefined && now - record.job.startedAt > JOB_MAX_MS;
 
 /**
  * The capture dirs of jobs left running for the person and still running, read from their own files: the boot sweep
@@ -498,7 +460,10 @@ export const keptJobDirs = (root: string = tmpdir()): readonly string[] => {
         return readdirSync(root, { withFileTypes: true })
             .filter((entry) => entry.isDirectory() && entry.name.startsWith(JOB_DIR_PREFIX))
             .map((entry) => join(root, entry.name))
-            .filter((dir) => recordOf(dir)?.fate === "handed" && !existsSync(join(dir, STATUS_FILE)));
+            .filter((dir) => {
+                const record = recordOf(dir);
+                return record !== undefined && (record.fate === "handed" || record.kept !== undefined) && !jobFinished(record.job);
+            });
     } catch {
         // allow(silent-catch): a tmp that cannot be listed holds no job dir the sweeps could spare, and this runs at boot, where it must not throw.
         return [];
@@ -510,13 +475,31 @@ export const keptJobSessions = (root: string = tmpdir()): readonly string[] => [
     ...new Set(keptJobDirs(root).flatMap((dir) => recordOf(dir)?.job.session ?? [])),
 ];
 
+/** Unfinished recorded jobs are adopted after the boot sweep; only sessions with no live record are orphans. */
+export const restorableJobSessions = (root: string = tmpdir(), now = Date.now()): readonly string[] => {
+    const sessions = new Set(keptJobSessions(root));
+    try {
+        for (const entry of readdirSync(root, { withFileTypes: true })) {
+            if (entry.isDirectory() && entry.name.startsWith(JOB_DIR_PREFIX)) {
+                const record = recordOf(join(root, entry.name));
+                if (record !== undefined && jobStarted(record.job) && !jobFinished(record.job) && !expired(record, now)) {
+                    sessions.add(record.job.session);
+                }
+            }
+        }
+    } catch {
+        // allow(silent-catch): an unlistable tmp holds no record to spare by; keptJobSessions already logged nothing either, and boot must not throw.
+    }
+    return [...sessions];
+};
+
 /** Once at boot: re-files the still-running jobs a dead daemon left, each as adopted as its own file says. */
-export const restoreBackgroundJobs = (actors: Actors, now: number = Date.now()): readonly BackgroundJob[] => {
+export const restoreBackgroundJobs = (actors: Actors, now: number = Date.now(), root: string = tmpdir()): readonly BackgroundJob[] => {
     const jobs = actors.holdings(JOBS);
     const restored: BackgroundJob[] = [];
-    for (const entry of readdirSync(tmpdir(), { withFileTypes: true }).filter((candidate) => candidate.isDirectory() && candidate.name.startsWith(JOB_DIR_PREFIX))) {
-        const record = recordOf(join(tmpdir(), entry.name));
-        // No turn survives a restart, so a job that had not started by then never will.
+    for (const entry of readdirSync(root, { withFileTypes: true }).filter((candidate) => candidate.isDirectory() && candidate.name.startsWith(JOB_DIR_PREFIX))) {
+        const record = recordOf(join(root, entry.name));
+        // The old CLI cannot dispatch an unstarted call; a resumed turn issues a fresh call.
         if (record !== undefined && !jobStarted(record.job)) {
             endNeverRan(record.job);
         }
@@ -612,7 +595,7 @@ export const settledBackgroundJobs = (actors: Actors, conversationId: string): S
             }
             continue;
         }
-        if (record.fate !== undefined) {
+        if (record.fate !== undefined || record.kept !== undefined) {
             continue;
         }
         record.fate = "awaited";
@@ -681,6 +664,7 @@ export const keepBackgroundJob = (actors: Holders, conversationId: string, id: s
         return "stopped";
     }
     record.kept = reason;
+    persist(record);
     return "kept";
 };
 

@@ -152,15 +152,15 @@ describe("a turn that may not land", () => {
         expect(fixed).toStrictEqual([]);
         expect(kept).toStrictEqual(books());
         // Kept, with the turn's own answer to landing, for if the wake goes away without firing (wake-held-land.ts).
-        expect(takeLandHeldForWake(deps.conversations, "c")).toStrictEqual({ autoLand: true });
+        expect(await takeLandHeldForWake(deps, "c")).toStrictEqual({ autoLand: true });
     });
 
     test("that failed clears the land an earlier close kept for a wake: it never lands by itself", async () => {
         const deps = await registered(true);
-        noteLandHeldForWake(deps.conversations, "c", { autoLand: undefined });
+        await noteLandHeldForWake(deps, "c", {});
         const turn = { conversationId: "c", prompt: "p", autoLand: true, failed: true, aborted: false, awaitingWake: true, sync: async () => [] };
         expect(await drain(landTurn(deps, hooks, turn, books()))).toStrictEqual([]);
-        expect(takeLandHeldForWake(deps.conversations, "c")).toBeUndefined();
+        expect(await takeLandHeldForWake(deps, "c")).toBeUndefined();
     });
 
     test("awaiting nothing, the same turn runs the repository's fixers on its span first, then goes on to decide its land", async () => {

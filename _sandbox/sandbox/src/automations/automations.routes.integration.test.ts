@@ -79,7 +79,7 @@ const deniedServices = (root: string): Services =>
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
             get: async () => SandboxSettingsSchema.parse({ admission: { schedule: "deny" } }),
         }),
-        turnJournal: unstubbed<Services["turnJournal"]>("turnJournal", { clearFire: async () => {} }),
+        turnJournal: unstubbed<Services["turnJournal"]>("turnJournal", { recordFire: async () => {}, clearFire: async () => {} }),
     });
 
 const senders: Automation["senders"] = { rules: [{ ids: ["u1"] }], others: "ignore" };

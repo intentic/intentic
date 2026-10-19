@@ -9,7 +9,7 @@ import { adoptBackgroundJobs } from "../agent/tools/jobs/background-adoption.js"
 import { restoreBackgroundJobs, settleLostRuns } from "../agent/tools/jobs/background-jobs.js";
 import { onInputWaitStarted } from "../agent/tools/jobs/input-wait-follow.js";
 import { restoreWatchers } from "../agent/verification/watchers.js";
-import { resumeInterruptedFires } from "../automations/fire-resume.js";
+import { resumeAutomationInboxes, resumeInterruptedFires } from "../automations/fire-resume.js";
 import { resumeWorkflowExecution } from "../workflows/workflow-runner.js";
 import { bootFacts, RESTART_STORM, reportRestartStorm } from "../system/boot/restarts/boot-history.js";
 import type { BootPhase } from "./boot-phase.js";
@@ -53,7 +53,8 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
         .then((resume) => resumeInterruptedFires(services, Date.now(), resume))
         .catch((error: unknown) =>
             logger.error({ err: error }, "interrupted automation fires could not be re-fired, they stand on the record as interrupted"),
-        );
+        )
+        .then(() => resumeAutomationInboxes(services));
 
     // Each watch is re-checked once, since it may have resolved during the rebuild. First, every run the restart took
     // down has its end written for it, so the watch waiting on it reports the loss at that look rather than at its

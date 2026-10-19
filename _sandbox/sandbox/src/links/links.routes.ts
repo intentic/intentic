@@ -16,7 +16,19 @@ import type { Services } from "../composition.js";
 import { ownerDenied } from "../auth/owner-gates.js";
 import { opt } from "../opt.js";
 import type { ResolvedLink, StoredLinkTask } from "./inbound-links.js";
-import { answerTask, askTask, decideTask, type LinkRefusal, type LinkTaskDeps, messageTask, statusAfter, statusOf, stopTask } from "./link-tasks.js";
+import {
+    answerTask,
+    askTask,
+    decideTask,
+    type LinkRefusal,
+    type LinkServices,
+    type LinkTaskDeps,
+    linkTaskDepsOf,
+    messageTask,
+    statusAfter,
+    statusOf,
+    stopTask,
+} from "./link-tasks.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // The two halves of a link as routes. The owner's (`/system/links`): mint one, change its terms, revoke it, answer a task
@@ -33,14 +45,8 @@ export interface LinkRoutesDeps extends LinkTaskDeps {
 }
 
 /** The routes' deps, read off the daemon's services. */
-export const linkRoutesDepsOf = (
-    services: Pick<Services, "inboundLinks" | "turns" | "conversations" | "pushSender" | "logger" | "auth" | "info" | "personas">,
-): LinkRoutesDeps => ({
-    links: services.inboundLinks,
-    turns: services.turns,
-    conversations: services.conversations,
-    notify: (notification) => void services.pushSender.notifyIfAway(notification),
-    logger: services.logger,
+export const linkRoutesDepsOf = (services: LinkServices & Pick<Services, "auth" | "info" | "personas">): LinkRoutesDeps => ({
+    ...linkTaskDepsOf(services),
     auth: services.auth,
     sandboxName: () => services.info?.name ?? "this sandbox",
     personas: async () => (await services.personas.list()).map((persona) => ({ id: persona.id, label: persona.label })),

@@ -35,7 +35,7 @@ const GUARD_FETCH = "automation-guard-fetch";
 // `skip`: record a skipped run saying why. `quiet`: nothing moved since last time, which a frequent watch would
 // otherwise write into its history every few minutes.
 export type ConditionVerdict =
-    | { readonly kind: "go"; readonly observed?: string; readonly outside?: string; readonly value?: string }
+    | { readonly kind: "go"; readonly observed?: string; readonly outside?: string; readonly value?: string; readonly commit?: () => Promise<void> }
     | { readonly kind: "skip"; readonly detail: string }
     | { readonly kind: "quiet"; readonly detail: string };
 
@@ -161,6 +161,17 @@ const remember = (services: Services, id: string, now: number, change: (previous
         return { ...kept, armedAt: previous?.armedAt ?? now, checkedAt: now, ...change(previous) };
     });
 
+// A passed check replayed after a crash may have died just before committing its baseline.
+export const rememberFiredCondition = async (services: Services, automation: AutomationRecord, value: string | undefined, now: number): Promise<void> => {
+    if (value === undefined) {
+        return;
+    }
+    await remember(services, automation.id, now, (before) => ({
+        value, digest: watchDigest(value), firedAt: now,
+        changedAt: before !== undefined && sawSame(before, value) ? (before.changedAt ?? now) : now,
+    }));
+};
+
 // Runs the automation's check, if it has one, and decides. An automation with neither a guard nor a source goes ahead
 // with nothing to say, exactly as before watches existed.
 export const checkCondition = async (services: Services, automation: AutomationRecord, payload: string | undefined): Promise<ConditionVerdict> => {
@@ -195,18 +206,18 @@ export const checkCondition = async (services: Services, automation: AutomationR
             await remember(services, automation.id, now, () => ({ digest }));
             return { kind: "quiet", detail: `Unchanged: still ${firstLine(value) === "" ? "empty" : `"${firstLine(value)}"`}.` };
         }
-        await remember(services, automation.id, now, () => ({ value, digest, changedAt: now, firedAt: now }));
+        const commit = () => remember(services, automation.id, now, () => ({ value, digest, changedAt: now, firedAt: now }));
         const observed = observedOf(value, previous.value, outside);
-        return { kind: "go", value, ...(observed === undefined ? {} : { observed }), ...(outside === undefined ? {} : { outside }) };
+        return { kind: "go", value, commit, ...(observed === undefined ? {} : { observed }), ...(outside === undefined ? {} : { outside }) };
     }
-    await remember(services, automation.id, now, (before) => ({
+    const commit = () => remember(services, automation.id, now, (before) => ({
         value,
         digest,
         changedAt: before !== undefined && sawSame(before, value) ? (before.changedAt ?? now) : now,
         firedAt: now,
     }));
     const observed = observedOf(value, undefined, outside);
-    return { kind: "go", value, ...(observed === undefined ? {} : { observed }), ...(outside === undefined ? {} : { outside }) };
+    return { kind: "go", value, commit, ...(observed === undefined ? {} : { observed }), ...(outside === undefined ? {} : { outside }) };
 };
 
 // How long ago, in the unit a person reads it in.

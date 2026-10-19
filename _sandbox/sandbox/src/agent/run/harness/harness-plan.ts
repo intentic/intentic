@@ -265,7 +265,7 @@ export const planHarnessTurn = async (
                 // than to the process that started it; the same profile the watch takes, for the same reason.
                 ...(input.conversationId === undefined
                     ? {}
-                    : { backgroundJobs: { conversationId: input.conversationId, profile: profileOf(input), conversations: deps.conversations } }),
+                    : { backgroundJobs: { historyRoot: deps.config.historyRoot, conversationId: input.conversationId, profile: profileOf(input), conversations: deps.conversations } }),
             },
         },
         resolved.credentials.account,

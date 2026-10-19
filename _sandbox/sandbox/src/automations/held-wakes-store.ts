@@ -56,7 +56,7 @@ export interface HeldWakesStore {
     // Throws ManifestUnreadableError for a hold that exists but this build cannot read.
     readonly get: (id: string) => Promise<AutomationApproval | undefined>;
     // Enqueue a held wake, minting its id (and, for a countdown, its signature); returns the stored record.
-    readonly add: (approval: Omit<AutomationApproval, "id">) => Promise<AutomationApproval>;
+    readonly add: (approval: Omit<AutomationApproval, "id">, id?: string) => Promise<AutomationApproval>;
     // A rejection: the hold goes unrun. True when one of that id existed and was removed.
     readonly remove: (id: string) => Promise<boolean>;
     // The owner's yes, recorded against the hold as it stands (approvals/approval-decisions.ts, beside the approvals queue's):
@@ -65,10 +65,10 @@ export interface HeldWakesStore {
     // Lets the hold out of the queue, and only while the owner's yes stands for it as it is now, spending that yes on the way
     // out so one yes runs once. Undefined when no such hold is left (another release took it); throws HeldWakeNotApproved
     // when no yes stands for it, and when it cannot be read.
-    readonly release: (id: string) => Promise<ReleasedWake | undefined>;
+    readonly release: (id: string, record?: (wake: ReleasedWake) => Promise<void>) => Promise<ReleasedWake | undefined>;
     // The daemon's own release of a countdown it minted, once its time has come. Undefined for a hold that is gone, is not
     // a countdown the daemon minted, or is not due yet.
-    readonly releaseCountdown: (id: string, now: number) => Promise<ReleasedWake | undefined>;
+    readonly releaseCountdown: (id: string, now: number, record?: (wake: ReleasedWake) => Promise<void>) => Promise<ReleasedWake | undefined>;
 }
 
 export class HeldWakeNotApproved extends Error {
@@ -141,22 +141,15 @@ export const fileHeldWakesStore = (historyRoot: string, warn: (message: string, 
             const hold = await files.read(id);
             return hold === undefined ? undefined : honest(hold);
         },
-        add: async (approval) => {
-            const id = randomUUID();
+        add: async (approval, id = randomUUID()) => {
             const hold: AutomationApproval = { ...approval, id };
             const mint = approval.autoRunAt === undefined ? undefined : await signedBy(hold);
             await files.write(id, mint === undefined ? approval : { ...approval, mint });
             publishRuntimeChange("approvals");
             return hold;
         },
-        remove: async (id) => {
-            const removed = await files.remove(id);
-            await forgetApprovals(historyRoot, [decisionKey(id)]);
-            if (removed) {
-                publishRuntimeChange("approvals");
-            }
-            return removed;
-        },
+        // A rejection takes it out exactly as a release does, its yes (if any) spent with it.
+        remove: take,
         approve: async (id, by) => {
             const found = await files.read(id);
             if (found === undefined) {
@@ -165,7 +158,7 @@ export const fileHeldWakesStore = (historyRoot: string, warn: (message: string, 
             await recordDecision(historyRoot, decisionKey(id), digestOf(await honest(found)), by);
             return true;
         },
-        release: async (id) => {
+        release: async (id, record) => {
             const found = await files.read(id);
             if (found === undefined) {
                 await forgetApprovals(historyRoot, [decisionKey(id)]);
@@ -177,14 +170,17 @@ export const fileHeldWakesStore = (historyRoot: string, warn: (message: string, 
             if (standing !== "approved") {
                 throw new HeldWakeNotApproved(id, standing);
             }
+            // Journalled before it leaves the queue, so a restart between the two still runs it (fire-resume.ts).
+            await record?.(released(hold));
             return (await take(id)) ? released(hold) : undefined;
         },
-        releaseCountdown: async (id, now) => {
+        releaseCountdown: async (id, now, record) => {
             const found = await files.read(id);
             const hold = found === undefined ? undefined : await honest(found);
             if (hold?.autoRunAt === undefined || hold.autoRunAt > now) {
                 return undefined;
             }
+            await record?.(released(hold));
             return (await take(id)) ? released(hold) : undefined;
         },
     };

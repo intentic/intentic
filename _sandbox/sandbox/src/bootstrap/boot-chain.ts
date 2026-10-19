@@ -21,12 +21,13 @@ import { projectDirOf, seedsStarterSite } from "../system/project-dir.js";
 import { restoreAuthorizedKeys, subscribeDeviceReports } from "../peers/desktop-sync.js";
 import { automationsDocument } from "../automations/automations-store.js";
 import { applyDefinitionItems } from "../definition/apply-definition.js";
+import { settlePendingVersions } from "../conversations/land/version-landed.js";
 import { sweepArrivals } from "../portability/bundle-arrival.js";
 import { parseDefinitionToml } from "../definition/definition.js";
 import { sweepStaleExports } from "../portability/exports.js";
 import { killStaleManagedSessions } from "../processes/managed-processes.js";
 import { killOrphanServiceProcesses } from "../processes/service-processes.js";
-import { keptJobSessions } from "../agent/tools/jobs/background-jobs.js";
+import { restorableJobSessions } from "../agent/tools/jobs/background-jobs.js";
 import { sweepEarlierGenerations } from "../system/boot/generation-sweep.js";
 import { panePids } from "../terminal/terminal-session.js";
 import { prepareTmuxServer } from "../terminal/tmux-server.js";
@@ -91,9 +92,9 @@ const sweepStaleSessions = async ({ config, logger, services }: BootRun): Promis
     }
     // Taken back as jobs once the conversations load (boot-resumes.ts restoreBackgroundJobs), which spares them from
     // then on.
-    const kept = keptJobSessions();
+    const kept = restorableJobSessions();
     if (kept.length > 0) {
-        logger.info({ sessions: kept }, "boot: terminals running servers an agent kept for the person are adopted, not swept");
+        logger.info({ sessions: kept }, "boot: terminals with unfinished background job records are adopted, not swept");
     }
     await killStaleManagedSessions([
         ...(applyLive ? [panelSession(INFRA_APPLY_KEY)] : []),
@@ -355,6 +356,14 @@ const BOOT_STEPS: readonly BootChainStep[] = [
         label: "Loading conversations",
         run: ({ services }) => services.agents.init(),
         failure: "agents registry not initialized, the fleet starts empty",
+    },
+    // Before the gate, so a land's version commit a restart cut holds its repos before any turn starts or resumes there.
+    {
+        key: "pendingVersions",
+        label: "Committing lands a restart cut",
+        when: ({ role }) => role.roots,
+        run: async ({ services }) => settlePendingVersions(services),
+        failure: "lands a restart cut were not versioned, their paths stay uncommitted in the main tree",
     },
     { key: "skills", label: "Converging agent skills", when: ({ role, traits }) => role.roots && traits.ownsWorkspaceConfig, run: convergeSkills },
     // Before the baseline, so a fresh root's first commit already holds the note.

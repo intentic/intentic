@@ -63,6 +63,8 @@ const fakeServices = (
             get: async () => SandboxSettingsSchema.parse(settings),
         }),
         heldWakes: fileHeldWakesStore(join(root, "history")),
+        // The automation inboxes (durable/inbox-store.ts) live beside the holds.
+        config: unstubbed<Services["config"]>("config", { historyRoot: join(root, "history") }),
         scheduleCoverage: fileScheduleCoverageStore(join(root, "automation-schedule.json")),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         activity: { append: async () => {}, list: async () => [] },
@@ -795,6 +797,11 @@ test("a wake journals itself while in flight and clears the entry when it settle
         title: "Webhook: nightly",
         startedAt: expect.any(Number),
         attempts: 0,
+        // Journalled at admission under its own key, then marked running once its check passed.
+        id: expect.any(String),
+        state: "running",
+        minted: true,
+        checked: true,
     });
     expect(await services.turnJournal.list()).toEqual([]);
 });

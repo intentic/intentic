@@ -45,7 +45,8 @@ export const landHeldForWake = async (services: WakeHeldLandDeps, conversationId
     if (notYet(services.conversations.state(conversationId))) {
         return;
     }
-    const held = takeLandHeldForWake(services.conversations, conversationId);
+    // Off the record, so a wake a restart brought back (watchers.ts) still lands what its close held.
+    const held = await takeLandHeldForWake(services, conversationId);
     const entry = services.agents.entry(conversationId);
     if (held === undefined || entry === undefined || !isIsolated(entry) || entry.archivedAt !== undefined) {
         return;

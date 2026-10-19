@@ -10,6 +10,7 @@ import { isProjectFolderRepo } from "../../git/remote/project-repo.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { standing } from "../../rules/rules.js";
 import { reposOf } from "../registry/agents-store.js";
+import { landMarksOf } from "../registry/land-marks.js";
 import { conversationTrailers, describeLanding } from "./landed-subject.js";
 import { opt } from "../../opt.js";
 
@@ -101,11 +102,27 @@ const commitClaim = async (services: Services, id: string): Promise<string[]> =>
     return committed;
 };
 
+// The land's version-pending mark (registry/land-marks.ts) answered: the settle that ran for it is over, however it
+// ended. Only the mark this settle began under: a newer land's is its own settle's to clear. A write that fails leaves
+// the mark, and the next boot settles that land once more, which finds nothing left to commit when this one made it.
+const answerVersionMark = async (services: Pick<Services, "agents" | "logger">, id: string, since: number | undefined): Promise<void> => {
+    if (since === undefined) {
+        return;
+    }
+    try {
+        await services.agents.amendLandMarks(id, (marks) => (marks.versionPending === since ? { ...marks, versionPending: undefined } : marks));
+    } catch (error) {
+        services.logger.warn({ err: error, agent: id }, "landed: its version-pending mark could not be cleared, the next boot settles it again");
+    }
+};
+
 // What happens to a landing once it is in the tree: the subject is drafted first, then, with the rule standing, the
 // claim is committed under it. An ordinary draft failure is already told on its report and falls back to the title;
 // an execution-domain refusal is not permission to continue. `unhold` is called the moment no commit is coming: at once when the rule does not stand,
-// otherwise once the claim is committed (or failed to be).
+// otherwise once the claim is committed (or failed to be). The land's version-pending mark is cleared as it ends, so only
+// a daemon that died meanwhile leaves it for the boot (settlePendingVersions).
 export const settleLanding = async (services: Services, id: string, unhold: () => void = () => undefined): Promise<void> => {
+    const since = landMarksOf(services.agents.entry(id)).versionPending;
     try {
         const { rules } = await services.sandboxSettings.get();
         const rule = versionRuleOf(rules);
@@ -128,6 +145,7 @@ export const settleLanding = async (services: Services, id: string, unhold: () =
         services.ruleFirings.stamp(rule.id, Date.now()).catch((error: unknown) => services.logger.warn({ err: error }, "rule firing stamp failed"));
         services.logger.info({ agent: id, repos: committed }, "landed: versioned");
     } finally {
+        await answerVersionMark(services, id, since);
         unhold();
     }
 };
@@ -193,6 +211,42 @@ export const settleLandingInBackground = (services: Services, id: string): void 
     void settleLanding(services, id, unhold).catch((error: unknown) => services.logger.warn({ err: error, agent: id }, "landed: settling failed"));
 };
 
+// THE VERSION COMMITS A RESTART CUT. A land's version commit runs off the land's own clock (the subject is drafted by a
+// model first), so a daemon that died between the land and that commit left the landed paths uncommitted in the main
+// tree, and the next isolated turn took them into the owner's remainder ("Your edits") with no conversation trailer.
+// Every land into the main tree marks its record as owing the commit (registry/land-marks.ts); the boot settles each
+// marked one again, holding its repos from that moment as a fresh land does, so a land or a turn opening there waits for
+// its commit (versionCommitsSettled), and the remainder leaves its paths alone until then (versionMainTree). A boot step
+// (bootstrap/boot-chain.ts), so it holds before the gate opens and before anything can start or resume a turn. Answers the
+// conversations it settles.
+export const settlePendingVersions = (services: Services): string[] => {
+    const owed = services.agents.ids().filter((id) => landMarksOf(services.agents.entry(id)).versionPending !== undefined);
+    for (const id of owed) {
+        settleLandingInBackground(services, id);
+    }
+    if (owed.length > 0) {
+        services.logger.info({ agents: owed }, "landed: version commits a restart cut are being made now");
+    }
+    return owed;
+};
+
+// Each repo's paths that lands still owing their version commit claim: left out of the remainder, or it would take
+// another conversation's work under the owner's subject and lose the trailer that names it.
+const pendingClaims = async (services: Services, repos: readonly string[]): Promise<ReadonlyMap<string, readonly string[]>> => {
+    const left = new Map<string, string[]>();
+    for (const id of services.agents.ids()) {
+        const entry = services.agents.entry(id);
+        if (entry === undefined || landMarksOf(entry).versionPending === undefined) {
+            continue;
+        }
+        const spanned = reposOf(entry).flatMap(({ repo }) => (repos.includes(repo) ? [repo] : []));
+        for (const claim of await claimsOf(services, id, spanned)) {
+            left.set(claim.repo, [...(left.get(claim.repo) ?? []), ...claim.paths]);
+        }
+    }
+    return left;
+};
+
 // The subject of the owner's own remainder, committed before an isolated turn reads the tree.
 const REMAINDER_SUBJECT = "Your edits";
 
@@ -203,12 +257,24 @@ type VersionDeps = Pick<Services, "agentWorktrees" | "logger">;
 
 // Each repo's main-tree remainder committed under the repo's lock; answers the repos that took a commit. Best-effort per
 // repo: one that refuses stays as it was and is said in the log.
-const commitRemainders = async (services: VersionDeps, repos: readonly string[], subjectOf: (repo: string) => string): Promise<string[]> => {
+const commitRemainders = async (
+    services: VersionDeps,
+    repos: readonly string[],
+    subjectOf: (repo: string) => string,
+    left: ReadonlyMap<string, readonly string[]> = new Map(),
+): Promise<string[]> => {
     const committed: string[] = [];
     for (const repo of repos) {
         try {
             const did = await services.agentWorktrees.withRepoLock(repo, () =>
-                commitWorktreeRemainder(repo, services.agentWorktrees.mainDir(repo), subjectOf(repo), services.agentWorktrees.mainDir("root")),
+                commitWorktreeRemainder(
+                    repo,
+                    services.agentWorktrees.mainDir(repo),
+                    subjectOf(repo),
+                    services.agentWorktrees.mainDir("root"),
+                    undefined,
+                    left.get(repo) ?? [],
+                ),
             );
             if (did) {
                 committed.push(repo);
@@ -248,12 +314,15 @@ export const versionProjectFolders = async (services: VersionDeps, repos: readon
 // Commits whatever is dirty in the main tree of each repo a turn is about to span, when the version rule stands;
 // otherwise only the project folders' (above), since an uncommitted tree is the developer's review boundary.
 // Best-effort: a repo that refuses stays as it was and the turn goes on without the owner's latest edits, which is
-// what happened before this existed.
+// what happened before this existed. A land's version commit still to come is waited for first, as a land waits for it,
+// so the turn reads that work as its own commit; one that outlasts the wait keeps its paths out of the remainder.
 export const versionMainTree = async (services: Services, repos: readonly string[]): Promise<string[]> => {
+    await versionCommitsSettled(services, repos);
     const { rules } = await services.sandboxSettings.get();
     const folders = await projectFolders(services, repos);
+    const left = await pendingClaims(services, repos);
     if (versionRuleOf(rules) === undefined) {
-        return commitRemainders(services, folders, folderSubject);
+        return commitRemainders(services, folders, folderSubject, left);
     }
-    return commitRemainders(services, repos, (repo) => (folders.includes(repo) ? folderSubject(repo) : REMAINDER_SUBJECT));
+    return commitRemainders(services, repos, (repo) => (folders.includes(repo) ? folderSubject(repo) : REMAINDER_SUBJECT), left);
 };

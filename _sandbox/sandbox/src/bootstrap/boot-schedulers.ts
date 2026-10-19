@@ -1,5 +1,5 @@
 import { startRuntimeHealth } from "../agent/providers/adapter-health.js";
-import { noteLinkTurnSettled, noteLinkTurnStarted } from "../links/link-tasks.js";
+import { linkTaskDepsOf, noteLinkTurnSettled, noteLinkTurnStarted, startUnstartedTasks } from "../links/link-tasks.js";
 import { childLandingWords, reportChildLanded } from "../conversations/land/child-lands.js";
 import { capacityNoticer } from "../agent/subagents/capacity-reopened.js";
 import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
@@ -85,7 +85,8 @@ const startProjectDelivery = ({ role, services, shutdown }: Pick<BootPhase, "rol
 };
 
 // Linked sandboxes, both halves (links/): a task another sandbox handed here reports how each of its turns ended, and the
-// tasks this sandbox handed out are followed again after a restart, so their parents still hear how each one ended.
+// tasks this sandbox handed out are followed again after a restart, so their parents still hear how each one ended. A task
+// handed here that was filed but never started before the restart starts now.
 const startLinks = ({ role, services, logger, shutdown }: Pick<BootPhase, "role" | "services" | "logger" | "shutdown">): void => {
     const deps = { links: services.inboundLinks, logger };
     shutdown.push(services.events.subscribe("run.settled", (settled) => noteLinkTurnSettled(deps, settled)));
@@ -93,6 +94,7 @@ const startLinks = ({ role, services, logger, shutdown }: Pick<BootPhase, "role"
     shutdown.push(() => services.linkedChildren.close());
     if (role.container) {
         void services.linkedChildren.resume().catch((error: Error) => logger.warn({ err: error }, "linked tasks: not followed again"));
+        void startUnstartedTasks(linkTaskDepsOf(services)).catch((error: Error) => logger.warn({ err: error }, "link: tasks filed before a restart not started"));
     }
 };
 

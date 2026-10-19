@@ -2,7 +2,7 @@ import { z } from "zod";
 import { AgentHarnessSchema, AgentProviderSchema } from "../schemas/agent.js";
 import { ShareDetailSchema } from "../schemas/share.js";
 import { TurnErrandSchema, TurnSpeakerSchema } from "../schemas/speaker.js";
-import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
+import { SubagentKindSchema, SubagentSdkRecordSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
 import { NeedSchema } from "../schemas/needs.js";
 import { HeldEndingSchema, RetryLadderSchema } from "../schemas/turn-break.js";
 import { HandoffOfferSchema } from "../schemas/providers/handoff.js";
@@ -172,6 +172,9 @@ export const TranscriptSubagentSchema = z.object({
     summary: z.string().optional(),
     error: z.string().optional(),
     verification: SubagentVerificationSchema.optional(),
+    sdk: SubagentSdkRecordSchema.optional().describe(
+        "Where the Claude runtime keeps this in-process subagent's own record, so its whole run reads back once nothing in memory remembers it. Absent for every other kind, and until the daemon has paired it.",
+    ),
 });
 export type TranscriptSubagent = z.infer<typeof TranscriptSubagentSchema>;
 // Mutable, unlike most of this file: the fold settles a card in place when its result lands turns later, saving a

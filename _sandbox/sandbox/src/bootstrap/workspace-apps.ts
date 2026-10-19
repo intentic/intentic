@@ -33,6 +33,10 @@ export const startWorkspaceApps = async ({ logger, traits, role, services, shutd
     if (!role.roots || !traits.ownsWorkspaceConfig) {
         return;
     }
+    await services.processes.restore({
+        INTENTIC_DAEMON: `http://127.0.0.1:${services.config.sandbox.port}`,
+        INTENTIC_PANEL_TOKEN: services.panelToken,
+    });
     const outcome = await runAutostart(services).catch((error: unknown) => {
         logger.warn({ err: error }, "autostart: the list could not be read, nothing started");
         return undefined;

@@ -9,9 +9,12 @@ import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { SHELL } from "../terminal/pane-state.js";
 import { watchPromptSignals } from "../terminal/prompt-signal.js";
 import { isNoTmuxServer, isNoTmuxTarget } from "../terminal/tmux-server.js";
+import { withSavedPanels } from "./panel-records.js";
 import { applyWorkload, type WorkloadClass } from "../workload/workload-class.js";
 
 export interface ProcessSpec {
+    // User-started panels return at boot until explicitly stopped (panel-records.ts).
+    readonly durable?: true;
     // Runs in a detached tmux session in `cwd`, with PORT (manager-assigned) and `env` set.
     readonly command: string;
     readonly cwd: string;
@@ -50,6 +53,7 @@ export interface ProcessRunner {
 const POLL_MS = 2000;
 
 export interface ManagedProcessesOptions {
+    readonly historyRoot?: string;
     // Injectable in tests; production uses the image zsh's /run/intentic/shell watcher.
     readonly onPromptWatch?: (onSignal: () => void) => () => void;
     readonly logger?: Pick<Logger, "warn">;
@@ -152,6 +156,8 @@ export const killStaleManagedSessions = async (exempt: readonly string[] = []): 
 };
 
 export interface ManagedProcesses {
+    // Past the boot sweep: restarts saved user panels with `env`, the daemon's current credentials.
+    readonly restore: (env: Record<string, string>) => Promise<void>;
     // Assigns a free port and starts the panel; no-op if already running, replacing a lingering session.
     readonly start: (repo: string, spec: ProcessSpec) => Promise<void>;
     // Re-tracks a session that survived a restart (a live one-shot the boot sweep spared); false if none exists.
@@ -273,7 +279,7 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
         }
     };
 
-    return {
+    return withSavedPanels(options, {
         start: async (key, spec) => {
             if (current.has(key)) {
                 return;
@@ -367,5 +373,5 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
             }
             stopWatching();
         },
-    };
+    });
 };

@@ -8,7 +8,7 @@ import { FastModeStateSchema } from "../schemas/providers/fast-mode.js";
 import { NeedSchema } from "../schemas/needs.js";
 import { PromptCacheOpeningSchema, PromptFingerprintSchema } from "../schemas/keep-warm.js";
 import { AgentReplySchema, UsageWindowSchema } from "../schemas/providers/plan-limits.js";
-import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
+import { SubagentKindSchema, SubagentSdkRecordSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
 import { RetryLadderSchema } from "../schemas/turn-break.js";
 import { HandedOffSchema, HandoffOfferSchema } from "../schemas/providers/handoff.js";
 import { AgentCommandSchema, browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, ContextUsageSchema, credentialOfferRequest, CredentialReceiptSchema, pageAskRequest, PageSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionRequestSchema, PlanRequestSchema, QuestionRequestSchema, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
@@ -142,6 +142,9 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         error: z.string().optional(),
         // Whether anything checked the work this report describes; rides the frame that ends the child.
         verification: SubagentVerificationSchema.optional(),
+        // Where the Claude runtime keeps an in-process child's own record, said once the daemon has paired it, so the
+        // card the turn settles into can name it after a restart.
+        sdk: SubagentSdkRecordSchema.optional(),
     }),
     z.object({ kind: z.literal("todos"), items: z.array(TodoItemSchema) }),
     // The provider's own slash commands, replaced whole each time; the composer's `/` popover lists them, invoking one

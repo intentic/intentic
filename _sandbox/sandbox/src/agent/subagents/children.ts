@@ -4,18 +4,15 @@ import type { WorkPlace } from "../../workload/resource-budget.js";
 import { conversationProfile, isIsolated, worktreeOf } from "../../conversations/registry/agents-store.js";
 import { landByHandLeased } from "../../conversations/land/land-by-hand.js";
 import { landTargetOf } from "../../conversations/land/land-target.js";
-import type { Caller } from "../../auth/auth.js";
 import { parentOfActor } from "../../auth/principal.js";
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AgentHarness, AgentProvider, TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import type { AskQuestion, ChildAgentAsk, ChildMove, ChildRun } from "@intentic/sandbox-contract/events/requests";
 import type { LimitPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
-import { capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
-import { childRunOf, sameChildRun } from "@intentic/sandbox-contract/events/child-run";
+import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { childRunOf } from "@intentic/sandbox-contract/events/child-run";
 import { newConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
-import { cardDeps } from "../../conversations/actor/card-deps.js";
-import { raiseRequest } from "../../guard/card-offers.js";
 import { type Holding, type LiveRun, liveRunOf } from "../../conversations/actor/conversation-holdings.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import type { Services } from "../../composition.js";
@@ -57,12 +54,12 @@ import { credentialsTravel, placeFanOut } from "../../runners/runner-scheduler.j
 import { freshRunnerSummaries } from "../../runners/runner-peer.js";
 import type { DelegateAsk, LinkListing } from "../../links/linked-children.js";
 import { childOpening, childRecordOf, childRouting, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, withRun } from "./child-spec.js";
-import { ALWAYS_LABEL, BEHIND_MAX_MS, CANCELLED, CANCEL_NOTES, LINKED_MERGE, LINKED_REHOME, MOVE_BUTTON, MOVE_TITLE, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, laneHeldNote, movedWords, nowhereToAsk, questionWords, quoted, startedWhy, unansweredWords } from "./child-words.js";
+import { BEHIND_MAX_MS, CANCELLED, CANCEL_NOTES, LINKED_MERGE, LINKED_REHOME, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, laneHeldNote, movedWords, nowhereToAsk, questionWords, quoted, startedWhy } from "./child-words.js";
 import { elsewhereFor, namedPaths, spentAsked } from "./child-listing.js";
 import { seatLine } from "./child-admission.js";
 import { resultContract, type ResultSchema, type ResultValue, turnResult } from "./child-result.js";
-import { CHILDREN, childResultOf, keepChild, SEATS, settleChild } from "./child-records.js";
-import { admit, grantTurn, notYet, refusedByRules, TURN_GRANTS, unanswerableWhy, unmovable } from "./child-gates.js";
+import { CHILDREN, childResultOf, closeUnstarted, keepChild, SEATS, settleChild } from "./child-records.js";
+import { type Admission, admit, askOwner, HELD_MOVES, labelOf, notYet, refusedByRules, restoredStartAnswer, TURN_GRANTS, unanswerableWhy, unmovable } from "./child-gates.js";
 import { ROSTER } from "../../conversations/actor/subagent-roster.js";
 
 // Spawns, steers and answers full agents from inside a turn, on any connected provider; a child is an ordinary
@@ -172,6 +169,10 @@ export interface ChildRecord {
     // Turns of it its parent paid a seat for (its start and every follow-up), which a restart counts back into the
     // parent's lifetime budget.
     turns: number;
+    // The accepted start and its order across a restart; a lane hold already reserves one seat.
+    startHold?: import("./spawned-children.js").SpawnedChild["startHold"];
+    // Writes the current record through its history handle, including cancellations through the narrow cancel port.
+    persist?: () => void;
     // The OOM killer's count as its current turn started, so its ending can tell a kill from its own failure.
     oomKillsAtStart: number | undefined;
     // Its last settled turn's whole closing message: what a wait hands over where the roster row's summary cut it.
@@ -203,9 +204,6 @@ export interface ChildRecord {
 const PERSON_RUNS: Holding<string> = { name: "person runs in child chats" };
 // The supervisor a turn armed for the `/children` routes, which have no tool mount to gate; held under its own id.
 const SUPERVISORS: Holding<ChildSupervisor> = { name: "child supervisors" };
-// Every child-agent card still up, by request id, held by the parent: which run raised it and on which provider, so the
-// owner's "for the rest of this turn" on one answers the others it covers.
-const HELD_MOVES: Holding<{ readonly requestId: string; readonly run: string; readonly provider: string }> = { name: "held child moves" };
 
 // Where a conversation's children, seats and supervisor are held: each conversation's actor.
 type Actors = Pick<ConversationActors, "holdings">;
@@ -255,9 +253,6 @@ export const resetChildrenForTest = (actors: Actors): void => {
     FAN_OUT.reset();
     SEAT_LINE.reset();
 };
-
-// Display label for the roster row; a provider absent from PROVIDERS shows as its raw id.
-export const labelOf = (provider: AgentProvider): string => PROVIDERS.find((entry) => entry.value === provider)?.label ?? provider;
 
 /**
  * Full question a blocked child is parked on. Undefined if it is parked on a consent hold (the owner's, never the
@@ -821,6 +816,7 @@ export const adoptChildTurn = (services: Services, started: DomainEventMap["run.
 // restored at boot as waiting to see whether its turn resumes, marked working), and its frames followed to their end.
 export const followAdopted = (services: Services, childId: string, kid: ChildRecord, run: LiveRun): void => {
     endPause(kid);
+    FAN_OUT.adopt(childId, childRouting(kid.spec));
     kid.running = true;
     kid.startedAt = Date.now();
     kid.submitted = undefined;
@@ -834,83 +830,6 @@ export const followAdopted = (services: Services, childId: string, kid: ChildRec
     }
     keepChild(services, childId);
     void followChildRun(services, childId, kid.parent, kid, run, freshTally());
-};
-
-// A supervisor move let through; `run` is set only when the owner re-pointed a start on the card, and is then the whole
-// run to start the child on in place of the agent's.
-type Admission = { readonly ok: true; readonly run?: ChildRun } | { readonly ok: false; readonly message: string };
-
-// The grant answers the cards already up on that provider in that turn as well as the moves still to come: four starts
-// held side by side are one decision, not four presses of the same caret.
-const releaseHeldMoves = (
-    services: Pick<Services, "conversations" | "cards">,
-    parent: string,
-    run: string,
-    provider: string,
-    caller: Caller | undefined,
-): void => {
-    for (const held of services.conversations.holdings(HELD_MOVES).of(parent)) {
-        if (held.run === run && held.provider === provider) {
-            services.cards.resolve({ kind: "permission", requestId: held.requestId, decision: "always" }, caller);
-        }
-    }
-};
-
-// Raises the card on the parent's live turn and settles with the owner's answer, however long that takes; nobody's call
-// waits on it. The two refusals differ because the model's next move differs, and only one is the owner declining.
-const askOwner = async (services: Services, parent: string, run: LiveRun, ask: ChildAgentAsk, reason: string): Promise<Admission> => {
-    const { move, provider } = ask;
-    const ended = new AbortController();
-    void run.waitUntilFinished().then(() => ended.abort());
-    let held: string | undefined;
-    const settled = raiseRequest(
-        cardDeps(services),
-        { conversationId: parent, push: (event) => run.push(event) },
-        {
-            kind: "permission",
-            onAbort: { kind: "permission", requestId: "", decision: "deny", feedback: "The turn ended before you answered." },
-            raised: (requestId) => {
-                // Filed as the card goes up, which is the one moment its id is known before the answer.
-                held = requestId;
-                services.conversations.holdings(HELD_MOVES).hold(parent, requestId, { requestId, run: run.id, provider });
-                return {
-                    kind: "permission",
-                    requestId,
-                    toolName: "agents.spawn",
-                    title: `${MOVE_TITLE[move]} on ${labelOf(provider)}?`,
-                    displayName: MOVE_BUTTON[move],
-                    reason,
-                    alwaysLabel: ALWAYS_LABEL,
-                    child: ask,
-                };
-            },
-            approves: (answer) => answer.decision !== "deny",
-            signal: ended.signal,
-        },
-    );
-    const { decision, reply, caller } = await settled.finally(() => {
-        if (held !== undefined) {
-            services.conversations.holdings(HELD_MOVES).drop(held);
-        }
-    });
-    switch (decision) {
-        case "approved": {
-            if (reply.decision === "always") {
-                grantTurn(services.conversations, parent, run.id, provider);
-                releaseHeldMoves(services, parent, run.id, provider, caller);
-            }
-            // Only a start can be re-pointed: a child already running keeps the run it was started on (childProfile).
-            const picked = move === "spawn" ? reply.child : undefined;
-            return picked !== undefined && !sameChildRun(ask, picked) ? { ok: true, run: childRunOf(picked) } : { ok: true };
-        }
-        case "unanswered":
-            return { ok: false, message: unansweredWords(move, reason) };
-        case "declined":
-            return {
-                ok: false,
-                message: `The owner declined this. Do not retry: carry on with what you can do without it, and say plainly what you left undone.`,
-            };
-    }
 };
 
 // A child on a runtime with rulebook "none" has no gating of its own, so the parent's turn taints, the same as reading
@@ -947,23 +866,33 @@ const admitChildTurn = async (
         return { ok: false, message: `This conversation has started ${ledger.total} child turns, its lifetime budget.` };
     }
     seats.hold(parent, parent, { live: ledger.live + 1, total: ledger.total + 1 });
-    // Once only: a start the governor held and then failed to start can reach two refunds for the one seat.
+    return reservedSeat(services, parent, settings.limitPolicy);
+};
+
+// A reservation already counted in SEATS, also used for a lane hold restored at boot.
+const reservedSeat = (services: Services, parent: string, limitPolicy: LimitPolicy): Seat => {
     let refunded = false;
     return {
         ok: true,
-        limitPolicy: settings.limitPolicy,
+        limitPolicy,
         release: (): void => {
             if (refunded) {
                 return;
             }
             refunded = true;
-            const now = seats.get(parent);
-            if (now !== undefined) {
-                seats.hold(parent, parent, { live: Math.max(0, now.live - 1), total: Math.max(0, now.total - 1) });
-            }
-            SEAT_LINE.freed(parent);
+            refundReservedSeat(services.conversations, parent);
         },
     };
+};
+
+// A lane wait that never ran returns both its live reservation and the lifetime turn it had reserved.
+const refundReservedSeat = (actors: Actors, parent: string): void => {
+    const seats = actors.holdings(SEATS);
+    const now = seats.get(parent);
+    if (now !== undefined) {
+        seats.hold(parent, parent, { live: Math.max(0, now.live - 1), total: Math.max(0, now.total - 1) });
+    }
+    SEAT_LINE.freed(parent);
 };
 
 // What the gate's card says about a child: its run, task and machine off the call's spec or the child's own record,
@@ -1027,6 +956,15 @@ interface ChildStart {
     readonly id: string;
 }
 
+// Rebuilding a wait keeps its original ordering token instead of moving it behind newer starts.
+const fileHeldStart = (services: Services, parent: ChildParent, start: ChildStart, held: "seat" | "lane" | "start", spec: ChildSpawnSpec): void => {
+    const records = services.conversations.holdings(CHILDREN);
+    const before = records.get(start.id);
+    const kid = childRecordOf(parent, spec, start.depth, held);
+    kid.startHold = before?.startHold === undefined ? undefined : { ...before.startHold, kind: held };
+    records.hold(parent.conversationId, start.id, kid, start.id);
+};
+
 // A seat reserved for a child's turn (admitChildTurn): what a start held by the governor keeps while it waits, so a held
 // child costs its parent's budgets exactly as a running one does, and refunds it if it never starts.
 type Seat = Extract<Awaited<ReturnType<typeof admitChildTurn>>, { readonly ok: true }>;
@@ -1053,9 +991,10 @@ const governedStart = async (services: Services, parent: ChildParent, start: Gov
 
 // Filed as a waiting child, so `wait` parks on it and `send` says why it has not started; the governor starts it.
 const holdOnLane = (services: Services, parent: ChildParent, start: GovernedStart & { readonly seat: Seat }, lane: Lane, reason: string): void => {
-    services.conversations.holdings(CHILDREN).hold(parent.conversationId, start.id, childRecordOf(parent, start.spec, start.depth, "lane"), start.id);
+    fileHeldStart(services, parent, start, "lane", start.spec);
     openSpawnedChild(rosterHandle(services, parent.conversationId), childBirth(start.id, start.spec, start.depth), true);
     noteSpawnedChild(services.conversations, start.id, { status: "pending", summary: `Held: ${reason}.` });
+    keepChild(services, start.id);
     const giveUp = async (why: string): Promise<void> => {
         start.seat.release();
         await abandonChildStart(services, parent.conversationId, start.id, why);
@@ -1102,10 +1041,11 @@ const waitForSeat = (
     start: GovernedStart,
     full: { readonly live: number; readonly ceiling: number },
 ): ChildSpawnResult => {
-    services.conversations.holdings(CHILDREN).hold(parent.conversationId, start.id, childRecordOf(parent, start.spec, start.depth, "seat"), start.id);
+    fileHeldStart(services, parent, start, "seat", start.spec);
     openSpawnedChild(rosterHandle(services, parent.conversationId), childBirth(start.id, start.spec, start.depth), true);
     const reason = `${full.live} of your children are running, the most that may run at once (${full.ceiling}), so it starts by itself when one of them ends`;
     noteSpawnedChild(services.conversations, start.id, { status: "pending", summary: `Waiting for a seat: ${reason}.` });
+    keepChild(services, start.id);
     SEAT_LINE.wait(parent.conversationId, {
         childId: start.id,
         start: async () => {
@@ -1196,12 +1136,16 @@ const startChild = async (
 };
 
 // A start waiting on the owner, filed as a child already, so `wait` parks on it and `send` refuses it with the reason.
-const holdChildStart = (services: Services, parent: ChildParent, start: ChildStart): void => {
-    services.conversations
-        .holdings(CHILDREN)
-        .hold(parent.conversationId, start.id, childRecordOf(parent, start.asked, start.depth, "start"), start.id);
+const holdChildStart = (services: Services, parent: ChildParent, start: ChildStart, reason: string): void => {
+    fileHeldStart(services, parent, start, "start", start.asked);
     openSpawnedChild(rosterHandle(services, parent.conversationId), childBirth(start.id, start.asked, start.depth));
     noteSpawnedChild(services.conversations, start.id, { status: "pending", summary: START_SUMMARY });
+    keepChild(services, start.id);
+    const kid = services.conversations.holdings(CHILDREN).get(start.id);
+    if (kid?.startHold !== undefined) {
+        kid.startHold = { ...kid.startHold, reason };
+        keepChild(services, start.id);
+    }
 };
 
 // A held start that will not run: its waiting row ends failed with why, and a parent in its turn is told, unless its wait
@@ -1210,12 +1154,12 @@ const holdChildStart = (services: Services, parent: ChildParent, start: ChildSta
 const endUnstarted = (services: Pick<ChildCancelDeps, "conversations">, id: string): void => {
     // Settled before the record goes, so a worker's ending is filed as its run's, not its parent's.
     settleChild(services.conversations, id, { status: "killed", report: "", error: CANCELLED });
-    services.conversations.holdings(CHILDREN).drop(id);
+    closeUnstarted(services.conversations, id);
 };
 
 const abandonChildStart = async (services: Services, parent: string, id: string, message: string): Promise<void> => {
     settleChild(services.conversations, id, { status: "failed", report: "", error: message });
-    services.conversations.holdings(CHILDREN).drop(id);
+    closeUnstarted(services.conversations, id);
     if (subagentEndingReported(services.conversations, id)) {
         return;
     }
@@ -1247,6 +1191,53 @@ const startAllowed = async (services: Services, parent: ChildParent, start: Chil
     }
 };
 
+/** Re-arms an accepted start after boot has adopted the turns that came back and counted their seats. */
+export const resumeHeldChild = async (services: Services, id: string, kid: ChildRecord): Promise<void> => {
+    const hold = kid.startHold;
+    if (hold === undefined || kid.cancelled) {
+        return;
+    }
+    const parent = { conversationId: kid.parent, cwd: kid.cwd };
+    const start = { id, depth: kid.depth, asked: kid.spec, spec: kid.spec };
+    if (hold.kind === "start") {
+        const run = liveRunOf(services.conversations, kid.parent);
+        if (run === undefined) {
+            await abandonChildStart(services, kid.parent, id, "The sandbox restarted before the owner allowed this start. Its parent's turn did not resume, so there is no live turn on which to raise its approval card. Send the child a message to carry on.");
+            return;
+        }
+        const approval = hold.requestId !== undefined && services.cards.conversationOf(hold.requestId) === kid.parent
+            ? restoredStartAnswer(services, kid.parent, run, startAsk(kid.spec), hold.requestId)
+            : askOwner(services, kid.parent, run, startAsk(kid.spec), hold.reason ?? "This start still needs the owner's approval.", id);
+        void approval.then((admission) => startAllowed(services, parent, start, admission));
+        return;
+    }
+    if (hold.kind === "seat") {
+        const settings = await services.sandboxSettings.get();
+        waitForSeat(services, parent, start, { live: services.conversations.holdings(SEATS).get(kid.parent)?.live ?? 0, ceiling: settings.subagentsAtOnce });
+        SEAT_LINE.freed(kid.parent);
+        return;
+    }
+    const seat = reservedSeat(services, kid.parent, (await services.sandboxSettings.get()).limitPolicy);
+    const governed = await governedStart(services, parent, start, seat);
+    if (governed === undefined) {
+        await startAllowedWithSeat(services, parent, start, seat);
+    }
+};
+
+// A restored lane reservation is handed to its turn once the governor lets it go, or refunded on every failed exit.
+const startAllowedWithSeat = async (services: Services, parent: ChildParent, start: GovernedStart, seat: Seat): Promise<void> => {
+    try {
+        const started = await startChild(services, parent, { ...start, seat });
+        if (!started.ok) {
+            seat.release();
+            await abandonChildStart(services, parent.conversationId, start.id, started.message);
+        }
+    } catch (error) {
+        seat.release();
+        await abandonChildStart(services, parent.conversationId, start.id, errorMessage(error));
+    }
+};
+
 /**
  * Starts a child agent and returns once it is queued; on a box short of memory it waits as `pending` before its turn
  * runs. Budget/depth refusals and a model the records call spent come back immediately; any other provider refusal
@@ -1268,8 +1259,8 @@ export const spawnChild = async (services: Services, parent: ChildParent, asked:
     if (run === undefined) {
         return { ok: false, message: nowhereToAsk(verdict.reason) };
     }
-    holdChildStart(services, parent, start);
-    void askOwner(services, parent.conversationId, run, startAsk(asked), verdict.reason).then((admission) =>
+    holdChildStart(services, parent, start, verdict.reason);
+    void askOwner(services, parent.conversationId, run, startAsk(asked), verdict.reason, start.id).then((admission) =>
         startAllowed(services, parent, start, admission),
     );
     return { ok: true, id: start.id, held: true, note: heldStart(verdict.reason) };
@@ -1591,7 +1582,11 @@ const cancelRecord = async (services: ChildCancelDeps, childId: string, kid: Chi
     // Held by the governor, not by the owner: the parent may take it back, and it never starts. One already off its lane
     // is being started (holdOnLane), which sees the cancel; refused as "on the owner's card", it started anyway.
     if (kid.held === "lane") {
-        if (FAN_OUT.withdraw(childId)) {
+        const withdrawn = FAN_OUT.withdraw(childId);
+        if (!withdrawn && !kid.running) {
+            refundReservedSeat(services.conversations, kid.parent);
+        }
+        if (withdrawn || !kid.running) {
             endUnstarted(services, childId);
         }
         kid.cancelled = true;
@@ -1599,9 +1594,8 @@ const cancelRecord = async (services: ChildCancelDeps, childId: string, kid: Chi
     }
     // Waiting for a seat among its parent's children: taken off the line, it never starts.
     if (kid.held === "seat") {
-        if (SEAT_LINE.withdraw(kid.parent, childId)) {
-            endUnstarted(services, childId);
-        }
+        SEAT_LINE.withdraw(kid.parent, childId);
+        endUnstarted(services, childId);
         kid.cancelled = true;
         return { ok: true, note: CANCEL_NOTES.waiting };
     }

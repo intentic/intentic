@@ -10,6 +10,7 @@ import { claudeSeatsDocument } from "../agent/providers/claude/claude-seats.js";
 import { pausedChildrenDocument } from "../agent/subagents/paused-children.js";
 import { scriptRunsDocument } from "../agent/subagents/script-run-store.js";
 import { spawnedChildrenDocument } from "../agent/subagents/spawned-children.js";
+import { keptJobRecordsDocument } from "../agent/tools/jobs/kept-job-records.js";
 import { approvalDecisionsDocument } from "../approvals/approval-decisions.js";
 import { approvalsDocument } from "../approvals/approvals-store.js";
 import { areasDocument } from "../areas/areas-store.js";
@@ -22,6 +23,7 @@ import { passkeysDocument } from "../auth/passkeys/passkey-store.js";
 import { controlTokensDocument } from "../auth/tokens/control-tokens.js";
 import { doorTokensDocument } from "../auth/tokens/door-tokens.js";
 import { automationRunsDocument, automationWatchDocument, automationsDocument, automationsRelocationStep } from "../automations/automations-store.js";
+import { listenerInboxDocument, workspaceInboxDocument } from "../automations/durable/inbox-store.js";
 import { heldWakesDocument, heldWakesOffWorkspaceStep } from "../automations/held-wakes-store.js";
 import { scheduleCoverageDocument } from "../automations/schedule-coverage.js";
 import { sendersDocument } from "../automations/senders-store.js";
@@ -49,7 +51,7 @@ import { hookApprovalsDocument, hookRequestsDocument } from "../guard/hook-appro
 import { hostSetupSeededDocument } from "../hosts/host-seed.js";
 import { issuesDocument } from "../issues/issues-store.js";
 import { inboundLinksDocument } from "../links/inbound-links.js";
-import { linkedChildrenDocument } from "../links/linked-children.js";
+import { linkedChildrenDocument } from "../links/linked-children-store.js";
 import { loopDesignsDocument, loopsDocument } from "../loops/loops-store.js";
 import { needsDocument } from "../needs/needs-store.js";
 import { syncEnrollmentsDocument } from "../peers/desktop-sync.js";
@@ -64,6 +66,7 @@ import { bundleManifestDocument } from "../portability/bundle-arrival.js";
 import { privacyLedgerDocument } from "../privacy/privacy-ledger.js";
 import { privacyShieldDocument } from "../privacy/privacy-policy.js";
 import { privacyVaultDocument } from "../privacy/privacy-vault.js";
+import { panelRecordsDocument } from "../processes/panel-records.js";
 import { pushDocument } from "../push/push-store.js";
 import { ruleFiringsDocument } from "../rules/rule-firings.js";
 import { runnerIdentityDocument } from "../runners/runner-identity.js";
@@ -91,6 +94,7 @@ import { pushChecksLeftoversStep } from "../store/evolution/steps/push-checks-le
 import { stateRegroupStep } from "../store/evolution/steps/state-regroup.js";
 import { issueInstallsDocument, webchatInstallsDocument } from "../store/installs.js";
 import { newestRunDocument } from "../store/newest-run.js";
+import { turnStartsDocument } from "../store/start-window.js";
 import { bootFailureDocument } from "../system/boot/boot-failure.js";
 import { bootHistoryDocument } from "../system/boot/restarts/boot-history.js";
 import { choreClockDocument } from "../system/chore-clock.js";
@@ -122,6 +126,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     pausedChildrenDocument,
     scriptRunsDocument,
     spawnedChildrenDocument,
+    keptJobRecordsDocument,
     approvalDecisionsDocument,
     approvalsDocument,
     areasDocument,
@@ -136,6 +141,8 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     automationRunsDocument,
     automationsDocument,
     automationWatchDocument,
+    listenerInboxDocument,
+    workspaceInboxDocument,
     heldWakesDocument,
     scheduleCoverageDocument,
     sendersDocument,
@@ -189,6 +196,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     privacyLedgerDocument,
     privacyShieldDocument,
     privacyVaultDocument,
+    panelRecordsDocument,
     pushDocument,
     ruleFiringsDocument,
     runnerIdentityDocument,
@@ -214,6 +222,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     issueInstallsDocument,
     webchatInstallsDocument,
     newestRunDocument,
+    turnStartsDocument,
     bootFailureDocument,
     bootHistoryDocument,
     choreClockDocument,

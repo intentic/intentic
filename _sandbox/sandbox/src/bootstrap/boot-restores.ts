@@ -1,3 +1,4 @@
+import { reportLostKeptJobs } from "../agent/tools/jobs/kept-job-records.js";
 import { startTranslator } from "../agent/providers/translator.js";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { restoreConnectorHooks } from "../capabilities/cli/connector-hooks.js";
@@ -6,6 +7,7 @@ import { startLocalModelsIfEnabled } from "../capabilities/handlers/localmodel.h
 import { engineReady } from "../engines/engine-resolve.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { restoreExits } from "../exit/exit-links.js";
+import { resumeExtensionHealthWatches } from "../extensions/extension-updates.js";
 import { startAllExtensionProcesses } from "../extensions/extension-processes.js";
 import { applyTmuxLogHooks } from "../logs/log-files.js";
 import { remountNetdisks } from "../netdisk/netdisk-links.js";
@@ -33,6 +35,9 @@ export const startBootRestores = (phase: BootPhase): void => {
     if (!role.container) {
         return;
     }
+    void reportLostKeptJobs(config.historyRoot, services.activity).catch((error: unknown) =>
+        logger.warn({ err: error }, "kept jobs lost during restart could not be reported in Activity"),
+    );
     // Every restore below is detached, so each names its own failure: otherwise a failed one (an unreadable capability
     // manifest, say) is an anonymous unhandled rejection and the only trace is a capability in error.
     // Writes stay under .intentic/, so this never touches the boot baseline.
@@ -60,11 +65,14 @@ export const startBootRestores = (phase: BootPhase): void => {
     );
     void startTranslatorIfPacked(phase).catch((error: unknown) => logger.warn({ err: error }, "translator: start gate failed"));
     // Provider gateways (e.g. ext-discord) are extension processes, so the daemon holds no gateway of its own to restore.
-    void startAllExtensionProcesses(services).catch((error: unknown) =>
+    const processesStarted = startAllExtensionProcesses(services).catch((error: unknown) =>
         logger.warn({ err: error }, "extensions: extension processes could not be started at boot"),
     );
     // A failure is a row on the Extensions tab, not a boot failure.
-    services.extensionBackend.start().catch((error: unknown) => logger.warn({ err: error }, "extension backend host failed to start"));
+    const backendStarted = services.extensionBackend.start().catch((error: unknown) => logger.warn({ err: error }, "extension backend host failed to start"));
+    void Promise.all([processesStarted, backendStarted]).then(() => resumeExtensionHealthWatches(services)).catch((error: unknown) =>
+        logger.warn({ err: error }, "extension update: health watches could not be resumed at boot"),
+    );
     // tmux.conf covers server start; this re-arms hooks on a server that outlived a daemon restart.
     void applyTmuxLogHooks(config.historyRoot);
     // The pane-log hooks above and queue-run's memory gate exec these by name; a dev build's dist lands without +x.

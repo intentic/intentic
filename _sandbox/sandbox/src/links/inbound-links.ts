@@ -33,7 +33,8 @@ const StoredTaskSchema = z.object({
     requestId: z.string(),
     conversationId: z.string(),
     title: z.string().optional(),
-    // The words the task opened with, kept whole only while it waits for the owner, since its turn starts from them.
+    // The words the task opened with, kept whole until its first turn is said (while it waits for the owner, or between
+    // filing and starting), since that turn starts from them; a boot finds a task still holding them unstarted.
     task: z.string().optional(),
     hops: z.number().int().nonnegative(),
     tainted: z.string().optional(),
@@ -124,6 +125,8 @@ export interface InboundLinks {
     readonly task: (linkId: string, key: { readonly requestId?: string; readonly conversationId?: string }) => Promise<StoredLinkTask | undefined>;
     readonly addTask: (linkId: string, task: NewLinkTask, now?: number) => Promise<StoredLinkTask | undefined>;
     readonly moveTask: (linkId: string, conversationId: string, move: LinkTaskMove, now?: number) => Promise<StoredLinkTask | undefined>;
+    // Every task filed to run whose first turn was never said: the daemon stopped between filing it and starting it.
+    readonly unstarted: () => Promise<readonly { readonly link: ResolvedLink; readonly task: StoredLinkTask }[]>;
     // Which link opened this conversation, for the turn's own endings to be filed against; undefined for any other.
     readonly linkOf: (conversationId: string) => Promise<{ readonly linkId: string; readonly task: StoredLinkTask } | undefined>;
 }
@@ -151,6 +154,31 @@ const summaryOf = (link: StoredLink): InboundLinkSummary => ({
 
 // A patch's named fields only: one left undefined keeps what is there rather than clearing it.
 const definedOf = (patch: LinkTermsPatch): LinkTermsPatch => Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
+
+// A task as its first ask files it.
+const filedTask = (task: NewLinkTask, now: number): StoredLinkTask => ({
+    requestId: task.requestId,
+    conversationId: task.conversationId,
+    ...opt("title", task.title),
+    // Kept until its first turn is said: the owner's yes, or a boot that finds it filed but never started, starts that
+    // turn from these words (link-tasks.ts startTurn forgets them).
+    ...opt("task", task.task),
+    hops: task.hops,
+    ...opt("tainted", task.tainted),
+    ...opt("fromConversation", task.fromConversation),
+    state: task.held ? "held" : "running",
+    version: 1,
+    askedAt: now,
+    updatedAt: now,
+});
+
+// Every task filed to run whose first turn was never said, with the link it runs under.
+const unstartedOf = (stored: StoredLinks): { readonly link: ResolvedLink; readonly task: StoredLinkTask }[] =>
+    stored.links.flatMap((link) =>
+        link.tasks
+            .filter((task) => task.state === "running" && task.task !== undefined)
+            .map((task) => ({ link: { id: link.id, label: link.label, terms: link.terms }, task })),
+    );
 
 // The newest TASKS_KEPT, every live one kept whatever its age.
 const pruned = (tasks: readonly StoredLinkTask[]): StoredLinkTask[] => {
@@ -258,20 +286,7 @@ export const fileInboundLinks = (path: string): InboundLinks => {
                     added = earlier;
                     return link;
                 }
-                added = {
-                    requestId: task.requestId,
-                    conversationId: task.conversationId,
-                    ...opt("title", task.title),
-                    // Kept only while it waits: the turn the owner's yes starts is made from these words.
-                    ...opt("task", task.held ? task.task : undefined),
-                    hops: task.hops,
-                    ...opt("tainted", task.tainted),
-                    ...opt("fromConversation", task.fromConversation),
-                    state: task.held ? "held" : "running",
-                    version: 1,
-                    askedAt: now,
-                    updatedAt: now,
-                };
+                added = filedTask(task, now);
                 return { ...link, tasks: pruned([...link.tasks, added]) };
             });
             return added;
@@ -301,6 +316,7 @@ export const fileInboundLinks = (path: string): InboundLinks => {
             }));
             return moved;
         },
+        unstarted: async () => unstartedOf(await file.read()),
         linkOf: async (conversationId) => {
             for (const link of (await file.read()).links) {
                 const task = link.tasks.find((candidate) => candidate.conversationId === conversationId);

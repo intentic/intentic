@@ -8,7 +8,8 @@ import { turnStandingOf } from "../conversations/actor/turn-standing.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { defineSlice } from "../seams/slice.js";
 import { fileInboundLinks, type InboundLinks, inboundLinksDocument } from "./inbound-links.js";
-import { createLinkedChildren, type LinkedChildren, linkedChildrenDocument } from "./linked-children.js";
+import { createLinkedChildren, type LinkedChildren } from "./linked-children.js";
+import { linkedChildrenDocument } from "./linked-children-store.js";
 import { linkMountsOf } from "./link-mounts.js";
 
 // LINKED SANDBOXES, both halves: the other sandboxes allowed to hand this one tasks, and the tasks this one handed to

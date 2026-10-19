@@ -56,27 +56,42 @@ describe("a move through its gates", () => {
 });
 
 describe("starts waiting for a seat", () => {
-    it("go oldest first, one per freed seat, per parent", async () => {
+    // Each start takes a seat if one is free, as a spawn's own admission does; a freed parent starts what finds one.
+    const seated = (seats: Map<string, number>, started: string[]) => (parent: string, childId: string) => ({
+        childId,
+        start: async () => {
+            const free = seats.get(parent) ?? 0;
+            if (free === 0) {
+                return false;
+            }
+            seats.set(parent, free - 1);
+            started.push(childId);
+            return true;
+        },
+    });
+    const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+    it("go oldest first, as many as find a freed seat, per parent", async () => {
         const line = seatLine();
         const started: string[] = [];
-        const waiter = (childId: string) => ({
-            childId,
-            start: async () => {
-                started.push(childId);
-                return true;
-            },
-        });
-        line.wait("p", waiter("a"));
-        line.wait("p", waiter("b"));
-        line.wait("q", waiter("c"));
+        const seats = new Map<string, number>();
+        const waiter = seated(seats, started);
+        line.wait("p", waiter("p", "a"));
+        line.wait("p", waiter("p", "b"));
+        line.wait("p", waiter("p", "d"));
+        line.wait("q", waiter("q", "c"));
+        seats.set("p", 1);
         line.freed("p");
-        await Promise.resolve();
+        await settled();
         expect(started).toEqual(["a"]);
-        expect(line.waiting("p")).toBe(1);
+        expect(line.waiting("p")).toBe(2);
+        seats.set("q", 1);
         line.freed("q");
+        // Two seats freed at once (a restart putting the line back, a wider ceiling): both waiting starts take one.
+        seats.set("p", 2);
         line.freed("p");
-        await Promise.resolve();
-        expect(started).toEqual(["a", "c", "b"]);
+        await settled();
+        expect(started).toEqual(["a", "c", "b", "d"]);
         expect(line.waiting("p")).toBe(0);
     });
 
@@ -90,11 +105,21 @@ describe("starts waiting for a seat", () => {
                 if (seats === 0) {
                     return false;
                 }
+                seats -= 1;
                 started.push("a");
                 return true;
             },
         });
-        line.wait("p", { childId: "b", start: async () => Boolean(started.push("b")) });
+        line.wait("p", {
+            childId: "b",
+            start: async () => {
+                if (seats === 0) {
+                    return false;
+                }
+                started.push("b");
+                return true;
+            },
+        });
         line.freed("p");
         await Promise.resolve();
         expect(started).toEqual([]);

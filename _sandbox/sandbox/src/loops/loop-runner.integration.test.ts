@@ -351,3 +351,83 @@ test("a boot that resumes picks the stranded loop back up and counts the resume"
     expect((await services.loops.get("cut"))?.resumed).toBe(1);
     expect(prompts.length).toBeGreaterThan(0);
 });
+
+// A restart drops everything in memory; only loops.json survives. A second set of services over the same root is the
+// daemon that boots after it.
+const recordedRound = (n: number, changed: boolean, costUsd: number) => ({ n, at: n, outcome: "continue" as const, changed, costUsd });
+
+const stagedBeforeDeath = async (root: string, loop: Loop, rounds: readonly ReturnType<typeof recordedRound>[]): Promise<void> => {
+    const before = fakeServices(root);
+    await before.loops.start(loop, 1);
+    for (const round of rounds) {
+        await before.loops.recordIteration(loop.conversationId, round);
+    }
+};
+
+// Turn that reports what it cost and whether the turn journal holds it: a loop's round goes through the unjournalled
+// door, so turn-resume never re-runs it beside the loop's own next round.
+const watchedTurn = (services: Services, prompts: string[], journalled: (boolean | undefined)[], costUsd: number): TurnStarter["stream"] =>
+    async function* turn(input: AgentTurn) {
+        prompts.push(input.prompt);
+        journalled.push(turnRunOf(services.conversations, input.conversationId ?? "")?.journalled);
+        const events: AgentEvent[] = [{ kind: "usage", costUsd }, { kind: "done" }];
+        yield* events;
+    };
+
+const resumeAll = restartResume({ ownerAsked: false, storm: false, autoResumeOnRestart: true });
+
+test("a resumed loop carries its stall streak on: two idle rounds behind a limit of 3 leave it one more", async () => {
+    const root = tempRoot();
+    await stagedBeforeDeath(root, { ...baseLoop("cut"), maxIterations: 20, stallLimit: 3 }, [
+        recordedRound(1, true, 0.25),
+        recordedRound(2, false, 0.25),
+        recordedRound(3, false, 0.25),
+    ]);
+    const services = fakeServices(root);
+    const prompts: string[] = [];
+    const journalled: (boolean | undefined)[] = [];
+
+    expect(await resumeLoops(drivenBy(services, watchedTurn(services, prompts, journalled, 0.25)), resumeAll)).toEqual(["cut"]);
+    await waitFor(async () => expect((await services.loops.get("cut"))?.state).not.toBe("running"), SETTLES);
+
+    const settled = await services.loops.get("cut");
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain("iteration-4.json");
+    expect(journalled).toEqual([false]);
+    expect(settled?.state).toBe("stalled");
+    expect(settled?.detail).toContain("3 iterations in a row");
+    expect(settled?.iterations.map((entry) => entry.n)).toEqual([1, 2, 3, 4]);
+});
+
+test("a loop that died already past its stall limit settles stalled on resume and runs no round", async () => {
+    const root = tempRoot();
+    await stagedBeforeDeath(root, { ...baseLoop("cut"), maxIterations: 20, stallLimit: 2 }, [recordedRound(1, false, 0), recordedRound(2, false, 0)]);
+    const services = fakeServices(root);
+    const prompts: string[] = [];
+
+    await resumeLoops(drivenBy(services, watchedTurn(services, prompts, [], 0)), resumeAll);
+    await waitFor(async () => expect((await services.loops.get("cut"))?.state).toBe("stalled"), SETTLES);
+
+    expect(prompts).toEqual([]);
+    expect((await services.loops.get("cut"))?.iterations).toHaveLength(2);
+});
+
+test("a resumed loop counts what its recorded rounds spent against its ceiling", async () => {
+    const root = tempRoot();
+    await stagedBeforeDeath(root, { ...baseLoop("cut"), maxIterations: 20, stallLimit: 99, maxSpendUsd: 1 }, [
+        recordedRound(1, true, 0.5),
+        recordedRound(2, true, 0.4),
+    ]);
+    const services = fakeServices(root);
+    const prompts: string[] = [];
+
+    await resumeLoops(drivenBy(services, watchedTurn(services, prompts, [], 0.25)), resumeAll);
+    await waitFor(async () => expect((await services.loops.get("cut"))?.state).not.toBe("running"), SETTLES);
+
+    // $0.90 behind it, one $0.25 round reaches $1.15: past the $1 ceiling, so a second round never starts.
+    const settled = await services.loops.get("cut");
+    expect(prompts).toHaveLength(1);
+    expect(settled?.state).toBe("overspent");
+    expect(settled?.detail).toContain("1.15");
+    expect(settled?.iterations.map((entry) => entry.n)).toEqual([1, 2, 3]);
+});

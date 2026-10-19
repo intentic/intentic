@@ -9,7 +9,7 @@ import { createServiceProcesses, type ServiceProcesses } from "./service-process
 
 // Processes the daemon runs: managed dev servers, service processes, the terminal runner, and the ports they listen on.
 export interface ProcessesSlice {
-    // Per-repo operator panels: the in-memory process manager the /panels routes and preview proxy drive.
+    // Per-repo operator panels: the process manager the /panels routes and preview proxy drive.
     readonly processes: ManagedProcesses;
     // Extensions' declared background processes as the daemon's own children (respawn, one log file each).
     readonly serviceProcesses: ServiceProcesses;
@@ -30,7 +30,7 @@ export const createProcessesSlice = ({ config, logger }: { readonly config: Pick
     ProcessesSlice,
     PortsMembers
 > => ({
-    processes: createManagedProcesses(undefined, { logger }),
+    processes: createManagedProcesses(undefined, { logger, historyRoot: config.historyRoot }),
     serviceProcesses: createServiceProcesses(join(config.historyRoot, "logs", "services"), logger),
     terminalRun: createTerminalRunner(),
 });

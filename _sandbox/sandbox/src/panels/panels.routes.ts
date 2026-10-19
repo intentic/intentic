@@ -147,8 +147,8 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
                 throw new ORPCError("BAD_REQUEST", { message: `${input.repo} has no runnable panel, add an operator/ dev server or a dev script` });
             }
             await services.processes.start(key, {
-                // No `exec`: keeps the interactive shell so Ctrl+C and re-running with ↑ still work through
-                // install-then-dev.
+                durable: true,
+                // No `exec`: keeps the interactive shell, so Ctrl+C and re-running with ↑ still work through install-then-dev.
                 command: "test -d node_modules || pnpm install && pnpm dev",
                 cwd: runDir,
                 // Server-side only, inside the sandbox; the panel token never reaches the browser iframe.
@@ -165,7 +165,7 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
             }
             const key = panelKey(input.repo);
             if (key !== undefined) {
-                services.processes.stop(key);
+                await services.processes.stop(key);
             }
             return { ok: true } as const;
         }),

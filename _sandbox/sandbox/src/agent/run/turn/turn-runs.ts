@@ -1,6 +1,6 @@
 import { type AgentEvent, isTurnFact, type TurnFact } from "@intentic/sandbox-contract/events/agent-events";
 import { isParkKind, type ParkKind } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import type { ParkedRequest } from "@intentic/sandbox-contract/events/requests";
+import { isRestorableRequest, type ParkedRequest } from "@intentic/sandbox-contract/events/requests";
 import type { TranscriptPatch, TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import { TranscriptFold, type TurnEnding } from "@intentic/sandbox-contract/transcript-fold";
@@ -13,10 +13,11 @@ import type { RoutedTurn, TurnInput, TurnStarter } from "../../../seams/turn-sta
 import type { JournalledTurn } from "../../../store/journals/turn-journal.js";
 import { opt } from "../../../opt.js";
 import { commandListOf, recordCommands } from "../../providers/agent-commands.js";
-import { type FrameBacklog, frameBacklog } from "../../../seams/frame-backlog.js";
+import { Mailbox } from "../../../seams/frame-backlog.js";
 import { turnPulseOf } from "./turn-pulse.js";
 import { settledOf } from "./turn-closing.js";
 import { planAnswerRows } from "./plan-answer.js";
+import type { RunLog, RunLogHead } from "../../../sessions/run-log.js";
 
 // Turn execution decoupled from any client connection: POST /agent starts a run, folds the transcript frame by frame,
 // and any number of clients attach to it live. Holds rows, not frames; each run is held by its conversation's actor
@@ -29,80 +30,6 @@ export interface TurnObserver {
     readonly awaiting: (kind: ParkKind) => void;
     // Run ended, exactly once; `error` only for a real failure, a /agent/stop abort settles as a clean "done".
     readonly settled: (outcome: { readonly ok: boolean; readonly error?: string }) => void;
-}
-
-// One subscriber's queue; a follower holds only what it has not yet read, so a stalled reader's backlog never reaches
-// the others. A bounded one is cut past frame-backlog's bound, its reader ending with the error it was given so it
-// re-attaches for a fresh head; the daemon's own readers are unbounded, reading as they are fed.
-class Mailbox<T> {
-    private readonly queue: FrameBacklog<T>;
-    private wake: (() => void) | undefined;
-    private closed = false;
-    private failure: Error | undefined;
-
-    constructor(replay: readonly T[], bounded: { readonly failure: () => Error; readonly onCut: () => void } | undefined) {
-        this.queue = frameBacklog<T>(
-            () => {
-                if (bounded !== undefined) {
-                    this.cut(bounded.failure());
-                    bounded.onCut();
-                }
-            },
-            bounded === undefined ? { frames: Infinity, waitMs: Infinity } : {},
-        );
-        for (const item of replay) {
-            this.queue.push(item);
-        }
-    }
-
-    push(item: T): void {
-        if (this.closed) {
-            return;
-        }
-        this.queue.push(item);
-        this.wake?.();
-    }
-
-    close(): void {
-        this.closed = true;
-        this.wake?.();
-    }
-
-    // Ends the reader with `error` as soon as it next reads; nothing queued is delivered after the cut.
-    cut(error: Error): void {
-        if (this.failure !== undefined) {
-            return;
-        }
-        this.failure = error;
-        this.closed = true;
-        this.wake?.();
-    }
-
-    // Everything pushed, in order, until closed and drained, or until cut. `released` runs however the reader leaves,
-    // including early exit, so the queue never leaks.
-    async *drain(released: () => void): AsyncGenerator<T> {
-        try {
-            for (;;) {
-                if (this.failure !== undefined) {
-                    throw this.failure;
-                }
-                const next = this.queue.shift();
-                if (next !== undefined) {
-                    yield next.frame;
-                    continue;
-                }
-                if (this.closed) {
-                    return;
-                }
-                await new Promise<void>((resolve) => {
-                    this.wake = resolve;
-                });
-                this.wake = undefined;
-            }
-        } finally {
-            released();
-        }
-    }
 }
 
 export class TurnRun implements LiveRun {
@@ -118,6 +45,10 @@ export class TurnRun implements LiveRun {
     private waiters: (() => void)[] = [];
     // Resolved once the settled run's durable transcript is written (or was not to be) and its journal entry is gone.
     private markRecorded: () => void = () => undefined;
+    // Hears every patch the run publishes, as it publishes it: the run log a restart reads back (sessions/run-log.ts).
+    tap: ((patches: readonly TranscriptPatch[]) => void) | undefined;
+    // Hears every frame once it is folded, whoever pushed it: the pump, or a gate raising its card outside the turn.
+    watch: ((event: AgentEvent) => void) | undefined;
     private readonly recorded = new Promise<void>((resolve) => {
         this.markRecorded = resolve;
     });
@@ -177,6 +108,7 @@ export class TurnRun implements LiveRun {
         for (const listener of this.listeners) {
             listener.push(event);
         }
+        this.watch?.(event);
     }
 
     // A row the daemon writes on the turn's behalf (a decision's notice, feedback answering a card).
@@ -271,8 +203,12 @@ export class TurnRun implements LiveRun {
     }
 
     private publish(patches: readonly TranscriptPatch[], fact?: TurnFact): void {
-        for (const patch of patches) {
-            this.deliver({ kind: "patch", seq: ++this.seq, patch: this.stamped(patch) });
+        const stamped = patches.map((patch) => this.stamped(patch));
+        for (const patch of stamped) {
+            this.deliver({ kind: "patch", seq: ++this.seq, patch });
+        }
+        if (stamped.length > 0) {
+            this.tap?.(stamped);
         }
         if (fact !== undefined) {
             const entry: AttachEntry = { kind: "fact", seq: ++this.seq, fact };
@@ -310,8 +246,12 @@ export interface RunOptions {
     // The run a restart cut while it waited on a person, carried on as itself (turn-resume.ts, rehydrateParkedTurn): its
     // id, its start, and the rows it had drawn, which stand in for `opening`. Absent, the run is a new one.
     readonly continues?: { readonly id: string; readonly startedAt: number; readonly rows: readonly TranscriptRow[] };
-    // Where the settled turn's durable transcript is written down (sessions/transcript-record.ts).
+    // Where the settled turn's durable transcript is written down (sessions/transcript-record.ts); `false` is a write
+    // that did not land, which keeps the run's log and its journal entry for whoever records it next.
     readonly transcript?: (rows: readonly TranscriptRow[], steerRows: readonly number[]) => Promise<unknown>;
+    // Opens the log a journalled run's rows are written to as they are drawn (sessions/run-log.ts), what a boot after a
+    // death mid-turn records the turn from.
+    readonly log?: (head: RunLogHead) => RunLog;
     // Side-channel prep that must precede the provider; its failure may cost persistence, never the turn itself.
     readonly before?: Promise<unknown>;
     // Names the provider, model and knobs the turn's persona or run role pins (turn-routing.ts), asked of the turn as it was
@@ -384,6 +324,32 @@ const bookedRerun = (event: Extract<AgentEvent, { kind: "error" }>): { readonly 
     return event.nextAt === undefined ? {} : { at: event.nextAt };
 };
 
+// Expiry is proactive, or the last completed run in a quiet sandbox would hold its rows forever.
+const expireRetained = (deps: RunDeps, conversationId: string, run: TurnRun): void => {
+    const runs = deps.conversations.holdings(RUNS);
+    const expiry = setTimeout(() => {
+        if (runs.get(conversationId) === run) {
+            runs.drop(conversationId);
+        }
+    }, RUN_RETAINED_MS);
+    expiry.unref();
+};
+
+// The settled run onto the record: true once its rows are there, or there was nothing to write (a turn refused before it
+// ran is not written at all, since the conversation's queue holds its message for another press); false for a write
+// that did not land.
+const writeSettled = async (run: TurnRun, transcript: RunOptions["transcript"]): Promise<boolean> => {
+    if (transcript === undefined || run.ranNothing) {
+        return true;
+    }
+    try {
+        return (await transcript(run.rows, run.steerRows)) !== false;
+    } catch {
+        // allow(silent-catch): a write that threw is one that did not land, which the answer carries on.
+        return false;
+    }
+};
+
 // A run of its own, opening on what `opening` builds for the instant it starts.
 const newRun = (opening: RunOptions["opening"]): TurnRun => {
     const startedAt = Date.now();
@@ -396,7 +362,7 @@ export function startTurnRun(
     deps: RunDeps,
     turnFn: TurnStarter["stream"],
     sent: TurnInput & { readonly conversationId: string },
-    { observer, journalled = false, opening, continues, transcript, before, route, attempts = 0, holdTurnedAway }: RunOptions = {},
+    { observer, journalled = false, opening, continues, transcript, log: openLog, before, route, attempts = 0, holdTurnedAway }: RunOptions = {},
 ): TurnRun | BeginRefusal {
     // Routed on the way in (idempotent), for a caller that starts a run without the port.
     let input: RoutedTurn & { readonly conversationId: string } = withRuntimeDefaults(sent);
@@ -437,7 +403,8 @@ export function startTurnRun(
     let sessionId: string | undefined;
     const parked: ParkedRequest[] = [];
     // While a card is up the run's rows ride along, the only copy of them a restart leaves; once none is, they are let go.
-    const journalEntry = (): void =>
+    // `settled`: the turn ended but its record did not take it, so a boot records it rather than running it again.
+    const journalEntry = (settled = false): void =>
         journal({
             kind: "journalled",
             entry: {
@@ -446,12 +413,37 @@ export function startTurnRun(
                 startedAt: run.startedAt,
                 attempts,
                 ...(sessionId !== undefined ? { sessionId } : {}),
-                ...(parked.length > 0 ? { parked: [...parked] } : {}),
+                ...(parked.length > 0 && !settled ? { parked: [...parked] } : {}),
                 // Cloned: the fold goes on changing the cards these rows share with it, under a write still queued.
-                run: { id: run.id, ...opt("rows", parked.length > 0 ? structuredClone([...run.rows]) : undefined) },
+                run: {
+                    id: run.id,
+                    ...opt("rows", parked.length > 0 || settled ? structuredClone([...run.rows]) : undefined),
+                    ...(settled ? { settled: true as const } : {}),
+                },
             },
         });
     journalEntry();
+    // No longer in flight, however it ended; only an unseen turn deserves resuming. One whose record did not take it
+    // stays journalled as settled, so a boot records it instead of running it again.
+    const endJournal = (recorded: boolean): void => (recorded ? journal({ kind: "unjournalled" }) : journalEntry(true));
+    // Restorable cards ride the journal entry while up (handovers excluded) and come off as each resolves, whoever raised
+    // them: the turn itself through its frames, or a gate it called, pushing its card onto the run. Rewritten once the
+    // frame is folded, so the rows it carries already show the card raised or settled.
+    run.watch = (event) => {
+        if (isRestorableRequest(event)) {
+            parked.push(event);
+            journalEntry();
+            return;
+        }
+        const held = event.kind === "resolved" ? parked.findIndex((card) => card.requestId === event.requestId) : -1;
+        if (held !== -1) {
+            parked.splice(held, 1);
+            journalEntry();
+        }
+    };
+    // The log a restart records this run from, for a run the journal holds: what it opened on, then every patch.
+    const runLog = journalled ? openLog?.({ run: run.id, startedAt: run.startedAt, rows: [...run.rows] }) : undefined;
+    run.tap = runLog?.append;
     // An observer is an optional side-channel; a throw from it must not abort an otherwise-fine run.
     const tell = (report: (target: TurnObserver) => void): void => {
         if (observer === undefined) {
@@ -510,27 +502,14 @@ export function startTurnRun(
                 if (isParkKind(event.kind)) {
                     const awaiting = event.kind;
                     tell((target) => target.awaiting(awaiting));
-                }
-                // Whether this frame changes what the journal entry says; it is rewritten once the frame is folded, so
-                // the rows it carries already show the card raised or settled.
-                let rejournal = false;
-                // Restorable cards ride the journal entry while up (handovers excluded) and come off as each resolves.
-                if (event.kind === "plan" || event.kind === "question" || event.kind === "permission") {
-                    parked.push(event);
-                    rejournal = true;
-                }
-                if (event.kind === "resolved") {
-                    const held = parked.findIndex((card) => card.requestId === event.requestId);
-                    if (held !== -1) {
-                        parked.splice(held, 1);
-                        rejournal = true;
-                    }
+                    // A person may be away for days: what the run drew up to its card goes to disk once it is folded.
+                    queueMicrotask(() => void runLog?.flush());
                 }
                 // Session the provider minted, folded into the journal entry once known; a resume without it starts
-                // over.
+                // over. Rewritten once the frame is folded.
+                const rejournal = event.kind === "session";
                 if (event.kind === "session") {
                     sessionId = event.sessionId;
-                    rejournal = true;
                 }
                 if (event.kind === "error") {
                     failure = event.message;
@@ -551,27 +530,14 @@ export function startTurnRun(
             run.push({ kind: "done" });
         } finally {
             run.finish(stopped ? "stopped" : "settled");
-            // Expiry is proactive, or the last completed run in a quiet sandbox would hold its rows forever.
-            const expiry = setTimeout(() => {
-                if (runs.get(input.conversationId) === run) {
-                    runs.drop(input.conversationId);
-                }
-            }, RUN_RETAINED_MS);
-            expiry.unref();
-            // Durable transcript, written once the turn is whole, including a settled failure or an abort; a turn
-            // refused before it ran is not written at all, since the conversation's queue holds its message for another
-            // press.
-            if (transcript !== undefined && !run.ranNothing) {
-                // Journal deletion is the commit point; await the transcript first so a crash can't lose both.
-                try {
-                    await transcript(run.rows, run.steerRows);
-                } catch {
-                    // allow(silent-catch): a transcript that fails to write must not hold the journal open; the turn has settled.
-                }
-            }
-            // No longer in flight, however it ended; only an unseen turn deserves resuming.
+            expireRetained(deps, input.conversationId, run);
+            // Durable transcript, written once the turn is whole, including a settled failure or an abort. Journal deletion
+            // is the commit point, so the record goes first and a crash can't lose both. The log then goes, or is kept for
+            // whoever writes the record next.
+            const recorded = await writeSettled(run, transcript);
+            await runLog?.close(recorded);
             try {
-                journal({ kind: "unjournalled" });
+                endJournal(recorded);
             } finally {
                 // Whatever the journal answered, so what waits on the record is never held for good.
                 run.recordedNow();

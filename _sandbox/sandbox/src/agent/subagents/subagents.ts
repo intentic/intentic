@@ -438,7 +438,7 @@ interface SubagentMeta {
     readonly model?: string;
 }
 
-const readMeta = async (metaPath: string): Promise<SubagentMeta | undefined> => {
+export const readMeta = async (metaPath: string): Promise<SubagentMeta | undefined> => {
     try {
         return JSON.parse(await readFile(metaPath, "utf8")) as SubagentMeta;
     } catch {
@@ -510,42 +510,11 @@ const scan = async (actors: Actors, dir: string, holder: string): Promise<void> 
     }
 };
 
-const pair = async (actors: Actors, dir: string, holder: string): Promise<void> => {
+export const pair = async (actors: Actors, dir: string, holder: string): Promise<void> => {
     const passes = actors.holdings(PASSES);
     const running = passes.get(dir) ?? scan(actors, dir, holder).finally(() => passes.drop(dir));
     passes.hold(holder, dir, running);
     await running;
-};
-
-/** What the roster knows of one subagent that a reader of its own transcript needs (subagent-transcript.ts). */
-export interface SubagentSource {
-    readonly kind: SubagentKind;
-    // The conversation whose turn started it.
-    readonly conversationId: string;
-    // Its one-line ask, the transcript's opening bubble where the runtime's own record carries no prompt.
-    readonly description: string | undefined;
-    // Where the Claude runtime keeps this child's own record, once it is paired to its meta file: the session it ran in
-    // (the directory `subagentsDir` sits in, named for it) and the SDK's id for the child. Absent for every other runtime.
-    readonly sdk: { readonly sessionId: string; readonly agentId: string } | undefined;
-}
-
-/** The roster's record of one subagent as its transcript's reader needs it, paired on the spot if it has not been yet. */
-export const subagentSource = async (actors: Actors, id: string): Promise<SubagentSource | undefined> => {
-    const record = actors.holdings(ROSTER).get(id);
-    if (record === undefined) {
-        return undefined;
-    }
-    const dir = record.turn.subagentsDir;
-    if (record.kind === "subagent" && record.agentId === undefined && dir !== undefined) {
-        await pair(actors, dir, record.conversationId);
-    }
-    const agentId = record.agentId;
-    return {
-        kind: record.kind,
-        conversationId: record.conversationId,
-        description: record.description,
-        sdk: dir === undefined || agentId === undefined ? undefined : { sessionId: basename(dirname(dir)), agentId },
-    };
 };
 
 // WHAT A CHILD RAN ON, off its own record: every assistant line the runtime writes there names the model the provider
@@ -656,7 +625,8 @@ export const pairLiveSubagents = async (actors: Actors): Promise<void> => {
 export const subagentVerification = (actors: Actors, id: string): SubagentVerification | undefined =>
     actors.holdings(ROSTER).get(id)?.verification ?? childVerification(actors, id);
 
-export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
+// `paired` hears each child SubagentStop pairs, which says where its record is (subagent-transcript.ts recordInto).
+export const subagentHooks = (turn: SubagentTurn, paired?: (child: SubagentRecord) => void): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     // Appends the verification verdict to the delegating call's result as the parent reads it, via `additionalContext`
     // rather than rewriting the report itself, as a spawned subagent's report and `wait` answer carry it. Nothing is
     // appended when there is nothing to warn about. The tool is `Agent` today and `Task` in older CLIs (the stream's
@@ -702,10 +672,14 @@ export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, Hoo
                     if (meta === undefined) {
                         return { continue: true };
                     }
+                    turn.subagentsDir ??= dirname(transcriptPath);
                     adopt(turn, meta, input.agent_id);
                     // Child's own last words go in as `report`, the strongest source; status is not set here since only
                     // the task stream distinguishes finishing, failing, or being cut short.
                     const child = meta.toolUseId !== undefined ? turn.conversations.holdings(ROSTER).get(meta.toolUseId) : undefined;
+                    if (child !== undefined) {
+                        paired?.(child);
+                    }
                     if (child !== undefined && input.last_assistant_message !== undefined) {
                         patch(turn.conversations, child.id, ending(child, { summary: input.last_assistant_message, source: "report" }));
                     }

@@ -62,7 +62,9 @@ const SpawnedChildSchema = z.object({
     startedAt: z.number(),
     // `running` while a turn of it is under way, `paused` while its turn waits on a re-run the sandbox booked, `settled`
     // once its last turn ended: what the next boot looks for, since a running one's turn may or may not come back.
-    state: z.enum(["running", "paused", "settled"]),
+    state: z.enum(["running", "paused", "settled", "held"]),
+    // A start accepted before it could run, with its original place in the waiting order.
+    startHold: z.object({ kind: z.enum(["seat", "lane", "start"]), order: z.number(), reason: z.string().optional(), requestId: z.string().optional() }).optional(),
     ending: ChildEndingSchema.optional(),
     // On `paused`, the wall its turn stopped at.
     pausedOn: z.string().optional(),
@@ -223,10 +225,10 @@ export const restoredFate = (child: SpawnedChild, facts: RestoredFacts, now: num
     if (facts.parent.archived) {
         return { kind: "drop", why: "the parent is archived" };
     }
-    if (facts.child === undefined) {
+    if (facts.child === undefined && child.turns > 0) {
         return { kind: "drop", why: "the child's conversation is gone" };
     }
-    if (facts.child.parent !== undefined && facts.child.parent !== child.parent) {
+    if (facts.child?.parent !== undefined && facts.child.parent !== child.parent) {
         return { kind: "drop", why: "the registry names another parent" };
     }
     if (child.state === "settled" && now - (child.ending?.at ?? child.at) > SETTLED_KEPT_MS) {

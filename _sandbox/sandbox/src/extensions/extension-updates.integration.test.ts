@@ -21,7 +21,7 @@ import { makeWorkspaceDir, moveWorkspacePath, readWorkspaceFile, removeWorkspace
 import { workspacePaths } from "../workspace/workspace.js";
 import type { Services } from "../composition.js";
 import { readExtensionEnablement } from "../capabilities/extension-inventory/extension-enablement.js";
-import { checkExtensionUpdates, readExtensionUpdateState, writeUpdatePolicy } from "./extension-updates.js";
+import { applyExtensionUpdate, checkExtensionUpdates, readExtensionUpdateState, resumeExtensionHealthWatches, writeUpdatePolicy } from "./extension-updates.js";
 
 // Update lifecycle end-to-end (discover, preview, apply, revert), driven over the daemon's HTTP surface, browser-style.
 // Against real git fixtures standing in for the author's repo and the registry.
@@ -275,4 +275,66 @@ test("a review that cannot even start says why on the card the same way", async 
         expect(update?.needsReview).toBe("an agent was asked to read this update and could not: settings could not be read");
         expect(update?.review).toBeUndefined();
     });
+});
+
+// A restart inside the health watch's minute used to leave the record "watching" for good, its auto-revert never run:
+// the watch lived only in its two timers. Here the daemon dies after the apply (its timers are dropped), and the boot
+// path rebuilds the watch from the record alone, with the auto-revert decision the apply made.
+test("a health watch cut by a restart is probed again at boot, and still auto-reverts a broken update", async () => {
+    jest.useFakeTimers();
+    try {
+        const author = await authorRepo();
+        // v3 declares a process that starts on boot; the fake service supervisor never runs it, so the update is broken.
+        await writeFile(
+            join(author.url, "intentic-extension.json"),
+            JSON.stringify({ ...MANIFEST_V2, version: "1.2.0", contributes: { processes: [{ name: "worker", command: "node worker.js", autoStart: true }] } }),
+        );
+        const v3 = await commit(author.url);
+        const registry = await registryRepo(author, v3);
+        const { workspace, svc } = await installedWorkspace(author, registry);
+        await checkExtensionUpdates(svc);
+        await applyExtensionUpdate(svc, "demo", v3, { autoRevert: true });
+        expect(await installedVersion(workspace.root)).toBe("1.2.0");
+        // The daemon dies: every timer it held is gone, and only the record on disk remains.
+        jest.clearAllTimers();
+        expect((await readExtensionUpdateState(workspace.root)).extensions["acme.demo"]).toMatchObject({
+            health: { state: "watching", fromRef: author.v1 },
+            healthWatch: { id: "demo", autoRevert: true },
+        });
+
+        jest.useRealTimers();
+        // The boot path with its probes minutes shortened to milliseconds; the verdict logic is the live one.
+        await resumeExtensionHealthWatches(svc, 1, 2);
+        await waitFor(async () => {
+            expect((await readExtensionUpdateState(workspace.root)).extensions["acme.demo"]?.health).toMatchObject({
+                state: "unhealthy",
+                autoReverted: true,
+            });
+        });
+        expect(await installedVersion(workspace.root)).toBe("1.0.0");
+        expect((await readExtensionUpdateState(workspace.root)).extensions["acme.demo"]?.healthWatch).toBeUndefined();
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+test("a watch with nothing wrong is resumed at boot and ends healthy after both probes", async () => {
+    jest.useFakeTimers();
+    try {
+        const author = await authorRepo();
+        const registry = await registryRepo(author, author.v2);
+        const { workspace, svc } = await installedWorkspace(author, registry);
+        await checkExtensionUpdates(svc);
+        await applyExtensionUpdate(svc, "demo", author.v2);
+        jest.clearAllTimers();
+
+        jest.useRealTimers();
+        await resumeExtensionHealthWatches(svc, 1, 2);
+        await waitFor(async () => {
+            expect((await readExtensionUpdateState(workspace.root)).extensions["acme.demo"]?.health).toMatchObject({ state: "healthy", fromRef: author.v1 });
+        });
+        expect(await installedVersion(workspace.root)).toBe("1.1.0");
+    } finally {
+        jest.useRealTimers();
+    }
 });

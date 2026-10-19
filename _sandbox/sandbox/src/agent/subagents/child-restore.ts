@@ -4,9 +4,10 @@ import { liveRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { ROSTER } from "../../conversations/actor/subagent-roster.js";
 import { sayToParent } from "../../conversations/land/child-lands.js";
 import { opt } from "../../opt.js";
-import { CHILDREN, keepChild, ledgerOf, SEATS, settleChild } from "./child-records.js";
+import { bindChildFile, CHILDREN, keepChild, ledgerOf, SEATS, settleChild } from "./child-records.js";
 import { childRecordOf, childRouting, taskLine } from "./child-spec.js";
-import { type ChildRecord, followAdopted, labelOf, rosterHandle } from "./children.js";
+import { type ChildRecord, followAdopted, resumeHeldChild, rosterHandle } from "./children.js";
+import { labelOf } from "./child-gates.js";
 import { restoredFate, type SpawnedChild, specFromFile } from "./spawned-children.js";
 import { type RestoredChildRow, restoreSpawnedChild } from "./roster-restore.js";
 
@@ -30,6 +31,8 @@ const restoredRecord = (entry: SpawnedChild): ChildRecord => {
     kid.report = entry.report;
     kid.result = entry.result;
     kid.turns = entry.turns;
+    kid.startHold = entry.startHold;
+    kid.held = entry.startHold?.kind;
     return kid;
 };
 
@@ -39,6 +42,9 @@ const restoredRow = (id: string, entry: SpawnedChild): RestoredChildRow => {
     const spec = specFromFile(entry.spec);
     const { provider, model } = childRouting(spec);
     const birth = { id, description: taskLine(spec), agentType: labelOf(provider), provider, model, spawnDepth: entry.depth, startedAt: entry.startedAt };
+    if (entry.state === "held") {
+        return { ...birth, status: "pending", summary: `Waiting to start: ${entry.startHold?.kind ?? "unknown hold"}.` };
+    }
     if (entry.state === "running") {
         return { ...birth, status: "pending", summary: RESTARTED_SUMMARY };
     }
@@ -66,7 +72,7 @@ export const restoreSpawnedChildren = async (services: Services): Promise<readon
     try {
         const ledger = ledgerOf(services);
         const now = Date.now();
-        for (const entry of await ledger.list()) {
+        for (const entry of (await ledger.list()).toSorted((left, right) => (left.startHold?.order ?? 0) - (right.startHold?.order ?? 0))) {
             const child = services.agents.entry(entry.id);
             const parent = services.agents.entry(entry.parent);
             const fate = restoredFate(entry, {
@@ -81,11 +87,15 @@ export const restoreSpawnedChildren = async (services: Services): Promise<readon
             if (services.conversations.holdings(CHILDREN).has(entry.id)) {
                 continue;
             }
-            services.conversations.holdings(CHILDREN).hold(entry.parent, entry.id, restoredRecord(entry), entry.id);
+            const kid = restoredRecord(entry);
+            bindChildFile(services, entry.id, kid);
+            services.conversations.holdings(CHILDREN).hold(entry.parent, entry.id, kid, entry.id);
             restoreSpawnedChild(rosterHandle(services, entry.parent), restoredRow(entry.id, entry));
             // The parent's lifetime budget counts what it already spent; nothing of it runs until a turn is adopted.
             const seats = services.conversations.holdings(SEATS);
-            seats.hold(entry.parent, entry.parent, { live: 0, total: (seats.get(entry.parent)?.total ?? 0) + entry.turns });
+            const reserved = entry.startHold?.kind === "lane" ? 1 : 0;
+            const before = seats.get(entry.parent) ?? { live: 0, total: 0 };
+            seats.hold(entry.parent, entry.parent, { live: before.live + reserved, total: before.total + entry.turns + reserved });
             if (entry.state !== "settled") {
                 cut.push(entry.id);
             }
@@ -96,6 +106,31 @@ export const restoreSpawnedChildren = async (services: Services): Promise<readon
     return cut;
 };
 
+// One child a restart cut: its resumed turn is followed, a booked re-run is waited for, and the rest stay stopped. A
+// held start is left for the second pass in settleRestoredChildren.
+const settleCutChild = (services: Services, childId: string): void => {
+    const kid = services.conversations.holdings(CHILDREN).get(childId);
+    if (kid === undefined || kid.running || kid.startHold !== undefined) {
+        return;
+    }
+    const run = liveRunOf(services.conversations, childId);
+    if (run !== undefined) {
+        followAdopted(services, childId, kid, run);
+        return;
+    }
+    const held = services.conversations.state(childId)?.resume.held;
+    if (held !== undefined && !held.fired) {
+        return;
+    }
+    const paused = services.conversations.holdings(ROSTER).get(childId)?.status === "paused";
+    const error = paused ? restartCutPause(services.conversations.holdings(ROSTER).get(childId)?.error ?? "") : RESTART_CUT;
+    settleChild(services.conversations, childId, { status: "failed", report: kid.report ?? "", error });
+    keepChild(services, childId);
+    if (!paused) {
+        void sayToParent(services, kid.parent, `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") stays stopped: ${RESTART_CUT}`);
+    }
+};
+
 /**
  * Once the turns a restart cut were resumed: each restored child whose turn came back is followed like any adopted turn;
  * one with a re-run still booked waits for it; the rest stay stopped, said on their rows and, for a turn that was under
@@ -104,28 +139,21 @@ export const restoreSpawnedChildren = async (services: Services): Promise<readon
 export const settleRestoredChildren = async (services: Services, cut: readonly string[]): Promise<void> => {
     for (const childId of cut) {
         try {
-            const kid = services.conversations.holdings(CHILDREN).get(childId);
-            if (kid === undefined || kid.running) {
-                continue;
-            }
-            const run = liveRunOf(services.conversations, childId);
-            if (run !== undefined) {
-                followAdopted(services, childId, kid, run);
-                continue;
-            }
-            const held = services.conversations.state(childId)?.resume.held;
-            if (held !== undefined && !held.fired) {
-                continue;
-            }
-            const paused = services.conversations.holdings(ROSTER).get(childId)?.status === "paused";
-            const error = paused ? restartCutPause(services.conversations.holdings(ROSTER).get(childId)?.error ?? "") : RESTART_CUT;
-            settleChild(services.conversations, childId, { status: "failed", report: kid.report ?? "", error });
-            keepChild(services, childId);
-            if (!paused) {
-                void sayToParent(services, kid.parent, `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") stays stopped: ${RESTART_CUT}`);
-            }
+            settleCutChild(services, childId);
         } catch (error) {
             services.logger.warn({ err: error, child: childId }, "subagents: a child a restart cut could not be settled");
+        }
+    }
+    // Adopt every resumed turn before releasing waits, so neither a parent's nor a provider's cap is undercounted.
+    for (const childId of cut) {
+        const kid = services.conversations.holdings(CHILDREN).get(childId);
+        if (kid?.startHold === undefined) {
+            continue;
+        }
+        try {
+            await resumeHeldChild(services, childId, kid);
+        } catch (error) {
+            services.logger.warn({ err: error, child: childId }, "subagents: a held child could not be re-armed after restart");
         }
     }
 };

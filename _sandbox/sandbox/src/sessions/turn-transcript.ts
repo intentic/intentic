@@ -12,6 +12,9 @@ import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import type { Services } from "../composition.js";
 import type { TranscriptAgent } from "./agent-transcript.js";
 import { parseQueuedPrompt } from "./vocabulary/prompt-envelope.js";
+import { conversationUnit } from "../store/conversation-units.js";
+import { isConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { NO_RUN_LOG, openRunLog, type RunLog, type RunLogHead, unrecordedRuns } from "./run-log.js";
 
 // Attachment paths as a row carries them: relative to the workspace root, absolute anywhere else left alone.
 export const rootRelative = (paths: readonly string[], root: string): string[] =>
@@ -54,7 +57,7 @@ export const openingRows = (
 };
 
 // Single derivation of which conversation a turn records against, so fork and append can't disagree.
-const transcriptAgentOf = (turn: AgentTurn & { readonly conversationId: string }): TranscriptAgent => ({ id: turn.conversationId });
+const transcriptAgentOf = (turn: { readonly conversationId: string }): TranscriptAgent => ({ id: turn.conversationId });
 
 // Opens a fork's record before its first turn, once: only a copy can supply the prefix it inherits from its source.
 // Never rejects; a disk failure in this side channel must not fail the turn.
@@ -95,7 +98,7 @@ export const handoffHistory = async (
 
 // Strips `checkpointId` and `rewindIndex` before writing: they describe the daemon's current rewind points, which move,
 // so a value frozen into the record would go stale. The read looks them up fresh.
-const recorded = (rows: readonly TranscriptRow[]): TranscriptRow[] =>
+export const recorded = (rows: readonly TranscriptRow[]): TranscriptRow[] =>
     rows.map((row) => {
         const { checkpointId: _checkpoint, rewindIndex: _index, ...kept } = row;
         return kept;
@@ -158,6 +161,71 @@ const recordSteerAnchors = async (
     );
 };
 
+// Where a conversation's run log lives: its own unit on the history volume, which a purge takes with it.
+export const runLogDir = (services: Pick<Services, "config">, conversationId: string): string => conversationUnit(services.config.historyRoot, conversationId);
+
+/** Opens the log a journalled run of this conversation writes as it draws (run-log.ts). */
+export const runLogFor =
+    (services: Pick<Services, "config" | "logger">, conversationId: string) =>
+    (head: RunLogHead): RunLog => {
+        // A log that cannot be opened costs the log, never the turn; an id that is no conversation's has no unit for one.
+        try {
+            return isConversationId(conversationId)
+                ? openRunLog(runLogDir(services, conversationId), head, (message, error) => services.logger.warn({ err: error, conversationId, run: head.run }, message))
+                : NO_RUN_LOG;
+        } catch (error) {
+            services.logger.warn({ err: error, conversationId, run: head.run }, "run log: not opened, this run goes unlogged");
+            return NO_RUN_LOG;
+        }
+    };
+
+/**
+ * Whether run `run`'s rows are already on the record: the last turn there carries its stamp. Asked before writing a run
+ * whose earlier write may have landed after all (a crash between the append and the journal's clear, a write that threw
+ * after the bytes were down), so a turn is never recorded twice. A record that cannot be read answers no: a turn drawn
+ * twice is better than a turn lost.
+ */
+export const alreadyRecorded = async (services: Pick<Services, "transcripts">, conversationId: string, run: string | undefined): Promise<boolean> => {
+    if (run === undefined) {
+        return false;
+    }
+    // allow(silent-catch): an unreadable tail answers no, and the append that follows says what is wrong with the record.
+    const tail = await services.transcripts.page(transcriptAgentOf({ conversationId }), { turns: 1 }).catch(() => undefined);
+    return tail?.rows.some((row) => row.run === run) ?? false;
+};
+
+/**
+ * Writes this conversation's runs whose settled rows never reached the record (run-log.ts keeps them), oldest first,
+ * ahead of anything newer: called before every write of a turn's rows. False when one still could not be written, and
+ * the caller then keeps its own rows back too, so the record never takes a later turn above an earlier one. Never throws.
+ */
+export const recordUnrecordedRuns = async (services: Pick<Services, "config" | "transcripts" | "logger">, conversationId: string): Promise<boolean> => {
+    // A unit that cannot be listed holds nothing this can write: the turn asking goes down as it would have without it.
+    const kept = await keptRuns(services, conversationId);
+    for (const { head, remove } of kept) {
+        if (!(await alreadyRecorded(services, conversationId, head.run))) {
+            try {
+                await services.transcripts.append(transcriptAgentOf({ conversationId }), recorded(head.rows));
+            } catch (error) {
+                services.logger.warn({ err: error, conversationId, run: head.run }, "transcript: a turn the record missed still could not be written");
+                return false;
+            }
+        }
+        await remove().catch((error: Error) => services.logger.warn({ err: error, conversationId, run: head.run }, "run log: a recorded turn's log stayed"));
+    }
+    return true;
+};
+
+// The runs this conversation's unit keeps for the record, or none when the unit cannot be read; never throws.
+const keptRuns = async (services: Pick<Services, "config" | "logger">, conversationId: string): Promise<Awaited<ReturnType<typeof unrecordedRuns>>> => {
+    try {
+        return isConversationId(conversationId) ? await unrecordedRuns(runLogDir(services, conversationId)) : [];
+    } catch (error) {
+        services.logger.warn({ err: error, conversationId }, "run log: the runs the record missed could not be listed");
+        return [];
+    }
+};
+
 // Message a died-under turn's record ends with, kept beside the write it closes.
 export const RESTART_INTERRUPTED = "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree.";
 
@@ -208,8 +276,16 @@ export const recordInterruptedTurn = async (
     // Session the dead turn last reported, off its journal entry; the registry entry may never have gotten it.
     sessionId: string | undefined,
     sentAt: number,
-    { resuming = false, drawn }: { readonly resuming?: boolean; readonly drawn?: readonly TranscriptRow[] | undefined } = {},
+    {
+        resuming = false,
+        drawn,
+        run,
+    }: { readonly resuming?: boolean; readonly drawn?: readonly TranscriptRow[] | undefined; readonly run?: string | undefined } = {},
 ): Promise<boolean> => {
+    // A crash between the record taking the run and the journal letting it go left the entry behind: written once only.
+    if (await alreadyRecorded(services, turn.conversationId, run)) {
+        return true;
+    }
     const recovered = drawn ?? (await interruptedTurnRows(services, turn, sessionId, sentAt));
     const written = recovered.length > 0 ? recovered : openingRows(turn, services.workspace.root, sentAt);
     const closing: TranscriptRow[] = resuming ? [] : [{ role: "notice", text: RESTART_INTERRUPTED, noticeCode: noticeCode({ code: "restartInterrupted" }) }];

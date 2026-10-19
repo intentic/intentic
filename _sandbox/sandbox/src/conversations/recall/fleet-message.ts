@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
@@ -7,8 +8,8 @@ import { sessionFor } from "../registry/routing.js";
 import type { Services } from "../../composition.js";
 import { conversationTaintSource, PEER_SOURCE, taintWords } from "../../guard/turn-taint.js";
 import { opt } from "../../opt.js";
-import type { Holding, Holdings } from "../actor/conversation-holdings.js";
 import { conversationProfile, type PersistedAgent } from "../registry/agents-store.js";
+import { fileStartWindow, type StartWindow, turnStartsDocument } from "../../store/start-window.js";
 import { resolveHandle } from "./fleet-recall.js";
 
 // One agent saying something to another conversation in this workspace — the thing a person does by typing into its
@@ -21,26 +22,14 @@ import { resolveHandle } from "./fleet-recall.js";
 // the turn it lands in depends on who the peer is (messageTaint).
 
 // Ping-pong between two agents is the one way this door spends real money with nobody asking, so each sender gets an
-// hourly budget of turns it may START elsewhere. Steering a live turn costs nothing and is not counted.
+// hourly budget of turns it may START elsewhere. Steering a live turn costs nothing and is not counted. The budget is kept
+// on disk (store/start-window.ts), so a restart or a crash loop does not hand out a fresh hour.
 const TURNS_PER_HOUR = 20;
-const WINDOW_MS = 3_600_000;
 // Sender key for a shell that carries no conversation stamp; it is still one budget, not an unbounded one.
 const UNSTAMPED = "(unstamped)";
 
-// When each sender started a turn elsewhere, held by the sender; the unstamped shell's budget is held by none.
-const STARTS: Holding<readonly number[]> = { name: "peer turn starts" };
-
-// True when the sender may start one more turn elsewhere, and books it; prunes its own window as it reads.
-const spendTurn = (starts: Holdings<readonly number[]>, from: string | undefined, now: number): boolean => {
-    const sender = from ?? UNSTAMPED;
-    const recent = (starts.get(sender) ?? []).filter((at) => now - at < WINDOW_MS);
-    if (recent.length >= TURNS_PER_HOUR) {
-        starts.hold(from, sender, recent);
-        return false;
-    }
-    starts.hold(from, sender, [...recent, now]);
-    return true;
-};
+// The window this door's starts are booked in: the history volume's, unless a caller stands one in.
+const startWindowOf = (services: Services): StartWindow => fileStartWindow(join(services.config.historyRoot, turnStartsDocument.path));
 
 // How far up the `startedBy` links a family is walked. Nesting is capped far below this; it only stops a corrupt
 // registry's loop.
@@ -142,7 +131,13 @@ const STEERED: Omit<Extract<MessageOutcome, { ok: true }>, "to"> = {
 };
 
 /** `from` is absent for an agent shell with no turn stamp. */
-export const messageConversation = async (services: Services, from: string | undefined, handle: string, message: string): Promise<MessageOutcome> => {
+export const messageConversation = async (
+    services: Services,
+    from: string | undefined,
+    handle: string,
+    message: string,
+    starts: StartWindow = startWindowOf(services),
+): Promise<MessageOutcome> => {
     const entry = targetOf(services, from, handle);
     if ("ok" in entry) {
         return entry;
@@ -160,7 +155,7 @@ export const messageConversation = async (services: Services, from: string | und
         services.logger.info({ from, to: entry.id }, "fleet message: steered into the live turn");
         return { ...STEERED, to: entry.id };
     }
-    if (!spendTurn(services.conversations.holdings(STARTS), from, Date.now())) {
+    if (!(await starts.spend(`peer:${sender}`, TURNS_PER_HOUR, Date.now()))) {
         return {
             ok: false,
             status: 429,

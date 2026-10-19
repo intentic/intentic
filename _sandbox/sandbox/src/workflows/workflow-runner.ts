@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Loop, LoopDocument, LoopState } from "@intentic/sandbox-contract/schemas/loops";
+import type { Loop, LoopDocument, LoopRecord, LoopState } from "@intentic/sandbox-contract/schemas/loops";
 import type { RepoBase } from "@intentic/sandbox-contract/schemas/agent";
 import type { Workflow, WorkflowRun, WorkflowRunState, WorkflowStep, WorkflowStepRun } from "@intentic/sandbox-contract/schemas/workflows";
 import type { Services } from "../composition.js";
@@ -179,6 +179,38 @@ const loopForStep = (step: WorkflowStep, repos: readonly RepoBase[], conversatio
     autoLand: false,
 });
 
+// The loop a step was driving when the daemon died under it, carried on rather than opened again: a fresh record would
+// restart its rounds at 0, its spend ceiling at $0, and leave the run's cost short of what it spent. Only a loop still
+// running and opened since this step started is the step's own: a `continue` step's conversation also holds the loop of
+// the step before it.
+const strandedLoopOf = async (services: Services, before: WorkflowStepRun | undefined): Promise<LoopRecord | undefined> => {
+    if (before?.state !== "running" || before.startedAt === undefined) {
+        return undefined;
+    }
+    const loop = await services.loops.get(before.conversationId);
+    return loop?.state === "running" && loop.startedAt >= before.startedAt ? loop : undefined;
+};
+
+// The step's loop: the one it was driving when the daemon died, else a fresh record (the manifest keeps only the latest
+// per conversation). A carried-on loop already holds the brief its handovers were written into, so none is named again.
+const stepLoopOf = async (
+    services: Services,
+    run: WorkflowRun,
+    step: WorkflowStep,
+    before: WorkflowStepRun | undefined,
+    handovers: () => Promise<readonly Handover[]>,
+): Promise<LoopRecord> => {
+    const stranded = await strandedLoopOf(services, before);
+    if (stranded !== undefined) {
+        return stranded;
+    }
+    const prompt = briefForStep(step, await handovers(), run.request);
+    // Falls back to the run's request, same fallback the prompt uses; a run leaving both empty is refused earlier.
+    const goal = step.goal ?? run.request ?? "";
+    await services.workflowRuns.patchStep(run.runId, step.id, { state: "running", startedAt: Date.now() });
+    return await services.loops.start(loopForStep(step, run.repos, before?.conversationId ?? "", prompt, goal), Date.now());
+};
+
 // Drives one run to completion; resolves however the run ends and never rejects, since every caller is fire-and-forget.
 // Finished steps from a resume replay off the record instead of re-running.
 export const runWorkflow = async (services: Services, run: WorkflowRun): Promise<void> => {
@@ -204,19 +236,14 @@ export const runWorkflow = async (services: Services, run: WorkflowRun): Promise
     const close = (stepId: string, state: WorkflowStepRun["state"], detail: string): Promise<void> =>
         services.workflowRuns.patchStep(runId, stepId, { state, endedAt: Date.now(), detail });
 
-    const execute = async (step: WorkflowStep, conversationId: string, handovers: readonly Handover[]): Promise<StepOutcome> => {
+    const execute = async (step: WorkflowStep, conversationId: string, opening: () => Promise<LoopRecord>): Promise<StepOutcome> => {
         const index = position.get(step.id) ?? 1;
-        const prompt = briefForStep(step, handovers, run.request);
-        // Falls back to the run's request, same fallback the prompt uses; a run leaving both empty is refused earlier.
-        const goal = step.goal ?? run.request ?? "";
         // Set before the loop starts, so the fleet card is never blank; a `continue` step overwrites its predecessor.
         services.conversations.send(conversationId, {
             kind: "workflow-shown",
             workflow: { runId, name: workflow.name, step: step.title, index, total: workflow.steps.length },
         });
-        await services.workflowRuns.patchStep(runId, step.id, { state: "running", startedAt: Date.now() });
-        // Fresh loop record per step: the manifest keeps only the latest per conversation.
-        const record = await services.loops.start(loopForStep(step, run.repos, conversationId, prompt, goal), Date.now());
+        const record = await opening();
         // Two doors: `stopLoop` ends the loop, the actor's `abort` the turn in flight, since an iteration here is a whole
         // turn. The check right after catches a stop landing in the gap before this point.
         const relay = (): void => {
@@ -255,7 +282,7 @@ export const runWorkflow = async (services: Services, run: WorkflowRun): Promise
         }
         const promise = (async (): Promise<StepOutcome> => {
             // A step already `done` from a previous life of this run replays off the record rather than re-running; a
-            // step that was mid-flight when the daemon died starts over, its loop history stopped at the same instant.
+            // step that was mid-flight when the daemon died carries its own loop on (strandedLoopOf).
             const before = recorded.get(step.id);
             if (before?.state === "done") {
                 return {
@@ -298,7 +325,7 @@ export const runWorkflow = async (services: Services, run: WorkflowRun): Promise
                     ...(branches !== undefined ? { branches } : {}),
                 };
             };
-            const handovers: Handover[] = await Promise.all(upstream.map(handoverFrom));
+            const opening = (): Promise<LoopRecord> => stepLoopOf(services, run, step, before, () => Promise.all(upstream.map(handoverFrom)));
             await gate.take();
             try {
                 // Checked again past the parallelism gate: a stopped run could otherwise let a queued step start
@@ -307,7 +334,7 @@ export const runWorkflow = async (services: Services, run: WorkflowRun): Promise
                     await close(step.id, "stopped", "The run was stopped before this step started.");
                     return BLOCKED;
                 }
-                return await execute(step, conversationId, handovers);
+                return await execute(step, conversationId, opening);
             } finally {
                 gate.give();
             }

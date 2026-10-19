@@ -1,7 +1,7 @@
 import { fakeTurns } from "./turn-starter.testing.js";
 import { deliverWake, type Wake, type WakeDoors } from "./wake-delivery.js";
 
-// The port's door as a wake meets it. A wake names no session: the conversation's admission decides it (turn-admission.test.ts).
+// The port's door as a wake meets it. A wake names no session: the conversation's admission decides it (turn-admission.integration.test.ts).
 const fake = (over: Parameters<typeof fakeTurns>[0] = {}): ReturnType<typeof fakeTurns> & { readonly doors: WakeDoors } => {
     const turns = fakeTurns(over);
     return Object.assign(turns, { doors: { turns: turns.turns } });

@@ -35,6 +35,8 @@ const fakeServices = (root: string, settings: z.input<typeof SandboxSettingsSche
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json"), () => false),
         senders: fileSendersStore(join(root, "senders.json")),
         heldWakes: fileHeldWakesStore(join(root, "history")),
+        // The automation inboxes (durable/inbox-store.ts) live beside the holds.
+        config: unstubbed<Services["config"]>("config", { historyRoot: join(root, "history") }),
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),

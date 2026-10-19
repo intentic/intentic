@@ -154,8 +154,8 @@ test("the check runs at turn-settled, after the turn's carry, and on the sweep",
     expect([...check.on].sort()).toEqual(["sweep", "turn-settled"]);
 });
 
-// A spent allowance's hold the entry cannot keep lives only as long as the daemon; the check names it and the field the
-// schema refused, and passes over every hold it can keep, every other hold and every fired one.
+// A hold the entry cannot keep lives only as long as the daemon; the check names it and the field the schema refused,
+// and passes over every hold it can keep, a refused credential's (never kept: its token stays off disk) and every fired one.
 describe("held-limit-turns-are-kept-for-a-restart", () => {
     const files = (count: number): string[] => Array.from({ length: count }, (_, index) => `f${String(index)}.png`);
     const held = (attachments: number, over: Partial<HeldRecord> = {}): HeldRecord => ({
@@ -179,13 +179,14 @@ describe("held-limit-turns-are-kept-for-a-restart", () => {
         await check.run({ moment: "turn-settled", fail });
     };
 
-    it("passes a hold the entry keeps, a hold of another wall, and a fired one", async () => {
+    it("passes a hold the entry keeps, a refused credential's, and a fired one", async () => {
         await runWith(held(20));
-        await runWith(held(21, { reason: "stopped" }));
+        await runWith(held(21, { reason: "auth" }));
         await runWith(held(21, { fired: true }));
     });
 
-    it("names a hold the schema refuses, and why", async () => {
+    it("names a hold the schema refuses, and why, whatever wall held it", async () => {
         await expect(runWith(held(21))).rejects.toThrow(/c1 \(input\.attachments: /);
+        await expect(runWith(held(21, { reason: "stopped" }))).rejects.toThrow(/c1 \(input\.attachments: /);
     });
 });
