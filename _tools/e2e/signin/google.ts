@@ -65,8 +65,9 @@ export const GOOGLE_BUTTON = `Sign in with the e2e Google account`;
 
 // The slice of `google.accounts.id` useGoogleIdentity.ts calls. `prompt` reports a skipped moment, the answer a
 // first-time visitor gets, so the credential only ever arrives through the rendered button: the press is part of what
-// each spec proves, and a spec that expects no press (a silent road) proves that too.
-const fakeGis = (credential: string): string => `(() => {
+// each spec proves, and a spec that expects no press (a silent road) proves that too. With no credential it is a
+// browser signed in to no Google account: the button is drawn and a press hands the page nothing.
+const fakeGis = (credential: string | undefined): string => `(() => {
     const credential = ${JSON.stringify(credential)};
     let config;
     window.google = { accounts: { id: {
@@ -75,7 +76,7 @@ const fakeGis = (credential: string): string => `(() => {
             const button = document.createElement("button");
             button.type = "button";
             button.textContent = ${JSON.stringify(GOOGLE_BUTTON)};
-            button.addEventListener("click", () => config?.callback({ credential, select_by: "btn" }));
+            button.addEventListener("click", () => credential && config?.callback({ credential, select_by: "btn" }));
             parent.replaceChildren(button);
         },
         prompt(listener) {
@@ -86,14 +87,31 @@ const fakeGis = (credential: string): string => `(() => {
     } } };
 })();`;
 
+const GOOGLE = /^https:\/\/([a-z0-9-]+\.)*(google\.com|googleapis\.com|gstatic\.com)\//u;
+
+/**
+ * Makes this browser context one signed in to no Google account, which is what every new browser in the specs starts
+ * as. Without it a context that never met signInToGoogle (the app's window, a replaying stranger) fetched the real
+ * `gsi/client` over the runner's network, and a page's `load` waited on however long Google took to answer: on
+ * 2026-10-19 that was 69s, which ran a spec out of time. Everything else addressed to Google is refused, as below.
+ */
+export const signedOutOfGoogle = async (context: BrowserContext): Promise<void> => {
+    await context.route(GOOGLE, (route) =>
+        route.request().url().startsWith(GIS_SCRIPT)
+            ? route.fulfill({ status: 200, contentType: `text/javascript`, body: fakeGis(undefined) })
+            : route.abort(`blockedbyclient`),
+    );
+};
+
 /**
  * Makes `person` the Google account this browser context is signed in to. Everything else addressed to Google is
  * refused, so a page that reached for the real Google (its OAuth redirect, its fonts, its FedCM endpoints) fails the
- * spec rather than passing on a network the tier never meant to use.
+ * spec rather than passing on a network the tier never meant to use. Playwright runs the newest matching route first,
+ * so this takes over from signedOutOfGoogle on the same context.
  */
 export const signInToGoogle = async (context: BrowserContext, person: Person, privatePem: string): Promise<void> => {
     const credential = idTokenFor(person, privatePem);
-    await context.route(/^https:\/\/([a-z0-9-]+\.)*(google\.com|googleapis\.com|gstatic\.com)\//u, (route) =>
+    await context.route(GOOGLE, (route) =>
         route.request().url().startsWith(GIS_SCRIPT)
             ? route.fulfill({ status: 200, contentType: `text/javascript`, body: fakeGis(credential) })
             : route.abort(`blockedbyclient`),

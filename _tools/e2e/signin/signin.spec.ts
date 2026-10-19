@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
 import { becomeTheAppWebview, completePath, listenForDeepLinks, readAuthLink, startAttempt } from "./desktop.js";
-import { GOOGLE_BUTTON, newPerson, type Person, signInToGoogle } from "./google.js";
+import { GOOGLE_BUTTON, newPerson, type Person, signedOutOfGoogle, signInToGoogle } from "./google.js";
 import { ENV_GOOGLE_KEY, REPO, stackUrls } from "./tier.js";
 
 // A person with no session signs in, every way the product lets one: on the web, and through the desktop app, whose
@@ -52,8 +52,13 @@ const googleKey = (): string => {
     return key;
 };
 
-// A context made by hand does not take the config's `use`, so the two things the specs lean on are said again.
-const freshBrowser = (browser: Browser): Promise<BrowserContext> => browser.newContext({ locale: `en-US`, viewport: { width: 1280, height: 800 } });
+// A context made by hand does not take the config's `use`, so the two things the specs lean on are said again. Each
+// starts signed in to no Google account, served locally, so no page in it waits on the real Google (google.ts).
+const freshBrowser = async (browser: Browser): Promise<BrowserContext> => {
+    const context = await browser.newContext({ locale: `en-US`, viewport: { width: 1280, height: 800 } });
+    await signedOutOfGoogle(context);
+    return context;
+};
 
 /** Who the api says this context is signed in as, by the context's own cookies; undefined for nobody. */
 const signedInAs = async (context: BrowserContext): Promise<string | undefined> => {
