@@ -1,7 +1,10 @@
-import type { AccountState, SwitchAccount } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { SwitchAccount } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { type AgentHarness, type AgentProvider, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../../composition.js";
-import { serviceability, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
+import { allowanceWall, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
+import { limitBooking } from "../../../conversations/actor/limit-booking.js";
+import { breakPolicyFor } from "../../run/turn/break-policy.js";
+import { opt } from "../../../opt.js";
 
 // The one command that moves a conversation to another account (routing.ts reads where it points from then on). Asked to
 // `run`, a turn a spent allowance or a stop is holding runs again at once on the account named, which is how "continue on
@@ -25,27 +28,25 @@ import { serviceability, type ServiceabilityDeps } from "../../../usage/servicea
 // When the picked account lets the held turn through, in epoch seconds: its reset while it reads spent (absent when it
 // names none), now while it has room or no reading. `shown` is what the card states: only a real wait gets a clock.
 //
-// Judged by the daemon's one verdict on the account (serviceability.ts), the same one the composer's clock and the
-// allowance gate read, never by the polled reading alone. Every Claude reading is rounded, and a rounded pool at 100 is
-// "at the line", not spent: only a refusal on file proves it spent. Read bare, every spent Claude account looked open, so a
-// pick from one spent account to another re-timed the held turn to now and the next pass sent it, to be refused within
-// seconds, while the composer counted down to the real reopen (2026-10-19).
+// Judged by the one allowance wall (serviceability.ts allowanceWall) that the allowance gate and the resume pass read
+// too, never by the polled reading alone. Every Claude reading is rounded, and a rounded pool at 100 is "at the line",
+// not spent: only a refusal on file proves it spent. Read bare, every spent Claude account looked open, so a pick from one
+// spent account to another re-timed the held turn to now and the next pass sent it, to be refused within seconds, while
+// the composer counted down to the real reopen (2026-10-19).
 const reopeningOf = async (
     services: ServiceabilityDeps,
     on: { readonly provider: AgentProvider; readonly account: string; readonly model: string | undefined },
     now: number,
 ): Promise<{ readonly reopensAt?: number; readonly shown?: number }> => {
     const { provider, account, model } = on;
-    const state = await serviceability(services, provider, account, model === undefined || model === "" ? undefined : { id: model }).catch(
-        (cause: unknown): AccountState => {
-            services.logger?.warn({ err: cause, provider, account }, "account switch: could not read the picked account's verdict, its held turn is due now");
-            return { kind: "unknown" };
-        },
-    );
-    if (state.kind !== "spent") {
+    const wall = await allowanceWall(services, provider, account, model === undefined || model === "" ? undefined : { id: model }, now).catch((cause: unknown) => {
+        services.logger?.warn({ err: cause, provider, account }, "account switch: could not read the picked account's allowance, its held turn is due now");
+        return undefined;
+    });
+    if (wall === undefined) {
         return { reopensAt: Math.ceil(now / 1000) };
     }
-    return state.reopensAt === undefined ? {} : { reopensAt: state.reopensAt, shown: state.reopensAt };
+    return wall.reopensAt === undefined ? {} : { reopensAt: wall.reopensAt, shown: wall.reopensAt };
 };
 
 export type AccountSwitch =
@@ -57,7 +58,7 @@ export type AccountSwitch =
     | { readonly kind: "busy" };
 
 export const switchAccount = async (
-    services: Pick<Services, "agents" | "claudeSeatCheck" | "conversations" | "turns"> & ServiceabilityDeps,
+    services: Pick<Services, "agents" | "claudeSeatCheck" | "conversations" | "sandboxSettings" | "turns"> & ServiceabilityDeps,
     input: SwitchAccount,
     now: number = Date.now(),
 ): Promise<AccountSwitch> => {
@@ -97,13 +98,15 @@ export const switchAccount = async (
             kind: "held-repointed",
             account,
             carry,
-            ...(reopening.reopensAt === undefined ? {} : { reopensAt: reopening.reopensAt }),
+            ...opt("reopensAt", reopening.reopensAt),
         });
         // A way on named with the pick is the person's pick for the booked re-run too.
         if (handoff !== undefined) {
             services.conversations.send(conversationId, { kind: "handoff-chosen", handoff });
         }
-        await services.agents.switchAccount(conversationId, account, reopening.shown === undefined ? {} : { resetsAt: reopening.shown });
+        // The booking the pick leaves, written with the move, so the card's one broadcast says when the turn now goes.
+        const booking = limitBooking(services.conversations.state(conversationId)?.resume.held, await breakPolicyFor(services, conversationId, "limit"));
+        await services.agents.switchAccount(conversationId, account, { ...opt("resetsAt", reopening.shown), ...opt("booking", booking) });
     }
     followPick(services, conversationId, { ...withRuntimeDefaults({ agent: entry.profile.provider, harness: entry.profile.harness }), account });
     if (entry.profile.account !== account && !carry) {

@@ -180,6 +180,7 @@ export const asStarted = <T extends FleetAgent>(card: T, startedAt: number): T =
     limitHeld: undefined,
     limitScheduled: undefined,
     limitMoving: undefined,
+    limitNextAt: undefined,
     unfinished: undefined,
     activity: undefined,
     unread: false,
@@ -222,6 +223,7 @@ const asLanding = <T extends FleetAgent>(card: T): T => ({
     limitHeld: undefined,
     limitScheduled: undefined,
     limitMoving: undefined,
+    limitNextAt: undefined,
     unread: false,
 });
 

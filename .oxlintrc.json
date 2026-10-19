@@ -19,6 +19,22 @@
     "rules": {
         // Repo-specific
         "typescript/no-extraneous-class": ["error", { "allowWithDecorator": true }],
+        // Whether an account can serve is its verdict (serviceState: the reading AND the refusals on file), never the
+        // polled reading alone, which reads every rounded pool (all of Claude's) as open. A pick between two spent
+        // accounts re-booked a held turn for "now" off the bare reading (2026-10-19). The override below names the few
+        // modules whose question really is the reading itself. Test suites replace this rule with their own and may.
+        "no-restricted-imports": [
+            "error",
+            {
+                "paths": [
+                    {
+                        "name": "@intentic/sandbox-contract/models/plan-pools",
+                        "importNames": ["readingHeadroom"],
+                        "message": "The reading alone is not whether an account can serve. Ask the verdict: allowanceWall or serviceability in the daemon (usage/serviceability/serviceability.ts), accountState in the editor (models/providers/usageStatus.ts)."
+                    }
+                ]
+            }
+        ],
         "import/no-unassigned-import": [
             "error",
             {
@@ -397,6 +413,13 @@
         "_tools/oxlint/anti-slop"
     ],
     "overrides": [
+        {
+            // The modules whose question is the polled reading itself, not the account's verdict: the editor's verdict,
+            // which re-reads a live reading only where the daemon's own verdict allows it (accountState, heldSpent), and
+            // the daemon's drift check, which asks whether a reading claimed spent while a turn went through.
+            "files": ["_editor/web/src/models/providers/usageStatus.ts", "_sandbox/sandbox/src/usage/drift/contradictions.ts"],
+            "rules": { "no-restricted-imports": "off" }
+        },
         {
             // Sorted so concurrent additions land in different places instead of all at the end of one reason block.
             "files": ["_site/demo/src/unserved.ts"],

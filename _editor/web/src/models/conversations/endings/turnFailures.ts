@@ -3,7 +3,6 @@ import type { TurnFact } from "@intentic/sandbox-contract/events/agent-events";
 import { t } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import { cooledPickUp, type PickUp, warmedPickUp } from "./pickUp";
-import { bindingWindow, usageStatusFor } from "../../providers/usageStatus";
 import type { ComposerSelection } from "../session/composerSelection";
 import type { Conversation } from "../session/conversation";
 import type { TranscriptView } from "../session/transcriptView";
@@ -195,19 +194,19 @@ export class TurnFailures {
     }
 
     // A spent allowance is a wait, not a crash: muted, not the error line, and nothing is resent unless this conversation's
-    // answer for the ending says so. `held` means continuing resends the same turn, not a new message.
+    // answer for the ending says so. `held` means continuing resends the same turn, not a new message. The reset and the
+    // booking are the frame's alone: one it names none for is the board card's to state once the sandbox times it
+    // (pickUp.withCardBooking), never this window's guess off a usage reading, which put a clock on the card that the
+    // daemon's booking did not keep (2026-10-19).
     private applyLimitError(error: TurnError): void {
-        const model = this.host.selection.model.value === `` ? undefined : { id: this.host.selection.model.value };
-        // The account the frame names served the turn; one naming none has no reading of its own to guess a reset from.
-        const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.selection.provider.value, error.account, model), model)?.resetsAt;
-        // Rests the press a minute when nothing ran (pickUp.cooledPickUp), then hands it back.
-        const pickUp = cooledPickUp({
+        const stated: PickUp = {
             reason: `limit`,
-            // `resetsAt` always comes from the frame, never the store's fallback; `nextAt` is the daemon's own booking.
-            ...(resetsAt === undefined ? {} : { readyAt: resetsAt * 1_000 }),
+            ...(error.resetsAt === undefined ? {} : { readyAt: error.resetsAt * 1_000 }),
             ...(error.nextAt === undefined ? {} : { nextAt: error.nextAt * 1_000 }),
             ...(error.held === undefined ? {} : { held: error.held }),
-        });
+        };
+        // Rests the press a minute when nothing ran (pickUp.cooledPickUp), then hands it back.
+        const pickUp = cooledPickUp(error.autoResume === `scheduled` ? { ...stated, booked: true } : stated);
         this.host.pickUp.value = pickUp;
         const until = pickUp.coolUntil;
         if (until !== undefined) {

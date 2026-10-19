@@ -1,8 +1,8 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import type { Services } from "../../../composition.js";
-import type { TurnInput } from "../../../seams/turn-starter.js";
-import { opt } from "../../../opt.js";
-import { spentRung } from "../../models/role-model-quota.js";
+import type { Services } from "../../../../composition.js";
+import type { TurnInput } from "../../../../seams/turn-starter.js";
+import { opt } from "../../../../opt.js";
+import { spentRung } from "../../../models/role-model-quota.js";
 
 /* THE SANDBOX DOES NOT SEND ITS OWN TURNS INTO AN ALLOWANCE IT KNOWS IS SPENT. A rebuild's restart re-ran three Codex
    subagents onto an allowance every account read as spent, logging "expect the provider to refuse it" as it did; the

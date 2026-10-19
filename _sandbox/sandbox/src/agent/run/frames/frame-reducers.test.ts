@@ -1,7 +1,7 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
-import type { HeldReason, HeldTurn } from "../turn/turn-resume.js";
+import type { HeldReason, HeldTurn } from "../turn/holds/held-turn.js";
 import type { UsageFrame } from "../turn/turn-usage.js";
 import {
     type ContextFrame,
@@ -27,7 +27,8 @@ const walk = <Reading>(initial: Reading, fold: (reading: Reading, event: AgentEv
 
 const kinds = (...names: AgentEvent["kind"][]): ReadonlySet<AgentEvent["kind"]> => new Set(names);
 const quiet: Silence = { proseChars: 0, kinds: kinds(), answered: false };
-const heldAs = (reason: HeldReason): HeldTurn => ({ input: { prompt: "go", conversationId: "c-1" }, reason, ran: false });
+// SAFETY: a hold carrying only what every wall's carries is one any wall makes, whichever reason it names.
+const heldAs = (reason: HeldReason): HeldTurn => ({ input: { prompt: "go", conversationId: "c-1" }, reason, ran: false }) as HeldTurn;
 const edit: AgentEvent = { kind: "tool_call", id: "e", name: "Edit", category: "edit", status: "completed", locations: [{ path: "/work/a.ts" }] };
 
 describe("each fold reads only its own frames", () => {

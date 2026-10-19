@@ -1,8 +1,9 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { RETRY_LADDER_TRIES } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { TurnEnding } from "@intentic/sandbox-contract/events/transcript";
-import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
+import type { HeldTurn } from "../../agent/run/turn/holds/held-turn.js";
 import type { Services } from "../../composition.js";
+import { opt } from "../../opt.js";
 
 // How a conversation's last turn ended, as its card offers to move it on: stopped, out of allowance, or a provider outage.
 
@@ -26,6 +27,10 @@ const heldOn = (deps: EndingDeps, id: string): Pick<TurnEnding, "held" | "retrie
     const climbed = held.reason === "stopped" && held.tries > 0;
     return { held: heldEnding(held), ...(climbed ? { retries: { made: held.tries, max: RETRY_LADDER_TRIES } } : {}) };
 };
+// The booked re-run's own instant, as `nextAt` states one: only while it is still ahead, since a booking already due goes
+// on the next pass, which is "now" to a reader (a booked move, a reset just reached).
+const bookedAhead = (nextAt: number | undefined): number | undefined => (nextAt !== undefined && nextAt * 1000 > Date.now() ? nextAt : undefined);
+
 const failureEnding = (deps: EndingDeps, id: string, summary: AgentSummary): TurnEnding | undefined => {
     if (summary.failureCode === "rate_limit") {
         return {
@@ -33,6 +38,7 @@ const failureEnding = (deps: EndingDeps, id: string, summary: AgentSummary): Tur
             ...(summary.limitResetsAt !== undefined ? { resetsAt: summary.limitResetsAt } : {}),
             ...heldOn(deps, id),
             ...(summary.limitScheduled === true ? { scheduled: true } : {}),
+            ...opt("nextAt", bookedAhead(summary.limitNextAt)),
         };
     }
     if (summary.failureCode === "provider-outage") {

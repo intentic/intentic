@@ -55,6 +55,8 @@ export interface AgentStanding {
     readonly limitScheduled?: boolean | undefined;
     /** The account the owner's policy is moving the held turn to, while that move is booked (a scheduled card's sentence). */
     readonly limitMoving?: string | undefined;
+    /** When the booked re-run goes, in epoch SECONDS, while one is booked (limitScheduled): the pass's own instant. */
+    readonly limitNextAt?: number | undefined;
     // A land that broke (AgentSummary.landFailure), standing until one goes through whatever turns run after it. Absent
     // from a sandbox older than it, where only a turn's own `failure` can say so.
     readonly landFailure?: LandFailure | undefined;

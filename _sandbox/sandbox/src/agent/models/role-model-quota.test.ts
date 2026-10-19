@@ -4,6 +4,7 @@ import type { Services } from "../../composition.js";
 import { PROVIDER_MODULES } from "../../runtimes/runtime-table.js";
 import { opt } from "../../opt.js";
 import { spentRung } from "./role-model-quota.js";
+import { claudeLimitRefusal, claudeWindows } from "../providers/claude/claude-usage.testing.js";
 
 // Quota reads must only ever say spent on evidence, never as a guess; the undefined-returning cases are what this suite
 // pins.
@@ -27,7 +28,9 @@ const routed = (accounts: Record<string, UsageWindow[] | undefined>, refusals: r
         providerRefusals: unstubbed<Services[`providerRefusals`]>(`providerRefusals`, { onFile: async () => ({ gemini: refusals }) }),
     });
 
-const claude = (accounts: Record<string, UsageWindow[] | undefined>, seats: Record<string, string> = {}): Services =>
+// Claude's accounts, each with its reading, its seat mark and the refusals on file, which alone prove a Claude account
+// spent (its pools are rounded).
+const claude = (accounts: Record<string, UsageWindow[] | undefined>, seats: Record<string, string> = {}, refusals: readonly ProviderRefusal[] = []): Services =>
     unstubbed<Services>(`services`, {
         claudeStore: unstubbed<Services[`claudeStore`]>(`claudeStore`, {
             list: async () => Object.keys(accounts).map((id) => ({ id }) as Awaited<ReturnType<Services[`claudeStore`][`list`]>>[number]),
@@ -41,7 +44,7 @@ const claude = (accounts: Record<string, UsageWindow[] | undefined>, seats: Reco
                     Object.entries(accounts).flatMap(([id, windows]) => (windows === undefined ? [] : [[id, { windows, measuredAt: NOW }]])),
                 ),
         }),
-        providerRefusals: unstubbed<Services[`providerRefusals`]>(`providerRefusals`, { onFile: async () => ({}) }),
+        providerRefusals: unstubbed<Services[`providerRefusals`]>(`providerRefusals`, { onFile: async () => ({ claude: refusals }) }),
     });
 
 const GEMINI = { provider: `gemini`, model: `gemini-3-flash-lite` };
@@ -98,15 +101,13 @@ test("asks the rung when the reading itself cannot be taken", async () => {
     await expect(spentRung(broken, GEMINI, NOW)).resolves.toBeUndefined();
 });
 
-const weekly = (utilization: number, resetsAt?: number): UsageWindow => ({
-    kind: `seven_day`,
-    utilization,
-    gates: `all`,
-    ...opt(`resetsAt`, resetsAt),
-});
+// A Claude account's weekly pool, as the reader files it (rounded), and the refusal that proves one spent.
+const refusedUntil = (account: string, resetsAt: number): ProviderRefusal => claudeLimitRefusal({ account, resetsAt, at: NOW - 60_000 });
+const weekly = (utilization: number, resetsAt?: number): UsageWindow => claudeWindows({ seven_day: { utilization, resetsAt } })[0]!;
 
 test("steps over Claude only when every connected account is at its cap", async () => {
-    const spent = await spentRung(claude({ one: [weekly(100, SECONDS + 7_200)], two: [weekly(100, SECONDS + 3_600)] }), HAIKU, NOW);
+    const refused = [refusedUntil(`one`, SECONDS + 7_200), refusedUntil(`two`, SECONDS + 3_600)];
+    const spent = await spentRung(claude({ one: [weekly(100, SECONDS + 7_200)], two: [weekly(100, SECONDS + 3_600)] }, {}, refused), HAIKU, NOW);
 
     expect(spent?.reason).toContain(`2`);
     expect(spent?.reason).toContain(`Claude`);
@@ -130,7 +131,11 @@ test("a per-model pool at its cap does not retire the whole Claude rung", async 
 
 // The account rows call a seatless account unable to serve; the gate once read only its usage and saw room on it.
 test("steps over Claude when the only account with room has lost its seat", async () => {
-    const spent = await spentRung(claude({ one: [weekly(100, SECONDS + 3_600)], two: [weekly(10)] }, { two: `Claude Code is not enabled for your seat.` }), HAIKU, NOW);
+    const spent = await spentRung(
+        claude({ one: [weekly(100, SECONDS + 3_600)], two: [weekly(10)] }, { two: `Claude Code is not enabled for your seat.` }, [refusedUntil(`one`, SECONDS + 3_600)]),
+        HAIKU,
+        NOW,
+    );
 
     expect(spent?.reason).toContain(`All 2 connected Claude accounts`);
 });

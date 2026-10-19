@@ -22,7 +22,7 @@ import type { SendLater, TurnBooking } from "../drafts/sendLater";
 import { bookingOfMessage, holdOfQueue, perMessage, queueFromMessages, unbookedOf } from "../drafts/bookings";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { accountsOutdated } from "../../providers/accountsOutdated";
-import { type ContinueOptions, repointedPickUp, withHandoffChosen } from "../endings/pickUp";
+import { type ContinueOptions, withHandoffChosen } from "../endings/pickUp";
 import { type AttachHead, type FollowEnd, followRun, type SentMessage, type TurnContext } from "../../../client/sandbox/streams/turnStream";
 import { noteTurnCompleted, track } from "../../../app/analytics";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
@@ -960,9 +960,9 @@ export class TurnClient {
     moveAccount(account: string): void {
         const { host } = this;
         this.unmoved = undefined;
-        // The card's wait follows the pick at once, off the same reading the composer's schedule uses: the press runs on
-        // the pick, and the daemon re-books a held turn there too.
-        host.pickUp.value = repointedPickUp(host.pickUp.value, host.selection.servingState.value);
+        // The card's wait is not re-timed here: the daemon re-books a held turn on the pick and states the booking on the
+        // card in the same write (pickUp.withCardBooking), which reaches every window, where this window's own reading of
+        // the picked account reached only this one and disagreed with what the daemon booked (2026-10-19).
         if (!host.registered.value || host.box.value !== undefined || accountsOutdated.value) {
             return;
         }

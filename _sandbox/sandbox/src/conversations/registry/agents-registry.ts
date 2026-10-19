@@ -24,7 +24,7 @@ import { liveRunOf } from "../actor/conversation-holdings.js";
 import { queueView } from "../actor/conversation-queue.js";
 import { restoredLimitHold } from "../actor/limit-hold.js";
 import { type LimitBooking, limitBooking } from "../actor/limit-booking.js";
-import { limitBookingKeeper, limitHold, rebooked, reportedFailure } from "./limit-ending.js";
+import { limitBookingKeeper, limitHold, rebooked, reportedFailure, switchedEntry } from "./limit-ending.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
 import type { ConversationUnits } from "../../store/conversation-units.js";
 import { type ConversationActors, type ConversationBooks, createConversationActors } from "../actor/conversation-actors.js";
@@ -550,7 +550,9 @@ export interface AgentsRegistry {
     // (switchAccount). The session goes with the caller's say, separately (`session-cleared`). Leaves `updatedAt` alone.
     // `limit` re-times a spent-allowance ending to the new account's reopen (absent: it reads unspent), so the card states
     // the instant the re-pointed hold now waits for; the move there is taken back, since the pick has replaced it.
-    readonly switchAccount: (id: string, account: string, limit?: { readonly resetsAt?: number }) => Promise<AgentSummary | undefined>;
+    // `limit` re-points a spent allowance's held turn too: the reset the card states for the picked account, and the booking
+    // the pick leaves it (limit-booking.ts), written in this same write so the one broadcast already says when it goes.
+    readonly switchAccount: (id: string, account: string, limit?: { readonly resetsAt?: number; readonly booking?: LimitBooking }) => Promise<AgentSummary | undefined>;
     // Holds a spent allowance's stored booking to what the resume pass will do (limit-booking.ts), and states the reset a
     // hold refused with none has since been timed to (`resetsAt`, epoch s). Writes, persists and broadcasts only when
     // something changed, and never moves `updatedAt`: a parent reads that to know whether it heard its child's stop
@@ -1271,22 +1273,7 @@ export const createFleet = (
                 };
             });
         },
-        switchAccount: (id, account, limit) =>
-            amend(id, (entry) => ({
-                ...entry,
-                profile: { ...entry.profile, account },
-                ...(limit !== undefined && entry.ending.kind === "limited"
-                    ? {
-                          ending: {
-                              kind: "limited" as const,
-                              ...opt("failure", entry.ending.failure),
-                              ...opt("resetsAt", limit.resetsAt),
-                              held: entry.ending.held,
-                              scheduled: entry.ending.scheduled,
-                          },
-                      }
-                    : {}),
-            })),
+        switchAccount: (id, account, limit) => amend(id, (entry) => switchedEntry(entry, account, limit)),
         keepLimitBooking: limitBookingKeeper(entryOf, amend),
         repointAccount: async (from, to) => {
             const moving = entries.filter((entry) => entry.profile.account === from);

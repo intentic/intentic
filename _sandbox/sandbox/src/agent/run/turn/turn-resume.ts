@@ -1,7 +1,7 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AgentReply, ResumeRouting } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { type AgentTurn, profileOf, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
-import type { ParkedRequest, TodoItem } from "@intentic/sandbox-contract/events/requests";
+import type { ParkedRequest } from "@intentic/sandbox-contract/events/requests";
 import {
     breakArmed,
     RETRY_LADDER_TRIES,
@@ -33,16 +33,17 @@ import type { BeginRefusal } from "../../../conversations/actor/conversation-dec
 import { waitingOf } from "../../../conversations/actor/conversation-queue.js";
 import { type HeldRecord, windowShut } from "../../../conversations/actor/conversation-state.js";
 import { opt } from "../../../opt.js";
-import type { VerificationStanding } from "../../verification/agent-verification.js";
 import { spentRung } from "../../models/role-model-quota.js";
 import { recordInterrupted } from "./interrupted-ledger.js";
 import { previousRun } from "../../../system/boot/restarts/boot-marker.js";
 import { restartCost } from "../../../system/boot/restarts/restart-record.js";
 import { notResumedReason, type RestartResume, restartResume } from "./restart-resume-policy.js";
-import { rebookedForReopen, spentUntil } from "./allowance-gate.js";
-import { limitBooking, limitReopensAt } from "../../../conversations/actor/limit-booking.js";
+import { rebookedForReopen, spentUntil } from "./holds/allowance-gate.js";
+import { limitBooking } from "../../../conversations/actor/limit-booking.js";
+import { limitDue } from "./holds/limit-due.js";
+import type { HeldReason, HeldTurn } from "./holds/held-turn.js";
 import { breakPolicyFor } from "./break-policy.js";
-import { keepStandingTrue } from "./held-standing.js";
+import { keepStandingTrue } from "./holds/held-standing.js";
 import { releaseBooked } from "./booked-release.js";
 
 // Re-runs a turn once its blocker clears. Two kinds live here and should not be confused: the daemon's own bookkeeping
@@ -51,47 +52,6 @@ import { releaseBooked } from "./booked-release.js";
 // that conversation's own policy (turn-break.ts), because a re-run spends the reader's budget on a turn they sent once.
 // What is pending lives in each conversation's actor; a new turn on the conversation supersedes it.
 
-// The wall a held turn stopped at; `stopped` is a death with nothing to repair, `door` a refusal before the model saw it,
-// `flagged` the provider's safety classifier stopping it partway.
-export type HeldReason = "limit" | "stopped" | "overflow" | "door" | "outage" | "auth" | "flagged";
-
-// A turn a wall stranded, held for a press (however long it takes) or the resume pass (RUNGS).
-export interface HeldTurn {
-    readonly input: TurnInput & { conversationId: string };
-    readonly reason: HeldReason;
-    // The run a door refusal ended, whose recorded rows are no history: the model never saw them.
-    readonly run?: string;
-    // The session the failed turn last reported; kept even when unused, so the fire can decide via `ran`.
-    readonly sessionId?: string;
-    // Epoch seconds the allowance reopens. Absent (Grok, Cursor publish none) means press-only, never guessed.
-    readonly reopensAt?: number;
-    // Whether the provider answered before the wall; false makes its session unsafe to reuse.
-    readonly ran: boolean;
-    // What the turn left behind at death (paths edited, verification, checklist); absent when refused at the door.
-    readonly standing?: VerificationStanding | undefined;
-    readonly checklist?: readonly TodoItem[] | undefined;
-    // Token costs from the failure frame, kept so a reopened tab's record matches the numbers the live frame showed.
-    readonly contextTokens?: number | undefined;
-    readonly handoffTokens?: number | undefined;
-    // Where the owner's policy decided to move this turn, decided once at the failure; the pass only performs it.
-    readonly move?: { readonly account: string; readonly carry: boolean } | undefined;
-    // Where a person's pick in the picker re-pointed a limit hold (switchAccount without `run`): not a move, since a pick
-    // is never a press, but the account the booked re-run goes on when it fires, at that account's reopen instead.
-    readonly onto?: { readonly account: string; readonly carry: boolean } | undefined;
-    // Set when the other account refuses the carried session, so the retry opens fresh instead of replaying it.
-    readonly carryRefused?: boolean | undefined;
-    // The ways a spent allowance's held turn can continue once its cache is cold, measured at the failure, with the one
-    // the sandbox suggests and the one a person picked (agent/providers/limit-handoff.ts). Absent: one way on, as before.
-    readonly handoff?: HandoffOffer | undefined;
-    // An auth hold's credential: the account to re-mint, and the refused token the rotation must supersede, not replay.
-    readonly remint?: { readonly account: string; readonly refusedToken: string } | undefined;
-    // A flagged hold's session entry before the stopped response (refusal-fork.ts): the re-run resumes there, so the
-    // model never reads what the classifier stopped. Absent when the CLI named no such point: a plain resume then.
-    readonly resumeAt?: string | undefined;
-    // A spent allowance's hold taken at the door (spent-door.ts): nothing was sent, so the re-run goes as a door's does,
-    // on the session as the last turn left it, rather than as a refused turn's, which opens fresh.
-    readonly turnedAway?: boolean | undefined;
-}
 
 // Where a press sends the held turn, by the one routing rule (conversations/registry/routing.ts), with the held turn's own
 // routing as the profile: naming no account keeps the held turn's on its provider, since only a person's explicit pick
@@ -505,38 +465,59 @@ const RUNGS: { readonly [R in HeldReason]?: Rung } = {
     },
     // The daemon's own remedy, fired at once and on no policy: a press or a clock would only resume the overflowed session.
     overflow: { verdict: () => ({}), spent: "resume-dropped", fire: dispatch(false) },
-    // A booked move goes at once; else the reopen instant, never one already past at the refusal (it would loop).
-    limit: {
-        verdict: (held, now) => {
-            if (held.move !== undefined) {
-                const { input, move } = held;
-                const { agent, harness } = withRuntimeDefaults(input);
-                return { routing: { agent, harness, account: move.account, carry: move.carry } };
-            }
-            const reopensAt = limitReopensAt(held);
-            if (reopensAt === undefined || reopensAt > now) {
-                return undefined;
-            }
-            // Re-pointed since the refusal: it goes where the person picked, not back to the account that refused it.
-            if (held.onto !== undefined) {
-                const { agent, harness } = withRuntimeDefaults(held.input);
-                return { armedBy: "limit", routing: { agent, harness, account: held.onto.account, ...(held.onto.carry ? { carry: true } : {}) } };
-            }
-            return { armedBy: "limit" };
-        },
-        spent: "resume-dropped",
-        fire: dispatch(false),
-    },
+    // A spent allowance's has no rung here: it goes by the rule its card states (runLimitHold).
+};
+
+/* NOTHING THE PASS SENDS GOES INTO AN ALLOWANCE THE RECORDS CALL SPENT. Every hold the pass fires is sent with nobody
+   pressing anything, so each first asks the allowance wall in front of the account it would go on (allowance-gate.ts
+   spentUntil, by the one verdict in serviceability.ts), here at the one place the pass sends: a spent allowance's through
+   its booking (limit-due.ts), every other wall's through the gate below. Until this, only the instant stored on a hold
+   stood between it and the provider, judged once when the refusal or a pick made it: a pick that judged a spent account
+   open stored "now", and the next beat sent two conversations' turns to be refused within seconds (2026-10-19). A
+   person's press still always goes (fireHeldResume): they may know what the records do not. A refused credential's
+   re-mint is not held: its minute is for the sign-in, and a spent allowance behind it is answered as its own wall. */
+
+// Says once per hold that the pass is holding it behind a wall, not every beat it stays there.
+const heldBehind = (services: Services, told: WeakSet<HeldRecord>, conversationId: string, held: HeldRecord, until: number): void => {
+    if (told.has(held)) {
+        return;
+    }
+    told.add(held);
+    services.logger.info(
+        { conversationId, reason: held.reason, account: held.onto?.account ?? held.input.account, until: new Date(until).toISOString() },
+        "resume pass: a held turn was due, but the records call the allowance it would go on spent, so it waits for the reopen",
+    );
+};
+
+// A spent allowance's hold: fired once its booking, read with the wall in front of where it goes, is due (limit-due.ts).
+const runLimitHold = async (services: Services, conversationId: string, held: HeldRecord, now: number, told: WeakSet<HeldRecord>): Promise<void> => {
+    const due = held.fired ? undefined : await limitDue(services, conversationId, held, now);
+    if (due === undefined) {
+        return;
+    }
+    if (due.walledUntil !== undefined) {
+        heldBehind(services, told, conversationId, held, due.walledUntil);
+    }
+    if (due.booking.at <= now) {
+        await dispatch(false)(services, held, due.routing, now);
+    }
+};
+
+// When the allowance in front of where a rung would send its hold reopens (ms), where the records call it spent with
+// that still ahead; undefined to send it.
+const wallAhead = (services: Services, held: HeldRecord, routing: ResumeRouting | undefined, now: number): Promise<number | undefined> => {
+    const account = routing?.account ?? held.input.account;
+    return spentUntil(services, account === undefined ? held.input : { ...held.input, account }, now);
 };
 
 // A given-up hold tells the card first; what it leaves waits until that lands, for a turn still unwinding.
-const runRung = async (services: Services, conversationId: string, held: HeldRecord, now: number): Promise<void> => {
+const runRung = async (services: Services, conversationId: string, held: HeldRecord, now: number, told: WeakSet<HeldRecord>): Promise<void> => {
+    if (held.reason === "limit") {
+        await runLimitHold(services, conversationId, held, now, told);
+        return;
+    }
     const rung = RUNGS[held.reason];
-    const booked = held.fired || rung === undefined ? undefined : rung.verdict(held, now);
-    // A move is booked at the failure, but it moves the conversation to another account, so it goes only while the owner
-    // still answers the limit with a move: one taken back before this pass waits on its reset like any other hold.
-    const withdrawn = held.move !== undefined && booked?.routing !== undefined && (await breakPolicyFor(services, conversationId, "limit")) !== "move";
-    const verdict = withdrawn ? rung?.verdict({ ...held, move: undefined }, now) : booked;
+    const verdict = held.fired || rung === undefined ? undefined : rung.verdict(held, now);
     if (verdict === undefined || rung === undefined) {
         return;
     }
@@ -544,6 +525,11 @@ const runRung = async (services: Services, conversationId: string, held: HeldRec
         return;
     }
     if (verdict.gaveUp === undefined) {
+        const until = held.reason === "auth" ? undefined : await wallAhead(services, held, verdict.routing, now);
+        if (until !== undefined) {
+            heldBehind(services, told, conversationId, held, until);
+            return;
+        }
         await rung.fire(services, held, verdict.routing, now);
         return;
     }
@@ -669,12 +655,14 @@ export const createTurnResumeScheduler = (services: Services, intervalMs = 5_000
     const passes = new SingleFlight<"pass", void>();
     // When each instant-less limit hold last asked the records for its reopen (retimeLimitHold).
     const retimeAsked = new Map<string, number>();
+    // The holds already said to be waiting behind a spent allowance (heldBehind), each said once.
+    const toldBehind = new WeakSet<HeldRecord>();
 
     const pass = async (now: number): Promise<void> => {
         for (const { conversationId, record } of services.conversations.stranded()) {
             // Per conversation, so one record that throws leaves the rest of the pass to run.
             try {
-                await runRung(services, conversationId, record, now);
+                await runRung(services, conversationId, record, now, toldBehind);
                 // After the rung, so a resend it just fired goes first and hears them as it runs.
                 if (wakesReopened(services, conversationId, record, now)) {
                     await services.turns.drain(conversationId);

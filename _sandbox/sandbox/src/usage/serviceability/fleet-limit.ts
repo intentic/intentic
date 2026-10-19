@@ -90,9 +90,32 @@ const judge = (reading: FleetReading, state: AccountState, model: ModelRef | und
     }
 };
 
+/**
+ * What stands between one account and a turn on one model when the allowance is the obstacle: its reopening (epoch s)
+ * by the rule the fleet's is judged by, `{}` where it is spent with no instant named. Undefined while it can serve, while
+ * nothing has measured it, and where a credential is in the way rather than an allowance (a revoked sign-in, a lost seat,
+ * a bench no wait lifts), since a wait answers none of those. `state` is the account's verdict among its provider's
+ * accounts (serviceStates), never one judged off its reading alone.
+ */
+export interface AllowanceWall {
+    readonly reopensAt?: number;
+}
+
+export const accountWall = (reading: FleetReading, state: AccountState, model: ModelRef | undefined): AllowanceWall | undefined => {
+    if (state.kind === "blocked" && state.fix !== "wait") {
+        return undefined;
+    }
+    const verdict = judge(reading, state, model);
+    if (verdict.kind !== "spent") {
+        return undefined;
+    }
+    const reopensAt = soonestOf(verdict.exhausted)?.resetsAt;
+    return reopensAt === undefined ? {} : { reopensAt };
+};
+
 /** The fleet's verdict for one model; `refusals` are the provider's refusals on file, each standing until something answers it. */
-export const fleetLimit = (readings: readonly FleetReading[], model: ModelRef | undefined, refusals?: RefusalsOnFile): TurnLimit => {
-    const states = serviceStates(readings, refusals, model);
+export const fleetLimit = (readings: readonly FleetReading[], model: ModelRef | undefined, refusals?: RefusalsOnFile, now: number = Date.now()): TurnLimit => {
+    const states = serviceStates(readings, refusals, model, now);
     const verdicts = readings.map((reading) => judge(reading, states.get(reading.account) ?? { kind: "unknown" }, model));
     const room = verdicts.flatMap((verdict) => (verdict.kind === "room" ? [verdict.measuredAt] : []));
     const exhausted = verdicts.flatMap((verdict) => (verdict.kind === "spent" ? verdict.exhausted : []));
@@ -113,8 +136,8 @@ export const fleetLimit = (readings: readonly FleetReading[], model: ModelRef | 
  * askable. Two readings of one question drifted before: the spawn gate read Claude's bare usage with no refusal, the
  * listing read seat marks and the refusals on file, and each could call spent what the other let through.
  */
-export const askableLimit = (readings: readonly FleetReading[], model: ModelRef | undefined, refusals?: RefusalsOnFile): TurnLimit => {
-    const limit = fleetLimit(readings, model, refusals);
+export const askableLimit = (readings: readonly FleetReading[], model: ModelRef | undefined, refusals?: RefusalsOnFile, now: number = Date.now()): TurnLimit => {
+    const limit = fleetLimit(readings, model, refusals, now);
     if (limit.spent + limit.withHeadroom >= readings.length) {
         return limit;
     }

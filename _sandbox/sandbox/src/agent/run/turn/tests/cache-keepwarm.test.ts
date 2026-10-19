@@ -16,6 +16,7 @@ import { assertAgentExecution, type AgentExecutionLease } from "../../../../work
 import { rootExecution } from "../../../../workload/agent-execution.testing.js";
 import { armKeepWarm, autoKeepWarm, dropKeepWarm, keepableOf, keepWarmDueOf, noteKeepable, stopKeepWarm, tendKeepWarm } from "../cache-keepwarm.js";
 import { nextPromptDayAt } from "../../../../conversations/actor/conversation-state.js";
+import { claudeReading } from "../../../providers/claude/claude-usage.testing.js";
 
 // Only the runtime is fake: the actor, registry, reducer and provider module a refresh reports into are the real ones.
 
@@ -311,7 +312,7 @@ describe("tending a hold", () => {
     });
 
     test("ends without sending anything once the account is spent, or can serve no turn at all", async () => {
-        const usage: AccountUsage = { measuredAt: T0, windows: [{ kind: "five_hour", utilization: 100, gates: "all" }] };
+        const usage: AccountUsage = claudeReading({ five_hour: { utilization: 100 } }, T0);
         const spent = await armed(refreshed(T0 + 51 * MINUTE), { usage });
         await tendKeepWarm(spent.deps, ID, T0 + 51 * MINUTE);
         expect(spent.sent).toHaveLength(0);

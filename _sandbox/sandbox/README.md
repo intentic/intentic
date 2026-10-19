@@ -157,9 +157,16 @@ flowchart LR
   by it, the failure frame states it, and the card's `limitScheduled`, which files the card in Active rather than
   Attention, is projected from it. Every beat the pass holds each held card to that rule, times a hold refused with no
   instant once the records know its reopen, and withdraws a "resuming" whose answer is now to wait
-  (`agent/run/turn/held-standing.ts`). (2026-10-19) Before, three places decided it from three inputs. An answer to a
+  (`agent/run/turn/holds/held-standing.ts`). (2026-10-19) Before, three places decided it from three inputs. An answer to a
   request sent before a refusal settled the refusal, so two Codex turns refused minutes later were held with no reset,
   and their "Send again" booked nothing while a sibling's moved to Active.
+- Nothing the resume pass sends goes into an allowance the records call spent. Before it fires any hold, it asks the
+  allowance wall in front of the account the turn would go on (`allowanceWall` in `usage/serviceability/`, the one
+  answer the allowance gate and an account pick read too). A spent allowance's booking is read with that wall on every
+  beat (`agent/run/turn/holds/limit-due.ts`): the wall can only push it later, and the card states the instant it
+  actually goes (`limitNextAt`). (2026-10-19) A pick between two spent Claude accounts read the second off its rounded
+  reading, which never proves a Claude account spent, stored "now" on the hold, and the next beat sent two turns to be
+  refused within seconds.
 - Codex sends steering after `turn/started` acknowledges the active turn. A refused message becomes a follow-up
   on the same thread once that turn settles; this preserves accepted input even when completion wins the race
   (2026-10-01). Final completion closes steering admission before yielding terminal frames, while planning keeps

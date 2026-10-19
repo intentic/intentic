@@ -7,13 +7,15 @@ import { BACK_ON, memoryRefusals, memorySeats, scriptedSeatCheck, STILL_OFF } fr
 import type { SeatRefusal } from "../claude/claude-seats.js";
 import type { ObservedSpend } from "../../../usage/observed-limits.js";
 import { type BlockedAccountDeps, offBlockedAccount } from "./blocked-account.js";
+import { claudeReading } from "../claude/claude-usage.testing.js";
 
 type StoredCursorAccount = Awaited<ReturnType<Services["cursorStore"]["credentials"]>>[number];
 
 // Which turns are moved off the account their conversation remembers, and which are left where routing points. The
 // planning side (the move recorded, the refusal held) is turn-plan.test.ts's; the whole path is agent.routes'.
 
-const reading = (utilization: number): AccountUsage => ({ windows: [{ kind: "five_hour", utilization, gates: "all" }], measuredAt: Date.now() });
+// A Claude account's five-hour pool, as the reader files it (rounded).
+const reading = (utilization: number): AccountUsage => claudeReading({ five_hour: { utilization } });
 
 const deps = (params: {
     readonly accounts: readonly OauthAccount[];

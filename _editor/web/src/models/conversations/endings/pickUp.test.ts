@@ -1,5 +1,7 @@
 import { t } from "@intentic/ui/i18n";
 import { formatClock, formatWeekdayTime } from "@intentic/ui/format";
+import { NO_ATTENTION } from "../../agent-status/agentStatus-lanes";
+import type { AgentStanding } from "../../agent-status/agentStatus-standing";
 import {
     atReopenPhrase,
     cooledPickUp,
@@ -12,10 +14,9 @@ import {
     pickUpStatus,
     pickUpWhen,
     pressCost,
-    repointedPickUp,
     wakesHeldUntil,
     warmedPickUp,
-    withCardReset,
+    withCardBooking,
     withHandoffChosen,
 } from "./pickUp";
 
@@ -55,8 +56,16 @@ describe(`pickUpOf`, () => {
             reason: `limit`,
             readyAt: 1_800_003_600_000,
             nextAt: 1_800_003_600_000,
+            booked: true,
             held,
         });
+    });
+
+    // The record names `nextAt` only while it is ahead: a booking already due is still a booking, and reads as one.
+    it(`keeps a spent allowance booked once its instant is due`, () => {
+        const reopened = pickUpOf({ reason: `limit`, resetsAt: 1_799_999_000, held: { ran: true }, scheduled: true });
+        expect(reopened).toEqual({ reason: `limit`, readyAt: 1_799_999_000_000, booked: true, held: { ran: true } });
+        expect(pickUpNext(pickUpOf({ reason: `limit`, held: { ran: true }, scheduled: true }), `resend`, NOW)).toBe(`Goes by itself shortly`);
     });
 
     // A ladder rung falls short of any reset, and a stopped turn has no allowance at all: one field could not carry both.
@@ -218,55 +227,98 @@ describe(`pickUpNext`, () => {
     it(`reports a booked move instead of an hour`, () => {
         expect(pickUpNext({ reason: `limit`, held: { ran: true, moving: `alice` } }, `wait`, NOW)).toBe(`Moving to alice now`);
     });
+
+    // The daemon's pass goes later than the reset where the account it goes on is still spent then: the line names the
+    // pass's instant, and one already due, or never named, goes on the next pass rather than never.
+    it(`names a booked limit's own instant over the reset, and a due or unnamed one as shortly`, () => {
+        const booked = { reason: `limit`, readyAt: NOW + 3_600_000, nextAt: NOW + 2 * 3_600_000, booked: true, held: { ran: true } } as const;
+        expect(pickUpNext(booked, `resend`, NOW)).toBe(pickUpNext({ reason: `limit`, readyAt: NOW + 2 * 3_600_000 }, `resend`, NOW));
+        expect(pickUpNext({ ...booked, readyAt: NOW - 60_000, nextAt: NOW - 1 }, `resend`, NOW)).toBe(`Goes by itself shortly`);
+        expect(pickUpNext({ reason: `limit`, booked: true, held: { ran: true } }, `resend`, NOW)).toBe(`Goes by itself shortly`);
+    });
+
+    // A sandbox older than the card's instant states the booking alone, and fires it at the reset.
+    it(`times a booking that names no instant by the reset`, () => {
+        expect(pickUpNext({ reason: `limit`, readyAt: NOW + 3_600_000, booked: true, held: { ran: true } }, `resend`, NOW)).toBe(`Goes by itself about 60 min`);
+    });
+
+    // An answer not booked yet says what it would do: go at the reset, whatever instant a stale booking named.
+    it(`says what an answer not booked yet would do off the reset`, () => {
+        expect(pickUpNext({ reason: `limit`, readyAt: NOW + 3_600_000, nextAt: NOW + 7_200_000 }, `move`, NOW)).toBe(`Goes by itself about 60 min`);
+    });
 });
 
-// The reported case: refused on one account (back 04:10), then the picker moved the chat to one that reopens at 01:30.
-// The card has to wait for the account the press and the booking now use, or it shows a clock the composer contradicts.
-describe(`repointedPickUp`, () => {
-    const refused = { reason: `limit` as const, readyAt: NOW + 3 * 3_600_000, nextAt: NOW + 3 * 3_600_000, held: { ran: false, moving: `bob` } };
+// Two conversations moved from one spent Claude account to another were sent to be refused "now" while the composer
+// counted down to the real reopen: the chat's clock was inferred in three places, and a pick made in another window never
+// reached it. The chat now says what the daemon's card says, and nothing else (2026-10-19).
+describe(`withCardBooking`, () => {
+    const refused = { reason: `limit` as const, readyAt: NOW + 3 * 3_600_000, nextAt: NOW + 3 * 3_600_000, booked: true as const, held: { ran: false, moving: `bob` } };
+    const card = (booking: Partial<AgentStanding> = {}): AgentStanding => ({
+        status: `error`,
+        attention: NO_ATTENTION,
+        failureCode: `rate_limit`,
+        limitHeld: true,
+        ...booking,
+    });
+    const reopensAt = (NOW + 12 * 60_000) / 1_000;
 
-    it(`re-times both clocks to the picked account's reopen, and drops a booked move the pick replaced`, () => {
-        const reopensAt = (NOW + 12 * 60_000) / 1_000;
-        expect(repointedPickUp(refused, { kind: `spent`, reopensAt })).toEqual({
+    it(`takes the card's reset, booking, instant and move over the frame's, absent ones included`, () => {
+        expect(withCardBooking(refused, card({ limitResetsAt: reopensAt, limitScheduled: true, limitNextAt: reopensAt }))).toEqual({
             reason: `limit`,
             readyAt: reopensAt * 1_000,
             nextAt: reopensAt * 1_000,
+            booked: true,
             held: { ran: false },
         });
-        expect(pickUpStatus(repointedPickUp(refused, { kind: `spent`, reopensAt })!, NOW)).toBe(`Limit reached · nothing ran · back about 12 min`);
+        // Picked onto an account with room and not booked: nothing to wait for, nothing booked, no move.
+        expect(withCardBooking(refused, card())).toEqual({ reason: `limit`, held: { ran: false } });
+        expect(withCardBooking(refused, card({ limitScheduled: true, limitMoving: `alice`, limitNextAt: reopensAt }))).toEqual({
+            reason: `limit`,
+            nextAt: reopensAt * 1_000,
+            booked: true,
+            held: { ran: false, moving: `alice` },
+        });
     });
 
-    it(`clears the wait when the picked account has room, or reads nothing`, () => {
-        expect(repointedPickUp(refused, { kind: `ready`, room: 60 })).toEqual({ reason: `limit`, held: { ran: false } });
-        expect(repointedPickUp(refused, undefined)).toEqual({ reason: `limit`, held: { ran: false } });
+    // A Codex 429 named no reset, so the chat said nothing would resend it; the sandbox then timed the hold from what its
+    // records knew, and the card moved to Active saying when (2026-10-19).
+    it(`times a refusal that named no reset off the card`, () => {
+        const untimed = { reason: `limit` as const, held: { ran: true } };
+        const timed = withCardBooking(untimed, card({ limitResetsAt: reopensAt, limitScheduled: true, limitNextAt: reopensAt }))!;
+        expect(timed).toEqual({ ...untimed, readyAt: reopensAt * 1_000, nextAt: reopensAt * 1_000, booked: true });
+        expect(pickUpNext(timed, `resend`, NOW)).toBe(`Goes by itself about 12 min`);
     });
 
-    it(`leaves every wall that is not about who pays alone`, () => {
+    // The account it goes on is still spent at the reset, so the pass goes later: the card's instant, not the reset.
+    it(`says the card's instant where it is later than the reset`, () => {
+        const later = withCardBooking(refused, card({ limitResetsAt: reopensAt, limitScheduled: true, limitNextAt: reopensAt + 3_600 }))!;
+        expect(later).toMatchObject({ readyAt: reopensAt * 1_000, nextAt: (reopensAt + 3_600) * 1_000 });
+        expect(pickUpStatus(later, NOW)).toBe(`Limit reached · nothing ran · back about 12 min`);
+        expect(pickUpNext(later, `resend`, NOW)).toBe(pickUpNext({ reason: `limit`, readyAt: (reopensAt + 3_600) * 1_000 }, `resend`, NOW));
+    });
+
+    // A booked move goes on the next pass, so the card's instant is already past: now, never "never".
+    it(`reads a booked move or a past instant as going now`, () => {
+        const past = (NOW - 5_000) / 1_000;
+        const moved = withCardBooking(refused, card({ limitScheduled: true, limitMoving: `alice`, limitNextAt: past }))!;
+        expect(pickUpNext(moved, `move`, NOW)).toBe(`Moving to alice now`);
+        const due = withCardBooking({ reason: `limit`, held: { ran: true } }, card({ limitScheduled: true, limitNextAt: past }))!;
+        expect(pickUpNext(due, `resend`, NOW)).toBe(`Goes by itself shortly`);
+    });
+
+    it(`leaves the frame's word while the card is not about this ending yet`, () => {
+        expect(withCardBooking(refused, { status: `running`, attention: NO_ATTENTION })).toBe(refused);
+        expect(withCardBooking(refused, card({ failureCode: `provider-outage`, limitResetsAt: reopensAt }))).toBe(refused);
+        expect(withCardBooking(refused, card({ limitHeld: undefined, limitResetsAt: reopensAt }))).toBe(refused);
+        expect(withCardBooking(refused, undefined)).toBe(refused);
         const stopped = { reason: `stopped` as const, nextAt: NOW + 60_000, held: { ran: true } };
-        expect(repointedPickUp(stopped, { kind: `ready`, room: 60 })).toBe(stopped);
-        expect(repointedPickUp(undefined, { kind: `ready`, room: 60 })).toBeUndefined();
-    });
-});
-
-// A Codex 429 named no reset, so the chat said nothing would resend it; the sandbox then timed the hold from what its
-// records knew, and the card moved to Active saying when. The chat says the same (2026-10-19).
-describe(`withCardReset`, () => {
-    const untimed = { reason: `limit` as const, held: { ran: true } };
-    const reopensAt = (NOW + 2 * 3_600_000) / 1_000;
-
-    it(`takes the reset the card states, and the booking with it where the card says one is made`, () => {
-        expect(withCardReset(untimed, { limitResetsAt: reopensAt, limitScheduled: true })).toEqual({ ...untimed, readyAt: reopensAt * 1_000, nextAt: reopensAt * 1_000 });
-        expect(withCardReset(untimed, { limitResetsAt: reopensAt })).toEqual({ ...untimed, readyAt: reopensAt * 1_000 });
-        expect(pickUpNext(withCardReset(untimed, { limitResetsAt: reopensAt, limitScheduled: true })!, `resend`, NOW)).not.toBe(pickUpNext(untimed, `resend`, NOW));
+        expect(withCardBooking(stopped, card({ limitResetsAt: reopensAt }))).toBe(stopped);
+        expect(withCardBooking(undefined, card({ limitResetsAt: reopensAt }))).toBeUndefined();
     });
 
-    it(`keeps a reset the refusal named, and leaves every other wall and a card with none alone`, () => {
-        const named = { ...untimed, readyAt: NOW + 60_000 };
-        expect(withCardReset(named, { limitResetsAt: reopensAt })).toBe(named);
-        expect(withCardReset(untimed, {})).toBe(untimed);
-        const stopped = { reason: `stopped` as const };
-        expect(withCardReset(stopped, { limitResetsAt: reopensAt })).toBe(stopped);
-        expect(withCardReset(undefined, { limitResetsAt: reopensAt })).toBeUndefined();
+    // A refusal the daemon does not hold sends a message on the press, and its card says so: the reset is still the card's.
+    it(`reads a card about an unheld refusal for an unheld pick-up`, () => {
+        expect(withCardBooking({ reason: `limit` }, card({ limitHeld: undefined, limitResetsAt: reopensAt }))).toEqual({ reason: `limit`, readyAt: reopensAt * 1_000 });
     });
 });
 

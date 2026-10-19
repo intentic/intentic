@@ -309,6 +309,14 @@ export const AgentSummarySchema = z.object({
     // Account a booked move is sending the held turn to; set alongside `limitScheduled`, cleared by the move's own
     // turn.
     limitMoving: z.string().optional().describe("The account the held turn is being moved to by the owner's policy, while that move is booked."),
+    // The resume pass's own instant for the booked re-run, the one it fires by (limit-due.ts), so a card states when it
+    // goes rather than inferring it from the reset: they differ once the account it goes on is still spent at the reset.
+    limitNextAt: z
+        .number()
+        .optional()
+        .describe(
+            "When the held turn goes again by itself, in epoch seconds, while it is booked to (limitScheduled): later than the reset where the account it goes on is still spent, and already past for a booked move, which goes on the next pass. Absent while only a press sends it.",
+        ),
     provider: AgentProviderSchema.describe("Which model provider it runs on."),
     harness: AgentHarnessSchema.describe("Which agentic loop it runs on."),
     // Latched with the conversation, so the card can say where work runs without asking anything else.

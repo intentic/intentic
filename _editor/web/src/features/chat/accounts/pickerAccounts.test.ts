@@ -1,5 +1,5 @@
 import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import { headroomState } from "@intentic/sandbox-contract/models/plan-pools";
+import { readingHeadroom } from "@intentic/sandbox-contract/models/plan-pools";
 import { capacityCounts, matchAccounts, pickerOrder } from "./pickerAccounts";
 import type { PlanHeadroom } from "../../../models/providers/usageStatus";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
@@ -35,7 +35,7 @@ const row = (label: string, percent?: number, subtitle?: string, state?: Account
     headroom: percent === undefined ? undefined : headroom(percent),
     state:
         state ??
-        headroomState(percent === undefined ? undefined : { measuredAt: 0, windows: [{ kind: `seven_day`, utilization: percent, gates: `all` }] }),
+        readingHeadroom(percent === undefined ? undefined : { measuredAt: 0, windows: [{ kind: `seven_day`, utilization: percent, gates: `all` }] }),
 });
 
 test("bands a pool by account count, worst first: the one figure that survives folding", () => {

@@ -59,8 +59,10 @@ const standingCopy = (agent: AgentStanding): AgentStanding => {
         ...(agent.limitScheduled !== undefined ? { limitScheduled: agent.limitScheduled } : {}),
         ...(agent.limitMoving !== undefined ? { limitMoving: agent.limitMoving } : {}),
     };
+    // When a booked limit goes, with the rest of its booking, so a copy never states a booking without its instant.
+    const booked = agent.limitNextAt === undefined ? copy : { ...copy, limitNextAt: agent.limitNextAt };
     // The jobs go with it: a job at a prompt holds the card's lane (heldByPrompt).
-    return agent.jobs === undefined ? copy : { ...copy, jobs: agent.jobs };
+    return agent.jobs === undefined ? booked : { ...booked, jobs: agent.jobs };
 };
 
 // Whether a clean turn's work lands by itself, folding the agent's own override, the sandbox default, and the

@@ -15,7 +15,7 @@ import { opt } from "../../../opt.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import type { TurnPlan } from "../turn/turn-plan.js";
 import type { UsageFrame } from "../turn/turn-usage.js";
-import type { HeldTurn } from "../turn/turn-resume.js";
+import type { HeldTurn } from "../turn/holds/held-turn.js";
 
 // What a finished turn leaves behind, decided as data from its readings: the records a held turn is re-run from, the
 // row that closes it in the activity log, its ledger row, the re-read it owes, and what its card records of the proof it

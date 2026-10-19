@@ -11,7 +11,7 @@ import type {
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import {
     bindingWindow,
-    headroomState,
+    readingHeadroom,
     type ModelRef,
     pinnedFull,
     provenFull,
@@ -79,7 +79,6 @@ export const usageTone = (percent: number): string =>
 
 // Past this a pool is drawn as tight; never a verdict, which is the contract's alone.
 const TIGHT_PERCENT = 75;
-export const isSpent = (usage: AccountUsage | undefined, model?: ModelRef): boolean => headroomState(usage, model).kind === `spent`;
 
 // Reading for an account: the shared map (providerAccounts.usageByAccount) if present, else the attached
 // row a caller holds (used by planLimitRows). The map always wins: turns and daemon pushes keep it current.
@@ -491,7 +490,7 @@ const stillBlocked = (state: AccountState, now: number): boolean =>
 /**
  * Whether an account can serve a turn: the daemon's verdict (`state`), read as it stands for what only the account list
  * carries (a revoked sign-in, a lost seat, a bench, a refusal). The plan-limit half is re-read on the live reading when
- * there is one, by the contract's one rule (`headroomState`), since readings and limit refusals stream in between lists,
+ * there is one, by the contract's one rule (`readingHeadroom`), since readings and limit refusals stream in between lists,
  * and a question about one model asks about the pools that model spends.
  */
 export const accountState = (provider: AgentProvider, facts: AccountFacts, model?: ModelRef, now: number = Date.now()): AccountState => {
@@ -507,7 +506,7 @@ export const accountState = (provider: AgentProvider, facts: AccountFacts, model
     if (live === undefined && verdict.kind !== `blocked`) {
         return verdict;
     }
-    const local = headroomState(live, model);
+    const local = readingHeadroom(live, model);
     // The daemon judged `spent` with the refusal it holds; this window's copy of that refusal can be missing, and a
     // rounded pool read at the line is then no proof either way. Only a reading showing room below the line, or the
     // reopening instant passing, answers the daemon's verdict, never a re-read at 0 room.

@@ -1,8 +1,9 @@
-import type { AccountUsage, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AccountUsage, ProviderRefusal, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { Model, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
+import { claudeLimitRefusal } from "../providers/claude/claude-usage.testing.js";
 
 /* WHAT THE AUTO JUDGE MAY CHOOSE FROM, at the seam it reads: readiness, accounts and catalogs are all handed in, so a
    test can state an allowance and see which models survive it. */
@@ -28,11 +29,14 @@ const HAIKU: Model = { id: "claude-haiku-4-5", label: "Haiku 4.5" };
 
 // One account's reading, in the one shape every provider files: what each pool has spent, and when it was measured.
 const usage = (windows: AccountUsage["windows"]): AccountUsage => ({ windows, measuredAt: NOW - 60_000 });
+// A Claude account's five-hour pool, rounded as the Claude reader files every pool: at 100 it reads at the line, and
+// only a refusal on file proves the account spent (claude-usage.testing.ts).
 const session = (utilization: number, resetsAt?: number): AccountUsage["windows"][number] => ({
     kind: "session",
     label: "5 hours",
     utilization,
     gates: "all",
+    rounded: true,
     ...(resetsAt === undefined ? {} : { resetsAt }),
 });
 
@@ -46,15 +50,19 @@ const account = (id: string, snapshot?: AccountUsage): OauthAccount => ({
 const warn = jest.fn();
 const catalogs = jest.fn<(provider: NativeProvider) => Promise<{ models: Model[]; default: string }>>();
 
+// The refusals on file a test sets: Claude's own word that an account is spent.
+let refused: readonly ProviderRefusal[] = [];
 const services = (): Services =>
     unstubbed<Services>("services", {
         logger: unstubbed<Services["logger"]>("logger", { warn } as Partial<Services["logger"]>),
+        providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({ claude: refused }) }),
         providerCatalogs: new Proxy({} as Services["providerCatalogs"], {
             get: (_target, provider: string) => ({ models: () => catalogs(provider as NativeProvider) }),
         }),
     });
 
 beforeEach(() => {
+    refused = [];
     warn.mockReset();
     catalogs.mockReset();
     ready.mockReturnValue({ claude: true });
@@ -78,6 +86,7 @@ test("with no account on file the models still stand: an unnamed account is a re
 
 test("a model every connected account is at cap for is dropped before the judge sees it", async () => {
     accountLists.mockReturnValue({ claude: [account("work", usage([session(100)])), account("spare", usage([session(100)]))] });
+    refused = [claudeLimitRefusal({ account: "work", at: NOW - 60_000 }), claudeLimitRefusal({ account: "spare", at: NOW - 60_000 })];
     const offer = await autoOffer(services(), NOW);
     // Nothing runnable, so the provider goes whole: offering its accounts would invite a pick with nothing to run.
     expect(offer.models).toEqual([]);
@@ -86,6 +95,7 @@ test("a model every connected account is at cap for is dropped before the judge 
 
 test("an unmeasured account keeps a model askable: silence is not evidence of a spent pool", async () => {
     accountLists.mockReturnValue({ claude: [account("work", usage([session(100)])), account("never-read")] });
+    refused = [claudeLimitRefusal({ account: "work", at: NOW - 60_000 })];
     const offer = await autoOffer(services(), NOW);
     expect(offer.models.map((model) => model.model)).toEqual([OPUS.id, HAIKU.id]);
 });

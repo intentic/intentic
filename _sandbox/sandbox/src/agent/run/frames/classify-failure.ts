@@ -16,8 +16,8 @@ import type { StoredModelRefusal } from "../../../usage/model-refusals.js";
 import { ACCOUNT_WIDE, type ObservedLimit } from "../../../usage/observed-limits.js";
 import { opt } from "../../../opt.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
-import type { HeldReason, HeldTurn } from "../turn/turn-resume.js";
-import { limitReopensAt } from "../../../conversations/actor/limit-booking.js";
+import type { HeldTurn } from "../turn/holds/held-turn.js";
+import { heldReopensAt } from "../../../conversations/actor/limit-booking.js";
 import type { Attribution } from "./frame-decorators.js";
 
 // One failure frame, classified read-only: the frame the window reads, the records to file, its log line and its hold.
@@ -321,7 +321,7 @@ const limitFrame = async (
     },
 ): Promise<ErrorFrame> => {
     const { conversationId, resetsAt, held, ran, way } = limit;
-    const schedulable = held && conversationId !== undefined && limitReopensAt({ reopensAt: limit.booked, recordedAt: limit.now }) !== undefined;
+    const schedulable = held && conversationId !== undefined && heldReopensAt({ reopensAt: limit.booked, recordedAt: limit.now }) !== undefined;
     // `move` implies the appointment, so anything but `wait` keeps it.
     const armed = schedulable ? breakArmed(await queries.breakPolicy(conversationId, "limit")) : false;
     const moving = held ? way?.move?.account : undefined;
@@ -359,14 +359,26 @@ type Dressed = Pick<FailurePlan, "frame" | "held"> & { readonly writes: readonly
 
 const bare = (frame: ErrorFrame): Dressed => ({ frame, held: undefined, writes: [] });
 
-// The turn held on its conversation, as the frame found it; `rest` names what only its wall knows.
-const holding = (context: FailureContext, conversationId: string, reason: HeldReason, rest: Partial<HeldTurn> = {}): HeldTurn => ({
+// What every held turn carries, as the frame found it: each wall spreads it under its own reason and adds what only it
+// knows, which the hold's type then checks against what that wall may carry (turn-resume.ts HeldTurn).
+const heldBase = (context: FailureContext, conversationId: string) => ({
     input: { ...context.turn, conversationId },
-    reason,
     ...opt("sessionId", context.sessionId),
     ran: context.answered,
-    ...rest,
 });
+
+// A spent allowance's hold: its booking and door marks, and the way on the owner's policy and the sandbox worked out
+// (limit-way.ts), whose booked move is the one place it goes next, since no pick has re-pointed a hold being made.
+const limitHeldOf = (
+    context: FailureContext,
+    conversationId: string,
+    own: { readonly reopensAt?: number; readonly turnedAway?: boolean; readonly run?: string },
+    way: LimitWay | undefined,
+): HeldTurn => {
+    const { move, ...left } = way ?? {};
+    const base = { ...heldBase(context, conversationId), reason: "limit" as const, ...own, ...left };
+    return move === undefined ? base : { ...base, move };
+};
 
 // What the turn left behind, which a fresh session's hand-off is seeded from.
 const leftBy = (context: FailureContext): Pick<LimitWay, "standing" | "checklist" | "contextTokens"> => ({
@@ -439,13 +451,13 @@ const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: F
     });
     const { conversationId } = turn;
     // A door's hold names its run, whose rows the model never saw, and re-runs on the session as it stood (turn-resume.ts).
-    const turnedAway: Partial<HeldTurn> = context.door === true ? { turnedAway: true, ...opt("run", context.run) } : {};
+    const turnedAway = context.door === true ? { turnedAway: true, ...opt("run", context.run) } : {};
     const horizon = context.childRerunHorizonMs;
     const far = horizon !== undefined && resetsAt !== undefined && resetsAt * 1000 - context.now > horizon;
     // A far reset is said on the frame and kept off the hold: the resume pass fires a limit hold at its `reopensAt` under
     // a `resend` answer whatever the frame said, so a child told nothing was booked was re-run by itself a week later.
     const booked = far || resetsAt === undefined ? undefined : horizon !== undefined && conversationId !== undefined ? childRerunAt(resetsAt, conversationId) : resetsAt;
-    const held = conversationId === undefined ? undefined : holding(context, conversationId, "limit", { ...opt("reopensAt", booked), ...way, ...turnedAway });
+    const held = conversationId === undefined ? undefined : limitHeldOf(context, conversationId, { ...opt("reopensAt", booked), ...turnedAway }, way);
     // Worth dressing for a reset or a hold; with neither, it goes out bare.
     if (resetsAt === undefined && held === undefined) {
         return { frame: event, held, writes };
@@ -472,14 +484,14 @@ const dressOverflow = (event: ErrorFrame, context: FailureContext, conversationI
         return bare({ ...event, message: withClause(event.message, TOO_LARGE) });
     }
     const frame: ErrorFrame = { ...event, message: withClause(event.message, FRESH_RERUN), held: { ran: context.answered }, autoResume: "scheduled" };
-    return { frame, held: holding(context, conversationId, "overflow", leftBy(context)), writes: [] };
+    return { frame, held: { ...heldBase(context, conversationId), reason: "overflow" as const, ...leftBy(context) }, writes: [] };
 };
 
 // The provider's safety classifier stopped the turn partway: held whole for a person, never re-run by a clock (the owner
 // asked to choose each time), with the entry a press resumes the session at so the stopped response is not sent again.
 const dressFlagged = (event: ErrorFrame, context: FailureContext, conversationId: string): Dressed => {
     const frame: ErrorFrame = { ...event, held: { ran: context.answered, ...opt("contextTokens", context.contextTokens) }, autoResume: "available" };
-    const held = holding(context, conversationId, "flagged", { ...leftBy(context), ...opt("resumeAt", event.refusal?.resumeAt) });
+    const held = { ...heldBase(context, conversationId), reason: "flagged" as const, ...leftBy(context), ...opt("resumeAt", event.refusal?.resumeAt) };
     return { frame, held, writes: [] };
 };
 
@@ -491,19 +503,21 @@ const dressDeath = async (event: ErrorFrame, context: FailureContext, conversati
     const { turn, answered } = context;
     if (context.carriedOff === true && !answered && turn.account !== undefined) {
         const left = leftBy(context);
-        const held = holding(context, conversationId, "limit", {
+        const held: HeldTurn = {
+            ...heldBase(context, conversationId),
+            reason: "limit",
             ran: true,
             carryRefused: true,
             move: { account: turn.account, carry: false },
             ...left,
-        });
+        };
         return { frame: { ...event, held: heldOf(true, left, turn.account), autoResume: "scheduled" }, held, writes: [] };
     }
     if (!answered && turn.resume === "stopped") {
         return bare(event);
     }
     const frame = await stoppedFrame(queries, event, { conversationId, ran: answered, contextTokens: context.contextTokens });
-    return { frame, held: holding(context, conversationId, "stopped", leftBy(context)), writes: [] };
+    return { frame, held: { ...heldBase(context, conversationId), reason: "stopped" as const, ...leftBy(context) }, writes: [] };
 };
 
 const dress = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries, reopening: Reopening | undefined): Promise<Dressed> => {
@@ -518,14 +532,14 @@ const dress = async (event: ErrorFrame, context: FailureContext, queries: Failur
     // The provider failed, not the workspace; past the attempt budget the frame goes out bare.
     if (context.outage !== undefined && context.outage.attempt < OUTAGE_MAX_ATTEMPTS) {
         const armed = breakArmed(await queries.breakPolicy(conversationId, "outage"));
-        return { frame: outageFrame(event, armed, context.outage), held: holding(context, conversationId, "outage"), writes: [] };
+        return { frame: outageFrame(event, armed, context.outage), held: { ...heldBase(context, conversationId), reason: "outage" as const }, writes: [] };
     }
     // Says on the frame whether the daemon will re-mint and re-run this credential.
     if (event.code === "claude-token-refused") {
         const { remint } = context;
         return remint === undefined
             ? bare(event)
-            : { frame: { ...event, autoResume: "scheduled" }, held: holding(context, conversationId, "auth", { remint }), writes: [] };
+            : { frame: { ...event, autoResume: "scheduled" }, held: { ...heldBase(context, conversationId), reason: "auth" as const, remint }, writes: [] };
     }
     if (event.code === "context-overflow") {
         return dressOverflow(event, context, conversationId);

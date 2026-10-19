@@ -1,8 +1,8 @@
 import { type AgentProvider, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
-import type { Services } from "../../../composition.js";
-import type { TurnInput } from "../../../seams/turn-starter.js";
-import { spentRung } from "../../models/role-model-quota.js";
-import { serviceability } from "../../../usage/serviceability/serviceability.js";
+import type { Services } from "../../../../composition.js";
+import type { TurnInput } from "../../../../seams/turn-starter.js";
+import { spentRung } from "../../../models/role-model-quota.js";
+import { allowanceWall } from "../../../../usage/serviceability/serviceability.js";
 
 /* WHAT GOES OUT WITH NOBODY PRESSING ANYTHING NEVER GOES INTO AN ALLOWANCE THE RECORDS CALL SPENT. A person's words the
    sandbox releases by itself (a memory hold once room comes back, a booking whose time came) used to go straight to the
@@ -28,15 +28,15 @@ export const spentUntil = async (services: Services, turn: Routed, now: number =
     const reopensAt =
         account === undefined
             ? (await spentRung(services, { provider: agent, model: model ?? "" }, now))?.reopensAt
-            : await accountReopening(services, agent, account, model);
+            : await accountReopening(services, agent, account, model, now);
     return reopensAt === undefined || reopensAt * 1000 <= now ? undefined : reopensAt * 1000;
 };
 
-// One account's reopening while its verdict reads spent; undefined for any other verdict, or a failed read.
-const accountReopening = async (services: Services, provider: AgentProvider, account: string, model: string | undefined): Promise<number | undefined> => {
+// One account's reopening while the records call it spent (serviceability.ts allowanceWall); undefined for any other
+// verdict, a wall with no instant named, or a failed read.
+const accountReopening = async (services: Services, provider: AgentProvider, account: string, model: string | undefined, now: number): Promise<number | undefined> => {
     try {
-        const state = await serviceability(services, provider, account, model === undefined ? undefined : { id: model });
-        return state.kind === "spent" ? state.reopensAt : undefined;
+        return (await allowanceWall(services, provider, account, model === undefined ? undefined : { id: model }, now))?.reopensAt;
     } catch (error) {
         // An unread verdict gates nothing: the words go, as they did before this gate, and the provider answers.
         services.logger.warn({ err: error, provider, account }, "allowance gate: could not read the account's verdict, the words go as they are");

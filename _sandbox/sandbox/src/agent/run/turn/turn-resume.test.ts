@@ -14,7 +14,9 @@ import { createFleet } from "../../../conversations/registry/agents-registry.js"
 import type { LandStandings } from "../../../conversations/land/standing.js";
 import type { Services } from "../../../composition.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
-import { createTurnResumeScheduler, handoffFor, type HeldTurn } from "./turn-resume.js";
+import { claudeLimitRefusal, claudeReading } from "../../providers/claude/claude-usage.testing.js";
+import { createTurnResumeScheduler, handoffFor } from "./turn-resume.js";
+import type { HeldOf, HeldTurn } from "./holds/held-turn.js";
 
 // Which way a spent allowance's held turn continues: the press's word, then the person's pick on the card, then the
 // suggestion, and never a way the destination cannot take.
@@ -30,13 +32,28 @@ const OFFER: HandoffOffer = {
 // The press as the editor sends it: the runtime it runs on, and here the same one the turn held.
 const HERE = { agent: "claude", harness: "native" } as const;
 
-const held = (over: Partial<HeldTurn> = {}): HeldTurn => ({
+const held = (over: Partial<Omit<HeldOf<"limit">, "reason" | "onto">> = {}): HeldTurn => ({
     input: { conversationId: "c1", prompt: "Fix the login bug", agent: "claude", harness: "native", account: "acct-1" },
     reason: "limit",
     sessionId: "s-1",
     ran: true,
     handoff: OFFER,
     ...over,
+});
+
+// A hold carries only what its own wall makes (HeldTurn): a reopen on a turn no allowance stopped, or a hold going to a
+// booked move's account and a person's pick at once, does not compile. Only the stored record is flat (limit-hold.ts).
+describe("a hold no wall makes", () => {
+    it("does not compile", () => {
+        const input = { conversationId: "c1", prompt: "p" };
+        // @ts-expect-error: a stopped turn has no allowance to reopen.
+        const stopped: HeldTurn = { input, reason: "stopped", ran: true, reopensAt: 100 };
+        // @ts-expect-error: a booked move and a person's pick cannot both be where it goes.
+        const both: HeldTurn = { input, reason: "limit", ran: true, move: { account: "a", carry: false }, onto: { account: "b", carry: false } };
+        // @ts-expect-error: only a refused credential carries one to re-mint.
+        const reminted: HeldTurn = { input, reason: "limit", ran: true, remint: { account: "a", refusedToken: "t" } };
+        expect([stopped.reason, both.reason, reminted.reason]).toEqual(["stopped", "limit", "limit"]);
+    });
 });
 
 describe("handoffFor", () => {
@@ -65,7 +82,8 @@ describe("handoffFor", () => {
 
     it("leaves a hold with no offer, and every other wall, as it always was", () => {
         expect(handoffFor(held({ handoff: undefined }), { ...HERE, handoff: "trim" })).toBeUndefined();
-        expect(handoffFor(held({ reason: "outage" }), undefined)).toBeUndefined();
+        const outage: HeldTurn = { input: held().input, reason: "outage", sessionId: "s-1", ran: true };
+        expect(handoffFor(outage, undefined)).toBeUndefined();
     });
 
     it("skips a way the offer does not have", () => {
@@ -217,7 +235,9 @@ describe("the pass books words for the reopen rather than sending them into a sp
     const PROFILE = { agent: "claude", harness: "native", account: "acct-b" } as const;
     const NOW = 1_800_000_000_000;
     const REOPEN = NOW / 1000 + 8 * 60 * 60;
-    const usage = (utilization: number) => ({ windows: [{ kind: "five_hour" as const, utilization, resetsAt: REOPEN, gates: "all" as const }], measuredAt: NOW });
+    // acct-b as the Claude reader files it, and at 100 the refusal on file that alone proves it spent (its pools are rounded).
+    const usage = (utilization: number) => claudeReading({ five_hour: { utilization, resetsAt: REOPEN } }, NOW);
+    const refusedAt = (utilization: number) => (utilization < 100 ? [] : [claudeLimitRefusal({ account: "acct-b", resetsAt: REOPEN, at: NOW - 60_000 })]);
 
     const conversation = async (utilization: number) => {
         const { agents, conversations } = createFleet(fleetStoreOver(openConversationsDb(IN_MEMORY)), standings(), noPresences());
@@ -234,7 +254,7 @@ describe("the pass books words for the reopen rather than sending them into a sp
             claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [{ id: "acct-b", label: "acct-b", connectedAt: 0 }] }),
             claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => ({}) }),
             accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => ({ "acct-b": usage(utilization) }) }),
-            providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({}) }),
+            providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({ claude: refusedAt(utilization) }) }),
             turns: unstubbed<Services["turns"]>("turns", {
                 drain: async (id) => void drained.push(id),
                 start: async (turn) => {
@@ -395,5 +415,93 @@ describe("a stranded card's lane follows what the pass will do", () => {
         expect(at.agents.get("c1")?.status).toBe("error");
         expect(at.lane()).toBe("attention");
         expect(at.conversations.state("c1")?.resume.held).toMatchObject({ reason: "stopped", fired: false });
+    });
+});
+
+/* NOTHING THE PASS SENDS GOES INTO AN ALLOWANCE THE RECORDS CALL SPENT (2026-10-19). Two conversations were moved from
+   one spent Claude account to another; the pick judged the second open off its rounded reading, stored "now" on each
+   hold, and the next beat sent both turns to be refused within seconds, while the composer counted down to 20:10. The
+   pass now reads the allowance wall in front of where a hold goes before it sends it, whatever the hold stored. */
+describe("the pass never sends a held turn into an allowance the records call spent", () => {
+    const standings = (): LandStandings => ({ of: () => "idle", causesOf: () => [], refresh: async () => false, forget: () => {} });
+    const PROFILE = { agent: "claude", harness: "native", account: "acct-a" } as const;
+    const NOW = 1_800_000_000_000;
+    const REOPEN = NOW / 1000 + 25 * 60;
+    // acct-b as the Claude reader files it: every pool rounded, so the reading alone never proves it spent; the refusal
+    // on file does, until the instant the provider named.
+    const ROUNDED_FULL = claudeReading({ five_hour: { utilization: 100, resetsAt: REOPEN } }, NOW);
+    const REFUSED = claudeLimitRefusal({ account: "acct-b", resetsAt: REOPEN, at: NOW - 60_000, model: "opus" });
+
+    const fleet = async () => {
+        const { agents, conversations } = createFleet(fleetStoreOver(openConversationsDb(IN_MEMORY)), standings(), noPresences());
+        await agents.init();
+        const started: TurnInput[] = [];
+        const services = unstubbed<Services>("services", {
+            agents,
+            conversations,
+            logger: pino({ level: "silent" }),
+            sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
+                get: async () => SandboxSettingsSchema.parse({ limitPolicy: "resend", stopPolicy: "retry" }),
+            }),
+            resources: unstubbed<Services["resources"]>("resources", { roomSince: async () => undefined }),
+            claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", {
+                list: async () => [
+                    { id: "acct-a", label: "a", connectedAt: 0 },
+                    { id: "acct-b", label: "b", connectedAt: 0 },
+                ],
+            }),
+            claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => ({}) }),
+            accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => ({ "acct-b": ROUNDED_FULL }) }),
+            providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({ claude: [REFUSED] }) }),
+            modelCooldowns: unstubbed<Services["modelCooldowns"]>("modelCooldowns", { cooling: async () => new Map() }),
+            turns: unstubbed<Services["turns"]>("turns", {
+                drain: async () => {},
+                start: async (turn) => {
+                    started.push(turn);
+                    return { id: `run-${started.length}`, async *frames() {} };
+                },
+            }),
+        });
+        return { agents, conversations, services, started };
+    };
+
+    // Refused on acct-a for a spent allowance, held, its card booked for acct-a's reset an hour out.
+    const refusedOnA = async (at: Awaited<ReturnType<typeof fleet>>) => {
+        await beginTurn(at.conversations, { conversationId: "c1", isolated: true, prompt: "Fix the gallery", profile: PROFILE }, NOW - 120_000);
+        const frame = { kind: "error" as const, code: "rate_limit" as const, message: "Claude usage limit reached.", held: { ran: true }, resetsAt: NOW / 1000 + 3_600, autoResume: "scheduled" as const };
+        at.conversations.send("c1", { kind: "frame", frame }, NOW - 120_000);
+        const input = { conversationId: "c1", prompt: "Fix the gallery", ...PROFILE, model: "opus" };
+        at.conversations.send("c1", { kind: "turn-held", held: { input, reason: "limit", ran: true, reopensAt: NOW / 1000 + 3_600 } }, NOW - 120_000);
+        await at.conversations.send("c1", { kind: "settle" }, NOW - 110_000).settled;
+    };
+
+    it("holds a turn re-pointed for now onto an account a refusal proves spent, and its card says when it really goes", async () => {
+        const at = await fleet();
+        await refusedOnA(at);
+        // A pick that read acct-b as open stored "now" on the hold, as switch-account.ts did before 2026-10-19.
+        expect(at.conversations.send("c1", { kind: "held-repointed", account: "acct-b", carry: true, reopensAt: NOW / 1000 }).reply).toBe(true);
+
+        await createTurnResumeScheduler(at.services).tick(NOW);
+        expect(at.started).toEqual([]);
+        expect(at.conversations.state("c1")?.resume.held).toMatchObject({ fired: false, onto: { account: "acct-b" } });
+        expect(at.agents.get("c1")).toMatchObject({ limitScheduled: true, limitNextAt: REOPEN });
+
+        await createTurnResumeScheduler(at.services).tick(REOPEN * 1000 + 1_000);
+        expect(at.started.map((turn) => turn.account)).toEqual(["acct-b"]);
+    });
+
+    it("holds a stopped turn's due rung while the account it goes on is spent, and sends it once that reopens", async () => {
+        const at = await fleet();
+        await beginTurn(at.conversations, { conversationId: "c1", isolated: true, prompt: "Fix the gallery", profile: PROFILE }, NOW - 120_000);
+        const input = { conversationId: "c1", prompt: "Fix the gallery", ...PROFILE, account: "acct-b", model: "opus" };
+        at.conversations.send("c1", { kind: "turn-held", held: { input, reason: "stopped", ran: true } }, NOW - 120_000);
+        await at.conversations.send("c1", { kind: "settle" }, NOW - 110_000).settled;
+
+        await createTurnResumeScheduler(at.services).tick(NOW);
+        expect(at.started).toEqual([]);
+        expect(at.conversations.state("c1")?.resume.held).toMatchObject({ reason: "stopped", fired: false, tries: 0 });
+
+        await createTurnResumeScheduler(at.services).tick(REOPEN * 1000 + 1_000);
+        expect(at.started.map((turn) => turn.account)).toEqual(["acct-b"]);
     });
 });

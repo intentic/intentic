@@ -123,13 +123,13 @@ export const restoredLimitHold = (entry: PersistedAgent | undefined): HeldRecord
     if (!standsBehind(stored, entry.ending)) {
         return undefined;
     }
-    const { standing, input, run, sessionId, reopensAt, reason, tries, forkAt, ...rest } = stored;
+    const { standing, input, run, sessionId, reason: _reason, tries, forkAt: _forkAt, reopensAt: _reopensAt, move: _move, onto: _onto, ...rest } = stored;
+    const { carryRefused: _carryRefused, turnedAway: _turnedAway, handoff: _handoff, ...shared } = rest;
     const { speaker, actor, unseenRuns, resume, resumeAt, ...turn } = input;
-    return {
-        ...rest,
+    const base = {
+        ...shared,
         ...opt("run", run),
         ...opt("sessionId", sessionId),
-        ...opt("reopensAt", reopensAt),
         input: {
             ...turn,
             ...opt("speaker", speaker),
@@ -139,11 +139,33 @@ export const restoredLimitHold = (entry: PersistedAgent | undefined): HeldRecord
             ...opt("resumeAt", resumeAt),
         },
         ...opt("standing", standing === undefined ? undefined : { state: standing.state, paths: standing.paths, check: standing.check }),
-        ...opt("resumeAt", forkAt),
-        reason: reason ?? "limit",
         fired: false,
         tries: tries ?? 0,
     };
+    return { ...base, ...wallOf(stored) };
+};
+
+// The stored record's keys put back on the wall that owns them (turn-resume.ts HeldTurn), a key another wall owns left
+// unread. Where it goes next is one place: a person's pick undoes a booked move (held-decide.ts), so it wins if both
+// were ever written.
+const wallOf = (stored: StoredLimitHold) => {
+    switch (stored.reason) {
+        case undefined: {
+            const next = stored.onto === undefined ? opt("move", stored.move) : { onto: stored.onto };
+            return {
+                reason: "limit" as const,
+                ...opt("reopensAt", stored.reopensAt),
+                ...opt("carryRefused", stored.carryRefused),
+                ...opt("turnedAway", stored.turnedAway),
+                ...opt("handoff", stored.handoff),
+                ...next,
+            };
+        }
+        case "flagged":
+            return { reason: "flagged" as const, ...opt("resumeAt", stored.forkAt) };
+        default:
+            return { reason: stored.reason };
+    }
 };
 
 // Whether the entry still ends in the wall that held the turn: a hold an older build left under a later turn is not one.

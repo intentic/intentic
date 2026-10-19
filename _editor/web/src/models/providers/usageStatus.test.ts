@@ -1,6 +1,6 @@
 import type { AccountUsage, ProviderRefusal, TranslatorAccounts, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
-import { type ServiceFacts, serviceState } from "@intentic/sandbox-contract/models/plan-pools";
+import { readingHeadroom, type ServiceFacts, serviceState } from "@intentic/sandbox-contract/models/plan-pools";
 import { providerAccounts, providerRefusals, translatorAccounts, usageByAccount } from "./providerAccounts";
 import {
     accountState,
@@ -9,7 +9,6 @@ import {
     formatRemaining,
     formatReset,
     formatWait,
-    isSpent,
     isStale,
     liveUsage,
     meterFill,
@@ -111,8 +110,8 @@ describe(`bindingWindow`, () => {
         expect(bindingWindow(reading, { id: `claude-haiku-4-5` })?.kind).toBe(`seven_day`);
         expect(bindingWindow(reading, { id: `claude-opus-4-6` })?.kind).toBe(`model:Opus`);
         expect(usagePercent(reading, { id: `claude-haiku-4-5` })).toBe(30);
-        expect(isSpent(reading, { id: `claude-haiku-4-5` })).toBe(false);
-        expect(isSpent(reading, { id: `claude-opus-4-6` })).toBe(true);
+        expect(readingHeadroom(reading, { id: `claude-haiku-4-5` }).kind).toBe(`ready`);
+        expect(readingHeadroom(reading, { id: `claude-opus-4-6` }).kind).toBe(`spent`);
     });
 
     it(`is undefined when no pool was reported, so a row reads unknown rather than 0%`, () => {
@@ -431,17 +430,17 @@ describe(`modelAllowance`, () => {
     });
 });
 
-// One definition of "spent", shared by the ring's colour, the row's dimming and the list's sort order.
-describe(`isSpent`, () => {
-    it(`is false for an account with no reading, unknown is not exhausted`, () => {
-        expect(isSpent(undefined)).toBe(false);
+// The ring's danger tone sits on the contract's one spent line, the same one the reading's own half of the verdict uses.
+describe(`the ring's tone and the reading's verdict`, () => {
+    it(`reads no reading as unknown, never exhausted`, () => {
+        expect(readingHeadroom(undefined).kind).toBe(`unknown`);
     });
 
-    it(`agrees with the ring's own danger tone at the boundary`, () => {
+    it(`agree at the boundary`, () => {
         const at = usage({ windows: [window({ utilization: 100 })] });
         const below = usage({ windows: [window({ utilization: 99 })] });
-        expect([isSpent(at), planHeadroom(at)?.tone]).toEqual([true, `text-danger`]);
-        expect([isSpent(below), planHeadroom(below)?.tone]).toEqual([false, `text-warning`]);
+        expect([readingHeadroom(at).kind, planHeadroom(at)?.tone]).toEqual([`spent`, `text-danger`]);
+        expect([readingHeadroom(below).kind, planHeadroom(below)?.tone]).toEqual([`ready`, `text-warning`]);
     });
 });
 

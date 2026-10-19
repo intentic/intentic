@@ -1,4 +1,4 @@
-import { headroomState } from "@intentic/sandbox-contract/models/plan-pools";
+import { readingHeadroom } from "@intentic/sandbox-contract/models/plan-pools";
 import type { AccountUsage } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { Logger } from "pino";
@@ -42,7 +42,7 @@ const contradictReadings = async (deps: AnsweredDeps, provider: AgentProvider, a
     const keys = readingKeys(stored, provider, account);
     const wrong = keys.filter((key) => {
         const usage = stored[key];
-        return usage !== undefined && usage.measuredAt < askedAt && headroomState(published(usage), { id: model }).kind === "spent";
+        return usage !== undefined && usage.measuredAt < askedAt && readingHeadroom(published(usage), { id: model }).kind === "spent";
     });
     // A routed turn names no account, so the answer proves only that one of them had room: wrong once all of them say none.
     if (wrong.length === 0 || (account === undefined && wrong.length < keys.length)) {

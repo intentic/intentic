@@ -9,7 +9,7 @@ import { PARK_KINDS, type ParkKind, type ResumeRouting } from "@intentic/sandbox
 import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
 import type { TurnCheckpoint } from "../../store/journals/turn-checkpoints.js";
 import type { JournalledTurn } from "../../store/journals/turn-journal.js";
-import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
+import type { HeldTurn } from "../../agent/run/turn/holds/held-turn.js";
 import { opt } from "../../opt.js";
 import type { FailedEnding, PersistedAgent } from "../registry/agents-store.js";
 import { keptHold, type StoredLimitHold, storedLimitHold } from "./limit-hold.js";

@@ -1,4 +1,3 @@
-import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { HandoffMode, HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import type { HeldEnding, RetryLadder, TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { QueuedMessage } from "@intentic/sandbox-contract/schemas/agent";
@@ -6,7 +5,7 @@ import type { TurnEnding } from "@intentic/sandbox-contract/events/transcript";
 import { formatClock, formatWeekdayTime } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 import { formatReset, formatWait } from "../../providers/usageStatus";
-import type { AgentStanding } from "../../agent-status/agentStatus-standing";
+import { type AgentStanding, limited } from "../../agent-status/agentStatus-standing";
 
 // One state for every turn ending that leaves finished work behind a live session. `reason` is the wall, `readyAt` a
 // spent allowance's honest reopen time, `nextAt` the instant the daemon's own booking fires. Excludes endings that need
@@ -15,15 +14,20 @@ import type { AgentStanding } from "../../agent-status/agentStatus-standing";
 //
 // What is deliberately NOT here: whether anything is armed. That is the conversation's answer to this ending's one
 // question (turnBreak.ts), read the same way by every surface — which is what stops a frame saying "scheduled" while a
-// switch elsewhere says off.
+// switch elsewhere says off. `booked` is not that answer either: it is what the daemon made of it, read only for when.
 
 export interface PickUp {
     /** Which wall left the work here; `flagged` is the one no standing answer covers, asked about each time. */
     readonly reason: HeldEnding;
     /** When the named allowance is due to reopen (ms); only a spent allowance has one. */
     readonly readyAt?: number;
-    /** When the daemon's own booking fires (ms), as the failure frame stated it; absent means it fires on the next pass. */
+    /** When the daemon's own booking fires (ms), as the frame, the record or the card stated it; absent means it fires on the next pass. */
     readonly nextAt?: number;
+    /**
+     * A spent allowance's held turn is on the daemon's books to go by itself (the frame's `autoResume`, the record's
+     * `scheduled`, the card's `limitScheduled`), so `nextAt` says when, and one past or never named goes on the next pass.
+     */
+    readonly booked?: true;
     /** How far a laddered wall's automatic re-runs have got (an outage's breaker, a stopped turn's rungs). */
     readonly retries?: RetryLadder;
     // The daemon is holding the turn itself, so the press re-runs it rather than sending a message. `ran` says whether
@@ -98,51 +102,44 @@ export const pressCost = (held: HeldTurn | undefined): PressCost | undefined => 
 
 // Same state as the daemon's own record (AgentTranscriptSchema.ending), for a window that didn't watch the turn die
 // live. A projection, not a second reading: the stream and the record reach the identical value from either end,
-// converting the wire's seconds to the client's milliseconds once, here.
-export const pickUpOf = (ending: TurnEnding): PickUp => ({
-    reason: ending.reason,
-    ...(ending.resetsAt === undefined ? {} : { readyAt: ending.resetsAt * 1_000 }),
-    ...(ending.nextAt === undefined ? {} : { nextAt: ending.nextAt * 1_000 }),
-    ...(ending.retries === undefined ? {} : { retries: ending.retries }),
-    ...(ending.held === undefined ? {} : { held: ending.held }),
-});
-
-/**
- * The pick-up after a person picks another account in the picker while a spent allowance holds the turn: the wait is
- * that account's now, not the refused one's. The press already runs on the pick, and the daemon re-books the held turn
- * there too (switch-account.ts), so a card still counting down to the refused account's reset would name a wait nothing
- * is waiting for, beside a composer counting down to the new one. `state` is the picked account's verdict for this
- * model: spent re-times both clocks to its reopen, anything else clears them (nothing to wait for), and either way a
- * booked move is gone, since the pick replaced it. Every other wall is not about who pays, and stays as it was.
- */
-export const repointedPickUp = (pickUp: PickUp | undefined, state: AccountState | undefined): PickUp | undefined => {
-    if (pickUp?.reason !== `limit`) {
-        return pickUp;
-    }
-    const { readyAt: _ready, nextAt: _next, held, ...rest } = pickUp;
-    const reopensAt = state?.kind === `spent` ? state.reopensAt : undefined;
-    const clock = reopensAt === undefined ? {} : { readyAt: reopensAt * 1_000, nextAt: reopensAt * 1_000 };
-    if (held === undefined) {
-        return { ...rest, ...clock };
-    }
-    const { moving: _moving, ...stays } = held;
-    return { ...rest, ...clock, held: stays };
+// converting the wire's seconds to the client's milliseconds once, here. A spent allowance's `scheduled` rides along as
+// `booked`, since the record names `nextAt` only while it is still ahead: without it, a booking already due would read
+// as nothing booked.
+export const pickUpOf = (ending: TurnEnding): PickUp => {
+    const pickUp: PickUp = {
+        reason: ending.reason,
+        ...(ending.resetsAt === undefined ? {} : { readyAt: ending.resetsAt * 1_000 }),
+        ...(ending.nextAt === undefined ? {} : { nextAt: ending.nextAt * 1_000 }),
+        ...(ending.retries === undefined ? {} : { retries: ending.retries }),
+        ...(ending.held === undefined ? {} : { held: ending.held }),
+    };
+    return ending.reason === `limit` && ending.scheduled === true ? { ...pickUp, booked: true } : pickUp;
 };
 
 /**
- * The pick-up with the reset the sandbox has since timed a spent allowance's hold to, as the board's card states it. A
- * refusal that named no instant is timed once the sandbox's records know when its pool reopens (held-standing.ts
- * retimeLimitHold), and then goes by itself under any answer that sends it. The frame this chat watched still names no
- * instant, so without this the chat went on saying nothing resends it while the card said when it would (2026-10-19).
- * Fills only what the pick-up lacks: a reset the refusal itself named stands.
+ * The pick-up as the board's card states the daemon's booking for it, once the card is about this ending (a spent
+ * allowance, held as the pick-up is held): its reset, whether the held turn is booked and the instant it goes, and the
+ * account a booked move takes it to all replace what the frame said, absent ones included. The sandbox re-times a hold
+ * after the refusal (held-standing.ts) and re-points it when a person picks another account, in whichever window they
+ * pick it (switch-account.ts), and only the card hears either. A card not about this ending yet (the turn still reads
+ * running, another ending) leaves the frame's word until the roster catches up. Two conversations moved from one spent
+ * Claude account to another were sent to be refused "now" while the composer counted down to the real reopen: the
+ * chat's clock was inferred in three places, none of them the daemon's booking, and a pick made in another window never
+ * reached it (2026-10-19).
  */
-export const withCardReset = (pickUp: PickUp | undefined, card: Pick<AgentStanding, `limitResetsAt` | `limitScheduled`> | undefined): PickUp | undefined => {
-    if (pickUp?.reason !== `limit` || pickUp.readyAt !== undefined || card?.limitResetsAt === undefined) {
+export const withCardBooking = (pickUp: PickUp | undefined, card: AgentStanding | undefined): PickUp | undefined => {
+    if (pickUp?.reason !== `limit` || card === undefined || !limited(card) || (card.limitHeld === true) !== (pickUp.held !== undefined)) {
         return pickUp;
     }
-    const readyAt = card.limitResetsAt * 1_000;
-    return card.limitScheduled === true ? { ...pickUp, readyAt, nextAt: readyAt } : { ...pickUp, readyAt };
+    const { readyAt: _ready, nextAt: _next, booked: _booked, held, ...rest } = pickUp;
+    const timed: PickUp = card.limitResetsAt === undefined ? rest : { ...rest, readyAt: card.limitResetsAt * 1_000 };
+    const booked: PickUp = card.limitScheduled === true ? { ...timed, booked: true } : timed;
+    const when: PickUp = card.limitScheduled === true && card.limitNextAt !== undefined ? { ...booked, nextAt: card.limitNextAt * 1_000 } : booked;
+    return held === undefined ? when : { ...when, held: movingTo(held, card.limitMoving) };
 };
+
+// The held turn with the move the card says is booked for it, or none.
+const movingTo = ({ moving: _was, ...held }: HeldTurn, moving: string | undefined): HeldTurn => (moving === undefined ? held : { ...held, moving });
 
 // How long Continue rests after a spent allowance refused a turn at the door (see PickUp.coolUntil). Short, since the
 // provider's reset guess is routinely early and the press is the way to find out; long enough that a second press is a
@@ -292,12 +289,26 @@ export const pickUpNext = (pickUp: PickUp, policy: TurnBreakPolicy, now: number 
     if (pickUp.retries !== undefined) {
         return ladderNext(pickUp.retries, at, now);
     }
-    // An allowance with no published reset has nothing to book against (classify-failure.ts arms only a known instant),
-    // so nothing goes by itself: "shortly" there was a promise no clock kept.
-    if (pickUp.reason === `limit` && at === undefined) {
-        return t(`chat.turnBreak.goesNever`);
+    if (pickUp.reason === `limit`) {
+        return limitNext(pickUp, now);
     }
-    return at === undefined || at <= now ? t(`chat.turnBreak.goesSoon`) : t(`chat.turnBreak.goesAt`, { when: pickUpWhen(at, now) });
+    return goesWhen(at, now);
+};
+
+// Goes by itself at `at`, or shortly once that is past or was never named.
+const goesWhen = (at: number | undefined, now: number): string =>
+    at === undefined || at <= now ? t(`chat.turnBreak.goesSoon`) : t(`chat.turnBreak.goesAt`, { when: pickUpWhen(at, now) });
+
+// A booked spent allowance goes when the daemon's pass says (`nextAt`), which is later than the reset where the account
+// it goes on is still spent then, and one already due goes on the next pass: booked is never "never". A sandbox older
+// than that instant states the booking alone, which it fires at the reset. An answer not booked yet (just chosen, the
+// roster not caught up) says what it would do: go at the reset. One with no published reset has nothing to book against
+// (classify-failure.ts arms only a known instant), so nothing goes by itself: "shortly" there was a promise no clock kept.
+const limitNext = (pickUp: PickUp, now: number): string => {
+    if (pickUp.booked === true) {
+        return goesWhen(pickUp.nextAt ?? pickUp.readyAt, now);
+    }
+    return pickUp.readyAt === undefined ? t(`chat.turnBreak.goesNever`) : goesWhen(pickUp.readyAt, now);
 };
 
 // A spent ladder books nothing, whatever the answer says: the press is the only way on, and the line says so.

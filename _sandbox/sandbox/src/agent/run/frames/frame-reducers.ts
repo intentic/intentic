@@ -4,7 +4,7 @@ import { createFrameLedger, type FrameLedger } from "../../verification/agent-ve
 import { createReachFrameLedger, type ReachFrameLedger } from "../../verification/agent-reach.js";
 import { createViewFrameLedger, type ViewFrameLedger } from "../../verification/agent-viewing.js";
 import { createTurnMetrics, type TurnMetrics } from "@intentic/agent-context/turn-metrics";
-import type { HeldReason, HeldTurn } from "../turn/turn-resume.js";
+import type { HeldReason, HeldTurn } from "../turn/holds/held-turn.js";
 import { sumUsage, type UsageFrame } from "../turn/turn-usage.js";
 
 // One fold per concern over a turn's frames, walked once in stream order: each owns its state and answers a reading at

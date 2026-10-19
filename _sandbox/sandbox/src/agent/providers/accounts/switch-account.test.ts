@@ -1,11 +1,14 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AccountUsage, ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import { claudeLimitRefusal, claudeReading } from "../claude/claude-usage.testing.js";
 import { unstubbed } from "@intentic/testing";
 import { services } from "../../../harness/route-services.testing.js";
 import type { Services } from "../../../composition.js";
 import { beginTurn } from "../../../conversations/actor/conversation-actors.testing.js";
 import { conversationEntry } from "../../../conversations/registry/agents-store.testing.js";
+import type { ConversationState } from "../../../conversations/actor/conversation-state.js";
+import { onHeldRepointed } from "../../../conversations/actor/held-decide.js";
 import { switchAccount } from "./switch-account.js";
 
 // The one command that moves who pays. A conversation's account is the daemon's record; this is the only write to it
@@ -86,6 +89,7 @@ test("asked to run, a held turn runs again at once on the account named, carried
             },
         }),
         claudeSeatCheck: unstubbed<Services["claudeSeatCheck"]>("claudeSeatCheck", { recheck: async () => true }),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {}),
         ...verdictOf({}, []),
     };
     expect(await switchAccount(deps, { conversationId: ID, account: "acct-b", carry: true, run: true })).toEqual({ kind: "moved", run: "run-2" });
@@ -129,8 +133,27 @@ test("a pick re-points the words that wait, held and booked, and sends none of t
 // pick, though: it re-runs on the picked account at that account's reopen, and the card's reset says the same instant.
 const heldOnPick = (usage: Record<string, AccountUsage>, refusals: readonly ProviderRefusal[] = []) => {
     const pressed: unknown[] = [];
-    const moved: [string, { readonly resetsAt?: number } | undefined][] = [];
+    const moved: [string, { readonly resetsAt?: number; readonly booking?: { readonly at: number } } | undefined][] = [];
     const sent: unknown[] = [];
+    // The refused account's hold, re-pointed by the actor's own rule (held-decide.ts onHeldRepointed), since the booking
+    // the pick leaves is read back off the hold the pick made.
+    // SAFETY: switchAccount and onHeldRepointed read only the phase and the held-turn records of the state.
+    let state = {
+        phase: { kind: "idle" },
+        resume: {
+            held: {
+                input: { conversationId: ID, prompt: "go", agent: "claude", harness: "native", account: "acct-a", model: "opus" },
+                reason: "limit",
+                ran: false,
+                reopensAt: 1_700_020_000,
+                recordedAt: T0 - 60_000,
+                fired: false,
+                tries: 0,
+            },
+            authFiring: false,
+            stopTries: 0,
+        },
+    } as ConversationState;
     const deps = {
         agents: unstubbed<Services["agents"]>("agents", {
             entry: () => conversationEntry({ id: ID }),
@@ -140,24 +163,18 @@ const heldOnPick = (usage: Record<string, AccountUsage>, refusals: readonly Prov
             },
         }),
         conversations: unstubbed<Services["conversations"]>("conversations", {
-            state: () =>
-                ({
-                    phase: { kind: "idle" },
-                    resume: {
-                        held: {
-                            input: { conversationId: ID, prompt: "go", agent: "claude", harness: "native", account: "acct-a", model: "opus" },
-                            reason: "limit",
-                            ran: false,
-                            reopensAt: 1_700_020_000,
-                            fired: false,
-                        },
-                    },
-                }) as never,
+            state: () => state,
             send: (_id, event) => {
                 sent.push(event);
+                if (event.kind === "held-repointed") {
+                    state = onHeldRepointed(state, event).state;
+                }
+                // SAFETY: switchAccount reads neither the reply nor the settlement of a repoint beyond awaiting it.
                 return { settled: Promise.resolve(), reply: true } as never;
             },
         }),
+        // SAFETY: the booking reads only the sandbox-wide answer to a spent allowance.
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => ({ limitPolicy: "resend" }) as never }),
         turns: unstubbed<Services["turns"]>("turns", {
             resume: async (_id, routing) => {
                 pressed.push(routing);
@@ -170,39 +187,39 @@ const heldOnPick = (usage: Record<string, AccountUsage>, refusals: readonly Prov
     return { deps, pressed, moved, sent };
 };
 
-const window = (utilization: number, resetsAt: number) => ({ kind: "five_hour", label: "5h", utilization, resetsAt, gates: "all" }) as never;
+// acct-b as the Claude reader files it (claude-usage.testing.ts): every pool rounded, so a full one reads at the line, and
+// the refusal on file is what proves it spent until the reopen it named.
+const REOPEN_B = 1_700_005_000;
+const FULL_B = claudeReading({ five_hour: { utilization: 100, resetsAt: REOPEN_B } }, T0);
+const REFUSED_B = claudeLimitRefusal({ account: "acct-b", resetsAt: REOPEN_B, at: T0 - 60_000, model: "opus" });
 
+// Read off the bare reading, every spent Claude account looked open: a pick from one spent account to another booked the
+// held turn for now, and the next pass sent it to be refused within seconds (2026-10-19, grand-alder-29zo, kind-lynx-7jba).
 test("without run, a held turn stays held, and its booking moves to the picked account's reopen", async () => {
-    const { deps, pressed, moved, sent } = heldOnPick({ "acct-b": { windows: [window(100, 1_700_005_000)] } as never });
+    const { deps, pressed, moved, sent } = heldOnPick({ "acct-b": FULL_B }, [REFUSED_B]);
     expect(await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0)).toEqual({ kind: "moved" });
     expect(pressed).toEqual([]);
-    expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: false, reopensAt: 1_700_005_000 });
-    expect(moved).toEqual([["acct-b", { resetsAt: 1_700_005_000 }]]);
+    expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: false, reopensAt: REOPEN_B });
+    // The card is re-stated in the same write: the picked account's reset, and the re-run booked for it.
+    expect(moved).toEqual([["acct-b", { resetsAt: REOPEN_B, booking: { at: REOPEN_B * 1000 } }]]);
 });
 
 // An account with room has nothing to wait for: the booking is due now (an armed resend goes on the next pass, a
 // `wait` answer still waits for a press), and the card states no clock at all.
 test("a pick onto an account with room clears the wait rather than keeping the refused account's", async () => {
-    // SAFETY: the usage reading is read only for this account's windows, which the literal names.
-    const { deps, moved, sent } = heldOnPick({ "acct-b": { windows: [window(40, 1_700_005_000)] } as never });
+    const { deps, moved, sent } = heldOnPick({ "acct-b": claudeReading({ five_hour: { utilization: 40, resetsAt: REOPEN_B } }, T0) });
     await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0);
     expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: false, reopensAt: Math.ceil(T0 / 1000) });
-    expect(moved).toEqual([["acct-b", {}]]);
+    // No clock on the card, and the re-run booked for now: the next pass sends it.
+    expect(moved).toEqual([["acct-b", { booking: { at: Math.ceil(T0 / 1000) * 1000 } }]]);
 });
 
-// Every Claude reading is rounded, and a rounded pool at 100 is at the line, not spent: what proves the picked account
-// spent is the refusal on file. Read off the reading alone, a pick from one spent account to another booked the held turn
-// for now, and the next pass sent it to be refused within seconds (2026-10-19, grand-alder-29zo and kind-lynx-7jba).
-test("a pick onto an account a refusal proves spent waits for its reopen, though its reading is only at the line", async () => {
-    const now = Date.now();
-    const reopen = Math.ceil(now / 1000) + 1_500;
-    const atTheLine: AccountUsage = { windows: [{ kind: "five_hour", label: "5h", utilization: 100, resetsAt: reopen, gates: "all", rounded: true }], measuredAt: now };
-    const refused: ProviderRefusal = { at: now - 60_000, kind: "limit", message: "Claude usage limit reached.", account: "acct-b", model: "opus", resetsAt: reopen };
-    const { deps, pressed, moved, sent } = heldOnPick({ "acct-b": atTheLine }, [refused]);
-    expect(await switchAccount(deps, { conversationId: ID, account: "acct-b" }, now)).toEqual({ kind: "moved" });
-    expect(pressed).toEqual([]);
-    expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: false, reopensAt: reopen });
-    expect(moved).toEqual([["acct-b", { resetsAt: reopen }]]);
+// At the line with no refusal standing is not spent: the pool may hold a sliver, so the booked re-run goes now and the
+// provider answers, as it would for any account the records cannot call spent.
+test("a pick onto an account only at the line, with no refusal standing, books the held turn for now", async () => {
+    const { deps, moved } = heldOnPick({ "acct-b": FULL_B });
+    await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0);
+    expect(moved).toEqual([["acct-b", { booking: { at: Math.ceil(T0 / 1000) * 1000 } }]]);
 });
 
 // Picking an account is an attempt on it: a seat-marked one is re-tested at once, not on the rationed schedule, so access

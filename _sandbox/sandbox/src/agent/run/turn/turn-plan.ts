@@ -15,7 +15,7 @@ import { gatherTurnFacts } from "../decide/turn-facts.js";
 import { withTurnSafety } from "./turn-safety.js";
 import { opt } from "../../../opt.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
-import { heldAtTheDoor, spentDoor } from "./spent-door.js";
+import { heldAtTheDoor, spentDoor } from "./holds/spent-door.js";
 
 // Plans a turn: gatherTurnFacts reads what it stands on, decideTurn decides it without I/O (both in ../decide), and the
 // adapter its (provider, harness) row names preflights it. A refusal is a value (`ok: false` + code) the route turns

@@ -134,6 +134,9 @@ const EndingSchema = z.discriminatedUnion("kind", [
         held: z.boolean(),
         scheduled: z.boolean(),
         moving: z.string().optional(),
+        // When the booked re-run goes (epoch s), while `scheduled`: the resume pass's own instant (limit-due.ts), which the
+        // pass keeps true on every beat (held-standing.ts keepLimitBooking).
+        nextAt: z.number().optional(),
     }),
 ]);
 export type Ending = z.infer<typeof EndingSchema>;

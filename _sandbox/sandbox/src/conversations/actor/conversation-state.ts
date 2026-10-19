@@ -6,7 +6,7 @@ import type { ProgramAsk, TodoItem } from "@intentic/sandbox-contract/events/req
 import { localZone, nextDayStartIn, type Zone } from "@intentic/sandbox-contract/time/zone";
 import type { TurnCheckpoint } from "../../store/journals/turn-checkpoints.js";
 import type { JournalledTurn } from "../../store/journals/turn-journal.js";
-import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
+import type { HeldTurn } from "../../agent/run/turn/holds/held-turn.js";
 import type { FailedEnding } from "../registry/agents-store.js";
 import { holdOf, NO_QUEUE, type TurnQueue, waitingOf } from "./conversation-queue.js";
 

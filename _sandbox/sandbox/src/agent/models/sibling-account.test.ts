@@ -5,10 +5,11 @@ import type { Services } from "../../composition.js";
 import type { SeatRefusal } from "../providers/claude/claude-seats.js";
 import { conversationEntry } from "../../conversations/registry/agents-store.testing.js";
 import { bookLimitMove, siblingWithRoom } from "./sibling-account.js";
+import { claudeReading } from "../providers/claude/claude-usage.testing.js";
 
 const account = (id: string, extra: Partial<OauthAccount> = {}): OauthAccount => ({ id, label: id, ...extra }) as OauthAccount;
-const reading = (utilization: number): AccountUsage =>
-    ({ windows: [{ kind: "five_hour", utilization, gates: "all" }], measuredAt: Date.now() }) as AccountUsage;
+// A Claude account's five-hour pool, as the reader files it (rounded).
+const reading = (utilization: number): AccountUsage => claudeReading({ five_hour: { utilization } });
 
 const fakeServices = (params: {
     readonly accounts: readonly OauthAccount[];

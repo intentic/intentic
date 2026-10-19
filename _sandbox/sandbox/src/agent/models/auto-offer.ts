@@ -3,7 +3,7 @@ import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { Model, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { ModelOffer, OfferedAccount, OfferedModel, OfferedWindow } from "@intentic/sandbox-contract/models/model-offer";
 import { type NativeProvider, TRANSLATOR_PROVIDERS, type TranslatorProvider } from "@intentic/sandbox-contract/models/provider-specs";
-import { gatingWindows, windowLive, windowPeriod } from "@intentic/sandbox-contract/models/plan-pools";
+import { gatingWindows, type RefusalsOnFile, windowLive, windowPeriod } from "@intentic/sandbox-contract/models/plan-pools";
 import type { Services } from "../../composition.js";
 import { type FleetReading, fleetLimit } from "../../usage/serviceability/fleet-limit.js";
 import { providerAccountLists, providerReadiness, sharedProviderReads } from "../providers/provider-registry.js";
@@ -67,12 +67,14 @@ const accountsOf = (
 
 // Spent for every account there is, which is the only reading that may remove a model. An unmeasured account counts as
 // headroom, matching role-model-quota.ts: "no reading" is not evidence of a full pool, and benching a model on silence
-// would hide most of the catalog in a sandbox nobody has measured.
-const runnable = (readings: readonly FleetReading[], model: Model): boolean => {
+// would hide most of the catalog in a sandbox nobody has measured. Judged with the provider's refusals on file, as the
+// rung gate judges it: every Claude pool is read rounded, at the line rather than spent, so read without them no
+// Claude account was ever spent here, and Auto could pick a model every account had refused (2026-10-19).
+const runnable = (readings: readonly FleetReading[], model: Model, refusals: RefusalsOnFile, now: number): boolean => {
     if (readings.length === 0) {
         return true;
     }
-    const limit = fleetLimit(readings, { id: model.id, label: model.label });
+    const limit = fleetLimit(readings, { id: model.id, label: model.label }, refusals, now);
     return limit.spent < readings.length;
 };
 
@@ -95,14 +97,24 @@ const catalogOf = async (services: Services, provider: NativeProvider): Promise<
     }
 };
 
+const NO_REFUSALS: Awaited<ReturnType<Services["providerRefusals"]["onFile"]>> = {};
+
 export const autoOffer = async (services: Services, now: number = Date.now()): Promise<ModelOffer> => {
     const shared = sharedProviderReads(services);
-    const [ready, native, routed] = await Promise.all([providerReadiness(services), providerAccountLists(services), shared.translatorAccounts()]);
+    const [ready, native, routed, refusals] = await Promise.all([
+        providerReadiness(services),
+        providerAccountLists(services),
+        shared.translatorAccounts(),
+        services.providerRefusals.onFile().catch((cause: unknown) => {
+            services.logger.warn({ err: cause }, "auto model: refusals on file unreadable, judging allowances by the readings alone");
+            return NO_REFUSALS;
+        }),
+    ]);
     const providers = (Object.keys(ready) as NativeProvider[]).filter((provider) => ready[provider]);
     const gathered = await Promise.all(
         providers.map(async (provider) => {
             const { offered, readings } = accountsOf(provider, native[provider] ?? [], routed[provider as TranslatorProvider] ?? [], now);
-            const models = (await catalogOf(services, provider)).filter((model) => runnable(readings, model));
+            const models = (await catalogOf(services, provider)).filter((model) => runnable(readings, model, refusals[provider], now));
             return { provider, offered, models };
         }),
     );

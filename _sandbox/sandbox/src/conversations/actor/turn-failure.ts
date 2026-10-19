@@ -31,5 +31,6 @@ export const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): Failed
         // answer re-books it (agents-registry `rebooked`) to keep card and schedule in agreement.
         scheduled: event.autoResume === "scheduled",
         ...opt("moving", event.held?.moving),
+        ...opt("nextAt", event.autoResume === "scheduled" ? event.nextAt : undefined),
     };
 };

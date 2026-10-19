@@ -4,7 +4,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { AgentRequest } from "../../providers/agent-request.js";
 import { createTurnFrames } from "../frames/frame-reducers.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
-import type { HeldTurn } from "../turn/turn-resume.js";
+import type { HeldTurn } from "../turn/holds/held-turn.js";
 import { costOf, settleTurn, type TurnEnd } from "./turn-settlement.js";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";

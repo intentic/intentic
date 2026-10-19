@@ -121,6 +121,7 @@ export const agentSeed = (
         | "limitHeld"
         | "limitScheduled"
         | "limitMoving"
+        | "limitNextAt"
     >,
 ): AgentTabSeed => ({
     id: agent.id,

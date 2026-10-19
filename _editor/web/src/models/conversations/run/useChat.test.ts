@@ -2574,6 +2574,7 @@ describe(`opening a session whose last turn stopped short`, () => {
                 reason: `limit`,
                 readyAt: 9_000_000,
                 nextAt: 9_000_000,
+                booked: true,
                 held: { ran: true },
             }),
         );

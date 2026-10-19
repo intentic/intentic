@@ -3,7 +3,7 @@ import type { Booked } from "../../../conversations/actor/conversation-actors.js
 import { type Booking, bookingOfItem } from "../../../conversations/actor/conversation-queue.js";
 import { versionCommitsSettled } from "../../../conversations/land/version-landed.js";
 import { landingRepos, workLanded } from "../../../conversations/land/work-landed.js";
-import { rebookedForReopen } from "./allowance-gate.js";
+import { rebookedForReopen } from "./holds/allowance-gate.js";
 
 // A person's scheduled sends let go when what each waits for comes: its instant, or another conversation's work landing.
 // One step of the resume pass (turn-resume.ts, createTurnResumeScheduler), apart from it since nothing here touches a held

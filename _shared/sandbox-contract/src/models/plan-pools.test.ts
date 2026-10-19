@@ -3,7 +3,7 @@ import {
     currentWindows,
     gatesModel,
     gatingWindows,
-    headroomState,
+    readingHeadroom,
     preferredAccount,
     refusalVerdict,
     roomiestAccount,
@@ -156,14 +156,14 @@ const at = (measuredAt: number, ...windows: UsageWindow[]): AccountUsage => ({ w
 const refusal = (over: Partial<ProviderRefusal> & Pick<ProviderRefusal, "kind">): ProviderRefusal => ({ at: 1_000, message: "no.", ...over });
 
 test("spent is the contract's one line: 99.5% still has room, 100% is spent until its last full pool reopens", () => {
-    expect(headroomState(usage(window({ kind: "five_hour", utilization: 99.5 })))).toEqual({ kind: "ready", room: 0.5 });
+    expect(readingHeadroom(usage(window({ kind: "five_hour", utilization: 99.5 })))).toEqual({ kind: "ready", room: 0.5 });
     expect(
-        headroomState(usage(window({ kind: "five_hour", utilization: 100, resetsAt: 50 }), window({ kind: "seven_day", utilization: 100, resetsAt: 900 }))),
+        readingHeadroom(usage(window({ kind: "five_hour", utilization: 100, resetsAt: 50 }), window({ kind: "seven_day", utilization: 100, resetsAt: 900 }))),
     ).toEqual({ kind: "spent", reopensAt: 900 });
-    expect(headroomState(usage(window({ kind: "five_hour", utilization: 100 })))).toEqual({ kind: "spent" });
-    expect(headroomState(undefined)).toEqual({ kind: "unknown" });
-    expect(headroomState(CLAUDE, { id: "claude-haiku-4-5" })).toEqual({ kind: "ready", room: 70 });
-    expect(headroomState(CLAUDE, { id: "claude-opus-4-6" })).toEqual({ kind: "spent" });
+    expect(readingHeadroom(usage(window({ kind: "five_hour", utilization: 100 })))).toEqual({ kind: "spent" });
+    expect(readingHeadroom(undefined)).toEqual({ kind: "unknown" });
+    expect(readingHeadroom(CLAUDE, { id: "claude-haiku-4-5" })).toEqual({ kind: "ready", room: 70 });
+    expect(readingHeadroom(CLAUDE, { id: "claude-opus-4-6" })).toEqual({ kind: "spent" });
 });
 
 // Anthropic reports whole percents: an account read at 100 kept serving turns for hours, so that reading is the line,
@@ -171,10 +171,10 @@ test("spent is the contract's one line: 99.5% still has room, 100% is spent unti
 test("a pool read at 100 in whole percents is at the line with no room, until a refusal proves it empty", () => {
     const week = window({ kind: "seven_day", utilization: 100, resetsAt: 900, rounded: true });
     const atLine = usage(window({ kind: "five_hour", utilization: 75, rounded: true }), week);
-    expect(headroomState(atLine)).toEqual({ kind: "ready", room: 0 });
-    expect(headroomState(atLine, { id: "claude-opus-5-5" })).toEqual({ kind: "ready", room: 0 });
+    expect(readingHeadroom(atLine)).toEqual({ kind: "ready", room: 0 });
+    expect(readingHeadroom(atLine, { id: "claude-opus-5-5" })).toEqual({ kind: "ready", room: 0 });
     // A precise 100 is still spent.
-    expect(headroomState(usage(window({ kind: "seven_day", utilization: 100, resetsAt: 900 })))).toEqual({ kind: "spent", reopensAt: 900 });
+    expect(readingHeadroom(usage(window({ kind: "seven_day", utilization: 100, resetsAt: 900 })))).toEqual({ kind: "spent", reopensAt: 900 });
     // The provider refused it: spent until the pool reopens, and a reading still at the line does not answer that.
     const facts = { account: "a", usage: { ...atLine, measuredAt: 2_000 } };
     const refused = refusal({ kind: "limit", account: "a" });
@@ -184,16 +184,16 @@ test("a pool read at 100 in whole percents is at the line with no room, until a 
 
 test("with no model named, an account is spent only when no model can run on it", () => {
     // A full Opus slice leaves every other model the room of the fullest pool still open.
-    expect(headroomState(CLAUDE)).toEqual({ kind: "ready", room: 70 });
-    expect(headroomState(GOOGLE)).toEqual({ kind: "ready", room: 73 });
+    expect(readingHeadroom(CLAUDE)).toEqual({ kind: "ready", room: 70 });
+    expect(readingHeadroom(GOOGLE)).toEqual({ kind: "ready", room: 73 });
     // A pool gating every model, full: nothing runs, and it reopens with that pool.
-    expect(headroomState(usage(window({ kind: "seven_day", utilization: 100, resetsAt: 900 }), window({ kind: "model:Opus", utilization: 10, gates: { models: ["Opus"] } })))).toEqual({
+    expect(readingHeadroom(usage(window({ kind: "seven_day", utilization: 100, resetsAt: 900 }), window({ kind: "model:Opus", utilization: 10, gates: { models: ["Opus"] } })))).toEqual({
         kind: "spent",
         reopensAt: 900,
     });
     // Every slice full: the first to reopen lets some model run again.
     expect(
-        headroomState(
+        readingHeadroom(
             usage(
                 window({ kind: "g", utilization: 100, resetsAt: 500, gates: { models: ["gemini"] } }),
                 window({ kind: "c", utilization: 100, resetsAt: 800, gates: { models: ["claude"] } }),
@@ -357,15 +357,15 @@ test("names the served models no pool covers, and none when a pool gates every m
 // while its Gemini models served.
 test("an account whose only named pools are full, with models no pool covers, is unknown rather than spent", () => {
     const thirdPartySpent = window({ kind: "google:3p-weekly", utilization: 100, resetsAt: 9_000, gates: { models: ["claude", "gpt"] } });
-    expect(headroomState({ ...usage(thirdPartySpent), uncovered: ["gemini-3.8-flash-high"] })).toEqual({ kind: "unknown" });
+    expect(readingHeadroom({ ...usage(thirdPartySpent), uncovered: ["gemini-3.8-flash-high"] })).toEqual({ kind: "unknown" });
     // Without the gap it is the spent account it always was, and a model the full pool gates is spent either way.
-    expect(headroomState(usage(thirdPartySpent))).toEqual({ kind: "spent", reopensAt: 9_000 });
-    expect(headroomState({ ...usage(thirdPartySpent), uncovered: ["gemini-3.8-flash-high"] }, { id: "claude-opus-4-6-thinking" })).toEqual({
+    expect(readingHeadroom(usage(thirdPartySpent))).toEqual({ kind: "spent", reopensAt: 9_000 });
+    expect(readingHeadroom({ ...usage(thirdPartySpent), uncovered: ["gemini-3.8-flash-high"] }, { id: "claude-opus-4-6-thinking" })).toEqual({
         kind: "spent",
         reopensAt: 9_000,
     });
     // A full pool gating every model still holds every model, covered or not.
-    expect(headroomState({ ...usage(window({ kind: "seven_day", utilization: 100, resetsAt: 7_000 })), uncovered: ["x"] })).toEqual({
+    expect(readingHeadroom({ ...usage(window({ kind: "seven_day", utilization: 100, resetsAt: 7_000 })), uncovered: ["x"] })).toEqual({
         kind: "spent",
         reopensAt: 7_000,
     });
@@ -374,11 +374,11 @@ test("an account whose only named pools are full, with models no pool covers, is
 test("a reading contradicted by an answered turn holds that model's full pools at the line, not spent", () => {
     const full = usage(window({ kind: "google:gemini-weekly", utilization: 100, resetsAt: 9_000, gates: { models: ["gemini"] } }));
     const contradicted: AccountUsage = { ...full, contradicted: { at: 1, model: "gemini-3.8-flash-high" } };
-    expect(headroomState(contradicted, { id: "gemini-3.8-flash-high" })).toEqual({ kind: "ready", room: 0 });
-    expect(headroomState(contradicted)).toEqual({ kind: "ready", room: 0 });
+    expect(readingHeadroom(contradicted, { id: "gemini-3.8-flash-high" })).toEqual({ kind: "ready", room: 0 });
+    expect(readingHeadroom(contradicted)).toEqual({ kind: "ready", room: 0 });
     // Another family's pool is not what the turn proved anything about.
     const other: AccountUsage = { ...full, contradicted: { at: 1, model: "claude-opus-4-6-thinking" } };
-    expect(headroomState(other, { id: "gemini-3.8-flash-high" })).toEqual({ kind: "spent", reopensAt: 9_000 });
+    expect(readingHeadroom(other, { id: "gemini-3.8-flash-high" })).toEqual({ kind: "spent", reopensAt: 9_000 });
 });
 
 test("a pool the provider stopped reporting is dropped once its window closes, not kept at a floor", () => {

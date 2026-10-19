@@ -1,6 +1,7 @@
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { IN_MEMORY } from "@intentic/base/sqlite";
+import type { HeldTurn } from "../../agent/run/turn/holds/held-turn.js";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AgentStatus } from "@intentic/sandbox-contract/schemas/agents";
@@ -655,8 +656,14 @@ const walk = async (seed: number, steps: number): Promise<number> => {
                 if (which === "got-somewhere") {
                     await send(id, { kind: "turn-got-somewhere" });
                 } else {
-                    const remint = which === "auth" ? { remint: { account: "acct", refusedToken: "tok" } } : {};
-                    await send(id, { kind: "turn-held", held: { input, reason: which, ran: random() < 0.5, ...remint } });
+                    const ran = random() < 0.5;
+                    const held: HeldTurn =
+                        which === "auth"
+                            ? { input, reason: which, ran, remint: { account: "acct", refusedToken: "tok" } }
+                            : which === "limit"
+                              ? { input, reason: which, ran }
+                              : { input, reason: which, ran };
+                    await send(id, { kind: "turn-held", held });
                     modelOf(id).firedThisHold = 0;
                 }
             },

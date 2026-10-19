@@ -1073,9 +1073,12 @@ describe("the settle", () => {
 
 describe("handoff-chosen", () => {
     const OFFER = { suggested: "trim", basis: "size", carry: { tokens: 400_000 }, trim: { tokens: 100_000, cleared: 120 } } as const;
-    const holding = (handoff?: typeof OFFER, reason: "limit" | "outage" = "limit"): ConversationState =>
-        decide(idle(), { kind: "turn-held", held: { input: { conversationId: "c1", prompt: "go" }, reason, ran: true, ...(handoff === undefined ? {} : { handoff }) } }, NOW, ENTRY)
+    const holding = (handoff?: typeof OFFER): ConversationState =>
+        decide(idle(), { kind: "turn-held", held: { input: { conversationId: "c1", prompt: "go" }, reason: "limit", ran: true, ...(handoff === undefined ? {} : { handoff }) } }, NOW, ENTRY)
             .state;
+    // Another wall's hold, which carries no offer at all (turn-resume.ts HeldTurn).
+    const outage = (): ConversationState =>
+        decide(idle(), { kind: "turn-held", held: { input: { conversationId: "c1", prompt: "go" }, reason: "outage", ran: true } }, NOW, ENTRY).state;
 
     test("records a person's pick on the held turn, and writes the hold so a restart keeps it", () => {
         const decision = decide(holding(OFFER), { kind: "handoff-chosen", handoff: "carry" }, NOW, ENTRY);
@@ -1088,7 +1091,7 @@ describe("handoff-chosen", () => {
     test("refuses a way the offer does not have, a hold with no offer, and another wall's hold", () => {
         expect(decide(holding(OFFER), { kind: "handoff-chosen", handoff: "summary" }, NOW, ENTRY).reply).toBe(false);
         expect(decide(holding(), { kind: "handoff-chosen", handoff: "trim" }, NOW, ENTRY).reply).toBe(false);
-        expect(decide(holding(OFFER, "outage"), { kind: "handoff-chosen", handoff: "trim" }, NOW, ENTRY).reply).toBe(false);
+        expect(decide(outage(), { kind: "handoff-chosen", handoff: "trim" }, NOW, ENTRY).reply).toBe(false);
         expect(decide(idle(), { kind: "handoff-chosen", handoff: "trim" }, NOW, ENTRY).reply).toBe(false);
     });
 });

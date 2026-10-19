@@ -6,12 +6,16 @@ import { mentionPaths } from "@intentic/sandbox-contract/text/mentions";
 import { RESUME_NOTES, resumeDisclosure, withoutResumeNote, withResumeNote } from "@intentic/sandbox-contract/events/resume";
 import type { MessageReceipt } from "@intentic/sandbox-contract/schemas/agent";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
-import { watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { waitFor, stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import type { SandboxCallContext } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { Conversation } from "./conversation";
+import { NO_ATTENTION } from "../../agent-status/agentStatus-lanes";
+import type { AgentStanding } from "../../agent-status/agentStatus-standing";
+import { pickUpNext } from "../endings/pickUp";
+import { conversationView } from "../panel/useChat-view";
 import { planFeedback } from "./cardReplies";
 import { seedFork } from "./forkSeed";
 import { providerAccounts, usageByAccount } from "../../providers/providerAccounts";
@@ -1907,6 +1911,7 @@ describe(`Conversation`, () => {
             reason: `limit`,
             readyAt: resetsAt * 1_000,
             nextAt: resetsAt * 1_000,
+            booked: true,
             held: { ran: false },
             coolUntil: expect.any(Number),
         });
@@ -2244,9 +2249,11 @@ describe(`Conversation`, () => {
         expect(conversation.session.value).toMatchObject({ id: `s-2`, account: `with-room` });
     });
 
-    // The reported case: refused on one account, then the picker moved the chat to another that reopens sooner. The card
-    // waits for the picked account from then on, as the press and the daemon's booking do, not the refused one's reset.
-    it(`re-times the limit card to the account the picker switched to`, async () => {
+    // Two conversations moved from one spent Claude account to another were sent to be refused "now" while the composer
+    // counted down to the real reopen: the chat's clock was inferred in three places, and a pick made in another window
+    // never reached it. A pick re-times nothing here; the daemon re-books the hold and says so on the card, and the chat
+    // reads the card, even where this window's own reading of the picked account says otherwise (2026-10-19).
+    it(`times the limit card by the daemon's booking after the picker switches account, not by this window's reading`, async () => {
         const now = Math.floor(Date.now() / 1000);
         const spentUntil = (resetsAt: number) => ({ measuredAt: Date.now(), windows: [{ kind: `five_hour` as const, utilization: 100, resetsAt, gates: `all` as const }] });
         providerAccounts.value = {
@@ -2257,18 +2264,46 @@ describe(`Conversation`, () => {
             ],
         };
         const conversation = new Conversation(`c1`);
+        conversation.registered.value = true;
         conversation.selection.apply({ kind: `set`, picks: { account: `refused` } });
-        daemon.mockImplementation(
-            turnDaemon([
-                { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, account: `refused`, resetsAt: now + 3 * 3_600, held: { ran: false } },
-                { kind: `done` },
-            ]),
+        const refusedTurn = turnDaemon([
+            { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, account: `refused`, resetsAt: now + 3 * 3_600, held: { ran: false } },
+            { kind: `done` },
+        ]);
+        daemon.mockImplementation((procedure, input, options) =>
+            procedure === `agent.switchAccount` ? Promise.resolve({}) : refusedTurn(procedure, input, options),
+        );
+        // The board's card for the chat, as the roster broadcasts it.
+        const card = ref<AgentStanding>({ status: `running`, attention: NO_ATTENTION });
+        const view = conversationView(
+            computed(() => conversation),
+            () => card.value,
         );
         await conversation.turn.send(`ship the parser`, settings);
-        expect(conversation.pickUp.value?.readyAt).toBe((now + 3 * 3_600) * 1_000);
+        // The roster has not caught up yet: the frame's own word stands.
+        expect(view.pickUp.value?.readyAt).toBe((now + 3 * 3_600) * 1_000);
 
+        const limited = { status: `error`, attention: NO_ATTENTION, failureCode: `rate_limit`, limitHeld: true } as const;
+        card.value = { ...limited, limitResetsAt: now + 3 * 3_600 };
         conversation.selection.apply({ kind: `selectAccount`, account: `sooner` });
-        expect(conversation.pickUp.value).toMatchObject({ reason: `limit`, readyAt: (now + 12 * 60) * 1_000, held: { ran: false } });
+        expect(daemon.mock.calls.filter(([procedure]) => procedure === `agent.switchAccount`).map(([, input]) => wire(input))).toEqual([
+            { conversationId: `c1`, account: `sooner` },
+        ]);
+        // Until the daemon says what the pick booked, the card still states the refused account's wait.
+        expect(view.pickUp.value).toEqual({ reason: `limit`, readyAt: (now + 3 * 3_600) * 1_000, held: { ran: false }, coolUntil: expect.any(Number) });
+
+        // The pick's one registry write: the picked account's reset, and the pass's own instant, later than the reset
+        // where the daemon judges the account still spent then.
+        card.value = { ...limited, limitResetsAt: now + 12 * 60, limitScheduled: true, limitNextAt: now + 40 * 60 };
+        expect(view.pickUp.value).toEqual({
+            reason: `limit`,
+            readyAt: (now + 12 * 60) * 1_000,
+            nextAt: (now + 40 * 60) * 1_000,
+            booked: true,
+            held: { ran: false },
+            coolUntil: expect.any(Number),
+        });
+        expect(pickUpNext(view.pickUp.value!, `resend`)).toMatch(/^Goes by itself about (39|40) min$/u);
     });
 
     // What an armed chat does through a spent allowance is the daemon's appointment now (runLimitRung), fired at the

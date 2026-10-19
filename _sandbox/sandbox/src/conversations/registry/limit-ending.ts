@@ -23,7 +23,7 @@ export const reportedFailure = (
     ending: Ending,
     status: AgentStatus,
     hold: HeldRecord | undefined,
-): Partial<Pick<AgentSummary, "failure" | "failureCode" | "limitResetsAt" | "limitHeld" | "limitScheduled" | "limitMoving">> => {
+): Partial<Pick<AgentSummary, "failure" | "failureCode" | "limitResetsAt" | "limitHeld" | "limitScheduled" | "limitMoving" | "limitNextAt">> => {
     if (status !== "error") {
         return {};
     }
@@ -39,6 +39,7 @@ export const reportedFailure = (
                 ...opt("limitHeld", ending.held && hold !== undefined ? true : undefined),
                 ...opt("limitScheduled", ending.scheduled && booked ? true : undefined),
                 ...opt("limitMoving", booked ? ending.moving : undefined),
+                ...opt("limitNextAt", ending.scheduled && booked ? ending.nextAt : undefined),
             };
         }
         default:
@@ -47,7 +48,8 @@ export const reportedFailure = (
 };
 
 // A held limit's booking as the card states it: the one rule the resume pass fires by (limit-booking.ts), read off the
-// live hold and the answer the pass will now give it. A booking read once at the failure would go on saying whatever was
+// live hold and the answer the pass will now give it, and the instant it goes (`nextAt`, epoch s), which the pass reads
+// with the wall in front of the account it goes on (limit-due.ts), so the card says when it actually goes. A booking read once at the failure would go on saying whatever was
 // true then: "Resume all when it's back" armed every held turn and every card still read as waiting on a press. Read off
 // the stored ending's reset instead of the hold's, a child whose reset lay past its horizon (held with no instant, on
 // purpose) read "resends …" in Active after any answer, while nothing would ever fire it (2026-10-19).
@@ -62,6 +64,7 @@ export const rebooked = (ending: Ending, booking: LimitBooking | undefined): End
         held: true,
         scheduled: booking !== undefined,
         ...opt("moving", booking?.moving),
+        ...opt("nextAt", booking === undefined ? undefined : Math.ceil(booking.at / 1000)),
     };
 };
 
@@ -73,10 +76,11 @@ const withLimitBooking = (entry: PersistedAgent | undefined, booking: LimitBooki
         return undefined;
     }
     const timed = resetsAt !== undefined && ending.resetsAt === undefined;
-    if (!timed && ending.scheduled === (booking !== undefined) && ending.moving === booking?.moving) {
+    const next = rebooked(timed ? { ...ending, resetsAt } : ending, booking);
+    if (next.kind !== "limited" || (!timed && ending.scheduled === next.scheduled && ending.moving === next.moving && ending.nextAt === next.nextAt)) {
         return undefined;
     }
-    return { ...entry, ending: rebooked(timed ? { ...ending, resetsAt } : ending, booking) };
+    return { ...entry, ending: next };
 };
 
 // The registry's `keepLimitBooking` over its own reads and writes: writes only an entry that changed, and answers whether
@@ -90,3 +94,20 @@ export const limitBookingKeeper =
         const changed = withLimitBooking(entryOf(id), booking, resetsAt);
         return changed !== undefined && (await amend(id, () => changed)) !== undefined;
     };
+
+// The entry moved to `account` (the registry's `switchAccount`). A spent allowance's ending is re-stated for the pick: the
+// reset the card states for the picked account (none where it has room), and the booking the pick leaves its held turn,
+// in the same write, so the one broadcast already says when the turn goes and the card never shows the refused
+// account's clock in between.
+export const switchedEntry = (
+    entry: PersistedAgent,
+    account: string,
+    limit: { readonly resetsAt?: number; readonly booking?: LimitBooking } | undefined,
+): PersistedAgent => {
+    const moved = { ...entry, profile: { ...entry.profile, account } };
+    if (limit === undefined || entry.ending.kind !== "limited") {
+        return moved;
+    }
+    const { failure, held, scheduled } = entry.ending;
+    return { ...moved, ending: rebooked({ kind: "limited", ...opt("failure", failure), ...opt("resetsAt", limit.resetsAt), held, scheduled }, limit.booking) };
+};

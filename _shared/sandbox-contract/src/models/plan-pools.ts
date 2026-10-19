@@ -265,12 +265,19 @@ const holdingPools = (full: readonly UsageWindow[], open: readonly UsageWindow[]
 };
 
 /**
+ * What the polled reading ALONE says, never whether the account can serve: that is `serviceState`, which also reads the
+ * refusals on file, ask it through the daemon's `serviceability`/`allowanceWall` or the editor's `accountState`. A
+ * provider that rounds its percentages (Claude does, every pool) is never proven spent here, so a caller reading this
+ * as the verdict sees every spent account as open: a pick between two spent accounts re-booked a held turn for "now"
+ * that way (2026-10-19). Imported only by the few modules lint allows (.oxlintrc.json, no-restricted-imports), and was
+ * named `headroomState` until then.
+ *
  * The plan-limit half of the verdict, at the contract's one spent line. With a model, the pools that model spends: spent
  * once any is full, else the room the fullest leaves. With none, whether the account can serve SOME turn: spent once a
  * pool gating every model is full, or every per-model slice is; a full slice alone (Opus at 100%) leaves the other
  * models their room, which is then read off the fullest pool still open.
  */
-export const headroomState = (usage: AccountUsage | undefined, model?: ModelRef): AccountState => {
+export const readingHeadroom = (usage: AccountUsage | undefined, model?: ModelRef): AccountState => {
     const windows = gatingWindows(usage, model).map((window) => (answeredDespite(usage, window) ? { ...window, rounded: true } : window));
     if (windows.length === 0) {
         return { kind: "unknown" };
@@ -299,10 +306,10 @@ const refusedPool = (usage: AccountUsage | undefined, refusal: ProviderRefusal, 
     if (usage === undefined || binding === undefined) {
         // No pool to pin: the refusal itself is the evidence, unless it was about a different model than this question.
         const sameModel = refusal.model === undefined || model === undefined || refusal.model === model.id;
-        return sameModel ? spent(refusal.resetsAt) : headroomState(usage, model);
+        return sameModel ? spent(refusal.resetsAt) : readingHeadroom(usage, model);
     }
     const pinned = usage.windows.map((window) => (window === binding ? pinnedFull(window) : window));
-    const state = headroomState({ ...usage, windows: pinned }, model);
+    const state = readingHeadroom({ ...usage, windows: pinned }, model);
     // The provider's own "try again at" is when it reopens, over whatever the polled pool last said.
     return state.kind === "spent" && refusal.resetsAt !== undefined ? spent(refusal.resetsAt) : state;
 };
@@ -338,7 +345,7 @@ export const serviceState = (facts: ServiceFacts, refusal?: ProviderRefusal, mod
     if (cooling?.until !== undefined && cooling.until * 1000 > now) {
         return { kind: "blocked", fix: "wait", reason: cooling.reason ?? "cooling down", until: cooling.until };
     }
-    return refusal?.kind === "limit" ? refusedPool(facts.usage, refusal, model) : headroomState(facts.usage, model);
+    return refusal?.kind === "limit" ? refusedPool(facts.usage, refusal, model) : readingHeadroom(facts.usage, model);
 };
 
 /** The refusals a provider's accounts are judged against: its last one, or every one on file (each account's own beside it). */

@@ -4,6 +4,7 @@ import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/provider
 import { type ModelRef, type ServiceFacts, serviceStates } from "@intentic/sandbox-contract/models/plan-pools";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { Services } from "../../composition.js";
+import { accountWall, type AllowanceWall } from "./fleet-limit.js";
 import { accountStateLogFor } from "./state-log.js";
 
 // "Can this account serve a turn?", answered in one place. The rule itself is the contract's (`serviceState` in
@@ -39,23 +40,60 @@ export const accountFactsOf = async (deps: ServiceabilityDeps, provider: AgentPr
     return routed(provider) ? (await deps.cliProxy.accounts())[provider].map(routedFacts) : [];
 };
 
+// Every account's facts and its verdict, judged together; each change of a verdict is logged where a logger is given.
+const judged = async (
+    deps: ServiceabilityDeps,
+    provider: AgentProvider,
+    model: ModelRef | undefined,
+    now: number = Date.now(),
+): Promise<{ readonly facts: readonly ServiceFacts[]; readonly states: ReadonlyMap<string, AccountState> }> => {
+    // The store's read first: a read that throws before it returns a promise then leaves no fact-gathering running
+    // with nobody to hear it fail.
+    const [refusals, facts] = await Promise.all([deps.providerRefusals.onFile(), accountFactsOf(deps, provider)]);
+    const states = serviceStates(facts, refusals[provider], model, now);
+    if (deps.logger !== undefined) {
+        accountStateLogFor(deps.logger).note(provider, facts, states, refusals[provider], model);
+    }
+    return { facts, states };
+};
+
 /** Every account of a provider with its verdict, in the provider's own order. `model` scopes the plan-limit half to the pools it spends. */
 export const serviceabilities = async (
     deps: ServiceabilityDeps,
     provider: AgentProvider,
     model?: ModelRef,
 ): Promise<readonly { readonly id: string; readonly state: AccountState }[]> => {
-    const [facts, refusals] = await Promise.all([accountFactsOf(deps, provider), deps.providerRefusals.onFile()]);
-    const states = serviceStates(facts, refusals[provider], model);
-    if (deps.logger !== undefined) {
-        accountStateLogFor(deps.logger).note(provider, facts, states, refusals[provider], model);
-    }
+    const { facts, states } = await judged(deps, provider, model);
     return facts.map((entry) => ({ id: entry.account, state: states.get(entry.account) ?? { kind: "unknown" } }));
 };
 
 /** One account's verdict; `unknown` for an account the provider does not hold. */
 export const serviceability = async (deps: ServiceabilityDeps, provider: AgentProvider, account: string, model?: ModelRef): Promise<AccountState> =>
     (await serviceabilities(deps, provider, model)).find((entry) => entry.id === account)?.state ?? { kind: "unknown" };
+
+/* WOULD A TURN ON THIS ACCOUNT BE REFUSED FOR A SPENT ALLOWANCE, AND UNTIL WHEN? Asked by everything that sends or books
+   a turn nobody pressed: the allowance gate on a person's released words (allowance-gate.ts), a pick that re-points a
+   held turn (switch-account.ts), and the resume pass before it fires a hold (turn-resume.ts). Each used to read it its
+   own way, and they disagreed: the pick read the polled reading alone, where every Claude pool is rounded and so never
+   proven spent, and re-booked a held turn for now onto an account the records had called spent for an hour, while the
+   composer counted down to its real reopen (2026-10-19). Judged here by the account verdict the lists publish
+   (serviceStates, refusals on file included) and the fleet's reopening rule (fleet-limit.ts accountWall). */
+
+/**
+ * The allowance wall in front of `account` for `model`, or undefined where nothing the records hold says it is spent.
+ * Judged at `now`, the caller's own instant: a refusal stands until the reopen it named, by the caller's clock.
+ */
+export const allowanceWall = async (
+    deps: ServiceabilityDeps,
+    provider: AgentProvider,
+    account: string,
+    model?: ModelRef,
+    now: number = Date.now(),
+): Promise<AllowanceWall | undefined> => {
+    const { facts, states } = await judged(deps, provider, model, now);
+    const reading = facts.find((entry) => entry.account === account);
+    return reading === undefined ? undefined : accountWall(reading, states.get(account) ?? { kind: "unknown" }, model);
+};
 
 // The lists publish the verdict on rows a door or the translator already assembled, so it is judged on exactly the facts
 // shown beside it. Model-less: the account's tightest gating pool.

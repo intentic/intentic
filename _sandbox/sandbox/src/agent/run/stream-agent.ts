@@ -43,7 +43,8 @@ import { type ActiveTurn, SteeringQueue } from "../checkpoints/agent-steering.js
 import { takeCheckpointNote } from "../checkpoints/checkpoint-worktree.js";
 import { recordProviderFailure } from "../providers/provider-health.js";
 import { breakPolicyFor } from "./turn/break-policy.js";
-import { type HeldTurn, stopResumeAt } from "./turn/turn-resume.js";
+import { stopResumeAt } from "./turn/turn-resume.js";
+import type { HeldTurn } from "./turn/holds/held-turn.js";
 import { keepableOf, noteKeepable } from "./turn/cache-keepwarm.js";
 import { beginPulse, endPulse, pulseFrame } from "./turn/turn-pulse.js";
 import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";

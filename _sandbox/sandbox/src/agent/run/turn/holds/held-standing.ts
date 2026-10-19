@@ -1,13 +1,13 @@
 import { withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import { breakArmed } from "@intentic/sandbox-contract/schemas/turn-break";
-import type { Services } from "../../../composition.js";
-import type { HeldRecord } from "../../../conversations/actor/conversation-state.js";
-import { limitBooking } from "../../../conversations/actor/limit-booking.js";
-import { opt } from "../../../opt.js";
-import { knownReopensAt } from "../../models/limit-reset.js";
-import { childRerunHorizonMs } from "../../subagents/child-records.js";
-import { childRerunAt } from "../frames/classify-failure.js";
-import { breakPolicyFor } from "./break-policy.js";
+import type { Services } from "../../../../composition.js";
+import type { HeldRecord } from "../../../../conversations/actor/conversation-state.js";
+import { opt } from "../../../../opt.js";
+import { knownReopensAt } from "../../../models/limit-reset.js";
+import { childRerunHorizonMs } from "../../../subagents/child-records.js";
+import { childRerunAt } from "../../frames/classify-failure.js";
+import { breakPolicyFor } from "../break-policy.js";
+import { limitDue } from "./limit-due.js";
 
 /* A STRANDED CARD'S LANE FOLLOWS WHAT THIS PASS WILL DO. The card files a held turn in Active only while it says
    something will send it (agent-lanes.ts laneOf), and what it says is stored on the entry, so every path that changes a
@@ -54,11 +54,12 @@ const retimeLimitHold = async (services: Services, conversationId: string, held:
     return reopensAt;
 };
 
-// A spent allowance's hold: timed where the records now can, then its stored booking held to the rule this pass fires by.
+// A spent allowance's hold: timed where the records now can, then its stored booking held to the reading this pass fires
+// by (limit-due.ts), the wall in front of where it goes included, so the card's instant is the one the pass will keep.
 const keepLimitBooking = async (services: Services, conversationId: string, held: HeldRecord, now: number, asked: Map<string, number>): Promise<void> => {
     const timed = await retimeLimitHold(services, conversationId, held, now, asked);
     const current = services.conversations.state(conversationId)?.resume.held ?? held;
-    const booking = limitBooking(current, await breakPolicyFor(services, conversationId, "limit"));
+    const booking = (await limitDue(services, conversationId, current, now))?.booking;
     if (await services.agents.keepLimitBooking(conversationId, booking, timed)) {
         services.logger.info(
             { conversationId, booked: booking === undefined ? "press only" : new Date(booking.at).toISOString(), ...opt("moving", booking?.moving) },

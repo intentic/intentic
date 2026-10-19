@@ -38,7 +38,8 @@ import { turnRunOf } from "../../../../conversations/actor/conversation-holdings
 import { createDomainEvents } from "../../../../seams/domain-events.js";
 import type { Said, StartedRun, TurnInput, TurnStarter } from "../../../../seams/turn-starter.js";
 import type { BeginRefusal } from "../../../../conversations/actor/conversation-decide.js";
-import { createTurnResumeScheduler, fireHeldResume, type HeldTurn, resumeInterruptedTurns, startConversationTurn } from "../turn-resume.js";
+import { createTurnResumeScheduler, fireHeldResume, resumeInterruptedTurns, startConversationTurn } from "../turn-resume.js";
+import type { HeldOf, HeldTurn } from "../holds/held-turn.js";
 import { TurnRun } from "../turn-runs.js";
 import { openRunLog, readRunLog, unrecordedRuns } from "../../../../sessions/run-log.js";
 import { conversationUnit } from "../../../../store/conversation-units.js";
@@ -2016,7 +2017,7 @@ const cutWake = (turns: TurnInput[]): TurnStarter["stream"] =>
         turns.push(input);
         yield cutDone;
     };
-const flaggedHold = (conversationId: string, change: Partial<HeldTurn> = {}): HeldTurn => ({
+const flaggedHold = (conversationId: string, change: Partial<Omit<HeldOf<"flagged">, "reason">> = {}): HeldTurn => ({
     reason: "flagged",
     input: { prompt: "ship the parser", conversationId, isolated: true, model: "claude-opus-5-5" },
     sessionId: "s-real",

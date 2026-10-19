@@ -10,7 +10,7 @@ import { seedFork } from "../session/forkSeed";
 import type { PendingAttachment } from "../../../features/chat/drafts/useChatAttachments";
 import { providerCommands } from "../../providers/providerCatalog";
 import type { TurnPick } from "../run/turnDefaults";
-import { type ContinueOptions, withCardReset } from "../endings/pickUp";
+import { type ContinueOptions, withCardBooking } from "../endings/pickUp";
 import type { ForkLink } from "../run/turnRequest";
 import { providerReadyOn } from "../../providers/access";
 import { type ChatAttachment, type ChatMessage, continuationFor, newestPermission } from "../transcript/transcript";
@@ -45,11 +45,12 @@ const failureView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | u
 });
 
 // The pick-up strip's state. Undefined while streaming, since a pick-up outlives its failure until the next turn actually
-// starts; the state arms the strip immediately after a send, before that turn begins. A spent allowance's reset the
-// sandbox timed after the refusal is read off the board's card (withCardReset), so the chat says when it goes as the card does.
+// starts; the state arms the strip immediately after a send, before that turn begins. A spent allowance's reset and
+// booking are read off the board's card once it is about this ending (withCardBooking), so the chat says when it goes as
+// the card does, whichever window re-timed it.
 const pickUpView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | undefined) => ({
     pickUp: computed(() =>
-        conversation.value.turn.streaming.value ? undefined : withCardReset(conversation.value.pickUp.value, cardOf?.(conversation.value.conversationId)),
+        conversation.value.turn.streaming.value ? undefined : withCardBooking(conversation.value.pickUp.value, cardOf?.(conversation.value.conversationId)),
     ),
 });
 

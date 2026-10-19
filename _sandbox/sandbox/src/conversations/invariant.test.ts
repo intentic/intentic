@@ -158,16 +158,12 @@ test("the check runs at turn-settled, after the turn's carry, and on the sweep",
 // and passes over every hold it can keep, a refused credential's (never kept: its token stays off disk) and every fired one.
 describe("held-limit-turns-are-kept-for-a-restart", () => {
     const files = (count: number): string[] => Array.from({ length: count }, (_, index) => `f${String(index)}.png`);
-    const held = (attachments: number, over: Partial<HeldRecord> = {}): HeldRecord => ({
-        input: { conversationId: "c1", prompt: "go", attachments: files(attachments) },
-        reason: "limit",
-        ran: true,
-        reopensAt: 9_000,
-        recordedAt: 1_000,
-        fired: false,
-        tries: 0,
-        ...over,
-    });
+    // A spent allowance's hold by default; a refused credential's and a stopped turn's carry no reopen of their own.
+    const held = (attachments: number, over: { readonly reason?: "limit" | "auth" | "stopped"; readonly fired?: boolean } = {}): HeldRecord => {
+        const base = { input: { conversationId: "c1", prompt: "go", attachments: files(attachments) }, ran: true, recordedAt: 1_000, fired: over.fired ?? false, tries: 0 };
+        const reason = over.reason ?? "limit";
+        return reason === "limit" ? { ...base, reason, reopensAt: 9_000 } : reason === "auth" ? { ...base, reason } : { ...base, reason };
+    };
     const runWith = async (record: HeldRecord): Promise<void> => {
         const check = checkNamed("held-limit-turns-are-kept-for-a-restart", {
             agents: registryOf({ c1: false }),

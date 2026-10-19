@@ -1,6 +1,8 @@
 import { pino } from "pino";
 import { type ClaudeStore, displayLabel, type StoredAccount } from "./claude-credentials.js";
 import { claudeHeadroomSource, claudeUsageWindows, RATE_LIMIT_PARK_MS, readClaudeUsage } from "./claude-usage.js";
+import { serviceState } from "@intentic/sandbox-contract/models/plan-pools";
+import { claudeLimitRefusal, claudeReading } from "./claude-usage.testing.js";
 
 // Anthropic OAuth usage payload, pinned (a private endpoint, not a published contract): defends the mapping from every
 // pool to its own named window, and that an unrecognised shape costs one window, not the read.
@@ -170,4 +172,14 @@ test("a refused read answers no windows, never an empty measurement, and says wh
     // Nothing to lift from the body: the status stands in, never silence.
     const [bare] = await claudeHeadroomSource(memoryStore([account("a")]), endpoint({}, false)).targets();
     expect(await bare!.read()).toEqual({ windows: [], failure: "HTTP 403" });
+});
+
+// What claude-usage.testing.ts promises every test that builds a Claude account with it: the reading comes out as this
+// reader files one, every pool rounded, so a full pool reads at the line and only a refusal on file proves it spent.
+test("a test's Claude reading is filed as the reader files one: at the line until a refusal proves it spent", () => {
+    const reading = claudeReading({ five_hour: { utilization: 100, resetsAt: 2_000_000_000 } }, 1_000);
+    expect(reading.windows).toEqual([{ kind: "five_hour", utilization: 100, resetsAt: 2_000_000_000, gates: "all", rounded: true }]);
+    expect(serviceState({ account: "a", usage: reading }, undefined, undefined, 1_000)).toEqual({ kind: "ready", room: 0 });
+    const refused = claudeLimitRefusal({ account: "a", resetsAt: 2_000_000_000, at: 500 });
+    expect(serviceState({ account: "a", usage: reading }, refused, undefined, 1_000)).toEqual({ kind: "spent", reopensAt: 2_000_000_000 });
 });
