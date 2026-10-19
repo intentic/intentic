@@ -118,28 +118,8 @@ const toggleOpen = (persona: Persona): void => {
     });
 };
 
-// The open persona lives in the address (`?open=<id>`, SandboxHub's `open`), so a reload or a shared link lands on it.
-// A named persona opens once the list holds it, once per naming: a refetch must not reopen one the reader just closed.
-let landedOn: string | undefined;
-watch(
-    [() => props.open, personas],
-    ([asked], previous) => {
-        if (asked !== previous?.[0]) {
-            landedOn = undefined;
-        }
-        const persona = personas.value.find((candidate) => candidate.id === asked);
-        if (persona === undefined || landedOn === asked) {
-            return;
-        }
-        landedOn = asked;
-        if (!isOpen(persona)) {
-            toggleOpen(persona);
-        }
-    },
-    { immediate: true },
-);
-
-// And back: opening, closing or renaming one rewrites the address. Replaced, not pushed: picking a tile is not a visit.
+// Opening, closing or renaming one rewrites the address. Replaced, not pushed: picking a tile is not a visit. This watch
+// is registered before the arrival one so a persona the first render selects is written back too.
 const route = useRoute();
 const router = useRouter();
 watch(
@@ -149,6 +129,42 @@ watch(
             void router.replace({ query: { ...route.query, open: id } });
         }
     },
+);
+
+// The open persona lives in the address (`?open=<id>`, SandboxHub's `open`), so a reload or a shared link lands on it.
+// A named persona opens once the list holds it, once per naming: a refetch must not reopen one the reader just closed.
+// A bare visit opens the first persona once the list lands, so the page arrives with its editor in view; one the reader
+// closes stays closed, so this arrival is settled once whether it named one, picked the first, or found none.
+let landedOn: string | undefined;
+let arrived = false;
+watch(
+    [() => props.open, personas, isLoading],
+    ([asked, , loading], previous) => {
+        if (asked !== previous?.[0]) {
+            landedOn = undefined;
+        }
+        if (asked !== undefined) {
+            arrived = true;
+            const persona = personas.value.find((candidate) => candidate.id === asked);
+            if (persona === undefined || landedOn === asked) {
+                return;
+            }
+            landedOn = asked;
+            if (!isOpen(persona)) {
+                toggleOpen(persona);
+            }
+            return;
+        }
+        if (arrived || loading) {
+            return;
+        }
+        arrived = true;
+        const first = personas.value[0];
+        if (first !== undefined && draft.value === undefined && newName.value === undefined) {
+            toggleOpen(first);
+        }
+    },
+    { immediate: true },
 );
 
 // A name, and nothing else: the persona is written with the schema's own defaults (stored as absent, so the file says

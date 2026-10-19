@@ -13,7 +13,7 @@ defineProps<{
 <template>
     <button
         type="button"
-        class="ui-row-select ui-row-select-horizontal group relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1.5"
+        class="ui-row-select group relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-1.5"
         :class="{ 'ui-row-select-on': selected }"
     >
         <span class="relative flex shrink-0">
