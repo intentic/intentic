@@ -20,6 +20,9 @@ const props = defineProps<{
     // The status this glyph stands in for in the card's corner (Landed, Idle), said first in the card so the corner
     // still says what it said before the seal took it.
     status?: string;
+    // Its reading in words beside the glyph (the board card's assurance line, WorkAssurance): a shape alone was a
+    // vocabulary nobody could read without hovering, so where there is room the glyph teaches itself.
+    labelled?: boolean;
 }>();
 
 const kind = computed(() => sealOf(props.proof));
@@ -84,8 +87,8 @@ const onCardEnter = (): void => hover.cancel();
 <template>
     <span
         ref="anchor"
-        class="inline-flex shrink-0 items-center"
-        :class="tone"
+        class="inline-flex items-center"
+        :class="labelled ? `min-w-0 gap-1 text-muted` : [`shrink-0`, tone]"
         data-seal
         :data-seal-kind="kind"
         role="img"
@@ -93,7 +96,8 @@ const onCardEnter = (): void => hover.cancel();
         @pointerenter="onEnter"
         @pointerleave="onLeave"
     >
-        <SealGlyph :kind="kind" aria-hidden="true" />
+        <SealGlyph :kind="kind" aria-hidden="true" :class="labelled ? [`shrink-0`, quiet ? tone : headTone] : undefined" />
+        <span v-if="labelled" class="min-w-0 truncate" aria-hidden="true">{{ reading.head }}</span>
         <AnchoredOverlay v-model="open" :anchor="anchor" side="top" cross="end">
             <div class="flex w-72 max-w-[calc(100vw-2rem)] flex-col gap-2.5 p-3 text-left" data-seal-card @pointerenter="onCardEnter" @pointerleave="onLeave">
                 <p v-if="status" class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ status }}</p>

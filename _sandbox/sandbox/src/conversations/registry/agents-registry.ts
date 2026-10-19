@@ -5,14 +5,12 @@ import type {
     AgentSummary,
     LandConflictReason,
     LandedMessageDraft,
-    UnfinishedWork,
     SessionOwner,
 } from "@intentic/sandbox-contract/schemas/agents";
 import { breakArmed, isTurnBreakPolicy, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { deriveTitle, planParts } from "@intentic/sandbox-contract/text/title";
 import { keepWarmCap } from "@intentic/sandbox-contract/schemas/keep-warm";
 import type { LandingDelivery } from "@intentic/sandbox-contract/schemas/project-delivery";
-import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
 import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import { withGitCaller } from "@intentic/base/git";
 import { freshness } from "@intentic/base/held";
@@ -30,6 +28,7 @@ import type { ConversationUnits } from "../../store/conversation-units.js";
 import { type ConversationActors, type ConversationBooks, createConversationActors } from "../actor/conversation-actors.js";
 import { activateLoadedFleet } from "./fleet-activation.js";
 import type { BeginTurn, SettleFlush } from "../actor/conversation-decide.js";
+import { unfinishedOf } from "./unfinished-work.js";
 import { activityLive, awaitingWake, type ConversationState, type HeldRecord, NO_USAGE, type TurnUsage, nextPromptDayAt } from "../actor/conversation-state.js";
 import { conversationStatus, parkedKinds, permissionAskOf } from "../actor/conversation-status.js";
 import {
@@ -122,18 +121,6 @@ const cacheClock = (state: ConversationState | undefined): AgentSummary["promptC
     return { ...cache, rollsAt, ...opt("keepableUntil", budget === undefined ? undefined : keepWarmCap(cache, rollsAt, budget - spent)) };
 };
 
-// What a turn left open, read at finish from only what it measured, no model asked, nothing self-reported: a missing
-// check means it was not re-run; what a missing checklist means depends on how the turn ended (`TurnCompletion`).
-const openSteps = (list: readonly TodoItem[]): UnfinishedWork["steps"] => {
-    const open = list.filter((item) => item.status !== "completed");
-    if (open.length === 0) {
-        return undefined;
-    }
-    // What it would pick up next: the one already in progress, else the first still waiting.
-    const next = (open.find((item) => item.status === "in_progress") ?? open[0])?.content;
-    return { open: open.length, total: list.length, ...(next !== undefined ? { next } : {}) };
-};
-
 // Where the checklist stands, for a card rather than for a verdict: the live list while the daemon still holds it,
 // else what the last turn recorded as left open. An empty list is no list, and says so by carrying nothing.
 const checklistOf = (entry: PersistedAgent, state: ConversationState | undefined): AgentChecklist | undefined => {
@@ -150,32 +137,6 @@ const checklistOf = (entry: PersistedAgent, state: ConversationState | undefined
 // What the actor keeps for its card between turns; nothing for a conversation this daemon has not heard from.
 const cardReadings = (state: ConversationState | undefined): Partial<Pick<ConversationState, "loop" | "workflow" | "watches" | "jobs" | "needs">> =>
     state ?? {};
-
-// The moment of measurement, not of the write: a settle that never observed the list learned nothing new, and stamping
-// `now` there would restart the age of an old abandonment.
-const leftAt = (entry: PersistedAgent, flush: SettleFlush, now: number): number =>
-    flush.checklist === undefined ? (entry.unfinished?.at ?? now) : now;
-
-/* THE STEPS A TURN LEAVES, and why a list it never saw is not always the old list. */
-const stepsLeft = (entry: PersistedAgent, flush: SettleFlush): UnfinishedWork["steps"] => {
-    if (flush.checklist !== undefined) {
-        return openSteps(flush.checklist);
-    }
-    return flush.ending === "clean" ? undefined : entry.unfinished?.steps;
-};
-
-const unfinishedOf = (entry: PersistedAgent, flush: SettleFlush, now: number): UnfinishedWork | undefined => {
-    // No turn ran: a land or a sweep finishing a resting card learned nothing about its work, and re-reading the
-    // readings left by the last turn would re-stamp an old abandonment with today's date.
-    if (flush.ending === "none") {
-        return entry.unfinished;
-    }
-    const steps = stepsLeft(entry, flush);
-    if (steps === undefined) {
-        return undefined;
-    }
-    return { at: leftAt(entry, flush, now), steps };
-};
 
 // The spent allowance's hold as the conversation's actor keeps it right now: the one the resume pass would fire. The
 // stored ending says what the refusal booked; this says whether it still stands. A hold goes without any turn ending:
@@ -313,6 +274,7 @@ const identityOf = (existing: Identity, turn: BeginTurn, entryOf: (id: string) =
     ...opt("startIn", existing.startIn ?? turn.startIn),
     ...opt("actsAs", existing.actsAs ?? turn.profile.actsAs),
     ...opt("forkedFrom", existing.forkedFrom ?? turn.forkedFrom),
+    ...opt("fresh", existing.fresh ?? turn.fresh),
 });
 
 // Who answers for it: kept once set, else the opening turn's member, else the parent's owner for a child (`since` is
@@ -449,6 +411,8 @@ const settledEntry = (entry: PersistedAgent, flush: SettleFlush, now: number): P
         ...opt("unfinished", unfinishedOf(entry, flush, now)),
         // A turn that touched no code brings no proof, and the branch's last record stands.
         ...opt("proof", flush.proof ?? entry.proof),
+        // The latest review wins, stamped with this settle; a turn that reported none leaves the one before standing.
+        ...opt("review", flush.review === undefined ? entry.review : { at: now, ...flush.review }),
         // Replaced by every turn that ran, a turn whose work all stayed on its branch clearing it; a settle with no turn
         // (a manual land) leaves it standing.
         ...opt("reach", flush.ranTurn ? flush.reach : entry.reach),
@@ -529,6 +493,7 @@ const describedBy = ({ placement, identity, profile, social, sessionId, archived
     // board is empty, their own conversations included.
     ...opt("areas", identity.areas),
     ...opt("forkedFrom", identity.forkedFrom),
+    ...opt("fresh", identity.fresh),
     ...opt("title", social.title?.text),
     ...opt("titleAction", social.title?.action),
     ...opt("model", profile.model),
@@ -1160,6 +1125,7 @@ export const createFleet = (
             ...describedBy(entry),
             ...reportedUnfinished(entry, state),
             ...opt("proof", entry.proof),
+            ...opt("review", entry.review),
             ...opt("reach", entry.reach),
             ...reportedFailure(entry.ending, status, limitHold(state)),
             ...postures(entry.postures),

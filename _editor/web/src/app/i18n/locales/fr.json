@@ -128,7 +128,6 @@
             "sends": "part {at}",
             "scheduledMessages": "Messages",
             "sendsWhenRoom": "envoi quand la mémoire se libère",
-            "landUnreviewedHint": "Intègre sans lire les modifications",
             "reviewChangesCount": "Examiner les modifications : {added} lignes ajoutées, {removed} supprimées"
         },
         "agentConflictReport": {

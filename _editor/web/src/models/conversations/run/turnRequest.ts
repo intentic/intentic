@@ -10,6 +10,8 @@ import { offeredHarness, offeredLoops } from "../../providers/offeredLoops";
 
 // Where a fork was cut from, carried by its first turn: `keep` rows of `conversationId`, over `files` then or now.
 export type ForkLink = NonNullable<ProcedureInput<`agent.run`>["forkOf"]>;
+// A fresh session's origin, on its first turn only (schemas/agent.ts FreshOfSchema).
+export type FreshLink = NonNullable<ProcedureInput<`agent.run`>["freshOf"]>;
 
 // Turn settings passed into a send: the active conversation's own provider/model/effort/thinking, captured at
 // send time.

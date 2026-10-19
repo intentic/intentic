@@ -9,6 +9,7 @@ import { CHAT_SURFACE, useChatSurface } from "../../../../models/conversations/t
 import { useToolCalls } from "../../../../models/conversations/tools/useToolCalls";
 import ChatForkCut from "../../transcript/ChatForkCut.vue";
 import ChatForkLine from "../../transcript/ChatForkLine.vue";
+import ChatFreshLine from "../../transcript/ChatFreshLine.vue";
 import ChatMessageView from "../../transcript/ChatMessageView.vue";
 import ChatTranscriptSkeleton from "../../transcript/ChatTranscriptSkeleton.vue";
 import { QUIET_TRANSCRIPT_WAIT } from "../../../../models/conversations/transcript/transcriptWait";
@@ -134,6 +135,7 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
         </div>
         <!-- Where a forked chat says so, above its inherited turns; held back until the reader reaches that point. -->
         <ChatForkLine v-if="!conversation.transcript.historyMore.value && whole && !props.subagent" />
+        <ChatFreshLine v-if="!conversation.transcript.historyMore.value && whole && !props.subagent" />
         <!-- What the conversation was told before its first word, at the one place in the column where that is
              true: above everything it has said. Drawn only at the real top, since in the middle of a paged
              history it would claim a beginning that isn't on screen. -->

@@ -3,6 +3,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { AgentJob, AgentWatch, TurnProof, TurnReach } from "@intentic/sandbox-contract/schemas/agents";
 import { isolatedAgent } from "../registry/agents-store.testing.js";
 import type { JournalledTurn } from "../../store/journals/turn-journal.js";
+import { opt } from "../../opt.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
 import { ASK_MAX_CHARS, type BeginTurn, type ConversationEffect, type ConversationEvent, decide, type SettleFlush } from "./conversation-decide.js";
 import { hold, joined, NO_QUEUE, released, rescheduled, scheduled } from "./conversation-queue.js";
@@ -1016,6 +1017,7 @@ describe("the settle", () => {
         checklist: [{ content: "a", status: "pending" as const }],
         proof: PROOF,
         reach: REACH,
+        review: { source: "claude" as const, findings: 3, open: 2 },
     };
     const flushOf = (decision: ReturnType<typeof decide>): SettleFlush | undefined => {
         const settled = decision.effects.find((effect) => effect.kind === "entry-settled");
@@ -1053,6 +1055,7 @@ describe("the settle", () => {
             checklist: undefined,
             proof: undefined,
             reach: undefined,
+            review: undefined,
         });
         expect(decision.state).toStrictEqual(idle({ resuming: true }));
     });
@@ -1087,5 +1090,30 @@ describe("handoff-chosen", () => {
         expect(decide(holding(), { kind: "handoff-chosen", handoff: "trim" }, NOW, ENTRY).reply).toBe(false);
         expect(decide(holding(OFFER, "outage"), { kind: "handoff-chosen", handoff: "trim" }, NOW, ENTRY).reply).toBe(false);
         expect(decide(idle(), { kind: "handoff-chosen", handoff: "trim" }, NOW, ENTRY).reply).toBe(false);
+    });
+});
+
+// A review is counted as its frame arrives and filed by the settle; the findings themselves stay in the transcript.
+describe("a review frame", () => {
+    const review = (id: string, outcomes: readonly (undefined | "fixed")[]) =>
+        ({
+            kind: "review",
+            review: { id, source: "codex", findings: outcomes.map((outcome, index) => ({ file: `a${index}.ts`, summary: "s", ...opt("outcome", outcome) })) },
+        }) as const;
+
+    test("counts its findings and the ones still open, the latest report winning", () => {
+        const first = decide(running(), { kind: "frame", frame: review("r1", [undefined, undefined, undefined]) }, NOW, ENTRY);
+        expect(first.state.turn.review).toStrictEqual({ source: "codex", findings: 3, open: 3 });
+        const again = decide(first.state, { kind: "frame", frame: review("r1", ["fixed", undefined, "fixed"]) }, NOW, ENTRY);
+        expect(again.state.turn.review).toStrictEqual({ source: "codex", findings: 3, open: 1 });
+        expect(again.effects).toStrictEqual([]);
+    });
+
+    test("is handed to the entry by the settle and spent with the turn", () => {
+        const counted = decide(running(), { kind: "frame", frame: review("r1", [undefined]) }, NOW, ENTRY);
+        const settled = decide(counted.state, { kind: "settle" }, NOW, ENTRY);
+        const flush = settled.effects.find((effect) => effect.kind === "entry-settled");
+        expect(flush?.kind === "entry-settled" ? flush.flush.review : "missing").toStrictEqual({ source: "codex", findings: 1, open: 1 });
+        expect(settled.state.turn.review).toBeUndefined();
     });
 });

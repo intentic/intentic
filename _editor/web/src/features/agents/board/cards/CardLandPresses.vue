@@ -12,10 +12,10 @@ import { useCardRequests } from "./cardRequests";
 // A Ready card's presses (AgentCard draws this only while it is Ready or its land runs): a maintainer's Land now, a
 // collaborator's Request land, and the standing ask either one is about.
 //
-// READ, THEN LAND. A Ready card whose changes the reader has not ticked through leads with the review rather than with
-// the land: the land applies work nobody has read, and the review is where it is read (and has its own Land now). The
-// land stays on the card as a quieter second press, for the reader who skips the review on purpose. Once every file is
-// ticked in the review (reviewedAll), Land now leads again. A card with no counted diff has nothing to read first.
+// LAND LEADS; READING IS OFFERED, NEVER REQUIRED. Reviewing a diff before it lands is often skipped on purpose (a small
+// change, work the agent already checked, a fresh session's review), so Land now is always the card's first press. A
+// card whose changes the reader has not ticked through (reviewedAll) offers the review beside it, quieter, and drops it
+// once every file is read. A card with no counted diff has nothing to offer reading.
 
 const t = useT();
 
@@ -36,7 +36,7 @@ const words = useVocabulary();
 const { requesting, requestLand, landAsk } = useCardRequests(() => props.agent, () => props.title);
 const landable = computed(() => props.agent.status === `ready`);
 const files = computed(() => props.agent.diff?.files ?? 0);
-const reviewFirst = computed(() => landable.value && !props.landing && files.value > 0 && !reviewedAll(props.agent.id, files.value));
+const unread = computed(() => landable.value && !props.landing && files.value > 0 && !reviewedAll(props.agent.id, files.value));
 </script>
 
 <template>
@@ -48,21 +48,12 @@ const reviewFirst = computed(() => landable.value && !props.landing && files.val
         </p>
         <!-- Disabled while the land runs: the daemon refuses a second one outright (agents.routes CONFLICT). -->
         <div class="flex flex-wrap items-center gap-1.5">
-            <!-- Unread work leads with its review (see `reviewFirst`); Land now follows, quieter, for a deliberate skip. -->
-            <Button v-if="reviewFirst" size="small" tier="accent" thumb class="self-start whitespace-nowrap" :disabled="busy" @click.stop="emit('changes')">
-                <Icon name="eye" />{{ words.reviewAndLand }}
-            </Button>
-            <Button
-                size="small"
-                :tone="reviewFirst ? undefined : 'success'"
-                :tier="reviewFirst ? 'quiet' : undefined"
-                thumb
-                :disabled="landing || busy"
-                v-tooltip.top="reviewFirst ? { title: words.land, note: t(`agents.agentCard.landUnreviewedHint`) } : undefined"
-                class="self-start whitespace-nowrap"
-                @click.stop="emit('land')"
-            >
+            <Button size="small" tone="success" thumb :disabled="landing || busy" class="self-start whitespace-nowrap" @click.stop="emit('land')">
                 <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" />{{ landing ? words.landing : words.land }}
+            </Button>
+            <!-- Unread work offers its review after the land, never before it (see `unread`). -->
+            <Button v-if="unread" size="small" tier="quiet" thumb class="self-start whitespace-nowrap" :disabled="busy" @click.stop="emit('changes')">
+                <Icon name="eye" />{{ t(`agents.agentStatus.reviewChanges`) }}
             </Button>
             <!-- Getting started's mark for the first land, beside the press that does it (only while that is the step). -->
             <TourMark v-if="!landing" step="land" place="card" :priority="3" side="bottom" @click.stop />

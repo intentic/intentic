@@ -29,6 +29,7 @@ import { CHAT_SURFACE } from "../../../models/conversations/tools/chatToolSurfac
 import { useSubagentRoster } from "../../../models/fleet/subagentRoster";
 import ChatPaneTurns from "./pane/ChatPaneTurns.vue";
 import ChatEditNotice from "./pane/ChatEditNotice.vue";
+import ChatFreshDraft from "./pane/ChatFreshDraft.vue";
 import ChatPaneEmpty from "./pane/ChatPaneEmpty.vue";
 import { useComposerSize } from "./pane/composerSize";
 import { useComposerControls } from "./pane/composerControls";
@@ -571,6 +572,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                             <ChatQueue />
                             <!-- An armed edit, and the two ways out of it. -->
                             <ChatEditNotice />
+                            <!-- A fresh session not sent yet: whose work it opens on, what it is for, and the way back to a plain chat. -->
+                            <ChatFreshDraft v-if="!strip" />
                             <!-- What the runtime's extensions show while the turn runs: a status line each, gone when it ends (ChatAgentStatus). -->
                             <ChatAgentStatus v-if="!strip" />
                             <!-- A new chat while this machine is busy and another of the owner's has room: the offer, or the move already made (ChatFleetSuggestion). -->

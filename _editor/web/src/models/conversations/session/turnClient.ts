@@ -1,4 +1,4 @@
-import { Latest, retry, sleep, within } from "@intentic/base/async";
+import { Latest, sleep, within } from "@intentic/base/async";
 import type { ConversationQueue, EditorContext, MessageReceipt, PermissionMode, QueuedMessage } from "@intentic/sandbox-contract/schemas/agent";
 import { deriveTitle } from "@intentic/sandbox-contract/text/title";
 import { errandOfPrompt } from "@intentic/sandbox-contract/events/errands";
@@ -14,6 +14,7 @@ import { computed, ref, shallowRef } from "vue";
 import { uuid } from "../../../lib/uuid";
 import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { type ProcedureInput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { postTurn } from "./turnPost";
 import { bookContinue, newerQueue, queueRefusal } from "./queueCalls";
 import type { PendingAttachment } from "../../../features/chat/drafts/useChatAttachments";
 import { accountIntent, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
@@ -42,11 +43,6 @@ interface OpenedTurn {
     readonly controller: AbortController;
     readonly session: SessionRef | undefined;
 }
-
-// A message sent again under the same id while no answer comes back: the daemon answers a resend with what it did the
-// first time, so trying again can never deliver the words twice. Bounds a network blip, not an outage.
-const SEND_ATTEMPTS = 3;
-const SEND_RETRY_MS = 500;
 
 // How long after a turn ends this window looks for the one its conversation's queue starts behind it: the daemon starts
 // it once the ended turn's record is written, a moment after the stream closes.
@@ -100,6 +96,7 @@ type TurnHost = Pick<
     | "registered"
     | "standing"
     | "pendingForkOf"
+    | "pendingFreshOf"
     | "error"
     | "pickUp"
     | "session"
@@ -450,11 +447,7 @@ export class TurnClient {
     // One message to the daemon, sent again under the same id while no answer comes back. A refusal is an answer; a
     // Stop or a closed tab ends the tries.
     private post(body: ProcedureInput<`agent.run`>, signal: AbortSignal): Promise<MessageReceipt | SandboxHttpError> {
-        return retry(() => orRefusal(sandboxRpc.agent.run(body, { signal, context: { at: this.host.box.value } })), {
-            attempts: SEND_ATTEMPTS,
-            delayMs: (attempt) => SEND_RETRY_MS * attempt,
-            signal,
-        });
+        return postTurn(this.host, body, signal);
     }
 
     // Turned away at the door: the daemon refused the words before taking them, says why, and hands them back.

@@ -158,6 +158,20 @@ describe(`reading a tab snapshot`, () => {
         expect(tabs?.[2]?.forkOf).toBeUndefined();
     });
 
+    it(`restores a fresh session's origin until its first turn is taken, and drops a kind it does not know`, () => {
+        session.set(
+            KEY,
+            blob(`fresh`, [
+                { ...tab(`fresh`), freshOf: { conversationId: `origin`, kind: `review` } },
+                { ...tab(`unknown`), freshOf: { conversationId: `origin`, kind: `audit` } },
+            ]),
+        );
+
+        const tabs = readTabSnapshot(`sb1`)?.tabs;
+        expect(tabs?.[0]?.freshOf).toEqual({ conversationId: `origin`, kind: `review` });
+        expect(tabs?.[1]?.freshOf).toBeUndefined();
+    });
+
     // The tab's own pick and the session's can differ mid-switch; both are stored separately.
     it(`restores the tab's account pin and the session's separately`, () => {
         session.set(

@@ -6,6 +6,9 @@ import { drillTarget, reviewAction, reviewBesideDrill } from "../../../../models
 import { unregistered, watching } from "../../../../models/agent-status/agentStatus-standing";
 import { boxNameOf, isRemote, openInSandbox } from "../../../../models/fleet/fleetScope";
 import { canArchive, type FleetAgent } from "../../../../models/fleet/useAgents-fleet";
+import { canStartFresh, draftFreshSession } from "../../../../models/fleet/freshSession";
+import { FRESH_KINDS, type FreshKind } from "@intentic/sandbox-contract/schemas/agent";
+import { FRESH_ICONS } from "../../../../models/fleet/freshKinds";
 import { bareBranch } from "../session/sessionChip";
 
 // One menu for every card (forty cards cost one node, and only one is ever open), since a card's surface is otherwise
@@ -54,6 +57,8 @@ export interface MenuActions {
     readonly stopWatching: (id: string) => Promise<void>;
     readonly restore: (ids: readonly string[]) => Promise<void>;
     readonly archive: (ids?: readonly string[]) => Promise<void>;
+    // A new chat on the card's work without its conversation, its ask in the composer (freshSession.ts).
+    readonly startFresh: (agent: FleetAgent, kind: FreshKind) => void;
 }
 
 // The verb+count form ("Stop watching (3)") the card has no room for beside its own truncating note; one row however
@@ -84,6 +89,24 @@ const filingRow = (agent: FleetAgent, here: boolean, act: MenuActions): MenuItem
             : [];
     return [...filing, ...(unregistered(agent.status) ? [{ label: t(`ui.action.close`), icon: `times`, command: () => act.closeAgent(agent) }] : [])];
 };
+
+// A second look at the card's work by a session that never read how it was made: one row, opening onto each kind there
+// is (a code review, a test pass, the reader's own ask, any added later), none of them first or required. Its work must
+// be here to cut a copy from.
+const freshRows = (agent: FleetAgent, here: boolean, act: MenuActions): MenuItem[] =>
+    !here || !canStartFresh(agent)
+        ? []
+        : [
+              {
+                  label: t(`agents.freshSession.menuFresh`),
+                  icon: `link`,
+                  items: FRESH_KINDS.map((kind) => ({
+                      label: t(`agents.freshSession.kind.${kind}`),
+                      icon: FRESH_ICONS[kind],
+                      command: () => act.startFresh(agent, kind),
+                  })),
+              },
+          ];
 
 // The card's own presses, beside the name they act on.
 const ownRows = ({ rename, react }: CardPresses = {}): MenuItem[] => [
@@ -117,6 +140,7 @@ export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActio
             ...(facts.peeked ? [{ label: t(`ui.action.keepOpen`), icon: `pin`, command: () => act.keepAgent(agent) }] : []),
             ...drillRows(agent, review, facts, act),
         ],
+        freshRows(agent, facts.here, act),
         ownRows(facts.presses),
         // The bare name (`sleek-arrow-uzgj`) `agents show`, Quick Open and the worktree path take; `agent/` is git's spelling.
         branch === undefined
@@ -184,7 +208,13 @@ export const useCardMenu = (host: MenuHost) => {
             // Clipboard may be unavailable (insecure context); the name is still on the card either way.
         }
     };
-    const act: MenuActions = { ...host.focus, ...host.agents, copySessionName, openInSandbox };
+    const act: MenuActions = {
+        ...host.focus,
+        ...host.agents,
+        copySessionName,
+        openInSandbox,
+        startFresh: (agent, kind) => void draftFreshSession(agent, kind),
+    };
     const ownPresses = (): CardPresses | undefined => {
         const presses = menuPresses.value;
         const react = presses?.react;

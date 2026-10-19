@@ -1981,3 +1981,31 @@ test("a message keeps the land-conflict errand its window composed, and is refus
     expect(claimed.rows[0]).toMatchObject({ role: "user", text: "fix main" });
     expect(claimed.rows[0]).not.toHaveProperty("errand");
 });
+
+// A fresh session opens on another conversation's work without its messages: hung under that conversation, still the
+// person's own, and refused at the door when there is no such work to start from.
+describe("a fresh session on another conversation's work", () => {
+    it("is refused at the door without an origin with a copy of its own, and for a conversation that already exists", async () => {
+        const client = clientFor(createApp(services()));
+        const freshOf = { conversationId: "conv-origin", kind: "review" } as const;
+        expect(await errorCode(client.agent.run({ prompt: "/code-review", conversationId: "conv-rev", isolated: true, freshOf }))).toBe("BAD_REQUEST");
+        await runAgentTurn(client, { prompt: "work in the shared tree", conversationId: "conv-origin" });
+        expect(await errorCode(client.agent.run({ prompt: "/code-review", conversationId: "conv-rev", isolated: true, freshOf }))).toBe("BAD_REQUEST");
+        // A scheduled first message is refused now, not when its time comes and nobody is watching.
+        expect(await errorCode(client.agent.run({ prompt: "/code-review", conversationId: "conv-rev", isolated: true, freshOf, sendAt: Date.now() + 60_000 }))).toBe("BAD_REQUEST");
+        await runAgentTurn(client, { prompt: "own conversation", conversationId: "conv-other", isolated: true });
+        expect(
+            await errorCode(client.agent.run({ prompt: "/code-review", conversationId: "conv-other", isolated: true, freshOf: { conversationId: "conv-other-origin", kind: "review" } })),
+        ).toBe("BAD_REQUEST");
+    });
+
+    it("opens under its origin, latched as the person's review of that work", async () => {
+        const client = clientFor(createApp(services()));
+        await runAgentTurn(client, { prompt: "build the thing", conversationId: "conv-origin", isolated: true });
+        await runAgentTurn(client, { prompt: "/code-review", conversationId: "conv-rev", isolated: true, freshOf: { conversationId: "conv-origin", kind: "review" } });
+        const card = (await client.agents.list()).agents.find((agent) => agent.id === "conv-rev");
+        expect(card?.startedBy).toBe("agent:conv-origin");
+        expect(card?.fresh).toMatchObject({ of: "conv-origin", kind: "review" });
+        expect((await client.agents.list()).agents.find((agent) => agent.id === "conv-origin")).not.toHaveProperty("fresh");
+    });
+});

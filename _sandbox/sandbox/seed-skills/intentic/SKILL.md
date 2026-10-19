@@ -262,9 +262,19 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
   in chat).
 - **Code review in chat**: a harness's own reviewer draws its findings as one card in the chat: Claude Code's
   `/code-review [low|medium|high|xhigh|max]`, Codex's `/review [branch <name> | commit <sha> | what to look at]`.
-  Each finding opens its file at the line, and **Fix** (one, or all) writes the ask into the composer. The same review
-  is asked from an agent's session menu (**Review changes**, its own branch) and from the Changes bar (your uncommitted
-  work, in a new chat on the shared tree). OpenCode's `/review` answers in prose.
+  Each finding opens its file at the line, and **Fix** (one, or all) writes the ask into the composer. OpenCode's
+  `/review` answers in prose. Typed in an agent's own chat, the review reads that chat too, so it is the agent checking
+  itself.
+- **Fresh sessions on an agent's work**: an agent's card menu (**Fresh session on this work** ▸ Code review, Test, Own
+  ask) and its page's session menu open a new chat on that agent's work as it is now, with none of its conversation, so
+  a review or a test judges the result rather than the reasoning (the way Claude Code's and Codex's own reviewers run).
+  None of them is required. A strip over the composer names the work and switches what the chat is for; the ask stays
+  editable until you send it. The new chat hangs under the agent's card with a kind tag, and its edits go back into
+  that agent's work. Its findings never reach the agent by themselves: in the review card, **Fix in the original** puts
+  them in the agent's own composer, where you press Send. A card says in words what has looked at its work, one marker
+  each: its own last check (**Tested after its last edit**, **Not tested after its last edit**), then the latest of each
+  kind of check run on it (**Code review: 3 findings**, **Test: done**), with **Again** once the work changed since. A
+  check that never ran says nothing.
 - **Agents** (`/agents`): the fleet board, every conversation as an agent with its branch and status. Every agent
   a conversation started hangs under its card as a row, whichever way it was started, and the chat's list of open
   chats hangs the same rows under its cards: a conversation it spawned (its row opens its own chat) and a subagent

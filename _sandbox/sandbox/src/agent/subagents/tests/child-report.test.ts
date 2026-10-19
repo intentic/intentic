@@ -24,12 +24,12 @@ const doorsOf = (
         live?: boolean;
         busy?: number;
         parentArchived?: boolean;
-        entries?: Record<string, { startedBy?: string; title?: string }>;
+        entries?: Record<string, { startedBy?: string; title?: string; fresh?: boolean }>;
         killNote?: ChildReportDeps["killNote"];
         landingOf?: ChildReportDeps["landingOf"];
     } = {},
 ): Doors => {
-    const entries: Record<string, { startedBy?: string; title?: string }> = {
+    const entries: Record<string, { startedBy?: string; title?: string; fresh?: boolean }> = {
         "parent-1": { title: "Refactor the parser" },
         "sub-1": { startedBy: childActor("parent-1"), title: "Port the tests" },
         ...over.entries,
@@ -212,6 +212,15 @@ describe("a spawned child's report", () => {
         const doors = doorsOf();
         await reportChildTurn(doors.deps, settledOf({ actor: undefined }));
         expect(doors.started).toHaveLength(1);
+    });
+
+    // A review or test a person opened on the parent's work hangs under it like a child, yet is the person's: even a turn
+    // the sandbox re-runs by itself wakes nobody, and its findings reach the parent only when that person sends them.
+    it("stays quiet for a fresh session on the parent's work, whoever started its turn", async () => {
+        const doors = doorsOf({ entries: { "sub-1": { startedBy: childActor("parent-1"), title: "Code review", fresh: true } } });
+        await reportChildTurn(doors.deps, settledOf({ actor: undefined }));
+        await reportChildTurn(doors.deps, settledOf({ actor: "owner@example.com" }));
+        expect(doors.started).toEqual([]);
     });
 
     it("stays quiet for a conversation nobody spawned, and for a parent filed away", async () => {

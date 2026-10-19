@@ -49,6 +49,9 @@ export interface TurnSpec {
     // The published slash command the words open with (agent-commands.ts). The harness parses a command only at the
     // very start of the message, so such a turn's words are sent first and its notes reach the model another way.
     readonly command?: string;
+    // What a harness's own reviewer reviews when the person's `/review` names nothing: a fresh session's origin work as
+    // exact ranges (context/fresh-session.ts), since that reviewer reads none of the notes. Absent for every other turn.
+    readonly reviewScope?: string;
     // Absolute paths of attached files; Codex sends images as native inputs, Claude folds them into the prompt.
     readonly attachments?: readonly string[];
     // Conversation this turn belongs to, for filing its subagents under the parent. Absent: unregistered.

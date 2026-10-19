@@ -17,6 +17,8 @@ import type { ChatSurface } from "../../../../models/conversations/tools/chatToo
 import { agentToolChildren } from "../../../../models/conversations/transcript/agentTranscript";
 import type { useShotViewer } from "../../transcript/shots/useShotViewer";
 import { openLinkedSubagent } from "../../../../models/fleet/linkedSubagent";
+import { draftInOrigin } from "../../../../models/fleet/freshSession";
+import { agentDisplayTitle } from "../../../../models/agent-status/agentStatus-meta";
 
 // What a pane's tool cards can lead to: the chat's own checkout, terminal and browser, the calls a delegation's card
 // holds in the chat's record, navigating in the app's own window, and the roster's word on the subagents its calls
@@ -38,6 +40,15 @@ export const paneSurface = (conversation: () => Conversation, router: Router, su
             const draft = conversation().draft.value.trim();
             conversation().draft.value = draft === `` ? text : `${draft}\n\n${text}`;
             focusComposer();
+        },
+        // A fresh session's findings go back to the conversation whose work it read, while that one is on the fleet.
+        fixIn: () => {
+            const agents = useAgents();
+            const of = agents.agentById(conversation().conversationId)?.fresh?.of;
+            const origin = of === undefined ? undefined : agents.agentById(of);
+            return origin === undefined || origin.archivedAt !== undefined
+                ? undefined
+                : { title: agentDisplayTitle(origin), draft: (text) => draftInOrigin(origin, text) };
         },
         // Same file-link decoration as the assistant's own prose, rebuilt per fragment since `agent` can change under it.
         decorate: (fragment) => fileLinkDecorator({ agent: agent() })(fragment),

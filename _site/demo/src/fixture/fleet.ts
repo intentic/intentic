@@ -169,6 +169,44 @@ const spawnedChildren = (now: number): AgentSummary[] => [
     }),
 ];
 
+// Fresh sessions a person opened on finished work (the board's "Code review in a fresh session"): cut from that work
+// with none of its conversation, hung under its card like a spawned child. The audit was reviewed (three findings, none
+// fixed yet) and tested; the release notes' review came back clean, but the notes changed after it.
+const freshSessions = (now: number): AgentSummary[] => [
+    spawned(`cnv_dep_audit`, `fresh-sharp-wren-7k2d`, {
+        title: `Code review: Nightly dependency audit`,
+        status: `idle`,
+        model: `claude-opus-5`,
+        startIn: undefined,
+        fresh: { of: `cnv_dep_audit`, kind: `review`, at: now - minutes(130) },
+        review: { at: now - minutes(118), source: `claude`, findings: 3, open: 3 },
+        updatedAt: now - minutes(118),
+        seenAt: now - minutes(118),
+        costUsd: 0.21,
+    }),
+    spawned(`cnv_dep_audit`, `fresh-light-moss-2v6h`, {
+        title: `Test: Nightly dependency audit`,
+        status: `idle`,
+        model: `claude-sonnet-5`,
+        startIn: undefined,
+        fresh: { of: `cnv_dep_audit`, kind: `test`, at: now - minutes(126) },
+        updatedAt: now - minutes(110),
+        seenAt: now - minutes(110),
+        costUsd: 0.09,
+    }),
+    spawned(RELEASE_NOTES_AGENT_ID, `fresh-still-pond-4m8q`, {
+        title: `Code review: Draft the release notes for 2.4`,
+        status: `idle`,
+        provider: `codex`,
+        harness: `native`,
+        model: `gpt-5.2-codex`,
+        fresh: { of: RELEASE_NOTES_AGENT_ID, kind: `review`, at: now - minutes(52) },
+        review: { at: now - minutes(48), source: `codex`, findings: 0, open: 0 },
+        updatedAt: now - minutes(48),
+        seenAt: now - minutes(47),
+    }),
+];
+
 // What the checkout agent's own runtime ran in-process (its Agent tool) beside the conversations it spawned: no
 // conversation of their own, so the roster names them, and the board deals them into the same tray as its spawned
 // helpers, one still exploring and one whose plan came back.
@@ -693,6 +731,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         },
     },
     ...spawnedChildren(now),
+    ...freshSessions(now),
     ...auditFamily(now),
 ];
 

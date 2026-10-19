@@ -261,6 +261,9 @@ export const restoreTab = (tab: StoredTab): Conversation => {
         // Fork linkage, back where send() looks for it; missing here, a rebuild sends an unseeded first turn.
         conversation.pendingForkOf.value = tab.forkOf;
     }
+    if (tab.freshOf !== undefined) {
+        conversation.pendingFreshOf.value = tab.freshOf;
+    }
     return conversation;
 };
 

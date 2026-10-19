@@ -25,7 +25,6 @@ import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import HoverCard from "../../chat/tabs/HoverCard.vue";
 import ReviewStat from "./ReviewStat.vue";
-import WorkspaceReviewButton from "./WorkspaceReviewButton.vue";
 import CommitField from "./commit/CommitField.vue";
 import IndexRunPrompt from "./commit/IndexRunPrompt.vue";
 import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
@@ -1170,8 +1169,8 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                     >
                         <Icon name="cloud-download" class="text-2xs" />
                     </button>
-                    <!-- An agent's review, then Commit, in the order the two happen; Commit reports progress while stages, hooks, and reads run. -->
-                    <WorkspaceReviewButton v-if="changes.count.value > 0" :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']" />
+                    <!-- Commit reports progress while stages, hooks, and reads run. A code review belongs to the session whose work it is,
+                         before it lands (its card's menu, freshSession.ts), not to the shared tree's mix of everyone's changes. -->
                     <Button
                         v-if="changes.count.value > 0"
                         size="small"

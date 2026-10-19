@@ -5,11 +5,13 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { toWorkspacePath } from "../../../../lib/files/fileRefs";
 import { useChatSurface } from "../../../../models/conversations/tools/chatToolSurface";
-import { findingChips, findingPlace, findingsLabel, fixRequest, openFindings, reviewerLabel, summaryParts } from "./reviewCard";
+import { findingChips, findingPlace, findingsLabel, fixRequest, openFindings, originFixRequest, reviewerLabel, summaryParts } from "./reviewCard";
 
 // A code review's findings, inline where the agent reported them (events/review.ts): one row per finding, most severe
 // first, its place a press away and its scenario or the reviewer's explanation a press below. The same card whichever
-// harness reviewed. Fix puts the ask in the composer, never sends it: the reader presses Send. A review re-reported with
+// harness reviewed. Fix puts the ask in the composer, never sends it: the reader presses Send. In a fresh session on
+// another conversation's work, Fix puts it in THAT conversation's composer instead (surface.fixIn): the agent that made
+// the work knows which findings hold, and this one only saw the result. A review re-reported with
 // its fixes applied is drawn again further down, so this one folds to a line. Everything that leaves the card goes
 // through the chat's surface, so a published conversation draws the same findings with nothing to press.
 
@@ -38,7 +40,19 @@ const openAt = (finding: ReviewFinding): void => {
     surface.openFile?.(toWorkspacePath(finding.file) ?? finding.file, finding.line);
 };
 
+// Where Fix goes: the origin of a fresh session while it is on the fleet, else this chat's own composer.
+const origin = computed(() => surface.fixIn?.());
+const canFix = computed(() => origin.value !== undefined || surface.draftMessage !== undefined);
+const fixTip = computed(() =>
+    origin.value === undefined ? undefined : { title: origin.value.title, note: t(`agents.freshSession.fixInOriginTip`, { title: origin.value.title }) },
+);
+
 const draftFix = (findings: readonly ReviewFinding[]): void => {
+    const target = origin.value;
+    if (target !== undefined) {
+        target.draft(originFixRequest(findings));
+        return;
+    }
     surface.draftMessage?.(fixRequest(findings));
 };
 </script>
@@ -65,7 +79,9 @@ const draftFix = (findings: readonly ReviewFinding[]): void => {
                     <Icon v-if="review.findings.length === 0" name="check-circle" class="text-2xs text-success" />
                     {{ findingsLabel(review) }}
                 </span>
-                <Button v-if="open.length > 1 && surface.draftMessage" size="small" tier="boring" class="shrink-0" @click="draftFix(open)">{{ t(`chat.chatReview.fixAll`) }}</Button>
+                <Button v-if="open.length > 1 && canFix" size="small" tier="boring" class="shrink-0" v-tooltip.top="fixTip" @click="draftFix(open)">{{
+                    origin ? t(`agents.freshSession.fixAllInOrigin`) : t(`chat.chatReview.fixAll`)
+                }}</Button>
             </div>
             <ol v-if="review.findings.length > 0" class="flex flex-col divide-y divide-line border-t border-line">
                 <li v-for="(finding, index) in review.findings" :key="index" class="flex min-w-0 flex-col gap-0.5 px-3 py-1.5 text-2xs">
@@ -106,12 +122,13 @@ const draftFix = (findings: readonly ReviewFinding[]): void => {
                             <StatusBadge v-for="chip in findingChips(finding)" :key="chip.label" size="xs" :variant="chip.tone" :label="chip.label" />
                         </span>
                         <button
-                            v-if="finding.outcome === undefined && surface.draftMessage"
+                            v-if="finding.outcome === undefined && canFix"
                             type="button"
                             :class="ui.textButton({ size: `xs`, flush: true }, `shrink-0`)"
+                            v-tooltip.top="fixTip"
                             @click="draftFix([finding])"
                         >
-                            {{ t(`chat.chatReview.fixOne`) }}
+                            {{ origin ? t(`agents.freshSession.fixInOrigin`) : t(`chat.chatReview.fixOne`) }}
                         </button>
                     </div>
                     <p v-if="expanded.has(index) && detailOf(finding)" class="pl-4.5 whitespace-pre-wrap text-muted">

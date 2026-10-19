@@ -1,6 +1,6 @@
 import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { agentContract } from "@intentic/sandbox-contract/contracts/agent.contract";
-import { type ConversationQueue, DEFAULT_PROVIDER } from "@intentic/sandbox-contract/schemas/agent";
+import { type ConversationQueue, DEFAULT_PROVIDER, type FreshOf } from "@intentic/sandbox-contract/schemas/agent";
 import { noticeCode } from "@intentic/sandbox-contract/events/sandbox-notice";
 import { speakerVoice } from "@intentic/sandbox-contract/schemas/speaker";
 import { type AuditNote, noteAudit } from "../../audit/audit-http.js";
@@ -23,12 +23,27 @@ import { opt } from "../../opt.js";
 import { forgetRemoteRequest, remoteRequestOf } from "../../runners/runner-requests.js";
 import { applyReply } from "../run/turn/turn-interactions.js";
 import { carryOnTurn } from "../run/turn/turn-resume.js";
+import { freshRefusal } from "../context/fresh-session.js";
 
 // What the audit trail keeps of an answer to a card: which card, what kind, and for a permission the decision itself.
 const replyNote = (input: AgentReply): AuditNote => ({
     target: input.requestId,
     details: input.kind === "permission" ? { kind: input.kind, decision: input.decision } : { kind: input.kind },
 });
+
+// A fresh session reads its origin's work, so a caller who may not see that conversation may not start from it; asked
+// first, so a refusal's words say nothing of a conversation the caller cannot see. Here at the door, ahead of the queue,
+// so a scheduled send that opens one is refused now rather than at a moment nobody is watching.
+const refuseFresh = (services: Services, context: OrpcContext, conversationId: string, freshOf: FreshOf | undefined): void => {
+    const origin = freshOf === undefined ? undefined : services.agents.entry(freshOf.conversationId);
+    if (origin !== undefined) {
+        refuseUnlessVisible(context.identity, provenanceOf(origin));
+    }
+    const refused = freshOf === undefined ? undefined : freshRefusal((id) => services.agents.entry(id), conversationId, freshOf);
+    if (refused !== undefined) {
+        throw new ORPCError("BAD_REQUEST", { message: refused });
+    }
+};
 
 export const createAgentRoutes = (services: Services) => {
     const i = implement(agentContract).$context<OrpcContext>();
@@ -72,6 +87,7 @@ export const createAgentRoutes = (services: Services) => {
             // checked before anything is started. An unfenced caller pays no read for this.
             await refuseUnlessReachable(services, context.identity, input.actsAs);
             own(context, conversationId);
+            refuseFresh(services, context, conversationId, input.freshOf);
             // Who is asking, from what the middleware verified on this request, never from the body.
             const speaker = speakerOf(context.identity, context.principal);
             // A person's words reopen an archived conversation, here at their door; the engine refuses every archived one.

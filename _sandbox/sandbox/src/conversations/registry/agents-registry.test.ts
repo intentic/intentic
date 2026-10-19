@@ -1916,6 +1916,57 @@ describe("agents registry", () => {
         });
     });
 
+    // The latest code review a turn reported, counted off its `review` frame and filed by the settle: what the board
+    // says of whether the work was reviewed. The findings stay in the transcript.
+    describe("the review a turn reported", () => {
+        const reviewFrame = (id: string, outcomes: readonly ("fixed" | undefined)[]) =>
+            ({
+                kind: "frame",
+                frame: {
+                    kind: "review",
+                    review: { id, source: "claude", findings: outcomes.map((outcome, index) => ({ file: `f${index}.ts`, summary: "s", ...opt("outcome", outcome) })) },
+                },
+            }) as const;
+
+        it("files a count stamped with the settle, keeps it through a turn that reviews nothing, and reads it back after a restart", async () => {
+            const store = memoryStore();
+            const first = createFleet(store, standings(), presences());
+            await first.agents.init();
+            await beginTurn(first.conversations, turn(), 1_000);
+            first.conversations.send("c1", reviewFrame("r1", [undefined, undefined]));
+            await first.conversations.send("c1", { kind: "settle" }, 2_000).settled;
+            expect(first.agents.get("c1")?.review).toEqual({ at: 2_000, source: "claude", findings: 2, open: 2 });
+
+            await beginTurn(first.conversations, turn({ prompt: "what changed?" }), 3_000);
+            await first.conversations.send("c1", { kind: "settle" }, 4_000).settled;
+            expect(first.agents.get("c1")?.review).toEqual({ at: 2_000, source: "claude", findings: 2, open: 2 });
+
+            const restarted = createFleet(store, standings(), presences());
+            await restarted.agents.init();
+            expect(restarted.agents.get("c1")?.review).toEqual({ at: 2_000, source: "claude", findings: 2, open: 2 });
+        });
+
+        it("takes a re-report with its fixes applied over the first", async () => {
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+            await registry.init();
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", reviewFrame("r1", [undefined, undefined]));
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+            await beginTurn(conversations, turn({ prompt: "fix them" }), 3_000);
+            conversations.send("c1", reviewFrame("r1", ["fixed", undefined]));
+            await conversations.send("c1", { kind: "settle" }, 4_000).settled;
+            expect(registry.get("c1")?.review).toEqual({ at: 4_000, source: "claude", findings: 2, open: 1 });
+        });
+
+        it("is absent until a review is reported", async () => {
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+            await registry.init();
+            await beginTurn(conversations, turn(), 1_000);
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+            expect(registry.entry("c1")).not.toHaveProperty("review");
+        });
+    });
+
     // What a turn left open, from only what it itself measured: the todo checklist. No model is asked, and no agent
     // declares anything.
     describe("unfinished work", () => {
@@ -2497,6 +2548,29 @@ describe("session ownership", () => {
         // A program's turn adds nobody.
         await beginTurn(conversations, turn({ conversationId: "bot", startedBy: "token:nightly" }), 4_000);
         expect(registry.entry("bot")?.identity.people).toBeUndefined();
+    });
+
+    // A fresh session on another conversation's work hangs under it as its child would, yet stays the person's: they
+    // own it, and the relationship is latched by the opening turn alone.
+    it("latches a fresh session's origin and kind, and its person stays its owner", async () => {
+        const store = memoryStore();
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn({ conversationId: "parent", startedBy: "ania@example.com", owner: { email: "ania@example.com" } }), 1_000);
+        await conversations.send("parent", { kind: "settle" }, 1_500).settled;
+        const fresh = { of: "parent", kind: "review", at: 2_000 } as const;
+        await beginTurn(
+            conversations,
+            turn({ conversationId: "review-1", startedBy: "agent:parent", owner: { email: "bob@example.com" }, fresh }),
+            2_000,
+        );
+        await conversations.send("review-1", { kind: "settle" }, 2_500).settled;
+        await beginTurn(conversations, turn({ conversationId: "review-1", startedBy: "bob@example.com", owner: { email: "bob@example.com" } }), 3_000);
+        expect(registry.get("review-1")?.fresh).toEqual(fresh);
+        expect(registry.get("review-1")?.startedBy).toBe("agent:parent");
+        expect(registry.get("review-1")?.owner?.email).toBe("bob@example.com");
+        expect(store.saved().find((entry) => entry.id === "review-1")?.identity.fresh).toEqual(fresh);
+        expect(registry.get("parent")).not.toHaveProperty("fresh");
     });
 
     it("assign moves it without counting as activity, and the moved owner survives the next turn", async () => {

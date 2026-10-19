@@ -21,6 +21,10 @@ export interface ChatSurface {
     // Put words in the conversation's composer for the reader to send (a review's Fix); never sends them. Absent where
     // there is no composer (a published page), which then offers nothing to write.
     readonly draftMessage?: (text: string) => void;
+    // Where a review's Fix goes instead, for a fresh session on another conversation's work (freshSession.ts): that
+    // conversation's composer, whose agent knows what the work is for. Undefined for any other chat, and once the origin
+    // has left the fleet, when Fix falls back to this chat's own composer.
+    readonly fixIn?: () => { readonly title: string; readonly draft: (text: string) => void } | undefined;
     // Show a call's picture in the conversation's viewer (ChatShotViewer); absent means a picture opens as a file.
     readonly viewPicture?: (toolId: string, path: string) => void;
     // Decorates a document's prose with workspace links; keeps the query client out of a published page's bundle.

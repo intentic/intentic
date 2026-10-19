@@ -93,6 +93,8 @@ export interface CodexTurn {
     // a hook whose server is not there yet is a hook that let its call through. A server named here that does not
     // connect fails the turn before it starts.
     readonly requiredMcp?: readonly string[];
+    // What a bare `/review` reviews instead of the uncommitted changes (codex-commands.ts reviewTargetIn).
+    readonly reviewScope?: string;
     readonly frames?: CodexFrameInbox;
     readonly signal: AbortSignal;
 }
@@ -1484,7 +1486,7 @@ async function* startCodexTurn(connection: CodexAppServerConnection, turn: Codex
     yield { type: "commands", skills: publishedCommands(skills) };
 
     const command = skillInput(turn.prompt, skills);
-    const review = reviewTargetIn(turn.prompt, skills);
+    const review = reviewTargetIn(turn.prompt, skills, turn.reviewScope);
     const input = [
         ...(command === undefined ? [] : [{ type: "skill", name: command.skill.name, path: command.skill.path }]),
         { type: "text", text: command?.text ?? turn.prompt, text_elements: [] },

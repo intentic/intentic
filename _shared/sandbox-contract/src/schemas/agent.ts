@@ -7,6 +7,7 @@ import { NATIVE_PROVIDERS } from "../models/provider-specs.js";
 import { AgentPlacementSchema } from "../protocol/doors/runner-protocol.js";
 import { MENTION_LIMIT } from "../text/mentions.js";
 import { entryId } from "./internal.js";
+import { FRESH_OF_DESCRIPTION, FreshOfSchema, freshOfIssues } from "./conversation-links.js";
 // Agent runtimes the daemon can serve: native providers have dedicated adapters, `endpoint/<id>` names an installed
 // endpoint capability, anything else is an ACP agent capability id. A bare string, not an enum, so an unknown id is a
 // clean error, not a contract change.
@@ -127,15 +128,8 @@ export type AdmissionPolicy = z.infer<typeof AdmissionPolicySchema>;
 // alone.
 export const PermissionModeSchema = z.enum(["default", "plan", "bypassPermissions"]);
 export type PermissionMode = z.infer<typeof PermissionModeSchema>;
-// Where a conversation was cut from, the durable half of a fork, carried on the registry entry. `index` is the message
-// the cut sat above in the source, so its transcript can put the mark back.
-export const ForkedFromSchema = z.object({
-    conversationId: ConversationIdSchema,
-    index: z.number().int().nonnegative(),
-    // Which files this fork opened on; kept so the fork can still say it later, not only right after the click.
-    files: z.enum(["then", "now"]),
-});
-export type ForkedFrom = z.infer<typeof ForkedFromSchema>;
+// How one conversation relates to another (a fork's cut, a fresh session's origin): conversation-links.ts.
+export * from "./conversation-links.js";
 // The turn's fields before the cross-field refinements below, so a subset (TurnProfileSchema) can be picked from them.
 // How many files one turn may carry. A batch of a person's queued messages joins their files, so the admission splits a
 // batch rather than build a turn past this (turn-admission.ts, together): a turn the daemon makes must parse back.
@@ -262,6 +256,8 @@ const AgentTurnFieldsSchema = z.object({
         })
         .optional()
         .describe("Where this conversation was cut from, on its first turn only. Only the client knows this, so only the client can say it."),
+    // A fresh session's origin, on its first turn only; requires an isolated conversationId the registry has never seen.
+    freshOf: FreshOfSchema.optional().describe(FRESH_OF_DESCRIPTION),
     // The browser sends the chosen model per turn; the provider token is the sandbox's own stored credential.
     model: z.string().optional().describe("Which model to use. Leave it out for the provider's default."),
     // Audience only, never model routing: `runRole` is what fills a model in. A run somebody pressed and is
@@ -362,6 +358,7 @@ export const AgentTurnSchema = AgentTurnFieldsSchema
     .refine((turn) => turn.forkOf?.files !== "then" || turn.isolated === true, {
         message: 'forkOf.files "then" requires isolated',
     })
+    .superRefine(freshOfIssues)
     .refine((turn) => turn.sendAt === undefined || turn.sendAfter === undefined, {
         message: "sendAt and sendAfter are two different holds: name one",
     })

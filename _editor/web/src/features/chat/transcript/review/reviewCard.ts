@@ -1,6 +1,7 @@
 import type { ReviewFinding, ReviewFindings } from "@intentic/sandbox-contract/events/review";
 import type { StatusVariant } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
+import { toWorkspacePath } from "../../../../lib/files/fileRefs";
 
 // What the review card says of a review and each finding, apart from drawing it: the chips, the place, and the words a
 // press on Fix puts in the composer. Pure, so the card's wording is tested without mounting it.
@@ -68,6 +69,20 @@ export const fixRequest = (findings: readonly ReviewFinding[]): string =>
     findings.length === 1
         ? t(`chat.chatReview.fixOneRequest`, { finding: named(findings[0]!) })
         : t(`chat.chatReview.fixAllRequest`, { list: findings.map((finding, index) => `${index + 1}. ${named(finding)}`).join(`\n`) });
+
+// The same findings for the conversation whose work a fresh session reviewed (freshSession.ts), which never saw the
+// review: each with its scenario, its place as the workspace names it (a worktree's absolute path is the reviewer's own
+// copy), and the ask to judge each against what the work is for rather than fix whatever was flagged.
+const described = (finding: ReviewFinding): string => {
+    const place = toWorkspacePath(findingPlace(finding).full) ?? findingPlace(finding).full;
+    const scenario = finding.scenario ?? finding.body;
+    return scenario === undefined ? `${place} — ${finding.summary}` : `${place} — ${finding.summary}\n   ${scenario.replaceAll(`\n`, `\n   `)}`;
+};
+
+export const originFixRequest = (findings: readonly ReviewFinding[]): string =>
+    findings.length === 1
+        ? t(`agents.freshSession.originFixOneRequest`, { finding: described(findings[0]!) })
+        : t(`agents.freshSession.originFixAllRequest`, { list: findings.map((finding, index) => `${index + 1}. ${described(finding)}`).join(`\n`) });
 
 // What the card's head says of what was found: how many, or that nothing was.
 export const findingsLabel = (review: ReviewFindings): string =>

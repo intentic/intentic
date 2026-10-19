@@ -1,10 +1,10 @@
 import { parseJsonWith } from "@intentic/base/json";
-import { type AgentHarness, AgentHarnessSchema, type AgentProvider, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
+import { type AgentHarness, AgentHarnessSchema, type AgentProvider, AgentProviderSchema,FRESH_KINDS } from "@intentic/sandbox-contract/schemas/agent";
 import { z } from "zod";
 import type { AgentStanding } from "../../agent-status/agentStatus-standing";
 import type { Conversation } from "../session/conversation";
 import type { TurnPick } from "../run/turnDefaults";
-import type { ForkLink, SessionRef } from "../run/turnRequest";
+import type { ForkLink, FreshLink, SessionRef } from "../run/turnRequest";
 import type { ChatRunView } from "../run/chatRun";
 import { forgetWindowState, readWindowState, writeWindowState } from "../../../workbench/window/windowStore";
 import { chatTabsKey } from "../../../app/storage/browserStorage";
@@ -52,6 +52,8 @@ export interface StoredTab {
     readonly session?: SessionRef;
     // Fork source, client-only until acked; losing it before then rebuilds as an unrelated, unseeded turn.
     readonly forkOf?: ForkLink;
+    // A fresh session's origin, client-only until acked, like a fork's source: lost, the turn opens on nobody's work.
+    readonly freshOf?: FreshLink;
     // Only being looked at (Conversation.peek); also read by the docked/popped-window handoff, not just reload.
     readonly peek?: boolean;
     // Held on purpose (Conversation.pinned); reopening a closed pinned chat keeps it held.
@@ -91,6 +93,7 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     // Session ref verbatim, never rebuilt field by field: the two must match exactly until something is switched.
     session: conversation.session.value,
     forkOf: conversation.pendingForkOf.value,
+    freshOf: conversation.pendingFreshOf.value,
     peek: conversation.peek.value,
     pinned: conversation.pinned.value,
     leftAt: conversation.leftAt.value,
@@ -157,6 +160,7 @@ const StoredTabSchema: z.ZodType<StoredTab> = z.object({
     actsAs: text,
     session: maybe(SessionSchema),
     forkOf: maybe(z.object({ conversationId: z.string().min(1), keep: z.number().int().nonnegative(), files: z.enum([`then`, `now`]) })),
+    freshOf: maybe(z.object({ conversationId: z.string().min(1), kind: z.enum(FRESH_KINDS) })),
     peek: flag,
     pinned: flag,
     leftAt: maybe(z.number()),

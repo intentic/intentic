@@ -1,3 +1,4 @@
+import type { FreshLink } from "../run/turnRequest";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { type AgentStanding, type ClientAgentStatus, type EndingByHand, endingOf } from "../../agent-status/agentStatus-standing";
 import { clockOffset } from "../../agent-status/sandboxClock";
@@ -49,6 +50,9 @@ export interface TabFacts {
     // when it is the last thing in a conversation that never ran, the conversation goes with it, and the board draws
     // the card as this composer's draft (useAgents-fleet.leavesWithItsMessage) instead of the row on its way out.
     readonly takingBack?: string;
+    // The work a fresh session not sent yet opens on (Conversation.pendingFreshOf), so its draft card already hangs under
+    // that work's card rather than standing apart until the sandbox files it.
+    readonly freshOf?: FreshLink;
 }
 
 // A sent turn the registry hasn't filed yet, replaced by the registry's own version once it lands. Zero
@@ -147,6 +151,7 @@ export const tabFacts = (conversation: Conversation): TabFacts => {
         ending: endedHere(conversation),
         resumeWithdrawn: conversation.failures.resumeWithdrawn.value,
         takingBack: conversation.turn.takingBack.value,
+        freshOf: conversation.pendingFreshOf.value,
     };
 };
 

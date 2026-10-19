@@ -115,9 +115,19 @@ interface UnsentTab {
     readonly at?: number;
 }
 
+// A fresh session not sent yet hangs under the work it opens on, as the sandbox will file it (`startedBy` naming that
+// conversation); `at` 0, since nothing has looked at the work yet.
+const linkedDraft = (tab: TabFacts, card: FleetAgent): FleetAgent => {
+    if (tab.freshOf === undefined) {
+        return card;
+    }
+    const of = tab.freshOf.conversationId;
+    return { ...card, startedBy: `agent:${of}`, fresh: { of, kind: tab.freshOf.kind, at: 0 } };
+};
+
 // One open tab the fleet has never registered (from the strip, tabFacts.ts), named only by its own unsent
 // preview, never a title fallback. `turn` fields exist only on a `starting` card, until the registry lands it.
-const draftCard = (tab: TabFacts, held: UnsentTab | undefined): FleetAgent => ({
+const draftCard = (tab: TabFacts, held: UnsentTab | undefined): FleetAgent => linkedDraft(tab, {
     id: tab.id,
     status: tab.standing,
     provider: tab.provider,

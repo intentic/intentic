@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
+import { FRESH_KINDS, type FreshKind } from "@intentic/sandbox-contract/schemas/agent";
+import { FRESH_ICONS } from "../../../../models/fleet/freshKinds";
 import { computed } from "vue";
 import { effectiveAutoLand, limited, memoryHeld, unregistered, writingNow } from "../../../../models/agent-status/agentStatus-standing";
 import { landedAway } from "../../fleet/agentStatus-land";
@@ -10,7 +12,7 @@ import { useAgents } from "../../../../models/fleet/useAgents";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { useAuth } from "../../../../client/auth/useAuth";
 import { agentWork, assignAgent } from "../../../../models/fleet/agentActions";
-import { draftReviewAsk } from "../../../../models/fleet/reviewAsk";
+import { canStartFresh, draftFreshSession } from "../../../../models/fleet/freshSession";
 import { startOperation } from "../../../../workbench/operations/operations";
 import { mayAssign, ownedBy } from "../../../../models/agent-status/ownership";
 import { landsByDefault } from "../../../../models/sandbox/environment/rules";
@@ -50,6 +52,16 @@ const emit = defineEmits<{ selected: []; discard: []; forceLand: []; rename: [];
 
 const { agentById, restore, busyIds, setBreakPolicy, setKeepWarm } = useAgents();
 const archived = computed(() => agentById(agentId)?.archivedAt !== undefined);
+// The card, when a fresh session can be cut from its work (freshSession.canStartFresh).
+const freshable = computed(() => {
+    const agent = agentById(agentId);
+    return agent !== undefined && canStartFresh(agent) ? agent : undefined;
+});
+const startFresh = (kind: FreshKind): void => {
+    if (freshable.value !== undefined) {
+        void draftFreshSession(freshable.value, kind);
+    }
+};
 // The session as its marks see it, or nothing for one the daemon has no entry for (a mark would answer 404).
 const marked = computed(() => {
     const agent = agentById(agentId);
@@ -246,11 +258,17 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                 <span class="truncate font-mono text-2xs text-subtle">{{ sessionName }}</span>
             </span>
         </button>
-        <!-- The agent reviews its own branch before it lands; the ask goes into its composer, for a level or a target first. -->
-        <button v-if="!archived && changes.pending.value.length > 0" type="button" :class="ITEM" @click="run(() => void draftReviewAsk(agentId))">
-            <Icon name="list-check" class="mt-0.5 text-xs text-subtle" />
-            <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.reviewChanges`) }}</span>
-        </button>
+        <!-- A second look at this work by a session that never read how it was made (freshSession.ts), one row per kind of
+             check and the reader's own ask, none of them first or required. The ask goes into its composer, for a model,
+             a level or words first. -->
+        <template v-if="freshable">
+            <button v-for="kind in FRESH_KINDS" :key="kind" type="button" :class="ITEM" @click="run(() => startFresh(kind))">
+                <Icon :name="FRESH_ICONS[kind]" class="mt-0.5 text-xs text-subtle" />
+                <span class="text-sm text-content md:text-xs">{{
+                    t(`agents.freshSession.menuItem`, { kind: t(`agents.freshSession.kind.${kind}`) })
+                }}</span>
+            </button>
+        </template>
         <button type="button" :class="ITEM" @click="run(() => changes.refresh())">
             <Icon name="refresh" class="mt-0.5 text-xs text-subtle" :spin="changes.fetching.value" />
             <span class="text-sm text-content md:text-xs">{{ t(`ui.action.refresh`) }}</span>

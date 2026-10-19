@@ -163,6 +163,14 @@ flowchart LR
   the bubble shows and the findings the card draws (`runtimes/codex/commands/codex-commands.ts`). OpenCode's `/review` is its own
   command and answers in prose. A turn whose words open with a published command sends them first, its notes riding
   the prompt hook (Claude Code), the text after the skill (Codex) or a block of their own (ACP) (`agent/run/command-turn.ts`).
+  The settle counts the turn's last review onto the conversation's card as `review` (how many findings, how many still
+  open), kept until a later review replaces it (`conversations/actor/conversation-decide.ts`).
+- Fresh sessions (2026-10-19): a person can open a conversation on another conversation's work with none of its
+  messages, for a code review, a test pass or an ask of their own (`freshOf` on the first turn). It is that
+  conversation's child in every way the daemon keeps (cut from its current work, landing back into it, folded under its
+  card) but it stays the person's: it is never woken for its origin and never reports to it, so findings reach the
+  origin only when the person sends them. Its opening turn is told the work as exact `git diff <from>...HEAD` ranges per
+  changed repo, and a bare `/review` on Codex reviews those ranges (`agent/context/fresh-session.ts`).
 - Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
   a nudge, an automation's thread) is refused on an archived one (`conversations/actor/conversation-decide.ts`), and a
   thread whose conversation was archived opens a fresh one instead.

@@ -1,5 +1,5 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import { profileOf } from "@intentic/sandbox-contract/schemas/agent";
+import { type FreshSession, profileOf } from "@intentic/sandbox-contract/schemas/agent";
 import type { SnapshotTurn } from "@intentic/sandbox-contract/schemas/history";
 import { landAgent, reportLockfileFailures } from "../../../conversations/land/land.js";
 import { intoOf, landTargetOf, underLeases } from "../../../conversations/land/land-target.js";
@@ -11,6 +11,7 @@ import type { ConversationWorktree } from "../../../conversations/worktrees/work
 import type { Services } from "../../../composition.js";
 import { checkpointWorktree } from "../../checkpoints/checkpoint-worktree.js";
 import { opt } from "../../../opt.js";
+import { childActor } from "../../../auth/principal.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import type { PlacedTurnEnding, TurnCloser } from "./turn-close.js";
 import { keepLandFailure, landedFrame, settleLandBooks, settleParentBooks } from "../../../conversations/land/turn-landing.js";
@@ -120,12 +121,18 @@ const endingOf = (failed: boolean, stopped: boolean, awaiting: boolean): PlacedT
 const openingPostures = (input: TurnInput): BeginTurn["postures"] =>
     input.conversationAutoLand === undefined ? input.postures : { ...input.postures, autoLand: input.conversationAutoLand };
 
+// What a fresh session's opening turn latches: the origin it names, what for, and when, so work the origin changes
+// afterwards reads as work it has not seen.
+const freshSessionOf = (input: TurnInput, now: number): FreshSession | undefined =>
+    input.freshOf === undefined ? undefined : { of: input.freshOf.conversationId, kind: input.freshOf.kind, at: now };
+
 // What a conversation's turn begins as: its profile whole, and what an opening turn decides. Placement is the
 // conversation's: a fresh one takes the request's, later turns follow the registry's own record.
 export const conversationIdentity = (
     input: TurnInput,
     conversationId: string,
     placement: { readonly isolated: boolean; readonly runner: string | undefined },
+    now = Date.now(),
 ): BeginTurn => ({
     conversationId,
     isolated: placement.isolated,
@@ -136,12 +143,15 @@ export const conversationIdentity = (
     ...opt("titleSource", input.titleSource),
     ...opt("postures", openingPostures(input)),
     ...opt("origin", input.origin),
-    ...opt("startedBy", input.actor),
+    // A fresh session hangs under the conversation whose work it starts from, as that one's child would; the person
+    // stays its speaker and owner.
+    ...opt("startedBy", input.freshOf === undefined ? input.actor : childActor(input.freshOf.conversationId)),
     ...opt("owner", input.owner),
     ...opt("areas", input.areas),
     ...opt("startIn", input.startIn),
     // A fork names its source once; `keep` is the cut's index in the source's own record.
     ...(input.forkOf !== undefined ? { forkedFrom: { conversationId: input.forkOf.conversationId, index: input.forkOf.keep, files: input.forkOf.files } } : {}),
+    ...opt("fresh", freshSessionOf(input, now)),
 });
 
 // A fresh conversation naming a runner nobody paired, refused in the same words whether it is sent now or booked.

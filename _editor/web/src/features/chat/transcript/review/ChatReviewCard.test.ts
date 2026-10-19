@@ -65,6 +65,26 @@ describe(`ChatReviewCard`, () => {
         ]);
     });
 
+    // A fresh session only saw the work: the agent that made it judges which findings hold, so Fix goes to its composer,
+    // each finding with what makes it go wrong, since that conversation never saw this card.
+    it(`puts a fresh session's fix in the original conversation's composer instead`, () => {
+        const local: string[] = [];
+        const original: string[] = [];
+        const element = mount(REVIEW, {
+            imageUrl: () => undefined,
+            draftMessage: (text) => local.push(text),
+            fixIn: () => ({ title: `Upload retries`, draft: (text) => original.push(text) }),
+        });
+        buttons(element, `Fix in the original`)[1]?.click();
+        buttons(element, `Fix all in the original`)[0]?.click();
+        expect(local).toEqual([]);
+        expect(original).toHaveLength(2);
+        expect(original[0]).toContain(`which saw your work but not this conversation`);
+        expect(original[0]).toContain(`src/cache.ts:7 — The cache never expires.`);
+        expect(original[1]).toContain(`1. src/upload.ts:40 — Retry drops the last chunk\n   The loop exits before the final flush.\n2. src/cache.ts:7`);
+        expect(buttons(element, `Fix`)).toHaveLength(0);
+    });
+
     it(`draws the findings with nothing to press where the surface offers nothing`, () => {
         const element = mount(REVIEW);
         expect(element.textContent).toContain(`Retry drops the last chunk`);

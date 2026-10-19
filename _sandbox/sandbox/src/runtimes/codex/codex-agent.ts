@@ -1022,6 +1022,7 @@ const codexPhase = (
             return yield* streamTurn(
                 runner({
                     prompt: phase.prompt,
+                    ...opt("reviewScope", request.spec.reviewScope),
                     ...(phase.images.length > 0 ? { images: phase.images } : {}),
                     ...(phase.sessionId !== undefined ? { sessionId: phase.sessionId } : {}),
                     ...turnBase,

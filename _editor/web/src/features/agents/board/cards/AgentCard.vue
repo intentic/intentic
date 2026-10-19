@@ -33,15 +33,17 @@ import WorkflowMark from "../../../../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../laneDrop";
 import type { CardOwnPresses } from "../view/cardMenu";
 import type { IdMatch } from "../idMatch";
-import { attentionReason, landFailure, retryLand, reviewAction, reviewBesideDrill, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
+import { attentionReason, retryLand, reviewAction, reviewBesideDrill, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
 import { cardFailure, type FamilyChip, type StandingChip, standingChip } from "../../../../models/agent-status/agentStatus-chips";
 import { type FleetLane, laneOf, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
 import { activityLine, agentDisplayTitle, agentStandingMeta, contextPct, cornerInk, loopMeta } from "../../../../models/agent-status/agentStatus-meta";
-import { conflictIsYours, limited, limitScheduled, scheduledCount, turnInFlight, turnWorking, unregistered } from "../../../../models/agent-status/agentStatus-standing";
+import { conflictIsYours, limited, limitScheduled, scheduledCount, turnWorking, unregistered } from "../../../../models/agent-status/agentStatus-standing";
 import { landedAway, landedDelivery } from "../../fleet/agentStatus-land";
 import CardSeal from "../../../../parts/fleet/CardSeal.vue";
+import WorkAssurance from "../../../../parts/fleet/WorkAssurance.vue";
+import { useWorkAssurance } from "../../../../models/fleet/board/workAssurance";
 import CardPermissionAsk from "./CardPermissionAsk.vue";
-import { cardProof, type ProofMark, sealStandsIn as standsIn } from "../../../../models/fleet/board/proofSeal";
+import { sealStandsIn as standsIn } from "../../../../models/fleet/board/proofSeal";
 import { reachLine } from "../../../../models/fleet/board/reachLine";
 import KeepWarmPanel from "../../../../parts/fleet/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
@@ -373,31 +375,19 @@ const cardRoot = useTemplateRef<HTMLElement>(`cardRoot`);
 // a coin toss of a label on forty receipts in a lane already named Finished, whose corner glyph says how each settled.
 const summary = computed(() => stats.value || rowDrill.value || rowChanges.value || resendable.value || dated.value || working.value || reactable.value);
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
-// What its last turn showed of its own work (proofSeal.ts). Held while value-equal, so a roster frame that moved
-// something else on this card (its activity, its clock) redraws none of the seal.
-let heldPrint = ``;
-let heldProof: ProofMark | undefined;
-// A land that broke wears no seal: a check mark on the card whose work is stuck read as finished.
-const landBroke = computed(() => landFailure(props.agent));
+// What its last turn showed of its own work and what has checked it since (workAssurance.ts): said in words on a line of
+// its own (WorkAssurance), and by the corner's seal alone (`seal`) only where that line is not drawn.
+const { proof, checks, assured, seal } = useWorkAssurance(() => props.agent);
 // What the card says of the failure it ended on: one line at rest, the words whole in its hover (cardFailure). A land
 // that broke keeps the line after the next turn cleared the turn's failure, since its work is still stuck.
 const failure = computed(() => cardFailure(props.agent));
-const proof = computed(() => {
-    const next = landBroke.value === undefined ? cardProof(props.agent, turnInFlight(props.agent)) : undefined;
-    const print = JSON.stringify(next ?? null);
-    if (print !== heldPrint) {
-        heldPrint = print;
-        heldProof = next;
-    }
-    return heldProof;
-});
 // Where its last turn put its work besides its branch (reachLine.ts): live files, a clone of its own, a push. Kept
 // while a new turn runs, unlike the seal: the work it names stays where it went until a turn puts it back.
 const reach = computed(() => reachLine(props.agent.reach));
 // THE SEAL IS THE CORNER'S LAST MARK, beside the chip or the status glyph, never under either: a card whose turn just
 // ended is almost always unread, so a seal that gave way to "Updated" would hide exactly when its proof is news.
 // It STANDS IN for a resting glyph (proofSeal.sealStandsIn); its hover leads with the word the glyph wore.
-const sealStandsIn = computed(() => standsIn(proof.value, props.agent.status));
+const sealStandsIn = computed(() => standsIn(seal.value, props.agent.status));
 // Either mark opens the same question the chat's status bar asks, answered for this card.
 const warmOpen = ref(false);
 const warmAnchor = ref<HTMLElement>();
@@ -705,7 +695,7 @@ const grab = (event: PointerEvent): void => {
                 <!-- What its last turn showed of its own work, one glyph, its words in its hover (CardSeal). The corner's marks are
                      a step over the title's size, as the rail's are: a board card is bigger, its ring is 28px to the rail's
                      24, and at the title's own size the two marks read as specks beside it. -->
-                <CardSeal v-if="proof !== undefined" :proof="proof" :quiet="receipt" :status="sealStandsIn ? statusMeta.label : undefined" class="text-base" />
+                <CardSeal v-if="seal !== undefined" :proof="seal" :quiet="receipt" :status="sealStandsIn ? statusMeta.label : undefined" class="text-base" />
             </span>
         </div>
         <p v-if="edit.error !== undefined" class="text-2xs text-danger">{{ edit.error }}</p>
@@ -766,6 +756,9 @@ const grab = (event: PointerEvent): void => {
                 <Icon :name="reach.tone === `warning` ? `exclamation-triangle` : `cloud-upload`" class="mt-px shrink-0 text-2xs" />
                 <span class="line-clamp-2 min-w-0 flex-1 leading-4">{{ reach.text }}</span>
             </p>
+
+            <!-- What has looked at its work, in words: its own last check, then the latest of each kind of check a fresh session ran. -->
+            <WorkAssurance v-if="assured" :agent="agent" :proof="proof" :checks="checks" :quiet="receipt" :class="dense ? 'w-full' : ''" />
 
             <!-- Provenance, ahead of the model/branch line: for an agent the user didn't start, whose it is outranks what it runs on. -->
             <OriginMark :origin="agent.origin" />

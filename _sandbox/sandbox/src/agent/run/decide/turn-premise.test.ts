@@ -2,7 +2,7 @@ import { experimentArm } from "@intentic/agent-context/experiments";
 import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
-import { premiseOf, type TurnRuntime } from "./turn-premise.js";
+import { type ConversationEntry, premiseOf, type TurnRuntime } from "./turn-premise.js";
 
 // Whether the premise sends the map: the arm decides where one was drawn, the switch where none was.
 
@@ -33,4 +33,23 @@ test.each([
 
 test("with the switch off neither arm is sent a map", () => {
     expect(premise({ workspaceMap: false, workspaceMapHoldout: 0.5 }, conversationIn("workspace-map-or-none", true)).send.map).toBe(false);
+});
+
+// A spawned child opens on its parent's long brief and goes unmapped; a fresh session hangs under its origin the same
+// way, but a person wrote its opening, so it is mapped like any person's conversation.
+test("a spawned child is not sent the map, a fresh session on another conversation's work is", () => {
+    const opening: AgentTurn = { prompt: "hi", conversationId: "conversation-0" };
+    const mapFor = (identity: ConversationEntry["identity"]): boolean =>
+        premiseOf(
+            {
+                entry: { id: "conversation-0", totals: { costUsd: 0, inputTokens: 0, outputTokens: 0, turns: 0, toolUses: 0, subagents: 0 }, profile: { provider: "claude", harness: "claude-code" }, identity },
+                settings: SandboxSettingsSchema.parse({ workspaceMap: true }),
+                personas: [],
+                areas: [],
+            },
+            opening,
+            RUNTIME,
+        ).send.map;
+    expect(mapFor({ startedBy: "agent:origin-1" })).toBe(false);
+    expect(mapFor({ startedBy: "agent:origin-1", fresh: { of: "origin-1", kind: "review", at: 1 } })).toBe(true);
 });

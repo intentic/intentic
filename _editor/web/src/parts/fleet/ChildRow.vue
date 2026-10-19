@@ -8,6 +8,7 @@ import { inProcess, type TrayChild } from "../../models/fleet/board/childFold";
 import { childLook } from "../../models/fleet/board/childLook";
 import { formatElapsed, toneWash } from "@intentic/ui";
 import RunFacts from "./RunFacts.vue";
+import { useT } from "@intentic/ui/i18n";
 
 // One child riding under its parent's card (childFold), in two lines. The first says which child and how it stands: its
 // glyph, its title, and how long it has worked or when it settled, or its ask, in the card's own pill, when it asks what
@@ -31,6 +32,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ open: [event: MouseEvent]; review: []; menu: [event: MouseEvent] }>();
 
+const t = useT();
 const look = computed(() => childLook(props.child, props.provider));
 // Ticks each second only while it works; settled dates below follow their own minute-rate leaf.
 const now = useNow(() => look.value.working);
@@ -75,6 +77,17 @@ const menu = (event: MouseEvent): void => {
             <span class="min-w-0 flex-1 truncate text-xs" :class="look.quiet ? 'text-muted' : 'text-content'" v-tooltip.top="look.titleHint">
                 <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{ run.text }}</span>
             </span>
+            <!-- A fresh session on the parent's work: what its review found, or that it is the reader's own ask (its kind titles a
+                 review's or a test's row already), told apart from a child the parent spawned. -->
+            <span
+                v-if="look.fresh !== undefined && (look.fresh.label !== undefined || look.fresh.result !== undefined)"
+                class="ui-status-pill shrink-0 gap-1 text-2xs"
+                :class="look.fresh.tone === `warning` ? toneWash(`warning`) : `bg-content/7 text-muted`"
+                v-tooltip.top="{ title: t(`agents.childRows.freshTitle`), note: t(`agents.childRows.kindTip`) }"
+                data-fresh-kind
+                ><Icon :name="look.fresh.icon" class="shrink-0 text-3xs" />{{ look.fresh.label ?? look.fresh.result
+                }}<template v-if="look.fresh.label !== undefined && look.fresh.result !== undefined"> · {{ look.fresh.result }}</template></span
+            >
             <!-- Right of the title when the row has room for both; the title still gives way first. The model, the ladder and
                  the clock each keep a fixed width, so the rows of a tray read as columns rather than each hugging its own. -->
             <span v-if="look.run !== undefined" class="hidden shrink-0 items-center text-2xs text-subtle @md:flex">

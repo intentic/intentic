@@ -73,9 +73,10 @@ export interface TurnPremise {
 // parent wrote, which named file paths in 201 of 213 children (a median 4,573 characters against 254 for a person's
 // opening), so the map has nothing left to orient; and drawn an arm of its own, it carried its parent's map into the
 // control group in 60 of them. Asked of the latched starter, which `begin` writes before the turn is planned. A card
-// that dropped the map is likewise out, and never in the experiment `arm` measures.
+// that dropped the map is likewise out, and never in the experiment `arm` measures. A fresh session hangs under the
+// conversation it reviews or tests the same way, but a person wrote its opening, as short as any person's: it is mapped.
 const mapped = (briefing: TurnBriefing, entry: ConversationEntry | undefined): boolean =>
-    briefing.sends("map") && parentOfActor(entry?.identity.startedBy) === undefined;
+    briefing.sends("map") && (parentOfActor(entry?.identity.startedBy) === undefined || entry?.identity.fresh !== undefined);
 
 // The opening (non-fork) message only: the map stays in the transcript, and the layout has not moved by the second
 // turn.

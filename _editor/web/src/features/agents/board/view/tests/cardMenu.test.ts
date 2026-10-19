@@ -43,6 +43,7 @@ const actions = (): { [K in keyof MenuActions]: ReturnType<typeof jest.fn> & Men
     stopWatching: jest.fn(async () => undefined),
     restore: jest.fn(async () => undefined),
     archive: jest.fn(async () => undefined),
+    startFresh: jest.fn(),
 });
 // The rows as a reader sees them: a label, or a rule between groups.
 const rows = (items: readonly MenuItem[]): string[] => items.map((item) => (item.separator === true ? `—` : String(item.label)));
@@ -143,6 +144,26 @@ describe(`what a card's menu offers`, () => {
         expect([rename.mock.calls, react.mock.calls]).toEqual([[[]], [[]]]);
         expect(rows(menuItemsFor(landed, facts({ presses: { react } }), actions()))).not.toContain(t(`ui.action.rename`));
         expect(rows(menuItemsFor(landed, facts({ presses: {} }), actions()))).toEqual(rows(menuItemsFor(landed, facts(), actions())));
+    });
+
+    // A second look by a session that never read how the work was made, only where there is work here to cut it from: one
+    // row opening onto every kind, none of them first or required.
+    it(`offers a fresh session on a card's work, one entry per kind, and starts it for that card`, () => {
+        const worked = card(`w`, { branch: `agent/w`, diff: { files: 2, insertions: 5, deletions: 1 } });
+        const act = actions();
+        const items = menuItemsFor(worked, facts(), act);
+        const fresh = items.find((item) => item.label === t(`agents.freshSession.menuFresh`));
+        expect(rows(fresh?.items ?? [])).toEqual([t(`agents.freshSession.kind.review`), t(`agents.freshSession.kind.test`), t(`agents.freshSession.kind.ask`)]);
+        for (const label of rows(fresh?.items ?? [])) {
+            press(fresh?.items ?? [], label);
+        }
+        expect(act.startFresh.mock.calls).toEqual([
+            [worked, `review`],
+            [worked, `test`],
+            [worked, `ask`],
+        ]);
+        expect(rows(menuItemsFor(landed, facts(), act))).not.toContain(t(`agents.freshSession.menuFresh`));
+        expect(rows(menuItemsFor(worked, facts({ here: false }), act))).not.toContain(t(`agents.freshSession.menuFresh`));
     });
 
     it(`runs each row's own press on the card it was opened for`, () => {

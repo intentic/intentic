@@ -1,13 +1,14 @@
 // agents: the conversation fleet
 import { LandingDeliverySchema } from "./project-delivery.js";
 import { z } from "zod";
-import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, ConversationQueueSchema, ForkedFromSchema } from "./agent.js";
+import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, ConversationQueueSchema, ForkedFromSchema, FreshSessionSchema } from "./agent.js";
 import { LoopStateSchema } from "./loops.js";
 import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema, TurnBreakPolicySchema, TurnBreakSchema } from "./turn-break.js";
 import { KeepWarmSchema } from "./keep-warm.js";
 import { AgentNeedSchema } from "./needs.js";
 import { EMOJI_MAX_LENGTH, isSingleEmoji } from "../text/emoji.js";
 import { ProgramAskSchema } from "../events/requests.js";
+import { ReviewTallySchema, TurnProofSchema } from "./work-assurance.js";
 // A fleet agent is any conversation with a registry entry, keyed by conversationId. Isolated ones own a git worktree
 // (branch agent/<id>); workspace conversations have none, but both share one status/activity/cost lifecycle.
 
@@ -101,22 +102,8 @@ export const UnfinishedWorkSchema = z.object({
         ),
 });
 export type UnfinishedWork = z.infer<typeof UnfinishedWorkSchema>;
-// What the last turn showed of its own work, read off its tool calls and never asked of the model: the record a card
-// badges instead of sending the turn back to prove anything. CI checks what the owner pushes (schemas/ci.ts).
-export const TurnProofSchema = z.object({
-    at: z.number().describe("When the turn that left this ended, in milliseconds."),
-    verification: z
-        .enum(["verified", "unproven", "failing", "no-code"])
-        .describe(
-            "Verified: a check it ran passed after its last edit to code. Failing: the last one it ran failed. Unproven: it changed code and ran nothing that checked it. No-code: it changed nothing a check could speak to.",
-        ),
-    check: z.string().optional().describe("The command that spoke, when one did, so a targeted test is never read as the whole suite."),
-    unviewed: z
-        .number()
-        .optional()
-        .describe("How many rendered files it changed (pages, components, styles) without looking at the result afterwards. Absent when none."),
-});
-export type TurnProof = z.infer<typeof TurnProofSchema>;
+// What has looked at a conversation's work (its last turn's own checks, its latest code review): work-assurance.ts.
+export * from "./work-assurance.js";
 // How many entries each of a reach's lists carries; past it, the list's `…More` count says how many were left out.
 export const TURN_REACH_LIST_MAX = 10;
 // Where the last turn's work went when it went somewhere other than its own branch, read off what the turn touched and
@@ -414,6 +401,10 @@ export const AgentSummarySchema = z.object({
     forkedFrom: ForkedFromSchema.optional().describe(
         "The conversation this one was cut from. Recorded once and never cleared: it is the relationship, not a pending state.",
     ),
+    // Recorded once on a fresh session's first turn and never cleared; `startedBy` names the same origin as its parent.
+    fresh: FreshSessionSchema.optional().describe(
+        "Set on a conversation started on another conversation's work without its messages (a code review, a test pass, a person's own ask): which one, for what, and when. Absent for every other conversation.",
+    ),
     // Root repo's short base sha; per-repo bases stay daemon-internal.
     base: z.string().optional().describe("The commit its private copy started from, shortened."),
     costUsd: z.number().optional().describe("What it has cost so far, in dollars. A subagent's spend is its own and is not folded in here."),
@@ -542,6 +533,10 @@ export const AgentSummarySchema = z.object({
     // Written by the turn's own settle from its tool calls; nothing is asked of the model to earn or clear it.
     proof: TurnProofSchema.optional().describe(
         "What its last turn showed of its work: whether a check it ran passed after its last edit, and whether it looked at interface files it changed. Absent until a turn that edited or checked anything has ended.",
+    ),
+    // Written by the settle of the turn that reported a review, from its review frames; never asked of the model.
+    review: ReviewTallySchema.optional().describe(
+        "The latest code review this conversation reported: how many findings, and how many are still open. Absent until one has.",
     ),
     // Written by the turn's own settle from its tool calls and a read of the clones and installs it could have touched;
     // replaced by every turn, so it says where the LAST turn's work went.

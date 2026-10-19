@@ -3,6 +3,7 @@ import {
     AgentOriginSchema,
     AgentProviderSchema,
     ForkedFromSchema,
+    FreshSessionSchema,
     profileOf,
     type TurnProfile,
 } from "@intentic/sandbox-contract/schemas/agent";
@@ -10,6 +11,7 @@ import {
     type AgentStatus,
     LandConflictSchema,
     LandedMessageSchema,
+    ReviewTallySchema,
     SessionOwnerSchema,
     TurnProofSchema,
     TurnReachSchema,
@@ -83,7 +85,9 @@ export type Placement = z.infer<typeof PlacementSchema>;
 // daemon verified them), the fence it was born with as area ids (absent: the whole workspace), where it opened and as
 // whom, and the conversation it was forked from. `people` is the one field that grows: every person who has asked it for
 // a turn, and what spoke into it carries over, since what it may spend is what all of them may
-// (secrets/credential-reach.ts). Added 2026-10-13, optional: a row written before it reads its starter alone.
+// (secrets/credential-reach.ts). Added 2026-10-13, optional: a row written before it reads its starter alone. `fresh`,
+// added 2026-10-19 and optional: a session a person started on another conversation's work without its messages (a code
+// review, a test pass), whose `startedBy` names that conversation as its parent.
 const IdentitySchema = z.object({
     origin: AgentOriginSchema.optional(),
     startedBy: z.string().optional(),
@@ -92,6 +96,7 @@ const IdentitySchema = z.object({
     startIn: z.string().optional(),
     actsAs: z.string().optional(),
     forkedFrom: ForkedFromSchema.optional(),
+    fresh: FreshSessionSchema.optional(),
 });
 export type Identity = z.infer<typeof IdentitySchema>;
 
@@ -212,6 +217,9 @@ export const PersistedAgentSchema = z.object({
     // Where the last turn's work went besides its branch (live files, clones of its own, pushes); replaced by every
     // turn that runs, absent when it all stayed on the branch.
     reach: TurnReachSchema.optional(),
+    // The latest code review a turn reported (events/review.ts), counted; a turn that reviews nothing leaves it standing.
+    // Added 2026-10-19, optional: a row from before it has never reported one as far as it knows.
+    review: ReviewTallySchema.optional(),
     postures: PosturesSchema,
     landing: LandingSchema,
     social: SocialSchema,

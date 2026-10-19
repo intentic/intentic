@@ -67,3 +67,19 @@ describe(`what a child says it runs on`, () => {
         expect(childLook(inProcess(), `claude`).run).toBeUndefined();
     });
 });
+
+describe(`what a fresh session on the parent's work says it is`, () => {
+    it(`names its kind, and what its review found once it reported`, () => {
+        expect(childLook(spawned(), `claude`).fresh).toBeUndefined();
+        expect(childLook(spawned({ fresh: { of: `p`, kind: `test`, at: 1 } }), `claude`).fresh).toMatchObject({ icon: `play`, result: undefined, tone: `neutral` });
+        const reviewed = spawned({ fresh: { of: `p`, kind: `review`, at: 1 }, review: { at: 2, source: `claude`, findings: 3, open: 2 } });
+        expect(childLook(reviewed, `claude`).fresh).toMatchObject({ label: undefined, icon: `list-check`, result: `3 findings`, tone: `warning` });
+        // Titled by its kind, its own title (which repeats the origin's name) in the hover.
+        expect(childLook(reviewed, `claude`)).toMatchObject({ title: `Code review`, titleHint: { title: `child` } });
+        const asked = spawned({ fresh: { of: `p`, kind: `ask`, at: 1 } });
+        expect(childLook(asked, `claude`)).toMatchObject({ title: `child`, fresh: { label: `Fresh` } });
+        const clean = spawned({ fresh: { of: `p`, kind: `review`, at: 1 }, review: { at: 2, source: `codex`, findings: 0, open: 0 } });
+        expect(childLook(clean, `claude`).fresh).toMatchObject({ result: `no findings`, tone: `neutral` });
+        expect(childLook(inProcess(), `claude`).fresh).toBeUndefined();
+    });
+});

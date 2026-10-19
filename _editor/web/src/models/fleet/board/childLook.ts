@@ -1,4 +1,6 @@
-import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import type { AgentProvider, FreshKind } from "@intentic/sandbox-contract/schemas/agent";
+import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
+import type { FleetAgent } from "../useAgents-fleet";
 import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { IconName, Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
@@ -10,6 +12,7 @@ import { subagentLive } from "../subagentRoster";
 import { modelLabelFor } from "../../providers/providerCatalog";
 import { clampEffort, effortsFor } from "../../providers/effortScale";
 import { inProcess, subagentTitle, type TrayChild } from "./childFold";
+import { FRESH_ICONS } from "../freshKinds";
 
 // What a row in a card's tray draws, read the same way off either kind of child: a conversation the card spawned, or a
 // subagent its runtime ran in-process. One shape, so the tray draws one row (ChildRow) and the two kinds cannot drift
@@ -40,7 +43,40 @@ export interface ChildLook {
     // What it runs on, in words on the row and the bar alike, never behind a hover: the one fact a reader cannot guess
     // from the parent, since a child may run on any model at any tier. Only what was recorded; absent says nothing.
     readonly run: RunLook | undefined;
+    // What a fresh session on the parent's work was opened for (freshSession.ts), and what its review found: the word that
+    // tells it apart from a child the parent's agent spawned, which it otherwise hangs beside. Absent for every other child.
+    readonly fresh: FreshLook | undefined;
 }
+
+export interface FreshLook {
+    // Drawn in the pill only for the reader's own ask: a review's or a test's row is titled by its kind already.
+    readonly label: string | undefined;
+    readonly icon: IconName;
+    // Its review's count, once it reported one.
+    readonly result: string | undefined;
+    // Findings still open are the parent's to look at; anything else is said quietly.
+    readonly tone: `warning` | `neutral`;
+}
+
+const freshLabel = (kind: FreshKind): string => t(`agents.childRows.kind.${kind}`);
+
+const freshLook = (child: Pick<FleetAgent, "fresh" | "review">): FreshLook | undefined => {
+    if (child.fresh === undefined) {
+        return undefined;
+    }
+    const review = child.review;
+    return {
+        label: child.fresh.kind === `ask` ? freshLabel(`ask`) : undefined,
+        icon: FRESH_ICONS[child.fresh.kind],
+        result:
+            review === undefined
+                ? undefined
+                : review.findings === 0
+                  ? t(`agents.childRows.clean`)
+                  : t(`agents.childRows.findings`, { count: review.findings }, review.findings),
+        tone: review !== undefined && review.open > 0 ? `warning` : `neutral`,
+    };
+};
 
 // The model by its catalog name ("Opus 5.5", never the alias a call named), and the tier it ran at on that model's own
 // ladder, the rungs the composer draws, so a child's tier reads the way the reader set their own.
@@ -83,50 +119,67 @@ const effortLook = (provider: AgentProvider, model: string, effort: string | und
     return rung < 0 ? { label: running, rung: 0, rungs: 0 } : { label: ladder[rung]!.label, rung, rungs: ladder.length };
 };
 
+// An in-process subagent: no chat of its own, so its row shows its transcript in its parent's.
+const inProcessLook = (child: SubagentSession, provider: AgentProvider): ChildLook => {
+    const live = subagentLive(child);
+    const meta = subagentStatusMeta(child.status);
+    const title = subagentTitle(child) ?? t(`shared.subagent`);
+    // Claude's default type says nothing worth a hover: only a chosen type (Explore, Plan…) is named.
+    const tag = child.agentType === `general-purpose` ? undefined : (child.agentType ?? t(`shared.subagent`));
+    return {
+        title,
+        titleHint: {
+            title: tag === undefined || tag === title ? t(`agents.childRows.inProcess`) : `${t(`agents.childRows.inProcess`)} · ${tag}`,
+            note: t(`agents.childRows.opensInThisChat`),
+        },
+        glyph: live ? meta : { ...meta, class: `text-subtle` },
+        hint: child.error ?? meta.label,
+        ask: undefined,
+        quiet: !live,
+        working: child.status === `running`,
+        since: child.startedAt,
+        doing: child.lastTool ?? t(`ui.status.working`),
+        at: child.endedAt ?? child.activityAt,
+        // Its parent's provider: an in-process subagent runs inside the parent's own runtime.
+        run: runLook(provider, child.model, child.effort, undefined),
+        fresh: undefined,
+    };
+};
+
+// A spawned child's standing glyph, in the card's own vocabulary; settled rows in the ledger's ink.
+const spawnedGlyph = (child: FleetAgent, lane: ReturnType<typeof laneOf>): ChildLook[`glyph`] => {
+    // An armed watch is why an idle child is in flight at all: its glyph says what it is waiting for, not that it idles.
+    if (!turnWorking(child) && watching(child)) {
+        return { icon: `eye`, label: t(`agents.childRows.watching`), class: `text-link` };
+    }
+    // A spent allowance is nothing broken: the clock it waits on, in muted ink, not the error's triangle.
+    if (limited(child)) {
+        return { icon: `clock`, label: t(`agents.agentStatus.usageLimit`), class: `text-subtle` };
+    }
+    const meta = agentStatusMeta(child.status);
+    return lane === `finished` ? { ...meta, class: `text-subtle` } : meta;
+};
+
+// Under its origin's card, a review's or a test's row is named by what it is: its own title only repeats the origin's
+// name after the kind ("Code review: …"), so it rides the hover instead. The reader's own ask keeps its title, and any
+// other child names its provider in the hover when that is not its parent's.
+const spawnedTitle = (child: FleetAgent, provider: AgentProvider): Pick<ChildLook, `title` | `titleHint`> => {
+    if (child.fresh !== undefined && child.fresh.kind !== `ask`) {
+        return { title: freshLabel(child.fresh.kind), titleHint: { title: agentDisplayTitle(child), note: t(`agents.childRows.kindTip`) } };
+    }
+    return { title: agentDisplayTitle(child), titleHint: child.provider === provider ? undefined : { title: providerLabel(child.provider) } };
+};
+
 export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook => {
     if (inProcess(child)) {
-        const live = subagentLive(child);
-        const meta = subagentStatusMeta(child.status);
-        const title = subagentTitle(child) ?? t(`shared.subagent`);
-        // Claude's default type says nothing worth a hover: only a chosen type (Explore, Plan…) is named.
-        const tag = child.agentType === `general-purpose` ? undefined : (child.agentType ?? t(`shared.subagent`));
-        return {
-            title,
-            titleHint: {
-                title: tag === undefined || tag === title ? t(`agents.childRows.inProcess`) : `${t(`agents.childRows.inProcess`)} · ${tag}`,
-                note: t(`agents.childRows.opensInThisChat`),
-            },
-            glyph: live ? meta : { ...meta, class: `text-subtle` },
-            hint: child.error ?? meta.label,
-            ask: undefined,
-            quiet: !live,
-            working: child.status === `running`,
-            since: child.startedAt,
-            doing: child.lastTool ?? t(`ui.status.working`),
-            at: child.endedAt ?? child.activityAt,
-            // Its parent's provider: an in-process subagent runs inside the parent's own runtime.
-            run: runLook(provider, child.model, child.effort, undefined),
-        };
+        return inProcessLook(child, provider);
     }
     const lane = laneOf(child);
     // What it asks of the reader; never in the archive, where every press waits for a restore.
     const ask = child.archivedAt === undefined && onlyOwnerCanAnswer(child) ? attentionReason(child) : undefined;
-    const glyph = ((): ChildLook[`glyph`] => {
-        // An armed watch is why an idle child is in flight at all: its glyph says what it is waiting for, not that it idles.
-        if (!turnWorking(child) && watching(child)) {
-            return { icon: `eye`, label: t(`agents.childRows.watching`), class: `text-link` };
-        }
-        // A spent allowance is nothing broken: the clock it waits on, in muted ink, not the error's triangle.
-        if (limited(child)) {
-            return { icon: `clock`, label: t(`agents.agentStatus.usageLimit`), class: `text-subtle` };
-        }
-        const meta = agentStatusMeta(child.status);
-        return lane === `finished` ? { ...meta, class: `text-subtle` } : meta;
-    })();
-    const run = runLook(child.provider, child.model, child.effort, child.thinking);
+    const glyph = spawnedGlyph(child, lane);
     return {
-        title: agentDisplayTitle(child),
-        titleHint: child.provider === provider ? undefined : { title: providerLabel(child.provider) },
+        ...spawnedTitle(child, provider),
         glyph,
         hint: child.failure ?? glyph.label,
         ask,
@@ -135,6 +188,7 @@ export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook 
         since: child.startedAt,
         doing: activityLine(child) ?? t(`ui.status.working`),
         at: child.updatedAt,
-        run,
+        run: runLook(child.provider, child.model, child.effort, child.thinking),
+        fresh: freshLook(child),
     };
 };

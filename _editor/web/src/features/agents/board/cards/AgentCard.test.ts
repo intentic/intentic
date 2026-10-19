@@ -198,38 +198,39 @@ it(`leaves the land button alone while some other action holds the card`, () => 
     expect(landButton(mount(ready(), `archive`))?.textContent?.trim()).toBe(`Land now`);
 });
 
-/* READ, THEN LAND: a Ready card with unread changes leads with its review, Land now kept as the quieter second press. */
+/* LAND LEADS, READING IS OFFERED: a Ready card's first press is always Land now; unread changes add a quieter Review
+   changes after it, since reviewing before a land is often skipped on purpose. */
 
 const written = (): FleetAgent => ({ ...ready(), id: `a7`, diff: { files: 2, insertions: 20, deletions: 2 } });
 const buttonNamed = (el: HTMLElement, words: string): HTMLButtonElement | undefined =>
     [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === words);
 
-it(`leads unread work with Review & land, and keeps Land now beside it for a deliberate skip`, () => {
+it(`leads with Land now and offers the review of unread work after it`, () => {
     const changes = jest.fn();
     const landed = jest.fn();
     const el = mount(written(), undefined, { onChanges: changes, onLand: landed });
     const presses = [...el.querySelectorAll(`button`)].map((button) => button.textContent?.trim());
-    expect(presses.indexOf(`Review & land`)).toBeGreaterThan(-1);
-    expect(presses.indexOf(`Review & land`)).toBeLessThan(presses.indexOf(`Land now`));
-    buttonNamed(el, `Review & land`)!.click();
+    expect(presses.indexOf(`Review changes`)).toBeGreaterThan(presses.indexOf(`Land now`));
+    expect(presses.indexOf(`Land now`)).toBeGreaterThan(-1);
+    buttonNamed(el, `Review changes`)!.click();
     expect([changes.mock.calls.length, landed.mock.calls.length]).toEqual([1, 0]);
     landButton(el)!.click();
     expect(landed).toHaveBeenCalledTimes(1);
 });
 
-it(`gives Land now the lead back once every file is marked reviewed`, () => {
+it(`stops offering the review once every file is marked reviewed`, () => {
     setAgentViewed(`a7`, [`root:a.ts`, `root:b.ts`], true);
     try {
         const el = mount(written());
-        expect(buttonNamed(el, `Review & land`)).toBeUndefined();
+        expect(buttonNamed(el, `Review changes`)).toBeUndefined();
         expect(landButton(el)?.textContent?.trim()).toBe(`Land now`);
     } finally {
         setAgentViewed(`a7`, [`root:a.ts`, `root:b.ts`], false);
     }
 });
 
-it(`offers no review first for a Ready card with nothing counted to read`, () => {
-    expect(buttonNamed(mount(ready()), `Review & land`)).toBeUndefined();
+it(`offers no review for a Ready card with nothing counted to read`, () => {
+    expect(buttonNamed(mount(ready()), `Review changes`)).toBeUndefined();
 });
 
 it(`opens the diff from the change count, a named press that does not also open the chat`, () => {

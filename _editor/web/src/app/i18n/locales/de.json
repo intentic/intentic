@@ -128,7 +128,6 @@
             "sends": "sendet {at}",
             "scheduledMessages": "Nachrichten",
             "sendsWhenRoom": "sendet, sobald Speicher frei ist",
-            "landUnreviewedHint": "Übernimmt, ohne die Änderungen zu lesen",
             "reviewChangesCount": "Änderungen prüfen: {added} Zeilen hinzugefügt, {removed} entfernt"
         },
         "agentConflictReport": {

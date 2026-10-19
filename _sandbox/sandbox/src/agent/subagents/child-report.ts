@@ -20,8 +20,11 @@ export interface ChildReportDeps {
     readonly logger: Logger;
     // Where the child's roster record, its verification ledger and a report still queued for its parent are held.
     readonly conversations: Pick<ConversationActors, "holdings">;
-    // A child's entry names its parent in `startedBy`.
-    readonly entryOf: (conversationId: string) => { readonly startedBy?: string | undefined; readonly title?: string | undefined } | undefined;
+    // A child's entry names its parent in `startedBy`; `fresh` marks a person's session on that parent's work, which
+    // never reports to it.
+    readonly entryOf: (
+        conversationId: string,
+    ) => { readonly startedBy?: string | undefined; readonly title?: string | undefined; readonly fresh?: boolean | undefined } | undefined;
     // What the parent runs as now, which the report's turn continues.
     readonly profileOf: (conversationId: string) => TurnProfile | undefined;
     // The ending a parent reads for a child whose runtime was killed under it; undefined for a failure of its own.
@@ -55,7 +58,9 @@ const reportText = (settled: DomainEventMap["run.settled"], killed: string | und
     return [...(rerun === undefined ? [] : [rerun]), answer, ...(ending === undefined ? [] : [ending])].filter((part) => part !== "").join("\n\n");
 };
 
-// Nobody when a person started the turn in the child's own chat, a wait already took it, or the parent is gone.
+// Nobody when a person started the turn in the child's own chat, a wait already took it, or the parent is gone; nor ever
+// for a fresh session (a review or test a person opened on the parent's work), whose findings reach the parent only when
+// that person sends them, so a re-run the sandbox fires itself wakes nobody either.
 const parentToTell = (
     deps: ChildReportDeps,
     settled: DomainEventMap["run.settled"],
@@ -64,6 +69,7 @@ const parentToTell = (
     const parent = parentOfActor(entry?.startedBy);
     if (
         parent === undefined ||
+        entry?.fresh === true ||
         (settled.actor !== undefined && parentOfActor(settled.actor) !== parent) ||
         subagentEndingReported(deps.conversations, settled.conversationId) ||
         deps.movingOn?.(settled.conversationId) === true ||

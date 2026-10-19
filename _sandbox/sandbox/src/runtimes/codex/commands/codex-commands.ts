@@ -58,10 +58,15 @@ export const reviewTargetOf = (words: string): CodexReviewTarget => {
 };
 
 // The review a prompt asks for, when its words (after the daemon's notes) open with `/review` and no skill of the thread
-// claims that name; undefined for every other prompt.
-export const reviewTargetIn = (prompt: string, skills: readonly CodexSkill[]): CodexReviewTarget | undefined => {
+// claims that name; undefined for every other prompt. A bare `/review` reviews `scope` where the turn carries one (a
+// fresh session's origin work, whose cut committed it, so its uncommitted changes are none); words after it still win.
+export const reviewTargetIn = (prompt: string, skills: readonly CodexSkill[], scope?: string): CodexReviewTarget | undefined => {
     const named = /^\/review(?:\s+([\s\S]*))?$/.exec(splitTurnPreamble(prompt).words.trim());
-    return named === null || skills.some((skill) => skill.name === REVIEW) ? undefined : reviewTargetOf(named[1] ?? "");
+    if (named === null || skills.some((skill) => skill.name === REVIEW)) {
+        return undefined;
+    }
+    const words = named[1]?.trim() ?? "";
+    return words === "" && scope !== undefined ? { type: "custom", instructions: scope } : reviewTargetOf(words);
 };
 
 // app-server renders a review as the reviewer's word, then a "Full review comments:" block of `- [P1] title — /abs/path:3-7`

@@ -142,7 +142,6 @@
             "sends": "sends {at}",
             "scheduledMessages": "Messages",
             "sendsWhenRoom": "sends when memory frees",
-            "landUnreviewedHint": "Lands without reading the changes",
             "reviewChangesCount": "Review changes: {added} lines added, {removed} removed"
         },
         "agentConflictReport": {
@@ -311,8 +310,7 @@
             "stopKeepingWarm": "Stop keeping cache warm",
             "stopKeepingWarmHint": "Kept warm until {time}",
             "tryLandAgain": "Try landing again",
-            "landsIfConflictsGone": "Lands if the conflicts are gone",
-            "reviewChanges": "Review changes"
+            "landsIfConflictsGone": "Lands if the conflicts are gone"
         },
         "agentStatus": {
             "approvalNeeded": "Approval needed",
@@ -636,7 +634,16 @@
             "needsInput": "Needs input",
             "paused": "Paused",
             "completed": "Completed",
-            "yoursIfStops": "Yours if it stops"
+            "yoursIfStops": "Yours if it stops",
+            "kind": {
+                "review": "Code review",
+                "test": "Test",
+                "ask": "Fresh"
+            },
+            "findings": "{count} finding | {count} findings",
+            "clean": "no findings",
+            "kindTip": "Started without its conversation",
+            "freshTitle": "Fresh session"
         },
         "ownerMark": {
             "controlToken": "Control token",
@@ -930,8 +937,57 @@
             "close": "Close",
             "startOwn": "Start my own agent"
         },
-        "reviewAsk": {
-            "inWords": "Review the changes on your branch for correctness bugs. For each finding, name the file and line, what goes wrong, and the inputs that make it go wrong."
+        "freshSession": {
+            "reviewInWords": "Review the work this session started from for correctness bugs. For each finding, name the file and line, what goes wrong, and the inputs that make it go wrong. Report what affects correctness or what the work is for, not style preferences.",
+            "testInWords": "Test the work this session started from: run its tests and the checks that apply, and try what it changed the way a person would use it. Report what you ran, with the exact commands, and what passed and what failed. Change nothing unless I ask.",
+            "title": {
+                "review": "Code review: {title}",
+                "test": "Test: {title}"
+            },
+            "kind": {
+                "review": "Code review",
+                "test": "Test",
+                "ask": "Own ask"
+            },
+            "anotherChat": "another chat",
+            "onWork": "On {title}'s work, without its conversation",
+            "howItWorks": "Fresh session",
+            "howItWorksNote": "Sees work, not its chat",
+            "unlink": "Unlink",
+            "unlinkNote": "Becomes an ordinary chat",
+            "menuFresh": "Fresh session on this work",
+            "lineNote": "started from its work, without its conversation",
+            "originGone": "a chat no longer here",
+            "fixInOrigin": "Fix in the original",
+            "fixAllInOrigin": "Fix all in the original",
+            "fixInOriginTip": "The agent that made it",
+            "originFixAllRequest": "A code review in a fresh session, which saw your work but not this conversation, found these. Check each against what the work is meant to do: fix the ones that hold up, and say which you left and why.\n{list}",
+            "originFixOneRequest": "A code review in a fresh session, which saw your work but not this conversation, found this. Check it against what the work is meant to do: fix it if it holds up, or say why not.\n{finding}",
+            "lineOf": "{kind}: {title}",
+            "lineKind": {
+                "review": "Code review",
+                "test": "Test",
+                "ask": "Fresh session"
+            },
+            "menuItem": "Fresh session: {kind}"
+        },
+        "workAssurance": {
+            "marker": "{kind}: {state}",
+            "state": {
+                "running": "running",
+                "done": "done",
+                "failed": "didn't finish",
+                "clean": "no findings",
+                "findings": "{count} finding | {count} findings",
+                "open": "{open} of {count} open"
+            },
+            "stale": "the work changed since",
+            "again": "Again",
+            "againTitle": "Run it again",
+            "againNote": "New chat, no conversation",
+            "openTitle": "Open it",
+            "ownTip": "In its own chat",
+            "freshTip": "In a fresh session"
         }
     },
     "app": {
@@ -11894,8 +11950,7 @@
             "unstageFrom": "Unstage {count} file from {origin} | Unstage {count} files from {origin}",
             "stageFrom": "Stage {count} file from {origin} | Stage {count} files from {origin}",
             "messageBeingWritten": "its commit message is being written",
-            "namesTheCommit": "names the commit",
-            "reviewChanges": "Review changes"
+            "namesTheCommit": "names the commit"
         },
         "rowActions": {
             "changedSinceOn": "Changed since switched on",

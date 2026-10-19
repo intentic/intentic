@@ -1,7 +1,7 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import type { AgentJob, AgentSummary, AgentWatch, SessionOwner, TurnProof, TurnReach } from "@intentic/sandbox-contract/schemas/agents";
+import type { AgentJob, AgentSummary, AgentWatch, ReviewTally, SessionOwner, TurnProof, TurnReach } from "@intentic/sandbox-contract/schemas/agents";
 import type { AgentNeed } from "@intentic/sandbox-contract/schemas/needs";
-import type { AgentOrigin, ForkedFrom, TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
+import type { AgentOrigin, ForkedFrom, FreshSession, TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import { handoffAvailable, type HandoffMode } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import type { KeepWarmEnd } from "@intentic/sandbox-contract/schemas/keep-warm";
 import { type LimitPolicy, RETRY_LADDER_TRIES } from "@intentic/sandbox-contract/schemas/turn-break";
@@ -13,6 +13,7 @@ import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
 import { opt } from "../../opt.js";
 import type { FailedEnding, PersistedAgent } from "../registry/agents-store.js";
 import { keptHold, type StoredLimitHold, storedLimitHold } from "./limit-hold.js";
+import { comingBackNow, failureOf, sanitizeFailure } from "./turn-failure.js";
 import {
     type Booking,
     edited,
@@ -73,6 +74,8 @@ export interface BeginTurn {
     // The fence that member holds, as area ids.
     readonly areas?: readonly string[];
     readonly forkedFrom?: ForkedFrom;
+    // A fresh session's origin and kind, named by its opening turn; `startedBy` then names that origin as its parent.
+    readonly fresh?: FreshSession;
 }
 
 // Why a turn does not claim the conversation: a turn or a rewind holds it, or it is archived and no person sent this one.
@@ -98,6 +101,8 @@ export interface SettleFlush {
     readonly proof: TurnProof | undefined;
     // Where the turn's work went besides its branch; absent when it all stayed there, which clears the card's last one.
     readonly reach: TurnReach | undefined;
+    // The last code review the turn reported; absent when it reported none, which leaves the card's last one standing.
+    readonly review: Omit<ReviewTally, "at"> | undefined;
 }
 
 export type ConversationEvent =
@@ -269,36 +274,6 @@ export interface Decision<R> {
     readonly reply: R;
 }
 
-// Long enough for a provider's own explanation; short enough that a stack trace or error page can't ride into the
-// roster. One bounded line, no newlines; empty collapses to `undefined`.
-const MAX_FAILURE_LENGTH = 400;
-const sanitizeFailure = (message: string): string | undefined => {
-    const clean = message.replaceAll(/\s+/gu, " ").trim().slice(0, MAX_FAILURE_LENGTH);
-    return clean === "" ? undefined : clean;
-};
-
-// The frame's own verdict decides, not the code, except a rate limit: its reopening can be hours away, so it is
-// recorded as a failure rather than hidden as work in progress.
-const comingBackNow = (event: Extract<AgentEvent, { kind: "error" }>): boolean => event.autoResume === "scheduled" && event.code !== "rate_limit";
-
-// A spent allowance is its own kind: the only failure with a reopening, a hold, a booking and a move to carry.
-const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): FailedEnding => {
-    const failure = sanitizeFailure(event.message);
-    if (event.code !== "rate_limit") {
-        return { kind: "failed", ...opt("failure", failure), ...opt("code", event.code) };
-    }
-    return {
-        kind: "limited",
-        ...opt("failure", failure),
-        ...opt("resetsAt", event.resetsAt),
-        held: event.held !== undefined,
-        // The daemon's own verdict at the failure; the firing pass asks the answer again at the reset, so a changed
-        // answer re-books it (agents-registry `rebooked`) to keep card and schedule in agreement.
-        scheduled: event.autoResume === "scheduled",
-        ...opt("moving", event.held?.moving),
-    };
-};
-
 // Half a pair names no deadline, so the frame is read only whole; a frame carrying neither leaves the last one standing.
 const promptCacheOf = (event: Extract<AgentEvent, { kind: "context_usage" }>, last: TurnRuntime["promptCache"]): TurnRuntime["promptCache"] =>
     event.cachedAt !== undefined && event.cacheTtlMs !== undefined ? { at: event.cachedAt, ttlMs: event.cacheTtlMs } : last;
@@ -445,6 +420,19 @@ const FRAMES: { readonly [K in AgentEvent["kind"]]?: FrameHandler<K> } = {
     subagent: (state, turn) => shown(state, counted(turn, { subagents: 1 })),
     subagent_update: (state, turn, frame) => (frame.status === undefined ? unchanged({ ...state, turn }, undefined) : shown(state, turn)),
     compact: (state, turn) => ({ state: { ...state, turn }, effects: [{ kind: "compacted" }], reply: undefined }),
+    // Counted, not kept: the findings stay in the transcript. A re-report of the same review replaces the count, its
+    // fixed and set-aside findings no longer open.
+    review: (state, turn, { review }) =>
+        unchanged(
+            {
+                ...state,
+                turn: {
+                    ...turn,
+                    review: { source: review.source, findings: review.findings.length, open: review.findings.filter((finding) => finding.outcome === undefined).length },
+                },
+            },
+            undefined,
+        ),
     error: onError,
 };
 
@@ -532,9 +520,14 @@ const onSettle = (state: ConversationState, entry: PersistedAgent | undefined): 
         checklist: turn.checklist,
         proof: turn.proof,
         reach: turn.reach,
+        review: turn.review,
     };
     return {
-        state: { ...state, phase, turn: { ...turn, usage: NO_USAGE, sessionId: undefined, failure: undefined, proof: undefined, reach: undefined } },
+        state: {
+            ...state,
+            phase,
+            turn: { ...turn, usage: NO_USAGE, sessionId: undefined, failure: undefined, proof: undefined, reach: undefined, review: undefined },
+        },
         effects: [{ kind: "entry-settled", flush }, { kind: "persist" }, { kind: "reprobe" }, { kind: "broadcast" }],
         reply: undefined,
     };

@@ -20,7 +20,7 @@ import type { PendingAttachment } from "../../../features/chat/drafts/useChatAtt
 import type { PickUp } from "../endings/pickUp";
 import type { SendLater } from "../drafts/sendLater";
 import type { TurnFailures } from "../endings/turnFailures";
-import type { ForkLink, SessionRef, TurnSettings } from "../run/turnRequest";
+import type { ForkLink, FreshLink, SessionRef, TurnSettings } from "../run/turnRequest";
 import type { ChatMessage } from "../transcript/transcript";
 import type { ComposerSelection } from "./composerSelection";
 import { IDLE } from "./runPhase";
@@ -127,6 +127,7 @@ const clientOf = (settings: TurnSettings = SETTINGS, selection: Partial<Composer
         registered: ref(false),
         standing: ref<AgentStanding | undefined>(),
         pendingForkOf: ref<ForkLink | undefined>(),
+        pendingFreshOf: ref<FreshLink | undefined>(),
         error,
         pickUp: ref<PickUp | undefined>(),
         session,

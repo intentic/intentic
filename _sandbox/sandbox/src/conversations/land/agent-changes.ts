@@ -122,6 +122,14 @@ export const agentRepoAnchor = async (worktrees: AgentWorktrees, entry: Isolated
     return anchorOf(entry.placement, dir, main, entry.placement.branch, composed.landedTip, composed.base, git);
 };
 
+/** Where a repo's whole output starts, as the review lists it (`cumulative`): the main line under the branch, or for a
+ *  subagent the parent's work it was cut from, never a land's tip. What a fresh session on this work is told to read. */
+export const agentRepoWholeAnchor = async (worktrees: AgentWorktrees, entry: IsolatedAgent, composed: RepoRecord, git: GitRunner = defaultGit): Promise<string> => {
+    const main = worktrees.mainDir(composed.repo);
+    const dir = (await worktrees.attached(entry.id, composed.repo)) ? worktrees.worktreeDir(entry.id, composed.repo) : main;
+    return anchorOf(entry.placement, dir, main, entry.placement.branch, undefined, composed.base, git);
+};
+
 // Resolves the checkout/main repo, delta anchor and scratch together, so the answers cannot diverge. Only a live copy
 // has scratch: a retired one's went with it.
 const agentRepoScope = async (

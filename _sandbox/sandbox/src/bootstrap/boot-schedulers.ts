@@ -30,7 +30,7 @@ const childReportDeps = (services: BootPhase["services"], logger: BootPhase["log
     conversations: services.conversations,
     entryOf: (conversationId) => {
         const entry = services.agents.entry(conversationId);
-        return entry === undefined ? undefined : { startedBy: entry.identity.startedBy, title: entry.social.title?.text };
+        return entry === undefined ? undefined : { startedBy: entry.identity.startedBy, title: entry.social.title?.text, fresh: entry.identity.fresh !== undefined };
     },
     profileOf: (conversationId) => {
         const entry = services.agents.entry(conversationId);

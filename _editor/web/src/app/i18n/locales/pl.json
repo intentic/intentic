@@ -142,7 +142,6 @@
             "sends": "wyśle {at}",
             "scheduledMessages": "Wiadomości",
             "sendsWhenRoom": "wyśle, gdy zwolni się pamięć",
-            "landUnreviewedHint": "Scala bez przejrzenia zmian",
             "reviewChangesCount": "Przejrzyj zmiany: dodane wiersze: {added}, usunięte: {removed}"
         },
         "agentConflictReport": {
@@ -311,8 +310,7 @@
             "stopKeepingWarm": "Przestań utrzymywać pamięć podręczną",
             "stopKeepingWarmHint": "Utrzymywana ciepła do {time}",
             "tryLandAgain": "Spróbuj scalić ponownie",
-            "landsIfConflictsGone": "Scala, jeśli konflikty zniknęły",
-            "reviewChanges": "Przejrzyj zmiany"
+            "landsIfConflictsGone": "Scala, jeśli konflikty zniknęły"
         },
         "agentStatus": {
             "approvalNeeded": "Potrzebna zgoda",
@@ -568,7 +566,16 @@
             "needsInput": "Potrzebuje odpowiedzi",
             "paused": "Wstrzymany",
             "completed": "Ukończony",
-            "yoursIfStops": "Twoje, gdy przestanie"
+            "yoursIfStops": "Twoje, gdy przestanie",
+            "kind": {
+                "review": "Przegląd kodu",
+                "test": "Test",
+                "ask": "Świeża"
+            },
+            "findings": "{count} uwaga | {count} uwagi | {count} uwag",
+            "clean": "bez uwag",
+            "kindTip": "Zaczęta bez jej rozmowy",
+            "freshTitle": "Świeża sesja"
         },
         "liveMetrics": {
             "coresValue": "{cores} rdzeń | {cores} rdzenie | {cores} rdzeni",
@@ -930,8 +937,57 @@
             "close": "Zamknij",
             "startOwn": "Uruchom mojego agenta"
         },
-        "reviewAsk": {
-            "inWords": "Przejrzyj zmiany na swojej gałęzi pod kątem błędów. Przy każdej uwadze podaj plik i wiersz, co działa źle i przy jakich danych."
+        "freshSession": {
+            "reviewInWords": "Przejrzyj pracę, od której zaczęła się ta sesja, pod kątem błędów poprawności. Przy każdej uwadze podaj plik i wiersz, co działa źle i jakie dane wejściowe do tego prowadzą. Zgłaszaj to, co wpływa na poprawność lub cel pracy, a nie kwestie stylu.",
+            "testInWords": "Przetestuj pracę, od której zaczęła się ta sesja: uruchom jej testy i pasujące sprawdzenia, a zmienione rzeczy wypróbuj tak, jak użyłby ich człowiek. Napisz, co uruchomiłeś (dokładne polecenia), co przeszło, a co nie. Niczego nie zmieniaj, dopóki nie poproszę.",
+            "title": {
+                "review": "Przegląd kodu: {title}",
+                "test": "Test: {title}"
+            },
+            "kind": {
+                "review": "Przegląd kodu",
+                "test": "Test",
+                "ask": "Własne polecenie"
+            },
+            "anotherChat": "inny czat",
+            "onWork": "Na pracy {title}, bez jej rozmowy",
+            "howItWorks": "Świeża sesja",
+            "howItWorksNote": "Widzi pracę, nie czat",
+            "unlink": "Odłącz",
+            "unlinkNote": "Stanie się zwykłym czatem",
+            "menuFresh": "Świeża sesja na tej pracy",
+            "lineNote": "zaczęta od jej pracy, bez jej rozmowy",
+            "originGone": "czat, którego już nie ma",
+            "fixInOrigin": "Popraw w oryginale",
+            "fixAllInOrigin": "Popraw wszystko w oryginale",
+            "fixInOriginTip": "Agent, który ją wykonał",
+            "originFixAllRequest": "Przegląd kodu w świeżej sesji, która widziała twoją pracę, ale nie tę rozmowę, zgłosił te uwagi. Sprawdź każdą względem tego, czemu praca ma służyć: popraw te, które się potwierdzają, i napisz, które zostawiłeś i dlaczego.\n{list}",
+            "originFixOneRequest": "Przegląd kodu w świeżej sesji, która widziała twoją pracę, ale nie tę rozmowę, zgłosił tę uwagę. Sprawdź ją względem tego, czemu praca ma służyć: popraw, jeśli się potwierdza, albo napisz, dlaczego nie.\n{finding}",
+            "lineOf": "{kind}: {title}",
+            "lineKind": {
+                "review": "Przegląd kodu",
+                "test": "Test",
+                "ask": "Świeża sesja"
+            },
+            "menuItem": "Świeża sesja: {kind}"
+        },
+        "workAssurance": {
+            "marker": "{kind}: {state}",
+            "state": {
+                "running": "trwa",
+                "done": "gotowe",
+                "failed": "nie skończył się",
+                "clean": "bez uwag",
+                "findings": "{count} uwaga | {count} uwagi | {count} uwag",
+                "open": "otwarte {open} z {count}"
+            },
+            "stale": "praca zmieniła się od tego czasu",
+            "again": "Ponów",
+            "againTitle": "Uruchom ponownie",
+            "againNote": "Nowy czat, bez rozmowy",
+            "openTitle": "Otwórz",
+            "ownTip": "We własnym czacie",
+            "freshTip": "W świeżej sesji"
         }
     },
     "app": {
@@ -11405,8 +11461,7 @@
             "unstageFrom": "Usuń z indeksu {count} plik od „{origin}” | Usuń z indeksu {count} pliki od „{origin}” | Usuń z indeksu {count} plików od „{origin}”",
             "stageFrom": "Dodaj do indeksu {count} plik od „{origin}” | Dodaj do indeksu {count} pliki od „{origin}” | Dodaj do indeksu {count} plików od „{origin}”",
             "messageBeingWritten": "wiadomość commita jest w trakcie pisania",
-            "namesTheCommit": "nadaje nazwę commitowi",
-            "reviewChanges": "Przejrzyj zmiany"
+            "namesTheCommit": "nadaje nazwę commitowi"
         },
         "rowActions": {
             "changedSinceOn": "Zmienione od włączenia",

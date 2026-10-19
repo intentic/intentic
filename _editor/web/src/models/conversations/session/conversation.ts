@@ -8,7 +8,7 @@ import type { PendingAttachment } from "../../../features/chat/drafts/useChatAtt
 import type { SendLater } from "../drafts/sendLater";
 import type { PickUp } from "../endings/pickUp";
 import { TurnFailures } from "../endings/turnFailures";
-import type { ForkLink, SessionRef } from "../run/turnRequest";
+import type { ForkLink, FreshLink, SessionRef } from "../run/turnRequest";
 import { CardReplies } from "./cardReplies";
 import { ComposerSelection } from "./composerSelection";
 import { TranscriptView } from "./transcriptView";
@@ -87,6 +87,10 @@ export class Conversation {
 
     // Where this conversation was cut from, until the daemon accepts a turn carrying it; a fork's only record.
     readonly pendingForkOf = ref<ForkLink | undefined>(undefined);
+
+    // The conversation whose work this one opens on without its messages (a fresh session, freshSession.ts), until the
+    // daemon accepts the turn carrying it. Never beside a fork: one is a copy of a chat, the other a clean start on work.
+    readonly pendingFreshOf = ref<FreshLink | undefined>(undefined);
 
     // The session the daemon last reported for this conversation, with the provider/account that minted it; public for
     // the manager. Which session the next turn goes on in is the daemon's to say.

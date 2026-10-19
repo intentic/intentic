@@ -47,9 +47,13 @@ export const keepSubagentWhileShown = (drawn: readonly string[]): void => {
 /**
  * The card of the conversation that spawned this one, while it is on the fleet: what makes a spawned conversation a
  * subagent, whose chat is its parent's to direct. A parent archived or gone leaves the child a conversation in its own
- * right, as the board then stands it as a card of its own.
+ * right, as the board then stands it as a card of its own. A fresh session on another's work (freshSession.ts) hangs
+ * under it the same way but is the reader's own chat, so it has no parent to direct it.
  */
 export const parentCardOf = (agent: FleetAgent | undefined, cardOf: (id: string) => FleetAgent | undefined): FleetAgent | undefined => {
+    if (agent?.fresh !== undefined) {
+        return undefined;
+    }
     const parentId = parentOf(agent?.startedBy);
     const parent = parentId === undefined ? undefined : cardOf(parentId);
     return parent === undefined || parent.archivedAt !== undefined || parent.sandboxId !== agent?.sandboxId ? undefined : parent;

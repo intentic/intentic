@@ -107,6 +107,8 @@ const workspaceNotes = (
         ...(send.map && facts.mapNote !== undefined ? [{ title: WORKSPACE_MAP_NOTE_TITLE, text: facts.mapNote }] : []),
         // After the map, which draws the tree, and before the skills: what the tree holds is the next question it raises.
         ...[facts.contextNote].filter((note) => note !== undefined),
+        // Beside it: for a fresh session, the work it started from, which is the rest of what its tree holds.
+        ...[facts.fresh?.note].filter((note) => note !== undefined),
         ...(facts.skillCatalogNote === undefined ? [] : [{ title: SKILL_CATALOG_NOTE_TITLE, text: facts.skillCatalogNote }]),
         // Only where the runtime has no readiness tools and hooks, which would otherwise repeat these facts every turn.
         ...(setupNotice !== undefined && capabilities.mcp !== "full" ? [{ title: setupNoticeTitle(setupNotice), text: setupNotice }] : []),
@@ -205,6 +207,7 @@ export const honoured = (
             ...opt("systemAppend", placement.systemAppend),
             search: searchToolOf(premise),
             ...opt("stablePrompt", premise.stablePrompt),
+            ...opt("reviewScope", facts.fresh?.review),
             sessionStore: facts.sessionStore,
             turnCapMs: settings.turnCapMinutes * 60_000,
             ...opt("cwd", startPath),
