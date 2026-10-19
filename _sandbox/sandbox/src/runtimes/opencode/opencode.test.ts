@@ -1328,6 +1328,24 @@ describe("MCP mounting", () => {
         expect(opencode.mcpCalls.map(({ call }) => call)).toEqual(["add", "remove"]);
     });
 
+    test("a just-added name absent until reconciliation is awaited through pending to connected", async () => {
+        const fake = await booted();
+        const opencode = fake.at(0).fake;
+        opencode.mcp.list
+            .mockResolvedValueOnce({ location: { directory: DIRECTORY }, data: [] })
+            .mockResolvedValueOnce({ location: { directory: DIRECTORY }, data: [{ name: NAME, status: { status: "pending" } }] });
+
+        const mounting = fake.service.mount(DIRECTORY, [serverFor("turn-1")]);
+        const settled = tracked(mounting);
+        await advanceTimersByTimeAsync(SETTLE_MS);
+        expect(settled()).toBe(false);
+        await advanceTimersByTimeAsync(50);
+        const release = await mounting;
+        expect(opencode.mcp.list).toHaveBeenCalledTimes(3);
+        await release();
+        expect(opencode.mcpCalls.map(({ call }) => call)).toEqual(["add", "remove"]);
+    });
+
     test("a server OpenCode refuses to add is left out rather than failing the turn", async () => {
         const fake = await booted();
         const opencode = fake.at(0).fake;

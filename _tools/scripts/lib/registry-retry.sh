@@ -66,6 +66,9 @@
 # lacks `packages: write` must fail on the FIRST attempt — three silent backoffs before the same error is how
 # a pipeline that fails in five minutes becomes one that fails in twenty and reads like an infrastructure flake. So the
 # decision is made on the command's own output, not on its exit status, which is 1 for all of them alike.
+# GHCR can also reject a blob HEAD after login succeeded and sibling images were accepted (51b5215). Retry
+# that existence probe with a fresh push/auth exchange; a persistent rejection still exhausts the budget.
+# This does not retry a rejected manifest write or the ordinary "unauthorized: authentication required".
 #
 # BOTH DIRECTIONS ARE ASSERTED, against the text those releases actually printed, by the `publish-retry` check
 # (_tools/checks/publish-retry.mjs, shared with npm-publish-retry.sh) — which reads the pattern list below back
@@ -106,6 +109,7 @@ registry_retry_transient() {
         -e 'connectex: a connection attempt failed' \
         -e 'dial tcp.*(connection refused|connection timed out|no route to host)' \
         -e 'failed to fetch oauth token' \
+        -e 'unexpected status from HEAD request to https://ghcr\.io/v2/[^ ]+/blobs/sha256:[0-9a-f]+: 401 Unauthorized' \
         -- "$1"
 }
 

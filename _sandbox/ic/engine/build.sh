@@ -37,7 +37,8 @@ verify() {
 fetch_url() {
   local url="$1" dest="$2" sha="$3"
   if [ ! -f "$dest" ]; then
-    curl -fsSL -o "$dest" "$url"
+    # curl does not retry DNS failures with --retry alone. Keep a resolver outage inside this download's budget.
+    curl -fsSL --retry 5 --retry-all-errors --retry-max-time 180 --connect-timeout 15 --max-time 120 -o "$dest" "$url"
   fi
   verify "$dest" "$sha"
 }

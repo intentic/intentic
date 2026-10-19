@@ -644,6 +644,7 @@ fn plan(source: &Target, target: &Target, from: Kind, to: Kind, log: &Log) -> Re
                 continue;
             }
         }
+        mounted_key_file(&inspect)?;
         if to == Kind::Intentic && uses_gpu(&inspect, &env) {
             bail!("{slug} uses this device's GPU, which the intentic engine cannot pass through yet. It stays on Docker Desktop, and so does this device: nothing was moved.");
         }
@@ -866,7 +867,7 @@ fn move_one(
     say(slug, "starting", json!({}));
     // The placeholder carries no bind, so the reshape finds no key mounted on it: handed the key the sandbox had as the
     // operator's file, it mounts that one, by the same door it mounts its own (at_rest.rs `Source::Given`).
-    let key = key_file(&sandbox.inspect).filter(|path| path.is_file());
+    let key = mounted_key_file(&sandbox.inspect)?;
     let made = with_key_file(key.as_deref(), || {
         with_engine(target, || {
             crate::sandbox::recreate::run(
@@ -1741,8 +1742,9 @@ fn named_volumes(inspect: &Value) -> Vec<(String, String)> {
 /// recreates from carries named volumes only, and a reshape that finds no key mounted can recover only ic's own key,
 /// and only from the home it runs with: an operator's file, or a key made under another home, would stop the move with
 /// "given an at-rest key that it no longer mounts" (the desktop-windows smoke, 2026-10-18). Read from
-/// `HostConfig.Binds`, which holds the host path as ic handed it to the source engine: `C:\…` to Docker Desktop,
-/// `/mnt/<drive>/…` to ours, which is `<DRIVE>:\…` on this machine. Pure.
+/// `HostConfig.Binds` first, then the effective bind mounts (a container made with `--mount` has no Binds). Docker
+/// Desktop can name the source through its Linux drive mount, including after a recreate replays `.Mounts.Source`.
+/// All those spellings must name the same Windows file, even when this run uses a different ic home. Pure.
 fn key_file(inspect: &Value) -> Option<std::path::PathBuf> {
     let marker = format!(":{}", sandbox::at_rest::KEY_MOUNT);
     strings(&inspect["HostConfig"]["Binds"])
@@ -1750,9 +1752,32 @@ fn key_file(inspect: &Value) -> Option<std::path::PathBuf> {
         .find_map(|bind| {
             let at = bind.rfind(&marker)?;
             let after = &bind[at + marker.len()..];
-            (after.is_empty() || after.starts_with(':')).then(|| windows_path_of(&bind[..at]))
+            (after.is_empty() || after.starts_with(':')).then(|| bind[..at].to_string())
         })
+        .or_else(|| {
+            inspect["Mounts"].as_array()?.iter().find_map(|mount| {
+                (mount["Type"] == "bind" && mount["Destination"] == sandbox::at_rest::KEY_MOUNT)
+                    .then(|| mount["Source"].as_str().map(str::to_string))
+                    .flatten()
+            })
+        })
+        .map(|source| windows_path_of(&source))
         .map(std::path::PathBuf::from)
+}
+
+/// Refuse a missing mounted key while planning, before stopping any sandbox. Docker's `-v` would otherwise create a
+/// directory at its missing source, and neither that directory nor a newly generated key can read the old stores.
+fn mounted_key_file(inspect: &Value) -> Result<Option<std::path::PathBuf>> {
+    let key = key_file(inspect);
+    if let Some(path) = &key {
+        if !path.is_file() {
+            bail!(
+                "the mounted at-rest key {} is not a file. Restore the original key before moving; no replacement key can read its encrypted credentials.",
+                path.display()
+            );
+        }
+    }
+    Ok(key)
 }
 
 /// Run `work` with `key` as the operator's key file (HOST_FILE_ENV), unless the operator named one on this run, then
@@ -1769,10 +1794,16 @@ fn with_key_file<T>(key: Option<&std::path::Path>, work: impl FnOnce() -> Result
     result
 }
 
-/// `/mnt/c/Users/x` as Windows names it, `C:\Users\x`, for Docker Desktop, which takes a Windows path; anything else as it
-/// is. Pure.
+/// A drive path from our WSL engine or Docker Desktop as Windows names it (`C:\Users\x`); anything else as it is. Pure.
 fn windows_path_of(source: &str) -> String {
-    let Some(rest) = source.strip_prefix(intentic_docker_host::wsl_path::DRIVES_ROOT) else {
+    let Some(rest) = [
+        intentic_docker_host::wsl_path::DRIVES_ROOT,
+        "/run/desktop/mnt/host/",
+        "/host_mnt/",
+        "/",
+    ]
+    .iter()
+    .find_map(|prefix| source.strip_prefix(prefix)) else {
         return source.to_string();
     };
     let mut parts = rest.split('/');
@@ -2105,6 +2136,63 @@ mod tests {
         ] } });
         assert_eq!(key_file(&ours), expected);
         assert_eq!(key_file(&json!({ "HostConfig": { "Binds": null } })), None);
+    }
+
+    #[test]
+    fn a_key_replayed_from_docker_desktops_linux_drive_path_is_a_windows_file() {
+        for root in ["/run/desktop/mnt/host/", "/host_mnt/", "/"] {
+            let source = format!("{root}c/Users/me/.intentic/keys/at-rest-a.key");
+            let inspect = json!({ "HostConfig": { "Binds": [
+                format!("{source}:{}:ro", sandbox::at_rest::KEY_MOUNT),
+            ] } });
+            assert_eq!(
+                key_file(&inspect),
+                Some(std::path::PathBuf::from(
+                    r"C:\Users\me\.intentic\keys\at-rest-a.key"
+                )),
+            );
+        }
+        for source in ["/run/desktop/mnt/host/wsl/Ubuntu/key", "/srv/keys/a.key"] {
+            assert_eq!(windows_path_of(source), source);
+        }
+    }
+
+    #[test]
+    fn a_key_created_with_mount_is_recovered_only_from_its_bind_destination() {
+        let mut inspect = json!({ "HostConfig": { "Binds": null }, "Mounts": [
+            { "Type": "bind", "Source": "D:/keys/old.key", "Destination": sandbox::at_rest::PREVIOUS_KEY_MOUNT },
+            { "Type": "volume", "Source": "/var/lib/docker/volumes/key", "Destination": sandbox::at_rest::KEY_MOUNT },
+        ] });
+        assert_eq!(key_file(&inspect), None);
+        inspect["Mounts"].as_array_mut().unwrap().push(json!({
+            "Type": "bind", "Source": "/run/desktop/mnt/host/d/keys/current.key",
+            "Destination": sandbox::at_rest::KEY_MOUNT,
+        }));
+        assert_eq!(
+            key_file(&inspect),
+            Some(std::path::PathBuf::from(r"D:\keys\current.key"))
+        );
+    }
+
+    #[test]
+    fn a_move_refuses_a_missing_or_directory_key_and_keeps_an_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = dir.path().join("key");
+        let inspect = json!({ "Mounts": [{
+            "Type": "bind", "Source": key.to_str().unwrap(),
+            "Destination": sandbox::at_rest::KEY_MOUNT,
+        }] });
+        let refusal = format!(
+            "the mounted at-rest key {} is not a file. Restore the original key before moving; no replacement key can read its encrypted credentials.",
+            key.display()
+        );
+        assert_eq!(mounted_key_file(&inspect).unwrap_err().0, refusal);
+        std::fs::create_dir(&key).unwrap();
+        assert_eq!(mounted_key_file(&inspect).unwrap_err().0, refusal);
+        std::fs::remove_dir(&key).unwrap();
+        std::fs::write(&key, [7u8; 32]).unwrap();
+        assert_eq!(mounted_key_file(&inspect).unwrap(), Some(key));
+        assert_eq!(mounted_key_file(&json!({})).unwrap(), None);
     }
 
     #[test]

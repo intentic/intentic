@@ -27,3 +27,53 @@ appimage_env() {
     fi
     export PATCHELF="$patchelf"
 }
+
+# Tauri 2.12.3 downloads these without retrying DNS errors. Seed its cache before compiling/bundling, using the
+# release assets' checksums, so a resolver outage retries the download rather than the entire AppImage build.
+appimage_fetch_tool() {
+    local name="$1" url="$2" sha="$3" cache dest partial
+    cache="${XDG_CACHE_HOME:-$HOME/.cache}/tauri"
+    mkdir -p "$cache"
+    dest="$cache/$name"
+    if [ -f "$dest" ] && printf '%s  %s\n' "$sha" "$dest" | sha256sum -c - >/dev/null 2>&1; then
+        return 0
+    fi
+    partial="$(mktemp "$cache/$name.XXXXXX")"
+    if ! curl -fsSL --retry 5 --retry-all-errors --retry-max-time 180 --connect-timeout 15 --max-time 120 -o "$partial" "$url"; then
+        rm -f "$partial"
+        return 1
+    fi
+    if ! printf '%s  %s\n' "$sha" "$partial" | sha256sum -c -; then
+        rm -f "$partial"
+        return 1
+    fi
+    chmod +x "$partial"
+    mv -f "$partial" "$dest"
+}
+
+appimage_fetch_tools() {
+    local arch linuxdeploy_arch apprun_sha linuxdeploy_sha
+    arch="$(uname -m)"
+    linuxdeploy_arch="$arch"
+    # ponytail: tools pinned by tauri-cli 2.12.3 (linux/appimage/linuxdeploy.rs); hashes from binary-releases.
+    case "$arch" in
+        x86_64)
+            apprun_sha=f30140a43a0a59e46db21bdefdf749b9e9f2c6946e92afabbacf98b8ae73fb4f
+            linuxdeploy_sha=36a2d7e274d12e1050d0e9ecfe11d339ed54720b2bec464c286d53f8b07f5c62 ;;
+        aarch64)
+            apprun_sha=072f17c0895a85c490282fe5395c5007e5fc75da727e553b3b8fb680feb11578
+            linuxdeploy_sha=556ab80baa98e600aa80f0dcedfb70bca0e1ce7e9f147fb345be3fcc3e91b2b1 ;;
+        i686)
+            linuxdeploy_arch=i386
+            apprun_sha=a573a682b1a4a3e9b5dddbd1f5785749b7bba6013149b51ae99d0f123fe11691
+            linuxdeploy_sha=fab919e3f88ec4460631f744ed5205bb7965ab4bc2c276227e12db81543afe9a ;;
+        arm*)
+            arch=armhf
+            linuxdeploy_arch=armhf
+            apprun_sha=b14d89f0762bcf09fc6af2359d936675928b8833ff52a1aeda68cb28a309f6ba
+            linuxdeploy_sha=2dad604a3b8110ff81f6f754d6fe1ba50b92bb75303385ab080966edddee28dd ;;
+        *) echo "error: no AppImage tool pins for $arch" >&2; return 1 ;;
+    esac
+    appimage_fetch_tool "AppRun-$arch" "https://github.com/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-$arch" "$apprun_sha"
+    appimage_fetch_tool "linuxdeploy-07333c6-$linuxdeploy_arch.AppImage" "https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy-07333c6/linuxdeploy-$linuxdeploy_arch.AppImage" "$linuxdeploy_sha"
+}

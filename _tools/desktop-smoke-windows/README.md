@@ -25,7 +25,13 @@ flowchart LR
   (`engine.ts`), so the runner's own `~/.intentic`, a real engine and the Run key are never touched, and it removes
   what its engine put into WSL's network, which the runner's Linux fleet shares.
   Dispatch Nightly with `only: desktop-engine` to build the current `ic` and rootfs and run this install-and-port
-  check alone. The `desktop-windows` choice also builds the app and runs the desktop and sandbox tiers.
+  check alone, or `only: desktop-engine-move` to include the move without running the installer tiers. The move
+  fixture has a separate ic home, and its encryption key is checked before, across and after the move, so recovery
+  from Docker Desktop's mounted key is exercised. The `desktop-windows` choice also builds the app and runs the
+  desktop and sandbox tiers.
+  The move requires a test host holding only these tiers' sandbox fixtures: it refuses unrelated sandboxes instead
+  of moving them under its temporary home. Cleanup preserves that home and the test distro if another container
+  still mounts files there, including a stopped container whose encryption key must survive.
 - Each assertion polls to its own deadline, a failure does not stop the run, and the exit code is the failure
   count. `parse.ts` keeps what the machine answers pure, so it is tested off Windows.
 - `constants.ts` holds the strings this tier shares with the Linux tier's `_tools/desktop-smoke/smoke.sh`.

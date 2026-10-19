@@ -23,6 +23,12 @@ flowchart LR
 - Off the fleet: CodeQL, Scorecard, npm publish (provenance needs a GitHub-hosted builder), the arm64 sandbox image, the mobile builds and the engines bump.
 - A failing commit still costs a whole pipeline. Every verification job in `ci.yml` runs whatever preflight concluded, so one run reports everything wrong with a commit, and only the jobs that push or deploy wait on proofs. When a gate in front of `images` fails, `images-dry` builds the amd64 sandbox image into the host's docker store and boots it, holding a read-only token. That is one more image build per failing main push that changes the image.
 
+Dispatch `CI` on a repair branch with `desktop_smoke` or `windows_smoke` to verify installers on their runners.
+`platform_image_smoke` builds and pushes the web image as `ci-<run-id>-<attempt>`, without updating `latest`,
+commit or content tags, and without deploying. It runs the same release script with its content shortcut disabled,
+so an existing image cannot turn a registry-push check into a retag. Desktop downloads retry DNS failures within
+a bounded budget; AppImage tools are checksum-verified and cached before bundling.
+
 ## The fork boundary
 
 The repository is public and the runners hold release credentials, a shared cache and the host docker socket, so a fork's code must never reach them.

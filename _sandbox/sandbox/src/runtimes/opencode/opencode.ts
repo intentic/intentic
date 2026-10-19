@@ -249,7 +249,8 @@ const mcpHolds = (client: () => Promise<OpenCodeClient>) => {
             async () => {
                 const listed = await opencode.mcp.list({ location: { directory } });
                 const status = listed.data.find((server) => server.name === name)?.status.status;
-                return status === "pending" ? undefined : true;
+                // add() schedules reconciliation: the name can be absent before its pending entry appears.
+                return status === undefined || status === "pending" ? undefined : true;
             },
             { intervalMs: MCP_POLL_MS, until: Date.now() + MCP_CONNECT_MS },
         );

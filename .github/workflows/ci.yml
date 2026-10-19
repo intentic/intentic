@@ -38,6 +38,10 @@ on:
         description: Build and smoke-test the Windows installer on the Windows desktop runner
         type: boolean
         default: false
+      platform_image_smoke:
+        description: Build and push the web image under a CI-only tag, without deploying
+        type: boolean
+        default: false
 
 # Supersede a running pipeline on a pull request; never on main, where the release job must be allowed to
 # finish. This is `interruptible: true` — which every verify job carried and the release deliberately did not.
@@ -2037,6 +2041,41 @@ jobs:
       # pushed. Last, so a failed sandbox stitch leaves both images on the previous pair rather than one of each.
       - run: bash _tools/scripts/image/promote-image-tag.sh dind-host "sha-${GITHUB_SHA::8}" latest
         shell: bash
+
+  # Exercises the same web build and registry push as images-platform on a repair branch. No moving release tags
+  # or deployment: the run's unique tag proves the push even when a content tag already exists.
+  platform-image-smoke:
+    needs: preflight
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.platform_image_smoke && needs.preflight.result == 'success' }}
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+        - /var/run/docker.sock:/var/run/docker.sock
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      - uses: ./.github/actions/ghcr-login
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: pnpm turbo run build --filter=@intentic/web
+      - run: bash ../../_tools/scripts/platform/docker-release.sh web
+        working-directory: _editor/web
+        env:
+          TAGS: ci-${{ github.run_id }}-${{ github.run_attempt }}
+          TURBO_HASH: ''
 
   # Platform image publishing: build + push web + api on every push to main that touches the platform, then
   # roll the Komodo stack. Same philosophy as `images` — apps build job-side under turbo off the warm caches,

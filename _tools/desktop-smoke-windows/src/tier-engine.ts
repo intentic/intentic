@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { INGRESS_URL, PLATFORM_URL_UNREACHABLE, SANDBOX_GRANT } from "./constants.js";
 import { ENGINE_CONNECT_TOKEN, ENGINE_SANDBOX_HOSTNAME, engineDockerOf, engineStatusOf, isolatedEnv, moveLines } from "./engine.js";
+import { readEngineIsolation } from "./engine-isolation.js";
 import type { Harness } from "./harness.js";
 import { sandboxContainerName } from "./parse.js";
 import { dockerReachable, sandboxHealth } from "./probe.js";
@@ -52,7 +53,22 @@ const httpStatus = async (url: string): Promise<number | undefined> => {
     }
 };
 
-export const runEngineTier = async (harness: Harness, options: EngineTierOptions): Promise<void> => {
+const engineTierIsolated = async (harness: Harness, move: boolean): Promise<boolean> => {
+    try {
+        const isolation = await readEngineIsolation(ENGINE_ROOT);
+        if (isolation.homeUsers.length > 0 || (move && isolation.unexpected.length > 0)) {
+            harness.fail(`the engine tier needs an isolated Windows test host`,
+                `Other sandboxes: ${isolation.unexpected.join(`, `)}. Containers using its temporary home: ${isolation.homeUsers.join(`, `)}. Preserve their original keys and use a clean test host.`);
+            return false;
+        }
+    } catch (error) {
+        harness.fail(`could not verify the engine tier's isolation`, String(error));
+        return false;
+    }
+    return true;
+};
+
+const engineInputsReady = async (harness: Harness, options: EngineTierOptions): Promise<boolean> => {
     harness.section(`what this tier runs`);
     for (const [what, path] of [
         [`ic.exe`, options.icBin],
@@ -60,10 +76,17 @@ export const runEngineTier = async (harness: Harness, options: EngineTierOptions
     ] as const) {
         if (!existsSync(path)) {
             harness.fail(`no ${what} at ${path}`, `The Windows build job puts both into the artifact this workflow downloads.`);
-            return;
+            return false;
         }
     }
     harness.pass(`ic.exe and the engine's rootfs from this checkout are here`);
+    return engineTierIsolated(harness, options.move);
+};
+
+export const runEngineTier = async (harness: Harness, options: EngineTierOptions): Promise<void> => {
+    if (!await engineInputsReady(harness, options)) {
+        return;
+    }
     rmSync(ENGINE_ROOT, { recursive: true, force: true });
     mkdirSync(ENGINE_ROOT, { recursive: true });
     const env = isolatedEnv(ENGINE_ROOT, options.tarball);
@@ -162,14 +185,24 @@ interface MoveContext {
     readonly env: Record<string, string>;
 }
 
-const moveBothWays = async (harness: Harness, context: MoveContext): Promise<void> => {
-    const { ic, status, docker, options } = context;
+interface MoveFixture {
+    readonly container: string;
+    readonly stamp: string;
+    readonly keyCommand: readonly string[];
+    readonly keyBefore: string;
+}
+
+const createMoveFixture = async (harness: Harness, context: MoveContext): Promise<MoveFixture | undefined> => {
+    const { options } = context;
     const container = sandboxContainerName(ENGINE_SANDBOX_HOSTNAME);
 
     harness.section(`a sandbox on Docker Desktop`);
-    // The setup tier's stand-in inputs under a hostname of this tier's own; ic reads them from its environment, beside
-    // the tier's isolated one.
+    // A home different from the engine's: the move must recover the mounted key rather than find its own home copy
+    // (the desktop-windows failure on 2026-10-19). This also covers that case when run without the setup tier.
+    const sandboxHome = join(ENGINE_ROOT, `sandbox-home`, STATE_DIR);
+    mkdirSync(sandboxHome, { recursive: true });
     const connectEnv = {
+        INTENTIC_HOME: sandboxHome,
         CONNECT_TOKEN: ENGINE_CONNECT_TOKEN,
         SANDBOX_GRANT,
         INGRESS_URL,
@@ -188,12 +221,36 @@ const moveBothWays = async (harness: Harness, context: MoveContext): Promise<voi
         return;
     }
     harness.pass(`${container} answers on Docker Desktop`);
+    const keyCommand = [`exec`, container, `sh`, `-c`, `sha256sum "$INTENTIC_AT_REST_KEY_FILE"`] as const;
+    const keyBefore = await run(`docker`, keyCommand);
+    if (keyBefore.code !== 0 || keyBefore.stdout.trim() === ``) {
+        harness.fail(`the sandbox's encryption key could not be read before the move`, keyBefore.stderr);
+        return;
+    }
     const stamp = `moved ${Date.now()}`;
     const wrote = await run(`docker`, [`exec`, container, `sh`, `-c`, `printf '%s' ${shellQuote(stamp)} > ${shellQuote(MARKER)}`]);
     if (wrote.code !== 0) {
         harness.fail(`could not write a file into the sandbox`, said(wrote));
         return;
     }
+    return { container, stamp, keyCommand, keyBefore: keyBefore.stdout };
+};
+
+const assertOriginalKey = (harness: Harness, expected: string, received: RunResult, where: string): void => {
+    if (received.code === 0 && received.stdout === expected) {
+        harness.pass(`the sandbox ${where} mounts its original encryption key from the other home`);
+    } else {
+        harness.fail(`the sandbox ${where} does not mount its original encryption key`, received.stderr);
+    }
+};
+
+const moveBothWays = async (harness: Harness, context: MoveContext): Promise<void> => {
+    const { ic, status, docker } = context;
+    const fixture = await createMoveFixture(harness, context);
+    if (fixture === undefined) {
+        return;
+    }
+    const { container, stamp, keyCommand, keyBefore } = fixture;
 
     harness.section(`moved onto Intentic's engine`);
     const there = await ic([`engine`, `move`, `--to`, `intentic`, `--yes`], MOVE_MS);
@@ -216,6 +273,7 @@ const moveBothWays = async (harness: Harness, context: MoveContext): Promise<voi
     } else {
         harness.fail(`the sandbox on Intentic's engine does not hold the file written before the move`, said(carried));
     }
+    assertOriginalKey(harness, keyBefore, await docker(keyCommand), `on Intentic's engine`);
     const port = (await docker([`port`, container])).stdout.match(/127\.0\.0\.1:(\d+)/)?.[1];
     if (port === undefined) {
         harness.fail(`the moved sandbox publishes no loopback port`);
@@ -241,6 +299,7 @@ const moveBothWays = async (harness: Harness, context: MoveContext): Promise<voi
     } else {
         harness.fail(`the sandbox back on Docker Desktop does not hold the file`, said(home));
     }
+    assertOriginalKey(harness, keyBefore, await run(`docker`, keyCommand), `back on Docker Desktop`);
     const cleaned = await ic([`engine`, `cleanup`, `--now`], 5 * 60_000);
     if (cleaned.code === 0) {
         harness.pass(`the copies the moves left behind are removed`);

@@ -388,8 +388,10 @@ flowchart LR
   - **Moving between engines.** `ic engine move --to intentic|docker-desktop` carries every sandbox this side of the
     PC keeps: stopped and set aside as `<name>.moved`, its exact image across by `docker save | docker load`, each
     volume by a tar stream checked against a list of every file and its size, then made again by the ordinary reshape
-    (run contract, health waits). The PC switches only once all are across; any failure puts every sandbox back as it
-    was. The old copies stay for 7 days in `~/.intentic/engine/moves.json` and `ic engine cleanup` (also run by tidy)
+    (run contract, health waits). A mounted encryption key must still be a host file: a missing key or a directory is
+    refused before any sandbox is stopped, and must be restored from the original key. The PC switches only once all
+    are across; any failure puts every sandbox back as it was. The old copies stay for 7 days in
+    `~/.intentic/engine/moves.json` and `ic engine cleanup` (also run by tidy)
     removes them; no listing names one as a sandbox (`ic sandbox list` skips `<name>.moved`), and a `docker system
     prune` on that engine can take one sooner, since it is a stopped container. Sandboxes kept by a WSL-side `ic` stay
     on Docker Desktop. Measured on omen: 1.47 GB of volumes
