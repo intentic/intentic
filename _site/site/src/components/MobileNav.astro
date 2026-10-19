@@ -5,9 +5,9 @@ import { APP_URL, discordUrl, githubUrl } from "@intentic/site-content/site";
 import DownloadCta from "./DownloadCta.astro";
 import { GITHUB_MARK } from "../lib/marks";
 import { isCurrentRow, isCurrentSection } from "../lib/navCurrent";
-import { NAV_ICONS } from "../lib/navIcons";
 import DiscordIcon from "./DiscordIcon.astro";
 import ExternalIcon from "./ExternalIcon.astro";
+import NavNiche from "./NavNiche.astro";
 
 // Which product's page this is on (Nav.astro decides and passes it): the sheet's one action is that product's door.
 interface Props {
@@ -18,6 +18,8 @@ const { product = "default" } = Astro.props;
 const currentPath = Astro.url.pathname;
 ---
 
+{/* THE PHONE'S SHEET is the bar's panel at full height: the same lacquer, the same niches, and room for each row's
+    line of description, which the bar's panel has too. The gilt gradient the glyphs are laid in is Nav.astro's. */}
 <div class="mobile-nav-overlay" id="mobile-nav-overlay">
     <div class="mobile-nav-inner">
         <ul class="mobile-nav-list">
@@ -30,21 +32,8 @@ const currentPath = Astro.url.pathname;
                             <li class:list={["mobile-nav-group", { expanded: here }]}>
                                 <button type="button" class:list={["mobile-nav-heading", { active: here }]} aria-expanded={here ? "true" : "false"}>
                                     {entry.label}
-                                    <svg
-                                        class="mobile-chevron"
-                                        width="12"
-                                        height="7"
-                                        viewBox="0 0 12 7"
-                                        fill="none"
-                                        aria-hidden="true"
-                                    >
-                                        <path
-                                            d="M1 1L6 6L11 1"
-                                            stroke="currentColor"
-                                            stroke-width="1.5"
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                        />
+                                    <svg class="mobile-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                        <path d="m5 9 7 7 7-7" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" />
                                     </svg>
                                 </button>
                                 {/* Keep section labels in mobile menus unless the rows already provide the grouping. */}
@@ -57,26 +46,19 @@ const currentPath = Astro.url.pathname;
                                                 <li>
                                                     <a
                                                         href={item.href}
-                                                        class:list={["mobile-nav-link", "nav-wash", "sub", { current: isCurrentRow(item, currentPath) }]}
+                                                        class:list={["mobile-nav-row", { current: isCurrentRow(item, currentPath) }]}
                                                         aria-current={isCurrentRow(item, currentPath) ? "page" : undefined}
                                                         target={item.external ? "_blank" : undefined}
                                                         rel={item.external ? "noopener" : undefined}
                                                     >
-                                                        {item.icon && NAV_ICONS[item.icon] && (
-                                                            <svg
-                                                                class="mobile-nav-icon"
-                                                                viewBox="0 0 24 24"
-                                                                fill="none"
-                                                                stroke="currentColor"
-                                                                stroke-width="1.6"
-                                                                stroke-linecap="round"
-                                                                stroke-linejoin="round"
-                                                                aria-hidden="true"
-                                                                set:html={NAV_ICONS[item.icon]}
-                                                            />
-                                                        )}
-                                                        {item.label}
-                                                        {item.external && <ExternalIcon />}
+                                                        <NavNiche icon={item.icon} />
+                                                        <span class="mobile-nav-row-text">
+                                                            <span class="mobile-nav-row-label">
+                                                                {item.label}
+                                                                {item.external && <ExternalIcon />}
+                                                            </span>
+                                                            {item.description && <span class="mobile-nav-row-blurb">{item.description}</span>}
+                                                        </span>
                                                     </a>
                                                 </li>
                                             ))}
@@ -86,12 +68,18 @@ const currentPath = Astro.url.pathname;
                                         <li>
                                             <a
                                                 href={entry.action.href}
-                                                class="mobile-nav-link nav-wash sub action"
+                                                class="mobile-nav-action"
                                                 target={entry.action.external ? "_blank" : undefined}
                                                 rel={entry.action.external ? "noopener" : undefined}
                                             >
-                                                {entry.action.label}{" "}
-                                                {entry.action.external ? <ExternalIcon /> : <span aria-hidden="true">→</span>}
+                                                {entry.action.label}
+                                                {entry.action.external ? (
+                                                    <ExternalIcon />
+                                                ) : (
+                                                    <svg class="mobile-nav-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                        <path d="M4 12h15 M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="square" />
+                                                    </svg>
+                                                )}
                                             </a>
                                         </li>
                                     )}
@@ -103,10 +91,10 @@ const currentPath = Astro.url.pathname;
 
                     if (entry.type === "link") {
                         return (
-                            <li>
+                            <li class="mobile-nav-group">
                                 <a
                                     href={entry.href}
-                                    class:list={["mobile-nav-link", "nav-wash", { current: isCurrentSection(entry, currentPath) }]}
+                                    class:list={["mobile-nav-heading", { active: isCurrentSection(entry, currentPath) }]}
                                     aria-current={isCurrentSection(entry, currentPath) ? "page" : undefined}
                                     target={entry.external ? "_blank" : undefined}
                                     rel={entry.external ? "noopener" : undefined}
@@ -119,24 +107,19 @@ const currentPath = Astro.url.pathname;
                     }
                 })
             }
-
-            <li class="mobile-nav-divider"></li>
-
-            <li>
-                <a href={githubUrl} target="_blank" rel="noopener" class="mobile-nav-link nav-wash">
-                    <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true"><path d={GITHUB_MARK} /></svg>
-                    GitHub
-                </a>
-            </li>
-
-            {/* Use the full Discord label because the mobile menu has room for it. */}
-            <li>
-                <a href={discordUrl} target="_blank" rel="noopener" class="mobile-nav-link nav-wash">
-                    <DiscordIcon />
-                    Discord community
-                </a>
-            </li>
         </ul>
+
+        {/* The two community doors, side by side as a pair of carved plaques; each name fits half a phone's width. */}
+        <div class="mobile-nav-doors">
+            <a href={githubUrl} target="_blank" rel="noopener" class="mobile-nav-door">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true"><path d={GITHUB_MARK} /></svg>
+                GitHub
+            </a>
+            <a href={discordUrl} target="_blank" rel="noopener" class="mobile-nav-door">
+                <DiscordIcon size={18} />
+                Discord
+            </a>
+        </div>
 
         {
             product === "desk" ? (
@@ -159,7 +142,8 @@ const currentPath = Astro.url.pathname;
         top: var(--bar-height);
         z-index: 99;
 /* Opaque for the same reason the desktop menu is: the page behind ghosts through an almost-opaque layer once the blur spreads it. */
-        background: var(--color-canvas);
+        background-color: var(--color-canvas);
+        background-image: var(--role-nav-sheen), var(--role-nav-lacquer);
         opacity: 0;
         visibility: hidden;
         transform: translateY(-12px);
@@ -169,6 +153,15 @@ const currentPath = Astro.url.pathname;
             transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
+    }
+    /* The bar's gilt foot, carried onto the sheet's top edge so the two read as one object. */
+    .mobile-nav-overlay::before {
+        content: "";
+        position: sticky;
+        top: 0;
+        display: block;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, var(--color-line-bright) 50%, transparent);
     }
 
     .mobile-nav-overlay.open {
@@ -180,122 +173,71 @@ const currentPath = Astro.url.pathname;
     .mobile-nav-inner {
         max-width: 32rem;
         margin: 0 auto;
-        padding: 1.5rem;
+        padding: 0.75rem 1.25rem 1.5rem;
         display: flex;
         flex-direction: column;
         min-height: calc(100dvh - var(--bar-height));
     }
 
-    /* List */
     .mobile-nav-list {
         list-style: none;
         padding: 0;
         margin: 0;
         display: flex;
         flex-direction: column;
-        gap: 2px;
+    }
+    /* Groups are parted by a hairline, the sheet's own rule at its quietest. */
+    .mobile-nav-group + .mobile-nav-group {
+        border-top: 1px solid var(--color-line);
     }
 
-    /* Links */
-/* A row is a label, so it takes the brand face the bar's labels do, and it splits its two states the way the desktop panel does. */
-    .mobile-nav-link {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        /* 2px of the left padding is spent on the rule, so a marked row keeps its words on the same vertical. */
-        border-left: 2px solid transparent;
-        padding: 14px 16px 14px 14px;
-        font-family: var(--font-mark);
-        font-size: 1.0625rem;
-        font-weight: var(--font-weight-semibold);
-        color: var(--color-muted);
-        text-decoration: none;
-/* Colour only. */
-        transition: color 0.15s;
-    }
-
-/* POSITION: the words brighten a step, over `.nav-wash` (global.css) — the same raking light the desktop panel's rows take. */
-    .mobile-nav-link:hover,
-    .mobile-nav-link:focus-visible {
-        color: var(--color-content);
-    }
-
-    .mobile-nav-link.sub {
-        font-size: 0.975rem;
-        padding: 12px 16px 12px 26px;
-        color: var(--color-subtle);
-    }
-
-    /* The row's line drawing, warming a step with the row the way the desktop panel's does. */
-    .mobile-nav-icon {
-        flex: none;
-        width: 1.05rem;
-        height: 1.05rem;
-        color: var(--color-gold);
-        transition: color 0.15s;
-    }
-    .mobile-nav-link:hover .mobile-nav-icon,
-    .mobile-nav-link:focus-visible .mobile-nav-icon {
-        color: var(--color-gold-bright);
-    }
-
-    .mobile-nav-link.sub.action {
-        color: var(--color-gold-bright);
-    }
-
-/* STATE, and after the wash for the reason the desktop panel states it last. */
-    .mobile-nav-link.current,
-    .mobile-nav-link.current:hover,
-    .mobile-nav-link.current:focus-visible {
-        border-left-color: var(--color-accent);
-        color: var(--color-content);
-    }
-    .mobile-nav-link.current .mobile-nav-icon,
-    .mobile-nav-link.current:hover .mobile-nav-icon,
-    .mobile-nav-link.current:focus-visible .mobile-nav-icon {
-        color: var(--color-gold-bright);
-    }
-
-    .mobile-subnav-label {
-        padding: 12px 16px 4px 28px;
-        font-size: var(--text-2xs);
-        font-weight: var(--font-weight-semibold);
-        letter-spacing: 0.22em;
-        text-transform: uppercase;
-        color: var(--color-gold);
-    }
-
-    /* ── Accordion heading ─────────────────────────────── */
+    /* ── Headings: a menu's trigger, or a page of its own ─ */
     .mobile-nav-heading {
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 0.5rem;
         width: 100%;
-        padding: 14px 16px;
+        padding: 1rem 0.5rem;
         font-family: var(--font-mark);
-        font-size: 1.0625rem;
+        font-size: 1.25rem;
         font-weight: var(--font-weight-semibold);
         color: var(--color-content);
+        text-decoration: none;
         background: none;
         border: none;
         cursor: pointer;
         transition: color 0.15s;
     }
-
-/* A heading is an accordion trigger, not a destination, so it takes no rule — the same split the bar makes. */
     .mobile-nav-heading:hover {
         color: var(--color-primary-400);
     }
-    /* The group you are in is state, so the accent's bright metal, the bar's own answer for its current section. */
+    /* The group you are in is state: the accent's bright metal, and the bar's ember lozenge set before its name. */
     .mobile-nav-heading.active,
     .mobile-nav-heading.active:hover {
         color: var(--color-gold-bright);
     }
-
-    .mobile-chevron {
-        transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    .mobile-nav-heading.active::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: -0.55rem;
+        width: 5px;
+        height: 5px;
+        background: var(--color-primary-500);
+        filter: var(--house-ember-mark-glow);
+        transform: translateY(-50%) rotate(45deg);
+    }
+    .mobile-nav-heading:focus-visible {
+        outline-offset: -2px;
     }
 
+    .mobile-chevron {
+        flex: none;
+        opacity: 0.75;
+        transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
     .mobile-nav-heading[aria-expanded="true"] .mobile-chevron {
         transform: rotate(180deg);
     }
@@ -310,21 +252,179 @@ const currentPath = Astro.url.pathname;
 
 /* Hidden overflow lets the collapsed 0fr row reach zero. */
     .mobile-subnav-inner {
+        display: grid;
+        gap: 0.15rem;
         list-style: none;
         margin: 0;
         padding: 0;
         overflow: hidden;
     }
-
     .mobile-nav-group.expanded .mobile-subnav {
         grid-template-rows: 1fr;
     }
+    .mobile-nav-group.expanded .mobile-subnav-inner {
+        padding-bottom: 0.9rem;
+    }
 
-    /* Divider */
-    .mobile-nav-divider {
-        height: 1px;
-        background: var(--color-line);
-        margin: 12px 16px;
+    .mobile-subnav-label {
+        padding: 0.75rem 0.5rem 0.25rem;
+        font-size: var(--text-2xs);
+        font-weight: var(--font-weight-semibold);
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--color-gold);
+    }
+
+    /* ── Rows: the bar panel's row, a step smaller ─────── */
+    .mobile-nav-row {
+        --niche-size: 2.625rem;
+        --glyph-size: 1.625rem;
+        position: relative;
+        isolation: isolate;
+        display: flex;
+        align-items: center;
+        gap: 0.9rem;
+        padding: 0.4rem 0.5rem;
+        text-decoration: none;
+    }
+    .mobile-nav-row::before {
+        --cut: 10px;
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background: var(--role-nav-row);
+        clip-path: polygon(
+            var(--cut) 0,
+            calc(100% - var(--cut)) 0,
+            100% var(--cut),
+            100% calc(100% - var(--cut)),
+            calc(100% - var(--cut)) 100%,
+            var(--cut) 100%,
+            0 calc(100% - var(--cut)),
+            0 var(--cut)
+        );
+        opacity: 0;
+        transition: opacity 0.18s ease;
+    }
+    .mobile-nav-row:hover,
+    .mobile-nav-row:focus-visible {
+        --niche-lit: 1;
+        --niche-sweep: 1;
+    }
+    .mobile-nav-row:hover::before,
+    .mobile-nav-row:focus-visible::before {
+        opacity: 1;
+    }
+    .mobile-nav-row:focus-visible {
+        outline-offset: -2px;
+    }
+    .mobile-nav-row.current {
+        --niche-lit: 1;
+        --niche-glow: 1;
+    }
+    .mobile-nav-row-text {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+    .mobile-nav-row-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-family: var(--font-mark);
+        font-size: 1.0625rem;
+        font-weight: var(--font-weight-semibold);
+        line-height: 1.3;
+        color: var(--color-content);
+    }
+    .mobile-nav-row.current .mobile-nav-row-label {
+        color: var(--color-gold-bright);
+    }
+    .mobile-nav-row-blurb {
+        font-size: 0.8125rem;
+        line-height: 1.4;
+        color: var(--color-subtle);
+    }
+
+    /* The group's one action: no niche, its words on the rows' text column, the arrow drawn in the glyphs' hand. */
+    .mobile-nav-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.7rem 0.5rem 0.4rem calc(0.5rem + 2.625rem + 0.9rem);
+        font-family: var(--font-mark);
+        font-size: 0.975rem;
+        font-weight: var(--font-weight-semibold);
+        color: var(--color-gold-bright);
+        text-decoration: none;
+        transition: color 0.15s;
+    }
+    .mobile-nav-action:hover {
+        color: var(--color-primary-400);
+    }
+    .mobile-nav-arrow {
+        width: 0.95rem;
+        height: 0.95rem;
+    }
+
+    /* ── The community doors ────────────────────────────── */
+    .mobile-nav-doors {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.6rem;
+        margin-top: 1rem;
+    }
+    .mobile-nav-door {
+        --cut: 9px;
+        position: relative;
+        isolation: isolate;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.55rem;
+        padding: 0.8rem 0.75rem;
+        background: var(--role-nav-niche-edge);
+        clip-path: polygon(
+            var(--cut) 0,
+            calc(100% - var(--cut)) 0,
+            100% var(--cut),
+            100% calc(100% - var(--cut)),
+            calc(100% - var(--cut)) 100%,
+            var(--cut) 100%,
+            0 calc(100% - var(--cut)),
+            0 var(--cut)
+        );
+        font-family: var(--font-mark);
+        font-size: 0.9375rem;
+        font-weight: var(--font-weight-semibold);
+        color: var(--color-muted);
+        text-decoration: none;
+        transition: color 0.15s;
+    }
+    .mobile-nav-door::before {
+        --inner: calc(var(--cut) - 0.41px);
+        content: "";
+        position: absolute;
+        inset: 1px;
+        z-index: -1;
+        background: var(--role-nav-niche-well);
+        clip-path: polygon(
+            var(--inner) 0,
+            calc(100% - var(--inner)) 0,
+            100% var(--inner),
+            100% calc(100% - var(--inner)),
+            calc(100% - var(--inner)) 100%,
+            var(--inner) 100%,
+            0 calc(100% - var(--inner)),
+            0 var(--inner)
+        );
+    }
+    .mobile-nav-door:hover {
+        color: var(--color-primary-400);
+    }
+    .mobile-nav-door:focus-visible {
+        outline-offset: -3px;
     }
 
     /* CTA button */
@@ -341,6 +441,14 @@ const currentPath = Astro.url.pathname;
             display: none;
         }
     }
+
+    @media (prefers-reduced-motion: reduce) {
+        .mobile-nav-overlay,
+        .mobile-subnav,
+        .mobile-chevron {
+            transition: none;
+        }
+    }
 </style>
 
 <script is:inline>
@@ -349,7 +457,7 @@ const currentPath = Astro.url.pathname;
         const toggle = document.getElementById("mobile-nav-open");
 
         // Accordion toggles
-        overlay?.querySelectorAll(".mobile-nav-heading").forEach((btn) => {
+        overlay?.querySelectorAll("button.mobile-nav-heading").forEach((btn) => {
             btn.addEventListener("click", () => {
                 const group = btn.closest(".mobile-nav-group");
                 const wasExpanded = group?.classList.contains("expanded");

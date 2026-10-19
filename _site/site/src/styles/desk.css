@@ -145,12 +145,42 @@ html[data-variant="desk"] {
         color-mix(in oklab, var(--desk-brand-600) 5%, transparent) 34%,
         transparent 72%
     );
-    --role-nav-sheet: var(--color-card);
-    --role-nav-sheet-wash: radial-gradient(130% 120% at 50% 8%, color-mix(in oklab, var(--desk-brand-300) 14%, transparent) 0%, transparent 70%);
-    /* On paper the dark skin's gold fibres read as lint lying across the words. One faint warm tooth instead. */
-    --role-nav-sheet-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='m' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='4' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.27 0 0 0 0 0.18 0.09 0 0 0 -0.032'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23m)'/%3E%3C/svg%3E");
-    --role-nav-sheet-frame: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath d='M8.4 0.6H39.6M47.4 8.4V39.6M39.6 47.4H8.4M0.6 39.6V8.4' fill='none' stroke='rgba(158,69,2,0.66)' stroke-width='1.2'/%3E%3Cpath d='M39.6 0.6L47.4 8.4M47.4 39.6L39.6 47.4M8.4 47.4L0.6 39.6M0.6 8.4L8.4 0.6' fill='none' stroke='rgba(158,69,2,0.66)' stroke-width='2.34'/%3E%3Cpath d='M10.22 5H37.78M43 10.22V37.78M37.78 43H10.22M5 37.78V10.22' fill='none' stroke='rgba(158,69,2,0.4)' stroke-width='1'/%3E%3Cpath d='M37.78 5L43 10.22M43 37.78L37.78 43M10.22 43L5 37.78M5 10.22L10.22 5' fill='none' stroke='rgba(158,69,2,0.4)' stroke-width='1.95'/%3E%3C/svg%3E");
-    --role-nav-sheet-shadow: drop-shadow(0 10px 14px rgb(var(--desk-shadow-tint) / 0.14)) drop-shadow(0 24px 34px rgb(var(--desk-shadow-tint) / 0.12));
+    /* Lacquer in daylight is a card with a warm sheen, and its gilt is the burnt orange gold becomes on paper. */
+    --role-nav-lacquer: linear-gradient(180deg, var(--color-card) 0%, color-mix(in oklab, var(--color-card) 93%, var(--desk-brand-300)) 100%);
+    --role-nav-sheen: radial-gradient(85% 55% at 20% -6%, rgb(255 255 255 / 0.7), transparent 64%);
+    --role-nav-gilt-edge: linear-gradient(
+        180deg,
+        color-mix(in oklab, var(--desk-brand-700) 62%, transparent) 0%,
+        color-mix(in oklab, var(--desk-brand-700) 30%, transparent) 18%,
+        color-mix(in oklab, var(--desk-brand-700) 18%, transparent) 100%
+    );
+    --role-nav-shadow: drop-shadow(0 3px 6px rgb(var(--desk-shadow-tint) / 0.1)) drop-shadow(0 18px 28px rgb(var(--desk-shadow-tint) / 0.18));
+    --role-nav-foot: color-mix(in oklab, var(--desk-brand-300) 13%, transparent);
+    --role-nav-row: color-mix(in oklab, var(--desk-brand-600) 7%, transparent);
+    --role-nav-niche-well: linear-gradient(180deg, color-mix(in oklab, var(--color-canvas) 86%, var(--desk-brand-300)), var(--color-card));
+    --role-nav-niche-edge: linear-gradient(
+        180deg,
+        color-mix(in oklab, var(--desk-brand-700) 16%, transparent),
+        color-mix(in oklab, var(--desk-brand-700) 34%, transparent)
+    );
+    --role-nav-niche-edge-lit: linear-gradient(
+        180deg,
+        color-mix(in oklab, var(--desk-brand-700) 50%, transparent),
+        color-mix(in oklab, var(--desk-brand-700) 85%, transparent)
+    );
+    --role-nav-niche-glow: radial-gradient(
+        90% 80% at 50% 100%,
+        color-mix(in oklab, var(--desk-brand-300) 42%, transparent),
+        color-mix(in oklab, var(--desk-brand-300) 10%, transparent) 72%
+    );
+    --role-nav-niche-sheen: rgb(255 255 255 / 0.65);
+    --role-glyph-gilt-1: var(--desk-brand-700);
+    --role-glyph-gilt-2: var(--desk-brand-800);
+    --role-glyph-gilt-3: var(--desk-brand-950);
+    --role-glyph-plane: color-mix(in oklab, var(--desk-brand-300) 36%, transparent);
+    --role-glyph-jewel: var(--desk-brand-600);
+    /* A cut on paper shows as a lit lower lip, not a shadow. */
+    --role-glyph-bevel: drop-shadow(0 1px 0 rgb(255 255 255 / 0.85));
     /* Translucent, like the dark bar: the page scrolls under it. */
     --role-bar-fill: color-mix(in oklab, var(--color-canvas) 88%, transparent);
     /* A glow is a thing a dark page can have. */

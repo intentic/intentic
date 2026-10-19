@@ -10,7 +10,7 @@ export const docsBook: Book = {
         {
             label: "Learn",
             tagline: "What this is",
-            icon: "book-open",
+            icon: "learn",
             entry: "",
             groups: [
                 {
@@ -83,7 +83,7 @@ export const docsBook: Book = {
         {
             label: "Run a sandbox",
             tagline: "Install, reproduce, keep",
-            icon: "box",
+            icon: "sandbox",
             entry: "quickstart",
             groups: [
                 {
@@ -192,7 +192,7 @@ export const docsBook: Book = {
         {
             label: "Integrations",
             tagline: "Outside systems and machines",
-            icon: "layers",
+            icon: "integrations",
             entry: "capabilities",
             groups: [
                 {
@@ -265,7 +265,7 @@ export const docsBook: Book = {
         {
             label: "Agent Orchestration",
             tagline: "The everyday work",
-            icon: "workflow",
+            icon: "orchestration",
             entry: "parallel-agents",
             groups: [
                 {

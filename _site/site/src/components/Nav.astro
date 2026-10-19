@@ -1,16 +1,18 @@
 ---
-/* The bar starts transparent and lifts after the page scrolls. */
+/* The bar starts transparent and lifts after the page scrolls. Its menus open on one shared sheet of lacquer below it. */
+import { getImage } from "astro:assets";
 import { deskLanding } from "@intentic/site-content/landing";
-import { navEntries } from "@intentic/site-content/nav";
+import { type MenuItem, navEntries } from "@intentic/site-content/nav";
 import { APP_URL, DESK_PATH, discordUrl, githubUrl } from "@intentic/site-content/site";
 import { GITHUB_MARK } from "../lib/marks";
 import { isCurrentRow, isCurrentSection } from "../lib/navCurrent";
-import { NAV_ICONS } from "../lib/navIcons";
-import DiscordIcon from "./DiscordIcon.astro";
+import { shotPair } from "../lib/shots";
 import Bullet from "./Bullet.astro";
+import DiscordIcon from "./DiscordIcon.astro";
 import DownloadCta from "./DownloadCta.astro";
 import Lotus from "./Lotus.astro";
 import MobileNav from "./MobileNav.astro";
+import NavNiche from "./NavNiche.astro";
 
 // Which product's page this bar sits on. The mark leads home to that product, and the bar's one action is that
 // product's door: the install for a developer, the app for the desk. A shared page (docs, pricing) is the
@@ -25,9 +27,59 @@ interface Props {
 const { product = "default", ctaManaged = false } = Astro.props;
 const home = product === "desk" ? DESK_PATH : "/";
 const currentPath = Astro.url.pathname;
+
+// THE PREVIEW WINDOW. A menu whose rows carry a shot (Features) shows the hovered row's screen beside the list. Its
+// pictures are URLs, not <Image>s, on purpose: the sheet is on every page, and an <img> with a src would be fetched by
+// every page view. The script hands them their src on the reader's first approach to the bar instead.
+// The window is 21rem by about 19rem and the shot COVERS it, so a wide shot is drawn wider than the window: each one's
+// rungs and `sizes` come from how wide it is actually drawn, never past the capture's own width.
+const WINDOW = { width: 336, height: 304 };
+const previewSource = async (src: ImageMetadata) => {
+    const drawn = Math.round(Math.max(WINDOW.width, (WINDOW.height * src.width) / src.height));
+    const widths = [...new Set([drawn, drawn * 2].map((width) => Math.min(width, src.width)))];
+    const image = await getImage({ src, widths, format: "webp" });
+    return { src: image.src, srcset: image.srcSet.attribute, sizes: `${drawn}px` };
+};
+const previewOf = async (item: MenuItem) => {
+    if (item.shot === undefined) {
+        return undefined;
+    }
+    const pair = shotPair(item.shot.name);
+    const [dark, light] = await Promise.all([previewSource(pair.dark), previewSource(pair.light)]);
+    return { href: item.href, dark, light };
+};
+const previews = await Promise.all(
+    navEntries.map(async (entry) => {
+        if (entry.type !== "menu") {
+            return [];
+        }
+        const shots = await Promise.all(entry.sections.flatMap((section) => section.items).map(previewOf));
+        return shots.filter((shot) => shot !== undefined);
+    }),
+);
+// The window opens on the page you are reading when it is one of the rows, and on the first row otherwise.
+const shownPreview = (index: number): string | undefined => {
+    const entry = navEntries[index];
+    const rows = entry?.type === "menu" ? entry.sections.flatMap((section) => section.items) : [];
+    const here = rows.find((item) => item.shot !== undefined && isCurrentRow(item, currentPath));
+    return here?.href ?? previews[index]?.[0]?.href;
+};
 ---
 
 <header class="bar" id="site-bar" data-cta-managed={ctaManaged ? "" : undefined}>
+    {/* The gold leaf every menu glyph is laid in, defined once for the bar and the phone sheet. Its stops read the
+        skin's tokens, so the same gradient is gold on lacquer and burnt orange on paper. Sized to nothing rather than
+        `display: none`, which some engines treat as having no gradient to paint with. */}
+    <svg class="gilt-defs" width="0" height="0" aria-hidden="true" focusable="false">
+        <defs>
+            <linearGradient id="nav-gilt" gradientUnits="userSpaceOnUse" x1="0" y1="2" x2="0" y2="22">
+                <stop offset="0" style="stop-color: var(--role-glyph-gilt-1)" />
+                <stop offset="0.5" style="stop-color: var(--role-glyph-gilt-2)" />
+                <stop offset="1" style="stop-color: var(--role-glyph-gilt-3)" />
+            </linearGradient>
+        </defs>
+    </svg>
+
     <div class="bar-inner">
         <a href={home} class="brand lockup" aria-label="intentic" data-brand>
             <Lotus size="lg" class="brand-mark" />
@@ -54,55 +106,78 @@ const currentPath = Astro.url.pathname;
                                 aria-controls={`bar-menu-${index}`}
                             >
                                 {entry.label}
-                                <svg class="chev" width="9" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true">
-                                    <path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                                <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <path d="m5 9 7 7 7-7" stroke="currentColor" stroke-width="2.6" stroke-linecap="square" />
                                 </svg>
                             </button>
 
                             {/* Menu chrome stays fixed while its body moves into the shared flyout. */}
                             <div class="menu-panel">
                                 <div class="menu-panel-body" id={`bar-menu-${index}`}>
-                                    <div class="menu-rows" style={`--menu-cols:${entry.sections.length}`}>
-                                        {entry.sections.map((section) => (
-                                            <div class="menu-section">
-                                                {section.label && <div class="eyebrow eyebrow-bare menu-section-label">{section.label}</div>}
-                                                <ul>
-                                                    {section.items.map((item) => (
-                                                        <li>
-                                                            <a
-                                                                href={item.href}
-                                                                class:list={[
-                                                                    "menu-item",
-                                                                    "nav-wash",
-                                                                    { current: isCurrentRow(item, currentPath), "menu-item--flat": !item.description },
-                                                                ]}
-                                                                aria-current={isCurrentRow(item, currentPath) ? "page" : undefined}
-                                                                target={item.external ? "_blank" : undefined}
-                                                                rel={item.external ? "noopener" : undefined}
-                                                            >
-                                                                {item.icon && NAV_ICONS[item.icon] && (
-                                                                    <svg
-                                                                        class="menu-item-icon"
-                                                                        viewBox="0 0 24 24"
-                                                                        fill="none"
-                                                                        stroke="currentColor"
-                                                                        stroke-width="1.6"
-                                                                        stroke-linecap="round"
-                                                                        stroke-linejoin="round"
-                                                                        aria-hidden="true"
-                                                                        set:html={NAV_ICONS[item.icon]}
-                                                                    />
-                                                                )}
-                                                                <span class="menu-item-text">
-                                                                    <span class="menu-item-label">{item.label}</span>
-                                                                    {item.description && <span class="menu-item-blurb">{item.description}</span>}
-                                                                </span>
-                                                            </a>
-                                                        </li>
+                                    <div class:list={["menu-main", { "menu-main--preview": (previews[index]?.length ?? 0) > 0 }]}>
+                                        <div class="menu-rows" style={`--menu-cols:${entry.sections.length}`}>
+                                            {entry.sections.map((section) => (
+                                                <div class="menu-section">
+                                                    {section.label && <div class="eyebrow eyebrow-bare menu-section-label">{section.label}</div>}
+                                                    <ul>
+                                                        {section.items.map((item) => (
+                                                            <li>
+                                                                <a
+                                                                    href={item.href}
+                                                                    class:list={[
+                                                                        "menu-item",
+                                                                        { current: isCurrentRow(item, currentPath), "menu-item--flat": !item.description },
+                                                                    ]}
+                                                                    aria-current={isCurrentRow(item, currentPath) ? "page" : undefined}
+                                                                    target={item.external ? "_blank" : undefined}
+                                                                    rel={item.external ? "noopener" : undefined}
+                                                                    data-preview={item.shot ? item.href : undefined}
+                                                                >
+                                                                    <NavNiche icon={item.icon} />
+                                                                    <span class="menu-item-text">
+                                                                        <span class="menu-item-label">{item.label}</span>
+                                                                        {item.description && <span class="menu-item-blurb">{item.description}</span>}
+                                                                    </span>
+                                                                </a>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {(previews[index]?.length ?? 0) > 0 && (
+                                            <div class="menu-preview" aria-hidden="true">
+                                                <div class="menu-preview-window">
+                                                    {previews[index]?.map((shot) => (
+                                                        <div
+                                                            class="menu-preview-shot"
+                                                            data-preview={shot.href}
+                                                            data-shown={shot.href === shownPreview(index) ? "" : undefined}
+                                                        >
+                                                            <img
+                                                                class="shot-dark"
+                                                                alt=""
+                                                                sizes={shot.dark.sizes}
+                                                                loading="lazy"
+                                                                decoding="async"
+                                                                data-preview-src={shot.dark.src}
+                                                                data-preview-srcset={shot.dark.srcset}
+                                                            />
+                                                            <img
+                                                                class="shot-light"
+                                                                alt=""
+                                                                sizes={shot.light.sizes}
+                                                                loading="lazy"
+                                                                decoding="async"
+                                                                data-preview-src={shot.light.src}
+                                                                data-preview-srcset={shot.light.srcset}
+                                                            />
+                                                        </div>
                                                     ))}
-                                                </ul>
+                                                </div>
                                             </div>
-                                        ))}
+                                        )}
                                     </div>
 
                                     {entry.action && (
@@ -114,7 +189,9 @@ const currentPath = Astro.url.pathname;
                                         >
                                             <Bullet />
                                             {entry.action.label}
-                                            <span aria-hidden="true">→</span>
+                                            <svg class="menu-action-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                <path d="M4 12h15 M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="square" />
+                                            </svg>
                                         </a>
                                     )}
                                 </div>
@@ -124,9 +201,11 @@ const currentPath = Astro.url.pathname;
                 )
             }
 
-            {/* The shared dock is present in markup so Astro scopes its styles. */}
+            {/* The shared dock is present in markup so Astro scopes its styles. The finial is the lozenge set into the
+                sheet's top edge; it rides under whichever trigger the sheet belongs to. */}
             <div class="flyout">
                 <div class="flyout-shift">
+                    <span class="flyout-finial" aria-hidden="true"></span>
                     <div class="flyout-surface"></div>
                 </div>
             </div>
@@ -134,10 +213,10 @@ const currentPath = Astro.url.pathname;
 
         <div class="bar-end">
             <a href={githubUrl} target="_blank" rel="noopener" class="bar-icon" aria-label="GitHub repository" title="GitHub repository">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17" aria-hidden="true"><path d={GITHUB_MARK}></path></svg>
+                <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true"><path d={GITHUB_MARK}></path></svg>
             </a>
             <a href={discordUrl} target="_blank" rel="noopener" class="bar-icon" aria-label="Discord community" title="Discord community">
-                <DiscordIcon size={17} />
+                <DiscordIcon size={18} />
             </a>
             {
                 product === "desk" ? (
@@ -185,6 +264,33 @@ const currentPath = Astro.url.pathname;
         if (trigger && page) {items.push({ menu, trigger, page });}
     }
 
+    /* A preview window shows the row under the pointer or focus, and keeps the last one when the pointer moves on. */
+    for (const { page } of items) {
+        const shots = [...page.querySelectorAll<HTMLElement>(".menu-preview-shot")];
+        if (shots.length === 0) {continue;}
+        for (const row of page.querySelectorAll<HTMLElement>(".menu-item[data-preview]")) {
+            const pick = () => {
+                for (const shot of shots) {shot.toggleAttribute("data-shown", shot.dataset.preview === row.dataset.preview);}
+            };
+            row.addEventListener("pointerenter", pick);
+            row.addEventListener("focus", pick);
+        }
+    }
+
+    /* The window's pictures are fetched on the first approach to the bar, never by the page load itself. Only the
+       skin's own copy of each is fetched: the other twin is `display: none`, and a hidden lazy image never loads. */
+    let warmed = false;
+    const warm = () => {
+        if (warmed) {return;}
+        warmed = true;
+        for (const img of document.querySelectorAll<HTMLImageElement>("img[data-preview-src]")) {
+            img.srcset = img.dataset.previewSrcset ?? "";
+            img.src = img.dataset.previewSrc ?? "";
+        }
+    };
+    links?.addEventListener("pointerenter", warm, { once: true });
+    links?.addEventListener("focusin", warm, { once: true });
+
     const flyout = document.querySelector<HTMLElement>(".flyout");
     const surface = document.querySelector<HTMLElement>(".flyout-surface");
 
@@ -214,15 +320,18 @@ const currentPath = Astro.url.pathname;
             window.clearTimeout(closeTimer);
         };
 
-        /* The flyout is positioned from the trigger and clamped to the viewport. */
+        /* The flyout is positioned from the trigger and clamped to the viewport; the finial stays under the trigger
+           even where the clamp has pushed the sheet off-centre. */
         const place = (item: Menu) => {
             const nav = links.getBoundingClientRect();
             const label = item.trigger.getBoundingClientRect();
             const size = item.page.getBoundingClientRect();
             const edge = 12;
+            const centre = label.left + label.width / 2;
             const room = Math.max(edge, window.innerWidth - edge - size.width);
-            const x = Math.min(Math.max(label.left + label.width / 2 - size.width / 2, edge), room);
+            const x = Math.min(Math.max(centre - size.width / 2, edge), room);
             flyout.style.setProperty("--fx", `${Math.round(x - nav.left)}px`);
+            flyout.style.setProperty("--fa", `${Math.round(centre - x)}px`);
             surface.style.setProperty("--fw", `${Math.round(size.width)}px`);
             surface.style.setProperty("--fh", `${Math.round(size.height)}px`);
         };
@@ -239,6 +348,7 @@ const currentPath = Astro.url.pathname;
             idle();
             const next = items[i];
             if (!next || next === open) {return;}
+            warm();
             // Content drifts toward the next menu; a cold open only rises.
             flyout.style.setProperty("--dir", String(open ? Math.sign(i - items.indexOf(open)) : 0));
 
@@ -419,15 +529,40 @@ const currentPath = Astro.url.pathname;
         left: 0;
         z-index: 100;
         background: transparent;
-        border-bottom: 1px solid transparent;
-        transition:
-            background-color 0.3s ease,
-            border-color 0.3s ease;
+        transition: background-color 0.3s ease;
     }
     .bar[data-lifted] {
         background: var(--role-bar-fill);
-        border-bottom-color: var(--color-line);
-        backdrop-filter: blur(14px);
+        backdrop-filter: blur(14px) saturate(1.15);
+    }
+    /* The bar's foot is a gilt hairline that fades out toward both ends, brightest under the links it carries. */
+    .bar::after {
+        content: "";
+        position: absolute;
+        right: 0;
+        bottom: -1px;
+        left: 0;
+        height: 1px;
+        background: linear-gradient(
+            90deg,
+            transparent,
+            var(--color-line-strong) 16%,
+            var(--color-line-bright) 50%,
+            var(--color-line-strong) 84%,
+            transparent
+        );
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        pointer-events: none;
+    }
+    .bar[data-lifted]::after {
+        opacity: 1;
+    }
+    .gilt-defs {
+        position: absolute;
+        width: 0;
+        height: 0;
+        overflow: hidden;
     }
 
     .bar-inner {
@@ -459,10 +594,11 @@ const currentPath = Astro.url.pathname;
     }
     /* The wordmark uses the site's title face. */
     .bar-link {
+        position: relative;
         display: inline-flex;
         align-items: center;
-        gap: 0.35rem;
-        padding: 0.45rem 0.65rem;
+        gap: 0.4rem;
+        padding: 0.5rem 0.7rem;
         border: 0;
         background: none;
         font-family: var(--font-mark);
@@ -478,8 +614,7 @@ const currentPath = Astro.url.pathname;
             opacity 0.2s ease;
     }
     /* The pointer warms a link to ember, the site's hover; the section you are in is state, so it wears the accent and
-       keeps it under the pointer (_editor/ui/README.md, "One signal colour"). They used to be one rule, so the current section
-       looked exactly like a hovered one. */
+       keeps it under the pointer (_editor/ui/README.md, "One signal colour"). */
     .bar-link:hover,
     .menu[data-open] .menu-trigger {
         color: var(--color-primary-400);
@@ -490,37 +625,44 @@ const currentPath = Astro.url.pathname;
         color: var(--color-gold-bright);
         opacity: 1;
     }
+    /* The section you are in also carries the house's mark for "you are standing here": an ember lozenge, lit. */
+    .bar-link.active::after {
+        content: "";
+        position: absolute;
+        bottom: 0.05rem;
+        left: 50%;
+        width: 5px;
+        height: 5px;
+        background: var(--color-primary-500);
+        filter: var(--house-ember-mark-glow);
+        transform: translateX(-50%) rotate(45deg);
+    }
     .chev {
-        transition: transform 0.2s ease;
+        opacity: 0.7;
+        transition:
+            transform 0.24s ease,
+            opacity 0.2s ease;
     }
     /* The chevron follows the OPEN menu, not the hovered one — with the script running, hover opens. */
     .menu[data-open] .chev,
     .bar-links:not([data-enhanced]) .menu:hover .chev {
+        opacity: 1;
         transform: rotate(180deg);
     }
 
-    /* Menu panels share the page's carved surface vocabulary. */
     .menu {
         position: relative;
     }
-    /* THE PANEL IS THE BUTTON'S BLOCK AT WALL SCALE, and like the button it carries its face on its OWN. */
+
+    /* THE SHEET: black lacquer with a gold-leaf edge. Two layers, because a clipped shape has no border of its own: the
+       element is the gilt, and its ::before is the lacquer laid a pixel inside it. Padding is that pixel, so a body
+       measured at its own size fits inside the edge rather than over it. */
     .menu-panel,
     .flyout-surface {
-        --cut: 9px;
-
-        /* Each skin brings its own sheet: a ground, a woven tile and a wash. */
-        background-color: var(--role-nav-sheet);
-        background-image:
-            var(--role-nav-sheet-texture),
-            var(--role-nav-sheet-wash);
-        background-repeat: repeat, no-repeat;
-        background-size: 200px 200px, cover;
-        /* Menu panels use the same double rule as buttons. */
-        border: 1px solid transparent;
-        border-image-source: var(--role-nav-sheet-frame);
-        border-image-slice: 16;
-        border-image-width: 16px;
-        border-image-repeat: stretch;
+        --cut: 12px;
+        isolation: isolate;
+        padding: 1px;
+        background: var(--role-nav-gilt-edge);
         clip-path: polygon(
             var(--cut) 0,
             calc(100% - var(--cut)) 0,
@@ -531,13 +673,30 @@ const currentPath = Astro.url.pathname;
             0 calc(100% - var(--cut)),
             0 var(--cut)
         );
-        filter: var(--role-nav-sheet-shadow);
+    }
+    .menu-panel::before,
+    .flyout-surface::before {
+        --inner: calc(var(--cut) - 0.41px);
+        content: "";
+        position: absolute;
+        inset: 1px;
+        z-index: -1;
+        background: var(--role-nav-sheen), var(--role-nav-lacquer);
+        clip-path: polygon(
+            var(--inner) 0,
+            calc(100% - var(--inner)) 0,
+            100% var(--inner),
+            100% calc(100% - var(--inner)),
+            calc(100% - var(--inner)) 100%,
+            var(--inner) 100%,
+            0 calc(100% - var(--inner)),
+            0 var(--inner)
+        );
     }
 
     /* Menu body spacing moves with the shared panel. */
     .menu-panel-body {
-        min-width: 22rem;
-        padding: 1.1rem 1.15rem 0.9rem;
+        padding: 0.7rem;
     }
 
     /* Without the script each menu keeps its own hover panel. */
@@ -561,6 +720,10 @@ const currentPath = Astro.url.pathname;
         transform: translate(-50%, 0);
         transition-delay: 0s;
     }
+    /* No script, no pictures: the window is only ever filled by the script. */
+    .menu-panel .menu-preview {
+        display: none;
+    }
 
     /* The flyout follows the cursor within one stable panel. */
     .flyout {
@@ -581,11 +744,29 @@ const currentPath = Astro.url.pathname;
         pointer-events: auto;
         transition-delay: 0s;
     }
-    /* The moving part owns the gap below the bar. */
+    /* The moving part owns the gap below the bar, and throws the sheet's shadow: a clipped element cannot cast one. */
     .flyout-shift {
-        padding-top: 0.55rem;
+        --gap: 0.7rem;
+        position: relative;
+        padding-top: var(--gap);
+        filter: var(--role-nav-shadow);
         transform: translateX(var(--fx, 0));
         transition: transform 0.42s cubic-bezier(0.22, 0.68, 0.24, 1);
+    }
+    /* A gilt lozenge set into the sheet's top edge, a lit stone at its heart, standing under the open trigger. */
+    .flyout-finial {
+        position: absolute;
+        top: calc(var(--gap) - 6px);
+        left: calc(var(--fa, 50%) - 6px);
+        z-index: 1;
+        width: 12px;
+        height: 12px;
+        background:
+            linear-gradient(var(--role-glyph-jewel), var(--role-glyph-jewel)) center / 4px 4px no-repeat,
+            var(--role-nav-lacquer);
+        border: 1px solid var(--role-glyph-gilt-2);
+        transform: rotate(45deg);
+        transition: left 0.42s cubic-bezier(0.22, 0.68, 0.24, 1);
     }
     /* Content-box sizing matches the dimensions measured from each body. */
     .flyout-surface {
@@ -602,20 +783,29 @@ const currentPath = Astro.url.pathname;
     .flyout[data-open] .flyout-surface {
         transform: none;
     }
+    .flyout[data-open] .flyout-finial {
+        animation: finial-rise 0.2s ease both;
+    }
+    @keyframes finial-rise {
+        from {
+            translate: 0 -0.4rem;
+        }
+    }
     /* The one frame where the panel is allowed to teleport: a cold open, which must appear at its trigger. */
     .flyout[data-instant],
     .flyout[data-instant] .flyout-shift,
+    .flyout[data-instant] .flyout-finial,
     .flyout[data-instant] .flyout-surface,
     .flyout[data-instant] .flyout-page {
         transition: none;
     }
-    /* Menu bodies stack at the surface origin and stay out of flow. */
+    /* Menu bodies stack inside the edge and stay out of flow. */
     .flyout-page {
         position: absolute;
-        top: 0;
-        left: 0;
+        top: 1px;
+        left: 1px;
         width: max-content;
-        max-width: min(92vw, 46rem);
+        max-width: min(92vw, 48rem);
         opacity: 0;
         visibility: hidden;
         transform: translateX(calc(var(--dir, 0) * 12px));
@@ -636,53 +826,78 @@ const currentPath = Astro.url.pathname;
             transform 0.34s cubic-bezier(0.22, 0.68, 0.24, 1);
     }
 
+    .menu-main {
+        display: grid;
+    }
+    .menu-main--preview {
+        grid-template-columns: minmax(0, auto) 21rem;
+        gap: 0.7rem;
+    }
     .menu-rows {
         display: grid;
-        grid-template-columns: repeat(var(--menu-cols, 1), minmax(0, 1fr));
+        grid-template-columns: repeat(var(--menu-cols, 1), minmax(17rem, 1fr));
         gap: 1.5rem;
     }
     .menu-section-label {
-        margin-bottom: 0.6rem;
+        margin: 0.4rem 0 0.4rem 0.6rem;
     }
     .menu-section ul {
+        display: grid;
+        gap: 0.1rem;
         margin: 0;
         padding: 0;
         list-style: none;
     }
-    /* Menu rows contain an icon and label with distinct states. */
+
+    /* A ROW IS A NICHE AND ITS WORDS. Under the pointer the row lifts onto a faint gilt plane and its niche lights; the
+       page you are on keeps its niche lit at rest, which is how the app's rail marks the picked tile. */
     .menu-item {
-        display: flex;
-        align-items: flex-start;
-        gap: 0.7rem;
-        /* The active rule is included in the row's left padding. */
-        border-left: 2px solid transparent;
-        padding: 0.5rem 0.6rem 0.5rem calc(0.6rem - 2px);
+        --niche-size: 3rem;
+        --glyph-size: 1.8rem;
+        position: relative;
+        isolation: isolate;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        column-gap: 0.95rem;
+        padding: 0.45rem 1.1rem 0.45rem 0.45rem;
         text-decoration: none;
     }
-    /* Label-only rows (the reference menu) have one line to sit against, so the icon centres on it. */
-    .menu-item--flat {
-        align-items: center;
+    .menu-item::before {
+        --cut: 10px;
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background: var(--role-nav-row);
+        clip-path: polygon(
+            var(--cut) 0,
+            calc(100% - var(--cut)) 0,
+            100% var(--cut),
+            100% calc(100% - var(--cut)),
+            calc(100% - var(--cut)) 100%,
+            var(--cut) 100%,
+            0 calc(100% - var(--cut)),
+            0 var(--cut)
+        );
+        opacity: 0;
+        transition: opacity 0.18s ease;
     }
-
-    .menu-item-icon {
-        flex: none;
-        width: 1.15rem;
-        height: 1.15rem;
-        /* Dropped a hair so the glyph sits on the label's cap line once a blurb makes the text two lines tall. */
-        margin-top: 0.08rem;
-        color: var(--color-gold);
-        transition:
-            color 0.2s ease,
-            transform 0.26s cubic-bezier(0.34, 1.5, 0.64, 1);
+    .menu-item:hover,
+    .menu-item:focus-visible {
+        --niche-lit: 1;
+        --niche-sweep: 1;
     }
-    .menu-item--flat .menu-item-icon {
-        margin-top: 0;
+    .menu-item:hover::before,
+    .menu-item:focus-visible::before {
+        opacity: 1;
     }
-    /* The hover's second signal, and the reason the label can stay put: it is already the brightest text. */
-    .menu-item:hover .menu-item-icon,
-    .menu-item:focus-visible .menu-item-icon {
-        color: var(--color-gold-bright);
-        transform: scale(1.08);
+    .menu-item:focus-visible {
+        outline-offset: -2px;
+    }
+    .menu-item.current {
+        --niche-lit: 1;
+        --niche-glow: 1;
     }
     .menu-item-text {
         display: flex;
@@ -691,58 +906,192 @@ const currentPath = Astro.url.pathname;
     }
     .menu-item-label {
         font-family: var(--font-mark);
-        font-size: 0.9375rem;
+        font-size: 1rem;
         font-weight: var(--font-weight-semibold);
+        line-height: 1.3;
         color: var(--color-content);
+    }
+    .menu-item.current .menu-item-label {
+        color: var(--color-gold-bright);
     }
     .menu-item-blurb {
         margin-top: 0.1rem;
         max-width: 30ch;
-        font-size: 0.75rem;
-        line-height: 1.45;
+        font-size: 0.8125rem;
+        line-height: 1.4;
         color: var(--color-subtle);
+        transition: color 0.18s ease;
+    }
+    .menu-item:hover .menu-item-blurb,
+    .menu-item:focus-visible .menu-item-blurb {
+        color: var(--color-muted);
     }
 
-    /* Current rows keep their state while hovered: the accent's edge, the bright metal on the glyph, and the label in the
-       full ink it already has. The app's own nav row, mark for mark. */
-    .menu-item.current {
-        border-left-color: var(--color-accent);
+    /* THE PREVIEW WINDOW: the hovered row's screen, framed in the same gilt as the sheet and sunk into the lacquer at
+       its foot. Its shots are app screens, so the top-left corner, where the rail and the heading are, is the part kept. */
+    .menu-preview {
+        --cut: 9px;
+        position: relative;
+        align-self: stretch;
+        min-height: 13rem;
+        margin: 0.45rem 0 0.45rem;
+        padding: 1px;
+        background: var(--role-nav-gilt-edge);
+        clip-path: polygon(
+            var(--cut) 0,
+            calc(100% - var(--cut)) 0,
+            100% var(--cut),
+            100% calc(100% - var(--cut)),
+            calc(100% - var(--cut)) 100%,
+            var(--cut) 100%,
+            0 calc(100% - var(--cut)),
+            0 var(--cut)
+        );
     }
-    .menu-item.current .menu-item-icon,
-    .menu-item.current:hover .menu-item-icon,
-    .menu-item.current:focus-visible .menu-item-icon {
-        color: var(--color-gold-bright);
+    .menu-preview-window {
+        --inner: calc(var(--cut) - 0.41px);
+        position: relative;
+        height: 100%;
+        overflow: hidden;
+        background: var(--role-nav-niche-well);
+        clip-path: polygon(
+            var(--inner) 0,
+            calc(100% - var(--inner)) 0,
+            100% var(--inner),
+            100% calc(100% - var(--inner)),
+            calc(100% - var(--inner)) 100%,
+            var(--inner) 100%,
+            0 calc(100% - var(--inner)),
+            0 var(--inner)
+        );
+    }
+    .menu-preview-window::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(0deg, color-mix(in oklab, var(--color-canvas) 55%, transparent), transparent 38%);
+        pointer-events: none;
+    }
+    .menu-preview-shot {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        transform: scale(1.02);
+        transition:
+            opacity 0.32s ease,
+            transform 0.5s cubic-bezier(0.22, 0.68, 0.24, 1);
+    }
+    .menu-preview-shot[data-shown] {
+        opacity: 1;
+        transform: none;
+    }
+    .menu-preview-shot img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: left top;
     }
 
+    /* THE LINTEL: the sheet's one action, on a ground a step lighter, under a gilt rule with a lozenge at its joint.
+       The lotus heads it as the house's mark for a door; the arrow is pushed to the far end rather than spread there,
+       so the mark stays beside its words (scripts/check-alignment.mjs measures it). */
     .menu-action {
+        position: relative;
         display: flex;
         align-items: center;
-        gap: 0.5rem;
-        margin-top: 0.9rem;
-        border-top: 1px solid var(--color-line);
-        padding: 0.8rem 0.6rem 0.1rem;
-        font-size: 0.875rem;
+        gap: 0.55rem;
+        /* Out to the edge on three sides: the lintel spans the sheet, and the sheet's own cut corners finish it. */
+        margin: 0.55rem -0.7rem -0.7rem;
+        padding: 0.85rem 1.25rem 0.9rem 1.15rem;
+        background:
+            linear-gradient(90deg, transparent, var(--color-line-strong) 14%, var(--color-line-strong) 86%, transparent) top / 100% 1px no-repeat,
+            var(--role-nav-foot);
+        font-family: var(--font-mark);
+        font-size: 0.9375rem;
+        font-weight: var(--font-weight-semibold);
         color: var(--color-gold-bright);
         text-decoration: none;
         transition: color 0.16s ease;
     }
-    .menu-action:hover {
+    .menu-action::before {
+        content: "";
+        position: absolute;
+        top: -3px;
+        left: 50%;
+        width: 7px;
+        height: 7px;
+        background: var(--role-nav-lacquer);
+        border: 1px solid var(--color-line-bright);
+        transform: translateX(-50%) rotate(45deg);
+    }
+    .menu-action-arrow {
+        flex: none;
+        margin-left: auto;
+        padding-left: 1.5rem;
+        box-sizing: content-box;
+        width: 1rem;
+        height: 1rem;
+        transition: transform 0.26s cubic-bezier(0.34, 1.5, 0.64, 1);
+    }
+    .menu-action:hover,
+    .menu-action:focus-visible {
         color: var(--color-primary-400);
+    }
+    .menu-action:hover .menu-action-arrow,
+    .menu-action:focus-visible .menu-action-arrow {
+        transform: translateX(3px);
+    }
+    .menu-action:focus-visible {
+        outline-offset: -3px;
     }
 
     .bar-end {
         display: flex;
         align-items: center;
-        gap: 1rem;
+        gap: 0.25rem;
         flex: none;
     }
+    /* The bar's two marks sit in niches of their own that only show under the pointer. */
     .bar-icon {
-        display: inline-flex;
+        --cut: 0.55rem;
+        position: relative;
+        isolation: isolate;
+        display: inline-grid;
+        place-items: center;
+        width: 2.4rem;
+        height: 2.4rem;
         color: var(--color-muted);
         transition: color 0.2s ease;
     }
+    .bar-icon::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background: var(--role-nav-row);
+        clip-path: polygon(
+            var(--cut) 0,
+            calc(100% - var(--cut)) 0,
+            100% var(--cut),
+            100% calc(100% - var(--cut)),
+            calc(100% - var(--cut)) 100%,
+            var(--cut) 100%,
+            0 calc(100% - var(--cut)),
+            0 var(--cut)
+        );
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
     .bar-icon:hover {
         color: var(--color-primary-400);
+    }
+    .bar-icon:hover::before {
+        opacity: 1;
+    }
+    .bar-end :global(.bar-cta) {
+        margin-left: 0.75rem;
     }
 
     /* The bar CTA hides when the hero already exposes the same action. */
@@ -766,6 +1115,7 @@ const currentPath = Astro.url.pathname;
         display: none;
         flex-direction: column;
         gap: 5px;
+        margin-left: 0.5rem;
         padding: 4px;
         background: none;
         border: none;
@@ -822,9 +1172,6 @@ const currentPath = Astro.url.pathname;
             gap: 0.75rem;
             padding: 0 1rem;
         }
-        .bar-end {
-            gap: 0.6rem;
-        }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -832,13 +1179,20 @@ const currentPath = Astro.url.pathname;
         .menu-panel,
         .flyout,
         .flyout-shift,
+        .flyout-finial,
         .flyout-surface,
-        .flyout-page {
+        .flyout-page,
+        .menu-preview-shot {
             transition: none;
         }
-        /* The icon still warms with its row; it just stops springing when it does. */
-        .menu-item-icon {
-            transition: color 0.2s ease;
+        .flyout[data-open] .flyout-finial {
+            animation: none;
+        }
+        .menu-preview-shot {
+            transform: none;
+        }
+        .menu-action-arrow {
+            transition: none;
         }
         .bar[data-cta-managed] :global(.bar-cta) {
             transform: none;

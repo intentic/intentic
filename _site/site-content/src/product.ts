@@ -70,7 +70,7 @@ export const productPages: ProductPage[] = [
         slug: "run",
         navLabel: "Agent Workspace",
         menuBlurb: "Many agents, one board",
-        icon: "play",
+        icon: "agents",
         heading: "Run many agents. See which one needs you.",
         sub: "A chat window works for one agent. The board shows the status, changes and cost of every agent at once.",
         hero: {
@@ -124,7 +124,7 @@ export const productPages: ProductPage[] = [
         slug: "connect",
         navLabel: "Integrations",
         menuBlurb: "Wire in outside systems",
-        icon: "link",
+        icon: "integrations",
         heading: "Connect agents to the systems they need.",
         sub: "Connect GitHub, Postgres, Stripe, Discord or any MCP server. Every key stays in your sandbox.",
         hero: {
@@ -191,7 +191,7 @@ export const productPages: ProductPage[] = [
         slug: "automate",
         navLabel: "Automations",
         menuBlurb: "On a pipeline, issue or schedule",
-        icon: "zap",
+        icon: "automations",
         heading: "Start an agent automatically.",
         sub: "Choose a schedule or event. Add an optional check command that decides whether each run should start.",
         // Explains the mechanism itself; a screenshot of results only shows the result. Same drawing as automate.ts.
@@ -257,7 +257,7 @@ export const productPages: ProductPage[] = [
         slug: "review",
         navLabel: "Approvals",
         menuBlurb: "Approve every change first",
-        icon: "circle-check",
+        icon: "approvals",
         heading: "It proposes. You approve. Nothing is merged until you read the diff.",
         sub: "Every agent plans first, then waits. Review each file before you accept the change.",
         menuShot: {
@@ -326,7 +326,7 @@ export const productPages: ProductPage[] = [
         slug: "host",
         navLabel: "Self-hosting",
         menuBlurb: "Self-hosted",
-        icon: "server",
+        icon: "self-hosting",
         heading: "Host the work. Keep control.",
         sub: "A sandbox is a Docker container on your laptop, desktop or server. Move it to a server so agents can keep working when your laptop is off.",
         menuShot: {

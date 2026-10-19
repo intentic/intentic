@@ -14,7 +14,7 @@ const PUBLISHED = "2026-08-21";
 // The one hand-written shelf; each page answers something a schema can't (sandbox location, what a 409 means).
 const startHere: BookSection = {
     label: "Start here",
-    icon: "flag",
+    icon: "api",
     entry: "",
     groups: [
         {

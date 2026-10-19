@@ -1,0 +1,138 @@
+---
+/* ONE MENU GLYPH IN ITS NICHE: the app rail's tile, carved. An octagonal well with a gilt edge, and the glyph laid
+   into it in gold leaf (lib/navIcons.ts). The row that holds it decides its state through three custom properties,
+   so the bar's panel and the phone sheet light it the same way without reaching into this file:
+     --niche-lit    0 or 1, the edge brightens (hover, focus, the current page)
+     --niche-glow   0 or 1, the well fills with light from below: the current page, the app's "one lit niche"
+     --niche-sweep  0 or 1, the sheen crosses the well (hover and focus only)
+   Its measure comes from --niche-size and --glyph-size, which the row sets. */
+import { navGlyphMarkup } from "../lib/navIcons";
+
+interface Props {
+    icon: string | undefined;
+}
+
+const markup = navGlyphMarkup(Astro.props.icon);
+---
+
+{
+    markup !== "" && (
+        <span class="niche" aria-hidden="true">
+            <span class="niche-well" />
+            <svg class="glyph" viewBox="0 0 24 24" set:html={markup} />
+        </span>
+    )
+}
+
+<style>
+    .niche {
+        --cut: calc(var(--niche-size, 3rem) * 0.22);
+        position: relative;
+        isolation: isolate;
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: var(--niche-size, 3rem);
+        height: var(--niche-size, 3rem);
+        background: var(--role-nav-niche-edge);
+        clip-path: polygon(
+            var(--cut) 0,
+            calc(100% - var(--cut)) 0,
+            100% var(--cut),
+            100% calc(100% - var(--cut)),
+            calc(100% - var(--cut)) 100%,
+            var(--cut) 100%,
+            0 calc(100% - var(--cut)),
+            0 var(--cut)
+        );
+    }
+    /* The lit edge is its own layer so it can fade: a gradient cannot transition into another. */
+    .niche::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: var(--role-nav-niche-edge-lit);
+        opacity: var(--niche-lit, 0);
+        transition: opacity 0.22s ease;
+    }
+    /* Inset by the edge's one pixel; the cut is 0.41px shorter so the diagonal edge stays a pixel thick too. */
+    .niche-well {
+        --inner: calc(var(--cut) - 0.41px);
+        position: absolute;
+        inset: 1px;
+        z-index: 1;
+        background: var(--role-nav-niche-well);
+        clip-path: polygon(
+            var(--inner) 0,
+            calc(100% - var(--inner)) 0,
+            100% var(--inner),
+            100% calc(100% - var(--inner)),
+            calc(100% - var(--inner)) 100%,
+            var(--inner) 100%,
+            0 calc(100% - var(--inner)),
+            0 var(--inner)
+        );
+    }
+    .niche-well::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: var(--role-nav-niche-glow);
+        opacity: var(--niche-glow, 0);
+        transition: opacity 0.26s ease;
+    }
+    /* The reflection crosses the well once while the row is targeted, the bronze button's sheen at niche scale. */
+    .niche::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        background: linear-gradient(115deg, transparent 34%, var(--role-nav-niche-sheen) 50%, transparent 66%);
+        transform: translateX(calc(-110% + var(--niche-sweep, 0) * 220%));
+        transition: transform 0.7s cubic-bezier(0.22, 0.68, 0.24, 1);
+        pointer-events: none;
+    }
+
+    .glyph {
+        position: relative;
+        z-index: 3;
+        width: var(--glyph-size, 1.8rem);
+        height: var(--glyph-size, 1.8rem);
+        overflow: visible;
+        filter: var(--role-glyph-bevel);
+        transform: translateY(calc(var(--niche-lit, 0) * -1px));
+        transition: transform 0.26s cubic-bezier(0.34, 1.5, 0.64, 1);
+    }
+    /* The layers arrive as markup, so they carry no scope of this file. */
+    .glyph :global(.glyph-plane) {
+        fill: var(--role-glyph-plane);
+    }
+    .glyph :global(.glyph-line) {
+        fill: none;
+        /* The gold leaf is one gradient, defined once in Nav.astro; without it the stroke is the leaf's middle tone. */
+        stroke: url(#nav-gilt) var(--role-glyph-gilt-2);
+        stroke-width: 1.6;
+        stroke-linecap: square;
+        stroke-linejoin: miter;
+        stroke-miterlimit: 4;
+    }
+    .glyph :global(.glyph-spark) {
+        fill: none;
+        stroke: var(--role-glyph-jewel);
+        stroke-width: 1.8;
+        stroke-linecap: square;
+        stroke-linejoin: miter;
+    }
+    .glyph :global(.glyph-jewel) {
+        fill: var(--role-glyph-jewel);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .niche::after {
+            display: none;
+        }
+        .glyph {
+            transform: none;
+        }
+    }
+</style>
