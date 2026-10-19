@@ -6,7 +6,7 @@ import { useDialogGround } from "../overlays/dialogGround.js";
 import { provideRowDensity, provideRowFlushInline, type RowDensity } from "./row.js";
 
 // Names the group's subject when the label alone is ambiguous; sits inline with the label since a
-// reader who misidentifies the subject has already misread every number below it.
+// reader who misidentifies the subject has already misread every row below it.
 // Drops the surface, for a group already sitting on one (e.g. inside a <Card>); a border between two
 // identical `bg-card` surfaces reads as decoration, not structure.
 // Replaces the text label for a group drawn as a loading skeleton, whose heading is a bar like the rows under it.

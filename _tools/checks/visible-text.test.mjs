@@ -30,7 +30,7 @@ test("a bound label's result is drawn, and so is what a template's placeholder h
     assert.deepEqual(found("<Badge :label=\"live ? 'live' : t(`views.notDeployed`)\" />"), ["live"]);
     assert.deepEqual(found('<b :aria-label="`${open ? `Collapse` : `Expand`} ${path}`" />'), ["Collapse", "Expand"]);
     // One sentence, reported once: the words inside its `${}` belong to it.
-    assert.deepEqual(found('<RowGroup :count="`${used} of ${slots} ${slots === 1 ? `slot` : `slots`}`" />'), [" of  "]);
+    assert.deepEqual(found('<RowGroup :caption="`${used} of ${slots} ${slots === 1 ? `slot` : `slots`}`" />'), [" of  "]);
 });
 
 test("an object's visible keys are read on any bound attribute, its other keys are not", { skip }, () => {

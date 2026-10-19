@@ -831,7 +831,7 @@ const pickedTier = ref(`collaborator`);
                         </div>
                     </div>
                     <div class="flex flex-col gap-1">
-                        <span class="ui-field-label">FilterBar · count, controls</span>
+                        <span class="ui-field-label">FilterBar · controls</span>
                         <FilterBar v-model="filter" placeholder="Filter…">
                             <template #controls>
                                 <Picker v-model="pickedTier" :options="PICKER_HINTED" variant="ghost" aria-label="Access tier" />

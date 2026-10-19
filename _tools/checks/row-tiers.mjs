@@ -5,6 +5,7 @@
 // a <RowGroup> child that sets its own padding — use <RowNote> instead
 // a row inside a <RowGroup> that declares its own `density` (flush rows excepted)
 // a <RowGroup> that restates the default `density="compact"`
+// a <RowGroup> `:count` (removed from the component; use `caption` for words beside the label)
 // a literal `:size` on a mark inside `#lead`, where the tier already hands one out
 // a row component (relying on its group for density) mounted outside any <RowGroup>
 import { at, blank, classesOf, finishFindings, tags, templateSource, templatesUnder, VOID } from "./lib/templates.mjs";
@@ -66,6 +67,13 @@ for (const path of tracked) {
             findings.push({
                 at: where,
                 why: `<RowGroup density="compact"> restates the default: a group is a list and a list is compact, so drop the prop`,
+            });
+        }
+
+        if (name === `RowGroup` && /(?:^|\s):count="/u.test(attrs)) {
+            findings.push({
+                at: where,
+                why: `<RowGroup> no longer takes \`count\`: the rows below are the tally; put prose beside the label with \`caption\` if a reader still needs words there`,
             });
         }
 
