@@ -149,9 +149,11 @@ export const RAW_ROUTES = {
     "POST /children/delegate": { agent: true, control: "never" },
     "GET /children/links": { agent: true, control: "never" },
     "GET /children": { agent: true, control: "never" },
-    // The fleet reads, and the one write: words in front of another conversation, which a person can do by typing.
+    // The fleet reads, and its two writes: words in front of another conversation, which a person can do by typing, and
+    // the Continue a person can press on one a spent allowance or a stop held (`agents resume`).
     "GET /fleet": { agent: true },
     "POST /fleet/message": { agent: true },
+    "POST /fleet/resume": { agent: true },
     "GET /fleet/{handle}": { agent: true },
     // The `devices push` CLI: a program the agent built, carried to one of the owner's computers in chunks; held to the
     // devices the calling conversation's turn mounts, and refused by the machine itself unless "Run programs" is on.

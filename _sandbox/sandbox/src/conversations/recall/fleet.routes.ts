@@ -2,10 +2,13 @@ import { type HandleResolution,candidateOf,fleetRecall,fleetRoster,fleetSearch,p
 import { type ConversationReader, conversationReader, registryProvenance } from "../../auth/scope/conversation-reader.js";
 import type { Context } from "hono";
 import { z } from "zod";
+import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
 import { soleLiveConversation } from "../actor/conversation-holdings.js";
 import { messageConversation } from "./fleet-message.js";
+import { type ResumeAsk, resumeConversation } from "./fleet-resume.js";
+import type { PersistedAgent } from "../registry/agents-store.js";
 import { resolveFleetHandle } from "./fleet-handles.js";
 import { fleetMessageDetail, fleetMessages, fleetRows } from "./fleet-transcript.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
@@ -14,9 +17,10 @@ import { defineRawRoutes } from "../../http/raw-route-server.js";
 // one answer. Its own namespace, not `/agents`: the board's router can land, discard and rename, so what lives here
 // costs one grants.ts line each and cannot reach those. Serves a CLI parsing JSON, not a typed client.
 //
-// Reads, and exactly one write: `message`, which says something to another conversation the way a person does by
-// typing into its chat (fleet-message.ts). It can start a turn, so it is rate-limited and attributed there; it cannot
-// land, archive, rename or discard anything.
+// Reads, and two writes, each something a person does in a conversation's chat: `message` says something to it
+// (fleet-message.ts), rate-limited and attributed there, and `resume` presses its Continue (fleet-resume.ts), which
+// re-runs a turn a spent allowance or a stop held, optionally on another model or account. Neither can land, archive,
+// rename or discard anything.
 
 // Cap on a roster or search page; a caller asking for everything still gets a bounded answer.
 const MAX_LIMIT = 100;
@@ -27,6 +31,16 @@ const MAX_MESSAGE_CHARS = 8_000;
 const MessageBodySchema = z.object({
     to: z.string().min(1),
     message: z.string().min(1).max(MAX_MESSAGE_CHARS),
+});
+
+// Where a resumed turn goes; every field left out keeps the conversation's own.
+const ResumeBodySchema = z.object({
+    to: z.string().min(1),
+    provider: AgentProviderSchema.optional(),
+    harness: AgentHarnessSchema.optional(),
+    model: z.string().min(1).optional(),
+    account: z.string().min(1).optional(),
+    effort: z.string().min(1).optional(),
 });
 
 const numberQuery = (c: Context<AppEnv>, name: string, max: number): number | undefined => {
@@ -86,6 +100,42 @@ const readableHandle = (resolved: HandleResolution, reads: ConversationReader): 
     }
     return resolved.kind === "unknown" || reads(resolved.entry.id) ? resolved : { kind: "unknown" };
 };
+
+// A write's body as its schema reads it, or undefined for one that is not JSON or not that shape: the caller answers
+// either with its own usage line.
+const bodyOf = async <T>(c: Context<AppEnv>, schema: z.ZodType<T>): Promise<T | undefined> => {
+    // allow(silent-catch): an unreadable body is answered as a 400 naming the shape it should have had.
+    const parsed = schema.safeParse(await c.req.json().catch(() => undefined));
+    return parsed.success ? parsed.data : undefined;
+};
+
+// Who is writing: the turn's own stamp, else the one turn in flight (the attribution the children routes use).
+const callerOf = (services: Services, c: Context<AppEnv>): string | undefined => {
+    const from = c.req.header("x-intentic-conversation") ?? soleLiveConversation(services.conversations);
+    return from === "" ? undefined : from;
+};
+
+// A refused write as the CLI reads it, with the conversations an ambiguous handle matched when there were some.
+interface WriteRefusal {
+    readonly ok: false;
+    readonly message: string;
+    readonly candidates?: readonly ReturnType<typeof candidateOf>[];
+}
+const refusalBody = (message: string, candidates: readonly PersistedAgent[] | undefined): WriteRefusal =>
+    candidates === undefined ? { ok: false, message } : { ok: false, message, candidates: candidates.map(candidateOf) };
+
+/** POST /fleet/resume: press another conversation's Continue — its held turn again, or carry on where it ended. */
+const resumeRoute =
+    (services: Services) =>
+    async (c: Context<AppEnv>): Promise<Response> => {
+        const body = await bodyOf(c, ResumeBodySchema);
+        if (body === undefined) {
+            return c.json({ ok: false, message: 'Pass JSON like {"to": "<handle>", "provider": "claude", "model": "claude-opus-5-5"}; every field but `to` is optional.' }, 400);
+        }
+        const { to, ...ask } = body;
+        const outcome = await resumeConversation(services, callerOf(services, c), to, ask satisfies ResumeAsk);
+        return outcome.ok ? c.json(outcome) : c.json(refusalBody(outcome.message, outcome.candidates), outcome.status);
+    };
 
 // Full Services, not a Pick: `message` starts turns, and a turn is the whole daemon.
 const createFleetRoutes = (services: Services) => ({
@@ -150,37 +200,25 @@ const createFleetRoutes = (services: Services) => ({
     },
     /** POST /fleet/message: say something to another conversation — steered into its live turn, or opening one. */
     message: async (c: Context<AppEnv>): Promise<Response> => {
-        const parsed = MessageBodySchema.safeParse(await c.req.json().catch(() => undefined));
-        if (!parsed.success) {
+        const body = await bodyOf(c, MessageBodySchema);
+        if (body === undefined) {
             return c.json({ ok: false, message: 'Pass JSON like {"to": "<handle>", "message": "…"}.' }, 400);
         }
-        // Same attribution the children routes use: the turn's own stamp, else the one turn in flight.
-        const from = c.req.header("x-intentic-conversation") ?? soleLiveConversation(services.conversations);
-        const outcome = await messageConversation(services, from === "" ? undefined : from, parsed.data.to, parsed.data.message);
-        return outcome.ok
-            ? c.json(outcome)
-            : c.json(
-                  {
-                      ok: false,
-                      message: outcome.message,
-                      ...(outcome.candidates === undefined
-                          ? {}
-                          : { candidates: outcome.candidates.map(candidateOf) }),
-                  },
-                  outcome.status,
-              );
+        const outcome = await messageConversation(services, callerOf(services, c), body.to, body.message);
+        return outcome.ok ? c.json(outcome) : c.json(refusalBody(outcome.message, outcome.candidates), outcome.status);
     },
 });
 
 // The fleet surface: which conversations exist, what one is, which said a phrase — joined from the registry, the
-// record, the worktree composition and the phrase index — and saying something to one of them.
-// Scoped to the agent token like `services`/`capabilities`, unlike `/agents`: the reads cannot change anything,
-// and the one write only puts words in front of another conversation, which a person can do by typing.
+// record, the worktree composition and the phrase index — and saying something to one of them or pressing its Continue.
+// Scoped to the agent token like `services`/`capabilities`, unlike `/agents`: the reads cannot change anything, and the
+// two writes only do what a person can do in a conversation's chat: type, or press Continue.
 export const fleetRawRoutes = defineRawRoutes((services: Services) => {
     const fleetRoutes = createFleetRoutes(services);
     return {
         "GET /fleet": fleetRoutes.list,
         "POST /fleet/message": fleetRoutes.message,
+        "POST /fleet/resume": resumeRoute(services),
         "GET /fleet/{handle}": fleetRoutes.show,
     };
 });

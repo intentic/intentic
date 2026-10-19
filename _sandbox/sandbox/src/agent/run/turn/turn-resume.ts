@@ -116,9 +116,10 @@ const reroutedInput = (input: TurnInput & { conversationId: string }, routing: R
     if (routing === undefined) {
         return input;
     }
-    const { agent: _agent, harness: _harness, account: _account, model: _model, ...rest } = input;
-    // No model in the press keeps the refused turn's; an unloaded catalog has no pick to send.
+    const { agent: _agent, harness: _harness, account: _account, model: _model, effort: _effort, ...rest } = input;
+    // No model in the press keeps the refused turn's; an unloaded catalog has no pick to send. The same for its tier.
     const model = routing.model ?? input.model;
+    const effort = routing.effort ?? input.effort;
     const { account } = pressed(input, routing);
     return {
         ...rest,
@@ -126,6 +127,7 @@ const reroutedInput = (input: TurnInput & { conversationId: string }, routing: R
         harness: routing.harness,
         ...(account !== undefined ? { account } : {}),
         ...(model !== undefined ? { model } : {}),
+        ...opt("effort", effort),
     };
 };
 
@@ -265,7 +267,7 @@ export const carryOnTurn = async (
     const started = await services.turns.start(
         held === undefined
             ? { ...rest, prompt: RESUME_NOTES.continued, resume: "continued", ...opt("sessionId", sessionFor(services, turn)) }
-            : rerunOf(held, { agent, harness, ...opt("account", turn.account), ...opt("model", turn.model) }),
+            : rerunOf(held, { agent, harness, ...opt("account", turn.account), ...opt("model", turn.model), ...opt("effort", turn.effort) }),
     );
     return started === "busy" || started === "archived" ? undefined : started;
 };

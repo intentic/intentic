@@ -34,6 +34,8 @@ import { channelAnswerSink } from "../extensions/listener/listener-deliver.js";
 import type { ReleasedWake } from "./held-wakes-store.js";
 import { type TurnProgressReader, turnProgressReader } from "../extensions/listener/listener-progress.js";
 import { conversationLink } from "../system/boot/open-in-app.js";
+import type { TurnInput } from "../seams/turn-starter.js";
+import { refusalOf, type WakeRefusal, wakeEnding, wakePostures } from "./wake/wake-fallback.js";
 
 // How much of an event's webhook body reaches the guard's env and the wake prompt.
 export const PAYLOAD_MAX = 64_000;
@@ -745,6 +747,7 @@ const runFire = async (
             });
         const body = wakeBody(automation, capped, late, observed);
         let failure: string | undefined;
+        let refusal: WakeRefusal | undefined;
         let runtimeSessionId: string | undefined;
         // Account rides only if every rung agrees on provider, meaningless elsewhere; else best-headroom wins.
         const account =
@@ -756,7 +759,7 @@ const runFire = async (
         const sessionId =
             resumedSessionId === undefined ? undefined : sessionFor(services, { conversationId, agent: pin.provider, harness: pin.harness, account, sessionId: resumedSessionId });
         // Every fire lands in a conversation; a channel or visitor keeps one active, a schedule wake mints a fresh one.
-        const turn: AgentTurn & { conversationId: string } = {
+        const turn: TurnInput & { conversationId: string } = {
             // STREAM_NOTE is applied here, not folded into `body`, so it belongs to this fire, not the journal entry.
             prompt: stream !== undefined ? `${STREAM_NOTE}\n\n${body}` : body,
             conversationId,
@@ -781,6 +784,8 @@ const runFire = async (
             ...opt("account", account),
             // Absence here is deliberate: the resolver reads no pin as no account on an unattended turn, not all.
             ...(actsAs !== undefined ? { actsAs } : {}),
+            // Nobody presses Send again on a wake: it answers a spent allowance or a stop itself (wake-fallback.ts).
+            postures: wakePostures((await services.sandboxSettings.get()).limitPolicy),
         };
         // Transcript folds as it streams; opens stamped with when the turn began, not when appended, minutes later.
         const fold = new TranscriptFold(openingRows(turn, services.workspace.root, Date.now()), Date.now);
@@ -796,6 +801,7 @@ const runFire = async (
                 }
                 if (event.kind === "error") {
                     failure = event.message;
+                    refusal = refusalOf(event);
                 }
                 tellStream(stream, progress, event);
             }
@@ -810,14 +816,13 @@ const runFire = async (
         if (failure !== undefined) {
             stream?.failed(failure);
         }
+        // A spent allowance its ladder answers moves on now; one a near reset answers goes again then (its postures).
+        const ending = await wakeEnding(services, { conversationId, ladder: automation.models, ran: pin }, failure, refusal);
         // Conversation id rides on the run record so a wake that reached a turn is openable with no runtime session.
-        await services.automations.recordRun(automation.id, {
-            at: Date.now(),
-            ...(failure === undefined ? { outcome: "completed" as const } : { outcome: "error" as const, detail: failure }),
-            conversationId,
-        });
-        // Read after recording so this fire's own outcome is part of the streak the guard weighs.
-        const quarantined = failure === undefined ? undefined : await quarantineIfSpinning(services, automation.id);
+        await services.automations.recordRun(automation.id, { at: Date.now(), ...ending.run, conversationId });
+        // Read after recording so this fire's own outcome is part of the streak the guard weighs. A wake the sandbox
+        // carries on by itself has not failed yet, so it never disables its automation.
+        const quarantined = ending.failed ? await quarantineIfSpinning(services, automation.id) : undefined;
         notifyWakeSettled(services, automation, conversationId, failure);
         // Runtime session is the activity feed's join key between the trigger and the outbound calls the wake produced.
         void services.activity

@@ -129,6 +129,7 @@ export const UNSERVED = {
     "POST /environment/remove": REAL_MACHINE,
     "POST /environment/runtime-install": REAL_MACHINE,
     "POST /fleet/message": NOT_THE_EDITORS,
+    "POST /fleet/resume": NOT_THE_EDITORS,
     "POST /intake/{id}/report": OFF_SITE,
     "POST /link/conversations": NOT_THE_EDITORS,
     "POST /link/conversations/{id}/answer": NOT_THE_EDITORS,

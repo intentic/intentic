@@ -430,6 +430,8 @@ export const ResumeRoutingSchema = z.object({
         ),
     // A client whose catalog hasn't loaded has nothing to send; the turn's own model is the better fallback.
     model: z.string().optional().describe("Which model. Leave it out to keep the one the refused turn named."),
+    // A tier named for one model may mean nothing on another, so a move onto a ladder rung carries that rung's own.
+    effort: z.string().optional().describe("How hard the model should think on the re-run. Leave it out to keep the refused turn's."),
     // A session is a file the daemon keeps; a credential is an env var. That's what lets a same-provider account switch
     // resume the existing session instead of opening a fresh one.
     carry: z

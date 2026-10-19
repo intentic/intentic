@@ -67,12 +67,19 @@ LOOK UP — reach for these instead of searching /history by hand
                                        marked by kind: user (asked by its user), said, ran (a tool call's
                                        name and target), asked (a question card), notice, run
 
-SAY SOMETHING TO ANOTHER CONVERSATION
+SAY SOMETHING TO ANOTHER CONVERSATION, OR PRESS ITS CONTINUE
   agents message <handle> '<text>'     what a person does by typing into that conversation's chat: the words
                                        are steered into its live turn, or open one on its own routing if it
                                        is idle. Any conversation, not just a subagent of this one — which is
                                        what \`send\` below is limited to. The message is attributed to this
                                        conversation and read as a peer's words, not as its owner's
+  agents resume <handle> [--provider <id> --model <id>] [--effort <tier>] [--account <id>] [--harness <loop>]
+                                       press another conversation's Continue, as the editor's "Send again"
+                                       does: a turn a spent allowance or a stop held runs again whole, with
+                                       nothing said in anyone's name; one that simply ended carries on in
+                                       its own session. Name a provider and model to move it off a spent
+                                       one (\`agents providers\` lists what has room); left out, it runs on
+                                       the conversation's own routing. Archived conversations stay archived
 
 SPAWN AND SUPERVISE
   agents providers [--all]             what a subagent could run on right now: every connected provider, its
@@ -897,25 +904,53 @@ const message = async (argv) => {
     }
     const { status, text } = await call("POST", "/fleet/message", JSON.stringify({ to: handle, message: words }));
     if (status !== 200) {
-        const parsed = (() => {
-            try {
-                return JSON.parse(text);
-            } catch {
-                return undefined;
-            }
-        })();
-        // An ambiguous handle names its candidates rather than making the caller search again.
-        if (Array.isArray(parsed?.candidates)) {
-            process.stderr.write(`agents: ${parsed.message}\n`);
-            for (const candidate of parsed.candidates) {
-                process.stderr.write(`  ${candidate.id}  [${candidate.status}]${candidate.title === undefined ? "" : `  ${candidate.title}`}\n`);
-            }
-            process.exit(1);
-        }
-        return die(`agents: ${refusalOf(text)}`);
+        return dieWithCandidates(text);
     }
     const { to, note } = JSON.parse(text);
     process.stdout.write(`${to}: ${note ?? "delivered"}\n`);
+};
+
+// A refusal that names candidates (an ambiguous handle) lists them rather than making the caller search again.
+const dieWithCandidates = (text) => {
+    const parsed = (() => {
+        try {
+            return JSON.parse(text);
+        } catch {
+            return undefined;
+        }
+    })();
+    if (Array.isArray(parsed?.candidates)) {
+        process.stderr.write(`agents: ${parsed.message}\n`);
+        for (const candidate of parsed.candidates) {
+            process.stderr.write(`  ${candidate.id}  [${candidate.status}]${candidate.title === undefined ? "" : `  ${candidate.title}`}\n`);
+        }
+        process.exit(1);
+    }
+    return die(`agents: ${refusalOf(text)}`);
+};
+
+// Presses ANY conversation's Continue (fleet-resume.ts): its held turn again, on another model when named.
+const resume = async (argv) => {
+    const { flags, positional } = parseFlags(argv, ["provider", "model", "account", "harness", "effort"]);
+    const [handle, ...extra] = positional;
+    if (handle === undefined || extra.length > 0) {
+        return die(`agents: resume takes one handle (put words in front of it with \`agents message\` instead)\n\n${USAGE}`);
+    }
+    if (flags.model !== undefined && flags.provider === undefined) {
+        return die("agents: --model needs --provider: a model name only means anything to the provider that serves it");
+    }
+    const body = { to: handle };
+    for (const key of ["provider", "model", "account", "harness", "effort"]) {
+        if (flags[key] !== undefined) body[key] = flags[key];
+    }
+    const { status, text } = await call("POST", "/fleet/resume", JSON.stringify(body));
+    if (status !== 200) {
+        return dieWithCandidates(text);
+    }
+    const { to, run, resumed, on } = JSON.parse(text);
+    const where = [on?.provider, on?.model].filter(Boolean).join("/");
+    const what = resumed === "held" ? "its held turn is running again" : "it carries on from where it ended";
+    process.stdout.write(`${to}: ${what}${where === "" ? "" : ` on ${where}`} (run ${run}). Follow it with \`agents show ${to}\`.\n`);
 };
 
 const list = async () => {
@@ -965,6 +1000,7 @@ const main = async () => {
     if (command === "wait") return wait(rest);
     if (command === "send") return send(rest);
     if (command === "message") return message(rest);
+    if (command === "resume") return resume(rest);
     if (command === "answer") return answerChild(rest);
     if (command === "cancel") return cancelChild(rest);
     if (command === "merge") return mergeChild(rest);

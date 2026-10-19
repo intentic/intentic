@@ -356,7 +356,10 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "walk can join. To SAY something to one, `agents message <handle> '<text>'` — the same door a person uses by " +
             "typing into that chat, and it reaches a conversation that is idle, which the SDK's own cross-session messaging " +
             "cannot: an idle conversation here has no process to receive one. Your message arrives attributed to you and is " +
-            "read as a peer's words, not as its owner's instruction, so ask rather than direct.",
+            "read as a peer's words, not as its owner's instruction, so ask rather than direct. To get one going again " +
+            "without words — a turn a spent allowance or a stop is holding, or one that ended — `agents resume <handle>` " +
+            "is the press the editor's Send again makes: the held turn runs again whole; add `--provider <id> --model <id>` " +
+            "to move it off a spent model (`agents providers` lists what has room).",
     },
     {
         id: "secrets",
