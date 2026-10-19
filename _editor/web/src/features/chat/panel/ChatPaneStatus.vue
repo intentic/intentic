@@ -155,8 +155,10 @@ const usageChip = computed(() => {
         class="mx-auto flex w-full max-w-[51rem] items-center gap-2 px-3 pb-2 text-2xs text-subtle"
         :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 8}px` } : undefined"
     >
-        <!-- Whether this transcript shows its tool calls; left of the hint so it stays reachable on narrow panes. -->
-        <ChatToolCallsToggle />
+        <!-- Whether this transcript shows its tool calls; left of the hint so it stays reachable on narrow panes. Not on a
+             phone: there it was the one thing holding this strip a full touch-row tall under the composer, and the same
+             switch lives in Settings → Appearance. -->
+        <ChatToolCallsToggle v-if="!mobile" />
         <!-- The refusal owns this slot whenever set, since a tooltip alone never reaches touch; it displaces the keyboard hint. -->
         <span v-if="block !== undefined" class="flex min-w-0 flex-1 items-center gap-1 text-warning">
             <Icon name="exclamation-circle" class="shrink-0 text-2xs" />
