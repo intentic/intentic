@@ -3105,6 +3105,44 @@ test("a turn the safety classifier stopped is said once, where it resumes, and t
     expect(interrupts).toEqual(["interrupt"]);
 });
 
+// A subagent the classifier stopped is that subagent's failure, which the parent reads as its Agent call's result and
+// carries on from: no error frame of the turn's, and the CLI is left running.
+test("a subagent's API error is not the turn's failure", async () => {
+    withoutTmux();
+    const interrupts: string[] = [];
+    const childError = (error: string, text: string, stop: string | null) => ({
+        type: "assistant",
+        session_id: "s",
+        uuid: `child-${error}`,
+        parent_tool_use_id: "toolu_child",
+        error,
+        message: { id: `child-${error}`, stop_reason: stop, content: [{ type: "text", text }] },
+    });
+    const messages = [
+        childError("invalid_request", "API Error: Opus 5.5's safeguards flagged this session.", "refusal"),
+        childError("rate_limit", "API Error: 429 rate limited", null),
+        { type: "result", subtype: "success", session_id: "s" },
+    ];
+    const queryFn: QueryFn = () =>
+        Object.assign(
+            (async function* () {
+                for (const message of messages) {
+                    // SAFETY: each fixture carries the fields the fold reads.
+                    yield message as SDKMessage;
+                }
+            })(),
+            {
+                interrupt: async () => {
+                    interrupts.push("interrupt");
+                    return undefined;
+                },
+            },
+        );
+    const events = await collect(request, queryFn);
+    expect(events.filter((event) => event.kind === "error")).toEqual([]);
+    expect(interrupts).toEqual([]);
+});
+
 test("a flagged turn asks the CLI not to switch models by itself, and a cut resume names its entry", async () => {
     withoutTmux();
     let seen: Options | undefined;

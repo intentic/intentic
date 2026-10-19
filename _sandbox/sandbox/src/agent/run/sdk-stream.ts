@@ -608,17 +608,12 @@ class TurnFold {
         this.cacheTtlMs = ttlFromCacheCreation(usage.cache_creation ?? undefined) ?? this.cacheTtlMs;
     }
 
-    // Text and thinking already streamed as deltas above; here only tool calls surface (including checklist verbs,
-    // rendered as their own live list).
+    // Tool calls surface here (text and thinking streamed as deltas); a subagent's failure is its Agent call's result, not the turn's.
     private async *onAssistant(message: SDKAssistantMessage, sessionId: unknown, parent: string | undefined): AsyncGenerator<AgentEvent> {
-        if (message.error !== undefined && parent === undefined && isSafeguardRefusal(message)) {
-            yield* this.onFlagged(message);
-            return;
-        }
         if (message.error !== undefined) {
-            const failure = await errorFrame(message, this.args.allowance, this.args.trial);
-            this.overflowed ||= failure.code === "context-overflow";
-            yield failure;
+            if (parent === undefined) {
+                yield* isSafeguardRefusal(message) ? this.onFlagged(message) : this.onFailure(message);
+            }
             return;
         }
         yield* this.showInheritedChecklist();
@@ -631,9 +626,14 @@ class TurnFold {
         }
     }
 
-    // The safety classifier stopped the turn: said once, held for a person (classify-failure.ts), and the CLI interrupted,
-    // since left alone it answers the stopped response's tool call and asks again into the same refusal, over and over
-    // (a real CLI sent 18 more requests in half a second). The stream then ends on the interrupted run's own result.
+    private async *onFailure(message: SDKAssistantMessage): AsyncGenerator<AgentEvent> {
+        const failure = await errorFrame(message, this.args.allowance, this.args.trial);
+        this.overflowed ||= failure.code === "context-overflow";
+        yield failure;
+    }
+
+    // The safety classifier stopped the turn: said once, held for a person (classify-failure.ts), and the CLI interrupted, since
+    // left alone it asks again into the same refusal (a real CLI sent 18 more requests in half a second), then ends on its result.
     private async *onFlagged(message: SDKAssistantMessage): AsyncGenerator<AgentEvent> {
         if (this.flagged) {
             return;
