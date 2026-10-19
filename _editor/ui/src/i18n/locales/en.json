@@ -367,7 +367,8 @@
     },
     "keys": {
         "enter": "Enter",
-        "esc": "Esc"
+        "esc": "Esc",
+        "space": "Space"
     },
     "dagEditor": {
         "fitGraph": "Fit graph"

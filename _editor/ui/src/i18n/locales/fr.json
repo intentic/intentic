@@ -246,7 +246,8 @@
     },
     "keys": {
         "enter": "Entrée",
-        "esc": "Échap"
+        "esc": "Échap",
+        "space": "Espace"
     },
     "dagEditor": {
         "fitGraph": "Ajuster le graphe"

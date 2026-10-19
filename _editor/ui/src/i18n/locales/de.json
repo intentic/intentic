@@ -256,7 +256,8 @@
     },
     "keys": {
         "enter": "Eingabe",
-        "esc": "Esc"
+        "esc": "Esc",
+        "space": "Leertaste"
     },
     "dagEditor": {
         "fitGraph": "Graph einpassen"

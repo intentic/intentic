@@ -59,6 +59,8 @@ const emit = defineEmits<{
     dragover: [event: DragEvent];
     dragleave: [event: DragEvent];
     drop: [event: DragEvent];
+    // The full-window view of the picture (HomeLightbox.vue).
+    view: [];
 }>();
 
 const icon = computed<IconName>(() => (locked ? `lock` : iconForEntry(entry.name, entry.type)));
@@ -133,7 +135,7 @@ const duration = computed(() => {
         :data-home-tile="entry.path"
         :data-drop-dir="dropDir"
         :tabindex="tabindex"
-        class="ui-row-select flex shrink-0 flex-col rounded-lg p-1 select-none"
+        class="ui-row-select group flex shrink-0 flex-col rounded-lg p-1 select-none"
         :class="{ 'ui-row-select-on': selected, 'ui-row-select-drop': dropTarget, 'opacity-60': pending, 'opacity-40': dragging }"
         @click="emit('select', $event)"
         @dblclick="emit('open')"
@@ -187,9 +189,23 @@ const duration = computed(() => {
             <Icon
                 v-if="entry.link !== undefined"
                 name="link"
-                class="absolute top-1.5 right-1.5 rounded bg-black/50 p-0.5 text-[0.65rem] text-white"
+                class="absolute top-1.5 left-1.5 rounded bg-black/50 p-0.5 text-[0.65rem] text-white"
                 :aria-label="t(`workspace.words.symlink`)"
             />
+            <!-- The larger view, offered where the pointer is and nowhere else: a hover raises nothing by itself, and Space on
+                 the selected picture does the same. Its own press, so it neither selects nor opens the tile under it. -->
+            <button
+                v-if="kind !== undefined && shown"
+                type="button"
+                class="absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-card/85 text-content opacity-0 shadow-sm ring-1 ring-line/60 backdrop-blur-sm transition-opacity group-hover:opacity-100 hover:bg-card focus-visible:opacity-100"
+                :aria-label="t(`workspace.homeLightbox.view`)"
+                v-tooltip.bottom="{ title: t(`workspace.homeLightbox.view`), keys: t(`ui.keys.space`) }"
+                @click.stop="emit('view')"
+                @dblclick.stop
+                @pointerdown.stop
+            >
+                <Icon name="expand" class="text-[0.8rem]" aria-hidden="true" />
+            </button>
             <!-- Over the picture, not behind it, where an inset ring would be painted under it: a hairline that keeps a dark
                  picture's edge off a dark page. Selection is the card's own, the one every row and tile wears. -->
             <span class="pointer-events-none absolute inset-0 rounded-md ring-1 ring-line/50 ring-inset" aria-hidden="true"></span>

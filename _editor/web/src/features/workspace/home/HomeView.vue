@@ -34,6 +34,8 @@ import HomeGallerySwitch from "./HomeGallerySwitch.vue";
 import HomeGalleryTile from "./HomeGalleryTile.vue";
 import HomeProbe from "./HomeProbe.vue";
 import HomeQuickLook from "./look/HomeQuickLook.vue";
+import HomeLightbox from "./look/HomeLightbox.vue";
+import { useHomeLightbox } from "./look/useHomeLightbox";
 import HomeTile from "./HomeTile.vue";
 import { useT } from "@intentic/ui/i18n";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
@@ -315,9 +317,11 @@ const lookAt = shallowRef<{ readonly entry: WorkspaceTreeEntry; readonly el: HTM
 const lookEntry = computed(() => (look.shown.value ? lookAt.value?.entry : undefined));
 const lookAnchor = computed(() => (look.shown.value ? lookAt.value?.el : undefined));
 const closeLook = (): void => look.hide();
+// The full-window view of a picture, asked for with Space or a gallery tile's expand button (useHomeLightbox.ts).
+const lightbox = useHomeLightbox(() => order.value, () => galleryOn.value, (at) => focusTile(at), closeLook);
 const onTileEnter = (entry: WorkspaceTreeEntry, el: HTMLElement): void => {
     // Nothing to look into: the padlock and the placeholder say all there is; a drag or a rename is not a look.
-    if (isLockedWorkspacePath(entry.path) || pending(entry.path) || dragging.value || editing.value) {
+    if (isLockedWorkspacePath(entry.path) || pending(entry.path) || dragging.value || editing.value || lightbox.inPlace(entry)) {
         closeLook();
         return;
     }
@@ -421,7 +425,7 @@ const onKeydown = (event: KeyboardEvent): void => {
         return;
     }
     // The verbs first (Delete, F2, select all); while a name is being typed, every key is the field's.
-    if (handleKey(event) || onNavigationKey(event)) {
+    if (handleKey(event) || onNavigationKey(event) || lightbox.onSpace(event, selectedEntry.value)) {
         return;
     }
     if (isGridKey(event.key)) {
@@ -670,6 +674,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                                         :dragging="carried(entry.path)"
                                         @select="(event) => onTileSelect(entry, event)"
                                         @open="open(entry)"
+                                        @view="lightbox.view(entry)"
                                         @enter="(el) => onTileEnter(entry, el)"
                                         @leave="onTileLeave"
                                         @contextmenu="(event) => openMenu(event, entry)"
@@ -708,7 +713,8 @@ const onBackgroundMenu = (event: MouseEvent): void => {
             </span>
         </div>
 
-        <HomeQuickLook :entry="lookEntry" :anchor="lookAnchor" :large="galleryOn" />
+        <HomeQuickLook :entry="lookEntry" :anchor="lookAnchor" />
+        <HomeLightbox v-model:path="lightbox.viewing.value" :entries="lightbox.viewable.value" :tile-of="tileEl" @open="open" @close="lightbox.closed" />
         <ContextMenu ref="menu" :model="menuItems" :min-width="10" />
     </div>
 </template>

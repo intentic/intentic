@@ -25,16 +25,7 @@ import { useLookPicture } from "./useLookPicture";
 // pointer crossing onto one of them is how the look moves on.
 const t = useT();
 
-const {
-    entry,
-    anchor,
-    large = false,
-} = defineProps<{
-    entry: WorkspaceTreeEntry | undefined;
-    anchor: HTMLElement | undefined;
-    // The gallery's look: its pictures are already large on the page, so the card draws them as large as the window lets.
-    large?: boolean;
-}>();
+const { entry, anchor } = defineProps<{ entry: WorkspaceTreeEntry | undefined; anchor: HTMLElement | undefined }>();
 
 const { listingOf, keepListed } = useWorkspaceTree();
 const layout = useLayout();
@@ -165,7 +156,8 @@ const medium = computed(() => (kind.value === `picture` || kind.value === `video
 // anything in it has drawn.
 const HEADER_HEIGHT = 52;
 const CHROME: Size = { width: 2, height: HEADER_HEIGHT + 3 };
-// Wide enough for a text file's lines; a grid's picture look is the same width, a gallery's as large as fits.
+// Wide enough for a text file's lines; a picture's card is no wider. A picture larger than that is Space's to show
+// (HomeLightbox.vue), never a hover's.
 const CARD_WIDTH = 576;
 const MIN_WIDTH = 288;
 const GAP = 12;
@@ -185,7 +177,7 @@ const aspect = computed(() => {
     return pictureBox === undefined || pictureBox.height <= 0 ? Number.NaN : pictureBox.width / pictureBox.height;
 });
 const limits = computed<MediaLimits>(() => ({
-    cap: large ? { width: 1280, height: Number.POSITIVE_INFINITY } : { width: CARD_WIDTH - CHROME.width, height: Math.min(384, (view.value?.height ?? 0) * 0.55) },
+    cap: { width: CARD_WIDTH - CHROME.width, height: Math.min(384, (view.value?.height ?? 0) * 0.55) },
     own: known.value?.exact === true ? known.value : undefined,
     chrome: CHROME,
     minWidth: MIN_WIDTH,

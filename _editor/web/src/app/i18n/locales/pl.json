@@ -11277,6 +11277,14 @@
             "previous30Days": "Ostatnie 30 dni",
             "undated": "Data nieznana"
         },
+        "homeLightbox": {
+            "position": "{at} z {count}",
+            "open": "Otwórz",
+            "close": "Zamknij",
+            "previous": "Poprzedni",
+            "next": "Następny",
+            "view": "Pokaż większy"
+        },
         "homeQuickLook": {
             "itemCount": "{count} element | {count} elementy | {count} elementów",
             "more": "i {count} więcej",

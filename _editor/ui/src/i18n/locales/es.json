@@ -260,7 +260,8 @@
     },
     "keys": {
         "enter": "Intro",
-        "esc": "Esc"
+        "esc": "Esc",
+        "space": "Espacio"
     },
     "dagEditor": {
         "fitGraph": "Encajar grafo"

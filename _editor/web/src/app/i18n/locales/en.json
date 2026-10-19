@@ -11595,6 +11595,14 @@
             "previous30Days": "Previous 30 days",
             "undated": "Date unknown"
         },
+        "homeLightbox": {
+            "position": "{at} of {count}",
+            "open": "Open",
+            "close": "Close",
+            "previous": "Previous",
+            "next": "Next",
+            "view": "View larger"
+        },
         "homeQuickLook": {
             "itemCount": "{count} item | {count} items",
             "more": "and {count} more",
