@@ -214,51 +214,6 @@ jobs:
         env:
           DEEP: ${{ inputs.deep && !inputs.engine-only }}
 
-      - name: Diagnose the runner image copy without stopping its container
-        if: ${{ inputs.engine-only }}
-        run: |
-          $probeRoot = Join-Path $env:TEMP 'intentic-engine-smoke'
-          $env:USERPROFILE = Join-Path $probeRoot 'home'
-          $env:HOME = $env:USERPROFILE
-          $env:LOCALAPPDATA = Join-Path $probeRoot 'localappdata'
-          $env:INTENTIC_HOME = Join-Path $env:USERPROFILE '.intentic'
-          $env:IC_ENGINE_DISTRO = 'intentic-engine-ci'
-          $env:IC_ENGINE_AUTOSTART = '0'
-          $env:INTENTIC_NO_PROMPT = '1'
-          $env:IC_ENGINE = 'docker-desktop'
-          $env:INTENTIC_ENGINE_TARBALL = (Resolve-Path windows-artifacts/intentic-engine-*-x86_64.tar.gz).Path
-          $ic = (Resolve-Path windows-artifacts/ic-windows-amd64.exe).Path
-          $container = (docker inspect intentic-sandbox-runner-omen | ConvertFrom-Json)[0]
-          $images = @($container.Config.Env | Where-Object { $_ -match '^SANDBOX_(BASE_)?IMAGE=' } | ForEach-Object { ($_ -split '=', 2)[1] } | Select-Object -Unique)
-          foreach ($image in $images) {
-            Write-Host "source before: $image"
-            docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}} {{json .RootFS.Layers}}' $image
-          }
-          & $ic engine install
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          try {
-            $copyArgs = @('engine', 'copy', '--to', 'intentic')
-            foreach ($image in $images) { $copyArgs += @('--image', $image) }
-            & $ic @copyArgs
-            $copyCode = $LASTEXITCODE
-            foreach ($image in $images) {
-              Write-Host "source after: $image"
-              docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}} {{json .RootFS.Layers}}' $image
-            }
-            $record = Get-Content (Join-Path $env:INTENTIC_HOME 'engine/engine.json') -Raw | ConvertFrom-Json
-            $env:DOCKER_HOST = $record.host
-            $env:DOCKER_TLS_VERIFY = '1'
-            $env:DOCKER_CERT_PATH = $record.certPath
-            foreach ($image in $images) {
-              Write-Host "target: $image"
-              & (Join-Path $record.bin 'docker.exe') image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}} {{json .RootFS.Layers}}' $image
-            }
-          } finally {
-            Remove-Item Env:DOCKER_HOST, Env:DOCKER_TLS_VERIFY, Env:DOCKER_CERT_PATH -ErrorAction SilentlyContinue
-            & $ic engine remove --yes
-          }
-          exit $copyCode
-
       # Always, so a run that failed mid-tier hands the next one a clean machine rather than relying on the
       # reconcile above to notice — and because a deep run deliberately left the app installed.
       #
