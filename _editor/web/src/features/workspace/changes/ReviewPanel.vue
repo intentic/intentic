@@ -536,6 +536,8 @@ const blockedByConflicts = computed(() => scannable.value.some((repo) => repo.co
 // repos this box would actually commit — a run in a repo the filter excludes isn't this button's concern.
 const committingNow = computed(() => commitTarget.value.filter((repo) => changes.committing.value.includes(repo)));
 const commitRunning = computed(() => committingNow.value.length > 0);
+const progressRepos = ref<readonly string[]>([]);
+const commitStatusRepos = computed(() => committingNow.value.filter((repo) => !progressRepos.value.includes(repo)));
 const commitReady = computed(
     () =>
         commitTarget.value.length > 0 &&
@@ -1090,7 +1092,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 :draft-title="filterLabel"
                 @submit="doCommit"
             />
-            <IndexRunPrompt />
+            <IndexRunPrompt @progress="progressRepos = $event" />
             <!-- The bar's own width says the one thing its buttons can't, most pressing first: what stops Commit, a press
                  under way, why Ctrl+Enter refused, the push in flight or just done, why the lit chip left the box alone,
                  and last what the sync spans. A line that matters keeps a floor (basis), so a narrow box wraps the buttons
@@ -1099,9 +1101,9 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 <span v-if="changes.count.value > 0 && blockedByConflicts" :class="BAR_LINE" class="text-danger">
                     {{ t(`workspace.reviewPanel.resolveConflictsFirst`) }}
                 </span>
-                <!-- Where the commit is happening — the one thing the button beside it can't say. -->
-                <span v-else-if="commitRunning" :class="BAR_LINE" class="text-muted">{{
-                    t(`workspace.reviewPanel.committingNow`, { repos: committingNow.join(`, `) })
+                <!-- Where the commit is happening, until a slow run's own row (IndexRunPrompt) takes it over with its Stop. -->
+                <span v-else-if="commitStatusRepos.length > 0" :class="BAR_LINE" class="text-muted">{{
+                    t(`workspace.reviewPanel.committingNow`, { repos: commitStatusRepos.join(`, `) })
                 }}</span>
                 <!-- Why Ctrl+Enter just refused: takes the line, since it answers the question the line is for. -->
                 <span v-else-if="blockerNotice" :class="BAR_LINE" class="text-warning" v-tooltip.right.overflow="blockerNotice">

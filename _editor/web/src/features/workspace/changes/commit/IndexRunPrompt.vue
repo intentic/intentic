@@ -3,8 +3,10 @@ import type { IndexRun, IndexRunDir } from "@intentic/sandbox-contract/schemas/g
 import { Button, ConfirmDialog, formatBytes, formatCount, Icon } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { cancelIndexRun, followedRuns, holdQuestions } from "../../../../models/changes/indexRuns";
+
+const emit = defineEmits<{ progress: [repos: readonly string[]] }>();
 
 // The two things a stage or commit run (models/changes/indexRuns.ts) asks of the reader, drawn under the commit box of
 // whichever Changes panel is open: the guardrail's question before a stage that would take thousands of files, naming
@@ -31,6 +33,7 @@ const SLOW_RUN_MS = 1_000;
 const following = computed(() => [...followedRuns.value.entries()].filter(([, followed]) => followed.run.status === `running`));
 const now = useNow(() => following.value.length > 0, 250);
 const running = computed(() => (following.value.some(([, followed]) => now.value - followed.since >= SLOW_RUN_MS) ? following.value : []));
+watch(running, (runs) => emit(`progress`, runs.map(([repo]) => repo)), { immediate: true });
 const phaseLine = (repo: string, run: IndexRun): string => {
     const total = run.files?.total;
     switch (run.phase) {

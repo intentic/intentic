@@ -15,6 +15,7 @@ import { router } from "../../../router";
 import { signalConnection } from "../../../client/sandbox/useSandbox";
 import { registry } from "../../../models/fleet/useAgents-registry";
 import { changesKey } from "../../../models/changes/useChanges";
+import { followedRuns } from "../../../models/changes/indexRuns";
 import { commitMessage, nameCommitAfter } from "./commit/commitMessage";
 import * as actualSandboxRpc from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
@@ -92,6 +93,7 @@ afterEach(() => {
     commit.mockClear();
     indexRunStart.mockClear();
     holds.length = 0;
+    followedRuns.value = new Map();
     // A lit chip's ask lives at module scope, so one test's click would light the next test's chip.
     nameCommitAfter(undefined);
     commitMessage.value = ``;
@@ -109,6 +111,30 @@ const landing = (title: string): AgentSummary => ({
     harness: `native`,
     updatedAt: 0,
     attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
+});
+
+it(`shows each committing repo once when detailed progress takes over`, async () => {
+    const el = await mount();
+    await answer({
+        repos: [{ repo: `root`, branch: `main`, conflicted: [], staged: [{ path: `main.ts`, status: `modified` }], unstaged: [] }],
+        committing: [`root`],
+    });
+    expect(el.textContent).toContain(`Committing root…`);
+
+    followedRuns.value = new Map([[`root`, {
+        run: { status: `running`, id: `run`, repo: `root`, op: `commit`, phase: `committing`, command: `git commit`, output: `` },
+        since: Date.now() - 2_000,
+        lostContact: false,
+    }]]);
+    await settle();
+    expect(el.textContent).toContain(`Committing in root…`);
+    expect(el.textContent).not.toContain(`Committing root…`);
+    expect(buttonNamed(el, `Stop`)).toBeInstanceOf(HTMLButtonElement);
+
+    followedRuns.value = new Map();
+    await settle();
+    expect(el.textContent).toContain(`Committing root…`);
+    expect(el.textContent).not.toContain(`Committing in root…`);
 });
 
 it(`waits only for the first answer, then keeps it while the daemon is asked again`, async () => {
