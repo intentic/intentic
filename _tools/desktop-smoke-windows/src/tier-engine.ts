@@ -162,14 +162,24 @@ interface MoveContext {
     readonly env: Record<string, string>;
 }
 
-const moveBothWays = async (harness: Harness, context: MoveContext): Promise<void> => {
-    const { ic, status, docker, options } = context;
+interface MoveFixture {
+    readonly container: string;
+    readonly stamp: string;
+    readonly keyCommand: readonly string[];
+    readonly keyBefore: string;
+}
+
+const createMoveFixture = async (harness: Harness, context: MoveContext): Promise<MoveFixture | undefined> => {
+    const { options } = context;
     const container = sandboxContainerName(ENGINE_SANDBOX_HOSTNAME);
 
     harness.section(`a sandbox on Docker Desktop`);
-    // The setup tier's stand-in inputs under a hostname of this tier's own; ic reads them from its environment, beside
-    // the tier's isolated one.
+    // A home different from the engine's: the move must recover the mounted key rather than find its own home copy
+    // (the desktop-windows failure on 2026-10-19). This also covers that case when run without the setup tier.
+    const sandboxHome = join(ENGINE_ROOT, `sandbox-home`, STATE_DIR);
+    mkdirSync(sandboxHome, { recursive: true });
     const connectEnv = {
+        INTENTIC_HOME: sandboxHome,
         CONNECT_TOKEN: ENGINE_CONNECT_TOKEN,
         SANDBOX_GRANT,
         INGRESS_URL,
@@ -188,12 +198,36 @@ const moveBothWays = async (harness: Harness, context: MoveContext): Promise<voi
         return;
     }
     harness.pass(`${container} answers on Docker Desktop`);
+    const keyCommand = [`exec`, container, `sh`, `-c`, `sha256sum "$INTENTIC_AT_REST_KEY_FILE"`] as const;
+    const keyBefore = await run(`docker`, keyCommand);
+    if (keyBefore.code !== 0 || keyBefore.stdout.trim() === ``) {
+        harness.fail(`the sandbox's encryption key could not be read before the move`, keyBefore.stderr);
+        return;
+    }
     const stamp = `moved ${Date.now()}`;
     const wrote = await run(`docker`, [`exec`, container, `sh`, `-c`, `printf '%s' ${shellQuote(stamp)} > ${shellQuote(MARKER)}`]);
     if (wrote.code !== 0) {
         harness.fail(`could not write a file into the sandbox`, said(wrote));
         return;
     }
+    return { container, stamp, keyCommand, keyBefore: keyBefore.stdout };
+};
+
+const assertOriginalKey = (harness: Harness, expected: string, received: RunResult, where: string): void => {
+    if (received.code === 0 && received.stdout === expected) {
+        harness.pass(`the sandbox ${where} mounts its original encryption key from the other home`);
+    } else {
+        harness.fail(`the sandbox ${where} does not mount its original encryption key`, received.stderr);
+    }
+};
+
+const moveBothWays = async (harness: Harness, context: MoveContext): Promise<void> => {
+    const { ic, status, docker } = context;
+    const fixture = await createMoveFixture(harness, context);
+    if (fixture === undefined) {
+        return;
+    }
+    const { container, stamp, keyCommand, keyBefore } = fixture;
 
     harness.section(`moved onto Intentic's engine`);
     const there = await ic([`engine`, `move`, `--to`, `intentic`, `--yes`], MOVE_MS);
@@ -216,6 +250,7 @@ const moveBothWays = async (harness: Harness, context: MoveContext): Promise<voi
     } else {
         harness.fail(`the sandbox on Intentic's engine does not hold the file written before the move`, said(carried));
     }
+    assertOriginalKey(harness, keyBefore, await docker(keyCommand), `on Intentic's engine`);
     const port = (await docker([`port`, container])).stdout.match(/127\.0\.0\.1:(\d+)/)?.[1];
     if (port === undefined) {
         harness.fail(`the moved sandbox publishes no loopback port`);
@@ -241,6 +276,7 @@ const moveBothWays = async (harness: Harness, context: MoveContext): Promise<voi
     } else {
         harness.fail(`the sandbox back on Docker Desktop does not hold the file`, said(home));
     }
+    assertOriginalKey(harness, keyBefore, await run(`docker`, keyCommand), `back on Docker Desktop`);
     const cleaned = await ic([`engine`, `cleanup`, `--now`], 5 * 60_000);
     if (cleaned.code === 0) {
         harness.pass(`the copies the moves left behind are removed`);
