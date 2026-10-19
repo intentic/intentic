@@ -146,11 +146,10 @@ const act = (event: Event, verb: "close" | "keep"): void => {
                 <Icon name="times" class="text-2xs" />
             </span>
         </template>
-        <!-- The board card's stamps, in the board's seat left of the standing. The row is a button already, so here they open
-             their card on hover only, and three fit before the rest fold. -->
+        <!-- The board card's stamps, in the board's seat left of the standing; three fit before the rest fold. -->
         <template v-if="props.view.stamps.length > 0" #corner>
             <span class="flex h-4 shrink-0 items-center" data-corner>
-                <CardStamps :stamps="props.view.stamps" :agent="props.agent" :press="false" :max="3" class="text-xs" />
+                <CardStamps :stamps="props.view.stamps" :agent="props.agent" :max="3" class="text-sm" />
             </span>
         </template>
         <!-- One line: where it came from, the model, and (settled only) its age, right-aligned. Why it needs you is the card's corner (see `chipOf`), where the board puts it too. -->

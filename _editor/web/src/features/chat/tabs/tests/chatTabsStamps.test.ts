@@ -1,4 +1,4 @@
-// A CARD STAMPS WHAT CHECKED ITS WORK: one glyph per check that ran, in the rail's row and the board's card alike, left of
+// A CARD STAMPS WHAT CHECKED ITS WORK: one badge per check that ran, in the rail's row and the board's card alike, left of
 // the standing, which keeps the corner's right edge. Nothing is spelled out on the card: every stamp's words are its
 // card's (CardStamps), and its accessible name.
 import "@intentic/testing/dom";
@@ -104,7 +104,7 @@ afterEach(() => {
 
 const rowOf = (el: HTMLElement, key: Seed): HTMLElement => el.querySelector<HTMLElement>(`[data-chat-tab="${SEEDS[key].id}"]`)!;
 const stampsIn = (root: HTMLElement): HTMLElement | null => root.querySelector<HTMLElement>(`[data-stamps]`);
-// Each stamp drawn, as `kind:outcome` and the mark beside its glyph.
+// Each stamp drawn, as `kind:outcome` and the mark beside its badge.
 const drawn = (root: HTMLElement): string[] =>
     [...root.querySelectorAll<HTMLElement>(`[data-stamp]`)].map(
         (stamp) => `${stamp.dataset[`stampKind`]}:${stamp.dataset[`stampOutcome`]}${stamp.textContent?.trim() ? ` ${stamp.textContent.trim()}` : ``}`,
@@ -119,13 +119,11 @@ it(`stamps nothing on a row whose last turn proved nothing, and keeps its standi
     expect(row.querySelector(`[data-icon="check-circle"]`)).not.toBeNull();
 });
 
-it(`stamps the agent's own check on a rail row, never as a press of its own`, async () => {
+it(`stamps the agent's own check on a rail row`, async () => {
     const el = await mountRail();
     const failing = stampsIn(rowOf(el, `failing`))!;
     expect(drawn(failing)).toEqual([`self:failed !`]);
     expect(readings(failing)).toEqual([`Self-check: its last run failed`]);
-    // The row is a button already; a click on the stamps is the row's.
-    expect(failing.tagName).toBe(`SPAN`);
     expect(failing.closest(`[data-corner]`)).not.toBeNull();
 
     const proven = stampsIn(rowOf(el, `proven`))!;
@@ -152,7 +150,8 @@ it(`stamps a board card's own failed check in its corner, with no words line in 
     const el = await mountCard(cardOf(`failing`));
     const stamps = stampsIn(el)!;
     expect(drawn(stamps)).toEqual([`self:failed !`]);
-    expect(stamps.tagName).toBe(`BUTTON`);
+    // A mark, never a press: a click on it is the card's.
+    expect(stamps.tagName).toBe(`SPAN`);
     expect(el.textContent).not.toContain(`signup.spec.ts`);
     expect(el.querySelector(`[data-work-assurance]`)).toBeNull();
 });

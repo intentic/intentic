@@ -666,9 +666,9 @@ const grab = (event: PointerEvent): void => {
                         <Icon name="ellipsis" class="text-sm" />
                     </button>
                 </span>
-                <!-- What vouches for its work, one stamp per check that ran (CardStamps), left of the standing so the standing keeps
-                     the card's right edge on every card. A step under the standing's size: the standing is the corner's main mark. -->
-                <CardStamps :stamps="stamps" :agent="agent" :quiet="receipt" class="text-sm" />
+                <!-- What vouches for its work, one badge per check that ran (CardStamps), left of the standing so the standing keeps
+                     the card's right edge on every card. At the standing's own size: a badge's cut-out symbol needs the room. -->
+                <CardStamps :stamps="stamps" :agent="agent" :quiet="receipt" class="text-base" />
                 <!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
                 <span
                     v-if="chip !== undefined"

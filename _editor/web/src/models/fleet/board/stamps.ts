@@ -1,12 +1,11 @@
-import type { IconName } from "@intentic/ui";
-import { CHECK_KINDS, type CheckKind, FRESH_ICONS } from "../freshKinds";
+import { CHECK_KINDS, type CheckKind } from "../freshKinds";
 import type { CheckMarker } from "../freshSession";
 import type { ProofMark } from "./proofSeal";
 
 // WHAT VOUCHES FOR A CARD'S WORK, as stamps: one per check that actually ran on it, side by side in the card's corner
-// (CardStamps.vue). Each stamp has a fixed glyph for its kind and a tone for how the check came out. A mark beside the
-// glyph means the stamp needs you: the number of open findings, or `!` for a failure. A stamp with nothing beside it
-// needs nothing.
+// (CardStamps.vue). Each stamp is a badge whose cut-out symbol says its kind (StampBadge.vue) and whose ink says how
+// the check came out. A mark beside the badge means the stamp needs you: the number of open findings, or `!` for a
+// failure. A stamp with nothing beside it needs nothing.
 // A check that never ran leaves no stamp, and that includes the agent's own check, so a card nobody checked has an
 // empty corner. Pure functions over plain data, so the board's card and the rail's row get the same stamps.
 
@@ -15,10 +14,6 @@ import type { ProofMark } from "./proofSeal";
 // same place on every card.
 export type StampKind = `self` | CheckKind;
 const STAMP_KINDS: readonly StampKind[] = [`self`, ...CHECK_KINDS];
-
-// The terminal prompt is the agent's own check because that check is a command it ran (the hover names it). The other
-// glyphs are the ones the fresh-session menu, composer strip and child row already use for each kind.
-export const STAMP_ICONS = { self: `terminal`, ...FRESH_ICONS } as const satisfies Record<StampKind, IconName>;
 
 // How the check came out:
 //   passed    the agent's check passed after its last edit, or a review found nothing (or every finding was fixed or
@@ -88,7 +83,7 @@ export const stampsOf = (proof: ProofMark | undefined, checks: readonly CheckMar
 // work it judged has moved on (its hover offers to run it again).
 const stampNeedsYou = (stamp: Stamp): boolean => !stamp.stale && (stamp.outcome === `failed` || stamp.outcome === `findings`);
 
-// The mark beside the glyph: what needs you, or nothing. The count is capped at 9+ so the corner keeps its width.
+// The mark beside the badge: what needs you, or nothing. The count is capped at 9+ so the corner keeps its width.
 export const stampMark = (stamp: Stamp): string | undefined => {
     if (!stampNeedsYou(stamp)) {
         return undefined;
@@ -100,7 +95,7 @@ export const stampMark = (stamp: Stamp): string | undefined => {
     return open > 9 ? `9+` : String(open);
 };
 
-// The glyph's ink. A failure or open findings keep their tone even on a receipt. A pass is green on a live card and
+// The badge's ink. A failure or open findings keep their tone even on a receipt. A pass is green on a live card and
 // quiet on a receipt, where it is history. A stale stamp is quiet everywhere. A prose answer is plain ink, because
 // green would claim a verdict it never gave.
 export const stampTone = (stamp: Stamp, quiet: boolean): string => {

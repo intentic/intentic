@@ -3,16 +3,18 @@ import { AnchoredOverlay, ui, useHoverIntent } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { useRole } from "../../client/sandbox/useRole";
-import { foldStamps, type Stamp, STAMP_ICONS, stampMark, stampTone } from "../../models/fleet/board/stamps";
+import { foldStamps, type Stamp, stampMark, stampTone } from "../../models/fleet/board/stamps";
 import { canStartFresh, draftFreshSession } from "../../models/fleet/freshSession";
 import { useAgents } from "../../models/fleet/useAgents";
 import type { FleetAgent } from "../../models/fleet/useAgents-fleet";
+import StampBadge from "./StampBadge.vue";
 
-// THE CARD'S STAMPS: one glyph per check that ran on its work, side by side in its corner (stamps.ts). The glyph says
-// which check it was and its tone says how it came out. A number or `!` beside a glyph means that stamp needs you.
-// A pointer that stays, or a press, opens a small card that says each stamp in words. From that card the reader can
-// open the chat a check ran in, or run a check again when the work has moved past it. None of it is a gate: every check
-// is optional, and CI checks everything once the work is pushed.
+// THE CARD'S STAMPS: one badge per check that ran on its work, side by side in its corner (stamps.ts, StampBadge). The
+// symbol cut out of a badge says which check it was and the badge's ink says how it came out. A number or `!` beside a
+// badge means that stamp needs you.
+// A mark, never a press: a click on it is the card's, which opens the card. A pointer that stays opens a small card that
+// says each stamp in words, from which the reader can open the chat a check ran in, or run a check again when the work
+// has moved past it. None of it is a gate: every check is optional, and CI checks everything once the work is pushed.
 
 const t = useT();
 
@@ -26,11 +28,8 @@ const props = withDefaults(
         quiet?: boolean;
         // How many stamps the corner draws before the rest fold into "+N".
         max?: number;
-        // Whether the stamps are a press of their own. A rail row is a button already, so there the stamps open their
-        // card on hover only, and a click selects the row.
-        press?: boolean;
     }>(),
-    { agent: undefined, quiet: false, max: 4, press: true },
+    { agent: undefined, quiet: false, max: 4 },
 );
 
 const fold = computed(() => foldStamps(props.stamps, props.max));
@@ -80,21 +79,12 @@ const { canReview } = useRole();
 const again = computed(() => props.agent !== undefined && canReview.value && canStartFresh(props.agent));
 const offersAgain = (stamp: Stamp): boolean => again.value && stamp.kind !== `self` && (stamp.stale || stamp.outcome === `failed`);
 
-// Opens for a pointer that stays and waits for one that overshoots onto the card, as DevRebuild's card does. A press
-// pins it open until a click outside closes it.
+// Opens for a pointer that stays and waits for one that overshoots onto the card, as DevRebuild's card does.
 const anchor = ref<HTMLElement>();
 const hover = useHoverIntent({ open: 200, close: 150, warm: 300 });
-const pinned = ref(false);
 const open = computed({
-    get: () => pinned.value || hover.shown.value,
-    set: (value: boolean) => {
-        if (value) {
-            hover.show();
-            return;
-        }
-        pinned.value = false;
-        hover.hide();
-    },
+    get: () => hover.shown.value,
+    set: (value: boolean) => (value ? hover.show() : hover.hide()),
 });
 const onEnter = (event: PointerEvent): void => {
     if (event.pointerType === `mouse`) {
@@ -103,14 +93,6 @@ const onEnter = (event: PointerEvent): void => {
 };
 const onLeave = (): void => hover.leave();
 const onCardEnter = (): void => hover.cancel();
-const onPress = (event: MouseEvent): void => {
-    // The card's own click opens the card; this one is the stamps'.
-    event.stopPropagation();
-    pinned.value = !open.value;
-    if (!pinned.value) {
-        hover.hide();
-    }
-};
 
 const openCheck = (stamp: Stamp): void => {
     const card = stamp.by === undefined ? undefined : agentById(stamp.by);
@@ -128,18 +110,13 @@ const runAgain = (stamp: Stamp): void => {
 </script>
 
 <template>
-    <component
-        :is="press ? `button` : `span`"
+    <span
         v-if="stamps.length > 0"
         ref="anchor"
-        :type="press ? `button` : undefined"
-        class="inline-flex shrink-0 items-center gap-1.5 rounded-sm"
-        :class="press ? `cursor-pointer` : undefined"
+        class="inline-flex shrink-0 cursor-default items-center gap-1"
         data-stamps
-        :role="press ? undefined : `img`"
+        role="img"
         :aria-label="label"
-        :aria-expanded="press ? open : undefined"
-        @click="press ? onPress($event) : undefined"
         @pointerenter="onEnter"
         @pointerleave="onLeave"
     >
@@ -154,11 +131,11 @@ const runAgain = (stamp: Stamp): void => {
             :data-stamp-stale="stamp.stale ? `` : undefined"
             aria-hidden="true"
         >
-            <Icon :name="STAMP_ICONS[stamp.kind]" :class="stamp.outcome === `running` ? `motion-safe:animate-pulse` : undefined" />
+            <StampBadge :kind="stamp.kind" :class="stamp.outcome === `running` ? `motion-safe:animate-pulse` : undefined" />
             <span v-if="stampMark(stamp)" class="text-[0.7em] font-semibold leading-none tabular-nums" data-stamp-mark>{{ stampMark(stamp) }}</span>
         </span>
         <span v-if="fold.folded > 0" class="text-[0.7em] font-medium leading-none text-subtle" aria-hidden="true">+{{ fold.folded }}</span>
-        <AnchoredOverlay v-model="open" :anchor="anchor" side="top" cross="end" :restore-focus="pinned">
+        <AnchoredOverlay v-model="open" :anchor="anchor" side="top" cross="end" :restore-focus="false">
             <div class="flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-0.5 p-1.5 text-left" data-stamps-card @pointerenter="onCardEnter" @pointerleave="onLeave">
                 <p class="px-1.5 pb-0.5 pt-1 text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`agents.stamps.heading`) }}</p>
                 <div v-for="stamp in stamps" :key="stamp.kind" class="flex items-start gap-1" data-stamp-row :data-stamp-kind="stamp.kind">
@@ -170,7 +147,7 @@ const runAgain = (stamp: Stamp): void => {
                         v-tooltip.top="stamp.by === undefined ? undefined : t(`agents.stamps.openTitle`)"
                         @click="openCheck(stamp)"
                     >
-                        <Icon :name="STAMP_ICONS[stamp.kind]" class="mt-px shrink-0 text-sm" :class="stampTone(stamp, false)" />
+                        <StampBadge :kind="stamp.kind" class="shrink-0 text-lg" :class="stampTone(stamp, false)" />
                         <span class="flex min-w-0 flex-1 flex-col gap-0.5">
                             <span class="text-xs leading-snug">
                                 <span class="font-medium text-content">{{ kindName(stamp) }}</span>
@@ -203,5 +180,5 @@ const runAgain = (stamp: Stamp): void => {
                 </div>
             </div>
         </AnchoredOverlay>
-    </component>
+    </span>
 </template>
