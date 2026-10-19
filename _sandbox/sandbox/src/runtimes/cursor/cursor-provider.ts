@@ -16,6 +16,7 @@ import {
 } from "../../agent/providers/adapter.js";
 import type { AgentRequest, CursorCredential } from "../../agent/providers/agent-request.js";
 import { opt } from "../../opt.js";
+import { childResultDoor } from "../../agent/subagents/child-records.js";
 import { withAttachments } from "../../sessions/vocabulary/attachment-note.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
 import { releasingMounts } from "../../agent/tools/turn-mounts.js";
@@ -140,6 +141,8 @@ export const planCursorTurn = async (
             ...context.base.hooks,
             // Same predicate the harness arm applies: a child has shell and write; a narrowed turn can't proxy them back.
             ...(context.children !== undefined && mayDelegate(persona) ? { children: context.children } : {}),
+            // A spawned child its parent gave a result schema hands its value back here, whatever its persona's shelves.
+            ...opt("result", childResultDoor(services, input.conversationId)),
             ...opt("privacy", privacy),
         },
     };

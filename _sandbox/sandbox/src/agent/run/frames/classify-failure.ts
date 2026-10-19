@@ -61,8 +61,9 @@ export interface FailureContext {
     readonly sessionId: string | undefined;
     // Whether the provider answered before this frame: `ran` on every hold this frame promises.
     readonly answered: boolean;
-    // A spawned child's turn: nobody watches it, so a reset far off is no re-run worth booking for it (FAR_RERUN_MS).
-    readonly child?: boolean | undefined;
+    // A spawned child's turn: how far off a reset it is still booked to re-run by itself (children.ts
+    // childRerunHorizonMs), since nobody watches it; undefined for every other turn, which has no horizon.
+    readonly childRerunHorizonMs?: number | undefined;
     // Whether this turn re-ran a held one, its session carried onto another account than the one it was held on.
     readonly carriedOff?: boolean | undefined;
     // Held at the door for a spent allowance (spent-door.ts): no request went out, so nothing is filed against the
@@ -277,9 +278,23 @@ const heldOf = (ran: boolean, way: LimitWay | undefined, moving: string | undefi
 });
 
 /* HOW FAR OFF A RESET A CHILD IS STILL WORTH HOLDING FOR. A child's parent waits on it, and was told "do not give the
-   task to another agent meanwhile" for a quota that reopened next week (2026-10-17). Past this, a child's spent turn is
-   not booked to re-run by itself: it ends offering the reset, and its parent hears where else its work can go on. */
-export const FAR_RERUN_MS = 90 * 60_000;
+   task to another agent meanwhile" for a quota that reopened next week (2026-10-17). Past its horizon, a child's spent
+   turn is not booked to re-run by itself: it ends offering the reset, and its parent hears where else its work can go on.
+   The horizon comes with the turn (childRerunHorizonMs in agent/subagents/child-records.ts): the owner's
+   childRerunHorizonHours, six hours unless changed, so a five-hour window is waited out, or 90 minutes for a child with
+   fallbacks, so it moves to them rather than waiting. */
+
+// How far past the reset a child's re-run is booked: a margin for a reset that lands a little late, and a spread within it
+// read off the conversation's id, so siblings refused together on one provider do not all go again in the same second.
+const CHILD_RERUN_MARGIN_S = 15;
+const CHILD_RERUN_SPREAD_S = 30;
+export const childRerunAt = (resetsAt: number, conversationId: string): number => {
+    let spread = 0;
+    for (const char of conversationId) {
+        spread = (spread * 31 + (char.codePointAt(0) ?? 0)) % (CHILD_RERUN_SPREAD_S + 1);
+    }
+    return resetsAt + CHILD_RERUN_MARGIN_S + spread;
+};
 
 // Dresses a spent-allowance frame with when it reopens, whether it is held, and whether a clock resumes it unasked;
 // `autoResume` needs a held turn and a known instant. A booked move fires on the next pass, "now" to a reader, so it
@@ -293,7 +308,7 @@ const limitFrame = async (
         readonly held: boolean;
         readonly ran: boolean;
         readonly way: LimitWay | undefined;
-        // A child whose reset is past FAR_RERUN_MS: offered, never booked.
+        // A child whose reset is past its horizon: offered, never booked.
         readonly far: boolean;
     },
 ): Promise<ErrorFrame> => {
@@ -407,10 +422,11 @@ const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: F
     const { conversationId } = turn;
     // A door's hold names its run, whose rows the model never saw, and re-runs on the session as it stood (turn-resume.ts).
     const turnedAway: Partial<HeldTurn> = context.door === true ? { turnedAway: true, ...opt("run", context.run) } : {};
-    const far = context.child === true && resetsAt !== undefined && resetsAt * 1000 - context.now > FAR_RERUN_MS;
+    const horizon = context.childRerunHorizonMs;
+    const far = horizon !== undefined && resetsAt !== undefined && resetsAt * 1000 - context.now > horizon;
     // A far reset is said on the frame and kept off the hold: the resume pass fires a limit hold at its `reopensAt` under
     // a `resend` answer whatever the frame said, so a child told nothing was booked was re-run by itself a week later.
-    const booked = far ? undefined : resetsAt;
+    const booked = far || resetsAt === undefined ? undefined : horizon !== undefined && conversationId !== undefined ? childRerunAt(resetsAt, conversationId) : resetsAt;
     const held = conversationId === undefined ? undefined : holding(context, conversationId, "limit", { ...opt("reopensAt", booked), ...way, ...turnedAway });
     // Worth dressing for a reset or a hold; with neither, it goes out bare.
     if (resetsAt === undefined && held === undefined) {

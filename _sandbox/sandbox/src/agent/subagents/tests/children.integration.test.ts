@@ -18,6 +18,15 @@ import { unstubbed } from "@intentic/testing";
 import { reportChildTurn } from "../child-report.js";
 import { childLandingWords } from "../../../conversations/land/child-lands.js";
 import { filePausedChildren } from "../paused-children.js";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { childActor } from "../../../auth/principal.js";
+import { spawnedChildren } from "../spawned-children.js";
+import { childRerunHorizonMs, childResultDoor, childResultOf } from "../child-records.js";
+import { RESTART_CUT, restoreSpawnedChildren, settleRestoredChildren } from "../child-restore.js";
+import type { ResultSchema } from "../child-result.js";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import {
     adoptChildTurn,
     answerChild,
@@ -839,6 +848,7 @@ describe("the shell door's arming", () => {
         answer: async () => ({ ok: true }),
         pendingQuestion: () => undefined,
         report: () => undefined,
+        result: () => undefined,
         landing: () => undefined,
         merge: async () => ({ ok: true }),
         cancel: async () => ({ ok: true }),
@@ -875,25 +885,56 @@ describe("the shell door's arming", () => {
 });
 
 describe("the budgets, enforced in the daemon", () => {
-    it("refuses past the live ceiling, and frees the slot when a child settles", async () => {
+    // 2026-10-18: a spawn past the ceiling was refused, and a fan-out wider than it lost whatever its parent did not spawn
+    // again; it now waits for a seat and starts by itself.
+    it("holds a spawn past the live ceiling as pending, and starts it by itself when a child settles", async () => {
         const gate = Promise.withResolvers<void>();
+        const started: string[] = [];
         const holdOpen = async function* (input: AgentTurn): AsyncGenerator<AgentEvent> {
-            void input;
+            started.push(input.prompt);
             await gate.promise;
             yield { kind: "done" };
         };
-        const services = spawnServices({ subagentsAtOnce: 1 }, [], actors);
-        const first = await spawnChild(drivenBy(services, holdOpen), parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6" });
-        expect(first.ok).toBe(true);
-        const second = await spawnChild(drivenBy(services, holdOpen), parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6" });
-        expect(second).toMatchObject({ ok: false, message: expect.stringContaining("already running") });
-        gate.resolve();
-        if (first.ok) {
-            await settled(first.id);
+        const services = drivenBy(spawnServices({ subagentsAtOnce: 1 }, [], actors), holdOpen);
+        const first = await spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6" });
+        const second = await spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!first.ok || !second.ok) {
+            throw new Error("not spawned");
         }
-        const third = await spawnChild(drivenBy(services, holdOpen), parent, { prompt: "three", provider: "claude", model: "claude-sonnet-4-6" });
-        expect(third.ok).toBe(true);
+        expect(second).toEqual({
+            ok: true,
+            id: second.id,
+            held: true,
+            note: "Waiting for a seat: 1 of your children are running, the most that may run at once (1), so it starts by itself when one of them ends.",
+        });
+        expect(listSubagentSessions(actors).find((session) => session.id === second.id)).toMatchObject({ status: "pending" });
+        expect(await sendToChild(services, parent, second.id, "and the lexer")).toMatchObject({ ok: false, message: expect.stringContaining("waits for one of your running children to end") });
+        await waitFor(() => expect(started).toEqual(["one"]), SETTLES);
         gate.resolve();
+        await settled(first.id);
+        await settled(second.id);
+        expect(started).toEqual(["one", "two"]);
+    });
+
+    it("lets a parent cancel a spawn waiting for a seat, which then never starts", async () => {
+        const gate = Promise.withResolvers<void>();
+        const started: string[] = [];
+        const holdOpen = async function* (input: AgentTurn): AsyncGenerator<AgentEvent> {
+            started.push(input.prompt);
+            await gate.promise;
+            yield { kind: "done" };
+        };
+        const services = drivenBy(spawnServices({ subagentsAtOnce: 1 }, [], actors), holdOpen);
+        const first = await spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6" });
+        const second = await spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!first.ok || !second.ok) {
+            throw new Error("not spawned");
+        }
+        await expect(cancelChild(services, parent, second.id)).resolves.toMatchObject({ ok: true });
+        expect(await settled(second.id)).toMatchObject({ outcome: "finished", matched: { status: "killed" } });
+        gate.resolve();
+        await settled(first.id);
+        expect(started).toEqual(["one"]);
     });
 
     it("refuses past the lifetime budget", async () => {
@@ -923,9 +964,11 @@ describe("the budgets, enforced in the daemon", () => {
             spawnChild(drivenBy(services, holdOpen), parent, { prompt: "three", provider: "claude", model: "claude-sonnet-4-6" }),
         ]);
 
-        expect(results.filter((result) => result.ok)).toHaveLength(1);
-        for (const refused of results.filter((result) => !result.ok)) {
-            expect(refused).toMatchObject({ message: expect.stringContaining("already running") });
+        // One goes; the other two wait for its seat, each told why, and none is refused.
+        expect(results.filter((result) => result.ok && result.held !== true)).toHaveLength(1);
+        expect(results.filter((result) => result.ok && result.held === true)).toHaveLength(2);
+        for (const waiting of results.filter((result) => result.ok && result.held === true)) {
+            expect(waiting).toMatchObject({ note: expect.stringContaining("Waiting for a seat") });
         }
         gate.resolve();
     });
@@ -2260,17 +2303,19 @@ describe("the fan-out governor", () => {
             yield { kind: "error", code: "account-not-entitled", message: "[role_forbidden] Cloud Agent is not available for non-billable admins." };
             yield { kind: "done" };
         };
-    const answering = (turns: TurnInput[]): TurnStarter["stream"] =>
-        async function* answered(input: TurnInput) {
-            turns.push(input);
-            yield { kind: "delta", text: "On it." };
-            yield { kind: "done" };
-        };
     const opus = { provider: "cursor", model: "claude-opus-5-5" } as const;
 
     it("starts one child on a lane nothing has proven, and the rest once it is answered", async () => {
         const turns: TurnInput[] = [];
-        const services = drivenBy(spawnServices({}, [], actors), answering(turns));
+        const gate = Promise.withResolvers<void>();
+        // The canary answers only once the second spawn has been admitted, so the lane is still unproven when it asks.
+        const answeringLater = async function* (input: TurnInput): AsyncGenerator<AgentEvent> {
+            turns.push(input);
+            await gate.promise;
+            yield { kind: "delta", text: "On it." };
+            yield { kind: "done" };
+        };
+        const services = drivenBy(spawnServices({}, [], actors), answeringLater);
         const first = await spawnChild(services, parent, { prompt: "ws1", ...opus });
         const second = await spawnChild(services, parent, { prompt: "ws2", ...opus });
         expect(first).toMatchObject({ ok: true });
@@ -2278,6 +2323,7 @@ describe("the fan-out governor", () => {
         if (!first.ok || !second.ok) {
             throw new Error("not started");
         }
+        gate.resolve();
         await settled(first.id);
         await settled(second.id);
         expect(turns.map((turn) => turn.prompt)).toEqual(["ws1", "ws2"]);
@@ -2446,5 +2492,292 @@ describe("moving a child to another provider", () => {
         await waitFor(() => expect(turns.map((turn) => turn.agent)).toEqual(["cursor", "claude"]), SETTLES);
         expect(turns[1]?.prompt).toContain("[role_forbidden]");
         expect(await settled(started.id)).toMatchObject({ outcome: "finished", matched: { status: "completed" } });
+    });
+});
+
+// 2026-10-18: a parent's supervision of its children lived in this process's memory, so after a restart `send`, `answer`
+// and `cancel` answered "No such child" and a parked wait answered unknown-target while the child worked on.
+describe("a child across a daemon restart", () => {
+    const told: string[] = [];
+    beforeEach(() => {
+        told.length = 0;
+    });
+    // The daemon over a history volume of the test's own, whose registry names the parent and every `sub-` child of it,
+    // and whose parent has a live turn to hear news in.
+    const restartable = async (
+        body: TurnStarter["stream"],
+        over: Partial<SandboxSettings> = {},
+    ): Promise<{ readonly services: Services; readonly root: string }> => {
+        const root = await mkdtemp(join(tmpdir(), "spawned-children-"));
+        const driven = drivenBy(spawnServices(over, [], actors), body);
+        const services = unstubbed<Services>("services", {
+            ...driven,
+            config: unstubbed<Services["config"]>("config", { historyRoot: root }),
+            conversations: { ...driven.conversations, running: (id: string) => id === parent.conversationId || driven.conversations.running(id) },
+            agents: unstubbed<Services["agents"]>("agents", {
+                entry: (id: string) => {
+                    if (id === parent.conversationId) {
+                        return conversationEntry({ id });
+                    }
+                    return id.startsWith("sub-") ? conversationEntry({ id, identity: { startedBy: childActor(parent.conversationId) } }) : undefined;
+                },
+            }),
+            turns: {
+                ...driven.turns,
+                say: async (said) => {
+                    told.push(said.turn.prompt);
+                    return { delivered: "steered", run: "run-parent" };
+                },
+            },
+        });
+        return { services, root };
+    };
+    // What a restart leaves of this process's memory: nothing.
+    const restart = async (root: string): Promise<void> => {
+        await spawnedChildren(root, { warn: () => {} }).list();
+        resetSubagents(actors);
+        resetChildrenForTest(actors);
+    };
+
+    it("is reachable again: its ending answers a wait naming it, counts as handed over to a wait on any, and a send continues it", async () => {
+        const turns: TurnInput[] = [];
+        const { services, root } = await restartable(fakeTurn(turns, [{ kind: "delta", text: "Ported." }, { kind: "text_end" }, { kind: "done" }]));
+        const result = await spawnChild(services, parent, { prompt: "Port the parser", description: "Port the parser", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        await restart(root);
+        expect(await sendToChild(services, parent, result.id, "also the lexer")).toEqual({ ok: false, message: "No such child of this conversation. `list` shows yours." });
+
+        expect(await restoreSpawnedChildren(services)).toEqual([]);
+
+        expect(await waitForSubagent(actors, parent.conversationId, { until: ["finished"], timeoutMs: 100 })).toMatchObject({ outcome: "unknown-target" });
+        expect(await settled(result.id)).toMatchObject({
+            outcome: "finished",
+            matched: { id: result.id, status: "completed", summary: "Ported.", description: "Port the parser" },
+        });
+        expect(childReportOf(actors, result.id)).toBe("Ported.");
+        expect(await sendToChild(services, parent, result.id, "also the lexer")).toEqual({
+            ok: true,
+            note: "Sent: the child runs a follow-up turn, once there is memory for it. Supervise it with wait.",
+        });
+        await waitFor(() => expect(turns.map((turn) => turn.prompt)).toEqual(["Port the parser", "also the lexer"]), SETTLES);
+        expect(turns[1]).toMatchObject({ conversationId: result.id, agent: "claude", model: "claude-sonnet-4-6", isolated: true, unattended: true });
+    });
+
+    it("whose turn the restart cut and nothing resumed stays stopped, said on its row and to its parent", async () => {
+        const { services, root } = await restartable(doneAtOnce);
+        spawnedChildren(root, { warn: () => {} }).write("sub-cut", {
+            parent: parent.conversationId,
+            spec: { prompt: "Port the parser", description: "Port the parser", provider: "claude", model: "claude-sonnet-4-6" },
+            depth: 1,
+            cwd: WORKSPACE_ROOT,
+            startedAt: 1_000,
+            state: "running",
+            turns: 1,
+            at: 2_000,
+        });
+        await restart(root);
+
+        const cut = await restoreSpawnedChildren(services);
+        expect(cut).toEqual(["sub-cut"]);
+        expect(listSubagentSessions(actors).find((session) => session.id === "sub-cut")).toMatchObject({
+            status: "pending",
+            summary: "The sandbox restarted during its turn: waiting to see whether the turn resumes.",
+        });
+
+        await settleRestoredChildren(services, cut);
+
+        expect(listSubagentSessions(actors).find((session) => session.id === "sub-cut")).toMatchObject({ status: "failed", error: RESTART_CUT });
+        expect(told).toEqual([`Your subagent \`sub-cut\` ("Port the parser") stays stopped: ${RESTART_CUT}`]);
+        const [onFile] = await spawnedChildren(root, { warn: () => {} }).list();
+        expect(onFile).toMatchObject({ id: "sub-cut", state: "settled", ending: { status: "failed", error: RESTART_CUT } });
+    });
+
+    it("whose cut turn came back is followed to its end, and its report reaches the parent's wait", async () => {
+        const gate = Promise.withResolvers<void>();
+        const body = async function* (): AsyncGenerator<AgentEvent> {
+            await gate.promise;
+            yield { kind: "delta", text: "Ported after the restart." };
+            yield { kind: "text_end" };
+            yield { kind: "done" };
+        };
+        const { services, root } = await restartable(body);
+        spawnedChildren(root, { warn: () => {} }).write("sub-resumed", {
+            parent: parent.conversationId,
+            spec: { prompt: "Port the parser", provider: "claude", model: "claude-sonnet-4-6" },
+            depth: 1,
+            cwd: WORKSPACE_ROOT,
+            startedAt: 1_000,
+            state: "running",
+            turns: 1,
+            at: 2_000,
+        });
+        await restart(root);
+        const cut = await restoreSpawnedChildren(services);
+        // The turn journal resumes it, as the boot does once the records are back.
+        expect(services.turns.run({ conversationId: "sub-resumed", prompt: "Port the parser" })).not.toBe("busy");
+
+        await settleRestoredChildren(services, cut);
+
+        expect(listSubagentSessions(actors).find((session) => session.id === "sub-resumed")).toMatchObject({ status: "running", summary: "" });
+        expect(told).toEqual([]);
+        gate.resolve();
+        expect(await settled("sub-resumed")).toMatchObject({ outcome: "finished", matched: { status: "completed", summary: "Ported after the restart." } });
+    });
+
+    it("counts the turns its parent spent before the restart against the lifetime budget", async () => {
+        const { services, root } = await restartable(doneAtOnce, { subagentsPerTurn: 3 });
+        spawnedChildren(root, { warn: () => {} }).write("sub-spent", {
+            parent: parent.conversationId,
+            spec: { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" },
+            depth: 1,
+            cwd: WORKSPACE_ROOT,
+            startedAt: 1_000,
+            state: "settled",
+            turns: 3,
+            // Settled just now: one that settled a fortnight ago is let go at boot, and its turns with it.
+            at: Date.now(),
+        });
+        await restart(root);
+        await restoreSpawnedChildren(services);
+
+        expect(await spawnChild(services, parent, { prompt: "more", provider: "claude", model: "claude-sonnet-4-6" })).toEqual({
+            ok: false,
+            message: "This conversation has started 3 child turns, its lifetime budget.",
+        });
+    });
+
+    it("strikes off a child whose parent was archived", async () => {
+        const { services, root } = await restartable(doneAtOnce);
+        const archived = unstubbed<Services>("services", {
+            ...services,
+            agents: unstubbed<Services["agents"]>("agents", {
+                entry: (id: string) => (id === parent.conversationId ? conversationEntry({ id, archivedAt: 5 }) : conversationEntry({ id })),
+            }),
+        });
+        spawnedChildren(root, { warn: () => {} }).write("sub-orphan", {
+            parent: parent.conversationId,
+            spec: { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" },
+            depth: 1,
+            cwd: WORKSPACE_ROOT,
+            startedAt: 1_000,
+            state: "settled",
+            turns: 1,
+            at: 2_000,
+        });
+        await restart(root);
+
+        expect(await restoreSpawnedChildren(archived)).toEqual([]);
+
+        expect(listSubagentSessions(actors)).toEqual([]);
+        expect(await spawnedChildren(root, { warn: () => {} }).list()).toEqual([]);
+    });
+});
+
+describe("a child spawned with a result schema", () => {
+    const VERDICT: ResultSchema = {
+        type: "object",
+        properties: { verdict: { type: "string", enum: ["real", "false-positive"] }, line: { type: "integer" } },
+        required: ["verdict", "line"],
+        additionalProperties: false,
+    };
+
+    it("is told the contract after its task, and its tool's value is what a wait hands over", async () => {
+        const turns: TurnInput[] = [];
+        const gate = Promise.withResolvers<void>();
+        const body = async function* (input: TurnInput): AsyncGenerator<AgentEvent> {
+            turns.push(input);
+            await gate.promise;
+            yield { kind: "delta", text: "It is real: the bound is off by one." };
+            yield { kind: "text_end" };
+            yield { kind: "done" };
+        };
+        const services = drivenBy(spawnServices({}, [], actors), body);
+        const result = await spawnChild(services, parent, { prompt: "Verify finding 3", provider: "claude", model: "claude-sonnet-4-6", result: { schema: VERDICT } });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await waitFor(() => expect(turns).toHaveLength(1), SETTLES);
+        expect(turns[0]?.prompt).toMatch(/^Verify finding 3\n\n---\nYour parent needs a structured result/u);
+        const door = childResultDoor(services, result.id);
+        expect(door?.take({ verdict: "maybe", line: 3 })).toEqual({ error: 'verdict: Invalid option: expected one of "real"|"false-positive"' });
+        expect(door?.take({ verdict: "real", line: 41 })).toEqual({ value: { verdict: "real", line: 41 } });
+        gate.resolve();
+
+        await settled(result.id);
+        expect(childResultOf(actors, result.id)).toEqual({ value: { verdict: "real", line: 41 } });
+    });
+
+    it("that never calls its tool is read for a JSON value at the end of its last message", async () => {
+        const services = drivenBy(
+            spawnServices({}, [], actors),
+            fakeTurn([], [{ kind: "delta", text: 'Checked.\n```json\n{"verdict": "false-positive", "line": 7}\n```' }, { kind: "text_end" }, { kind: "done" }]),
+        );
+        const result = await spawnChild(services, parent, { prompt: "Verify finding 4", provider: "claude", model: "claude-sonnet-4-6", result: { schema: VERDICT } });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        expect(childResultOf(actors, result.id)).toEqual({ value: { verdict: "false-positive", line: 7 } });
+    });
+
+    it("says why there is no result when it hands back nothing that matches", async () => {
+        const services = drivenBy(spawnServices({}, [], actors), fakeTurn([], [{ kind: "delta", text: "Looks fine to me." }, { kind: "text_end" }, { kind: "done" }]));
+        const result = await spawnChild(services, parent, { prompt: "Verify finding 5", provider: "claude", model: "claude-sonnet-4-6", result: { schema: VERDICT } });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        expect(childResultOf(actors, result.id)).toEqual({ error: "It ended without calling its result tool, and its last message holds no JSON value." });
+    });
+
+    it("is refused before anything starts when the schema reaches past the subset", async () => {
+        const turns: TurnInput[] = [];
+        const refused = await spawnChild(drivenBy(spawnServices({}, [], actors), fakeTurn(turns)), parent, {
+            prompt: "go",
+            provider: "claude",
+            model: "claude-sonnet-4-6",
+            result: { schema: { type: "string", pattern: "^x+$" } },
+        });
+        expect(refused).toEqual({
+            ok: false,
+            message:
+                "The result schema cannot be used: schema.pattern: not a keyword a result schema may use (it may use type, properties, required, items, enum, const, description, title, minimum, maximum, exclusiveMinimum, exclusiveMaximum, minLength, maxLength, minItems, maxItems, additionalProperties, default).",
+        });
+        expect(turns).toEqual([]);
+        expect(listSubagentSessions(actors)).toEqual([]);
+    });
+
+    it("gives no result door to a child spawned without one, nor to a conversation nobody spawned", async () => {
+        const services = drivenBy(spawnServices({}, [], actors), fakeTurn([]));
+        const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        expect(childResultDoor(services, result.id)).toBeUndefined();
+        expect(childResultDoor(services, parent.conversationId)).toBeUndefined();
+        await settled(result.id);
+    });
+});
+
+describe("how far off a reset a child waits by itself", () => {
+    it("is the owner's horizon, ninety minutes for a child with fallbacks to move to, and nothing for a conversation nobody spawned", async () => {
+        const services = drivenBy(spawnServices({}, [], actors), fakeTurn([], []));
+        const plain = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+        const moving = await spawnChild(services, parent, {
+            prompt: "go",
+            provider: "cursor",
+            model: "composer-2.5",
+            fallbacks: [{ provider: "claude", model: "claude-sonnet-4-6" }],
+        });
+        if (!plain.ok || !moving.ok) {
+            throw new Error("not spawned");
+        }
+        expect(childRerunHorizonMs(actors, plain.id, { childRerunHorizonHours: 6 })).toBe(6 * 3_600_000);
+        expect(childRerunHorizonMs(actors, plain.id, { childRerunHorizonHours: 0 })).toBe(0);
+        expect(childRerunHorizonMs(actors, moving.id, { childRerunHorizonHours: 6 })).toBe(90 * 60_000);
+        expect(childRerunHorizonMs(actors, parent.conversationId, { childRerunHorizonHours: 6 })).toBeUndefined();
     });
 });

@@ -46,7 +46,7 @@ test("draws the three ceilings, and sends whether it may spawn at all to Guardra
     const host = mount();
 
     expect(host.querySelector(`[aria-label="Spawn subagents"]`)).toBeNull();
-    for (const label of [`Subagents at once`, `Subagents per conversation`, `Nesting depth`]) {
+    for (const label of [`Subagents at once`, `Subagents per conversation`, `Nesting depth`, `Wait for a reset`]) {
         expect(numberBox(host, label), label).not.toBeNull();
     }
     expect(host.querySelector(`a[href="/sandbox/guardrails"]`)).not.toBeNull();
@@ -59,6 +59,20 @@ test("each ceiling opens on the daemon's own default", () => {
     expect(numberBox(host, `Subagents at once`).value).toBe(String(defaults.subagentsAtOnce));
     expect(numberBox(host, `Subagents per conversation`).value).toBe(String(defaults.subagentsPerTurn));
     expect(numberBox(host, `Nesting depth`).value).toBe(String(defaults.subagentDepth));
+    expect(numberBox(host, `Wait for a reset`).value).toBe(String(defaults.childRerunHorizonHours));
+});
+
+// Zero is a real answer here (never wait), unlike the ceilings above, whose floor is one.
+test("the reset wait takes zero, and no more than a day", async () => {
+    const host = mount();
+    const box = numberBox(host, `Wait for a reset`);
+    box.value = `0`;
+    box.dispatchEvent(new Event(`change`));
+    box.value = `48`;
+    box.dispatchEvent(new Event(`change`));
+    await nextTick();
+
+    expect(patch.mock.calls).toEqual([[{ childRerunHorizonHours: 0 }], [{ childRerunHorizonHours: 24 }]]);
 });
 
 test("a ceiling writes its own key and nothing else", async () => {

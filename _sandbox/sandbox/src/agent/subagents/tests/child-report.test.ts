@@ -61,6 +61,33 @@ const settledOf = (over: Partial<DomainEventMap["run.settled"]> = {}): DomainEve
 describe("a spawned child's report", () => {
     beforeEach(() => resetSubagents(actors));
 
+    it("carries the result a child spawned with a schema handed back, and says why where it handed none", async () => {
+        const read: [string, string][] = [];
+        const handed = doorsOf();
+        await reportChildTurn(
+            {
+                ...handed.deps,
+                resultOf: (childId, closing) => {
+                    read.push([childId, closing]);
+                    return { json: '{\n  "tests": 12\n}' };
+                },
+            },
+            settledOf(),
+        );
+        expect(read).toEqual([["sub-1", "Ported all 12 tests; they pass."]]);
+        expect(handed.started[0]?.prompt).toContain('Ported all 12 tests; they pass.\n\nResult (it matches the schema you gave it):\n```json\n{\n  "tests": 12\n}\n```');
+
+        const missing = doorsOf();
+        await reportChildTurn({ ...missing.deps, resultOf: () => ({ missing: "It ended without calling its result tool." }) }, settledOf({ conversationId: "sub-1" }));
+        expect(missing.started[0]?.prompt).toContain("Result: none. It ended without calling its result tool. Ask it for one with send.");
+    });
+
+    it("reads no result off a turn that failed", async () => {
+        const doors = doorsOf();
+        await reportChildTurn({ ...doors.deps, resultOf: () => ({ json: "{}" }) }, settledOf({ failure: "Provider refused." }));
+        expect(doors.started[0]?.prompt).not.toContain("Result");
+    });
+
     it("tells the parent a killed child can be continued, in place of a bare failure", async () => {
         const asked: [string, string][] = [];
         const doors = doorsOf({

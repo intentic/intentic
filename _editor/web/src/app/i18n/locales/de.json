@@ -2680,6 +2680,8 @@
             "subagentsAtOnce": "Subagenten gleichzeitig",
             "subagentsPerConversation": "Subagenten pro Unterhaltung",
             "totalDelegatedAgentsAllowed": "Gesamtzahl delegierter Agenten pro Unterhaltung.",
+            "waitForReset": "Auf Zurücksetzung warten",
+            "waitForResetHours": "Stunden, die ein Subagent nach erschöpftem Kontingent auf die Zurücksetzung wartet, bevor er aufhört. Einer mit Ausweichmodellen wechselt nach 90 Minuten zu ihnen.",
             "whetherInGuardrails": "Ob er überhaupt Subagenten starten darf, und wann er zuerst fragt:"
         },
         "aiAccountSection": {

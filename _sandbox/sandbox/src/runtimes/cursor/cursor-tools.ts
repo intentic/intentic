@@ -3,11 +3,13 @@ import type { McpServerConfig as CursorMcpServer, SDKCustomTool, SDKJsonValue, T
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AskQuestion } from "@intentic/sandbox-contract/events/requests";
 import { z } from "zod";
+import { opt } from "../../opt.js";
 import type { AgentRequest, TurnHooks, TurnTools } from "../../agent/providers/agent-request.js";
 import { formatAnswers } from "../../sessions/vocabulary/question-answers.js";
 import type { SubagentWaitUntil } from "../../agent/subagents/subagents.js";
 import { workWaitAnswer } from "../../agent/subagents/work-wait.js";
 import { spawnedNote } from "../../agent/subagents/children.js";
+import { ResultValueSchema } from "../../agent/subagents/child-result.js";
 import { type CommandGuard, consultWith, JS_SUBJECT } from "../../guard/command-guard.js";
 import { outsideSourceOf, sealResult } from "../../guard/outside-results.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
@@ -298,6 +300,7 @@ const waitTool = (request: AgentRequest, children: NonNullable<TurnHooks["childr
                 pendingQuestion: (childId) => children.pendingQuestion(childId),
                 report: (childId) => children.report(childId),
                 landing: (childId) => children.landing(childId),
+                result: (childId) => children.result(childId),
             }),
         );
     },
@@ -390,6 +393,29 @@ const childAsk = (verb: string, title: string): CursorToolAsk => ({ toolName: `m
 // `ask` is mounted on every turn: an unattended turn's question waits for the owner like any other card. The
 // supervision set isn't card-shaped and rides every turn too; a child settles on its own clock. `owner` is the person a
 // `default`-mode turn puts each call that changes something to; the ones that only read (ask, providers, wait) never are.
+const ResultArgsSchema = z.object({ value: ResultValueSchema });
+
+// A spawned child's own door for its result: the input is its parent's schema itself, held to it again on the way in.
+const resultTool = (door: NonNullable<TurnHooks["result"]>): SDKCustomTool => ({
+    description:
+        "Hand your parent the structured result it asked for in your task, as `value` matching the schema it gave. Call it once " +
+        "the work is done; a value that does not match is refused with why, so fix it and call again. Calling it again " +
+        "replaces the value. Then end your turn with a short report.",
+    inputSchema: { type: "object", properties: { value: door.schema }, required: ["value"] },
+    execute: async (args) => {
+        const parsed = ResultArgsSchema.safeParse(args);
+        if (!parsed.success) {
+            return JSON.stringify({ ok: false, message: "Pass the result as `value`." });
+        }
+        const taken = door.take(parsed.data.value);
+        return JSON.stringify(
+            "value" in taken
+                ? { ok: true, note: "Recorded: your parent receives this value with your report. End your turn with a short report." }
+                : { ok: false, message: `Not recorded, it does not match the schema: ${taken.error}` },
+        );
+    },
+});
+
 export const cursorCustomTools = (
     request: AgentRequest,
     guard: CursorGuard,
@@ -397,6 +423,7 @@ export const cursorCustomTools = (
     owner?: CursorOwner,
 ): Record<string, SDKCustomTool> => ({
     ask: askTool(request, push),
+    ...opt("result", request.hooks.result === undefined ? undefined : resultTool(request.hooks.result)),
     // Absent, not refused, when the persona's card withheld the backend: jsExecutionPlanOf answers undefined there.
     ...(request.tools.jsExecution === undefined ? {} : { code: codeTool(request, request.tools.jsExecution, guard, push, owner) }),
     ...(request.hooks.children !== undefined

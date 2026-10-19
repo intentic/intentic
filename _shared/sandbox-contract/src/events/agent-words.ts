@@ -48,7 +48,19 @@ export interface ChildReportFields {
     // Where its work went, in the daemon's words: into the parent's own checkout, or held off it by a clash. Undefined
     // for a child whose work lands as any conversation's does.
     readonly landing?: string | undefined;
+    // For a child spawned with a result schema: the value it handed back, written out as JSON, or why it handed none.
+    readonly result?: { readonly json: string } | { readonly missing: string } | undefined;
 }
+
+// The result a child spawned with a schema handed back, in words; nothing for a child spawned without one.
+const resultLines = (result: ChildReportFields["result"]): readonly string[] => {
+    if (result === undefined) {
+        return [];
+    }
+    return "json" in result
+        ? ["", "Result (it matches the schema you gave it):", "```json", result.json, "```"]
+        : ["", `Result: none. ${result.missing} Ask it for one with send.`];
+};
 
 // The wait tool's `verification` field, in words.
 const verificationLine = (verification: SubagentVerification | undefined): string | undefined => {
@@ -76,6 +88,7 @@ export const childReportPrompt = (fields: ChildReportFields): string => {
         ...(verification === undefined ? [] : [verification]),
         "",
         fields.report.trim() === "" ? "(It ended without a closing report.)" : fields.report.trim(),
+        ...resultLines(fields.result),
         "",
         `${fields.landing ?? "Its changes are in its own worktree and land the way any agent's do."} Its account of its own work is a claim, not ` +
             "a result: check what matters before you build on it, and follow up with the subagents tools as you would mid-turn.",

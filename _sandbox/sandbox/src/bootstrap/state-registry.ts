@@ -8,6 +8,8 @@ import type { StructuralStep } from "../store/evolution/state-steps.js";
 import { activityLogDocument } from "../activity/activity-store.js";
 import { claudeSeatsDocument } from "../agent/providers/claude/claude-seats.js";
 import { pausedChildrenDocument } from "../agent/subagents/paused-children.js";
+import { scriptRunsDocument } from "../agent/subagents/script-run-store.js";
+import { spawnedChildrenDocument } from "../agent/subagents/spawned-children.js";
 import { approvalDecisionsDocument } from "../approvals/approval-decisions.js";
 import { approvalsDocument } from "../approvals/approvals-store.js";
 import { areasDocument } from "../areas/areas-store.js";
@@ -117,6 +119,8 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     activityLogDocument,
     claudeSeatsDocument,
     pausedChildrenDocument,
+    scriptRunsDocument,
+    spawnedChildrenDocument,
     approvalDecisionsDocument,
     approvalsDocument,
     areasDocument,

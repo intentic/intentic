@@ -124,3 +124,68 @@ test("send refuses half a move and sends nothing, and passes a whole one on", as
     await call("tools/call", { name: "send", arguments: { child: "kid-1", message: "Carry on.", provider: "claude", model: "claude-sonnet-4-6" } });
     expect(sent).toEqual([{ childId: "kid-1", rehome: { provider: "claude", model: "claude-sonnet-4-6" } }]);
 });
+
+// A child its parent gave a result schema: the schema itself is its tool's input, so the listing shows the model the shape
+// and a value off it is refused before the door ever sees it.
+test("a child given a result schema lists a result tool taking that shape, and a matching value reaches its door", async () => {
+    const taken: unknown[] = [];
+    const schema = { type: "object", properties: { verdict: { type: "string", enum: ["real", "false-positive"] } }, required: ["verdict"], additionalProperties: false };
+    const call = await connect(
+        subagentWaitServer({
+            conversationId: "sub-kid",
+            conversations: unstubbed<ConversationActors>("conversations", {}),
+            signal: new AbortController().signal,
+            result: {
+                schema,
+                take: (value) => {
+                    taken.push(value);
+                    return { value };
+                },
+            },
+        }),
+    );
+    const listed = await call("tools/list", {});
+    expect(listed.result?.tools?.map((tool) => tool.name)).toEqual(["wait", "result", "keep"]);
+    // SAFETY: tools/list answers each tool with its JSON Schema input; read here only to compare.
+    expect((listed.result?.tools?.find((tool) => tool.name === "result") as { inputSchema?: unknown } | undefined)?.inputSchema).toMatchObject({
+        properties: { value: { type: "object", properties: { verdict: { type: "string", enum: ["real", "false-positive"] } }, required: ["verdict"], additionalProperties: false } },
+        required: ["value"],
+    });
+
+    const off = await call("tools/call", { name: "result", arguments: { value: { verdict: "maybe" } } });
+    expect(off.result?.content?.[0]?.text).toContain("Input validation error");
+    expect(taken).toEqual([]);
+
+    const on = await call("tools/call", { name: "result", arguments: { value: { verdict: "real" } } });
+    // SAFETY: the tool answers one JSON text block; `unknown` only narrows JSON.parse's `any` for toEqual to compare.
+    expect(on.result?.content?.map((block) => JSON.parse(block.text) as unknown)).toEqual([
+        { ok: true, note: "Recorded: your parent receives this value with your report. End your turn with a short report." },
+    ]);
+    expect(taken).toEqual([{ verdict: "real" }]);
+});
+
+test("spawn passes a result schema on, and refuses one that is no JSON object before spawning anything", async () => {
+    const spawned: unknown[] = [];
+    const children = unstubbed<ChildSupervisor>("children", {
+        spawn: async (spec) => {
+            spawned.push(spec.result);
+            return { ok: true, id: "sub-x" };
+        },
+    });
+    const call = await connect(serverWith(children));
+    await call("tools/call", {
+        name: "spawn",
+        arguments: { prompt: "Verify it", provider: "claude", model: "claude-sonnet-4-6", schema: { type: "object", properties: { ok: { type: "boolean" } } } },
+    });
+    expect(spawned).toEqual([{ schema: { type: "object", properties: { ok: { type: "boolean" } } } }]);
+    const bad = await call("tools/call", {
+        name: "spawn",
+        arguments: { prompt: "Verify it", provider: "claude", model: "claude-sonnet-4-6", schema: { type: "object", default: Number.NaN } },
+    });
+    // NaN is no JSON value: the schema is refused whole rather than half-read.
+    // SAFETY: the tool answers one JSON text block; `unknown` only narrows JSON.parse's `any` for toEqual to compare.
+    expect(bad.result?.content?.map((block) => JSON.parse(block.text) as unknown)).toEqual([
+        { ok: false, message: "The result schema must be a JSON object: a JSON Schema describing the value you want back." },
+    ]);
+    expect(spawned).toHaveLength(1);
+});

@@ -23,7 +23,7 @@ const request = (
     over: {
         readonly policy?: Pick<TurnPolicy, "unattended">;
         readonly tools?: Pick<TurnTools, "jsExecution">;
-        readonly hooks?: Pick<TurnHooks, "children">;
+        readonly hooks?: Pick<TurnHooks, "children" | "result">;
     } = {},
 ): AgentRequest => ({
     execution: unstubbed("execution", {}),
@@ -65,6 +65,7 @@ const supervisor = (over: Partial<ChildSupervisor> = {}): ChildSupervisor => ({
     providers: async () => [],
     pendingQuestion: () => undefined,
     report: () => undefined,
+    result: () => undefined,
     landing: () => undefined,
     merge: async () => ({ ok: true }),
     cancel: async () => ({ ok: true }),
@@ -228,5 +229,36 @@ describe("what the pair does", () => {
         const answer = JSON.parse(await parked) as { outcome: string; agent?: { summary?: string } };
         expect(answer.outcome).toBe("finished");
         expect(answer.agent?.summary).toBe("done: two files changed");
+    });
+});
+
+describe("a spawned child's result on Cursor", () => {
+    it("is a tool of its own whose input is the parent's schema, refusing a value off it", async () => {
+        const taken: unknown[] = [];
+        const schema = { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false };
+        const tools = cursorCustomTools(
+            request({
+                hooks: {
+                    result: {
+                        schema,
+                        take: (value) => {
+                            taken.push(value);
+                            return taken.length === 1 ? { error: "ok: Invalid input" } : { value };
+                        },
+                    },
+                },
+            }),
+            guard(allowing()),
+            push(),
+        );
+        expect(Object.keys(tools)).toEqual(["ask", "result"]);
+        expect(tools["result"]?.inputSchema).toEqual({ type: "object", properties: { value: schema }, required: ["value"] });
+        // SAFETY: the tool never reads the SDK's call context, so an empty one stands in for it.
+        expect(await tools["result"]?.execute?.({ value: { nope: 1 } }, {} as never)).toBe(JSON.stringify({ ok: false, message: "Not recorded, it does not match the schema: ok: Invalid input" }));
+        // SAFETY: as above.
+        expect(await tools["result"]?.execute?.({ value: { ok: true } }, {} as never)).toBe(
+            JSON.stringify({ ok: true, note: "Recorded: your parent receives this value with your report. End your turn with a short report." }),
+        );
+        expect(taken).toEqual([{ nope: 1 }, { ok: true }]);
     });
 });

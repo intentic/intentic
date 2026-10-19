@@ -19,7 +19,7 @@ export const sameModel = (served: string, asked: string): boolean => {
 };
 
 // Refusals no wait soon answers: the account itself refused, a model off the plan, a spent allowance with no re-run booked
-// (none named, or one too far off for a child, classify-failure.ts FAR_RERUN_MS).
+// (none named, or one past the child's horizon, children.ts childRerunHorizonMs).
 const REFUSED_OUTRIGHT: ReadonlySet<string> = new Set(["account-not-entitled", "claude-not-entitled", "model-unavailable", "trial-exhausted"]);
 
 // Whether this failure moves the child onto its spawn's next fallback rather than ending it.
@@ -229,8 +229,11 @@ export const childRecordOf = (parent: ChildParent, spec: ChildSpawnSpec, depth: 
         queued: false,
         behind: false,
         held,
+        turns: 0,
         oomKillsAtStart: undefined,
         report: undefined,
+        result: undefined,
+        submitted: undefined,
         cancelled: false,
         movingOn: undefined,
         paused: undefined,

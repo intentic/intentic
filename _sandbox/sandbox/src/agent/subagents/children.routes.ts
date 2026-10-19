@@ -3,12 +3,13 @@ import type { Context } from "hono";
 import { AgentHarnessSchema, type AgentProvider, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { z } from "zod";
 import { listSubagentSessions, type SubagentWaitUntil } from "./subagents.js";
-import { waitForWork, workWaitAnswer } from "./work-wait.js";
+import { type ChildLookups, waitForWork, workWaitAnswer } from "./work-wait.js";
 import { soleLiveConversation } from "../../conversations/actor/conversation-holdings.js";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
 import { childLandingWords } from "../../conversations/land/child-lands.js";
 import { type ChildActionResult, type ChildSupervisor, childReportOf, pendingQuestionOf, supervisorFor } from "./children.js";
+import { childResultOf } from "./child-records.js";
 import { HALF_A_MOVE } from "./child-words.js";
 import { spawnCatalogText, spawnableProviders } from "./spawn-catalog.js";
 import { markSpentByHand, unmarkSpentByHand } from "../../usage/observed-accounts.js";
@@ -109,6 +110,15 @@ const waitBody = (text: string): unknown => {
     return parseJsonOr(text, undefined);
 };
 
+// What a wait through the CLI reads of a child beyond its roster row, a linked one's from its follower.
+const childLookupsOf = (services: Services): ChildLookups => ({
+    pendingQuestion: (childId) =>
+        services.linkedChildren.owns(childId) ? services.linkedChildren.pendingQuestion(childId) : pendingQuestionOf(services.conversations, childId),
+    report: (childId) => (services.linkedChildren.owns(childId) ? services.linkedChildren.report(childId) : childReportOf(services.conversations, childId)),
+    landing: (childId) => (services.linkedChildren.owns(childId) ? services.linkedChildren.landing(childId) : childLandingWords(services.agents, childId)),
+    result: (childId) => (services.linkedChildren.owns(childId) ? undefined : childResultOf(services.conversations, childId)),
+});
+
 const createChildrenRoutes = (services: Services) => ({
     /** POST /children/spawn — start a child; answers `{ok:true,id}` the moment it is queued, before any wait for memory. */
     spawn: async (c: Context<AppEnv>): Promise<Response> => {
@@ -197,13 +207,7 @@ const createChildrenRoutes = (services: Services) => ({
             signal: c.req.raw.signal,
         });
         return c.json(
-            workWaitAnswer(result, {
-                pendingQuestion: (childId) =>
-                    services.linkedChildren.owns(childId) ? services.linkedChildren.pendingQuestion(childId) : pendingQuestionOf(services.conversations, childId),
-                report: (childId) => (services.linkedChildren.owns(childId) ? services.linkedChildren.report(childId) : childReportOf(services.conversations, childId)),
-                landing: (childId) =>
-                    services.linkedChildren.owns(childId) ? services.linkedChildren.landing(childId) : childLandingWords(services.agents, childId),
-            }),
+            workWaitAnswer(result, childLookupsOf(services)),
         );
     },
     /** POST /children/send — steer a working child, or run a follow-up turn on a settled one. */

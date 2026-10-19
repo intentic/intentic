@@ -8,7 +8,9 @@ import { type AgentHarness, AgentHarnessSchema, type AgentProvider, AgentProvide
 import { harnessChoosable, loopsOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
-import { type ChildRehome, type ChildSupervisor, spawnedNote } from "./children.js";
+import { type ChildRehome, type ChildSpawnSpec, type ChildSupervisor, spawnedNote } from "./children.js";
+import type { ChildResultDoor } from "./child-records.js";
+import { ResultSchemaSchema, ResultValueSchema, resultValidator } from "./child-result.js";
 import { HALF_A_MOVE } from "./child-words.js";
 import type { SubagentWaitUntil } from "./subagents.js";
 import { type ChildrenWaitAnswer, childrenWaitAnswer, waitForChildren, waitForWork, workWaitAnswer } from "./work-wait.js";
@@ -22,6 +24,9 @@ import { keepBackgroundJob, type KeepOutcome } from "../tools/jobs/background-jo
 const DEFAULT_TIMEOUT_S = 600;
 const MAX_TIMEOUT_S = 1800;
 
+// One tool as the SDK's server takes it.
+export type ServerTool = NonNullable<Parameters<ReturnType<typeof sdk>["createSdkMcpServer"]>[0]["tools"]>[number];
+
 export interface SubagentWaitDeps {
     // The conversation whose children this turn may wait on; a parent supervises only its own.
     readonly conversationId: string | undefined;
@@ -31,6 +36,12 @@ export interface SubagentWaitDeps {
     readonly signal: AbortSignal;
     // The child-agent engine (spawn, steer, answer); absent means the spawn/send/answer tools are not offered.
     readonly children?: ChildSupervisor;
+    // Where this turn hands its result, when it is a spawned child its parent gave a result schema (children.ts
+    // childResultDoor); absent for every other turn, which gets no `result` tool.
+    readonly result?: ChildResultDoor;
+    // More tools for the same server, built by whoever mounts it: the workflow tools over this turn's runs
+    // (agent/subagents/script-run-tools.ts), which reach the child engine from above, so this server never names them.
+    readonly extraTools?: readonly ServerTool[];
     readonly logsDir?: string;
 }
 
@@ -110,6 +121,88 @@ const FALLBACKS_FIELD = z
         "Where it goes by itself, in this order, when its provider refuses it in a way no wait soon answers (an account refused outright, a model off the plan, a spent allowance with no reset or one hours away): it moves to the next one the records do not call spent, in its own worktree, and you are told.",
     );
 
+// A result schema a parent names at spawn: any JSON object here, held to the result subset by the spawn itself
+// (child-result.ts resultSchemaFault), where the refusal can say which keyword is out of bounds.
+const SCHEMA_FIELD = z
+    .looseObject({})
+    .optional()
+    .describe(
+        "A JSON Schema for a structured result you want back besides its report. With it, the subagent gets a `result` tool " +
+            "taking exactly that shape, which refuses a value that does not match, and wait hands the value over as `result` " +
+            "(or says why there is none as `resultError`). It may use type, properties, required, items, enum, const, " +
+            "description, title, minimum, maximum, exclusiveMinimum, exclusiveMaximum, minLength, maxLength, minItems, maxItems, " +
+            "default and additionalProperties (true or false).",
+    );
+
+// The child's own door for its result: the input is the parent's schema itself, so its runtime shows the model the exact
+// shape and the SDK refuses a value that does not match before the handler runs, said back to the model to fix.
+const resultTool = (door: ChildResultDoor) =>
+    sdk().tool(
+        "result",
+        "Hand your parent the structured result it asked for in your task, as `value` matching the schema it gave. Call it " +
+            "once the work is done; a value that does not match is refused with why, so fix it and call again. Calling it " +
+            "again replaces the value. Then end your turn with a short report.",
+        { value: resultValidator(door.schema) },
+        async (args) => {
+            const parsed = ResultValueSchema.safeParse(args.value);
+            if (!parsed.success) {
+                return answer({ ok: false, message: "The value must be JSON." });
+            }
+            const taken = door.take(parsed.data);
+            return answer(
+                "value" in taken
+                    ? { ok: true, note: "Recorded: your parent receives this value with your report. End your turn with a short report." }
+                    : { ok: false, message: `Not recorded, it does not match the schema: ${taken.error}` },
+            );
+        },
+        { annotations: toolAnnotations("write") },
+    );
+
+// The spawn tool's arguments.
+const SPAWN_FIELDS = {
+    prompt: z.string().min(1).describe("The subagent's whole task, self-contained."),
+    description: z.string().max(200).optional().describe("One line naming the task, for the board and the roster."),
+    provider: AgentProviderSchema.describe("Which provider serves it. Required: see the providers tool for what is connected."),
+    model: z
+        .string()
+        .min(1)
+        .describe(
+            "Which of its models, e.g. composer-2.5 on cursor. Required, and it must be one that provider serves: " +
+                "a model name only means anything to the provider that vends it.",
+        ),
+    harness: AgentHarnessSchema.optional().describe(SPAWN_HARNESS_WORDS),
+    effort: z.string().optional().describe("How hard it should think, where the provider offers a choice."),
+    on: z
+        .string()
+        .optional()
+        .describe(
+            'Which machine runs it: a runner\'s name, or "here" to keep it in this sandbox. Leave it out and the fleet ' +
+                "decides, which is what spreads a fan-out over every machine you have connected.",
+        ),
+    fallbacks: FALLBACKS_FIELD,
+    schema: SCHEMA_FIELD,
+};
+type SpawnArgs = z.infer<z.ZodObject<typeof SPAWN_FIELDS>>;
+
+// The spawn the tool's arguments ask for, each knob only where named, or why its result schema is no JSON object.
+const spawnAsked = (args: SpawnArgs): ChildSpawnSpec | { readonly refused: string } => {
+    const schema = args.schema === undefined ? undefined : ResultSchemaSchema.safeParse(args.schema);
+    if (schema !== undefined && !schema.success) {
+        return { refused: "The result schema must be a JSON object: a JSON Schema describing the value you want back." };
+    }
+    return {
+        prompt: args.prompt,
+        provider: args.provider,
+        model: args.model,
+        ...opt("description", args.description),
+        ...opt("harness", args.harness),
+        ...opt("effort", args.effort),
+        ...opt("on", args.on),
+        ...opt("fallbacks", args.fallbacks),
+        ...opt("result", schema?.data === undefined ? undefined : { schema: schema.data }),
+    };
+};
+
 // What the wait tool tells the model it does, in one place outside the server it is mounted on.
 const WAIT_WORDS =
     "Wait until work you started here needs you: a subagent you started, or a command you ran with " +
@@ -151,6 +244,7 @@ const waitOnMany = async (
         pendingQuestion: (childId) => deps.children?.pendingQuestion(childId),
         report: (childId) => reportOf(deps, childId),
         landing: (childId) => deps.children?.landing(childId),
+        result: (childId) => deps.children?.result(childId),
     });
     return many.outcome === "unknown-target" ? { ...said, note: NOTHING_TO_WAIT_FOR } : said;
 };
@@ -205,45 +299,17 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               "provider AND the model: this spends a real allowance and nothing is chosen for you. Call the providers " +
                               "tool for what is connected and what still has room. A provider nobody has connected fails with the " +
                               "words to say so.",
-                          {
-                              prompt: z.string().min(1).describe("The subagent's whole task, self-contained."),
-                              description: z.string().max(200).optional().describe("One line naming the task, for the board and the roster."),
-                              provider: AgentProviderSchema.describe(
-                                  "Which provider serves it. Required: see the providers tool for what is connected.",
-                              ),
-                              model: z
-                                  .string()
-                                  .min(1)
-                                  .describe(
-                                      "Which of its models, e.g. composer-2.5 on cursor. Required, and it must be one that provider serves: " +
-                                          "a model name only means anything to the provider that vends it.",
-                                  ),
-                              harness: AgentHarnessSchema.optional().describe(SPAWN_HARNESS_WORDS),
-                              effort: z.string().optional().describe("How hard it should think, where the provider offers a choice."),
-                              on: z
-                                  .string()
-                                  .optional()
-                                  .describe(
-                                      'Which machine runs it: a runner\'s name, or "here" to keep it in this sandbox. Leave it out and the fleet ' +
-                                          "decides, which is what spreads a fan-out over every machine you have connected.",
-                                  ),
-                              fallbacks: FALLBACKS_FIELD,
-                          },
+                          SPAWN_FIELDS,
                           async (args) => {
                               const children = deps.children;
                               if (children === undefined) {
                                   return answer({ ok: false, message: "This turn cannot spawn agents." });
                               }
-                              const result = await children.spawn({
-                                  prompt: args.prompt,
-                                  provider: args.provider,
-                                  model: args.model,
-                                  ...(args.description !== undefined ? { description: args.description } : {}),
-                                  ...(args.harness !== undefined ? { harness: args.harness } : {}),
-                                  ...(args.effort !== undefined ? { effort: args.effort } : {}),
-                                  ...(args.on !== undefined ? { on: args.on } : {}),
-                                  ...opt("fallbacks", args.fallbacks),
-                              });
+                              const asked = spawnAsked(args);
+                              if ("refused" in asked) {
+                                  return answer({ ok: false, message: asked.refused });
+                              }
+                              const result = await children.spawn(asked);
                               return answer(
                                   result.ok
                                       ? { ok: true, child: result.id, note: spawnedNote(result.id, result.note, result.held === true) }
@@ -375,6 +441,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                             pendingQuestion: (childId) => deps.children?.pendingQuestion(childId),
                             report: (childId) => reportOf(deps, childId),
                             landing: (childId) => deps.children?.landing(childId),
+                            result: (childId) => deps.children?.result(childId),
                         }),
                         ...(result.outcome === "unknown-target" ? { note: NOTHING_TO_WAIT_FOR } : {}),
                     });
@@ -382,6 +449,8 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                 // Moves only which endings this conversation was told, marked as a wait settles, so parallel waits never share one.
                 { annotations: toolAnnotations("read") },
             ),
+            ...(deps.result === undefined ? [] : [resultTool(deps.result)]),
+            ...(deps.extraTools ?? []),
             sdk().tool(
                 "keep",
                 "Leave a command you ran with run_in_background running for the person after your turn ends: a dev server " +

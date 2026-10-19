@@ -30,6 +30,8 @@ import { ensureComposedWorktree } from "../context/conversation-context.js";
 import { settleLandingInBackground, versionMainTree } from "../../conversations/land/version-landed.js";
 import { turnStartIndex } from "../../sessions/turn-transcript.js";
 import { type ChildSupervisor, childSupervisor, isSpawnedChild, spawnDepthOf } from "../subagents/children.js";
+import { childRerunHorizonMs } from "../subagents/child-records.js";
+import { type ScriptRunDoor, scriptRunDoor } from "../subagents/script-runs.js";
 import { withRuntimeSubagents } from "../subagents/runtime-subagents.js";
 import { checkoutDirtyPaths } from "../tools/agent-shell-edits.js";
 import { scanProducedDocuments, withProducedDocuments } from "../tools/produced-documents.js";
@@ -545,6 +547,12 @@ const childrenOf = (services: Services, input: RoutedTurn, cwd: string): ChildSu
         ? undefined
         : childSupervisor(services, { conversationId: input.conversationId, cwd });
 
+// Its workflow runs, on the same terms as its children: a conversation of its own, and no outside wake behind the turn.
+const workflowsOf = (services: Services, input: RoutedTurn, cwd: string): ScriptRunDoor | undefined =>
+    input.conversationId === undefined || input.outsideWake !== undefined
+        ? undefined
+        : scriptRunDoor(services, { conversationId: input.conversationId, cwd });
+
 // Everything a turn resolves before it can be planned: where it runs, the session it resumes and what a fresh one is
 // told, the request every arm builds on, the readings its frames fold into, and the repo sync already under way.
 interface Preflight {
@@ -633,6 +641,7 @@ const preflight = async (
         settings,
         ...opt("resync", worktree?.resync),
         ...opt("children", childrenOf(services, input, localCwd)),
+        ...opt("workflows", workflowsOf(services, input, localCwd)),
     };
     const handoffNotes = [...(summarized?.note === undefined ? [] : [summarized.note]), ...(handoffNote === undefined ? [] : [handoffNote])];
     return {
@@ -871,7 +880,7 @@ const classified = async (services: Services, event: ErrorFrame, turn: TurnState
             attribution: turn.attribution,
             sessionId: readings.sessionId,
             answered: readings.silence.answered,
-            child: input.conversationId !== undefined && isSpawnedChild(services.conversations, input.conversationId),
+            childRerunHorizonMs: childRerunHorizonMs(services.conversations, input.conversationId, await services.sandboxSettings.get()),
             carriedOff: turn.carriedOff,
             door: turn.door,
             remint: turn.remint,

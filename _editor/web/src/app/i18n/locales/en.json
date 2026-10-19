@@ -5936,6 +5936,8 @@
             "subagentsAtOnce": "Subagents at once",
             "subagentsPerConversation": "Subagents per conversation",
             "totalDelegatedAgentsAllowed": "Total delegated agents allowed per conversation.",
+            "waitForReset": "Wait for a reset",
+            "waitForResetHours": "Hours a subagent refused for a spent allowance waits for the reset before it stops. One with fallbacks moves to them after 90 minutes.",
             "whetherInGuardrails": "Whether it may start subagents at all, and when it asks first:"
         },
         "aiAccountSection": {

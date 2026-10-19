@@ -2680,6 +2680,8 @@
             "subagentsAtOnce": "Sous-agents à la fois",
             "subagentsPerConversation": "Sous-agents par conversation",
             "totalDelegatedAgentsAllowed": "Total d'agents délégués autorisés par conversation.",
+            "waitForReset": "Attendre la réinitialisation",
+            "waitForResetHours": "Heures pendant lesquelles un sous-agent refusé faute de quota attend la réinitialisation avant de s'arrêter. Un sous-agent avec des solutions de repli y passe après 90 minutes.",
             "whetherInGuardrails": "S'il peut lancer des sous-agents, et quand il demande d'abord :"
         },
         "aiAccountSection": {

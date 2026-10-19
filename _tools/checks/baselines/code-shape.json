@@ -1563,7 +1563,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/subagents/children.ts": {
-        "count": 1842,
+        "count": 1827,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/subagents/subagent-wait.ts#subagentWaitServer#lines": {
@@ -1671,8 +1671,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/bootstrap/state-registry.ts#stateDocuments#lines": {
-        "count": 123,
-        "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+        "count": 125,
+        "why": "generated, one line per stored document: spawned-children/ and script-runs/ joined it (2026-10-19)"
     },
     "_sandbox/sandbox/src/browser/cast/browser-view.ts#createBrowserViewRoute.<anonymous>#lines": {
         "count": 208,

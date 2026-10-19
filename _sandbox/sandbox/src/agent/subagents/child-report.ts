@@ -1,4 +1,4 @@
-import { childReportPrompt } from "@intentic/sandbox-contract/events/agent-words";
+import { childReportPrompt, type ChildReportFields } from "@intentic/sandbox-contract/events/agent-words";
 import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import type { Logger } from "pino";
 import { parentOfActor } from "../../auth/principal.js";
@@ -30,6 +30,11 @@ export interface ChildReportDeps {
     readonly landingOf: (childId: string) => string | undefined;
     // Whether the child is moving itself onto a fallback (children.ts childMovingOn): the move says its own words.
     readonly movingOn?: (childId: string) => boolean;
+    // For a child spawned with a result schema, what the turn that ended with this closing message handed back
+    // (children.ts childTurnResult); undefined for one spawned without.
+    readonly resultOf?: (childId: string, closing: string) => ChildReportFields["result"];
+    // Whether the child is a workflow run's worker (children.ts isWorker), whose endings its run reads instead.
+    readonly worker?: (childId: string) => boolean;
 }
 
 // Characters of the child's answer a report carries, from the head where the answer is; the rest stays in its chat.
@@ -61,7 +66,8 @@ const parentToTell = (
         parent === undefined ||
         (settled.actor !== undefined && parentOfActor(settled.actor) !== parent) ||
         subagentEndingReported(deps.conversations, settled.conversationId) ||
-        deps.movingOn?.(settled.conversationId) === true
+        deps.movingOn?.(settled.conversationId) === true ||
+        deps.worker?.(settled.conversationId) === true
     ) {
         return undefined;
     }
@@ -95,6 +101,8 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
             report: reportText(settled, settled.failure === undefined ? undefined : await deps.killNote(settled.conversationId, settled.failure)),
             verification: childVerification(deps.conversations, settled.conversationId),
             landing: deps.landingOf(settled.conversationId),
+            // A turn that failed or was stopped hands nothing back, which its ending already says.
+            result: settled.failure === undefined && settled.stopped !== true ? deps.resultOf?.(settled.conversationId, settled.closing) : undefined,
         });
         // Asked again after the awaits above: a wait of the parent's may have taken this ending meanwhile.
         if (subagentEndingReported(deps.conversations, settled.conversationId)) {

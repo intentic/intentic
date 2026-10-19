@@ -5,6 +5,7 @@ import { capacityNoticer } from "../agent/subagents/capacity-reopened.js";
 import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
 import { onAccountReopened } from "../usage/serviceability/state-log.js";
 import { adoptChildTurn, childKillNote, childMovingOn } from "../agent/subagents/children.js";
+import { childTurnResult, isWorker, resultWords } from "../agent/subagents/child-records.js";
 import { createProjectDelivery, type ProjectDeliveryDeps } from "../conversations/land/project-delivery.js";
 import { landHeldForWake } from "../conversations/land/wake-held-land.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
@@ -38,6 +39,8 @@ const childReportDeps = (services: BootPhase["services"], logger: BootPhase["log
     killNote: (childId, failure) => childKillNote(services, childId, failure),
     landingOf: (childId) => childLandingWords(services.agents, childId),
     movingOn: (childId) => childMovingOn(services.conversations, childId),
+    resultOf: (childId, closing) => resultWords(childTurnResult(services.conversations, childId, closing)),
+    worker: (childId) => isWorker(services.conversations, childId),
 });
 
 // A wake disarmed before it fired: the land its conversation's last close skipped for it runs now, if still due.

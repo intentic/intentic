@@ -103,7 +103,15 @@ on each spawn: both are required, and no setting picks them. So "spawn the cheap
   the owner can re-point the start to another model before allowing it.
 - **Subagents at once**, **Subagents per conversation** and **Nesting depth** cap how many; they also bound the
   subagents a runtime starts in-process (Claude Code's own Agent tool), which run inside the parent's turn and
-  which the spawn rule does not cover.
+  which the spawn rule does not cover. A spawn past **Subagents at once** waits as pending and starts by itself when
+  one of the parent's children ends; past **Subagents per conversation** it is refused, a count that survives a
+  restart.
+- **Wait for a reset** is how long a subagent refused for a spent allowance waits for the provider's reset before it
+  goes again by itself (six hours unless changed, 0 for never); one spawned with fallbacks moves to them after 90
+  minutes instead.
+- A **workflow** (the `workflow` tool beside `spawn`) is a script the agent writes to run many subagents for it: each
+  `agent()` call names its provider and model, or takes the run's, and goes through the same rules and caps as a
+  spawn. Its finished calls are kept, so a restart or a `resume` of an edited script does not pay for them again.
 - A persona with **Delegate** off can do neither: the in-process agent tools are removed and it cannot spawn.
 
 Which model actually ran each turn is recorded: `mcp__diagnostics__turns`.

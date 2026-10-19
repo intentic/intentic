@@ -2690,6 +2690,8 @@
             "subagentsAtOnce": "Subagentes a la vez",
             "subagentsPerConversation": "Subagentes por conversación",
             "totalDelegatedAgentsAllowed": "Total de agentes delegados permitidos por conversación.",
+            "waitForReset": "Esperar al reinicio",
+            "waitForResetHours": "Horas que un subagente rechazado por cuota agotada espera al reinicio antes de detenerse. Uno con alternativas pasa a ellas a los 90 minutos.",
             "whetherInGuardrails": "Si puede lanzar subagentes, y cuándo pregunta antes:"
         },
         "aiAccountSection": {

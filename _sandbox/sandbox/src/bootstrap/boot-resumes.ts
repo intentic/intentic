@@ -1,5 +1,7 @@
 import { fileRestartResume } from "../system/restart-resume.js";
 import { settleRestartPauses } from "../agent/subagents/paused-children.js";
+import { restoreSpawnedChildren, settleRestoredChildren } from "../agent/subagents/child-restore.js";
+import { resumeScriptRuns } from "../agent/subagents/script-runs.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "../agent/run/turn/turn-resume.js";
 import { type RestartResume, restartResume } from "../agent/run/turn/restart-resume-policy.js";
 import { restoreLimitHolds } from "../conversations/actor/limit-hold.js";
@@ -20,11 +22,14 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
     } catch (error) {
         logger.error({ err: error }, "held turns a spent allowance stranded could not be put back, their cards wait for a press");
     }
+    // The spawned children their parents supervise, read back before anything below can start a turn on one: a re-run
+    // the scheduler fires or a turn the restart cut is adopted only where its record is back (agent/subagents/children.ts).
+    const restoredChildren = restoreSpawnedChildren(services);
     // A spent allowance, a provider outage or a turn that stopped short re-run only on the conversation's own policy.
     const turnResume = createTurnResumeScheduler(services);
     shutdown.push(() => turnResume.stop());
     if (role.roots) {
-        turnResume.start();
+        void restoredChildren.then(() => turnResume.start());
     }
 
     // Detached: an interrupted turn is a whole turn, an interrupted automation fire a whole fire, and a stranded loop or
@@ -33,8 +38,8 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
     // (agent/run/turn/restart-resume-policy.ts): the owner's ask for this restart, autoResumeOnRestart, and whether this
     // boot is one of a restart storm, which resumes nothing (system/boot/boot-history.ts, 2026-10-05).
     const policy = bootResumePolicy({ logger, services });
-    void policy
-        .then((resume) => resumeInterruptedTurns(services, Date.now(), resume))
+    void Promise.all([policy, restoredChildren])
+        .then(([resume]) => resumeInterruptedTurns(services, Date.now(), resume))
         .catch((error: unknown) => logger.error({ err: error }, "interrupted turns could not be resumed, they stand on the record as interrupted"))
         .then(() => {
             for (const conversationId of services.agents.ids()) {
@@ -43,9 +48,7 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
                 }
             }
         })
-        // A child paused on a re-run the restart dropped stays stopped: its parent is told, once the turns the restart
-        // cut are running again, since only a parent with a live turn can be (agent/subagents/paused-children.ts).
-        .then(() => (role.roots ? settleRestartPauses(services) : undefined));
+        .then(() => settleCutChildren({ role, services }, restoredChildren));
     void policy
         .then((resume) => resumeInterruptedFires(services, Date.now(), resume))
         .catch((error: unknown) =>
@@ -88,8 +91,36 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
         logger.warn({ err: error }, "background jobs could not be taken back, a still-running one may lose its terminal");
     }
 
+    void resumeCutRuns({ role, services }, policy, restoredChildren);
+
     // The coordinator reserves workflow-owned conversations before generic loop recovery sees the rest.
     void policy.then(async (resume) => resumeWorkflowExecution(services, resume)).catch((error: unknown) => logger.error({ err: error }, "loops and workflow runs could not be resumed"));
+};
+
+// Once the turns the restart cut are running again, since only a parent with a live turn can hear it: a child paused on a
+// re-run the restart dropped stays stopped (agent/subagents/paused-children.ts), and so does one whose turn the restart
+// cut and that did not come back, said on its row and to its parent (agent/subagents/children.ts). Neither throws.
+const settleCutChildren = async ({ role, services }: Pick<BootPhase, "role" | "services">, restored: Promise<readonly string[]>): Promise<void> => {
+    if (!role.roots) {
+        return;
+    }
+    await settleRestartPauses(services);
+    await settleRestoredChildren(services, await restored);
+};
+
+// Workflow runs a restart cut, once their workers' records are back (agent/subagents/script-runs.ts): each goes on where
+// it was, its finished calls handed back and its workers still working waited on, as the restart's answer says. Never
+// throws.
+const resumeCutRuns = async (
+    { role, services }: Pick<BootPhase, "role" | "services">,
+    policy: Promise<RestartResume>,
+    restored: Promise<readonly string[]>,
+): Promise<void> => {
+    if (!role.roots) {
+        return;
+    }
+    const [resume] = await Promise.all([policy, restored]);
+    await resumeScriptRuns(services, resume);
 };
 
 // The one answer this boot gives every resume pass: the owner's ask for this restart, autoResumeOnRestart, and whether

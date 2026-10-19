@@ -2,6 +2,7 @@ import { anySignal, whenAborted } from "@intentic/base/async";
 import { DisposableStore } from "@intentic/base/lifecycle";
 import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
 import type { PendingChildCard } from "./children.js";
+import type { ResultValue } from "./child-result.js";
 import { whenFileAppears } from "../tools/file-appears.js";
 import { type BackgroundJob, backgroundJobOf, jobFinished, jobInputWait, type JobReport, jobReport, jobStatusPath, runningJobsOf } from "../tools/jobs/background-jobs.js";
 import { followRun } from "../tools/jobs/input-wait-follow.js";
@@ -193,8 +194,9 @@ export const waitForChildren = async (
     }
 };
 
-/** One child as a wait on several hands it over: its row, its whole report and where its work went, once it ended. */
-export type WaitedChild = SubagentSession & { readonly report?: string; readonly landing?: string };
+/** One child as a wait on several hands it over: its row, its whole report and where its work went, once it ended, and
+ *  its result where it was spawned with a schema. */
+export type WaitedChild = SubagentSession & { readonly report?: string; readonly landing?: string; readonly result?: ResultValue; readonly resultError?: string };
 
 /** What a wait on several answers. */
 export interface ChildrenWaitAnswer {
@@ -208,7 +210,12 @@ export interface ChildrenWaitAnswer {
 
 const waitedChild = (agent: SubagentSession, lookups: ChildLookups): WaitedChild => {
     const ended = ENDED.has(agent.status);
-    return { ...agent, ...opt("report", ended ? lookups.report(agent.id) : undefined), ...opt("landing", ended ? lookups.landing(agent.id) : undefined) };
+    return {
+        ...agent,
+        ...opt("report", ended ? lookups.report(agent.id) : undefined),
+        ...opt("landing", ended ? lookups.landing(agent.id) : undefined),
+        ...resultFields(lookups, agent),
+    };
 };
 
 /** The answer a wait on several gives: each child with its whole report and where its work went, once it has ended. */
@@ -268,7 +275,24 @@ export interface ChildLookups {
     readonly report: (childId: string) => string | undefined;
     // Where its work went: into the waiter's own checkout, or held off it by a clash (child-lands.ts childLandingWords).
     readonly landing: (childId: string) => string | undefined;
+    // What its last turn handed back against the schema it was spawned with (child-result.ts); undefined without one.
+    readonly result?: (childId: string) => { readonly value: ResultValue } | { readonly error: string } | undefined;
 }
+
+/** A child's result as a wait hands it over: `result` the value, or `resultError` why there is none. */
+export interface ResultFields {
+    readonly result?: ResultValue;
+    readonly resultError?: string;
+}
+
+// Only for a child that completed and was spawned with a schema; every other ending hands nothing back.
+const resultFields = (lookups: ChildLookups, agent: SubagentSession | undefined): ResultFields => {
+    const result = agent?.status === "completed" ? lookups.result?.(agent.id) : undefined;
+    if (result === undefined) {
+        return {};
+    }
+    return "value" in result ? { result: result.value } : { resultError: result.error };
+};
 
 // A child whose turn has ended (or paused for the sandbox's re-run) has a report to hand over whole.
 const ENDED: ReadonlySet<string> = new Set(["completed", "failed", "killed", "paused"]);
@@ -284,6 +308,7 @@ export const workWaitAnswer = (result: WorkWaitOutcome, lookups: ChildLookups): 
     return {
         outcome: result.outcome,
         ...(agent === undefined ? {} : { agent }),
+        ...resultFields(lookups, agent),
         ...(result.job === undefined ? {} : { job: result.job }),
         ...(question === undefined ? {} : { question }),
         ...opt("report", report),

@@ -6,12 +6,13 @@ import {
     classifyFailure,
     ERROR_MESSAGE_CHARS,
     type ErrorFrame,
-    FAR_RERUN_MS,
+    childRerunAt,
     type FailureContext,
     type FailureQueries,
     type FailureWrite,
     outageFrame,
 } from "./classify-failure.js";
+import { FAR_RERUN_MS } from "../../subagents/child-records.js";
 
 const NOW = 1_800_000_000_000;
 // Whatever the turn is attributed to rides its refusal, the actor included.
@@ -148,9 +149,9 @@ describe("a spent allowance", () => {
     });
 
     // 2026-10-17: a child was booked to re-run against a quota reopening next week, its parent told not to hand the task on.
-    test("a child's reset far off is offered, never booked, and a near one is booked as before", async () => {
+    test("a child's reset past its horizon is offered, never booked, and a near one is booked a little after it", async () => {
         const far = Math.ceil(NOW / 1000) + FAR_RERUN_MS / 1000 + 600;
-        const offered = await classifyFailure(limit, context({ child: true, limitReset: far }), answering({ way, policy: "resend" }));
+        const offered = await classifyFailure(limit, context({ childRerunHorizonMs: FAR_RERUN_MS, limitReset: far }), answering({ way, policy: "resend" }));
         // Held for a press, as a reset nothing names is: never on a clock.
         expect(offered.frame).toMatchObject({ resetsAt: far, held: { ran: true } });
         expect(offered.frame.autoResume).toBeUndefined();
@@ -160,9 +161,27 @@ describe("a spent allowance", () => {
         expect(offered.held).toMatchObject({ reason: "limit" });
         expect(offered.held?.reopensAt).toBeUndefined();
         const near = Math.ceil(NOW / 1000) + 600;
-        const booked = await classifyFailure(limit, context({ child: true, limitReset: near }), answering({ way, policy: "resend" }));
+        const booked = await classifyFailure(limit, context({ childRerunHorizonMs: FAR_RERUN_MS, limitReset: near }), answering({ way, policy: "resend" }));
         expect(booked.frame).toMatchObject({ autoResume: "scheduled", nextAt: near });
-        expect(booked.held).toMatchObject({ reason: "limit", reopensAt: near });
+        expect(booked.held).toMatchObject({ reason: "limit", reopensAt: childRerunAt(near, "c-1") });
+    });
+
+    // 2026-10-18: every child behind a five-hour window with more than ninety minutes left ended instead of waiting it out.
+    test("a child under a six-hour horizon waits out a reset three hours off", async () => {
+        const reset = Math.ceil(NOW / 1000) + 3 * 3_600;
+        const booked = await classifyFailure(limit, context({ childRerunHorizonMs: 6 * 3_600_000, limitReset: reset }), answering({ way, policy: "resend" }));
+        expect(booked.frame).toMatchObject({ autoResume: "scheduled", nextAt: reset });
+        expect(booked.held?.reopensAt).toBe(childRerunAt(reset, "c-1"));
+    });
+
+    test("a child's re-run goes a little after the reset, siblings spread apart by their ids", () => {
+        expect(childRerunAt(1_000, "sub-a")).toBe(1_000 + 15 + 4);
+        const spread = new Set(["sub-a", "sub-b", "sub-c", "sub-d", "sub-e"].map((id) => childRerunAt(1_000, id)));
+        expect(spread.size).toBeGreaterThan(1);
+        for (const at of spread) {
+            expect(at).toBeGreaterThanOrEqual(1_015);
+            expect(at).toBeLessThanOrEqual(1_045);
+        }
     });
 
     // 2026-10-17: Codex's team credit ran out while its weekly pool read 57%; no reading may answer that refusal.

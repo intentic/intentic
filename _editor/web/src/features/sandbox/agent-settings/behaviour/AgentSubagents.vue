@@ -7,7 +7,8 @@ import { commitCount } from "../models/numberInputs";
 import { postureOf } from "../../guardrails/spawnPosture";
 import { useT } from "@intentic/ui/i18n";
 
-// Three ceilings over one activity, starting subagents: how wide one fan-out is, the lifetime budget per conversation,
+// Three ceilings over one activity, starting subagents, and how long a subagent refused for a spent allowance waits for
+// its reset before it stops instead (childRerunHorizonHours): how wide one fan-out is, the lifetime budget per conversation,
 // and how deep delegation nests. They bound every subagent, spawned or started in-process by the runtime's own Agent
 // tool. Raising only the width just hits the per-conversation ceiling later. Bounds mirror SandboxSettingsSchema so the
 // box never accepts a number the save would reject. Whether it may spawn one at all (a conversation of its own, on any
@@ -20,6 +21,7 @@ const { settings, patch, refusal } = useSandboxSettings();
 const AT_ONCE = { min: 1, max: 200 };
 const PER_TURN = { min: 1, max: 2000 };
 const DEPTH = { min: 1, max: 10 };
+const RERUN_HOURS = { min: 0, max: 24 };
 
 // Whether spawning is refused, which leaves the ceilings below bounding only the subagents a runtime starts itself.
 const spawnDenied = computed(() => postureOf(settings.value?.actionRules ?? {}) === `deny`);
@@ -94,6 +96,26 @@ const GUARDRAILS = { name: `sandbox`, params: { tab: `guardrails` } } as const;
                     :class="ui.input({ size: `sm` }, 'w-20 text-right')"
                     @change="
                         (event: Event) => commitCount(event, settings?.subagentDepth ?? 3, DEPTH, (subagentDepth: number) => patch({ subagentDepth }))
+                    "
+                />
+            </template>
+        </Row>
+        <!-- Nobody watches a subagent, so a spent allowance either waits for the reset by itself or ends and says where else the work can go. -->
+        <Row icon="clock" :title="t(`sandbox.agentSubagents.waitForReset`)" :description="t(`sandbox.agentSubagents.waitForResetHours`)">
+            <template #control>
+                <input
+                    type="number"
+                    :min="RERUN_HOURS.min"
+                    :max="RERUN_HOURS.max"
+                    :value="settings?.childRerunHorizonHours ?? 6"
+                    :disabled="settings === undefined"
+                    :aria-label="t(`sandbox.agentSubagents.waitForReset`)"
+                    :class="ui.input({ size: `sm` }, 'w-20 text-right')"
+                    @change="
+                        (event: Event) =>
+                            commitCount(event, settings?.childRerunHorizonHours ?? 6, RERUN_HOURS, (childRerunHorizonHours: number) =>
+                                patch({ childRerunHorizonHours }),
+                            )
                     "
                 />
             </template>

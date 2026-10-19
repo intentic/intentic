@@ -597,6 +597,11 @@ export const SandboxSettingsSchema = z.object({
         .max(10)
         .default(3)
         .describe("How many levels deep the delegation may go, since a subagent can start subagents of its own."),
+    // How far off a reset a spawned child's spent turn is booked to re-run by itself (classify-failure.ts); one with fallbacks
+    // keeps 90 minutes. 2026-10-18: was a fixed 90 minutes, which ended every child behind a five-hour window.
+    childRerunHorizonHours: z.number().int().min(0).max(24).default(6).describe(
+        "How long a subagent refused for a spent allowance waits for the provider's reset before it goes again by itself. Past it, or at 0, it stops and its parent hears where else the work can go. One spawned with fallbacks waits at most 90 minutes and then moves to them.",
+    ),
     // Width again, for a team-chat automation rather than a turn: each thread a message lands in is a conversation of
     // its own, and threads of one automation are worked on side by side up to this many (automations/scheduler.ts in
     // the daemon); one more waits, told it is queued, until a slot frees. Read per fire, so a change holds from the next

@@ -25,6 +25,14 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // The tasks this sandbox's conversations handed to linked sandboxes (links/linked-children.ts), followed until they
     // settle: part of the conversations' own record, so it goes where they go.
     { path: "links/linked-children.json", portability: "carry" },
+    // One file per agent a conversation spawned (agent/subagents/spawned-children.ts): what its parent supervises it by
+    // (its run, session, last report and result), read back at boot so a restart does not orphan it. Part of the
+    // conversations' own record, so it goes where they go.
+    { path: "spawned-children/", portability: "carry" },
+    // One file per workflow run a conversation started (agent/script-runs/script-runs.ts): its script, its calls and what
+    // each handed back, so a restart picks it up where it was and a later run can resume from its finished calls. Part of
+    // the conversations' own record, so it goes where they go.
+    { path: "script-runs/", portability: "carry" },
     // The long tool outputs those transcripts name rather than hold, stored once by content for every record naming
     // them; a transcript without them keeps only each output's start.
     { path: "blobs/", portability: "carry" },

@@ -5470,6 +5470,8 @@
             "subagentsAtOnce": "Podagentów naraz",
             "subagentsPerConversation": "Podagentów na rozmowę",
             "totalDelegatedAgentsAllowed": "Łączna liczba delegowanych agentów dozwolona na rozmowę.",
+            "waitForReset": "Czekaj na odnowienie",
+            "waitForResetHours": "Ile godzin podagent odrzucony z powodu wyczerpanego limitu czeka na odnowienie, zanim się zatrzyma. Podagent z zapasowymi modelami przechodzi na nie po 90 minutach.",
             "whetherInGuardrails": "Czy w ogóle może uruchamiać podagenty i kiedy najpierw pyta:"
         },
         "aiAccountSection": {

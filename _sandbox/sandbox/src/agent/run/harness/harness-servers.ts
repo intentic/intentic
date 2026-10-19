@@ -18,6 +18,8 @@ import { createDepsServer } from "../../../workspace/deps/deps-tools.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import type { TurnTools } from "../../providers/agent-request.js";
 import { subagentWaitServer } from "../../subagents/subagent-wait.js";
+import { childResultDoor } from "../../subagents/child-records.js";
+import { workflowTools } from "../../subagents/script-run-tools.js";
 import type { SecretAccess, SecretLane } from "../../../secrets/secret-access.js";
 import { watchServer } from "../../verification/watch-server.js";
 import type { WatchPlacement } from "../../verification/watchers.js";
@@ -246,6 +248,9 @@ export const subagentsServerFor = (deps: HarnessServersDeps, { context, persona 
         conversations: deps.conversations,
         signal: context.base.signal,
         ...opt("children", context.children !== undefined && mayDelegate(persona) ? context.children : undefined),
+        ...opt("extraTools", context.workflows !== undefined && mayDelegate(persona) ? workflowTools(context.workflows, context.base.signal) : undefined),
+        // A spawned child its parent gave a result schema hands its value back here, whatever its persona's shelves.
+        ...opt("result", childResultDoor(deps, context.base.spec.conversationId)),
     });
 
 // Withheld without shell power or a conversation to wake.

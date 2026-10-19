@@ -187,7 +187,7 @@ export interface SubagentTurn {
     subagentsDir: string | undefined;
 }
 
-const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partial<SubagentRecord>): SubagentRecord => {
+export const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partial<SubagentRecord>): SubagentRecord => {
     const now = Date.now();
     const actors = turn.conversations;
     sweep(actors);

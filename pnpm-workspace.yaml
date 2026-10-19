@@ -255,6 +255,7 @@ catalog:
   "@hono/otel": 1.2.0
   "@huggingface/hub": 2.17.5
   "@huggingface/transformers": 4.3.0
+  "@jitl/quickjs-singlefile-cjs-release-sync": 0.32.0
   # Meta's MSP client for Muse Code (runtimes/muse in the daemon). MIT, zero runtime deps, and versioned in lockstep
   # with the Muse Code release it speaks to: engines.json blesses the matching CLI build (1.4.6-R…), and
   # _tools/scripts/engines/engine-pins.mjs reads this line as the version it tracks.
@@ -409,6 +410,7 @@ catalog:
   prettier: 3.9.9
   primevue: 4.5.5
   prisma: 7.10.0
+  quickjs-emscripten-core: 0.32.0
   read-excel-file: 9.3.10
   semantic-release: 25.0.9
   semver: 7.8.5

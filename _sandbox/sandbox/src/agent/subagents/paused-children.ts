@@ -7,6 +7,12 @@ import type { Services } from "../../composition.js";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { openDocument } from "../../store/open-document.js";
 import { type ChildNewsDeps, sayToParent } from "../../conversations/land/child-lands.js";
+import { liveRunOf, turnRunOf } from "../../conversations/actor/conversation-holdings.js";
+import { CHILDREN, keepChild, settleChild } from "./child-records.js";
+import { taskLine } from "./child-spec.js";
+import { noRerun } from "./child-words.js";
+import type { ChildRecord } from "./children.js";
+import { noteSpawnedChild } from "./subagents.js";
 
 // A paused child's end check, across a restart. A spawned child whose turn ended on a wall the sandbox re-runs it past by
 // itself (a spent allowance, a turn that stopped short) is paused, not finished, and its parent was told not to send the
@@ -177,4 +183,56 @@ export const settleRestartPauses = async (deps: RestartPauseDeps): Promise<void>
     } catch (error) {
         deps.logger.warn({ err: error }, "subagents: the pauses a restart cut could not be settled, their parents are not told");
     }
+};
+
+// How often a paused child looks whether the re-run it waits for is still coming, and how many looks in a row may find
+// it gone before the pause ends as failed; two, since a re-run firing is a moment with no hold and no run yet.
+const PAUSE_LOOK_MS = 15_000;
+const PAUSE_MISSES = 2;
+
+/**
+ * Ends a child's pause, whatever ends it: its re-run starting, a message from its parent, a cancel (its parent's, or its
+ * family's as a parent leaves), or the re-run lapsing. Struck off the record a restart reads too, so the next boot does
+ * not tell its parent about a pause that already ended.
+ */
+export const endPause = (kid: ChildRecord): void => {
+    if (kid.paused !== undefined) {
+        clearInterval(kid.paused.look);
+        kid.paused.unrecord();
+        kid.paused = undefined;
+    }
+};
+
+// A turn that ended on a wall the sandbox re-runs it past by itself is paused, not finished: its row stays live so its
+// parent's wait keeps covering it, says when the re-run comes and how to stop it, and ends as failed if it never does.
+// Written down while it stands, since a restart clears the booking and this look with it (above).
+export const pauseChild = (services: Services, childId: string, parent: string, kid: ChildRecord, failure: string, error: string): void => {
+    endPause(kid);
+    noteSpawnedChild(services.conversations, childId, { status: "paused", summary: `Paused, not finished. ${error}`, error });
+    const ledger = filePausedChildren(services.config.historyRoot, services.logger);
+    void ledger.note(childId, { parent, failure }, Date.now());
+    let misses = 0;
+    const look = setInterval(() => {
+        // Its record went with a dispose (its own conversation's, or its parent's): nobody is left to tell. The pause
+        // itself stands, for the family's cancel that follows a parent's discard to find and end (cancelFamily).
+        if (kid.paused?.look !== look || services.conversations.holdings(CHILDREN).get(childId) !== kid) {
+            clearInterval(look);
+            return;
+        }
+        const held = services.conversations.state(childId)?.resume.held;
+        const gone = liveRunOf(services.conversations, childId) === undefined && (held === undefined || held.fired);
+        misses = gone ? misses + 1 : 0;
+        if (misses < PAUSE_MISSES) {
+            return;
+        }
+        const ranElsewhere = turnRunOf(services.conversations, childId)?.id !== kid.paused.run;
+        endPause(kid);
+        const lapsed = `${failure} ${noRerun(ranElsewhere)}`;
+        settleChild(services.conversations, childId, { status: "failed", report: kid.report ?? "", error: lapsed });
+        keepChild(services, childId);
+        void sayToParent(services, parent, `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") stays stopped: ${lapsed}`);
+    }, PAUSE_LOOK_MS);
+    look.unref();
+    kid.paused = { failure, run: turnRunOf(services.conversations, childId)?.id, look, unrecord: () => void ledger.forget([childId]) };
+    keepChild(services, childId);
 };

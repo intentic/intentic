@@ -25,6 +25,7 @@ import type { SteeringQueue } from "../checkpoints/agent-steering.js";
 import type { SearchTool } from "../prompt/guidance.js";
 import type { PromptTrim } from "../prompt/system-prompt.js";
 import type { ChildSupervisor } from "../subagents/children.js";
+import type { ChildResultDoor } from "../subagents/child-records.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import type { DirtyFiles } from "../tools/agent-shell-edits.js";
 import type { AgentTool } from "../tools/agent-tools.js";
@@ -299,6 +300,9 @@ export interface TurnHooks {
     readonly resync?: () => Promise<AgentEvent | undefined>;
     // Supervision surface for runtimes that mount child-agent tools as their own, not through the harness's SDK.
     readonly children?: ChildSupervisor;
+    // Where a spawned child its parent gave a result schema hands its value, for runtimes that mount the `result` tool as
+    // their own rather than through the daemon's MCP door (children.ts childResultDoor).
+    readonly result?: ChildResultDoor;
     // The late half of the daemon's own tools served through the MCP door (runtimes/daemon-tools/daemon-servers.ts): the loop
     // attaches its event push, watchdog hold and command gate here when it starts. Absent where none were mounted.
     readonly relay?: TurnRelay;

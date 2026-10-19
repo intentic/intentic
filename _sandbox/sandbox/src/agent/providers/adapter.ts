@@ -8,6 +8,7 @@ import type { SteeringQueue } from "../checkpoints/agent-steering.js";
 import type { TurnTrim } from "../prompt/window/context-trim.js";
 import { opt } from "../../opt.js";
 import type { ChildSupervisor } from "../subagents/children.js";
+import type { ScriptRunDoor } from "../subagents/script-runs.js";
 import type { AgentRequest, TurnBase, TurnCredential, TurnSpec } from "./agent-request.js";
 import { assertAgentExecution, type AgentExecutionContext } from "../../workload/agent-execution.js";
 
@@ -120,6 +121,8 @@ export interface TurnContext {
     // Child-agent supervision, injected by agent.routes like `resync`; absent for a conversationless turn or a focused
     // caller with no route.
     readonly children?: ChildSupervisor;
+    // Workflow runs this conversation may start and follow (script-runs.ts), beside its children and on the same terms.
+    readonly workflows?: ScriptRunDoor;
 }
 
 // One runtime's implementation of the seam. `R` is pinned per adapter so the table can map runtime to adapter without a
