@@ -22,6 +22,8 @@ export interface TokenSource<Token, Request, Minted> {
 // on the view opened again.
 export function useMintedTokens<Token, Request, Minted>(source: TokenSource<Token, Request, Minted>) {
     const tokens = shallowRef<readonly Token[]>([]);
+    const initialLoading = shallowRef(true);
+    const loading = shallowRef(true);
     const kind = source.key ?? `tokens/minted`;
     const minting = useOperation<Minted>(() => (source.owner === undefined ? kind : `${kind}/${String(source.owner())}`));
     // The last mint's raw value, never refetchable.
@@ -32,11 +34,15 @@ export function useMintedTokens<Token, Request, Minted>(source: TokenSource<Toke
 
     // A list that didn't load is said, not shown as "no tokens": a live token nobody can see is one nobody revokes.
     const refresh = async (): Promise<void> => {
+        loading.value = true;
         try {
             tokens.value = await source.list();
         } catch (caught) {
             tokens.value = [];
             listNotice.value ??= noticeFrom(caught, t(`common.useMintedTokens.couldntLoad`));
+        } finally {
+            loading.value = false;
+            initialLoading.value = false;
         }
     };
 
@@ -44,6 +50,7 @@ export function useMintedTokens<Token, Request, Minted>(source: TokenSource<Toke
         source.owner ?? (() => undefined),
         () => {
             listNotice.value = undefined;
+            initialLoading.value = true;
             void refresh();
         },
         { immediate: true },
@@ -84,5 +91,5 @@ export function useMintedTokens<Token, Request, Minted>(source: TokenSource<Toke
         tokens.value = live;
     };
 
-    return { tokens, minted, minting: minting.busy, notice, mint, forgetMinted, revoke };
+    return { tokens, minted, minting: minting.busy, notice, mint, forgetMinted, revoke, loading, initialLoading };
 }

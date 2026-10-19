@@ -5174,6 +5174,7 @@
         "settingsTokens": {
             "labelEGStorefrontSandbox": "Bezeichnung (z. B. Storefront-Sandbox)",
             "mintToken": "Token erzeugen",
+            "readingTokens": "Token werden gelesen…",
             "shownOnceCopyNow": "Wird nur einmal angezeigt. Kopiere ihn jetzt: gespeichert wird nur sein Hashwert.",
             "whatProvisioningTokensAre": "Mit einem Bereitstellungs-Token kann eine deiner Sandboxes Sandboxes in diesem Konto anlegen. Füge ihn in die Fähigkeit „Sandbox-Flotte“ jener Sandbox ein; jede Sandbox, die ihr Agent anlegt, fragt dich vorher trotzdem im Chat.",
             "whereItGoes": "Wohin er gehört",

@@ -1,4 +1,4 @@
-import { effectScope, type EffectScope } from "vue";
+import { effectScope, ref, type EffectScope } from "vue";
 import { type TokenSource, useMintedTokens } from "./useMintedTokens";
 import { forgetOperations } from "./operations";
 
@@ -86,5 +86,80 @@ describe(`useMintedTokens`, () => {
         kept?.forgetMinted();
         expect(kept?.minted.value).toBeUndefined();
         third.stop();
+    });
+
+    it(`exposes an initial loading state while the first list query is out`, async () => {
+        let finishList: (tokens: readonly string[]) => void = () => {};
+        const source: TokenSource<string, never, string> = {
+            ...refusing,
+            list: () => new Promise((resolve) => {
+                finishList = resolve;
+            }),
+        };
+        const scope = effectScope();
+        const minted = scope.run(() => useMintedTokens(source));
+        if (minted === undefined) {
+            throw new Error(`the scope did not run`);
+        }
+        expect(minted.initialLoading.value).toBe(true);
+        expect(minted.loading.value).toBe(true);
+        expect(minted.tokens.value).toEqual([]);
+
+        finishList([`token-1`]);
+        await settled();
+
+        expect(minted.initialLoading.value).toBe(false);
+        expect(minted.loading.value).toBe(false);
+        expect(minted.tokens.value).toEqual([`token-1`]);
+        scope.stop();
+    });
+
+    it(`clears the initial loading state even when the list query rejects`, async () => {
+        let rejectList: (err: Error) => void = () => {};
+        const source: TokenSource<string, never, string> = {
+            ...refusing,
+            list: () => new Promise((_, reject) => {
+                rejectList = reject;
+            }),
+        };
+        const scope = effectScope();
+        const minted = scope.run(() => useMintedTokens(source));
+        if (minted === undefined) {
+            throw new Error(`the scope did not run`);
+        }
+        expect(minted.initialLoading.value).toBe(true);
+
+        rejectList(new Error(`failed`));
+        await settled();
+
+        expect(minted.initialLoading.value).toBe(false);
+        expect(minted.notice.value?.tone).toBe(`danger`);
+        scope.stop();
+    });
+
+    it(`resets initial loading when the owner changes`, async () => {
+        const owner = ref(`user-1`);
+        let finishList: (tokens: readonly string[]) => void = () => {};
+        const source: TokenSource<string, never, string> = {
+            ...refusing,
+            owner: () => owner.value,
+            list: () => new Promise((resolve) => {
+                finishList = resolve;
+            }),
+        };
+        const scope = effectScope();
+        const minted = scope.run(() => useMintedTokens(source));
+        if (minted === undefined) {
+            throw new Error(`the scope did not run`);
+        }
+        expect(minted.initialLoading.value).toBe(true);
+        finishList([`token-1`]);
+        await settled();
+        expect(minted.initialLoading.value).toBe(false);
+
+        owner.value = `user-2`;
+        await settled();
+        expect(minted.initialLoading.value).toBe(true);
+        scope.stop();
     });
 });

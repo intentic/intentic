@@ -1,6 +1,19 @@
 <script setup lang="ts">
 import type { ApiToken } from "@intentic/api-contract";
-import { Button, Code, CopyButton, Notice, Row, RowGroup, RowNote, ui } from "@intentic/ui";
+import {
+    Button,
+    Code,
+    CopyButton,
+    Notice,
+    Row,
+    RowGroup,
+    RowNote,
+    SkeletonRows,
+    SkeletonSnapshot,
+    ui,
+    useLoadingReveal,
+    vSkeletonSource,
+} from "@intentic/ui";
 import { formatDate, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
 import { apiClient } from "../../lib/useApi";
@@ -13,7 +26,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { tokens, minted, minting, notice, mint, revoke } = useMintedTokens({
+const { tokens, minted, minting, notice, mint, revoke, initialLoading } = useMintedTokens({
     list: async () => (await apiClient.token.list()).tokens,
     mint: async (label: string) => {
         const named = label.trim();
@@ -24,6 +37,11 @@ const { tokens, minted, minting, notice, mint, revoke } = useMintedTokens({
     // The account's, so a token minted from one sandbox's settings is still there from another's.
     key: `account/tokens/minted`,
 });
+
+const outline = useLoadingReveal(
+    initialLoading,
+    computed(() => `settings.tokens`),
+);
 
 const label = ref(``);
 
@@ -72,11 +90,21 @@ const pasteSnippet = computed(() => t(`settings.settingsTokens.pastePath`));
 <template>
     <div class="flex flex-col gap-6">
         <RowGroup :label="t(`shared.apiTokens`)">
-            <Row v-for="token in tokens" :key="token.id" icon="key" :title="token.label" :description="describe(token)">
-                <template #control>
-                    <Button :label="t(`ui.action.revoke`)" size="small" tier="quiet" tone="danger" @click="revoke(token.id)" />
-                </template>
-            </Row>
+            <!-- Loading placeholder: drawn as the list last looked, or until then placeholder rows -->
+            <SkeletonSnapshot v-if="outline" of="settings.tokens" :label="t(`settings.settingsTokens.readingTokens`)">
+                <div role="status" aria-busy="true" class="divide-y divide-line-subtle">
+                    <span class="sr-only">{{ t(`settings.settingsTokens.readingTokens`) }}</span>
+                    <SkeletonRows :rows="2" description control />
+                </div>
+            </SkeletonSnapshot>
+            <!-- Settled list of tokens, captured for return visits -->
+            <div v-else-if="tokens.length > 0" v-skeleton-source="`settings.tokens`" class="divide-y divide-line-subtle">
+                <Row v-for="token in tokens" :key="token.id" icon="key" :title="token.label" :description="describe(token)">
+                    <template #control>
+                        <Button :label="t(`ui.action.revoke`)" size="small" tier="quiet" tone="danger" @click="revoke(token.id)" />
+                    </template>
+                </Row>
+            </div>
 
             <RowNote variant="block">
                 <div class="flex flex-col gap-3">

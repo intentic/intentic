@@ -9686,6 +9686,7 @@
             "minted": "{scope} · utworzony {date}",
             "neverUsed": "jeszcze nieużyty",
             "pastePath": "Możliwości → Flota sandboxów → Provisioning token",
+            "readingTokens": "Odczytywanie tokenów…",
             "shownOnceCopyNow": "Pokazywany raz. Skopiuj go teraz: przechowywany jest tylko jego skrót.",
             "used": "użyty {ago}",
             "whatProvisioningTokensAre": "Token provisioningowy pozwala jednemu z Twoich sandboxów tworzyć sandboxy na tym koncie. Wklej go w możliwość „Flota sandboxów” tego sandboxa; każdy sandbox tworzony przez jego agenta i tak najpierw zapyta Cię na czacie.",

@@ -5153,6 +5153,7 @@
         "settingsTokens": {
             "labelEGStorefrontSandbox": "Libellé (p. ex. sandbox boutique)",
             "mintToken": "Créer le jeton",
+            "readingTokens": "Lecture des jetons…",
             "shownOnceCopyNow": "Affiché une seule fois. Copiez-le maintenant : seule son empreinte est conservée.",
             "whatProvisioningTokensAre": "Un jeton d'approvisionnement permet à l'une de vos sandboxes de créer des sandboxes sur ce compte. Collez-le dans la capacité « Flotte de sandboxes » de cette sandbox ; chaque sandbox créée par son agent vous demandera quand même d'abord dans le chat.",
             "whereItGoes": "Où le coller",
