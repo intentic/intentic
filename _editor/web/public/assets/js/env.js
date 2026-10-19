@@ -94,6 +94,14 @@
       sh: ([name]) => ({ args: name === void 0 ? [] : [name, `--yes`] }),
       ps1: ([name]) => name === void 0 ? [] : [{ name: `Slug`, value: name }, { name: `Yes` }]
     },
+    uninstall: {
+      files: { sh: `uninstall.sh`, ps1: `uninstall.ps1` },
+      required: [],
+      optional: [],
+      typed: true,
+      sh: () => ({ args: [] }),
+      ps1: () => []
+    },
     device: coded(`device.sh`, `device.ps1`),
     sync: coded(`sync.sh`, `sync.ps1`),
     server: coded(`connect-host.sh`, `connect-host.ps1`)
