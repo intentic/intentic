@@ -12,8 +12,9 @@ import * as browserToolsOriginal from "../../browser/tools/browser-tools.js";
 import * as cursorSdkOriginal from "./cursor-sdk.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 
-// Where a turn here parks its cards: one fleet's actors.
-const cards = parkedCards(memoryFleet().conversations);
+// Where a turn here parks its cards: one fleet's actors, which also say whether the turn is a spawned child owing a result.
+const actors = memoryFleet();
+const cards = parkedCards(actors.conversations);
 
 /* What a Cursor turn is handed to reach out of itself: the turn's remote MCP servers, which cursorMcpServers mounts. */
 
@@ -35,6 +36,7 @@ const services = (overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
         tools: [],
         config: testConfig,
+        conversations: actors.conversations,
         ...testTurnMounts(),
         // Every turn looks for extensions serving tools of their own; none are installed here.
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),

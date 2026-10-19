@@ -206,6 +206,7 @@ test("a clean turn streams every frame once, stamps the ones that name an accoun
             contextTokens: 1_200,
             contextWindow: 200_000,
             searchCalls: 0,
+            iqSearches: 0,
             openingSearches: 0,
             openingListings: 0,
             failedCalls: 0,

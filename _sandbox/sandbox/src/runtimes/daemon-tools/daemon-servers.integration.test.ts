@@ -18,6 +18,7 @@ import { createTurnTaint } from "../../guard/turn-taint.js";
 import { type TurnPersona, turnPersona } from "../../personas/personas.js";
 import { turnWatchdog } from "../decorators/turn-watchdog.js";
 import { opt } from "../../opt.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import type { TurnContext } from "../../agent/providers/adapter.js";
 import type { ChildSupervisor } from "../../agent/subagents/children.js";
 import { harnessServers, turnSecretAccess } from "../../agent/run/harness/harness-servers.js";
@@ -34,7 +35,8 @@ const OPEN = turnPersona({ personas: [], actsAs: undefined, unattended: false })
 const input = AgentTurnSchema.parse({ prompt: "do the thing", conversationId: "conv-1" });
 
 const deps: DaemonServersDeps = unstubbed<DaemonServersDeps>("deps", {
-    conversations: unstubbed<DaemonServersDeps["conversations"]>("conversations", {}),
+    // Holdings only, for the child-result door: this turn is no spawned child, so it is handed none.
+    conversations: unstubbed<DaemonServersDeps["conversations"]>("conversations", { holdings: memoryFleet().conversations.holdings }),
     config: unstubbed<DaemonServersDeps["config"]>("config", { historyRoot: ROOT }),
     usage: unstubbed<DaemonServersDeps["usage"]>("usage", { turns: async () => [] }),
     dependencies: unstubbed<DaemonServersDeps["dependencies"]>("dependencies", {}),

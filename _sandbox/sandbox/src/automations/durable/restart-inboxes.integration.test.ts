@@ -59,14 +59,15 @@ test("channel messages waiting behind a running fire or in their debounce are an
     await waitFor(() => expect(ran).toHaveLength(3), SETTLES);
     await automationIdle("desk", after.services);
 
-    // The cut fire comes back first, on its own conversation; the waiting message continues that thread's conversation.
-    expect(ran.map((turn) => wordOf(turn.prompt))).toEqual(["first", "second", "third"]);
-    expect(ran[0]?.conversationId).toBe(cut[0]?.conversationId);
-    expect(ran[1]?.conversationId).toBe(cut[0]?.conversationId);
+    // The cut fire comes back on its own conversation, and the message that waited behind it continues that conversation
+    // after it. c2's is a thread of its own, run beside c1's rather than behind it, so across threads only the set is owed.
+    expect(ran.filter((turn) => turn.conversationId === cut[0]?.conversationId).map((turn) => wordOf(turn.prompt))).toEqual(["first", "second"]);
+    expect(ran.map((turn) => wordOf(turn.prompt)).toSorted()).toEqual(["first", "second", "third"]);
     const replies = async (channelId: string): Promise<string[]> =>
         (await after.services.webchatOutbox.since(`webchat:desk:${channelId}`, 0, Date.now())).replies.map((reply) => reply.text);
-    expect(await replies("c1")).toEqual(["answer:first", "answer:second"]);
-    expect(await replies("c2")).toEqual(["answer:third"]);
+    // An answer is written as its turn ends, a moment after the fire lets its lane go: what the visitor's next poll finds.
+    await waitFor(async () => expect(await replies("c1")).toEqual(["answer:first", "answer:second"]), SETTLES);
+    await waitFor(async () => expect(await replies("c2")).toEqual(["answer:third"]), SETTLES);
     expect(waitingMessages(root)).toEqual([]);
     expect(await after.services.turnJournal.list()).toEqual([]);
 });

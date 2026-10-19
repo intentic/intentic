@@ -123,7 +123,7 @@ it(`stamps the agent's own check on a rail row`, async () => {
     const el = await mountRail();
     const failing = stampsIn(rowOf(el, `failing`))!;
     expect(drawn(failing)).toEqual([`self:failed !`]);
-    expect(readings(failing)).toEqual([`Self-check: its last run failed`]);
+    expect(readings(failing)).toEqual([`Self-check: last run failed`]);
     expect(failing.closest(`[data-corner]`)).not.toBeNull();
 
     const proven = stampsIn(rowOf(el, `proven`))!;
@@ -203,5 +203,5 @@ it(`stamps each kind of check a fresh session ran, after the agent's own`, async
     await settle();
     const el = await mountCard(origin);
     expect(drawn(stampsIn(el)!)).toEqual([`self:passed`, `review:findings 2`]);
-    expect(readings(stampsIn(el))).toEqual([`Self-check: passed after its last edit`, `Code review: 2 of 3 findings open`]);
+    expect(readings(stampsIn(el))).toEqual([`Self-check: passed after last edit`, `Code review: 2 of 3 findings open`]);
 });

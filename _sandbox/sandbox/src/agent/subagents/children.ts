@@ -664,8 +664,7 @@ const movedOn = async (
     return moved ? "moved" : "stayed";
 };
 
-// Follows a run of the child's to its end onto its roster row, whoever started it; one that never started settles as the
-// tally says.
+// Follows a run of the child's to its end onto its roster row, whoever started it; one that never started settles as the tally says.
 const followChildRun = async (
     services: Services,
     childId: string,
@@ -1049,7 +1048,8 @@ const waitForSeat = (
     SEAT_LINE.wait(parent.conversationId, {
         childId: start.id,
         start: async () => {
-            if (services.conversations.holdings(CHILDREN).get(start.id)?.cancelled === true) {
+            // Cancelled, or its record gone with a parent disposed while it waited, which starting it would bring back.
+            if (services.conversations.holdings(CHILDREN).get(start.id)?.cancelled !== false) {
                 endUnstarted(services, start.id);
                 return true;
             }

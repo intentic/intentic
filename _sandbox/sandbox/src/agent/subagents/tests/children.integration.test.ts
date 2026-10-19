@@ -937,6 +937,31 @@ describe("the budgets, enforced in the daemon", () => {
         expect(started).toEqual(["one"]);
     });
 
+    // A waiting start's record is its parent's, so it goes with a disposed parent: the seat its running sibling frees
+    // afterwards must not start it, which would bring that parent back.
+    it("drops a spawn waiting for a seat with its disposed parent, which then never starts", async () => {
+        const gate = Promise.withResolvers<void>();
+        const started: string[] = [];
+        const holdOpen = async function* (input: AgentTurn): AsyncGenerator<AgentEvent> {
+            started.push(input.prompt);
+            await gate.promise;
+            yield { kind: "done" };
+        };
+        const services = drivenBy(spawnServices({ subagentsAtOnce: 1 }, [], actors), holdOpen);
+        const first = await spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6" });
+        const second = await spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!first.ok || !second.ok) {
+            throw new Error("not spawned");
+        }
+        await waitFor(() => expect(started).toEqual(["one"]), SETTLES);
+        await actors.dispose([parent.conversationId]);
+        gate.resolve();
+        await waitFor(() => expect(turnRunOf(actors, first.id)?.done).toBe(true), SETTLES);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(started).toEqual(["one"]);
+        expect(actors.traces(parent.conversationId)).toEqual([]);
+    });
+
     it("refuses past the lifetime budget", async () => {
         const services = spawnServices({ subagentsPerTurn: 1 }, [], actors);
         const first = await spawnChild(drivenBy(services, fakeTurn([])), parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6" });

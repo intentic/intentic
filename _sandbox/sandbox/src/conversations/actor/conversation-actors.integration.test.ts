@@ -162,6 +162,8 @@ interface Child {
     seated: boolean;
     // A wait already took its ending.
     reported: boolean;
+    // Spawned past its parent's "at once" ceiling, it waits for a seat and has not started (child-admission.ts).
+    waiting: boolean;
     // Its conversation still holds its run: a restart takes the fleet that held it.
     held: boolean;
 }
@@ -389,6 +391,26 @@ const walk = async (seed: number, steps: number): Promise<number> => {
         }
     };
 
+    // A seat of this parent's freed: its waiting starts go oldest first while a seat is free, each starting, or ending
+    // unstarted once the lifetime budget is spent, since nothing ends to free that.
+    const startWaiters = async (parentId: Id): Promise<void> => {
+        const parent = modelOf(parentId);
+        for (const waiter of children.filter((candidate) => candidate.waiting && candidate.parent === parentId)) {
+            if (parent.seats.live >= AT_ONCE) {
+                return;
+            }
+            waiter.waiting = false;
+            if (parent.seats.total >= PER_CONVERSATION) {
+                await until(() => !isSpawnedChild(fleet.conversations, waiter.id), `waiter ${waiter.id} ends unstarted`);
+                children.splice(children.indexOf(waiter), 1);
+                continue;
+            }
+            parent.seats = { live: parent.seats.live + 1, total: parent.seats.total + 1 };
+            Object.assign(waiter, { running: true, seated: true, held: true });
+            await until(() => gates.has(waiter.id), `waiter ${waiter.id} parks`);
+        }
+    };
+
     // A child's turn ends; its seat goes back to its parent unless the parent's seats went first.
     const endChild = async (child: Child): Promise<void> => {
         gates.get(child.id)?.();
@@ -404,6 +426,7 @@ const walk = async (seed: number, steps: number): Promise<number> => {
         const parent = modelOf(child.parent);
         if (child.seated) {
             parent.seats = { live: parent.seats.live - 1, total: parent.seats.total };
+            await startWaiters(child.parent);
         }
     };
 
@@ -431,7 +454,9 @@ const walk = async (seed: number, steps: number): Promise<number> => {
 
     // Whatever a dying daemon took with it, let go of first: children and runs end, jobs exit, cards lose their turns.
     const quiesce = async (): Promise<void> => {
-        for (const child of children.filter((candidate) => candidate.running)) {
+        // An ending may start a waiting sibling, which ends in its turn; once none runs, none waits.
+        const running = (): Child | undefined => children.find((candidate) => candidate.running);
+        for (let child = running(); child !== undefined; child = running()) {
             await endChild(child);
         }
         for (const id of IDS.filter((each) => modelOf(each).run === "live")) {
@@ -754,14 +779,30 @@ const walk = async (seed: number, steps: number): Promise<number> => {
             weight: 2,
             run: async (id) => {
                 const model = modelOf(id);
-                const allowed = model.seats.live < AT_ONCE && model.seats.total < PER_CONVERSATION;
+                // Past the "at once" ceiling a start waits for a seat, charged nothing until it starts; under it, the
+                // lifetime budget refuses.
+                const waits = model.seats.live >= AT_ONCE;
+                const allowed = waits || model.seats.total < PER_CONVERSATION;
                 const spawned = await spawnChild(daemon, { conversationId: id, cwd: WORKSPACE_ROOT }, CHILD_SPEC);
                 expect(spawned.ok, `a spawn under ${JSON.stringify(model.seats)}`).toBe(allowed);
                 if (!spawned.ok) {
                     return;
                 }
+                expect(spawned.held === true, `a spawn under ${JSON.stringify(model.seats)} waits`).toBe(waits);
+                children.push({
+                    id: spawned.id,
+                    parent: id,
+                    running: !waits,
+                    forgotten: false,
+                    seated: !waits,
+                    reported: false,
+                    held: !waits,
+                    waiting: waits,
+                });
+                if (waits) {
+                    return;
+                }
                 model.seats = { live: model.seats.live + 1, total: model.seats.total + 1 };
-                children.push({ id: spawned.id, parent: id, running: true, forgotten: false, seated: true, reported: false, held: true });
                 await until(() => gates.has(spawned.id), `child ${spawned.id} parks`);
             },
         },
@@ -779,7 +820,7 @@ const walk = async (seed: number, steps: number): Promise<number> => {
             name: "child-report",
             weight: 1,
             run: async () => {
-                const child = draw(children.filter((candidate) => !candidate.running));
+                const child = draw(children.filter((candidate) => !candidate.running && !candidate.waiting));
                 if (child === undefined) {
                     return;
                 }
@@ -918,6 +959,10 @@ const walk = async (seed: number, steps: number): Promise<number> => {
                     child.forgotten = true;
                     child.seated = false;
                 }
+                // A start still waiting for a seat goes with its parent's record: no seat freeing later starts it.
+                for (const waiter of orphans.filter((child) => child.waiting)) {
+                    children.splice(children.indexOf(waiter), 1);
+                }
                 expectGone(fleet, id);
                 // Children still running end after it is gone, and must bring nothing of it back.
                 for (const child of orphans.filter((candidate) => candidate.running)) {
@@ -931,7 +976,7 @@ const walk = async (seed: number, steps: number): Promise<number> => {
             weight: 1,
             run: async () => {
                 // A settled one only, as a discard refuses a conversation still running.
-                const child = draw(children.filter((candidate) => !candidate.running));
+                const child = draw(children.filter((candidate) => !candidate.running && !candidate.waiting));
                 if (child === undefined) {
                     return;
                 }
@@ -1068,7 +1113,8 @@ const checkHeldAcross = (fleet: Fleet, cards: ParkedCards, { raised, children, r
         // A child's run is its own conversation's, so its parent's dispose leaves it.
         expect(runOf(fleet, child.id), where).toBe(child.held ? (child.running ? "live" : "finished") : undefined);
         if (!child.forgotten) {
-            expect(ledger.find((kid) => kid.conversationId === child.id)?.running, where).toBe(child.running);
+            // A waiting start's record reads as running, as it will be once it starts.
+            expect(ledger.find((kid) => kid.conversationId === child.id)?.running, where).toBe(child.running || child.waiting);
             expect(subagentEndingReported(actors, child.id), where).toBe(child.reported);
         }
     }

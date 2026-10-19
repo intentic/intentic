@@ -73,8 +73,9 @@ test("fires queued behind a running one, an approved hold among them, come back 
     expect(ran.map((turn) => payloadOf(turn.prompt))).toEqual(["one", "two", "three", "four"]);
     // The cut fire continues on the conversation it was cut on.
     expect(ran[0]?.conversationId).toBe(cut[0]?.conversationId);
+    // An answer is written as its turn ends, a moment after the fire lets its lane go: what the visitor's next poll finds.
     for (const [n, word] of ["one", "two", "three", "four"].entries()) {
-        expect(await repliesFor(after.services, visitor("desk", n + 1))).toEqual([`answer:${word}`]);
+        await waitFor(async () => expect(await repliesFor(after.services, visitor("desk", n + 1))).toEqual([`answer:${word}`]), SETTLES);
     }
     expect(await after.services.turnJournal.list()).toEqual([]);
     const runs = (await after.services.automations.get("desk"))?.runs ?? [];
@@ -103,7 +104,7 @@ test("an approved hold whose release died before taking it out of the queue runs
 
     expect(payloadOf(ran[0]?.prompt ?? "")).toBe("approved");
     expect(await after.services.heldWakes.list()).toEqual([]);
-    expect(await repliesFor(after.services, visitor("gate", 1))).toEqual(["answer:approved"]);
+    await waitFor(async () => expect(await repliesFor(after.services, visitor("gate", 1))).toEqual(["answer:approved"]), SETTLES);
     expect(await after.services.turnJournal.list()).toEqual([]);
 });
 

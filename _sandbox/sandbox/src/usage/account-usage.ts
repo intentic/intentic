@@ -26,7 +26,7 @@ export interface AccountUsageStore {
     // account with no window still current is absent rather than measured-and-empty.
     readonly read: () => Promise<Record<string, AccountUsage>>;
     // `whole`: the reader vouches this reading names every pool the account has, so a pool the last one named and this
-    // one does not is kept, marked missing (reading-continuity.ts), rather than dropped without a word.
+    // one does not is kept, marked missing (drift/continuity.ts), rather than dropped without a word.
     readonly record: (account: string, usage: AccountUsage, options?: { readonly whole?: boolean }) => Promise<void>;
     // Says a re-read failed on the snapshot it failed to replace, in one write: a read-then-record would put back a
     // reading a turn's stream landed in between. Keeps the first failure's `since` while failures run on. Answers the
