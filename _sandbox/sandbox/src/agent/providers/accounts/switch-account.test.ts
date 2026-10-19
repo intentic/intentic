@@ -1,4 +1,6 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { AccountUsage, ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { unstubbed } from "@intentic/testing";
 import { services } from "../../../harness/route-services.testing.js";
 import type { Services } from "../../../composition.js";
@@ -49,6 +51,18 @@ test("refuses a conversation it does not know, and one whose turn is running", a
     expect(deps.agents.entry(ID)?.profile.account).toBe("acct-a");
 });
 
+// What the daemon's verdict on an account is judged from (serviceability.ts): both accounts connected, no seat marks,
+// the reading, and the refusals on file.
+// SAFETY: the verdict reads only an account's id; the rest of a stored row is the store's own business.
+const ACCOUNTS = [{ id: "acct-a", label: "a" }, { id: "acct-b", label: "b" }] as OauthAccount[];
+const verdictOf = (usage: Record<string, AccountUsage>, refusals: readonly ProviderRefusal[]) => ({
+    accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => usage }),
+    claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [...ACCOUNTS] }),
+    claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => ({}) }),
+    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({ claude: refusals }) }),
+    cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {}),
+});
+
 test("asked to run, a held turn runs again at once on the account named, carried when asked", async () => {
     const pressed: unknown[] = [];
     const reopened: string[] = [];
@@ -72,7 +86,7 @@ test("asked to run, a held turn runs again at once on the account named, carried
             },
         }),
         claudeSeatCheck: unstubbed<Services["claudeSeatCheck"]>("claudeSeatCheck", { recheck: async () => true }),
-        accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", {}),
+        ...verdictOf({}, []),
     };
     expect(await switchAccount(deps, { conversationId: ID, account: "acct-b", carry: true, run: true })).toEqual({ kind: "moved", run: "run-2" });
     expect(pressed).toEqual([{ routing: { agent: "claude", harness: "native", account: "acct-b", carry: true } }]);
@@ -113,7 +127,7 @@ test("a pick re-points the words that wait, held and booked, and sends none of t
 // A pick in the model picker moves the conversation and nothing else: a turn held by a limit, a stop or a memory
 // refusal stays held until a press asks for it, never started by the pick itself. A limit hold's booking follows the
 // pick, though: it re-runs on the picked account at that account's reopen, and the card's reset says the same instant.
-const heldOnPick = (usage: Awaited<ReturnType<Services["accountUsage"]["read"]>>) => {
+const heldOnPick = (usage: Record<string, AccountUsage>, refusals: readonly ProviderRefusal[] = []) => {
     const pressed: unknown[] = [];
     const moved: [string, { readonly resetsAt?: number } | undefined][] = [];
     const sent: unknown[] = [];
@@ -151,7 +165,7 @@ const heldOnPick = (usage: Awaited<ReturnType<Services["accountUsage"]["read"]>>
             },
         }),
         claudeSeatCheck: unstubbed<Services["claudeSeatCheck"]>("claudeSeatCheck", { recheck: async () => true }),
-        accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => usage }),
+        ...verdictOf(usage, refusals),
     };
     return { deps, pressed, moved, sent };
 };
@@ -174,6 +188,21 @@ test("a pick onto an account with room clears the wait rather than keeping the r
     await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0);
     expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: false, reopensAt: Math.ceil(T0 / 1000) });
     expect(moved).toEqual([["acct-b", {}]]);
+});
+
+// Every Claude reading is rounded, and a rounded pool at 100 is at the line, not spent: what proves the picked account
+// spent is the refusal on file. Read off the reading alone, a pick from one spent account to another booked the held turn
+// for now, and the next pass sent it to be refused within seconds (2026-10-19, grand-alder-29zo and kind-lynx-7jba).
+test("a pick onto an account a refusal proves spent waits for its reopen, though its reading is only at the line", async () => {
+    const now = Date.now();
+    const reopen = Math.ceil(now / 1000) + 1_500;
+    const atTheLine: AccountUsage = { windows: [{ kind: "five_hour", label: "5h", utilization: 100, resetsAt: reopen, gates: "all", rounded: true }], measuredAt: now };
+    const refused: ProviderRefusal = { at: now - 60_000, kind: "limit", message: "Claude usage limit reached.", account: "acct-b", model: "opus", resetsAt: reopen };
+    const { deps, pressed, moved, sent } = heldOnPick({ "acct-b": atTheLine }, [refused]);
+    expect(await switchAccount(deps, { conversationId: ID, account: "acct-b" }, now)).toEqual({ kind: "moved" });
+    expect(pressed).toEqual([]);
+    expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: false, reopensAt: reopen });
+    expect(moved).toEqual([["acct-b", { resetsAt: reopen }]]);
 });
 
 // Picking an account is an attempt on it: a seat-marked one is re-tested at once, not on the rationed schedule, so access
