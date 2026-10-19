@@ -302,8 +302,15 @@ test("a credential Google wants verified carries the page to verify it on, and n
 
 // Google's answer for an account it wants verified, as the proxy's api-call relays it: the call itself succeeds, the
 // upstream status and body ride inside. Folded into "no reading" it froze four accounts' numbers with nothing said.
-const proxied = (statusCode: number, body: unknown): typeof fetch =>
-    (async () => Response.json({ status_code: statusCode, body: JSON.stringify(body) })) as unknown as typeof fetch;
+// Each Google method gets its own answer (the method is the tail of the proxied URL), and every one asked is recorded.
+const proxiedBy = (answer: (method: string) => { status: number; body: unknown }, asked: string[] = []): typeof fetch =>
+    (async (_url: string, init?: RequestInit) => {
+        const method = /"url":"[^"]*:(\w+)"/.exec(String(init?.body))?.[1] ?? "";
+        asked.push(method);
+        const { status, body } = answer(method);
+        return Response.json({ status_code: status, body: JSON.stringify(body) });
+    }) as unknown as typeof fetch;
+const proxied = (statusCode: number, body: unknown): typeof fetch => proxiedBy(() => ({ status: statusCode, body }));
 
 const GOOGLE_FILE = { name: "antigravity-a@example.com.json", provider: "antigravity", auth_index: "idx", project_id: "p-1" };
 
@@ -331,4 +338,84 @@ test("a refused quota read comes back with the provider's own sentence, not as n
         file: GOOGLE_FILE,
     });
     expect(ok).toEqual({ usage: expect.objectContaining({ windows: [expect.objectContaining({ kind: "google:gemini-weekly", utilization: 25 })] }) });
+});
+
+const proxiedGoogle = (answers: Record<string, { status: number; body: unknown }>, asked: string[]): typeof fetch =>
+    proxiedBy((method) => answers[method] ?? { status: 404, body: { error: { message: "no such method" } } }, asked);
+
+// Google's summary as it answered on 2026-10-19: the Claude and GPT group alone, spent, and no Gemini group at all.
+const SUMMARY_WITHOUT_GEMINI = {
+    groups: [
+        {
+            displayName: "Claude and GPT models",
+            buckets: [{ bucketId: "3p-weekly", displayName: "Weekly Limit Remaining", resetTime: "2026-10-24T12:03:31Z", remainingFraction: 0 }],
+        },
+    ],
+};
+const PER_MODEL = {
+    models: {
+        "gemini-3.8-flash-tiered": { quotaInfo: { remainingFraction: 0.25, resetTime: "2026-10-24T19:26:43Z" } },
+        "claude-opus-4-6-thinking": { quotaInfo: { resetTime: "2026-10-24T12:03:31Z" } },
+    },
+};
+
+// Read off the summary alone, every Google account showed one spent pool, which read as the whole account spent while
+// every Gemini model still had room.
+test("a family the quota summary leaves out is read off the per-model view, and the summary's own pools stand", async () => {
+    const asked: string[] = [];
+    const read = await fetchTranslatorUsage({
+        fetchFn: proxiedGoogle({ retrieveUserQuotaSummary: { status: 200, body: SUMMARY_WITHOUT_GEMINI }, fetchAvailableModels: { status: 200, body: PER_MODEL } }, asked),
+        managementUrl: "http://proxy",
+        managementToken: "t",
+        provider: "gemini",
+        file: GOOGLE_FILE,
+    });
+    expect(asked).toEqual(["retrieveUserQuotaSummary", "fetchAvailableModels"]);
+    expect("usage" in read ? read.usage.windows : read).toEqual([
+        expect.objectContaining({ kind: "google:3p-weekly", utilization: 100, gates: { models: ["claude", "gpt"] } }),
+        expect.objectContaining({ kind: "google:models:gemini", label: "Gemini models", utilization: 75, gates: { models: ["gemini"] } }),
+    ]);
+});
+
+test("a summary naming every family is the whole reading, and a failed per-model read leaves it as it was", async () => {
+    const both = {
+        groups: [
+            { displayName: "Gemini models", buckets: [{ bucketId: "gemini-weekly", remainingFraction: 0.5 }] },
+            ...SUMMARY_WITHOUT_GEMINI.groups,
+        ],
+    };
+    const asked: string[] = [];
+    const full = await fetchTranslatorUsage({
+        fetchFn: proxiedGoogle({ retrieveUserQuotaSummary: { status: 200, body: both } }, asked),
+        managementUrl: "http://proxy",
+        managementToken: "t",
+        provider: "gemini",
+        file: GOOGLE_FILE,
+    });
+    expect(asked).toEqual(["retrieveUserQuotaSummary"]);
+    expect("usage" in full ? full.usage.windows.map((window) => window.kind) : full).toEqual(["google:gemini-weekly", "google:3p-weekly"]);
+
+    const partial = await fetchTranslatorUsage({
+        fetchFn: proxiedGoogle({ retrieveUserQuotaSummary: { status: 200, body: SUMMARY_WITHOUT_GEMINI } }, []),
+        managementUrl: "http://proxy",
+        managementToken: "t",
+        provider: "gemini",
+        file: GOOGLE_FILE,
+    });
+    expect("usage" in partial ? partial.usage.windows.map((window) => window.kind) : partial).toEqual(["google:3p-weekly"]);
+});
+
+// A summary that answers nothing usable no longer leaves the account unread when the per-model view answers.
+test("the per-model view alone is a reading when the summary refuses", async () => {
+    const read = await fetchTranslatorUsage({
+        fetchFn: proxiedGoogle({ fetchAvailableModels: { status: 200, body: PER_MODEL } }, []),
+        managementUrl: "http://proxy",
+        managementToken: "t",
+        provider: "gemini",
+        file: GOOGLE_FILE,
+    });
+    expect("usage" in read ? read.usage.windows.map((window) => [window.kind, window.utilization]) : read).toEqual([
+        ["google:models:gemini", 75],
+        ["google:models:3p", 100],
+    ]);
 });

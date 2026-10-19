@@ -1,7 +1,7 @@
 import type { AccountUsage, UsageWindow, WindowGates } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { KeyedProvider } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
-import { wordsOf } from "@intentic/sandbox-contract/models/plan-pools";
+import { GOOGLE_FAMILIES, GoogleModelsSchema, googleGates, googleModelsUsage, sameGates } from "./google/model-pools.js";
 import { asNumber, asRecord, asString, clampPercent, readFailure, resetFromIso } from "./payload.js";
 import { parseJsonOr } from "@intentic/base/json";
 
@@ -244,21 +244,6 @@ export const codexUsageFromRateLimits = (payload: unknown, measuredAt: number = 
     return windows.length === 0 ? undefined : { windows, measuredAt };
 };
 
-// Gates come from words in the group/bucket names: `gemini` gates gemini only, `claude`/`gpt`/`3p`/etc gate the other
-// family, and an unrecognized name gates everything rather than being ignored.
-const GEMINI_WORDS = new Set(["gemini"]);
-const THIRD_PARTY_WORDS = new Set(["claude", "gpt", "3p", "third", "party", "anthropic", "openai"]);
-const googleGates = (...names: (string | undefined)[]): WindowGates => {
-    const words = new Set(names.flatMap((name) => (name === undefined ? [] : wordsOf(name))));
-    if ([...GEMINI_WORDS].some((word) => words.has(word))) {
-        return { models: ["gemini"] };
-    }
-    if ([...THIRD_PARTY_WORDS].some((word) => words.has(word))) {
-        return { models: ["claude", "gpt"] };
-    }
-    return "all";
-};
-
 export const geminiUsageFromPayload = (payload: unknown, measuredAt: number = Date.now()): AccountUsage | undefined => {
     const body = asRecord(payload);
     const groups = body?.[`groups`];
@@ -375,10 +360,11 @@ export const kimiUsageFromPayload = (payload: unknown, measuredAt: number = Date
 
 const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
 const KIMI_USAGE_URL = "https://api.kimi.com/coding/v1/usages";
-const GOOGLE_USAGE_URLS = [
-    "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
-    "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:retrieveUserQuotaSummary",
-    "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
+// The same service at each host; the first is the one Google points at.
+const GOOGLE_HOSTS = [
+    "https://daily-cloudcode-pa.googleapis.com/v1internal",
+    "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal",
+    "https://cloudcode-pa.googleapis.com/v1internal",
 ] as const;
 
 // A proxied call's answer, or why there is none: the upstream's own refusal where it gave one. Kept rather than folded
@@ -437,6 +423,62 @@ const usageOr = (answer: ApiAnswer, parse: (payload: unknown) => AccountUsage | 
     return usage === undefined ? { failure: NO_POOLS } : { usage };
 };
 
+interface GoogleRead {
+    readonly fetchFn: typeof fetch;
+    readonly managementUrl: string;
+    readonly managementToken: string;
+    readonly authIndex: string;
+    readonly project: string;
+    readonly signal: AbortSignal;
+    readonly measuredAt: number;
+}
+
+// One Google read across its hosts. The first refusal is the one kept: every host is the same service, and the first is
+// the one Google points at.
+const googleRead = async (read: GoogleRead, method: "retrieveUserQuotaSummary" | "fetchAvailableModels"): Promise<TranslatorUsageRead> => {
+    let refused: TranslatorUsageRead | undefined;
+    for (const host of GOOGLE_HOSTS) {
+        const answer = await apiCall({
+            ...read,
+            url: `${host}:${method}`,
+            method: "POST",
+            header: {
+                Authorization: "Bearer $TOKEN$",
+                "Content-Type": "application/json",
+                "User-Agent": "antigravity/cli/1.0.13 (aidev_client; os_type=darwin; arch=arm64)",
+            },
+            data: JSON.stringify({ project: read.project }),
+        });
+        const usage = usageOr(answer, (payload) => {
+            if (method === "retrieveUserQuotaSummary") {
+                return geminiUsageFromPayload(payload, read.measuredAt);
+            }
+            const parsed = GoogleModelsSchema.safeParse(payload);
+            return parsed.success ? googleModelsUsage(parsed.data, read.measuredAt) : undefined;
+        });
+        if ("usage" in usage) {
+            return usage;
+        }
+        refused ??= usage;
+    }
+    return refused ?? { failure: NO_POOLS };
+};
+
+// The quota summary names each family's pool. A family it leaves out (Gemini, on every account since October 2026) is
+// read off the per-model view instead; without it the account showed only its spent Claude and GPT pool, which read as
+// the whole account spent while Gemini still had room.
+const readGoogleUsage = async (read: GoogleRead): Promise<TranslatorUsageRead> => {
+    const summary = await googleRead(read, "retrieveUserQuotaSummary");
+    const named = "usage" in summary ? summary.usage.windows : [];
+    const covered = (gates: WindowGates): boolean => named.some((window) => window.gates === "all" || sameGates(window.gates, gates));
+    if (GOOGLE_FAMILIES.every((family) => covered(family.gates))) {
+        return summary;
+    }
+    const models = await googleRead(read, "fetchAvailableModels");
+    const filled = "usage" in models ? models.usage.windows.filter((window) => !covered(window.gates)) : [];
+    return filled.length === 0 ? summary : { usage: { windows: [...named, ...filled], measuredAt: read.measuredAt } };
+};
+
 const codexAccountId = (file: TranslatorAuthFile): string | undefined => {
     const token = asRecord(file.id_token);
     const authInfo = asRecord(token?.[`https://api.openai.com/auth`]) ?? token;
@@ -492,29 +534,7 @@ export const fetchTranslatorUsage = async (params: {
         if (project === undefined) {
             return { failure: "no Antigravity project on this Google account" };
         }
-        // The first refusal is the one kept: every URL is the same service, and the first is the one Google points at.
-        let refused: TranslatorUsageRead | undefined;
-        for (const url of GOOGLE_USAGE_URLS) {
-            const answer = await apiCall({
-                ...params,
-                authIndex,
-                url,
-                method: "POST",
-                header: {
-                    Authorization: "Bearer $TOKEN$",
-                    "Content-Type": "application/json",
-                    "User-Agent": "antigravity/cli/1.0.13 (aidev_client; os_type=darwin; arch=arm64)",
-                },
-                data: JSON.stringify({ project }),
-                signal,
-            });
-            const read = usageOr(answer, (payload) => geminiUsageFromPayload(payload, measuredAt));
-            if ("usage" in read) {
-                return read;
-            }
-            refused ??= read;
-        }
-        return refused ?? { failure: NO_POOLS };
+        return await readGoogleUsage({ ...params, authIndex, project, signal, measuredAt });
     } catch (error) {
         // Quota is an enhancement to the connection list, never a reason to hide the account itself; but a read that
         // throws the same way every sweep is still a number that stopped moving, so it says so.
