@@ -40,6 +40,9 @@ const { default: SandboxBehindCard } = await import("./SandboxBehindCard.vue");
 const { forgetOperations } = await import("../../../../workbench/operations/operations");
 const { forgetRestarts, restartExpected } = await import("../../../../models/sandbox/live/sandboxRestart");
 const { activeSandboxId } = await import("../../../../app/storage/activeSandbox");
+// The contract loads beside the start (daemon/contract.ts), and until it lands route drift reads as no evidence, which
+// this card draws as nothing. Every case here is about what the card says once there is evidence, so load it first.
+await (await import("../../../../client/sandbox/daemon/contract")).loadContract();
 
 // Baseline daemon level, plus the two ways it can diverge: a missing route, or one with a different shape.
 const LEVEL = [...SANDBOX_ROUTE_NAMES];

@@ -52,7 +52,7 @@ const welcomeHelper = async (deps: DoorDeps, lines: LineSocket): Promise<void> =
 };
 
 // Where the door listens: a loopback port the system picks (Windows), or a unix socket at a fixed path (Linux), made
-// 0600 here and opened to the one user it is for by the caller (door-linux.ts).
+// 0600 here and opened to the one user it is for by the caller (service-run-linux.ts).
 export type DoorPlace = { readonly kind: "tcp" } | { readonly kind: "unix"; readonly path: string };
 
 export interface OpenDoor {

@@ -21,5 +21,5 @@ it(`files one boot span with the first reach of each link, and ignores every lat
     expect(span?.fields[`main`]).toBeTypeOf(`number`);
     expect(Number(span?.fields[`session`])).toBeLessThanOrEqual(Math.round(first));
     expect(span?.fields[`shell`]).toBeUndefined();
-    expect(span?.ms).toBe(span?.fields[`view`]);
+    expect(span?.fields[`view`]).toBe(span?.ms);
 });

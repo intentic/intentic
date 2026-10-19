@@ -113,7 +113,7 @@ it(`stops pitching the free sign-in once a model is connected`, async () => {
     // What runs leads alone; every locked provider waits behind one row (onboarding review 2026-10-18, F10).
     expect(headings(element)).toEqual([`Claude Code`]);
     expect(freeChip(element)).toBeUndefined();
-    expect(disclosure(element)?.textContent?.trim()).toBe(`Add another provider (8)`);
+    expect(disclosure(element)?.textContent?.trim()).toBe(`Add another provider`);
     expect(disclosure(element)?.getAttribute(`aria-expanded`)).toBe(`false`);
 
     disclosure(element)?.click();
@@ -137,7 +137,7 @@ it(`seats the working free trial above the locked rows, with its allowance rathe
     // accounts the reader does not have waits behind one row, cheapest first once opened.
     expect(headings(element)).toEqual([`Claude Code`, `Free trial`]);
     expect(element.textContent).toContain(`Free trial · 12 steps left today`);
-    expect(disclosure(element)?.textContent?.trim()).toBe(`Add another provider (8)`);
+    expect(disclosure(element)?.textContent?.trim()).toBe(`Add another provider`);
 
     disclosure(element)?.click();
     await nextTick();

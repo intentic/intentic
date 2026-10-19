@@ -46,6 +46,8 @@
 @source inline("{from,via,to}-{black,white,canvas,transparent}/{0,50,75,90,95}");
 @source inline("{text,bg,border,ring,from,via,to}-primary-{50,100,200,300,400,500,600,700,800,900,950}");
 @source inline("{text,bg,border,ring}-primary-{500,600}/{10,15,20,30,40,50,70}");
+/* The primary role's filled and tinted surfaces (semantic-colors.css), and the text a fill carries. */
+@source inline("{,hover:,focus-visible:,group-hover:}{text,bg,border,ring,outline}-{primary-fill,primary-tint,fill-content}");
 @source inline("bg-{gradient,linear}-to-{t,tr,r,br,b,bl,l,tl}");
 @source inline("bg-{none,cover,contain,center,top,bottom,left,right,no-repeat}");
 
@@ -124,7 +126,7 @@
 /* A TINT under a state is the app's hover language — a row lifting a few percent off the canvas — so it is promised on the property that carries it. */
 @source inline("{hover:,group-hover:,aria-selected:}bg-{content,muted,subtle,canvas,card,overlay,line,link,danger,warning,success,info}/{2,3,4,5,10,15,20,30,50}");
 @source inline("{hover:,focus:,focus-visible:,focus-within:,active:,disabled:,group-hover:,group-focus-within:,peer-checked:,aria-selected:,data-active:}opacity-{0,10,20,25,30,40,50,60,70,75,80,90,100}");
-@source inline("{hover:,focus:,focus-visible:,focus-within:,active:,group-hover:,aria-selected:,data-active:}{ring,ring-0,ring-1,ring-2,ring-4,ring-inset,outline,outline-none,outline-hidden,outline-1,outline-2,outline-offset-1,outline-offset-2}");
+@source inline("{hover:,focus:,focus-visible:,focus-within:,active:,group-hover:,aria-selected:,data-active:}{ring,ring-0,ring-1,ring-2,ring-4,ring-inset,outline,outline-none,outline-hidden,outline-1,outline-2,outline-offset-1,outline-offset-2,-outline-offset-1,-outline-offset-2}");
 @source inline("{hover:,focus:,focus-visible:,active:,group-hover:,disabled:}{underline,no-underline,line-through,truncate,visible,invisible}");
 @source inline("{hover:,focus:,focus-visible:,active:,group-hover:,motion-safe:}{scale-95,scale-100,scale-105,scale-110,rotate-90,rotate-180,translate-x-0,translate-y-0,translate-x-1,translate-y-1,-translate-y-1,-translate-y-0.5}");
 @source inline("{hover:,focus:,group-hover:,disabled:,aria-selected:}{shadow,shadow-sm,shadow-md,shadow-lg,shadow-xl,shadow-none,border,border-0,border-2,bg-transparent}");

@@ -8,7 +8,7 @@ import { join } from "node:path";
 // - /var/lib/intentic-keyring/<uid>/: the vault, its keys, its audit and the service's own unlock key, owned by the
 //   `intentic-keyring` system user, 0700 (systemd's StateDirectory=), read by no process of the user;
 // - /run/intentic-keyring/<uid>/: the door, a unix socket and the token beside it, which the service opens to that one
-//   uid with an ACL (door-linux.ts);
+//   uid with an ACL (service-run-linux.ts);
 // - /var/lib/intentic-keyring/<uid>.installed: the marker that the service is on for that user, which intentic-machine
 //   reads (the directory above it is 0755, the vault folders inside are not);
 // - the templated system unit, and the polkit action whose owner annotation lets the service ask polkit about another

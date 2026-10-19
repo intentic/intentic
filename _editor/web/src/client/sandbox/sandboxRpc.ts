@@ -142,7 +142,10 @@ export const sandboxRpc: SandboxRpc = createORPCClient(
 
 // One client per extension, gated at the procedure rather than the request: the gate sees the named procedure
 // and input directly, and throws to refuse before anything is sent. It is handed the contract the call is made against,
-// which by then has loaded, to read the procedure's route off.
+// which by then has loaded, to read the procedure's route off. A procedure the active daemon's hello says it lacks is
+// refused here too, as the 404 it would answer, in the same words: a first-party extension is compiled into this build
+// and activates on a sandbox whose image predates it (loader.ts, loadUnlisted), so its badge timer would otherwise ask
+// an older daemon for a route it has never had on every tick.
 export const gatedSandboxRpc = (
     gate: (procedure: readonly string[], input: unknown, contract: ContractModule) => void,
 ): ContractRouterClient<typeof sandboxContract> =>
@@ -154,6 +157,10 @@ export const gatedSandboxRpc = (
                     interceptors: [
                         ({ path, input, next }) => {
                             gate(path, input, contract);
+                            const stale = staleDaemonReason(path.join(`.`));
+                            if (stale !== undefined) {
+                                throw new SandboxHttpError(404, stale);
+                            }
                             return next();
                         },
                         answered,

@@ -4673,7 +4673,6 @@
             "didntConnect": "Nie podłączono",
             "intro": "Wybierz dostawcę, aby go podłączyć lub zarządzać jego kontami. Wszystko, co podłączysz, jest przechowywane w tym sandboxie, nigdy na platformie.",
             "local": "Modele lokalne",
-            "models": "{count} model | {count} modele | {count} modeli",
             "onThisComputer": "Na tym komputerze",
             "ownServer": "Inny serwer?",
             "pointAtServer": "Wskaż go"
@@ -9618,7 +9617,6 @@
             "paymentWentThroughDetail": "To nietypowe. Odśwież stronę za minutę. Jeśli planu nadal nie będzie, skontaktuj się z nami — nic nie zostanie pobrane dwa razy.",
             "previousPlanEnded": "Twój poprzedni plan się zakończył.",
             "previousPlanEndedDetail": "Ponowna subskrypcja zaczyna nowy miesiąc. Nic nie przeszło z poprzedniego planu i nie ma żadnych zaległości.",
-            "slotsUsed": "{used} z {count} miejsca | {used} z {count} miejsc | {used} z {count} miejsc",
             "pricePerMonth": "${price}/mies.",
             "planChangedOnStripe": "Twój plan zmienił się w Stripe",
             "stoppedWaitingForStripe": "Ze Stripe nic nie wróciło, więc Rozliczenia przestały czekać",

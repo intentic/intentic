@@ -16,7 +16,7 @@ import {
 // service (LOCAL SERVICE) created would refuse the user's writes, and Node cannot give it another access list, so the
 // service listens on loopback instead and writes where (`port`) and a random token (`token`) to a door file only this
 // user can read. On Linux it is a unix socket (`socket`) in a folder only the service and this uid may enter
-// (door-linux.ts), with the same token beside it. Every connection opens with one line naming the token and what it is:
+// (service-run-linux.ts), with the same token beside it. Every connection opens with one line naming the token and what it is:
 // - `request`: one keyring request line follows (protocol.ts), one answer line comes back. The session helper forwards
 //   the user's pipe this way, so intentic-machine and intentic-askpass reach the service exactly as they reached the
 //   per-user keyring before it.

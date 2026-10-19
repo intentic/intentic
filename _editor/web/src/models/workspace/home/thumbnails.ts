@@ -169,6 +169,7 @@ const renditionAt = (edge: TileEdge): PictureSize => (edge === 256 ? `tile` : `e
 
 // Device pixels per CSS pixel, kept current as a window moves to another screen or the reader zooms. A query for the
 // ratio now stops matching the moment it changes, which is the one event a browser gives for it.
+// allow(module-state): the screen's pixel density belongs to the window, whichever sandbox it shows
 export const screenScale = ref(globalThis.devicePixelRatio || 1);
 const watchScale = (): void => {
     globalThis.matchMedia?.(`(resolution: ${screenScale.value}dppx)`).addEventListener(

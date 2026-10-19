@@ -205,7 +205,11 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
         portability: "identity",
         note: "Re-invite collaborators from the Access tab, a grant is the platform's record, and the target enforces its own copy.",
     },
-    { path: "identity/control-tokens.json", portability: "identity", note: "Mint fresh control tokens, the old ones authenticate against the source sandbox." },
+    {
+        path: "identity/control-tokens.json",
+        portability: "identity",
+        note: "Mint fresh control tokens, the old ones authenticate against the source sandbox.",
+    },
     // The links other sandboxes hand this one tasks through (links/inbound-links.ts): hashed tokens like the control
     // tokens, each minted here, and the tasks filed under them; elsewhere they would let the paired sandboxes reach the
     // target in this one's name.
@@ -243,6 +247,9 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "phone-enrollments.json", portability: "identity", note: "Pair your phone again from its card: the app is still installed." },
     { path: "phone-pair-consumed.json", portability: "identity" },
     { path: "phone-wake.json", portability: "identity" },
+    // Which computers' keyrings each phone paired with for Passwords (phones/phone-pairings.ts): a shortcut over the
+    // keyrings' own pinned keys, keyed by phones paired to this sandbox, so it stays with the pairings above.
+    { path: "phone-pairings.json", portability: "identity" },
     // Setup-device pairing burn list; carrying it would mark another sandbox's fresh pairing as spent.
     { path: "host-pair-consumed.json", portability: "identity" },
     // Lands waiting for the computer whose folder they go to, and which computer last held each attached folder

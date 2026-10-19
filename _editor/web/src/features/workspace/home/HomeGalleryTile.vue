@@ -197,7 +197,7 @@ const duration = computed(() => {
             <button
                 v-if="kind !== undefined && shown"
                 type="button"
-                class="absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-card/85 text-content opacity-0 shadow-sm ring-1 ring-line/60 backdrop-blur-sm transition-opacity group-hover:opacity-100 hover:bg-card focus-visible:opacity-100"
+                class="absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-card/85 text-content opacity-0 shadow-sm ring-1 ring-line/60 backdrop-blur-sm transition group-hover:opacity-100 hover:bg-card focus-visible:opacity-100"
                 :aria-label="t(`workspace.homeLightbox.view`)"
                 v-tooltip.bottom="{ title: t(`workspace.homeLightbox.view`), keys: t(`ui.keys.space`) }"
                 @click.stop="emit('view')"

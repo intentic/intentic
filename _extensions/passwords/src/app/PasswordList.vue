@@ -86,7 +86,7 @@ const recentNames = (): string =>
                 :data-name="item.name"
                 :aria-selected="item.name === selected"
                 :tabindex="item.name === selected || (selected === undefined && item === items[0]) ? 0 : -1"
-                class="group flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary-fill"
+                class="group flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-fill"
                 :class="item.name === selected ? `bg-primary-tint` : `hover:bg-overlay`"
                 @click="emit(`select`, item.name)"
                 @dblclick="emit(`open`, item.name)"

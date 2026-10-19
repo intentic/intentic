@@ -70,7 +70,7 @@ export const restartArgs = (paths: Pick<LinuxServicePaths, "unitName">): readonl
 export const disableArgs = (paths: Pick<LinuxServicePaths, "unitName">): readonly string[] => ["disable", "--now", paths.unitName];
 export const stopArgs = (paths: Pick<LinuxServicePaths, "unitName">): readonly string[] => ["stop", paths.unitName];
 
-// The door opened to the one user it is for (door-linux.ts): its folder may be entered, its socket written, its token
+// The door opened to the one user it is for (service-run-linux.ts): its folder may be entered, its socket written, its token
 // file read. The service's user owns all three, so it may set their ACLs without root.
 export const doorAclArgs = (paths: Pick<LinuxServicePaths, "uid" | "runDir" | "socket" | "door">): readonly (readonly string[])[] => [
     ["-m", `u:${paths.uid}:--x`, paths.runDir],

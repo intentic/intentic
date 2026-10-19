@@ -973,7 +973,7 @@ describe(`ChatMessageView errand row`, () => {
     });
 });
 
-// Notes mark: same bargain as the errand row, for sandbox-prepended context, in two steps — the mark says how much was
+// Notes mark: same bargain as the errand row, for sandbox-prepended context, in two steps — the mark says context was
 // added and takes no width from the column, opening it names each note, opening a note gives its verbatim words.
 describe(`ChatMessageView added-notes mark`, () => {
     const notes = [
@@ -985,8 +985,8 @@ describe(`ChatMessageView added-notes mark`, () => {
         const element = mount({ id: 3, role: `user`, text: `fix the bug`, notes });
 
         const mark = element.querySelector(`[aria-expanded]`)!;
-        // A count and a glyph is the whole of it: the name is on hover, so the lane stays out of the reading column.
-        expect(mark.textContent?.trim()).toBe(String(notes.length));
+        // A glyph is the whole of it, no count: the name is on hover, so the lane stays out of the reading column.
+        expect(mark.textContent?.trim()).toBe(``);
         expect(mark.getAttribute(`aria-label`)).toBe(`Sent ahead of your message`);
         expect(mark.querySelector(`[data-icon="paperclip"]`)).not.toBeNull();
         expect(shownText(element)).not.toContain(notes[0]!.title);

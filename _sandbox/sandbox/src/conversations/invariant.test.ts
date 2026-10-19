@@ -160,7 +160,13 @@ describe("held-limit-turns-are-kept-for-a-restart", () => {
     const files = (count: number): string[] => Array.from({ length: count }, (_, index) => `f${String(index)}.png`);
     // A spent allowance's hold by default; a refused credential's and a stopped turn's carry no reopen of their own.
     const held = (attachments: number, over: { readonly reason?: "limit" | "auth" | "stopped"; readonly fired?: boolean } = {}): HeldRecord => {
-        const base = { input: { conversationId: "c1", prompt: "go", attachments: files(attachments) }, ran: true, recordedAt: 1_000, fired: over.fired ?? false, tries: 0 };
+        const base = {
+            input: { conversationId: "c1", prompt: "go", attachments: files(attachments) },
+            ran: true,
+            recordedAt: 1_000,
+            fired: over.fired ?? false,
+            tries: 0,
+        };
         const reason = over.reason ?? "limit";
         return reason === "limit" ? { ...base, reason, reopensAt: 9_000 } : reason === "auth" ? { ...base, reason } : { ...base, reason };
     };
@@ -176,9 +182,9 @@ describe("held-limit-turns-are-kept-for-a-restart", () => {
     };
 
     it("passes a hold the entry keeps, a refused credential's, and a fired one", async () => {
-        await runWith(held(20));
-        await runWith(held(21, { reason: "auth" }));
-        await runWith(held(21, { fired: true }));
+        await expect(runWith(held(20))).resolves.toBeUndefined();
+        await expect(runWith(held(21, { reason: "auth" }))).resolves.toBeUndefined();
+        await expect(runWith(held(21, { fired: true }))).resolves.toBeUndefined();
     });
 
     it("names a hold the schema refuses, and why, whatever wall held it", async () => {

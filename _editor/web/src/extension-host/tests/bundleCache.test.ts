@@ -106,8 +106,9 @@ describe(`a load pass`, () => {
         pass.fetched(summary, source);
         await Promise.resolve();
         await new Promise((resolve) => setTimeout(resolve, 0));
-        expect([...entries.keys()]).toEqual([bundleKeyOf(`sbx-1`, `maintenance`, { kind: `dev`, value: fingerprint(source) })]);
-        expect(await bundlePass(`sbx-1`, () => true, storage).cached(summary)).toEqual({ key: [...entries.keys()][0], source });
+        const key = bundleKeyOf(`sbx-1`, `maintenance`, { kind: `dev`, value: fingerprint(source) });
+        expect([...entries.keys()]).toEqual([key]);
+        expect(await bundlePass(`sbx-1`, () => true, storage).cached(summary)).toEqual({ key, source });
     });
 
     test(`a checkout rebuilt between the list and the fetch is not kept under the revision the list named`, async () => {

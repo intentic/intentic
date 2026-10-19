@@ -4673,7 +4673,6 @@
             "didntConnect": "Didn't connect",
             "intro": "Pick a provider to connect it or manage its accounts. Whatever you connect is stored in this sandbox, never on the platform.",
             "local": "Local models",
-            "models": "{count} model | {count} models",
             "onThisComputer": "On this computer",
             "ownServer": "Another server?",
             "pointAtServer": "Point at it"
@@ -10089,7 +10088,6 @@
             "paymentWentThroughDetail": "This is unusual. Reload in a minute. If it still isn't here, get in touch and nothing will be charged twice.",
             "previousPlanEnded": "Your previous plan has ended.",
             "previousPlanEndedDetail": "Subscribing again starts a fresh month. Nothing was carried over, and nothing is owed.",
-            "slotsUsed": "{used} of {count} slot | {used} of {count} slots",
             "pricePerMonth": "${price}/month",
             "planChangedOnStripe": "Your plan changed on Stripe",
             "stoppedWaitingForStripe": "Nothing came back from Stripe, so Billing stopped waiting for it",

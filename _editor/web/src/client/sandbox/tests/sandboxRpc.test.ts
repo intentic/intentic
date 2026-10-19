@@ -218,6 +218,21 @@ it(`refuses an extension's undeclared call at its gate, before anything is sent`
     expect(fetchMock.mock.calls).toEqual([]);
 });
 
+// A compiled-in extension runs on a sandbox whose image predates it, and its badge timer asked the older daemon for a
+// route it never had on every tick: a 404 in the daemon's log each time (the compatibility tier against 1.344.0, run
+// 39328287293). The hello already said so, so the call is refused as that 404 before it goes.
+it(`refuses an extension's call to a procedure the daemon never advertised, before anything is sent`, async () => {
+    setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => name !== `vpn.list`));
+    const fetchMock = jest.fn(async () => json(200, { items: [] }));
+    stubGlobal(`fetch`, fetchMock);
+    const gated = gatedSandboxRpc(() => undefined);
+    const failure = await gated.vpn.list().catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(SandboxHttpError);
+    expect(failure).toMatchObject({ status: 404, message: expect.stringMatching(/^This sandbox is too old for this part of the app \(VPN: vpn\.list\)\./u) });
+    expect(fetchMock.mock.calls).toEqual([]);
+    resetSandboxScope();
+});
+
 it(`reads a hand-written route's { error } the same way, and a wordless refusal by its status`, async () => {
     stubGlobal(
         `fetch`,

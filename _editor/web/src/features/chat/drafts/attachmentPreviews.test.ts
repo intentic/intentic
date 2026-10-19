@@ -23,11 +23,13 @@ let counter = 0;
 const freshPath = (): string => `${STATE_DIR}/records/artifacts/attachments/u${++counter}/shot.png`;
 const freshSound = (): string => `${STATE_DIR}/records/artifacts/attachments/u${++counter}/voice.m4a`;
 
-// Let the address watcher flush and the pending .then callbacks run, without advancing the retry timers.
+// Let the address watcher flush and the pending .then callbacks run, without advancing the retry timers. The fetch
+// passes through a few async layers (thumbnails.ts) before its URL is filed, so drain more turns than any one needs.
 const settle = async (): Promise<void> => {
     await nextTick();
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let turn = 0; turn < 10; turn++) {
+        await Promise.resolve();
+    }
 };
 
 beforeEach(() => {

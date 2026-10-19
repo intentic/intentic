@@ -25,16 +25,15 @@ export const passwordActivityQuery = () => ({
 });
 
 // Polled while the editor is open: a need is answered, and a vault set up, on another computer, so nothing here hears
-// either change.
+// either change. Asked straight through `rpc` rather than the host's cache: this extension is compiled into the editor
+// and runs on sandboxes whose image predates Passwords, where both routes are missing. There the host refuses the call
+// before it is sent and the poll keeps "not shown", where a cached read would log every tick as a failed query.
 const passwordsAttention = sandboxPoll<PasswordsPresence>({
     host,
     everyMs: 60_000,
     initial: () => UNREAD_PRESENCE,
     read: async (api, previous) => {
-        const [{ needs }, passwords] = await Promise.all([
-            api.sandbox.fetch({ ...passwordNeedsQuery(), staleTime: 0 }),
-            api.sandbox.fetch({ ...passwordsQuery(), staleTime: 0 }),
-        ]);
+        const [{ needs }, passwords] = await Promise.all([api.sandbox.rpc.secrets.passwordNeeds(), api.sandbox.rpc.secrets.passwords()]);
         return presenceOf(previous, passwords, needs.filter((need) => need.state === `pending`).length);
     },
 });

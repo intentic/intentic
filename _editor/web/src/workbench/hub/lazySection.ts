@@ -24,9 +24,9 @@ interface SectionChunk {
     readonly landed: () => boolean;
 }
 
-// allow(module-state): one entry per section component, made once as its hub's module is read
+// One entry per section component, made once as its hub's module is read
 const chunks = new WeakMap<object, SectionChunk>();
-// allow(module-state): the waits a drawn section is in, which the warm-up lets finish before it starts its own
+// The waits a drawn section is in, which the warm-up lets finish before it starts its own
 const arriving = new Set<Promise<string | undefined>>();
 
 // What a wait ended in: nothing when it landed, the failure's words when it did not.

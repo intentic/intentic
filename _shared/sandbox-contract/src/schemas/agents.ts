@@ -63,8 +63,7 @@ export const AgentAttentionSchema = z.object({
     // A missing capability on a card from before needs (docs/architecture/needs.md); lets the lane say "setup needed" rather than a generic
     // pause.
     capability: z.boolean().describe("It needs something connected that is not connected yet."),
-    // A gated credential parked on a named person's click; the one pause the board's reader may not be able to clear
-    // themselves.
+    // A gated credential parked on a named person's click; the one pause the board's reader may not be able to clear themselves.
     credential: z
         .boolean()
         .describe("It is waiting for a named person to release a credential. The one pause that may not be yours to clear, whatever your role."),
@@ -162,8 +161,7 @@ export type TurnReach = z.infer<typeof TurnReachSchema>;
 // A landing's commit message: subject plus the two trailer sentences a changelog repo gets. One schema, not three
 // duplicated fields, since both the live roster and the review carrier must read the same shape and can't disagree.
 export const LandedMessageSchema = z.object({
-    // Written from the landed diff, not the opening prompt: a session that drifts from its title still needs an
-    // accurate subject.
+    // Written from the landed diff, not the opening prompt: a session that drifts from its title still needs an accurate subject.
     subject: z
         .string()
         .describe(
@@ -176,8 +174,7 @@ export const LandedMessageSchema = z.object({
         .describe(
             "The same change said to somebody who uses the product, for a repository that keeps a changelog. Usually absent, because most changes are not ones a user would notice.",
         ),
-    // Nearly always absent (removals only); required and mechanically guaranteed when a landing shrinks a wire-contract
-    // lock.
+    // Nearly always absent (removals only); required and mechanically guaranteed when a landing shrinks a wire-contract lock.
     breaking: z
         .string()
         .optional()
@@ -207,8 +204,7 @@ export const LandedMessageStepSchema = z.object({
     status: z
         .enum(["asking", "answered", "refused", "skipped"])
         .describe("How this one went. Skipped means it was not asked at all, because it refused a few minutes ago and the walk stepped over it."),
-    // Epoch ms it started; client-measures an in-flight step's ticking display. Absent for `skipped`, which cost no
-    // time.
+    // Epoch ms it started; client-measures an in-flight step's ticking display. Absent for `skipped`, which cost no time.
     at: z.number().optional().describe("When it started being asked, in milliseconds. Absent for one that was skipped, which cost no time."),
     ms: z.number().optional().describe("How long it took. Absent while it is still being asked."),
     reason: z.string().optional().describe("Why it refused, in its own words."),
@@ -284,16 +280,14 @@ export const AgentSummarySchema = z.object({
     status: AgentStatusSchema.describe(
         "What it is doing. Stopping and stopped are the two halves of somebody pressing stop, because a cancel is not instant; dismissing is the same window for a question waved away, which ends the turn too but owes the user nothing; resuming means the sandbox is already putting right whatever killed the turn; landing means its work is being carried into the workspace right now, and nothing may act on its branch until that settles.",
     ),
-    // Sentence the last turn died on; carried since `error` status alone isn't an answer, especially for an unwatched
-    // run.
+    // Sentence the last turn died on; carried since `error` status alone isn't an answer, especially for an unwatched run.
     failure: z
         .string()
         .optional()
         .describe(
             "Why the last turn failed, in the words it died on. Absent unless it did, and cleared the moment it runs again. Carried here because the word error on its own is not an answer, least of all for a run nobody was watching.",
         ),
-    // The error frame's own code, so the board can distinguish e.g. a rate limit from a crash the way chat already
-    // does.
+    // The error frame's own code, so the board can distinguish e.g. a rate limit from a crash the way chat already does.
     failureCode: z
         .string()
         .optional()
@@ -303,11 +297,9 @@ export const AgentSummarySchema = z.object({
     // Epoch seconds the spent allowance reopens; absent means genuinely unknown (Grok, Cursor) — never guess one.
     limitResetsAt: z.number().optional().describe("When the spent allowance reopens, in epoch seconds. Absent when the provider publishes no instant."),
     limitHeld: z.boolean().optional().describe("Whether the refused turn is held whole, so sending again re-runs it instead of appending to it."),
-    // Whether the daemon has already booked a retry at the reset; the one thing that keeps a stranded card out of the
-    // Attention lane.
+    // Whether the daemon has already booked a retry at the reset; the one thing that keeps a stranded card out of the Attention lane.
     limitScheduled: z.boolean().optional().describe("Whether the held turn is already booked to go again at the reset, so nobody has to press anything."),
-    // Account a booked move is sending the held turn to; set alongside `limitScheduled`, cleared by the move's own
-    // turn.
+    // Account a booked move is sending the held turn to; set alongside `limitScheduled`, cleared by the move's own turn.
     limitMoving: z.string().optional().describe("The account the held turn is being moved to by the owner's policy, while that move is booked."),
     // The resume pass's own instant for the booked re-run, the one it fires by (limit-due.ts), so a card states when it
     // goes rather than inferring it from the reset: they differ once the account it goes on is still spent at the reset.
