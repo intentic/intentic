@@ -22,7 +22,6 @@ import { refuseUnlessReachable } from "../../personas/persona-reach.js";
 import { opt } from "../../opt.js";
 import { forgetRemoteRequest, remoteRequestOf } from "../../runners/runner-requests.js";
 import { applyReply } from "../run/turn/turn-interactions.js";
-import { notePlanAnswer } from "../run/stream-agent.js";
 import { carryOnTurn } from "../run/turn/turn-resume.js";
 
 // What the audit trail keeps of an answer to a card: which card, what kind, and for a permission the decision itself.
@@ -210,9 +209,6 @@ export const createAgentRoutes = (services: Services) => {
                 throw new ORPCError("FORBIDDEN", { message: applied.refused });
             }
             if (applied === "settled") {
-                if (input.kind === "plan") {
-                    notePlanAnswer(run, input);
-                }
                 // What waited behind the card goes into the turn it un-parked, for every window alike.
                 void (held === undefined ? undefined : services.turns.drain(held));
                 return { ok: true } as const;

@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { anySignal } from "@intentic/base/async";
 import { readableProviderText } from "../../engines/provider-error-text.js";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { type AgentTurn, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { ContextTrim } from "@intentic/sandbox-contract/schemas/context-trim";
@@ -11,9 +10,6 @@ import type { PromptFingerprint } from "@intentic/sandbox-contract/schemas/keep-
 import type { SnapshotTurn } from "@intentic/sandbox-contract/schemas/history";
 import type { TranscriptRow, TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { HandedOff } from "@intentic/sandbox-contract/schemas/providers/handoff";
-import { mentionPaths } from "@intentic/sandbox-contract/text/mentions";
-import { noticeCode } from "@intentic/sandbox-contract/events/sandbox-notice";
-import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import type { Logger } from "pino";
 import { createOutboundSniffer } from "../../activity/outbound.js";
 import { turnCliEnv } from "./harness/turn-env.js";
@@ -327,19 +323,6 @@ async function* runConversationTurn(
         unregister?.();
     }
 }
-
-// What a settled plan answer leaves in the transcript: the decision's notice, and a rejection's feedback, which stays
-// visible as the user's own row or vanishes though the agent still has it. Staged files ride as @-paths in the one field.
-export const notePlanAnswer = (run: LiveRun | undefined, answer: Extract<AgentReply, { kind: "plan" }>): void => {
-    run?.note(
-        answer.approve
-            ? { role: "notice", text: "Plan approved.", noticeCode: noticeCode({ code: "planApproved" }) }
-            : { role: "notice", text: "Kept planning.", noticeCode: noticeCode({ code: "keptPlanning" }) },
-    );
-    if (!answer.approve && answer.feedback !== undefined && answer.feedback.trim().length > 0) {
-        run?.note(userRow(answer.feedback, Date.now(), mentionPaths(answer.feedback)));
-    }
-};
 
 // Preflight is a few hundred ms plus one throttled fetch; past this it's a defect, not ordinary load.
 const SLOW_PREFLIGHT_MS = 5_000;

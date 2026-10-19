@@ -1525,7 +1525,7 @@
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/stream-agent.ts": 1052,
+    "_sandbox/sandbox/src/agent/run/stream-agent.ts": 1044,
     "_sandbox/sandbox/src/agent/run/stream-agent.ts#preflight#cyclomatic": {
         "count": 22,
         "why": "standing when the check arrived (2026-10-16)"

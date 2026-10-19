@@ -16,6 +16,7 @@ import { commandListOf, recordCommands } from "../../providers/agent-commands.js
 import { type FrameBacklog, frameBacklog } from "../../../seams/frame-backlog.js";
 import { turnPulseOf } from "./turn-pulse.js";
 import { settledOf } from "./turn-closing.js";
+import { planAnswerRows } from "./plan-answer.js";
 
 // Turn execution decoupled from any client connection: POST /agent starts a run, folds the transcript frame by frame,
 // and any number of clients attach to it live. Holds rows, not frames; each run is held by its conversation's actor
@@ -171,8 +172,8 @@ export class TurnRun implements LiveRun {
     }
 
     push(event: AgentEvent): void {
-        const patches = this.fold.apply(event);
-        this.publish(patches, isTurnFact(event) ? event : undefined);
+        const notes = planAnswerRows(this.fold.rows, event);
+        this.publish([...this.fold.apply(event), ...notes.flatMap((row) => this.fold.note(row))], isTurnFact(event) ? event : undefined);
         for (const listener of this.listeners) {
             listener.push(event);
         }

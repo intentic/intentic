@@ -299,9 +299,9 @@ describe(`turn runs`, () => {
         await waitFor(() => expect(run.rows).toHaveLength(2));
         push({ kind: `resolved`, requestId: `p1`, reply: { kind: `plan`, requestId: `p1`, approve: true } });
         await waitFor(() => expect(run.rows[1]?.plan?.status).toBe(`approved`));
-        run.note({ role: `notice`, text: `Plan approved.` });
+        run.note({ role: `notice`, text: `The turn resumed.` });
         close();
-        expect((await followed).entries.slice(-2)).toEqual([
+        expect((await followed).entries.slice(-3)).toEqual([
             {
                 kind: `patch`,
                 seq: 3,
@@ -311,7 +311,38 @@ describe(`turn runs`, () => {
                     row: { role: `assistant`, text: ``, openedAt: AT, plan: { requestId: `p1`, text: `the plan`, status: `approved` }, run: run.id },
                 },
             },
-            { kind: `patch`, seq: 4, patch: { op: `append`, row: { role: `notice`, text: `Plan approved.`, openedAt: AT, run: run.id } } },
+            {
+                kind: `patch`,
+                seq: 4,
+                patch: { op: `append`, row: { role: `notice`, text: `Plan approved.`, noticeCode: { code: `planApproved` }, openedAt: AT, run: run.id } },
+            },
+            { kind: `patch`, seq: 5, patch: { op: `append`, row: { role: `notice`, text: `The turn resumed.`, openedAt: AT, run: run.id } } },
+        ]);
+    });
+
+    it(`records plan feedback once, with no answer invented for an unmatched or cancelled card`, async () => {
+        const { turnFn, close } = crankedTurn();
+        const run = started(startTurnRun(deps, turnFn, turn(`c-plan-feedback`), { opening }));
+        run.push({ kind: `plan`, requestId: `p1`, text: `the plan` });
+        const answer: AgentEvent = {
+            kind: `resolved`,
+            requestId: `p1`,
+            reply: { kind: `plan`, requestId: `p1`, approve: false, feedback: `smaller steps` },
+        };
+        run.push(answer);
+        run.push(answer);
+        run.push({ kind: `resolved`, requestId: `missing`, reply: { kind: `plan`, requestId: `missing`, approve: false, feedback: `not sent` } });
+        run.push({ kind: `plan`, requestId: `p2`, text: `another plan` });
+        run.push({ kind: `resolved`, requestId: `p2` });
+        close();
+        await run.waitUntilFinished();
+
+        expect(run.rows).toEqual([
+            { role: `user`, text: `do the thing`, sentAt: 1, run: run.id },
+            { role: `assistant`, text: ``, openedAt: AT, plan: { requestId: `p1`, text: `the plan`, status: `rejected` }, run: run.id },
+            { role: `notice`, text: `Kept planning.`, noticeCode: { code: `keptPlanning` }, openedAt: AT, run: run.id },
+            { role: `user`, text: `smaller steps`, sentAt: AT, run: run.id },
+            { role: `assistant`, text: ``, openedAt: AT, plan: { requestId: `p2`, text: `another plan`, status: `cancelled` }, run: run.id },
         ]);
     });
 
