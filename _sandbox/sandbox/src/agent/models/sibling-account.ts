@@ -2,7 +2,7 @@ import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { roomiestAccount } from "@intentic/sandbox-contract/models/plan-pools";
 import type { Services } from "../../composition.js";
 import { serviceabilities, type ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
-import { breakPolicyFor } from "../run/turn/turn-resume.js";
+import { breakPolicyFor } from "../run/turn/break-policy.js";
 
 // Claude-only: a routed provider balances its own credentials before refusing, so a refusal there already means nothing
 // is left. Picks the roomiest account the one serviceability rule calls ready: a revoked, seatless, benched, refused,

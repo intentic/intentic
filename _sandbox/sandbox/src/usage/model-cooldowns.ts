@@ -13,6 +13,9 @@ const StoredCooldownSchema = z.object({
     until: z.number(),
     // Provider's own sentence, so a surface can say why in the words that refused.
     message: z.string(),
+    // Epoch ms the refusal that benched it was filed: an answer to a request sent before then settles nothing. Absent
+    // from an entry an older build wrote, which any answer settles, as it always did.
+    since: z.number().optional(),
 });
 export type StoredCooldown = z.infer<typeof StoredCooldownSchema>;
 
@@ -35,8 +38,8 @@ export interface ModelCooldownStore {
     readonly record: (provider: string, model: string, cooldown: StoredCooldown) => Promise<void>;
     // A model that just served content is open, whatever the stored instant says: a credential came back early, or the
     // refusal that benched it was one account's and not the whole pool's. Without this the row reads "Back at …" while
-    // turns on it go through.
-    readonly clear: (provider: string, model: string) => Promise<void>;
+    // turns on it go through. `askedAt` is when the answering request went out; a bench filed at or after it stands.
+    readonly clear: (provider: string, model: string, askedAt?: number) => Promise<void>;
 }
 
 // A cooldown hides a model from the picker, so one recorded and never cleared reads, from outside, as a model that
@@ -71,11 +74,13 @@ export const fileModelCooldownStore = (path: string, options: ModelCooldownStore
             log({ provider, model, until: new Date(cooldown.until).toISOString(), reason: cooldown.message }, `model cooldown: ${provider} ${model} benched until ${new Date(cooldown.until).toISOString()}`);
         },
         // Returns the same object when nothing is stored, so the common case (no cooldown) never writes the file.
-        clear: async (provider, model) => {
+        clear: async (provider, model, askedAt) => {
             let reopened: StoredCooldown | undefined;
             await file.update((current) => {
                 const key = keyOf(provider, model);
-                reopened = current[key];
+                const stored = current[key];
+                // Benched while the answering request was already in flight: its answer says nothing about the bench.
+                reopened = stored !== undefined && askedAt !== undefined && stored.since !== undefined && stored.since >= askedAt ? undefined : stored;
                 if (reopened === undefined) {
                     return current;
                 }

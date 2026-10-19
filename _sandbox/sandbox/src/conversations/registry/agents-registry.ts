@@ -7,7 +7,7 @@ import type {
     LandedMessageDraft,
     SessionOwner,
 } from "@intentic/sandbox-contract/schemas/agents";
-import { breakArmed, isTurnBreakPolicy, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
+import { isTurnBreakPolicy, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { deriveTitle, planParts } from "@intentic/sandbox-contract/text/title";
 import { keepWarmCap } from "@intentic/sandbox-contract/schemas/keep-warm";
 import type { LandingDelivery } from "@intentic/sandbox-contract/schemas/project-delivery";
@@ -23,19 +23,20 @@ import { parentOfActor } from "../../auth/principal.js";
 import { liveRunOf } from "../actor/conversation-holdings.js";
 import { queueView } from "../actor/conversation-queue.js";
 import { restoredLimitHold } from "../actor/limit-hold.js";
+import { type LimitBooking, limitBooking } from "../actor/limit-booking.js";
+import { limitBookingKeeper, limitHold, rebooked, reportedFailure } from "./limit-ending.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
 import type { ConversationUnits } from "../../store/conversation-units.js";
 import { type ConversationActors, type ConversationBooks, createConversationActors } from "../actor/conversation-actors.js";
 import { activateLoadedFleet } from "./fleet-activation.js";
 import type { BeginTurn, SettleFlush } from "../actor/conversation-decide.js";
 import { unfinishedOf } from "./unfinished-work.js";
-import { activityLive, awaitingWake, type ConversationState, type HeldRecord, NO_USAGE, type TurnUsage, nextPromptDayAt } from "../actor/conversation-state.js";
+import { activityLive, awaitingWake, type ConversationState, NO_USAGE, type TurnUsage, nextPromptDayAt } from "../actor/conversation-state.js";
 import { conversationStatus, parkedKinds, permissionAskOf } from "../actor/conversation-status.js";
 import {
     type AgentsStore,
     type AgentTitleSource,
     type Composition,
-    type Ending,
     endingStatus,
     type Identity,
     type IsolatedAgent,
@@ -137,44 +138,6 @@ const checklistOf = (entry: PersistedAgent, state: ConversationState | undefined
 // What the actor keeps for its card between turns; nothing for a conversation this daemon has not heard from.
 const cardReadings = (state: ConversationState | undefined): Partial<Pick<ConversationState, "loop" | "workflow" | "watches" | "jobs" | "needs">> =>
     state ?? {};
-
-// The spent allowance's hold as the conversation's actor keeps it right now: the one the resume pass would fire. The
-// stored ending says what the refusal booked; this says whether it still stands. A hold goes without any turn ending:
-// a parent cancels its paused child (children.ts cancelChild), the resume pass gives it up, its one dispatch goes out
-// and the start is refused. Read only from the stored ending, each of those left the card saying a re-run was booked
-// that nothing would ever make, a card in Active for good, its family's card lifted there with it.
-const limitHold = (state: ConversationState | undefined): HeldRecord | undefined =>
-    state?.resume.held?.reason === "limit" ? state.resume.held : undefined;
-
-// The failure fields, only while the card still reads as `error`; once the standing has moved on, they would describe a
-// turn the board no longer shows as the last word. A spent allowance's are the rate limit's, its hold, booking and move
-// each only while the actor still holds the turn (limitHold), and the booking and move only until that hold fired.
-const reportedFailure = (
-    ending: Ending,
-    status: AgentStatus,
-    hold: HeldRecord | undefined,
-): Partial<Pick<AgentSummary, "failure" | "failureCode" | "limitResetsAt" | "limitHeld" | "limitScheduled" | "limitMoving">> => {
-    if (status !== "error") {
-        return {};
-    }
-    switch (ending.kind) {
-        case "failed":
-            return { ...opt("failure", ending.failure), ...opt("failureCode", ending.code) };
-        case "limited": {
-            const booked = hold !== undefined && !hold.fired;
-            return {
-                ...opt("failure", ending.failure),
-                failureCode: "rate_limit",
-                ...opt("limitResetsAt", ending.resetsAt),
-                ...(ending.held && hold !== undefined ? { limitHeld: true } : {}),
-                ...(ending.scheduled && booked ? { limitScheduled: true } : {}),
-                ...opt("limitMoving", booked ? ending.moving : undefined),
-            };
-        }
-        default:
-            return {};
-    }
-};
 
 // The per-conversation overrides of a sandbox-wide default (absent means inherit), projected together since the card's
 // menu and the chat's control read them together.
@@ -453,26 +416,6 @@ const restored = (entry: PersistedAgent): PersistedAgent => {
         : rest;
 };
 
-// A held limit's booking, read again from the answer the resume pass will now give it. The pass asks that answer fresh
-// at the reset (turn-resume.ts breakPolicyFor), so a booking read once at the failure would go on saying whatever was
-// true then: "Resume all when it's back" armed every held turn and every card still read as waiting on a press. The
-// frame's own rule (classify-failure.ts limitFrame): a held turn with a published reset goes by itself under any armed
-// answer, and a booked move stands only while the answer is still `move`, as the pass withdraws it otherwise.
-const rebooked = (ending: Ending, policy: TurnBreakPolicy): Ending => {
-    if (ending.kind !== "limited" || !ending.held) {
-        return ending;
-    }
-    const moving = policy === "move" ? ending.moving : undefined;
-    return {
-        kind: "limited",
-        ...opt("failure", ending.failure),
-        ...opt("resetsAt", ending.resetsAt),
-        held: true,
-        scheduled: moving !== undefined || (ending.resetsAt !== undefined && breakArmed(policy)),
-        ...opt("moving", moving),
-    };
-};
-
 // Written onto the entry at every change, so a conversation no actor has heard of since a restart shows it too.
 const queueClause = ({ queue }: PersistedAgent): Pick<AgentSummary, "queue"> => (queue === undefined ? {} : { queue: queueView(queue) });
 
@@ -607,6 +550,11 @@ export interface AgentsRegistry {
     // `limit` re-times a spent-allowance ending to the new account's reopen (absent: it reads unspent), so the card states
     // the instant the re-pointed hold now waits for; the move there is taken back, since the pick has replaced it.
     readonly switchAccount: (id: string, account: string, limit?: { readonly resetsAt?: number }) => Promise<AgentSummary | undefined>;
+    // Holds a spent allowance's stored booking to what the resume pass will do (limit-booking.ts), and states the reset a
+    // hold refused with none has since been timed to (`resetsAt`, epoch s). Writes, persists and broadcasts only when
+    // something changed, and never moves `updatedAt`: a parent reads that to know whether it heard its child's stop
+    // (heardByParent). Answers whether it wrote. Called by the pass on every beat (held-standing.ts keepLimitBooking).
+    readonly keepLimitBooking: (id: string, booking: LimitBooking | undefined, resetsAt?: number) => Promise<boolean>;
     // Moves every conversation running on account `from` to `to`, the survivor a superseded account merged into
     // (account-identity.ts). One write; answers how many moved. Leaves `updatedAt` and every session alone: it is the same
     // person's seat.
@@ -1348,7 +1296,7 @@ export const createFleet = (
                 return {
                     ...entry,
                     postures: (policy === null ? held : { ...held, [ending]: policy }) as Postures,
-                    ...(ending === "limit" && effective !== undefined ? { ending: rebooked(entry.ending, effective) } : {}),
+                    ...(ending === "limit" && effective !== undefined ? { ending: rebooked(entry.ending, limitBooking(limitHold(conversations.state(id)), effective)) } : {}),
                 };
             });
         },
@@ -1368,6 +1316,7 @@ export const createFleet = (
                       }
                     : {}),
             })),
+        keepLimitBooking: limitBookingKeeper(entryOf, amend),
         repointAccount: async (from, to) => {
             const moving = entries.filter((entry) => entry.profile.account === from);
             for (const entry of moving) {

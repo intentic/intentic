@@ -1,5 +1,7 @@
 import type { HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import { RESUME_NOTES } from "@intentic/sandbox-contract/events/resume";
+import { laneOf } from "@intentic/sandbox-contract/models/agent-lanes";
+import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import { IN_MEMORY } from "@intentic/base/sqlite";
@@ -289,5 +291,109 @@ describe("the pass books words for the reopen rather than sending them into a sp
 
         await createTurnResumeScheduler(services).tick(NOW);
         expect(drained).toEqual(["c1"]);
+    });
+});
+
+/* A STRANDED CARD'S LANE FOLLOWS WHAT THE PASS WILL DO (2026-10-19). Three Codex conversations were answered "Send
+   again" on one account; the one whose refusal named "try again at 1:53 PM" moved to Active, while the two refused minutes
+   later with a bare 429 stayed in Attention: their holds had no instant, so the answer booked nothing and nothing ever
+   would. Each beat now times such a hold once the records know its pool's reopen, and holds every card's booking, and a
+   "resuming" card's promise, to what this pass will actually do. */
+describe("a stranded card's lane follows what the pass will do", () => {
+    const standings = (): LandStandings => ({ of: () => "idle", causesOf: () => [], refresh: async () => false, forget: () => {} });
+    const PROFILE = { agent: "codex", harness: "native", account: "codex-subscription" } as const;
+    const NOW = 1_800_000_000_000;
+    const REOPEN = NOW / 1000 + 2 * 60 * 60;
+    const PROMPT = "Fix the header flicker";
+
+    const fleet = async (settings: Record<string, unknown>, refusals: readonly ProviderRefusal[] = []) => {
+        const { agents, conversations } = createFleet(fleetStoreOver(openConversationsDb(IN_MEMORY)), standings(), noPresences());
+        await agents.init();
+        let current = SandboxSettingsSchema.parse(settings);
+        const services = unstubbed<Services>("services", {
+            agents,
+            conversations,
+            logger: pino({ level: "silent" }),
+            sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => current }),
+            resources: unstubbed<Services["resources"]>("resources", { roomSince: async () => undefined }),
+            accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => ({}) }),
+            cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", { turnLimit: async () => ({ spent: 0, withHeadroom: 1 }) }),
+            providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({ codex: refusals }) }),
+            modelCooldowns: unstubbed<Services["modelCooldowns"]>("modelCooldowns", { cooling: async () => new Map() }),
+            turns: unstubbed<Services["turns"]>("turns", { drain: async () => {} }),
+        });
+        const lane = (): string | undefined => {
+            const summary = agents.get("c1");
+            return summary === undefined ? undefined : laneOf(summary);
+        };
+        return { agents, conversations, services, lane, answer: (next: Record<string, unknown>) => void (current = SandboxSettingsSchema.parse(next)) };
+    };
+
+    // Refused for a spent allowance, as classify-failure dresses it: held, with the reset where the refusal knew one.
+    const refused = async (at: Awaited<ReturnType<typeof fleet>>, reopensAt?: number) => {
+        await beginTurn(at.conversations, { conversationId: "c1", isolated: true, prompt: PROMPT, profile: PROFILE }, NOW - 120_000);
+        const frame = { kind: "error" as const, code: "rate_limit" as const, message: "429", held: { ran: true } };
+        at.conversations.send("c1", { kind: "frame", frame: reopensAt === undefined ? frame : { ...frame, resetsAt: reopensAt, autoResume: "available" } }, NOW - 120_000);
+        const input = { conversationId: "c1", prompt: PROMPT, ...PROFILE, model: "gpt-6.1-sol" };
+        const hold = { input, reason: "limit" as const, ran: true };
+        at.conversations.send("c1", { kind: "turn-held", held: reopensAt === undefined ? hold : { ...hold, reopensAt } }, NOW - 120_000);
+        await at.conversations.send("c1", { kind: "settle" }, NOW - 110_000).settled;
+    };
+
+    it("times a hold refused with no reset once the records know its pool's reopen, so its Send again goes then", async () => {
+        const sibling: ProviderRefusal = { at: NOW - 240_000, kind: "limit", message: "try again at 1:53 PM", model: "gpt-6.1-sol", resetsAt: REOPEN };
+        const at = await fleet({ limitPolicy: "resend" }, [sibling]);
+        await refused(at);
+        expect(at.lane()).toBe("attention");
+
+        await createTurnResumeScheduler(at.services).tick(NOW);
+        expect(at.conversations.state("c1")?.resume.held).toMatchObject({ reopensAt: REOPEN, fired: false });
+        expect(at.agents.get("c1")).toMatchObject({ limitResetsAt: REOPEN, limitScheduled: true });
+        expect(at.lane()).toBe("active");
+    });
+
+    it("leaves a hold the records cannot time in Attention, where only a press sends it", async () => {
+        const at = await fleet({ limitPolicy: "resend" });
+        await refused(at);
+        await createTurnResumeScheduler(at.services).tick(NOW);
+        expect(at.conversations.state("c1")?.resume.held?.reopensAt).toBeUndefined();
+        expect(at.lane()).toBe("attention");
+    });
+
+    // Only a conversation's own answer used to re-book its card; the sandbox-wide one, changed in Settings, left every
+    // held card filed by the answer it had when its turn was refused, while the pass acted on the new one.
+    it("re-files every held card within a beat when the sandbox-wide answer changes", async () => {
+        const at = await fleet({ limitPolicy: "wait" });
+        await refused(at, REOPEN);
+        await createTurnResumeScheduler(at.services).tick(NOW);
+        expect(at.lane()).toBe("attention");
+
+        at.answer({ limitPolicy: "resend" });
+        await createTurnResumeScheduler(at.services).tick(NOW);
+        expect(at.agents.get("c1")?.limitScheduled).toBe(true);
+        expect(at.lane()).toBe("active");
+
+        at.answer({ limitPolicy: "wait" });
+        await createTurnResumeScheduler(at.services).tick(NOW);
+        expect(at.agents.get("c1")?.limitScheduled).toBeUndefined();
+        expect(at.lane()).toBe("attention");
+    });
+
+    // An armed stop reads "resuming", in Active. Answered "wait" afterwards, the pass returned before its rung for good,
+    // and the card sat in Active with nothing ever to move it.
+    it("withdraws a resuming card's promise once its answer is to wait, leaving the hold for a press", async () => {
+        const at = await fleet({ stopPolicy: "retry" });
+        await beginTurn(at.conversations, { conversationId: "c1", isolated: true, prompt: PROMPT, profile: PROFILE }, NOW - 120_000);
+        at.conversations.send("c1", { kind: "frame", frame: { kind: "error", message: "stopped short", autoResume: "scheduled", held: { ran: true } } }, NOW - 120_000);
+        at.conversations.send("c1", { kind: "turn-held", held: { input: { conversationId: "c1", prompt: PROMPT, ...PROFILE }, reason: "stopped", ran: true } }, NOW - 120_000);
+        await at.conversations.send("c1", { kind: "settle" }, NOW - 110_000).settled;
+        expect(at.agents.get("c1")?.status).toBe("resuming");
+        expect(at.lane()).toBe("active");
+
+        at.answer({ stopPolicy: "wait" });
+        await createTurnResumeScheduler(at.services).tick(NOW);
+        expect(at.agents.get("c1")?.status).toBe("error");
+        expect(at.lane()).toBe("attention");
+        expect(at.conversations.state("c1")?.resume.held).toMatchObject({ reason: "stopped", fired: false });
     });
 });

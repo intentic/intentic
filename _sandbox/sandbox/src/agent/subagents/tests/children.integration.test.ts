@@ -12,7 +12,7 @@ import { spawnServices } from "../../../harness/spawn-services.testing.js";
 import { startTurnRun } from "../../run/turn/turn-runs.js";
 import { classifyFailure } from "../../run/frames/classify-failure.js";
 import { conversationIdentity, mainTreePlacement, placedTurn } from "../../run/placement/turn-placement.js";
-import { breakPolicyFor } from "../../run/turn/turn-resume.js";
+import { breakPolicyFor } from "../../run/turn/break-policy.js";
 import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTaint } from "../../../guard/turn-taint.js";
 import { unstubbed } from "@intentic/testing";
 import { reportChildTurn } from "../child-report.js";
@@ -1856,9 +1856,10 @@ describe("a turn the child did not get from its parent", () => {
 // children once sat in the owner's Attention lane after a spent allowance, each waiting for a press, while their parent
 // armed a watch of its own to resume them: a child's own answer books the re-run at the reset instead.
 describe("a child whose allowance runs out", () => {
-    const RESETS_AT = Date.UTC(2026, 8, 26, 15, 38) / 1000;
-    const BOOKED =
-        "The sandbox runs this same turn again by itself at 15:38 UTC, and its report reaches you when that ends: do not send it the task again or give the task to another agent meanwhile.";
+    // Two hours ahead, inside a child's default horizon: a reset already past when the turn is refused is never booked,
+    // since the pass would never fire it (limit-booking.ts). A fixed date here read as booked only until it went by.
+    const RESETS_AT = Math.ceil(Date.now() / 60_000) * 60 + 2 * 60 * 60;
+    const BOOKED = `The sandbox runs this same turn again by itself at ${new Date(RESETS_AT * 1000).toISOString().slice(11, 16)} UTC, and its report reaches you when that ends: do not send it the task again or give the task to another agent meanwhile.`;
 
     // The provider's refusal with a known reset, classified as the daemon's turn classifies it (stream-agent.ts), asking
     // the conversation's own answer to the ending where the daemon asks it; the rest is a turn that ran and left nothing.
@@ -1886,6 +1887,7 @@ describe("a child whose allowance runs out", () => {
                 {
                     breakPolicy: (conversationId, ending) => breakPolicyFor(answers, conversationId, ending),
                     reopensAt: async () => undefined,
+                    standingReopensAt: async () => undefined,
                     limitWay: async () => undefined,
                     stopLadder: () => ({ made: 0, nextAt: undefined }),
                     awaitingVerification: async () => [],

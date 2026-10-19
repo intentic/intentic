@@ -36,8 +36,10 @@ export interface ProviderRefusalStore {
     // Settles that account's own limit refusal too: it served a turn. `model` is what the answered turn ran on: a spent
     // allowance filed for one model is settled only by an answer on that model, since a title job on a cheap model
     // proves nothing about the pool an expensive one spends (2026-10-17: a Composer title call settled an Opus refusal
-    // two seconds after it was filed, and a Gemini flash-lite one settled an Opus 4.6 refusal).
-    readonly clear: (provider: string, account: string | undefined, model?: string | undefined) => Promise<void>;
+    // two seconds after it was filed, and a Gemini flash-lite one settled an Opus 4.6 refusal). `askedAt` is when the
+    // answered request went out: a refusal filed at or after it stands, since that request was already in flight (an
+    // answer to it settled a "try again at 1:53 PM" five seconds after it was filed, 2026-10-19).
+    readonly clear: (provider: string, account: string | undefined, model?: string | undefined, askedAt?: number) => Promise<void>;
     // Fires on every write, with the refusal as it now stands or undefined once settled; what /events forwards, so open
     // windows update within the same beat.
     readonly onChange: (listener: (provider: string, refusal: ProviderRefusal | undefined) => void) => () => void;
@@ -72,12 +74,14 @@ const providerOf = (key: string): string | undefined => (key.includes(":") ? key
 const accountCopy = (refusal: ProviderRefusal): string | undefined => (refusal.kind === "limit" ? refusal.account : undefined);
 
 /*
- * Whether a turn answered on `model` proves this refusal over. A refused credential or a refused account is answered by
- * any turn the account served; a spent allowance only by a turn on the model it named, or by any turn where it named
- * none. An answer whose model is unknown proves nothing about a model-scoped allowance.
+ * Whether a turn answered on `model`, by a request that went out at `askedAt`, proves this refusal over. Only a request
+ * sent after the refusal was filed can. A refused credential or a refused account is answered by any turn the account
+ * served; a spent allowance only by a turn on the model it named, or by any turn where it named none. An answer whose
+ * model is unknown proves nothing about a model-scoped allowance.
  */
-const answeredBy = (refusal: ProviderRefusal, model: string | undefined): boolean =>
-    refusal.kind !== "limit" || refusal.model === undefined || (model !== undefined && model !== "" && refusal.model === model);
+const answeredBy = (refusal: ProviderRefusal, model: string | undefined, askedAt: number | undefined): boolean =>
+    (askedAt === undefined || refusal.at < askedAt) &&
+    (refusal.kind !== "limit" || refusal.model === undefined || (model !== undefined && model !== "" && refusal.model === model));
 
 // Every write to this file decided which account a picker skips, and none of it was logged: one account's refusal took
 // over the provider's slot from another's and the only trace was the file as it stood afterwards. Each change writes one
@@ -151,18 +155,18 @@ export const fileProviderRefusalStore = (path: string, options: ProviderRefusalS
             );
             announce(provider, refusal);
         },
-        clear: async (provider, account, model) => {
+        clear: async (provider, account, model, askedAt) => {
             let settled = false;
             const removed: ProviderRefusal[] = [];
             await file.update((current) => {
                 const stored = current[provider];
                 // A refusal naming a different account belongs to someone else, and is still true; one about another
                 // model's allowance is still true of that model.
-                settled = stored !== undefined && (stored.account === undefined || stored.account === account) && answeredBy(stored, model);
+                settled = stored !== undefined && (stored.account === undefined || stored.account === account) && answeredBy(stored, model, askedAt);
                 // The account's own copy goes whatever the provider's last says, where this answer is about its model.
                 const own = account === undefined ? undefined : accountKey(provider, account);
                 const ownCopy = own === undefined ? undefined : current[own];
-                const ownSettled = ownCopy !== undefined && answeredBy(ownCopy, model);
+                const ownSettled = ownCopy !== undefined && answeredBy(ownCopy, model, askedAt);
                 const settles = (key: string): boolean => (settled && key === provider) || (ownSettled && key === own);
                 removed.splice(0, removed.length, ...Object.entries(current).flatMap(([key, refusal]) => (settles(key) ? [refusal] : [])));
                 return removed.length > 0 ? Object.fromEntries(Object.entries(current).filter(([key]) => !settles(key))) : current;

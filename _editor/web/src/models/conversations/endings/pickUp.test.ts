@@ -15,6 +15,7 @@ import {
     repointedPickUp,
     wakesHeldUntil,
     warmedPickUp,
+    withCardReset,
     withHandoffChosen,
 } from "./pickUp";
 
@@ -244,6 +245,28 @@ describe(`repointedPickUp`, () => {
         const stopped = { reason: `stopped` as const, nextAt: NOW + 60_000, held: { ran: true } };
         expect(repointedPickUp(stopped, { kind: `ready`, room: 60 })).toBe(stopped);
         expect(repointedPickUp(undefined, { kind: `ready`, room: 60 })).toBeUndefined();
+    });
+});
+
+// A Codex 429 named no reset, so the chat said nothing would resend it; the sandbox then timed the hold from what its
+// records knew, and the card moved to Active saying when. The chat says the same (2026-10-19).
+describe(`withCardReset`, () => {
+    const untimed = { reason: `limit` as const, held: { ran: true } };
+    const reopensAt = (NOW + 2 * 3_600_000) / 1_000;
+
+    it(`takes the reset the card states, and the booking with it where the card says one is made`, () => {
+        expect(withCardReset(untimed, { limitResetsAt: reopensAt, limitScheduled: true })).toEqual({ ...untimed, readyAt: reopensAt * 1_000, nextAt: reopensAt * 1_000 });
+        expect(withCardReset(untimed, { limitResetsAt: reopensAt })).toEqual({ ...untimed, readyAt: reopensAt * 1_000 });
+        expect(pickUpNext(withCardReset(untimed, { limitResetsAt: reopensAt, limitScheduled: true })!, `resend`, NOW)).not.toBe(pickUpNext(untimed, `resend`, NOW));
+    });
+
+    it(`keeps a reset the refusal named, and leaves every other wall and a card with none alone`, () => {
+        const named = { ...untimed, readyAt: NOW + 60_000 };
+        expect(withCardReset(named, { limitResetsAt: reopensAt })).toBe(named);
+        expect(withCardReset(untimed, {})).toBe(untimed);
+        const stopped = { reason: `stopped` as const };
+        expect(withCardReset(stopped, { limitResetsAt: reopensAt })).toBe(stopped);
+        expect(withCardReset(undefined, { limitResetsAt: reopensAt })).toBeUndefined();
     });
 });
 

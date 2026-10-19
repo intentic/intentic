@@ -17,6 +17,7 @@ import { ACCOUNT_WIDE, type ObservedLimit } from "../../../usage/observed-limits
 import { opt } from "../../../opt.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import type { HeldReason, HeldTurn } from "../turn/turn-resume.js";
+import { limitReopensAt } from "../../../conversations/actor/limit-booking.js";
 import type { Attribution } from "./frame-decorators.js";
 
 // One failure frame, classified read-only: the frame the window reads, the records to file, its log line and its hold.
@@ -94,6 +95,11 @@ export interface FailureQueries {
         readonly account: string | undefined;
         readonly period?: number;
     }) => Promise<number | undefined>;
+    // When the sandbox's own standing word on this provider's model says the pool reopens (limit-reset.ts
+    // standingReopensAt): the last refusal on file and the model's bench, for a refusal nothing else can time.
+    readonly standingReopensAt: (at: { readonly provider: AgentProvider; readonly model: string | undefined; readonly account: string | undefined }) => Promise<
+        number | undefined
+    >;
     readonly limitWay: (params: Parameters<typeof limitWayOf>[1]) => Promise<LimitWay | undefined>;
     // How many rungs the stop ladder has spent, and when its next would fire (undefined once it is spent).
     readonly stopLadder: (conversationId: string) => { readonly made: number; readonly nextAt: number | undefined };
@@ -172,7 +178,7 @@ const observedWrites = (
    never filed: a reading with room after the refusal answers it, as it always has. */
 const refusalReset = (event: ErrorFrame, context: FailureContext, reopening: Reopening | undefined): number | undefined => {
     if (reopening !== undefined) {
-        return reopening.said ? reopening.at : event.resetsAt;
+        return reopening.said || reopening.carried === true ? reopening.at : event.resetsAt;
     }
     return context.limitReset ?? latestOf(namedReset(event.message, context.now), event.resetsAt);
 };
@@ -297,23 +303,25 @@ export const childRerunAt = (resetsAt: number, conversationId: string): number =
 };
 
 // Dresses a spent-allowance frame with when it reopens, whether it is held, and whether a clock resumes it unasked;
-// `autoResume` needs a held turn and a known instant. A booked move fires on the next pass, "now" to a reader, so it
-// names no instant.
+// `autoResume` needs a held turn the pass would fire at its reset, read by the pass's own rule (limit-booking.ts) off the
+// instant the hold is booked for: none for a child past its horizon, none for a reset already past at the refusal,
+// which the pass never fires at. A booked move fires on the next pass, "now" to a reader, so it names no instant.
 const limitFrame = async (
     queries: FailureQueries,
     event: ErrorFrame,
     limit: {
         readonly conversationId: string | undefined;
         readonly resetsAt: number | undefined;
+        // What the hold is booked for (epoch s): the reset, a child's spread past it, or nothing.
+        readonly booked: number | undefined;
         readonly held: boolean;
         readonly ran: boolean;
         readonly way: LimitWay | undefined;
-        // A child whose reset is past its horizon: offered, never booked.
-        readonly far: boolean;
+        readonly now: number;
     },
 ): Promise<ErrorFrame> => {
     const { conversationId, resetsAt, held, ran, way } = limit;
-    const schedulable = held && resetsAt !== undefined && conversationId !== undefined && !limit.far;
+    const schedulable = held && conversationId !== undefined && limitReopensAt({ reopensAt: limit.booked, recordedAt: limit.now }) !== undefined;
     // `move` implies the appointment, so anything but `wait` keeps it.
     const armed = schedulable ? breakArmed(await queries.breakPolicy(conversationId, "limit")) : false;
     const moving = held ? way?.move?.account : undefined;
@@ -373,12 +381,18 @@ const leftBy = (context: FailureContext): Pick<LimitWay, "standing" | "checklist
    moment IT would ask again (OpenCode's capped retry-after, the translator's bench), and the pool the sentence names
    ("your 5-hour usage limit") reopens when the account's reading says it does: the later of the two. A frame with no
    instant at all reads the snapshot, as before. Booked at the floor, a Gemini quota resetting in a week was re-run in
-   fifteen minutes and a Kimi five-hour window with two hours left in thirty, each refused again (2026-10-17). */
+   fifteen minutes and a Kimi five-hour window with two hours left in thirty, each refused again (2026-10-17). Where
+   none of those knows, the sandbox's own standing word on the same pool does (limit-reset.ts standingReopensAt): a turn
+   refused with no instant two minutes after a sibling on the same model was told "try again at 1:53 PM" was held with
+   no reset at all, and its "Send again" booked nothing (2026-10-19). */
 // `said` is whether the provider's own words decided it (its stream's reset, an instant or a pool its sentence named),
 // which is what the refusal it files may stand on (refusalWrites); a floor or a snapshot is only the booking's.
+// `carried` is an instant the provider said about the same pool earlier, on file: filed again, so this refusal does not
+// erase it from the provider's slot.
 interface Reopening {
     readonly at: number | undefined;
     readonly said: boolean;
+    readonly carried?: true;
 }
 
 const reopeningOf = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<Reopening> => {
@@ -396,7 +410,11 @@ const reopeningOf = async (event: ErrorFrame, context: FailureContext, queries: 
     }
     const { provider, account } = context;
     const at = latestOf(floor, await queries.reopensAt({ provider, model: context.model, account, ...opt("period", period) }));
-    return { at, said: period !== undefined };
+    if (at !== undefined) {
+        return { at, said: period !== undefined };
+    }
+    const standing = await queries.standingReopensAt({ provider, model: context.model, account });
+    return standing === undefined ? { at: undefined, said: false } : { at: standing, said: false, carried: true };
 };
 
 // A spent allowance: when it reopens, whether it is held, the way on, and the model a routed provider benches.
@@ -406,7 +424,7 @@ const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: F
     const model = named(context.model);
     const writes: FailureWrite[] =
         KeyedProviderSchema.safeParse(provider).success && model !== undefined && resetsAt !== undefined && context.door !== true
-            ? [{ kind: "model-cooldown", provider, model, cooldown: { until: resetsAt * 1000, message: event.message } }]
+            ? [{ kind: "model-cooldown", provider, model, cooldown: { until: resetsAt * 1000, message: event.message, since: context.now } }]
             : [];
     const way = await queries.limitWay({
         turn,
@@ -432,7 +450,7 @@ const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: F
     if (resetsAt === undefined && held === undefined) {
         return { frame: event, held, writes };
     }
-    const frame = await limitFrame(queries, event, { conversationId, resetsAt, held: held !== undefined, ran: answered, way, far });
+    const frame = await limitFrame(queries, event, { conversationId, resetsAt, booked, held: held !== undefined, ran: answered, way, now: context.now });
     return { frame, held, writes };
 };
 

@@ -30,7 +30,7 @@ import { landByHandLeased } from "./land/land-by-hand.js";
 import { assignVerdict, fenceVerdict, isMemberAddress } from "./ownership.js";
 import { provenanceOf, refuseUnlessVisible, visibleTo } from "../auth/fleet-scope.js";
 import { armKeepWarm, dropKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
-import { sandboxBreakPolicy } from "../agent/run/turn/turn-resume.js";
+import { sandboxBreakPolicy } from "../agent/run/turn/break-policy.js";
 import { readSubagentTranscript } from "../agent/subagents/subagent-transcript.js";
 import { cancelFamily, familyOf } from "../agent/subagents/children.js";
 import { readSubagentSession } from "../sessions/sessions.js";

@@ -123,11 +123,22 @@ flowchart LR
   that account for every model (`usage/observed-limits.ts` `ACCOUNT_WIDE`, believed for a day). Placement, the spawn gate
   and a conversation remembering that account all move off it. An answer settles a spent allowance only for the model it
   came on (`usage/provider-refusals.ts` `answeredBy`), and a running turn's later fresh answers count as well as its
-  first. The reset is the vendor's own word where it gives one (`usage/reset-sentences.ts`: "Resets in 166h40m39s", "try
+  first. An answer settles only what was filed before its request went out, since a request already in flight proves
+  nothing about a refusal that came after it (`agent/run/frames/frame-reducers.ts`). The reset is the vendor's own word
+  where it gives one (`usage/reset-sentences.ts`: "Resets in 166h40m39s", "try
   again at 5:46 PM"). A loop's retry and the translator's bench only set the earliest re-run, and a pool the sentence
-  names by length ("your 5-hour usage limit") reopens when the reading says that pool does. A spent allowance in a
+  names by length ("your 5-hour usage limit") reopens when the reading says that pool does. A refusal that names no
+  instant takes the sandbox's standing word on the same pool: the last refusal on file for the model, or its bench
+  (`agent/models/limit-reset.ts` `standingReopensAt`). A spent allowance in a
   routed refusal envelope stays a spent allowance, not a model off the plan. An admin-granted credit ("send a request to
   your admin") is filed `unmetered`, so no usage reading answers it.
+- Whether a held turn goes again by itself is one rule (`conversations/actor/limit-booking.ts`). The resume pass fires
+  by it, the failure frame states it, and the card's `limitScheduled`, which files the card in Active rather than
+  Attention, is projected from it. Every beat the pass holds each held card to that rule, times a hold refused with no
+  instant once the records know its reopen, and withdraws a "resuming" whose answer is now to wait
+  (`agent/run/turn/held-standing.ts`). (2026-10-19) Before, three places decided it from three inputs. An answer to a
+  request sent before a refusal settled the refusal, so two Codex turns refused minutes later were held with no reset,
+  and their "Send again" booked nothing while a sibling's moved to Active.
 - Codex sends steering after `turn/started` acknowledges the active turn. A refused message becomes a follow-up
   on the same thread once that turn settles; this preserves accepted input even when completion wins the race
   (2026-10-01). Final completion closes steering admission before yielding terminal frames, while planning keeps

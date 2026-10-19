@@ -162,6 +162,30 @@ test("a spent allowance is settled only by an answer on the model it named", asy
     expect(await store.onFile()).toEqual({});
 });
 
+// A request already in flight when the refusal was filed was admitted before the pool ran dry: its answer is no proof the
+// pool has room. On 2026-10-19 one sent at 11:39:09 and answered at 11:39:18 settled a "try again at 1:53 PM" filed at
+// 11:39:13, and the turns refused on that account next found no instant to be booked for.
+test("an answer settles only what was filed before its request went out", async () => {
+    const { store } = tempStore();
+    const filed = Date.now() - 5_000;
+    const reopens = Math.round(Date.now() / 1000) + 7_200;
+    await store.record("codex", refusal({ at: filed, model: "gpt-6.1-sol", resetsAt: reopens }));
+    await store.clear("codex", undefined, "gpt-6.1-sol", filed - 4_000);
+    await store.clear("codex", undefined, "gpt-6.1-sol", filed);
+    expect((await store.read())[`codex`]?.resetsAt).toBe(reopens);
+
+    await store.clear("codex", undefined, "gpt-6.1-sol", filed + 1);
+    expect(await store.read()).toEqual({});
+});
+
+test("an account's own copy outlives an answer to a request sent before it was filed", async () => {
+    const { store } = tempStore();
+    const filed = Date.now() - 5_000;
+    await store.record("cursor", refusal({ at: filed, account: "a", model: "composer-2.5" }));
+    await store.clear("cursor", "a", "composer-2.5", filed - 4_000);
+    expect((await store.onFile())[`cursor`]).toHaveLength(2);
+});
+
 test("a refused account is settled by an answer on any model", async () => {
     const { store } = tempStore();
     await store.record("cursor", refusal({ kind: "entitlement", account: "a", model: "claude-opus-5-5" }));

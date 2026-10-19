@@ -45,3 +45,16 @@ test("forgets a refusal it has believed for its whole horizon", async () => {
     await store.record("cursor", "one", "composer-2.5", { at: now - 1000, message: REFUSED });
     expect(Object.keys(await store.spent("cursor", "one"))).toEqual(["composer-2.5"]);
 });
+
+// A turn's answer settles the account's entry only where its request went out after the refusal was recorded: one
+// already in flight then was admitted before the pool ran dry (provider-refusals.ts clear).
+test("an answer forgets only what was recorded before its request went out", async () => {
+    const { store } = tempStore();
+    const now = Date.now();
+    await store.record("cursor", "one", "composer-2.5", { at: now - 1000, message: REFUSED });
+    expect(await store.forget("cursor", "one", "composer-2.5", now - 5000)).toBe(false);
+    expect(Object.keys(await store.spent("cursor", "one"))).toEqual(["composer-2.5"]);
+
+    expect(await store.forget("cursor", "one", "composer-2.5", now)).toBe(true);
+    expect(await store.spent("cursor", "one")).toEqual({});
+});

@@ -66,3 +66,42 @@ export const limitReopensAt = async (params: {
     const limit = await services.cliProxy.turnLimit(routed.data, model).catch(() => undefined);
     return limit?.reopensAt;
 };
+
+/* THE SANDBOX'S OWN STANDING WORD ON A SPENT POOL. A refusal can name no instant (Codex hands over a 429 it was waiting
+   out inside the turn, saying only "rate limit") while the pool it hit was refused minutes earlier, in the provider's
+   own words, until a stated time: two turns on one Codex account were held with no reset and nothing to book them by,
+   two minutes after a sibling on the same model was told "try again at 1:53 PM" (2026-10-19). Where nothing else knows
+   when the pool reopens, the last refusal on file for this provider's model (and account, where it names one) and the
+   model's bench say it, the later of the two while still ahead. Never throws; undefined where neither stands. */
+export const standingReopensAt = async (params: {
+    readonly services: Pick<Services, "providerRefusals" | "modelCooldowns">;
+    readonly provider: AgentProvider;
+    readonly model: string | undefined;
+    readonly account: string | undefined;
+    readonly now?: number;
+}): Promise<number | undefined> => {
+    const { services, provider, account } = params;
+    const model = params.model === undefined || params.model === "" ? undefined : params.model;
+    const nowSeconds = (params.now ?? Date.now()) / 1000;
+    // A routed provider files its refusals under no account (classify-failure.ts refusingAccount), whatever label rides
+    // as the turn's account; a refusal naming another account is another pool.
+    const routed = KeyedProviderSchema.safeParse(provider).success;
+    // allow(silent-catch): this answers "when", never throws; an unreadable file leaves nothing standing.
+    const refusals = (await services.providerRefusals.onFile().catch(() => undefined))?.[provider] ?? [];
+    const filed = refusals
+        .filter(
+            (refusal) =>
+                refusal.kind === "limit" &&
+                (refusal.account === undefined || (!routed && refusal.account === account)) &&
+                (refusal.model === undefined || refusal.model === model),
+        )
+        .flatMap((refusal) => (refusal.resetsAt === undefined ? [] : [refusal.resetsAt]));
+    // allow(silent-catch): as above.
+    const bench = model === undefined ? undefined : (await services.modelCooldowns.cooling(provider).catch(() => undefined))?.get(model);
+    const instants = [...filed, ...(bench === undefined ? [] : [Math.ceil(bench.until / 1000)])].filter((at) => at > nowSeconds);
+    return instants.length === 0 ? undefined : Math.max(...instants);
+};
+
+/** When a spent pool reopens by everything the sandbox holds: a reading (limitReopensAt), else its standing word. */
+export const knownReopensAt = async (params: Parameters<typeof limitReopensAt>[0] & { readonly now?: number }): Promise<number | undefined> =>
+    (await limitReopensAt(params)) ?? (await standingReopensAt(params));

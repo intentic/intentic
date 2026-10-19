@@ -1,8 +1,9 @@
-import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { UsageWindow,ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import type { TurnLimit } from "../../usage/serviceability/fleet-limit.js";
-import { limitReopensAt } from "./limit-reset.js";
+import type { StoredCooldown } from "../../usage/model-cooldowns.js";
+import { limitReopensAt, standingReopensAt } from "./limit-reset.js";
 
 // Pins that the refusal frame's reopen time reads the same whichever runtime ran the turn, and the two cases where
 // answering nothing is the honest answer.
@@ -136,4 +137,43 @@ test("a refusal naming its pool by length reads that pool's reset, even before t
 
     expect(await limitReopensAt({ services: routed, provider: `kimi`, model: `kimi-k3`, account: undefined, period: 5 * 3_600 })).toBe(now + 7_200);
     expect(await limitReopensAt({ services: routed, provider: `kimi`, model: `kimi-k3`, account: undefined })).toBe(now + 1_800);
+});
+
+describe("the sandbox's standing word on a pool", () => {
+    const NOW = SECONDS * 1000;
+    const standing = (refusals: readonly ProviderRefusal[], cooling: Record<string, StoredCooldown> = {}) =>
+        unstubbed<Pick<Services, `providerRefusals` | `modelCooldowns`>>(`standing`, {
+            providerRefusals: unstubbed<Services[`providerRefusals`]>(`providerRefusals`, { onFile: async () => ({ codex: refusals, claude: refusals }) }),
+            modelCooldowns: unstubbed<Services[`modelCooldowns`]>(`modelCooldowns`, { cooling: async () => new Map(Object.entries(cooling)) }),
+        });
+    const spent = (over: Partial<ProviderRefusal>): ProviderRefusal => ({ at: NOW - 60_000, kind: `limit`, message: `try again at 1:53 PM`, ...over });
+
+    // A Codex 429 handed over with no instant, two minutes after a sibling on the same model was told when it reopens.
+    test("times a routed refusal by the last one on file for its model, whatever label the turn rode under", async () => {
+        const records = standing([spent({ model: `gpt-6.1-sol`, resetsAt: SECONDS + 8_000 })]);
+        await expect(
+            standingReopensAt({ services: records, provider: `codex`, model: `gpt-6.1-sol`, account: `codex-subscription`, now: NOW }),
+        ).resolves.toBe(SECONDS + 8_000);
+    });
+
+    test("reads the model's bench too, and the later of the two", async () => {
+        const records = standing([spent({ model: `gpt-6.1-sol`, resetsAt: SECONDS + 8_000 })], {
+            "gpt-6.1-sol": { until: (SECONDS + 9_000) * 1000, message: `cooling` },
+        });
+        await expect(standingReopensAt({ services: records, provider: `codex`, model: `gpt-6.1-sol`, account: undefined, now: NOW })).resolves.toBe(
+            SECONDS + 9_000,
+        );
+    });
+
+    test("says nothing for another model's pool, another account's, a past instant, or a refusal that named none", async () => {
+        const records = standing([
+            spent({ model: `gpt-6-astra`, resetsAt: SECONDS + 8_000 }),
+            spent({ model: `opus`, account: `other`, resetsAt: SECONDS + 8_000 }),
+            spent({ model: `opus`, resetsAt: SECONDS - 10 }),
+            spent({ model: `opus` }),
+            spent({ kind: `auth`, resetsAt: SECONDS + 8_000 }),
+        ]);
+        await expect(standingReopensAt({ services: records, provider: `codex`, model: `gpt-6.1-sol`, account: undefined, now: NOW })).resolves.toBeUndefined();
+        await expect(standingReopensAt({ services: records, provider: `claude`, model: `opus`, account: `acct`, now: NOW })).resolves.toBeUndefined();
+    });
 });

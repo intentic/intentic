@@ -57,6 +57,26 @@ test("a cleared cooldown is gone, and its siblings stay benched", async () => {
     expect([...(await store.cooling("codex")).keys()]).toEqual(["gpt-5.6-sol"]);
 });
 
+// Benched while the answering request was in flight: that answer says nothing about the bench (provider-refusals.ts).
+test("an answer to a request sent before the bench leaves it standing, and one sent after reopens it", async () => {
+    const { store } = tempStore();
+    const until = Date.now() + 300_000;
+    await store.record("codex", "gpt-6.1-sol", { until, message: COOLING, since: 13_000 });
+    await store.clear("codex", "gpt-6.1-sol", 9_000);
+    expect((await store.cooling("codex")).get("gpt-6.1-sol")?.until).toBe(until);
+
+    await store.clear("codex", "gpt-6.1-sol", 13_001);
+    expect(await store.cooling("codex")).toEqual(new Map());
+});
+
+// An older build wrote no `since`; any answer settles such an entry, as every answer did then.
+test("a bench with no filing instant is settled by any answer", async () => {
+    const { store } = tempStore();
+    await store.record("codex", "gpt-6.1-sol", { until: Date.now() + 300_000, message: COOLING });
+    await store.clear("codex", "gpt-6.1-sol", 9_000);
+    expect(await store.cooling("codex")).toEqual(new Map());
+});
+
 // The common case is a turn on a model nothing benched; clearing it must not create the file.
 test("clearing a model nothing benched writes nothing", async () => {
     const { store, path } = tempStore();

@@ -80,8 +80,9 @@ export interface ObservedLimitStore {
     // Drops one account's ledger whole: a forgotten account's refusals describe nothing any more.
     readonly clear: (provider: string, account: string) => Promise<void>;
     // Drops one model's entry, leaving the account's others standing: what unmarking by hand does, where clearing the
-    // whole ledger would throw away refusals nobody asked about. Answers whether there was one to drop.
-    readonly forget: (provider: string, account: string, model: string) => Promise<boolean>;
+    // whole ledger would throw away refusals nobody asked about. Answers whether there was one to drop. `askedAt`, from a
+    // turn's answer, is when its request went out: an entry recorded at or after it stands (provider-refusals.ts clear).
+    readonly forget: (provider: string, account: string, model: string, askedAt?: number) => Promise<boolean>;
 }
 
 export const fileObservedLimitStore = (path: string): ObservedLimitStore => {
@@ -110,12 +111,13 @@ export const fileObservedLimitStore = (path: string): ObservedLimitStore => {
                 return rest;
             });
         },
-        forget: async (provider, account, model) => {
+        forget: async (provider, account, model, askedAt) => {
             const key = keyOf(provider, account);
             let had = false;
             await file.update((current) => {
                 const stored = current[key];
-                if (stored === undefined || !(model in stored)) {
+                const entry = stored?.[model];
+                if (stored === undefined || entry === undefined || (askedAt !== undefined && entry.at >= askedAt)) {
                     return current;
                 }
                 had = true;

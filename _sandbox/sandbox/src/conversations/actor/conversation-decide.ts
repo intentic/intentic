@@ -2,7 +2,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { AgentJob, AgentSummary, AgentWatch, ReviewTally, SessionOwner, TurnProof, TurnReach } from "@intentic/sandbox-contract/schemas/agents";
 import type { AgentNeed } from "@intentic/sandbox-contract/schemas/needs";
 import type { AgentOrigin, ForkedFrom, FreshSession, TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
-import { handoffAvailable, type HandoffMode } from "@intentic/sandbox-contract/schemas/providers/handoff";
+import type { HandoffMode } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import type { KeepWarmEnd } from "@intentic/sandbox-contract/schemas/keep-warm";
 import { type LimitPolicy, RETRY_LADDER_TRIES } from "@intentic/sandbox-contract/schemas/turn-break";
 import { PARK_KINDS, type ParkKind, type ResumeRouting } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
@@ -14,6 +14,8 @@ import { opt } from "../../opt.js";
 import type { FailedEnding, PersistedAgent } from "../registry/agents-store.js";
 import { keptHold, type StoredLimitHold, storedLimitHold } from "./limit-hold.js";
 import { comingBackNow, failureOf, sanitizeFailure } from "./turn-failure.js";
+import { BROADCAST, unchanged, withResume } from "./decision-parts.js";
+import { onHandoffChosen, onHeldRepointed, onHeldRetimed } from "./held-decide.js";
 import {
     type Booking,
     edited,
@@ -154,6 +156,10 @@ export type ConversationEvent =
     // A person picked another account while a spent allowance held the turn: the booking follows the pick, re-timed to
     // that account's reopen (`reopensAt`, epoch s; absent leaves it press-only). Answers whether a hold took it.
     | { readonly kind: "held-repointed"; readonly account: string; readonly carry: boolean; readonly reopensAt?: number }
+    // A spent allowance's hold that was refused with no reopen to go at, timed once the sandbox's records say when its
+    // pool reopens (`reopensAt`, epoch s; held-standing.ts retimeLimitHold). Taken only by an unfired limit hold still
+    // without an instant and without a move; answers whether it took it.
+    | { readonly kind: "held-retimed"; readonly reopensAt: number }
     // A person picked how a spent allowance's held turn continues once it is sent again; answers whether the hold took it.
     | { readonly kind: "handoff-chosen"; readonly handoff: HandoffMode }
     // A turn took the conversation's steering seam; it starts unwatched, whatever the last one was.
@@ -255,6 +261,7 @@ interface Replies {
     readonly "resume-superseded": HeldRecord | undefined;
     readonly "held-fired": boolean;
     readonly "held-repointed": boolean;
+    readonly "held-retimed": boolean;
     readonly "handoff-chosen": boolean;
     readonly "steer-reserved": number | undefined;
     readonly "steers-taken": readonly (TurnCheckpoint | undefined)[];
@@ -277,10 +284,6 @@ export interface Decision<R> {
 // Half a pair names no deadline, so the frame is read only whole; a frame carrying neither leaves the last one standing.
 const promptCacheOf = (event: Extract<AgentEvent, { kind: "context_usage" }>, last: TurnRuntime["promptCache"]): TurnRuntime["promptCache"] =>
     event.cachedAt !== undefined && event.cacheTtlMs !== undefined ? { at: event.cachedAt, ttlMs: event.cacheTtlMs } : last;
-
-const unchanged = <R>(state: ConversationState, reply: R): Decision<R> => ({ state, effects: [], reply });
-
-const BROADCAST: readonly ConversationEffect[] = [{ kind: "broadcast" }];
 
 // A queue that moved is written onto the entry, persisted, and shown, in that order; one that did not writes nothing.
 const queueWrites = (before: TurnQueue, after: TurnQueue): readonly ConversationEffect[] =>
@@ -591,11 +594,6 @@ const onRewindLeased = (state: ConversationState): Decision<boolean> =>
 const onRewindReleased = (state: ConversationState): Decision<undefined> =>
     unchanged(state.phase.kind === "rewinding" ? { ...state, phase: { kind: "idle" } } : state, undefined);
 
-const withResume = (state: ConversationState, resume: Partial<ConversationState["resume"]>): ConversationState => ({
-    ...state,
-    resume: { ...state.resume, ...resume },
-});
-
 // A stopped hold inherits the ladder's count; an outage or a refused credential says nothing of a stall, so restarts it.
 const onHeld = (state: ConversationState, held: HeldTurn, now: number): Decision<undefined> => {
     const tries = held.reason === "stopped" ? state.resume.stopTries : 0;
@@ -620,32 +618,6 @@ const onHeldFired = (state: ConversationState, ladder: boolean, judged: HeldReco
         return unchanged(state, false);
     }
     return unchanged(withResume(state, { held: { ...held, fired: true }, ...(ladder ? { stopTries: held.tries + 1 } : {}) }), true);
-};
-
-// Only an unfired limit hold is re-timed: every other wall is not about which account pays. A pick undoes a booked move,
-// since the person has just said where it goes.
-const onHeldRepointed = (state: ConversationState, event: Extract<ConversationEvent, { kind: "held-repointed" }>): Decision<boolean> => {
-    const { held } = state.resume;
-    if (held === undefined || held.fired || held.reason !== "limit") {
-        return unchanged(state, false);
-    }
-    const { reopensAt: _old, ...rest } = held;
-    const repointed: HeldRecord = {
-        ...rest,
-        ...opt("reopensAt", event.reopensAt),
-        onto: { account: event.account, carry: event.carry },
-        move: undefined,
-    };
-    return unchanged(withResume(state, { held: repointed }), true);
-};
-
-// Only an unfired limit hold whose offer names that way on takes the pick; told to every window, whose card shows it.
-const onHandoffChosen = (state: ConversationState, event: Extract<ConversationEvent, { kind: "handoff-chosen" }>): Decision<boolean> => {
-    const { held } = state.resume;
-    if (held === undefined || held.fired || held.reason !== "limit" || held.handoff === undefined || !handoffAvailable(held.handoff, event.handoff)) {
-        return unchanged(state, false);
-    }
-    return { state: withResume(state, { held: { ...held, handoff: { ...held.handoff, chosen: event.handoff } } }), effects: BROADCAST, reply: true };
 };
 
 // Bounds runaway steering per conversation; a settling turn empties the boxes, this guards one that never does. Only
@@ -772,6 +744,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
             ? { state: withResume(state, { held: event.held }), effects: BROADCAST, reply: undefined }
             : unchanged(state, undefined),
     "held-repointed": (state, event) => onHeldRepointed(state, event),
+    "held-retimed": (state, event) => onHeldRetimed(state, event.reopensAt),
     "handoff-chosen": (state, event) => onHandoffChosen(state, event),
     "ladder-spent": (state) =>
         unchanged(withResume(state, { held: state.resume.held && { ...state.resume.held, fired: true }, stopTries: 0 }), undefined),

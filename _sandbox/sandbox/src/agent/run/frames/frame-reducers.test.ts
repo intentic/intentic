@@ -182,7 +182,7 @@ test("a reducer answers its reading at any point of the walk", () => {
 
 describe("a turn's frames", () => {
     test("fold into every reading and ledger at once, and say which frame was the first answer", () => {
-        const frames = createTurnFrames(WORKSPACE_ROOT, "resumed");
+        const frames = createTurnFrames(WORKSPACE_ROOT, "resumed", 42);
         const stream: AgentEvent[] = [
             { kind: "session", sessionId: "s-1" },
             { kind: "rate_limit_info", status: "allowed", resetsAt: 50 },
@@ -195,7 +195,8 @@ describe("a turn's frames", () => {
             { kind: "error", message: "stopped" },
         ];
 
-        expect(stream.map((event) => frames.note(event))).toStrictEqual([false, false, true, false, false, false, false, false, false]);
+        // The first answer reports the turn's opening as when its request went out.
+        expect(stream.map((event) => frames.note(event))).toStrictEqual([undefined, undefined, 42, undefined, undefined, undefined, undefined, undefined, undefined]);
         expect(frames.readings()).toStrictEqual({
             sessionId: "s-1",
             usage: { kind: "usage", costUsd: 1 },
@@ -265,15 +266,26 @@ describe("a running turn's later answers", () => {
     test("re-settle refusals at most once a minute, and only on a fresh request's answer", () => {
         const resettle = createAnswerResettle();
         // The first answer is TurnFrames.note's to report; this one starts the clock.
-        expect(resettle.note(tool, 0)).toBe(false);
-        expect(resettle.note(said, 0)).toBe(false);
+        expect(resettle.note(tool, 0)).toBeUndefined();
+        expect(resettle.note(said, 0)).toBeUndefined();
         // Streaming on without a tool result in between is the same reply.
-        expect(resettle.note(said, RESETTLE_EVERY_MS * 2)).toBe(false);
-        expect(resettle.note(tool, RESETTLE_EVERY_MS * 2)).toBe(false);
-        expect(resettle.note(said, RESETTLE_EVERY_MS * 2)).toBe(true);
+        expect(resettle.note(said, RESETTLE_EVERY_MS * 2)).toBeUndefined();
+        expect(resettle.note(tool, RESETTLE_EVERY_MS * 2)).toBeUndefined();
+        expect(resettle.note(said, RESETTLE_EVERY_MS * 2 + 5)).toBe(RESETTLE_EVERY_MS * 2);
         // Within the minute: nothing more.
-        expect(resettle.note(tool, RESETTLE_EVERY_MS * 2 + 1)).toBe(false);
-        expect(resettle.note(said, RESETTLE_EVERY_MS * 2 + 1)).toBe(false);
+        expect(resettle.note(tool, RESETTLE_EVERY_MS * 2 + 6)).toBeUndefined();
+        expect(resettle.note(said, RESETTLE_EVERY_MS * 2 + 7)).toBeUndefined();
+    });
+
+    // The request answering a tool result goes out when that result comes back, not when its first word arrives: a
+    // refusal filed in between was filed while it was in flight, and its answer settles nothing filed after it went.
+    test("answer with when the request went out, the last tool result before the answer", () => {
+        const resettle = createAnswerResettle();
+        resettle.note(tool, 0);
+        resettle.note(said, 0);
+        resettle.note(tool, RESETTLE_EVERY_MS * 2);
+        resettle.note(tool, RESETTLE_EVERY_MS * 2 + 100);
+        expect(resettle.note(said, RESETTLE_EVERY_MS * 2 + 9_000)).toBe(RESETTLE_EVERY_MS * 2 + 100);
     });
 
     test("ignore a subagent's narration", () => {
@@ -281,6 +293,6 @@ describe("a running turn's later answers", () => {
         resettle.note(tool, 0);
         resettle.note(said, 0);
         resettle.note(tool, RESETTLE_EVERY_MS * 2);
-        expect(resettle.note({ kind: "delta", text: "x", parentToolUseId: "p" }, RESETTLE_EVERY_MS * 2)).toBe(false);
+        expect(resettle.note({ kind: "delta", text: "x", parentToolUseId: "p" }, RESETTLE_EVERY_MS * 2)).toBeUndefined();
     });
 });

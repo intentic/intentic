@@ -7,7 +7,6 @@ import {
     RETRY_LADDER_TRIES,
     retryLadderDelay,
     type TurnBreak,
-    type TurnBreakPolicy,
 } from "@intentic/sandbox-contract/schemas/turn-break";
 import { cancelledRequests } from "@intentic/sandbox-contract/policy/request-status";
 import { isAwaitingDecision, REQUEST_FIELDS, type TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
@@ -39,6 +38,9 @@ import { previousRun } from "../../../system/boot/restarts/boot-marker.js";
 import { restartCost } from "../../../system/boot/restarts/restart-record.js";
 import { notResumedReason, type RestartResume, restartResume } from "./restart-resume-policy.js";
 import { rebookedForReopen, spentUntil } from "./allowance-gate.js";
+import { limitBooking, limitReopensAt } from "../../../conversations/actor/limit-booking.js";
+import { breakPolicyFor } from "./break-policy.js";
+import { keepStandingTrue } from "./held-standing.js";
 import { releaseBooked } from "./booked-release.js";
 
 // Re-runs a turn once its blocker clears. Two kinds live here and should not be confused: the daemon's own bookkeeping
@@ -266,35 +268,6 @@ export const carryOnTurn = async (
     return started === "busy" || started === "archived" ? undefined : started;
 };
 
-// The one reader for every ending's question. Two callers must agree about the same turn — the failure frame promises
-// what happens next, and the pass below performs it — so both come through here. Per-conversation override wins;
-// absent, the sandbox-wide policy answers. Asked fresh at the moment it matters (the window opening, the rung falling
-// due), never snapshotted at the failure, so a mind changed in between is honoured; the one exception is the limit's
-// move, booked once at the failure (agent.routes) so the request's message and the fire cannot disagree.
-export const breakPolicyFor = async (
-    services: Pick<Services, "agents" | "sandboxSettings">,
-    conversationId: string,
-    ending: TurnBreak,
-): Promise<TurnBreakPolicy> => {
-    const override = services.agents.entry(conversationId)?.postures[ending];
-    return override ?? (await sandboxBreakPolicy(services, ending));
-};
-
-// The sandbox-wide answer, which a conversation with no answer of its own inherits.
-export const sandboxBreakPolicy = async (services: Pick<Services, "sandboxSettings">, ending: TurnBreak): Promise<TurnBreakPolicy> => {
-    const settings = await services.sandboxSettings.get();
-    switch (ending) {
-        case "limit":
-            return settings.limitPolicy;
-        case "outage":
-            return settings.outagePolicy;
-        case "memory":
-            return settings.memoryPolicy;
-        default:
-            return settings.stopPolicy;
-    }
-};
-
 // `fresh` drops a session that holds only one unanswered message, for a record-seeded handoff instead of replaying
 // provider filler. A note already on the prompt stays unless `restate` replaces it, and `resume` names the one it keeps.
 const resumedTurn = (
@@ -482,13 +455,6 @@ const fireAuthResume: Rung["fire"] = async (services, held) => {
     }
 };
 
-// The instant (ms) a spent allowance's hold is booked to go at its reset, or undefined: none named, or one already past
-// at the refusal, which would loop. One answer for the pass that fires it and the wake that keeps the machine up for it.
-const limitReopensAt = (held: HeldRecord): number | undefined => {
-    const reopensAt = held.reopensAt === undefined ? undefined : held.reopensAt * 1000;
-    return reopensAt === undefined || reopensAt <= held.recordedAt ? undefined : reopensAt;
-};
-
 // A door hold has no rung: whether a turn goes past the wall that stopped it is a person's call, not a clock's. The one
 // door a moment's wait clears by itself, low memory, is let go on its own answer once there is room (releaseRoomHolds).
 const RUNGS: { readonly [R in HeldReason]?: Rung } = {
@@ -671,19 +637,10 @@ const releaseRoomHolds = async (services: Services, now: number): Promise<void> 
     await services.turns.drain(conversationId);
 };
 
-// When a spent allowance's unfired hold goes by itself, read the way the pass reads it (RUNGS.limit, runRung): a booked
-// move at once while the conversation still answers the limit with a move, else its reset where it answers with any send.
-// Undefined for a hold only a press sends.
-const heldSendAt = async (services: Pick<Services, "agents" | "sandboxSettings">, conversationId: string, held: HeldRecord): Promise<number | undefined> => {
-    if (held.reason !== "limit" || held.fired) {
-        return undefined;
-    }
-    const policy = await breakPolicyFor(services, conversationId, "limit");
-    if (!breakArmed(policy)) {
-        return undefined;
-    }
-    return held.move !== undefined && policy === "move" ? held.recordedAt : limitReopensAt(held);
-};
+// When a spent allowance's unfired hold goes by itself, by the one rule the pass fires by (limit-booking.ts). Undefined
+// for a hold only a press sends.
+const heldSendAt = async (services: Pick<Services, "agents" | "sandboxSettings">, conversationId: string, held: HeldRecord): Promise<number | undefined> =>
+    held.reason !== "limit" || held.fired ? undefined : limitBooking(held, await breakPolicyFor(services, conversationId, "limit"))?.at;
 
 /**
  * The soonest instant the sandbox's own clock sends something a conversation is waiting on (ms), or 0 for none: a
@@ -704,6 +661,8 @@ export const createTurnResumeScheduler = (services: Services, intervalMs = 5_000
     // same records underneath it. A rung reads a policy before it stamps its record, and a second pass walking a stale
     // snapshot could fire the same hold twice; a send let go waits on a version commit, and must not be let go again.
     const passes = new SingleFlight<"pass", void>();
+    // When each instant-less limit hold last asked the records for its reopen (retimeLimitHold).
+    const retimeAsked = new Map<string, number>();
 
     const pass = async (now: number): Promise<void> => {
         for (const { conversationId, record } of services.conversations.stranded()) {
@@ -714,6 +673,7 @@ export const createTurnResumeScheduler = (services: Services, intervalMs = 5_000
                 if (wakesReopened(services, conversationId, record, now)) {
                     await services.turns.drain(conversationId);
                 }
+                await keepStandingTrue(services, conversationId, now, retimeAsked);
             } catch (error) {
                 services.logger.error({ err: error, conversationId, reason: record.reason }, "resume pass: a held turn could not be resumed, the pass goes on to the next");
             }

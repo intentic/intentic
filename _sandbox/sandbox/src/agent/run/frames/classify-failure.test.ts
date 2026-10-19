@@ -44,6 +44,7 @@ const answering = (
     answers: {
         readonly policy?: TurnBreakPolicy;
         readonly reopensAt?: number;
+        readonly standing?: number;
         readonly way?: LimitWay;
         readonly made?: number;
         readonly rung?: number;
@@ -60,6 +61,10 @@ const answering = (
         reopensAt: async (at) => {
             asked.push(["reopensAt", at]);
             return answers.reopensAt;
+        },
+        standingReopensAt: async (at) => {
+            asked.push(["standingReopensAt", at]);
+            return answers.standing;
         },
         limitWay: async (params) => {
             asked.push(["limitWay", params]);
@@ -236,8 +241,9 @@ describe("a spent allowance", () => {
         expect(refusalReset(guessed)).toBeUndefined();
     });
 
+    const RESET = NOW / 1000 + 3_600;
     const armed: [string, TurnBreakPolicy, LimitWay, Partial<ErrorFrame>][] = [
-        ["an armed conversation keeps the reset as its appointment", "resend", way, { autoResume: "scheduled", nextAt: 60 }],
+        ["an armed conversation keeps the reset as its appointment", "resend", way, { autoResume: "scheduled", nextAt: RESET }],
         ["an unarmed one only offers", "wait", way, { autoResume: "available" }],
         [
             "a booked move is scheduled now, so it names no instant",
@@ -247,8 +253,16 @@ describe("a spent allowance", () => {
         ],
     ];
     test.each(armed)("%s", async (_case, policy, booked, dressed) => {
-        const { frame } = await classifyFailure(limit, context({ limitReset: 60 }), answering({ policy, way: booked }));
-        expect(frame).toStrictEqual({ ...limit, resetsAt: 60, held: { ran: true, contextTokens: 9_000, handoffTokens: 1_200 }, ...dressed });
+        const { frame } = await classifyFailure(limit, context({ limitReset: RESET }), answering({ policy, way: booked }));
+        expect(frame).toStrictEqual({ ...limit, resetsAt: RESET, held: { ran: true, contextTokens: 9_000, handoffTokens: 1_200 }, ...dressed });
+    });
+
+    // The pass never fires a hold at a reset already past when it was refused (it would only loop, limit-booking.ts), so
+    // the frame does not promise it: a card reading "resends shortly" in Active would wait there for nothing.
+    test("a reset already past at the refusal books nothing, whatever the answer", async () => {
+        const { frame } = await classifyFailure(limit, context({ limitReset: NOW / 1000 - 60 }), answering({ policy: "resend", way }));
+        expect(frame.autoResume).not.toBe("scheduled");
+        expect(frame.nextAt).toBeUndefined();
     });
 
     test("with no reset anywhere it is still held, with nothing to schedule", async () => {
@@ -256,7 +270,25 @@ describe("a spent allowance", () => {
         const plan = await classifyFailure(limit, context({ answered: false }), queries);
         expect(plan.frame).toStrictEqual({ ...limit, held: { ran: false, contextTokens: 9_000, handoffTokens: 1_200 } });
         expect(plan.held).toStrictEqual({ input, reason: "limit", sessionId: "s-1", ran: false, ...way });
-        expect(queries.asked.map(([name]) => name)).toStrictEqual(["reopensAt", "limitWay"]);
+        expect(queries.asked.map(([name]) => name)).toStrictEqual(["reopensAt", "standingReopensAt", "limitWay"]);
+    });
+
+    // A refusal naming no instant, minutes after the provider told a sibling on the same pool when it reopens: that word,
+    // still on file, times this one too. Two Codex turns refused that way were held with no reset, so "Send again" booked
+    // neither, while the sibling told "try again at 1:53 PM" was booked for it (2026-10-19).
+    test("with no reset of its own it takes the sandbox's standing word on the pool, booked and filed again", async () => {
+        const queries = answering({ way, standing: 1_900_000_000, policy: "resend" });
+        const plan = await classifyFailure(limit, context(), queries);
+        expect(plan.frame).toMatchObject({ resetsAt: 1_900_000_000, autoResume: "scheduled", nextAt: 1_900_000_000 });
+        expect(plan.held).toMatchObject({ reason: "limit", reopensAt: 1_900_000_000 });
+        expect(plan.writes[0]).toMatchObject({ kind: "provider-refusal", refusal: { kind: "limit", resetsAt: 1_900_000_000 } });
+        expect(queries.asked).toContainEqual(["standingReopensAt", { provider: "claude", model: "opus", account: "acct" }]);
+    });
+
+    test("a reading's reset outranks the standing word, which is not asked", async () => {
+        const queries = answering({ way, reopensAt: 5, standing: 1_900_000_000 });
+        expect((await classifyFailure(limit, context(), queries)).frame.resetsAt).toBe(5);
+        expect(queries.asked.map(([name]) => name)).not.toContain("standingReopensAt");
     });
 
     test("with no reset and no conversation it goes out bare, and says it held nothing", async () => {
@@ -290,7 +322,7 @@ describe("a spent allowance", () => {
                 refusal: { at: NOW, kind: "limit", message: "429 usage limit", model: "gpt-5.1", resetsAt: 1_900_000_000 },
             },
             { kind: "headroom-refresh", options: { scope: { providers: ["codex"] }, maxAgeMs: 0 } },
-            { kind: "model-cooldown", provider: "codex", model: "gpt-5.1", cooldown: { until: 1_900_000_000_000, message: "429 usage limit" } },
+            { kind: "model-cooldown", provider: "codex", model: "gpt-5.1", cooldown: { until: 1_900_000_000_000, message: "429 usage limit", since: NOW } },
         ]);
     });
 

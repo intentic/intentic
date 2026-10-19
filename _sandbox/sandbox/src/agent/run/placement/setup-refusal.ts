@@ -3,7 +3,7 @@ import { breakArmed } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { Services } from "../../../composition.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import { NamespaceSetupError } from "../../../workload/namespace-holder.js";
-import { breakPolicyFor } from "../turn/turn-resume.js";
+import { breakPolicyFor } from "../turn/break-policy.js";
 
 // A TURN WHOSE OWN VIEW OF THE WORKSPACE DID NOT COME UP IN TIME. Its namespace holder said nothing for the whole quiet
 // bound twice, a second apart (withSetupRetry), with the daemon awake to hear it: the sandbox too loaded to set the turn

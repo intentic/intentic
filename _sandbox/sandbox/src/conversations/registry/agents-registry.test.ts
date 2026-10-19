@@ -2693,9 +2693,12 @@ describe("one write per fact", () => {
 const silent = pino({ level: "silent" });
 
 // The hold a refused turn leaves its conversation's actor, sent ahead of the settle as a turn's exit sends it
-// (settle-turn.ts recordResumes): the card's booking reads it, not the stored ending alone.
-const holdLimit = (conversations: ReturnType<typeof createFleet>["conversations"], id: string): void => {
-    conversations.send(id, { kind: "turn-held", held: { input: { conversationId: id, prompt: "p" }, reason: "limit", ran: true, reopensAt: 9_000 } });
+// (settle-turn.ts recordResumes): the card's booking reads it, not the stored ending alone. Its reset is an hour ahead of
+// when it is held, as a real one is: the pass never fires a hold at a reset already past (limit-booking.ts).
+// `timed: false` holds it with no instant to go at, as a refusal that named none leaves it.
+const holdLimit = (conversations: ReturnType<typeof createFleet>["conversations"], id: string, timed = true): void => {
+    const reopensAt = timed ? { reopensAt: Math.ceil(Date.now() / 1000) + 3_600 } : {};
+    conversations.send(id, { kind: "turn-held", held: { input: { conversationId: id, prompt: "p" }, reason: "limit", ran: true, ...reopensAt } });
 };
 
 // An arrival lands rows under a running daemon: what it brought replaces what was here for those ids, and nothing else
@@ -2779,6 +2782,46 @@ it("withdraws a booked move the answer no longer gives, and books nothing withou
     conversations.send("c2", { kind: "frame", frame: { kind: "error", code: "rate_limit", message: "spent", held: { ran: true } } });
     await conversations.send("c2", { kind: "settle" }, 4_000).settled;
     expect((await registry.setBreakPolicy("c2", "limit", "resend", "resend"))?.limitScheduled).toBeUndefined();
+});
+
+// A changed answer re-books by the pass's own rule, off the hold: a child whose reset lay past its horizon is held with
+// no instant on purpose (classify-failure.ts dressLimit), though its ending states the reset. Read off the ending, any
+// answer filed it in Active saying "resends …" while nothing would ever fire it (2026-10-19).
+it("re-books a changed answer from the hold, so a reset the hold was not booked for books nothing", async () => {
+    const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+    await registry.init();
+    await beginTurn(conversations, turn(), 1_000);
+    conversations.send("c1", { kind: "frame", frame: { kind: "error", code: "rate_limit", message: "spent", resetsAt: 9_999_999_999, held: { ran: true } } });
+    holdLimit(conversations, "c1", false);
+    await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+    const answered = await registry.setBreakPolicy("c1", "limit", "resend", "resend");
+    expect(answered).toMatchObject({ limitHeld: true, limitResetsAt: 9_999_999_999 });
+    expect(answered?.limitScheduled).toBeUndefined();
+});
+
+// What the resume pass holds the card to on every beat (held-standing.ts keepLimitBooking): it writes only what changed,
+// states a reset the hold has since been timed to, and leaves `updatedAt` alone, which a parent reads to know whether it
+// heard its child's stop (heardByParent).
+it("holds a held limit's booking to what the pass will do, writing only what changed", async () => {
+    const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+    await registry.init();
+    await beginTurn(conversations, turn(), 1_000);
+    conversations.send("c1", { kind: "frame", frame: { kind: "error", code: "rate_limit", message: "spent", held: { ran: true } } });
+    holdLimit(conversations, "c1");
+    await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+    const before = registry.get("c1");
+    expect(before?.limitScheduled).toBeUndefined();
+
+    expect(await registry.keepLimitBooking("c1", undefined)).toBe(false);
+    expect(await registry.keepLimitBooking("c1", { at: 5_000_000 }, 1_900_000_000)).toBe(true);
+    expect(registry.get("c1")).toMatchObject({ limitScheduled: true, limitResetsAt: 1_900_000_000, updatedAt: before?.updatedAt });
+    expect(await registry.keepLimitBooking("c1", { at: 5_000_000 }, 1_950_000_000)).toBe(false);
+    expect(registry.get("c1")?.limitResetsAt).toBe(1_900_000_000);
+
+    expect(await registry.keepLimitBooking("c1", undefined)).toBe(true);
+    expect(registry.get("c1")?.limitScheduled).toBeUndefined();
+    // Nothing to hold to the rule on a conversation that is not stranded behind a spent allowance.
+    expect(await registry.keepLimitBooking("nope", { at: 5_000_000 })).toBe(false);
 });
 
 // The booking is the actor's hold, which goes without any turn ending: a parent's cancel drops it, the resume pass gives
@@ -2904,7 +2947,7 @@ it("takes a spent allowance's kept hold off its entry once fired or dropped, and
         await conversations.send(id, { kind: "settle" }, 2_000).settled;
     }
     // Held before either way out, so the cleared ones below were cleared by it rather than never written.
-    expect(registry.entry("fired")?.limitHold).toMatchObject({ reopensAt: 9_000, ran: true });
+    expect(registry.entry("fired")?.limitHold).toMatchObject({ reopensAt: expect.any(Number), ran: true });
     const judged = conversations.state("fired")?.resume.held;
     if (judged === undefined) {
         throw new Error("expected a hold");

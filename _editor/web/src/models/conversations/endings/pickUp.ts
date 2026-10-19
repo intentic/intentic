@@ -6,6 +6,7 @@ import type { TurnEnding } from "@intentic/sandbox-contract/events/transcript";
 import { formatClock, formatWeekdayTime } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 import { formatReset, formatWait } from "../../providers/usageStatus";
+import type { AgentStanding } from "../../agent-status/agentStatus-standing";
 
 // One state for every turn ending that leaves finished work behind a live session. `reason` is the wall, `readyAt` a
 // spent allowance's honest reopen time, `nextAt` the instant the daemon's own booking fires. Excludes endings that need
@@ -126,6 +127,21 @@ export const repointedPickUp = (pickUp: PickUp | undefined, state: AccountState 
     }
     const { moving: _moving, ...stays } = held;
     return { ...rest, ...clock, held: stays };
+};
+
+/**
+ * The pick-up with the reset the sandbox has since timed a spent allowance's hold to, as the board's card states it. A
+ * refusal that named no instant is timed once the sandbox's records know when its pool reopens (held-standing.ts
+ * retimeLimitHold), and then goes by itself under any answer that sends it. The frame this chat watched still names no
+ * instant, so without this the chat went on saying nothing resends it while the card said when it would (2026-10-19).
+ * Fills only what the pick-up lacks: a reset the refusal itself named stands.
+ */
+export const withCardReset = (pickUp: PickUp | undefined, card: Pick<AgentStanding, `limitResetsAt` | `limitScheduled`> | undefined): PickUp | undefined => {
+    if (pickUp?.reason !== `limit` || pickUp.readyAt !== undefined || card?.limitResetsAt === undefined) {
+        return pickUp;
+    }
+    const readyAt = card.limitResetsAt * 1_000;
+    return card.limitScheduled === true ? { ...pickUp, readyAt, nextAt: readyAt } : { ...pickUp, readyAt };
 };
 
 // How long Continue rests after a spent allowance refused a turn at the door (see PickUp.coolUntil). Short, since the

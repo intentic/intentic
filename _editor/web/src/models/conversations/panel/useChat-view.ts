@@ -10,7 +10,7 @@ import { seedFork } from "../session/forkSeed";
 import type { PendingAttachment } from "../../../features/chat/drafts/useChatAttachments";
 import { providerCommands } from "../../providers/providerCatalog";
 import type { TurnPick } from "../run/turnDefaults";
-import type { ContinueOptions } from "../endings/pickUp";
+import { type ContinueOptions, withCardReset } from "../endings/pickUp";
 import type { ForkLink } from "../run/turnRequest";
 import { providerReadyOn } from "../../providers/access";
 import { type ChatAttachment, type ChatMessage, continuationFor, newestPermission } from "../transcript/transcript";
@@ -42,6 +42,15 @@ const failureView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | u
         const card = cardOf?.(conversation.value.conversationId);
         return card?.failureCode === undefined ? undefined : { code: card.failureCode, text: card.failure };
     }),
+});
+
+// The pick-up strip's state. Undefined while streaming, since a pick-up outlives its failure until the next turn actually
+// starts; the state arms the strip immediately after a send, before that turn begins. A spent allowance's reset the
+// sandbox timed after the refusal is read off the board's card (withCardReset), so the chat says when it goes as the card does.
+const pickUpView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | undefined) => ({
+    pickUp: computed(() =>
+        conversation.value.turn.streaming.value ? undefined : withCardReset(conversation.value.pickUp.value, cardOf?.(conversation.value.conversationId)),
+    ),
 });
 
 // What the board's card says this chat waits on a person for (a question, a plan, a permission), known before this
@@ -80,9 +89,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
     }),
     awaitingDecision: computed(() => conversation.value.transcript.awaitingDecision.value),
     pendingPlanMessage: computed(() => conversation.value.transcript.pendingPlanMessage.value),
-    // Undefined while streaming, since a pick-up outlives its failure until the next turn actually starts; the state
-    // arms the strip immediately after a send, before that turn begins.
-    pickUp: computed(() => (conversation.value.turn.streaming.value ? undefined : conversation.value.pickUp.value)),
+    ...pickUpView(conversation, cardOf),
     // Asked on every frame of a streamed turn, so through a reader of only the rows changed since it last read
     // (transcriptScan.ts), one per view.
     continuation: ((newest) => computed(() => continuationFor(conversation.value.transcript.messages.value, newest)))(newestOf(newestPermission)),

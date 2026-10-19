@@ -255,7 +255,7 @@ export interface TurnWrites {
     readonly activity: Parameters<Services["activity"]["append"]>[0][];
     readonly usage: Parameters<Services["usage"]["record"]>[0][];
     readonly providerRefusals: { readonly provider: string; readonly refusal: Parameters<Services["providerRefusals"]["record"]>[1] }[];
-    readonly refusalsCleared: { readonly provider: string; readonly account: string | undefined; readonly model?: string }[];
+    readonly refusalsCleared: { readonly provider: string; readonly account: string | undefined; readonly model?: string; readonly askedAt?: number }[];
     readonly headroomRefreshes: Parameters<Services["headroom"]["refresh"]>[0][];
     readonly headroomRecords: {
         readonly provider: string;
@@ -274,8 +274,8 @@ export interface TurnWrites {
         readonly model: string;
         readonly cooldown: Parameters<Services["modelCooldowns"]["record"]>[2];
     }[];
-    readonly cooldownsCleared: { readonly provider: string; readonly model: string }[];
-    readonly observedForgotten: { readonly provider: string; readonly account: string; readonly model: string }[];
+    readonly cooldownsCleared: { readonly provider: string; readonly model: string; readonly askedAt?: number }[];
+    readonly observedForgotten: { readonly provider: string; readonly account: string; readonly model: string; readonly askedAt?: number }[];
     readonly observedLimits: {
         readonly provider: string;
         readonly account: string;
@@ -303,14 +303,14 @@ const benchRecorders = (writes: TurnWrites): Pick<ServiceOverrides, "modelRefusa
     modelCooldowns: {
         cooling: async () => new Map(),
         record: async (provider, model, cooldown) => void writes.modelCooldowns.push({ provider, model, cooldown }),
-        clear: async (provider, model) => void writes.cooldownsCleared.push({ provider, model }),
+        clear: async (provider, model, askedAt) => void writes.cooldownsCleared.push({ provider, model, ...opt("askedAt", askedAt) }),
     },
     observedLimits: {
         spent: async () => ({}),
         record: async (provider, account, model, limit) => void writes.observedLimits.push({ provider, account, model, limit }),
         clear: async () => {},
-        forget: async (provider, account, model) => {
-            writes.observedForgotten.push({ provider, account, model });
+        forget: async (provider, account, model, askedAt) => {
+            writes.observedForgotten.push({ provider, account, model, ...opt("askedAt", askedAt) });
             return false;
         },
     },
@@ -352,7 +352,8 @@ export const recordingTurnStores = (
                 read: async () => ({}),
                 onFile: async () => ({}),
                 record: async (provider, refusal) => void writes.providerRefusals.push({ provider, refusal }),
-                clear: async (provider, account, model) => void writes.refusalsCleared.push({ provider, account, ...opt("model", model) }),
+                clear: async (provider, account, model, askedAt) =>
+                    void writes.refusalsCleared.push({ provider, account, ...opt("model", model), ...opt("askedAt", askedAt) }),
                 onChange: () => () => {},
             },
             // Every other member answers as the inert headroom above does.

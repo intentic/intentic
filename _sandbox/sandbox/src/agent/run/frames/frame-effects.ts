@@ -83,12 +83,15 @@ export const turnActivity =
 // It reopens the model it ran on as well, so the picker stops greying a row whose turns go through.
 // A spent allowance is settled only for the model that answered (provider-refusals.ts answeredBy); an account refused
 // outright is settled by any answer on it. The observed ledger is settled the same way: the account's entry for the model
-// it just served, and its account-wide refusal.
+// it just served, and its account-wide refusal. `askedAt` is when the answered request went out: only what was filed
+// before it is settled, since a request already in flight when a refusal was filed proves nothing about it
+// (frame-reducers.ts). Undefined settles whatever stands, for a caller that cannot say.
 export const providerAnswered = (
     deps: Pick<Services, "providerRefusals" | "claudeSeats" | "modelCooldowns" | "observedLimits" | "logger">,
     provider: string,
     account: string | undefined,
     model: string | undefined,
+    askedAt?: number,
 ): void => {
     recordProviderSuccess(provider);
     const served = model === undefined || model === "" ? undefined : model;
@@ -96,23 +99,43 @@ export const providerAnswered = (
     if (served !== undefined) {
         FAN_OUT.served({ provider, model: served });
     }
-    void deps.providerRefusals.clear(provider, account, served).catch((error: unknown) => deps.logger.warn({ err: error }, "provider refusal: settle failed"));
+    void deps.providerRefusals.clear(provider, account, served, askedAt).catch((error: unknown) => deps.logger.warn({ err: error }, "provider refusal: settle failed"));
     if (served !== undefined) {
-        void deps.modelCooldowns.clear(provider, served).catch((error: unknown) => deps.logger.warn({ err: error }, "model cooldown: settle failed"));
+        void deps.modelCooldowns.clear(provider, served, askedAt).catch((error: unknown) => deps.logger.warn({ err: error }, "model cooldown: settle failed"));
     }
     // Clears the seat mark too, so a re-enabled account rejoins rotation without a reconnect.
     if (account === undefined) {
         return;
     }
-    void settleObserved(deps, provider, account, served);
+    void settleObserved(deps, provider, account, served, askedAt);
     void deps.claudeSeats.clear(account).catch((error: unknown) => deps.logger.warn({ err: error }, "claude account: could not clear the entitlement mark"));
+};
+
+// A turn's frame, where it is an answer that settles refusals (TurnFrames.note answers when its request went out), settles
+// them as providerAnswered does; any other frame settles nothing.
+export const settleAnswered = (
+    deps: Parameters<typeof providerAnswered>[0],
+    provider: string,
+    account: string | undefined,
+    model: string | undefined,
+    askedAt: number | undefined,
+): void => {
+    if (askedAt !== undefined) {
+        providerAnswered(deps, provider, account, model, askedAt);
+    }
 };
 
 // The account's own refusals in the observed ledger, settled by its answer: the model it served, and the account-wide
 // refusal. Never rejects: a settle that fails is its own line.
-const settleObserved = async (deps: Pick<Services, "observedLimits" | "logger">, provider: string, account: string, served: string | undefined): Promise<void> => {
+const settleObserved = async (
+    deps: Pick<Services, "observedLimits" | "logger">,
+    provider: string,
+    account: string,
+    served: string | undefined,
+    askedAt: number | undefined,
+): Promise<void> => {
     try {
-        await Promise.all([ACCOUNT_WIDE, ...(served === undefined ? [] : [served])].map(async (entry) => deps.observedLimits.forget(provider, account, entry)));
+        await Promise.all([ACCOUNT_WIDE, ...(served === undefined ? [] : [served])].map(async (entry) => deps.observedLimits.forget(provider, account, entry, askedAt)));
     } catch (error) {
         deps.logger.warn({ err: error }, "observed limit: settle failed");
     }

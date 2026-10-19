@@ -1,6 +1,6 @@
 import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { Services } from "../../../composition.js";
-import { limitReopensAt } from "../../models/limit-reset.js";
+import { limitReopensAt, standingReopensAt } from "../../models/limit-reset.js";
 import { limitWayOf } from "../../models/limit-way.js";
 import type { FailureQueries } from "./classify-failure.js";
 
@@ -11,6 +11,7 @@ export type RecordQueries = Omit<FailureQueries, "breakPolicy" | "stopLadder">;
 
 export const recordQueries = (services: Services): RecordQueries => ({
     reopensAt: (at) => limitReopensAt({ services, ...at }),
+    standingReopensAt: (at) => standingReopensAt({ services, ...at }),
     limitWay: (params) => limitWayOf(services, params),
     awaitingVerification: async (provider) => {
         const keyed = KeyedProviderSchema.safeParse(provider);

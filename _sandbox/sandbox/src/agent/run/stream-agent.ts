@@ -42,7 +42,8 @@ import { opt } from "../../opt.js";
 import { type ActiveTurn, SteeringQueue } from "../checkpoints/agent-steering.js";
 import { takeCheckpointNote } from "../checkpoints/checkpoint-worktree.js";
 import { recordProviderFailure } from "../providers/provider-health.js";
-import { breakPolicyFor, type HeldTurn, stopResumeAt } from "./turn/turn-resume.js";
+import { breakPolicyFor } from "./turn/break-policy.js";
+import { type HeldTurn, stopResumeAt } from "./turn/turn-resume.js";
 import { keepableOf, noteKeepable } from "./turn/cache-keepwarm.js";
 import { beginPulse, endPulse, pulseFrame } from "./turn/turn-pulse.js";
 import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";
@@ -56,7 +57,7 @@ import { resumeTrimTurn, trimDelivery, type ColdTrimBasis } from "./turn/cold-tr
 import { planTurn, type TurnPlan, type TurnExperimentStamps } from "./turn/turn-plan.js";
 import { classifyFailure, type ErrorFrame, type FailureContext, type FailureQueries } from "./frames/classify-failure.js";
 import { abortSuppresses, type Attribution, decorateFrame, silenceOf, silentEnding, withSilentEnding } from "./frames/frame-decorators.js";
-import { performFailureWrites, providerAnswered, recordFrame, turnActivity } from "./frames/frame-effects.js";
+import { performFailureWrites, recordFrame, settleAnswered, turnActivity } from "./frames/frame-effects.js";
 import { recordQueries } from "./frames/failure-queries.js";
 import { createTurnFrames, type TurnFrames } from "./frames/frame-reducers.js";
 import { endedAfterStop } from "./frames/stop-grace.js";
@@ -1014,9 +1015,7 @@ async function* runPreparedTurn(
             const event = keptWarmOf(services, input.conversationId, raw);
             fingerprint = event.kind === "init" ? (event.prompt ?? fingerprint) : fingerprint;
             sniffer.observe(event);
-            if (frames.note(event)) {
-                providerAnswered(services, provider, account, request.spec.model);
-            }
+            settleAnswered(services, provider, account, request.spec.model, frames.note(event));
             recordFrame(services, event, { provider, account, record });
             yield event.kind === "error"
                 ? await classified(services, event, state)

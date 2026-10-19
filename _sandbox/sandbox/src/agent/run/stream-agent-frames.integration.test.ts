@@ -216,8 +216,8 @@ test("a clean turn streams every frame once, stamps the ones that name an accoun
             autoPicked: undefined,
         },
     ]);
-    // The first answer settles what this account last refused, the provider's mark and the seat's.
-    expect(writes.refusalsCleared).toStrictEqual([{ provider: "claude", account: "default" }]);
+    // The first answer settles what this account last refused before the turn opened, the provider's mark and the seat's.
+    expect(writes.refusalsCleared).toStrictEqual([{ provider: "claude", account: "default", askedAt: expect.any(Number) }]);
     expect(writes.seatsCleared).toStrictEqual(["default"]);
     expect(writes.headroomRecords).toStrictEqual([
         { provider: "claude", account: "default", usage: { windows: [...windows], measuredAt: expect.any(Number) } },
