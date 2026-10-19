@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { lessMotion } from "@intentic/ui/motion";
-import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
+import { computed, ref, shallowRef, watch } from "vue";
 import { RouterLink } from "vue-router";
 import MapBox from "./MapBox.vue";
 import MapGroupCard from "./MapGroupCard.vue";
@@ -52,7 +51,7 @@ const PAIRS_FROM = 520;
 
 const stage = ref<HTMLElement>();
 const expanded = shallowRef<ReadonlySet<GroupKey>>(new Set());
-const { layout } = useMapLayout(stage, () => [map, expanded.value, compact]);
+const { width, layout } = useMapLayout(stage, () => [map, expanded.value, compact]);
 // What was opened in one view means something else in the other: a detailed card's unfolded tail, a compact block opened.
 watch(
     () => compact,
@@ -60,37 +59,23 @@ watch(
 );
 
 const ready = computed(() => layout.value.width > 0);
-const flow = computed<Flow>(() => (layout.value.width >= ACROSS_FROM ? `across` : `down`));
-const pairs = computed(() => flow.value === `down` && layout.value.width >= PAIRS_FROM);
+// Width places the cards first; layout arrives after that placement. Reveal the whole drawing together once measured.
+const flow = computed<Flow>(() => (width.value >= ACROSS_FROM ? `across` : `down`));
+const pairs = computed(() => flow.value === `down` && width.value >= PAIRS_FROM);
 const columns = computed(() => {
     if (flow.value === `down`) {
         return `grid-cols-1 gap-y-10`;
     }
-    if (layout.value.width >= WIDE_FROM) {
+    if (width.value >= WIDE_FROM) {
         return `grid-cols-[minmax(11rem,15rem)_minmax(18rem,32rem)_minmax(14rem,20rem)] justify-center items-start gap-x-24 gap-y-3`;
     }
-    return layout.value.width >= ROOMY_FROM
+    return width.value >= ROOMY_FROM
         ? `grid-cols-[minmax(10rem,13.5rem)_minmax(15rem,1fr)_minmax(12rem,16.5rem)] items-start gap-x-16 gap-y-3`
         : `grid-cols-[minmax(8.5rem,12rem)_minmax(13rem,1fr)_minmax(10rem,14rem)] items-start gap-x-12 gap-y-3`;
 });
 const drawing = computed(() => drawMap(layout.value, map, lighting, flow.value, focus?.kind === `node` ? focus.id : undefined));
 const lines = computed(() => drawing.value.edges.filter((edge) => edge.kind !== `thread`));
 const threads = computed(() => drawing.value.edges.filter((edge) => edge.kind === `thread`));
-
-// The one entrance: the lines grow out of the box the first time the map is drawn, and never again.
-const growing = ref(false);
-let grown: ReturnType<typeof setTimeout> | undefined;
-watch(
-    () => lines.value.length > 0,
-    (drawn) => {
-        if (!drawn || grown !== undefined || lessMotion()) {
-            return;
-        }
-        growing.value = true;
-        grown = setTimeout(() => (growing.value = false), 1400);
-    },
-);
-onBeforeUnmount(() => clearTimeout(grown));
 
 const CLUSTERS: readonly { readonly kind: PrincipalKind; readonly label: () => string }[] = [
     { kind: `person`, label: () => t(`sandbox.sandboxMap.people`) },
@@ -121,27 +106,23 @@ const stroke = (state: `rest` | `on` | `off`): string => (state === `on` ? `var(
     <div
         ref="stage"
         class="relative transition-opacity"
-        :class="ready ? `opacity-100` : `opacity-0`"
+        :class="ready ? `opacity-100` : `invisible opacity-0`"
         @click.self="emit(`clear`)"
     >
         <!-- Under the cards: a line runs behind every card it passes, never over a name. -->
         <svg class="pointer-events-none absolute left-0 top-0 overflow-visible" :width="layout.width" :height="layout.height" aria-hidden="true">
-            <g :class="growing ? `map-grow` : ``">
-                <path
-                    v-for="(edge, index) in lines"
-                    :key="edge.key"
-                    :d="edge.d"
-                    fill="none"
-                    stroke-linecap="round"
-                    :path-length="growing ? 1 : undefined"
-                    :stroke="stroke(edge.state)"
-                    :stroke-width="edge.state === `on` ? 1.5 : 1.15"
-                    :stroke-dasharray="edge.dashed ? `5 4` : edge.faint ? `1 4` : undefined"
-                    :opacity="edge.state === `off` ? 0.14 : edge.faint ? 0.55 : 1"
-                    :style="{ '--map-i': index }"
-                    class="transition-[stroke,opacity,stroke-width]"
-                />
-            </g>
+            <path
+                v-for="edge in lines"
+                :key="edge.key"
+                :d="edge.d"
+                fill="none"
+                stroke-linecap="round"
+                :stroke="stroke(edge.state)"
+                :stroke-width="edge.state === `on` ? 1.5 : 1.15"
+                :stroke-dasharray="edge.dashed ? `5 4` : edge.faint ? `1 4` : undefined"
+                :opacity="edge.state === `off` ? 0.14 : edge.faint ? 0.55 : 1"
+                class="transition-[stroke,opacity,stroke-width]"
+            />
         </svg>
 
         <div
@@ -234,23 +215,6 @@ const stroke = (state: `rest` | `on` | `off`): string => (state === `on` ? `var(
 </template>
 
 <style scoped>
-/* THE ONE ENTRANCE: every line grows from its start, a step after the one before, on the house curve. Reduced motion never
-   sets `map-grow` (lessMotion), and zeroes the clock besides. */
-@keyframes map-grow {
-    from {
-        stroke-dashoffset: 1;
-    }
-    to {
-        stroke-dashoffset: 0;
-    }
-}
-.map-grow path {
-    stroke-dasharray: 1;
-    stroke-dashoffset: 1;
-    animation: map-grow var(--motion-grow) var(--ease-smooth) forwards;
-    animation-delay: calc(var(--map-i) * var(--motion-grow-step));
-}
-
 /* A thread is drawn the moment its focus lands, and fades in rather than popping. */
 @keyframes map-thread {
     from {

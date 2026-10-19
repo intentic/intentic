@@ -44,6 +44,7 @@ const read = (stage: HTMLElement): MapLayout => {
 };
 
 export function useMapLayout<Watched>(stage: Ref<HTMLElement | undefined>, changes: () => Watched) {
+    const width = shallowRef(0);
     const layout = shallowRef<MapLayout>(EMPTY);
     let frame: number | undefined;
     const measure = (): void => {
@@ -52,9 +53,17 @@ export function useMapLayout<Watched>(stage: Ref<HTMLElement | undefined>, chang
         }
         frame = requestAnimationFrame(() => {
             frame = undefined;
-            if (stage.value !== undefined) {
-                layout.value = read(stage.value);
+            if (stage.value === undefined) {
+                return;
             }
+            // Width chooses the stage's columns. Let Vue place the cards in those columns before publishing their
+            // geometry: otherwise the first drawing joins stacked cards with sideways lines for a frame.
+            width.value = stage.value.getBoundingClientRect().width;
+            void nextTick(() => {
+                if (stage.value !== undefined) {
+                    layout.value = read(stage.value);
+                }
+            });
         });
     };
     const observer = new ResizeObserver(measure);
@@ -71,5 +80,5 @@ export function useMapLayout<Watched>(stage: Ref<HTMLElement | undefined>, chang
         }
     });
     watch(changes, () => void nextTick(measure));
-    return { layout, measure };
+    return { width, layout, measure };
 }
