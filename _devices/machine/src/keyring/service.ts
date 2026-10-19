@@ -6,11 +6,11 @@ import { repoRoot } from "@intentic/constants/node";
 import { errorMessage } from "@intentic/base/errors";
 import { renameOver } from "@intentic/base/fs";
 import { runBounded } from "@intentic/base/process";
-import { askKeyring, currentSid, isHardened, keyringPaths, type KeyringResponse, KeyringUnavailable, realRunner } from "@intentic/keyring";
+import { askKeyring, keyringPaths, type KeyringResponse, KeyringUnavailable, realRunner, serviceInstalledHere } from "@intentic/keyring";
 import { type AutostartKind, autostart, type CliLauncher, explain, livePid, type Log, spawnDetached, stopProcess } from "@intentic/local-agent";
 import { DEV_VERSION } from "@intentic/sandbox-contract/state/versions";
 import type { KeyringRefusalCode } from "@intentic/sandbox-contract/schemas/keyring";
-import { KEYRING_AUTOSTART, KEYRING_SESSION_AUTOSTART } from "../autostart/autostart.js";
+import { KEYRING_AUTOSTART } from "../autostart/autostart.js";
 import { binDir } from "../config.js";
 import { askpassPath, downloadAsset, keyringAssetName, keyringPath, releaseAssetUrl, renameIfPresent } from "../release.js";
 import { verifyReleaseFiles } from "../release/release-verify.js";
@@ -163,69 +163,72 @@ export const linkAskpass = async (): Promise<"linked" | "copied"> => {
     }
 };
 
-// ---- hardened mode (Windows) ----
-
-/** What hardened mode runs the vault as: the startup task of that name, as LOCAL SERVICE (the keyring's service/). */
-export const KEYRING_SERVICE = "IntenticKeyring";
+// ---- the protected service ----
 
 /**
- * Whether hardened mode is on here: the keyring wrote its marker for this user under %ProgramData%\\Intentic\\Keyring
- * when it was installed elevated. Never on anything but Windows.
+ * Whether Passwords' protected service is installed for this user: the keyring wrote its marker when it was installed
+ * as an administrator (%ProgramData%\\Intentic\\Keyring on Windows, /var/lib/intentic-keyring on Linux).
  */
-export const hardenedHere = async (): Promise<boolean> => {
-    if (process.platform !== "win32") {
-        return false;
-    }
-    try {
-        return isHardened(await currentSid(realRunner));
-    } catch {
-        // allow(silent-catch): a user Windows cannot name has no marker of its own, which reads as not hardened
-        return false;
-    }
-};
+export const serviceHere = async (): Promise<boolean> => await serviceInstalledHere(realRunner);
 
 // A PowerShell string literal: single quotes, each one inside doubled.
 const psQuoted = (text: string): string => `'${text.replaceAll("'", "''")}'`;
 
-/** The keyring binary run elevated, through the one UAC prompt Windows shows for it; answers its exit code. */
+/** What setup says when the administrator's yes is not given, or cannot be. */
+export const NEEDS_ADMIN = "Passwords needs an administrator's approval once, to install its protected service. Nothing was changed.";
+
+/** The command that runs the keyring binary as an administrator: UAC on Windows, pkexec on Linux. Pure. */
+export const elevatedCommand = (args: readonly string[], platform: NodeJS.Platform = process.platform): { readonly command: string; readonly args: readonly string[] } =>
+    platform === "win32"
+        ? { command: "powershell.exe", args: ["-NoProfile", "-Command", `$p = Start-Process -FilePath ${psQuoted(keyringPath)} -ArgumentList ${args.map(psQuoted).join(",")} -Verb RunAs -Wait -PassThru; exit $p.ExitCode`] }
+        : { command: "pkexec", args: [keyringPath, ...args] };
+
+/**
+ * Whether an elevated run's failure was the administrator's yes not given: UAC's "canceled by the user", pkexec's 126
+ * (dialog dismissed) and 127 (not authorized). Pure.
+ */
+export const approvalRefused = (exitCode: number | null, said: string, platform: NodeJS.Platform = process.platform): boolean =>
+    platform === "win32" ? /canceled by the user/iu.test(said) : exitCode === 126 || exitCode === 127;
+
+/** The keyring binary run as an administrator, through the one prompt the system shows for it. */
 const runElevated = async (args: readonly string[]): Promise<void> => {
-    const script = `$p = Start-Process -FilePath ${psQuoted(keyringPath)} -ArgumentList ${args.map(psQuoted).join(",")} -Verb RunAs -Wait -PassThru; exit $p.ExitCode`;
-    const result = await runBounded("powershell.exe", ["-NoProfile", "-Command", script], { timeoutMs: ELEVATED_TIMEOUT_MS });
+    const elevated = elevatedCommand(args);
+    const result = await runBounded(elevated.command, elevated.args, { timeoutMs: ELEVATED_TIMEOUT_MS });
     if (result.spawnError !== undefined) {
-        throw result.spawnError;
+        throw new KeyringCliError("declined", `${NEEDS_ADMIN} (${elevated.command} could not be started: ${errorMessage(result.spawnError)})`);
     }
     if (result.exitCode !== 0) {
         const said = result.stderr.text.trim();
+        if (approvalRefused(result.exitCode, said)) {
+            throw new KeyringCliError("declined", NEEDS_ADMIN);
+        }
         throw new KeyringCliError(
-            /canceled by the user/iu.test(said) ? "declined" : "failed",
-            /canceled by the user/iu.test(said)
-                ? "Windows asked for an administrator's yes, and it was not given: nothing was changed."
-                : `\`intentic-keyring ${args.join(" ")}\` did not finish (exit ${String(result.exitCode)})${said === "" ? "" : `: ${said}`}. Its log is ${keyringPaths().log}.`,
+            "failed",
+            `\`intentic-keyring ${args.join(" ")}\` did not finish (exit ${String(result.exitCode)})${said === "" ? "" : `: ${said}`}. Its log is ${keyringPaths().log}.`,
         );
     }
 };
 
 // ---- running it ----
 
-const entryFor = (hardened: boolean, log: Log) => autostart(hardened ? KEYRING_SESSION_AUTOSTART : KEYRING_AUTOSTART, KEYRING_LAUNCHER, log);
+const entry = (log: Log) => autostart(KEYRING_AUTOSTART, KEYRING_LAUNCHER, log);
 
 /** The pid the keyring records for itself, while that process lives. */
 export const keyringPid = async (): Promise<number | undefined> => await livePid(keyringPaths().pid);
 
 /**
- * Registers the keyring's login entry and starts it through that entry, or directly where the entry cannot start one,
- * then waits for its pipe. Answers which entry keeps it running, and its first answer.
+ * Registers the session helper's login entry and starts it through that entry, or directly where the entry cannot start
+ * one, then waits for its pipe. Answers which entry keeps it running, and its first answer.
  */
 export const startKeyring = async (log: Log): Promise<{ readonly autostart: AutostartKind; readonly state: KeyringStateAnswer }> => {
-    const hardened = await hardenedHere();
-    const spec = hardened ? KEYRING_SESSION_AUTOSTART : KEYRING_AUTOSTART;
-    const entry = entryFor(hardened, log);
-    const kind = await entry.register();
+    const spec = KEYRING_AUTOSTART;
+    const helper = entry(log);
+    const kind = await helper.register();
     const running = await keyringState();
     if (!(running instanceof KeyringUnavailable)) {
         return { autostart: kind, state: running };
     }
-    if (await entry.start()) {
+    if (await helper.start()) {
         const came = await waitForKeyring();
         if (came !== undefined) {
             return { autostart: kind, state: came };
@@ -309,11 +312,10 @@ export const upgradeKeyring = async (version: string, log: Log): Promise<Keyring
     await renameIfPresent(keyringPath, previousOf(keyringPath));
     await renameOver(staged, keyringPath);
     await linkAskpass();
-    if (await hardenedHere()) {
-        // The service runs its own copy, which only an administrator replaces: the new program installs itself there.
-        log("Windows asks for an administrator's yes to put the new keyring in place for the hardened service…");
-        await runElevated(["service", "install"]);
-    }
+    // The service runs its own copy, which only an administrator replaces: the new program installs itself there. A
+    // computer still on the per-user keyring from before moves to the service now, its vault with it.
+    log((await serviceHere()) ? "Asking for an administrator's yes to put the new keyring in place for Passwords' service…" : "Asking for an administrator's yes, once, to move Passwords under its protected service…");
+    await runElevated(["service", "install"]);
     try {
         const { state } = await startKeyring(log);
         const to = state.ok ? state.state.version : version;
@@ -328,54 +330,42 @@ export const upgradeKeyring = async (version: string, log: Log): Promise<Keyring
     }
 };
 
-// ---- harden ----
+// ---- the service, set up ----
 
 /**
- * Hardened mode: the vault moved under the IntenticKeyring service (`intentic-keyring service install`, elevated), and
- * the session helper registered to start at sign-in in place of `serve`.
+ * Passwords' protected service installed for this user (`intentic-keyring service install`, as an administrator), the
+ * vault of a per-user keyring from before moved into it, and the session helper started. Already installed, only the
+ * helper is started. Answers which entry starts the helper and its first answer.
  */
-export const hardenKeyring = async (log: Log): Promise<{ readonly service: string; readonly autostart: AutostartKind }> => {
-    if (process.platform !== "win32") {
-        throw new KeyringCliError(
-            "unavailable",
-            "Hardened mode is Windows-only: it moves the vault under a Windows service account the agent's own commands cannot read. Elsewhere the keyring runs as your user.",
-        );
-    }
+export const ensureService = async (log: Log): Promise<{ readonly autostart: AutostartKind; readonly state: KeyringStateAnswer; readonly installedNow: boolean }> => {
     if (!keyringInstalled()) {
-        throw new KeyringCliError("no-keyring", "No keyring is installed on this computer: `intentic-machine keyring setup` installs one first.");
+        throw new KeyringCliError("no-keyring", "No keyring is installed on this computer: `intentic-machine keyring setup` installs one.");
     }
-    // The plain keyring holds the vault until now and writes it on every change: stopped first, so the copy the
-    // service takes is the last one written. The helper is started whether or not the pipe answers already: the service
-    // answering it is not the helper running.
+    if (await serviceHere()) {
+        return { ...(await startKeyring(log)), installedNow: false };
+    }
+    // A per-user keyring from before holds the vault until now and writes it on every change: stopped first, so the copy
+    // the service takes is the last one written.
     await stopKeyring();
-    await entryFor(false, log).unregister();
-    log("Windows asks for an administrator's yes, once, to move the vault under the hardened keyring…");
+    log("Asking for an administrator's yes, once, to install Passwords' protected service…");
     await runElevated(["service", "install"]);
-    const entry = entryFor(true, log);
-    const kind = await entry.register();
-    if (!(await entry.start())) {
-        await spawnDetached(KEYRING_SESSION_AUTOSTART.logPath, KEYRING_LAUNCHER, KEYRING_SESSION_AUTOSTART.foregroundArgs);
-    }
-    if ((await waitForKeyring()) === undefined) {
-        throw new KeyringCliError("no-keyring", `The service was installed, but the keyring's pipe did not answer within ${START_TIMEOUT_MS / 1000} s. Its log is ${keyringPaths().log}.`);
-    }
-    return { service: KEYRING_SERVICE, autostart: kind };
+    return { ...(await startKeyring(log)), installedNow: true };
 };
 
 // ---- uninstall ----
 
 /**
- * The keyring off this computer: its login entry, the process, its binaries. The vault stays where it is, so a keyring
- * set up again opens the same entries with the same passphrase.
+ * The keyring off this computer: its service, its login entry, the process, its binaries. The vault goes back to
+ * ~/.intentic/keyring and stays there, so Passwords set up again opens the same entries with the same recovery key.
  */
-export const uninstallKeyring = async (log: Log): Promise<{ readonly removed: readonly string[]; readonly vault: string; readonly hardened: boolean }> => {
-    const hardened = await hardenedHere();
-    if (hardened) {
-        log("Windows asks for an administrator's yes, once, to remove the IntenticKeyring service…");
+export const uninstallKeyring = async (log: Log): Promise<{ readonly removed: readonly string[]; readonly vault: string; readonly service: boolean }> => {
+    const service = await serviceHere();
+    if (service) {
+        log("Asking for an administrator's yes, once, to remove Passwords' protected service…");
         await runElevated(["service", "uninstall"]);
     }
     // The entry first: a logon task's watchdog would otherwise start again what the stop below ends.
-    await entryFor(hardened, log).unregister();
+    await entry(log).unregister();
     await stopKeyring();
     // allow(silent-catch): no bin folder holds nothing of the keyring's
     const names = (await readdir(binDir).catch(() => [])).filter((name) => name.startsWith(basename(keyringPath)) || name.startsWith(basename(askpassPath)));
@@ -394,5 +384,5 @@ export const uninstallKeyring = async (log: Log): Promise<{ readonly removed: re
         }),
     );
     const removed = outcomes.filter((path) => path !== undefined);
-    return { removed, vault: keyringPaths().dir, hardened };
+    return { removed, vault: keyringPaths().dir, service };
 };

@@ -255,10 +255,6 @@
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_devices/webext/src/popup/popup.ts": {
-        "count": 625,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_devices/webext/src/popup/popup.ts#ago#cognitive": {
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
@@ -271,7 +267,7 @@
         "count": 809,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/desktop-app/src/desktop.ts": 884,
+    "_editor/desktop-app/src/desktop.ts": 777,
     "_editor/desktop-app/src/device/DeviceView.vue": {
         "count": 663,
         "why": "standing when the check arrived (2026-10-16)"

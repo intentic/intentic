@@ -84,28 +84,64 @@ export type PromptAnswer =
 // A passphrase dialog of the platform's own.
 export type PassphrasePrompt = (notice: Notice) => Promise<PromptAnswer>;
 
+// THE TYPE-ONCE BOX (2026-10-19): the keyring's own dialog asking the person for a value it does not hold yet, for a
+// prompt nothing in the vault answers (ssh asking for a password nobody saved, a program's password field, an agent's
+// need with no match). What is typed goes to the keyring alone, which answers or types with it and, when `remember` is
+// left ticked, keeps it. It is not a consent to anything else: a value typed here is the person's own act.
+export interface ValueNotice extends Notice {
+    // Whether the "Remember it" box starts ticked: on when the person turned remembering on for the source.
+    readonly remember: boolean;
+    // A user name to ask for beside the value, prefilled when known.
+    readonly username?: { readonly value?: string | undefined } | undefined;
+}
+
+export type ValueAnswer =
+    | { readonly kind: "answered"; readonly value: string; readonly remember: boolean; readonly username?: string | undefined }
+    | { readonly kind: "cancelled" }
+    | { readonly kind: "unavailable"; readonly reason: string };
+
+export type ValuePrompt = (notice: ValueNotice) => Promise<ValueAnswer>;
+
+// A CHOICE among a few answers (an agent's need: Allow once, While I'm here, Always, Deny), shown in the keyring's own
+// dialog because Windows Hello's and polkit's prompts can say only yes or no. The choice alone grants nothing: the core
+// then asks the usual verified yes (Hello, polkit, the recovery key), naming what was chosen, and only both together
+// count.
+export interface ChoiceNotice extends Notice {
+    readonly choices: readonly { readonly id: string; readonly label: string }[];
+}
+
+export type ChoiceAnswer = { readonly kind: "chosen"; readonly id: string } | { readonly kind: "cancelled" } | { readonly kind: "unavailable"; readonly reason: string };
+
+export type ChoicePrompt = (notice: ChoiceNotice) => Promise<ChoiceAnswer>;
+
+// What a Consent may carry beside its yes: the type-once box and the choice dialog, where this computer can show them.
+export interface ConsentExtras {
+    readonly askValue?: ValuePrompt | undefined;
+    readonly choose?: ChoicePrompt | undefined;
+}
+
 export interface Consent {
     readonly ask: (request: ConsentRequest) => Promise<ConsentAnswer>;
     // Windows Hello, where this computer has it: for `setup`'s enrolment and `state`'s list of ways to unlock.
     readonly hello: HelloDriver | undefined;
+    // The type-once box, where this computer can show one (absent: the op that needed it says why it cannot ask).
+    readonly askValue?: ValuePrompt | undefined;
+    // The choice dialog (absent: a request with choices is asked as a plain yes, which takes the first choice).
+    readonly choose?: ChoicePrompt | undefined;
 }
 
 const nobodyToAsk = (request: ConsentRequest, reason: string): ConsentRefusal =>
     request.unlock ? { ok: false, code: "locked", reason: `The keyring is locked and ${reason}` } : { ok: false, code: "declined", reason: `Nobody could be asked: ${reason}` };
-
-// No way to ask a person here: every request is refused, saying why.
-export const refusingConsent = (why: string): Consent => ({
-    ask: (request) => Promise.resolve(nobodyToAsk(request, why)),
-    hello: undefined,
-});
 
 // How many times a mistyped passphrase is asked again before the request is refused.
 const PASSPHRASE_TRIES = 3;
 
 // The passphrase as consent: asked for every time, and checked against the vault, so a yes is a person who knows it.
 // While unlocked it is still asked and checked: a dialog any program of this user could click through is not a person.
-export const passphraseConsent = (prompt: PassphrasePrompt): Consent => ({
+export const passphraseConsent = (prompt: PassphrasePrompt, extras: ConsentExtras = {}): Consent => ({
     hello: undefined,
+    askValue: extras.askValue,
+    choose: extras.choose,
     ask: async (request) => {
         const opener = request.opener;
         if (opener === undefined) {
@@ -133,6 +169,8 @@ export const passphraseConsent = (prompt: PassphrasePrompt): Consent => ({
 // opens it; unlocked, Hello's consent verifier says yes. A person who cancels Hello is a no, not a reason to ask again.
 export const helloConsent = (hello: HelloDriver, fallback: Consent): Consent => ({
     hello,
+    askValue: fallback.askValue,
+    choose: fallback.choose,
     ask: async (request) => {
         const notice = { title: request.title, message: request.message };
         if (!(await hello.available())) {
@@ -165,6 +203,8 @@ export const serialConsent = (inner: Consent, defaultWaitMs: number = KEYRING_GR
     let tail: Promise<void> = Promise.resolve();
     return {
         hello: inner.hello,
+        askValue: inner.askValue,
+        choose: inner.choose,
         ask: async (request) => {
             const before = tail;
             let release = (): void => undefined;

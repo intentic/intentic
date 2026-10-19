@@ -3834,7 +3834,8 @@
             "secrets": "Vos secrets",
             "sessionOrSigningKeys": "Clés de session ou de signature",
             "showMoreAccounts": "Afficher {collapsedCredentialCount} comptes de plus",
-            "onYourComputers": "Sur tes ordinateurs"
+            "onYourComputers": "Sur tes ordinateurs",
+            "openInPasswords": "Ouvrir dans Mots de passe"
         },
         "sandboxStorageCard": {
             "changedTodayOrInUse": "Modifié aujourd'hui ou utilisé",

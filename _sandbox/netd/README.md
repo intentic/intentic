@@ -60,6 +60,10 @@ flowchart LR
   and still attach, though their local grid can differ; newer editors fall back to local fitting with older netd versions.)
   A terminal is a WebSocket however it arrives: a browser's over TCP, or one the
   editor speaks on a WebTransport stream, which the edge relays as the same HTTP/1.1 upgrade.
+- In the editor's own sessions (`web-…`, never an agent's) netd also notices a password typed at a hidden prompt (2026-10-19,
+  `term/hidden.rs`): output that stopped on a password-ish question, then keystrokes while the pane's tty has echo off
+  (asked of the tty with `tcgetattr`). The line is edited as the tty does and told to Node once (`ToNode::HiddenLine`),
+  for Passwords to keep if the owner turned that on. No other byte of a pane reaches Node.
 - A request it hands Node from the machine-published loopback port carries `x-intentic-listener: loopback`
   (`NetdHeader::Listener`), which netd strips from every request arriving from outside, like its other headers. It is
   how the daemon admits the desktop app's own bundled page there and nowhere else (2026-10-16: the offline sandbox face,
@@ -122,6 +126,7 @@ flowchart LR
 - [crates/netd/src/standing.rs](crates/netd/src/standing.rs) — where the tunnel stands for Node and the vitals, and
   each carrier's redial pace.
 - [crates/netd/src/term/mod.rs](crates/netd/src/term/mod.rs) — a terminal socket from Node's plan to its close.
+- [crates/netd/src/term/hidden.rs](crates/netd/src/term/hidden.rs) — a password typed at a hidden prompt in an editor terminal: the line edited as the tty does and told to Node once (`ToNode::HiddenLine`), for Passwords.
 - [crates/netd-wire/src/lib.rs](crates/netd-wire/src/lib.rs) — the control socket's frames, their only definition.
 - [crates/netd/tests/routes.rs](crates/netd/tests/routes.rs) — the real binary on real ports: routing, preview relay, TLS, upgrades.
 

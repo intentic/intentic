@@ -86,7 +86,8 @@ explicitly allows, so an AI agent can carry out tasks the user asked for while t
 | `cookies` | One user-initiated action: "hand this site's sign-in to my sandbox", so a long-running job continues after the browser closes. It requires a confirmation on the page every time, a switch that is off by default, and it sends the cookies only to the user's own sandbox. |
 | `activeTab` | Lets the popup name the site the user is on when they click the toolbar icon, so they can allow that one site with a click. It never reaches a page by itself: the agent's tools still run only on sites the user granted. |
 | `favicon` | Shows each allowed site's icon in the popup's list, from the browser's own favicon cache. No page is fetched for it. |
-| `host permissions` (`*://*/*`, optional) | Requested per site at runtime, never at install. The user chooses each site in the extension's popup and revokes it in Chrome's settings. |
+| `host permissions` (`*://*/*`, optional) | Two separate uses, both optional and both started by the user in the popup: (1) the agent, one site at a time, for reading and acting while they watch; (2) Passwords, all sites at once only after "Turn on", to remember and fill sign-ins via the Intentic desktop app on this computer. Does not widen the agent's reach. |
+| `nativeMessaging` (optional) | Talks only to the Intentic desktop app's local native host so passwords saved in this browser are sealed on the user's own computer and returned for fill only after they confirm on the computer (Windows Hello or system consent). No other native hosts and no remote servers. |
 | Content script on `*://*.intentic.dev/*` | Receives a pairing code the user's own sandbox page offers, so the user does not have to copy and paste it. It reads nothing else on those pages. |
 
 **Data usage disclosures** — the connector reads arbitrary user-approved pages, so disclose the sensitive

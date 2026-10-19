@@ -585,6 +585,22 @@
                 color: var(--muted);
                 font-size: 12.5px;
             }
+            .passwords-card {
+                padding: 12px;
+            }
+            .passwords-lead {
+                margin: 0 0 8px;
+                font-size: 12.5px;
+            }
+            .passwords-detail {
+                margin: 0 0 10px;
+                font-size: 12px;
+            }
+            .passwords-actions {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
             .add-row {
                 display: flex;
                 align-items: center;
@@ -846,6 +862,15 @@
                         <button class="btn primary" type="submit">Connect</button>
                     </form>
                     <div id="pair-error" class="error" hidden></div>
+                </section>
+                <section id="passwords">
+                    <h2 class="label">Passwords</h2>
+                    <div class="card passwords-card">
+                        <p id="passwords-lead" class="passwords-lead"></p>
+                        <p id="passwords-detail" class="passwords-detail muted" hidden></p>
+                        <div id="passwords-actions" class="passwords-actions"></div>
+                        <div id="passwords-error" class="error" hidden></div>
+                    </div>
                 </section>
                 <section id="sites">
                     <div id="here" class="card" hidden></div>

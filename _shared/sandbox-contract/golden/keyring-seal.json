@@ -1,0 +1,62 @@
+{
+  "recipient": {
+    "publicKey": "eR9lSfr4kkCsnFXxIuVA-Tqx-fHU2B1bNRwmECF1S3I",
+    "privateKey": "x7OIAUo-rysGJ1yZOmD_QWEH9B5q3Cc90scxZ-5h_KQ"
+  },
+  "phone": {
+    "publicKey": "9oOufZYx6DfmHJLssvlgIkzpigzqnwgvf-3P_owHAVA",
+    "privateKey": "T01qPmEMwqoOA5gGQFJ7b0tDSt2aUIKvjJ8R7mg0PKo"
+  },
+  "vectors": [
+    {
+      "name": "capture",
+      "plaintext": "hunter2-long-enough",
+      "purpose": {
+        "kind": "capture",
+        "via": "Pixel 8",
+        "at": 1700000000000
+      },
+      "ephemeral": {
+        "publicKey": "lRizna7JHa9RbD7Cdp9ANQB4pyW-p3kGTn-CV8fZVmM",
+        "privateKey": "JzMK_wtEOTXcEHT_zL0hX7hIBdA-gh_pF4sM2az5a5M"
+      },
+      "iv": "ASNFZ4mrze8BI0Vn",
+      "box": {
+        "v": 1,
+        "epk": "lRizna7JHa9RbD7Cdp9ANQB4pyW-p3kGTn-CV8fZVmM",
+        "iv": "ASNFZ4mrze8BI0Vn",
+        "tag": "XPlHvUpFkCgmy6v06Ej97w",
+        "data": "udMyxOSydj6iznm3wR9GqQoTZQ"
+      }
+    },
+    {
+      "name": "phone",
+      "plaintext": "secret-password",
+      "purpose": {
+        "kind": "phone",
+        "device": "phone-card-1",
+        "nonce": "abcdefghijklmnopqrstuv"
+      },
+      "ephemeral": {
+        "publicKey": "aQfFHNZllse0GJoS_zwNalvnGYZ-c64tfNaJ5GZt0Ds",
+        "privateKey": "7wHdhpRLI3D2W3r_Ti-IJbyYCB6C0QR-DMwRRO7eHZQ"
+      },
+      "iv": "iavN7wEjRWeJq83v",
+      "box": {
+        "v": 1,
+        "epk": "aQfFHNZllse0GJoS_zwNalvnGYZ-c64tfNaJ5GZt0Ds",
+        "iv": "iavN7wEjRWeJq83v",
+        "tag": "Vc5VL4xu0oRE2rum1fm41Q",
+        "data": "uw5uVpe4oBWZ65Ayr0Wd"
+      }
+    }
+  ],
+  "unseal": {
+    "phonePlaintext": "secret-password",
+    "phonePurpose": {
+      "kind": "phone",
+      "device": "phone-card-1",
+      "nonce": "abcdefghijklmnopqrstuv"
+    }
+  }
+}

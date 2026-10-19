@@ -27,6 +27,7 @@ import dev.intentic.device.Distribution
 import dev.intentic.device.Graph
 import dev.intentic.device.link.LinkState
 import dev.intentic.device.platform.SafFiles
+import dev.intentic.device.passwords.PasswordsClient
 import dev.intentic.device.store.AllowedApp
 import dev.intentic.device.store.AppMode
 import dev.intentic.device.store.LinkMode
@@ -43,6 +44,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var content: LinearLayout
     private val observer: () -> Unit = { render() }
     private var pendingWritable = false
+    private var keyrings: List<PasswordsClient.Keyring>? = null
+    private var keyringsLoading = false
 
     private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) {
@@ -102,6 +105,7 @@ class MainActivity : AppCompatActivity() {
         pairingSection()
         if (Graph.pairings.get() != null) {
             agentSection()
+            passwordsSection()
             accessSection()
             foldersSection()
             appsSection()
@@ -137,6 +141,28 @@ class MainActivity : AppCompatActivity() {
             Graph.settings.mode == LinkMode.ON_DEMAND -> "Asleep. It connects when your agent needs the phone, or when this app is open."
             else -> "Not connected."
         }
+
+    private fun passwordsSection() {
+        val pairing = Graph.pairings.get() ?: return
+        if (keyrings == null && !keyringsLoading) {
+            keyringsLoading = true
+            Thread({
+                val loaded = when (val result = Graph.passwords.client.listKeyrings(pairing)) {
+                    is PasswordsClient.Result.Ok -> result.value
+                    is PasswordsClient.Result.Refused -> emptyList()
+                }
+                runOnUiThread {
+                    keyrings = loaded
+                    keyringsLoading = false
+                    render()
+                }
+            }, "intentic-keyrings").start()
+        }
+        PasswordsSection.render(this, ui, content, pairing, keyrings, keyringsLoading) {
+            keyrings = null
+            render()
+        }
+    }
 
     private fun agentSection() {
         content.addView(ui.heading("Agent"))

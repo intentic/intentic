@@ -25,19 +25,25 @@ const value = ref(``);
 // The need's answer, wherever it is drawn (needAnswer.ts).
 const { busy, notice, answer } = useNeedAnswer(() => props.need);
 
-// Where it is kept: the sandbox, as it always was, unless the person picks one of their computers. Offered only while one
-// answers, since a value sent to a computer that does not is a value nobody can take in.
+// Where it is kept. Offered only while a computer's keyring answers, since a value sent to a computer that does not is a
+// value nobody can take in; and then the computer is the default (2026-10-19, Passwords): a password kept where the
+// owner's own vault is, asked for at each use, is the stronger home, and the sandbox stays one press away. Once the
+// person picks, a keyring coming or going no longer moves the choice under them.
 const { online } = useKeyrings();
-const where = ref<`sandbox` | `computer`>(`sandbox`);
+const picked = ref<`sandbox` | `computer` | undefined>(undefined);
+const where = computed<`sandbox` | `computer`>({
+    // A keyring that answers but has no vault yet (`setUp` false) can still be picked, and is no default.
+    get: () => (online.value.length === 0 ? `sandbox` : (picked.value ?? (online.value.some((keyring) => keyring.setUp !== false) ? `computer` : `sandbox`))),
+    set: (choice) => {
+        picked.value = choice;
+    },
+});
 const device = ref<string | undefined>(undefined);
 // Asking each time is the default: the strongest of the three, and the one a person can loosen later on that computer.
 const mode = ref<KeyringShareMode>(`each-use`);
 watch(
     online,
     (keyrings) => {
-        if (keyrings.length === 0) {
-            where.value = `sandbox`;
-        }
         if (!keyrings.some((keyring) => keyring.machine === device.value)) {
             device.value = keyrings[0]?.machine;
         }

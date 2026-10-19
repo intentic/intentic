@@ -1,8 +1,15 @@
 import { askKeyring, keyringPaths, KeyringUnavailable, type KeyringRequest, type KeyringResponse } from "@intentic/keyring";
 import type {
+    KeyringCaptureItem,
+    KeyringCaptureResult,
     KeyringCopies,
     KeyringInboxItem,
     KeyringInboxResult,
+    KeyringNeed,
+    KeyringNeedResult,
+    KeyringPhoneFillResult,
+    KeyringPhoneKeys,
+    KeyringPhonePairResult,
     KeyringRefusalCode,
     KeyringReleaseResult,
     KeyringShares,
@@ -15,6 +22,7 @@ import type {
     KeyringTypeInput,
     KeyringTypeResult,
     SignedKeyringGrant,
+    SignedKeyringPhoneFill,
 } from "@intentic/sandbox-contract/schemas/keyring";
 import { ORPCError } from "@orpc/server";
 import type { z } from "zod";
@@ -175,3 +183,26 @@ export const keyringSyncDeliver = async (link: KeyringLink, deliver: SyncDeliver
     return { accepted: answer.accepted };
 };
 
+// ---- the Passwords app (2026-10-19) ----
+// Each names the sandbox from the link, never from the call: a capture is recorded as seen through it, a need is asked
+// for it, and a phone pairs and fills through it.
+
+export const keyringCapture = async (link: KeyringLink, item: KeyringCaptureItem): Promise<KeyringCaptureResult> => {
+    const answer = await ask(link, { op: "capture", item, sandbox: link.sandboxUrl });
+    return answer instanceof KeyringUnavailable ? noKeyring(answer) : answer;
+};
+
+export const keyringNeed = async (link: KeyringLink, need: KeyringNeed): Promise<KeyringNeedResult> => {
+    const answer = await ask(link, { op: "need", sandbox: link.sandboxUrl, need });
+    return answer instanceof KeyringUnavailable ? noKeyring(answer) : answer;
+};
+
+export const keyringPhonePair = async (link: KeyringLink, phone: KeyringPhoneKeys): Promise<KeyringPhonePairResult> => {
+    const answer = await ask(link, { op: "phone-pair", sandbox: link.sandboxUrl, phone });
+    return answer instanceof KeyringUnavailable ? noKeyring(answer) : answer;
+};
+
+export const keyringPhoneFill = async (link: KeyringLink, fill: SignedKeyringPhoneFill): Promise<KeyringPhoneFillResult> => {
+    const answer = await ask(link, { op: "phone-fill", sandbox: link.sandboxUrl, fill });
+    return answer instanceof KeyringUnavailable ? noKeyring(answer) : answer;
+};

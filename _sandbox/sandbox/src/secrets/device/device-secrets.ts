@@ -98,6 +98,7 @@ const NEXT_STEP: ReadonlyMap<KeyringRefusalCode, string> = new Map<KeyringRefusa
     ["declined", "The person at that computer said no: do not retry, and do not look for another way to get it."],
     ["locked", "Ask the owner to unlock the keyring there, then run it again."],
     ["busy", "Another prompt is open there: run it again in a moment."],
+    ["pending", "It waits for the owner's answer in the Passwords app: carry on with what does not need it, and run it again once they have said yes."],
     ["unavailable", "Run it again once the computer is reachable, or carry on without it and say what you left undone."],
 ]);
 

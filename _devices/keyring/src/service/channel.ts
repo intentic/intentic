@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { chmod, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
 import { z } from "zod";
 import { answerRequestLine, type KeyringHandler, type ServerLog } from "../server.js";
@@ -6,7 +7,8 @@ import { type Challenge, ChallengeSchema, OpeningSchema, type Proof, ProofSchema
 import { LineSocket } from "./lines.js";
 import type { HelperLink } from "./remote.js";
 
-// The hardened service's side of the door (door.ts): loopback only, every connection opening with the token. A request
+// The protected service's side of the door (door.ts): loopback on Windows, a unix socket on Linux, every connection
+// opening with the token. A request
 // connection is answered like the pipe answers (server.ts); a helper connection is challenged, and only one that proves
 // itself becomes the link prompts and typings go through.
 
@@ -20,7 +22,8 @@ export interface DoorDeps {
     readonly handler: KeyringHandler;
     readonly link: HelperLink;
     readonly token: string;
-    // What to ask a helper for: a Hello signature over a fresh challenge, or the passphrase.
+    // What to ask a helper for: a Hello signature over a fresh challenge, its pid for polkit, the recovery key, or nothing
+    // before setup.
     readonly challenge: () => Promise<Challenge>;
     // Whether `proof` answers `challenge`.
     readonly proven: (challenge: Challenge, proof: Proof) => Promise<boolean>;
@@ -48,7 +51,40 @@ const welcomeHelper = async (deps: DoorDeps, lines: LineSocket): Promise<void> =
     deps.log("a session helper is connected");
 };
 
-export const serveDoor = async (deps: DoorDeps): Promise<{ readonly server: Server; readonly port: number }> => {
+// Where the door listens: a loopback port the system picks (Windows), or a unix socket at a fixed path (Linux), made
+// 0600 here and opened to the one user it is for by the caller (door-linux.ts).
+export type DoorPlace = { readonly kind: "tcp" } | { readonly kind: "unix"; readonly path: string };
+
+export interface OpenDoor {
+    readonly server: Server;
+    // The port, for a loopback door.
+    readonly port: number | undefined;
+}
+
+const listenOn = async (server: Server, place: DoorPlace): Promise<number | undefined> =>
+    await new Promise<number | undefined>((resolve, reject) => {
+        server.once("error", reject);
+        const listening = (): void => {
+            server.off("error", reject);
+            if (place.kind === "unix") {
+                resolve(undefined);
+                return;
+            }
+            const address = ListeningSchema.safeParse(server.address());
+            if (!address.success) {
+                reject(new Error("the door did not open on a TCP port"));
+                return;
+            }
+            resolve(address.data.port);
+        };
+        if (place.kind === "unix") {
+            server.listen(place.path, listening);
+        } else {
+            server.listen({ host: "127.0.0.1", port: 0, exclusive: true }, listening);
+        }
+    });
+
+export const serveDoor = async (deps: DoorDeps, place: DoorPlace = { kind: "tcp" }): Promise<OpenDoor> => {
     const server = createServer((socket) => {
         const lines = new LineSocket(socket);
         void (async () => {
@@ -69,17 +105,13 @@ export const serveDoor = async (deps: DoorDeps): Promise<{ readonly server: Serv
             socket.end(await answerRequestLine(deps.handler, request, deps.log));
         })();
     });
-    const port = await new Promise<number>((resolve, reject) => {
-        server.once("error", reject);
-        server.listen({ host: "127.0.0.1", port: 0, exclusive: true }, () => {
-            server.off("error", reject);
-            const address = ListeningSchema.safeParse(server.address());
-            if (!address.success) {
-                reject(new Error("the door did not open on a TCP port"));
-                return;
-            }
-            resolve(address.data.port);
-        });
-    });
+    if (place.kind === "unix") {
+        // A socket left by a service that stopped: systemd runs one instance per user, so nothing live owns it.
+        await rm(place.path, { force: true });
+    }
+    const port = await listenOn(server, place);
+    if (place.kind === "unix") {
+        await chmod(place.path, 0o600);
+    }
     return { server, port };
 };

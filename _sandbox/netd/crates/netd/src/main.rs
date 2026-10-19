@@ -124,7 +124,11 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
     tokio::spawn(async move { recording.keep_written(&vitals_file).await });
 
     let (config_sender, config) = watch::channel(None);
-    let terminals = Terminals::new(Hubs::new(Tmux::default()));
+    // A password the person types at a hidden prompt in an editor terminal goes to Node, which may hand it to Passwords.
+    let teller: crate::term::Teller = Arc::new(move |message| {
+        let _ = link.tell(&message);
+    });
+    let terminals = Terminals::new(Hubs::telling(Tmux::default(), Some(teller)));
     let netd = Arc::new(Netd::new(
         link,
         http.clone(),

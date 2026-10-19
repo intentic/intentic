@@ -2365,6 +2365,8 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         Some(Link::FirstTask(args)) => crate::first_task::on_link(app, args),
         // Repair, opened on this computer from the recovery panel, a page or the system (repair.rs).
         Some(Link::Repair(args)) => crate::repair::on_link(app, args),
+        // Passwords, opened from the hosted editor's "Manage on this computer" (keyring.rs).
+        Some(Link::Passwords { entry }) => crate::keyring::on_link(app, entry.as_deref()),
         Some(Link::Local(verb)) => {
             if let Source::Files { window } = source {
                 crate::local::act(app, window, verb);

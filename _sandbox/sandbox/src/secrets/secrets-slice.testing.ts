@@ -4,6 +4,7 @@ import type { CredentialGate, CredentialGateKind, SecretProgramGuard } from "@in
 import { createCredentialGrants } from "./credential-grants.js";
 import { REACH_ALL } from "./credential-reach.js";
 import { createDeviceSecrets } from "./device/device-secrets.js";
+import { createKeyringNeeds, memoryKeyringNeeds } from "./device/keyring-needs.js";
 import { createKeyringLink, type KeyringDevices } from "./device/keyring-link.js";
 import { createKeyringSync, type KeyringSyncDevices } from "./device/keyring-sync.js";
 import { memoryKeyringBook, memoryKeyringCopies, memoryReleasedValues, memorySandboxKeys, NO_DEVICES, SANDBOX_URL } from "./device/keyring.testing.js";
@@ -38,6 +39,7 @@ const keyringFakes = (devices: KeyringDevices & KeyringSyncDevices, secretRegist
         keyringSync,
         sandboxKeyringKeys,
         deviceSecrets: createDeviceSecrets({ link: keyringLink, sync: keyringSync, released, registry: secretRegistry, devices: () => devices, logger: quiet }),
+        keyringNeeds: createKeyringNeeds({ link: keyringLink, store: memoryKeyringNeeds(), logger: quiet }),
     };
 };
 

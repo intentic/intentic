@@ -6,7 +6,7 @@ declare namespace chrome {
         const lastError: { message?: string } | undefined;
         function getManifest(): { version: string; name: string };
         function getURL(path: string): string;
-        const onInstalled: { addListener: (callback: () => void) => void };
+        const onInstalled: { addListener: (callback: (details?: { readonly reason: "install" | "update" | "chrome_update" | "shared_module_update" }) => void) => void };
         const onStartup: { addListener: (callback: () => void) => void };
         const onMessage: {
             addListener: (
@@ -14,6 +14,21 @@ declare namespace chrome {
             ) => void;
         };
         function sendMessage(message: unknown): Promise<unknown>;
+        function connectNative(name: string): Port;
+        interface Port {
+            postMessage(message: unknown): void;
+            disconnect(): void;
+            onMessage: { addListener(callback: (message: unknown) => void): void; removeListener(callback: (message: unknown) => void): void };
+            onDisconnect: { addListener(callback: () => void): void; removeListener(callback: () => void): void };
+        }
+        interface MessageSender {
+            tab?: tabs.Tab;
+            url?: string;
+        }
+    }
+
+    namespace extension {
+        const inIncognitoContext: boolean;
     }
 
     namespace storage {
@@ -46,6 +61,7 @@ declare namespace chrome {
 
     namespace tabs {
         interface Tab {
+            incognito?: boolean;
             id?: number;
             windowId?: number;
             active?: boolean;
@@ -89,6 +105,18 @@ declare namespace chrome {
             args?: Args;
             world?: "ISOLATED" | "MAIN";
         }): Promise<InjectionResult<Awaited<Result>>[]>;
+        interface RegisteredContentScript {
+            id: string;
+            matches?: string[];
+            excludeMatches?: string[];
+            js?: string[];
+            runAt?: "document_idle" | "document_start" | "document_end";
+            persistAcrossSessions?: boolean;
+        }
+        function registerContentScripts(scripts: RegisteredContentScript[]): Promise<void>;
+        function updateContentScripts(scripts: RegisteredContentScript[]): Promise<void>;
+        function unregisterContentScripts(filter: { ids: string[] }): Promise<void>;
+        function getRegisteredContentScripts(filter: { ids: string[] }): Promise<RegisteredContentScript[]>;
     }
 
     namespace cookies {

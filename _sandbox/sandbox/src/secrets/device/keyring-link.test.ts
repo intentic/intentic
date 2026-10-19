@@ -288,7 +288,7 @@ describe("keyrings", () => {
         const { link, devices } = setup({ rog }, { syncOf: () => ({ key: rog.keys.sync.publicKey, peers: ["omen"] }) });
         await link.refresh();
         const [online] = await link.keyrings();
-        expect(online).toEqual({ machine: "rog", online: true, locked: false, version: "1.0.0", pendingInbox: 0, shared: 1, sync: { fingerprint: expect.stringMatching(/^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/u), peers: ["omen"] } });
+        expect(online).toEqual({ machine: "rog", online: true, locked: false, setUp: true, version: "1.0.0", pendingInbox: 0, shared: 1, sync: { fingerprint: expect.stringMatching(/^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/u), peers: ["omen"] } });
         devices.online.delete("rog");
         expect(await link.keyrings()).toEqual([{ machine: "rog", online: false, version: "1.0.0", shared: 1 }]);
     });

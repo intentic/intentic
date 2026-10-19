@@ -1,5 +1,5 @@
 import { rm } from "node:fs/promises";
-import { KeyringPointerSchema, KeyringPublicKeySchema } from "@intentic/sandbox-contract/schemas/keyring";
+import { KeyringPointerSchema, KeyringPublicKeySchema, KeyringRememberSchema } from "@intentic/sandbox-contract/schemas/keyring";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { writeJsonFile } from "../../store/json-file.js";
@@ -16,7 +16,16 @@ import { openDocument } from "../../store/open-document.js";
 // unasked (keyring-link.ts says when it does).
 const HeardSchema = z.object({
     pointers: z.array(KeyringPointerSchema),
-    keyring: z.object({ version: z.string(), locked: z.boolean(), pendingInbox: z.number().int().nonnegative() }).optional(),
+    keyring: z
+        .object({
+            version: z.string(),
+            locked: z.boolean(),
+            pendingInbox: z.number().int().nonnegative(),
+            // Which sources the person lets that keyring remember from (absent from one older than 2026-10-19): a sandbox
+            // terminal's capture and the phone's are sent only where theirs is on.
+            remember: KeyringRememberSchema.optional(),
+        })
+        .optional(),
     pinned: z.object({ seal: KeyringPublicKeySchema, inbox: KeyringPublicKeySchema, at: z.number() }).optional(),
     heardAt: z.number(),
 });

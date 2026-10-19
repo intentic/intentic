@@ -137,6 +137,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.imap",
         "intentic.microsoft-365",
         "intentic.onlyoffice",
+        "intentic.passwords",
         "intentic.phones",
         "intentic.pi-agent",
         "intentic.pipelines",

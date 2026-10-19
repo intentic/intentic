@@ -104,7 +104,7 @@ const scheduleAfterExit = async (paths: readonly string[], emptyDirs: readonly s
     return started;
 };
 
-/** Sweeps both folders; `holdBin` keeps the binaries a step that did not finish still needs (a hardened keyring). */
+/** Sweeps both folders; `holdBin` keeps the binaries a step that did not finish still needs (Passwords' protected service, which only the keyring's own program removes). */
 export const sweepAgentFiles = async (deleteData: boolean, holdBin: boolean, say: Tally): Promise<SweptFiles> => {
     const movedSelf = holdBin ? undefined : await moveSelfAside();
     const keyringDir = keyringPaths().dir;

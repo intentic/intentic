@@ -5,6 +5,7 @@
 
 mod control;
 mod deflate;
+mod hidden;
 mod hub;
 mod screen;
 
@@ -32,7 +33,7 @@ use tokio_tungstenite::tungstenite::protocol::{CloseFrame, Role, WebSocketConfig
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
 
 use hub::{Controls, Outbox, Taken};
-pub use hub::{Hubs, Tmux};
+pub use hub::{Hubs, Teller, Tmux};
 use relay::body::{self, Body};
 
 /// Every route netd answers itself; the contract marks each `netd` (raw-routes.ts), and a test holds them equal.

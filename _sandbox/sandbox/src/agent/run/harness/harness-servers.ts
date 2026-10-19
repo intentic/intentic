@@ -42,6 +42,7 @@ export type HarnessServersDeps = Pick<
     | "gatewayHeld"
     | "hostGuardGate"
     | "keyringLink"
+    | "keyringNeeds"
     | "programGuardFor"
     | "secretTickets"
     | "dependencies"
@@ -170,6 +171,7 @@ const typistServer = (deps: HarnessServersDeps, turn: TypistTurn): McpSdkServerC
         accounts,
         devices: cardsOf(turn.granted, "device"),
         keyrings: { link: deps.keyringLink, listed: () => deps.deviceSecrets.listed(), programGuardFor: deps.programGuardFor },
+        needs: (need) => deps.keyringNeeds.request(need),
         ...opt("desktop", turn.desktop ? sandboxDesktopTypist() : undefined),
         ownBrowsers: cardsOf(turn.granted, "webext"),
         tickets: deps.secretTickets,

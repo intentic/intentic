@@ -99,11 +99,12 @@ const startLinks = ({ role, services, logger, shutdown }: Pick<BootPhase, "role"
 };
 
 // The keyrings on the owner's computers (secrets/device/): each read when its computer connects and every minute after,
-// and the sync mailbox between them carried every five. Only the daemon that owns the roots reads them, since what they
-// say is kept under the auth root it owns.
+// the sync mailbox between them carried every five, and the needs waiting on each looked at again after every read.
+// Only the daemon that owns the roots reads them, since what they say is kept under the auth root it owns.
 const startKeyrings = ({ role, services, shutdown }: Pick<BootPhase, "role" | "services" | "shutdown">): void => {
     if (role.roots) {
         shutdown.push(services.deviceSecrets.start());
+        shutdown.push(services.keyringNeeds.start());
     }
 };
 

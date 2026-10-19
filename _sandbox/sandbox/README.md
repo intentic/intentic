@@ -32,6 +32,27 @@ flowchart LR
   reference to it like any stored name, and asks that computer for a value one use at a time, after the gates and the
   host guard, with a grant signed by its own keyring keys (public halves served at `GET /keyring/keys`). A released
   value is kept only to mask, so every use asks again; an entry shared in `copy` mode is kept here as an ordinary secret.
+- An agent can ask by need instead of by name (`secrets/device/keyring-needs.ts`, `POST /secrets/want`, the `secrets
+  want` CLI, `type_secret` with `for`): the need goes over the device link's `keyringNeed` to each online computer
+  whose keyring is set up, most recently answered first. The first yes wins and that computer's shares are read at
+  once, so the name resolves on the next use; an answer the person has not given yet (`pending`) ends the round and
+  waits in Passwords on that computer; when nothing fits anywhere, the computer used last is asked again with its
+  type-once box. Every need is kept in `keyring-needs.json` under the auth root, and a pending one turns allowed by
+  itself when a later read of that computer lists an entry serving its place. The hosted Passwords view reads
+  `GET /secrets/passwords`, `/secrets/passwords/needs` and `/secrets/passwords/activity` (`secrets/device/passwords.routes.ts`).
+- Terminal capture (`secrets/device/terminal-capture.ts`, `secrets/device/prompt-capture.ts`): netd watches the sessions the person
+  types into (`web-…`, never an agent's). When a password prompt is left without a newline and the pane's tty then has
+  echo off, netd edits the next line as the tty does and tells this daemon `ToNode::HiddenLine` once, then drops it
+  ([netd's term/hidden.rs](../netd/crates/netd/src/term/hidden.rs)). Here the prompt is judged again, so one-time
+  codes are skipped. The value is then sealed to the inbox key of the most recently active computer whose keyring has
+  remembering from sandboxes on, and sent with `keyringCapture`. The pane gets one dim "Saved … to Passwords on …" line.
+- Phone passwords (`phones/phone-passwords.routes.ts`, `/system/phones/passwords/*`): the Intentic Device app, as
+  Android's autofill service, lists the owner's keyrings (online, locked, inbox key, whether remembering from the phone
+  is on there, whether this phone is paired), pairs with one, sends what the person signed in with already sealed to
+  that keyring's inbox key, and asks for a fill signed by its biometric-gated key. Each request carries the phone's own
+  enrollment token, the one its socket presents, is held to 30 a minute per phone (fills to 10), and is relayed to the
+  named computer over its device link; a keyring's refusal comes back as the body. Pairings the keyring said yes to are
+  kept in `phone-pairings.json` on the history volume, only to answer `paired`.
 - `mcp__secrets__type_secret` (`browser/tools/secrets-tools.ts`, `secret-typing.ts`) types a secret without the agent
   seeing it into whichever of these the turn mounted: a sandbox browser's page, the sandbox's desktop (xdotool reading
   the value on stdin, only into a program on the secret's list), the focused window on one of the owner's computers or

@@ -10,6 +10,7 @@ import type { WorkspacePaths } from "../workspace/workspace.js";
 import { createDeviceSecrets, type DeviceSecretsService } from "./device/device-secrets.js";
 import type { SandboxKeyringKeys } from "./device/keyring-keys.js";
 import type { KeyringLink } from "./device/keyring-link.js";
+import { createKeyringNeeds, fileKeyringNeeds, type KeyringNeeds, keyringNeedsDocument } from "./device/keyring-needs.js";
 import { createKeyringParts } from "./device/keyring-parts.js";
 import type { KeyringSync } from "./device/keyring-sync.js";
 import { createProgramGuardGate, type ProgramGuardGate } from "./gates/program-guard-gate.js";
@@ -53,6 +54,8 @@ export interface SecretsSlice {
     readonly keyringSync: KeyringSync;
     readonly sandboxKeyringKeys: SandboxKeyringKeys;
     readonly deviceSecrets: DeviceSecretsService;
+    // An agent's need, by the place a credential is for, asked of the keyrings, and every need this sandbox raised.
+    readonly keyringNeeds: KeyringNeeds;
     // Each sandbox-held secret's program guard, the host guard's counterpart for typing into a window or a phone app:
     // the owner's settings, the list a typing reads (empty when unset), and the card that widens one.
     readonly secretProgramGuards: SecretProgramGuardsStore;
@@ -142,6 +145,7 @@ export const createSecretsSlice = ({
         keyringSync: keyrings.keyringSync,
         sandboxKeyringKeys: keyrings.keyringKeys,
         deviceSecrets,
+        keyringNeeds: createKeyringNeeds({ link: keyrings.keyringLink, store: fileKeyringNeeds(join(authRoot, keyringNeedsDocument.path)), logger }),
         secretProgramGuards,
         programGuardFor: (name) => secretProgramGuards.guardFor(name),
         programGuardGate: createProgramGuardGate({ ownerEmail, ...cards, hold }),

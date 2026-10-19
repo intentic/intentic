@@ -15,8 +15,13 @@ import { dialLoopback } from "./tools/programs/device-tunnel.js";
 import { hostFacts } from "./tools/describe.js";
 import { DeliveryRefused, deliverProject } from "../sync/project/project-delivery.js";
 import {
+    keyringCapture,
     keyringCopies,
     keyringInbox,
+    type KeyringLink,
+    keyringNeed,
+    keyringPhoneFill,
+    keyringPhonePair,
     keyringRelease,
     keyringShares,
     keyringSyncDeliver,
@@ -198,6 +203,27 @@ const deliverOverLink = async (runtime: HostRuntime, delivery: ProjectDelivery):
     }
 };
 
+type DeviceImplementer = ReturnType<typeof implement<typeof tolerantDeviceContract>>;
+
+// The keyring on this computer, relayed (keyring/relay.ts). Behind no switch of the grant: the keyring answers to its
+// own (a grant the sandbox signed, a person's yes), and this link names which sandbox asks. Not tools, so no agent can
+// call them; only the daemon does, and only on an agent advertising `keyring`.
+const keyringProcedures = (os: DeviceImplementer, keyring: KeyringLink) => ({
+    keyringShares: os.keyringShares.handler(async () => await keyringShares(keyring)),
+    keyringRelease: os.keyringRelease.handler(async ({ input }) => await keyringRelease(keyring, input)),
+    keyringType: os.keyringType.handler(async ({ input }) => await keyringType(keyring, input)),
+    keyringInbox: os.keyringInbox.handler(async ({ input }) => await keyringInbox(keyring, input)),
+    keyringCopies: os.keyringCopies.handler(async () => await keyringCopies(keyring)),
+    keyringSyncState: os.keyringSyncState.handler(async () => await keyringSyncState(keyring)),
+    keyringSyncPair: os.keyringSyncPair.handler(async ({ input }) => await keyringSyncPair(keyring, input)),
+    keyringSyncOutbox: os.keyringSyncOutbox.handler(async () => await keyringSyncOutbox(keyring)),
+    keyringSyncDeliver: os.keyringSyncDeliver.handler(async ({ input }) => await keyringSyncDeliver(keyring, input)),
+    keyringCapture: os.keyringCapture.handler(async ({ input }) => await keyringCapture(keyring, input)),
+    keyringNeed: os.keyringNeed.handler(async ({ input }) => await keyringNeed(keyring, input)),
+    keyringPhonePair: os.keyringPhonePair.handler(async ({ input }) => await keyringPhonePair(keyring, input)),
+    keyringPhoneFill: os.keyringPhoneFill.handler(async ({ input }) => await keyringPhoneFill(keyring, input)),
+});
+
 export const createHostRouter = (runtime: HostRuntime) => {
     const os = implement(tolerantDeviceContract);
     // Switches a grant carried that this agent does not know, each said once per link rather than on every reconnect.
@@ -262,18 +288,8 @@ export const createHostRouter = (runtime: HostRuntime) => {
                 throw new ORPCError(error instanceof ScopeError ? "FORBIDDEN" : "BAD_REQUEST", { message: errorMessage(error) });
             }
         }),
-        // The keyring on this computer, relayed (keyring/relay.ts). Behind no switch of the grant: the keyring answers to its
-        // own (a grant the sandbox signed, a person's yes), and this link names which sandbox asks. Not tools, so no agent
-        // can call them; only the daemon does, and only on an agent advertising `keyring`.
-        keyringShares: os.keyringShares.handler(async () => await keyringShares(keyring)),
-        keyringRelease: os.keyringRelease.handler(async ({ input }) => await keyringRelease(keyring, input)),
-        keyringType: os.keyringType.handler(async ({ input }) => await keyringType(keyring, input)),
-        keyringInbox: os.keyringInbox.handler(async ({ input }) => await keyringInbox(keyring, input)),
-        keyringCopies: os.keyringCopies.handler(async () => await keyringCopies(keyring)),
-        keyringSyncState: os.keyringSyncState.handler(async () => await keyringSyncState(keyring)),
-        keyringSyncPair: os.keyringSyncPair.handler(async ({ input }) => await keyringSyncPair(keyring, input)),
-        keyringSyncOutbox: os.keyringSyncOutbox.handler(async () => await keyringSyncOutbox(keyring)),
-        keyringSyncDeliver: os.keyringSyncDeliver.handler(async ({ input }) => await keyringSyncDeliver(keyring, input)),
+        // The keyring on this computer, relayed (keyringProcedures below).
+        ...keyringProcedures(os, keyring),
         stageArtifact: os.stageArtifact.handler(async ({ input }) => {
             try {
                 const result = await stageArtifact(input, runtime.scopes(), runtime.sandboxUrl);

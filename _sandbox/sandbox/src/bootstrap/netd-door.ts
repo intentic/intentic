@@ -26,6 +26,7 @@ import type { PushSender } from "../push/push.js";
 import { claimHolder, type ContainerRole } from "../system/boot/container-owner.js";
 import type { ProfileTraits } from "../system/boot/profile.js";
 import { sameProcess } from "../system/resources/proc-stat.js";
+import { createTerminalCapture } from "../secrets/device/terminal-capture.js";
 import { planTerminal, type TerminalPlanDeps } from "../terminal/terminal-plan.js";
 import { buildId } from "../version.js";
 import { LINK_LOST_EXIT } from "../system/boot/restarts/daemon-stop.js";
@@ -277,6 +278,7 @@ export const startNetdDoor = async (phase: BootPhase, host: string, { controlPat
     }
     const preview = previewDepsOf(phase);
     const terminal = terminalDepsOf(phase);
+    const hiddenLines = createTerminalCapture({ link: services.keyringLink, logger });
     let stopping = false;
     const link = await connectNetd({
         path: controlPath,
@@ -290,6 +292,8 @@ export const startNetdDoor = async (phase: BootPhase, host: string, { controlPat
         },
         // netd repeats where the tunnel stands to every Node that says hello; only a change is news.
         onTunnel: tunnelReports(logger, services.pushSender),
+        // A password the person typed at a hidden prompt in an editor terminal: Passwords may keep it (terminal-capture.ts).
+        onHiddenLine: ({ session, prompt, value }) => hiddenLines.entered(session, prompt, value),
         onFault: (error) => logger.warn({ err: error }, "netd link: fault on the control socket"),
         // The link closing unasked: netd dropped it (a frame it could not read) or is going away. Either way this daemon
         // cannot serve without it, and exits for a fresh start; netd going down takes no notice of the code.

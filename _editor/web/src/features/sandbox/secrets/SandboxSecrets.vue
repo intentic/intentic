@@ -26,6 +26,7 @@ import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSecretInventory } from "../../../models/capabilities/useSecrets";
 import { useKeyrings } from "../../capabilities/connect/secrets/useKeyrings";
+import OpenInPasswords from "./OpenInPasswords.vue";
 import SecretKeyrings from "./SecretKeyrings.vue";
 import { useOperation } from "../../../workbench/operations/operations";
 import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./secretRows";
@@ -322,6 +323,7 @@ const pushToCi = async (): Promise<void> => {
                 </RowGroup>
 
                 <RowGroup v-if="onComputers.length > 0 && groupVisible(onComputers)" :label="t(`sandbox.sandboxSecrets.onYourComputers`)">
+                    <template #actions><OpenInPasswords /></template>
                     <SecretEntryRow
                         v-for="row in onComputers"
                         :key="row.entry.key"

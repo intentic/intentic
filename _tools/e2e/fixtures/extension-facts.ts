@@ -79,6 +79,7 @@ export const EXPECTED_ACTIVATIONS: readonly ExpectedActivation[] = [
     { id: `deployments`, key: `production`, surface: `rail`, why: `the komodo capability named production` },
     { id: `documentation`, key: `documentation`, surface: `rail`, why: `any repo at all` },
     { id: `maintenance`, key: `maintenance`, surface: `rail`, why: `any repo at all` },
+    { id: `passwords`, key: `passwords`, surface: `rail`, why: `always on` },
     { id: `pipelines`, key: `pipelines`, surface: `rail`, why: `a github CLI capability is connected` },
     { id: `workflows`, key: `workflows`, surface: `rail`, why: `always on` },
 

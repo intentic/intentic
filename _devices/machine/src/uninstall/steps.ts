@@ -20,7 +20,9 @@ import { binDir, baseDir } from "../config.js";
 import { stopAllApps } from "../device/tools/programs/stop-all.js";
 import { readWindowsPath, removeFromWindowsPathValue, writeWindowsPath } from "../install.js";
 import { uninstallAskpass } from "../keyring/askpass.js";
-import { hardenedHere, keyringInstalled, keyringPid, uninstallKeyring } from "../keyring/service.js";
+import { uninstallGitHelper } from "../keyring/git-helper.js";
+import { uninstallNativeHost } from "../keyring/native-host-install.js";
+import { keyringInstalled, keyringPid, serviceHere, uninstallKeyring } from "../keyring/service.js";
 import { agentPath } from "../release.js";
 import { machineLauncher, readResident, retireResident } from "../resident/supervision.js";
 import { runProcess } from "../sync/exec.js";
@@ -104,22 +106,28 @@ export const removeKeyring = async (say: Tally): Promise<{ readonly holdBin: boo
             WINDOWS ? "unset SSH_ASKPASS, SSH_ASKPASS_REQUIRE, SUDO_ASKPASS and GIT_ASKPASS in your user environment" : "rm ~/.config/environment.d/intentic-askpass.conf",
         );
     }
-    const hardened = await hardenedHere();
+    try {
+        await uninstallGitHelper();
+        await uninstallNativeHost();
+    } catch (error) {
+        say.warn(`git or a browser may still try Passwords' helper (${errorMessage(error)}).`, "git config --global --unset-all credential.helper intentic, and remove dev.intentic.keyring from the browsers' NativeMessagingHosts");
+    }
+    const service = await serviceHere();
     const installed = keyringInstalled();
-    if (!hardened && !installed && !existsSync(keyringPaths().dir)) {
+    if (!service && !installed && !existsSync(keyringPaths().dir)) {
         return { holdBin: false };
     }
     try {
         // Run for a vault folder alone too: an entry the keyring registered may outlive its binary.
-        const { hardened: was } = await uninstallKeyring(say.note);
+        const { service: was } = await uninstallKeyring(say.note);
         if (was || installed) {
-            say.note(was ? "Removed the keyring, its hardened service and its login entry." : "Removed the keyring and its login entry.");
+            say.note(was ? "Removed Passwords, its protected service and its login entry." : "Removed Passwords and its login entry.");
         }
         return { holdBin: false };
     } catch (error) {
-        if (hardened) {
+        if (service) {
             // Only the keyring's own program, run with an administrator's yes, takes its service away: it stays for that.
-            say.warn(`The keyring's hardened service stays (${errorMessage(error)}), so this agent's programs stay to finish it.`, "intentic-machine uninstall --purge");
+            say.warn(`Passwords' protected service stays (${errorMessage(error)}), so this agent's programs stay to finish it.`, "intentic-machine uninstall --purge");
             return { holdBin: true };
         }
         const pid = await keyringPid();

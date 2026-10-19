@@ -66,6 +66,15 @@ flowchart LR
   - A watch has no browser either, so the app goes on over adb (`adb install`, or the agent's `android_install`).
 - **Activity log.** Every tool call is appended to a JSONL log in app storage (text arguments cut to 40 characters),
   and the app shows the last 100.
+- **Passwords (autofill).** On the main screen, **Passwords** lists the owner's computers reachable from this sandbox
+  (`GET /system/phones/passwords/keyrings`). **Pair** sends this phone's seal and presence keys (`POST pair`); both
+  screens show fingerprints so the person can check they match. **Save passwords to** picks which online computer
+  receives captures. When Intentic is the autofill app (Android's own settings), sign-in forms offer **Fill with
+  Intentic**: a fingerprint or screen-lock check signs the fill request, the computer answers with a value sealed to
+  this phone, and the app fills the fields. Saving runs through Android's own save confirmation (an OS rule, not
+  Intentic's): after the person accepts, the password is sealed to that computer's inbox key and sent with
+  `POST capture`. The phone keeps its seal private key (AES-GCM in the Keystore), its presence signing key (EC P-256 in
+  the Keystore, one use per biometric), and pairing fingerprints — never passwords in logs.
 - **Updater** (direct only, `update/`). On launch and once a day it reads
   `releases/latest/download/intentic-device.json` (`{version, url, sha256}`) from the GitHub releases. A newer build is
   downloaded and checked against its digest, then handed to PackageInstaller for the person to confirm.
@@ -88,6 +97,8 @@ flowchart LR
 
 ## Key files
 
+- [app/src/main/kotlin/dev/intentic/device/passwords/IntenticAutofillService.kt](app/src/main/kotlin/dev/intentic/device/passwords/IntenticAutofillService.kt) — Android autofill: fill behind biometric, save to the chosen computer.
+- [app/src/main/kotlin/dev/intentic/device/passwords/Seal.kt](app/src/main/kotlin/dev/intentic/device/passwords/Seal.kt) — X25519 sealing, tested against `_shared/sandbox-contract/golden/keyring-seal.json`.
 - [app/src/main/kotlin/dev/intentic/device/link/LinkController.kt](app/src/main/kotlin/dev/intentic/device/link/LinkController.kt) — dialling, hello, heartbeat watchdog, backoff, linger and close codes.
 - [app/src/main/kotlin/dev/intentic/device/protocol/](app/src/main/kotlin/dev/intentic/device/protocol/) — JSON-RPC, the MCP server, enrollment, facts.
 - [app/src/main/kotlin/dev/intentic/device/policy/Gate.kt](app/src/main/kotlin/dev/intentic/device/policy/Gate.kt) — the one place a tool call is allowed or refused.

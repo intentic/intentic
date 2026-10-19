@@ -4,8 +4,17 @@ import { redeemPairing } from "./enroll.js";
 import { closeLink, ensureLink, linkState } from "./link.js";
 import type { PopupCommand, PopupState } from "./messages.js";
 import { store } from "./store.js";
-import { currentGrants } from "./tools/tab-access.js";
+import { currentGrants, fileUnmodedGrants } from "./tools/tab-access.js";
 import { openPanel, refreshBadge } from "./tools/access.js";
+import {
+    addNeverSaveHost,
+    enablePasswordsInBrowser,
+    handlePasswordContentMessage,
+    passwordsStartup,
+    passwordsUiStatus,
+    syncPasswordContentScript,
+    type PasswordContentMessage,
+} from "./passwords.js";
 import { siteOf } from "./policy.js";
 
 // The service worker's entry point: keeps the socket up and answers the popup. Deliberately holds no state,
@@ -21,9 +30,16 @@ const wake = (): void => {
     chrome.alarms.create(ALARM, { periodInMinutes: 1 });
     void ensureLink();
     void refreshBadge();
+    void passwordsStartup();
 };
 
 chrome.runtime.onInstalled.addListener(wake);
+// An update from before a site's mode was required keeps the agent's sites (tab-access.ts `fileUnmodedGrants`).
+chrome.runtime.onInstalled.addListener((details) => {
+    if (details?.reason === "update") {
+        void fileUnmodedGrants();
+    }
+});
 chrome.runtime.onStartup.addListener(wake);
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === ALARM) {
@@ -55,7 +71,7 @@ chrome.permissions.onAdded.addListener((added) => {
 });
 
 const readState = async (): Promise<PopupState> => {
-    const [sandbox, scopes, grants, pending, offered, paused, log, settings] = await Promise.all([
+    const [sandbox, scopes, grants, pending, offered, paused, log, settings, passwords] = await Promise.all([
         store.sandbox(),
         store.scopes(),
         currentGrants(),
@@ -64,8 +80,9 @@ const readState = async (): Promise<PopupState> => {
         store.paused(),
         store.log(),
         store.settings(),
+        passwordsUiStatus(),
     ]);
-    return { sandbox, link: linkState(), scopes, grants, pending, offered, paused, log, settings };
+    return { sandbox, link: linkState(), scopes, grants, pending, offered, paused, log, settings, passwords };
 };
 
 // Redeems a pairing and dials; the popup already obtained the host permission, since only a click-backed page
@@ -94,6 +111,7 @@ const pair = async (code: string): Promise<{ ok: boolean; message: string }> => 
     await store.setInbox(undefined);
     await store.append({ at: Date.now(), tool: "connection", detail: `Connected to ${siteOf(pairing.url)}`, ok: true });
     await ensureLink();
+    await syncPasswordContentScript().catch((error: unknown) => console.warn("intentic: the Passwords content script could not be brought in step", error));
     await refreshBadge();
     return { ok: true, message: `Connected.` };
 };
@@ -102,25 +120,48 @@ const pair = async (code: string): Promise<{ ok: boolean; message: string }> => 
 // github.com" has its answer beside what it did there.
 const owner = async (detail: string): Promise<void> => await store.append({ at: Date.now(), tool: "owner", detail, ok: true });
 
+// The browser already granted this (the popup asked, click behind it); this only files the read/act narrowing Chrome
+// has no concept of.
+const allow = async (origin: string, mode: "read" | "act"): Promise<{ ok: true }> => {
+    await store.setMode(origin, mode);
+    await store.forgetDecline(origin);
+    const pending = await store.pending();
+    if (pending === undefined || pending.origin === origin) {
+        await store.setPending(undefined);
+    }
+    await owner(`Allowed ${siteOf(origin)} to ${mode === "act" ? "read and act" : "read only"}`);
+    await refreshBadge();
+    return { ok: true };
+};
+
+const decline = async (): Promise<{ ok: true }> => {
+    const pending = await store.pending();
+    if (pending !== undefined) {
+        await store.decline(pending.origin, Date.now());
+        await store.setPending(undefined);
+        await owner(`Declined ${siteOf(pending.origin)}`);
+    }
+    await refreshBadge();
+    return { ok: true };
+};
+
+// Passwords' one popup command.
+const enablePasswords = async (): Promise<{ ok: boolean; message?: string }> => {
+    const enabled = await enablePasswordsInBrowser();
+    if (enabled.ok) {
+        await owner("Turned on remembering passwords in this browser");
+    }
+    return enabled;
+};
+
 const handle = async (command: PopupCommand): Promise<unknown> => {
     switch (command.type) {
         case "state":
             return await readState();
         case "pair":
             return await pair(command.code);
-        case "allow": {
-            // The browser already granted this (the popup asked, click behind it); this only files the read/act
-            // narrowing Chrome has no concept of.
-            await store.setMode(command.origin, command.mode);
-            await store.forgetDecline(command.origin);
-            const pending = await store.pending();
-            if (pending === undefined || pending.origin === command.origin) {
-                await store.setPending(undefined);
-            }
-            await owner(`Allowed ${siteOf(command.origin)} to ${command.mode === "act" ? "read and act" : "read only"}`);
-            await refreshBadge();
-            return { ok: true };
-        }
+        case "allow":
+            return await allow(command.origin, command.mode);
         case "mode":
             await store.setMode(command.origin, command.mode);
             await owner(`Set ${siteOf(command.origin)} to ${command.mode === "act" ? "read and act" : "read only"}`);
@@ -130,16 +171,8 @@ const handle = async (command: PopupCommand): Promise<unknown> => {
             await store.forgetMode(command.origin);
             await owner(`Removed ${siteOf(command.origin)}`);
             return { ok: true };
-        case "decline": {
-            const pending = await store.pending();
-            if (pending !== undefined) {
-                await store.decline(pending.origin, Date.now());
-                await store.setPending(undefined);
-                await owner(`Declined ${siteOf(pending.origin)}`);
-            }
-            await refreshBadge();
-            return { ok: true };
-        }
+        case "decline":
+            return await decline();
         case "settings":
             await store.setSettings(command.settings);
             return { ok: true };
@@ -153,6 +186,8 @@ const handle = async (command: PopupCommand): Promise<unknown> => {
             await store.forgetSandbox();
             await refreshBadge();
             return { ok: true };
+        case "passwords-enable":
+            return await enablePasswords();
         case "dismiss-offer":
             await store.setInbox(undefined);
             await refreshBadge();
@@ -174,7 +209,48 @@ const handle = async (command: PopupCommand): Promise<unknown> => {
     }
 };
 
-chrome.runtime.onMessage.addListener((message, _sender, respond) => {
+const handlePasswordChannel = async (message: Record<string, unknown>, sender: chrome.runtime.MessageSender): Promise<unknown> => {
+    const type = message["type"];
+    if (type === "never-list") {
+        return await store.neverSaveHosts();
+    }
+    if (type === "never") {
+        const host = hostFromPasswordSender(sender);
+        if (host !== undefined) {
+            await addNeverSaveHost(host);
+        }
+        return await handlePasswordContentMessage({ type: "never" }, sender);
+    }
+    return await handlePasswordContentMessage(message as PasswordContentMessage, sender);
+};
+
+const hostFromPasswordSender = (sender: chrome.runtime.MessageSender): string | undefined => {
+    const url = sender.tab?.url ?? sender.url;
+    if (url === undefined) {
+        return undefined;
+    }
+    try {
+        return new URL(url).hostname;
+    } catch {
+        // allow(silent-catch): an address that does not parse has no site to save or fill for, which is the answer
+        return undefined;
+    }
+};
+
+chrome.runtime.onMessage.addListener((message, sender, respond) => {
+    if (typeof message === "object" && message !== null && (message as { channel?: string }).channel === "passwords") {
+        void handlePasswordChannel(message as Record<string, unknown>, sender)
+            .then(respond)
+            .catch((error: unknown) => respond({ ok: false, message: errorMessage(error) }));
+        return true;
+    }
+    // Passwords' content script runs on every site, so a command from a tab is only ever the pairing bridge's offer on
+    // the sandbox's own page; every other command is the popup's, from this extension's own page.
+    // SAFETY: only the `type` field is read, and anything that is not the string "offer" is refused.
+    if (sender.tab !== undefined && (message as { type?: unknown }).type !== "offer") {
+        respond({ ok: false, message: "That is the popup's to ask." });
+        return false;
+    }
     void handle(message as PopupCommand)
         .then(respond)
         .catch((error: unknown) => respond({ ok: false, message: errorMessage(error) }));

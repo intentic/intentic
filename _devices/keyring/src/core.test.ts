@@ -271,7 +271,9 @@ describe("askpass", () => {
         expect(await h.keyring.handle({ op: "askpass", prompt: "radar@10.0.0.5's password: " })).toEqual({ ok: true, value: SECRET });
         expect(await h.keyring.handle({ op: "askpass", prompt: "radar@10.0.0.5's password: " })).toEqual({ ok: true, value: SECRET });
         expect(h.person.asked).toHaveLength(2);
-        expect(await h.keyring.handle({ op: "askpass", prompt: "root@10.0.0.5's password: " })).toMatchObject({ ok: false, code: "unknown" });
+        // Nothing answers root's prompt: the type-once box opens, and closing it is a no.
+        expect(await h.keyring.handle({ op: "askpass", prompt: "root@10.0.0.5's password: " })).toMatchObject({ ok: false, code: "declined" });
+        expect(h.person.boxes.at(-1)?.title).toContain("root@10.0.0.5");
     });
 
     test("remembers an answer for the minutes the entry says, only while unlocked", async () => {

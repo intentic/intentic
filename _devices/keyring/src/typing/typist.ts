@@ -1,4 +1,5 @@
 import type { Focus } from "../policy.js";
+import type { Clipboard } from "./clipboard.js";
 
 // A TYPIST looks at where the keyboard's focus is, then types a value there, in two steps so the keyring can decide in
 // between (policy.ts typingDecision, perhaps a person's yes) and check again that nothing moved. It never answers with
@@ -25,6 +26,8 @@ export type Typed =
 export interface Typist {
     readonly inspect: (place: Place) => Promise<Inspected>;
     readonly type: (place: Place, seen: Seen, value: string) => Promise<Typed>;
+    // This computer's clipboard, for the Passwords app's Copy (clipboard.ts). Absent: Copy says it cannot.
+    readonly clipboard?: Clipboard | undefined;
 }
 
 // A typist for a platform with no way to type: every call says so.
@@ -34,7 +37,8 @@ export const noTypist = (why: string): Typist => ({
 });
 
 // The window typist and the phone typist behind one Typist, by where the value goes.
-export const typistFor = (window: Typist, android: Typist): Typist => ({
+export const typistFor = (window: Typist, android: Typist, clipboard?: Clipboard): Typist => ({
+    clipboard: clipboard ?? window.clipboard,
     inspect: async (place) => await (place.kind === "window" ? window : android).inspect(place),
     type: async (place, seen, value) => await (place.kind === "window" ? window : android).type(place, seen, value),
 });

@@ -51,7 +51,12 @@ export type SealPurpose =
     | { readonly kind: "type"; readonly sandbox: string; readonly secret: string; readonly nonce: string }
     | { readonly kind: "inbox"; readonly sandbox: string; readonly secret: string }
     | { readonly kind: "copy"; readonly sandbox: string; readonly secret: string; readonly updatedAt: number }
-    | { readonly kind: "sync"; readonly account: string; readonly device: string; readonly revision: number };
+    | { readonly kind: "sync"; readonly account: string; readonly device: string; readonly revision: number }
+    // A credential seen in use and sent to be kept (schemas/keyring.ts KeyringCaptureItem): bound to who saw it and when,
+    // so a box lifted from one capture cannot be replayed as another's.
+    | { readonly kind: "capture"; readonly via: string; readonly at: number }
+    // A value released to a paired phone for one autofill (KeyringPhoneFill), bound to that request's nonce.
+    | { readonly kind: "phone"; readonly device: string; readonly nonce: string };
 
 export const sealAad = (purpose: SealPurpose): Buffer => {
     switch (purpose.kind) {
@@ -64,21 +69,42 @@ export const sealAad = (purpose: SealPurpose): Buffer => {
             return Buffer.from(`copy\0${purpose.sandbox}\0${purpose.secret}\0${String(purpose.updatedAt)}`, "utf8");
         case "sync":
             return Buffer.from(`sync\0${purpose.account}\0${purpose.device}\0${String(purpose.revision)}`, "utf8");
+        case "capture":
+            return Buffer.from(`capture\0${purpose.via}\0${String(purpose.at)}`, "utf8");
+        case "phone":
+            return Buffer.from(`phone\0${purpose.device}\0${purpose.nonce}`, "utf8");
     }
 };
 
 const boxKey = (shared: Buffer, epk: string, recipient: string): Buffer =>
     Buffer.from(hkdfSync("sha256", shared, Buffer.concat([Buffer.from(epk, "base64url"), Buffer.from(recipient, "base64url")]), SEAL_INFO, 32));
 
+// Seals `plaintext` to the holder of `recipient`'s private half, for `purpose` alone, with a caller-chosen ephemeral
+// key and IV. The phone app's unit tests and golden/keyring-seal.json call this with fixed inputs so Kotlin can match.
+export const sealWithEphemeral = (
+    recipient: string,
+    plaintext: string,
+    purpose: SealPurpose,
+    ephemeralPair: KeyringKeyPair,
+    iv: Buffer,
+): SealedBox => {
+    const shared = diffieHellman({ privateKey: privateKeyOf("X25519", ephemeralPair), publicKey: publicKeyOf("X25519", recipient) });
+    const cipher = createCipheriv("aes-256-gcm", boxKey(shared, ephemeralPair.publicKey, recipient), iv);
+    cipher.setAAD(sealAad(purpose));
+    const data = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+    return {
+        v: 1,
+        epk: ephemeralPair.publicKey,
+        iv: iv.toString("base64url"),
+        tag: cipher.getAuthTag().toString("base64url"),
+        data: data.toString("base64url"),
+    };
+};
+
 // Seals `plaintext` to the holder of `recipient`'s private half, for `purpose` alone.
 export const seal = (recipient: string, plaintext: string, purpose: SealPurpose): SealedBox => {
     const ephemeral = newSealKeyPair();
-    const shared = diffieHellman({ privateKey: privateKeyOf("X25519", ephemeral), publicKey: publicKeyOf("X25519", recipient) });
-    const iv = randomBytes(12);
-    const cipher = createCipheriv("aes-256-gcm", boxKey(shared, ephemeral.publicKey, recipient), iv);
-    cipher.setAAD(sealAad(purpose));
-    const data = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-    return { v: 1, epk: ephemeral.publicKey, iv: iv.toString("base64url"), tag: cipher.getAuthTag().toString("base64url"), data: data.toString("base64url") };
+    return sealWithEphemeral(recipient, plaintext, purpose, ephemeral, randomBytes(12));
 };
 
 // Opens a box sealed to `pair` for `purpose`; throws on any way of not being one (malformed, another key, another purpose).

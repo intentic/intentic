@@ -1,4 +1,3 @@
-import type { deviceContract } from "@intentic/sandbox-contract/contracts/device.contract";
 import {
     KeyringRefusalCodeSchema,
     type KeyringDeviceKeys,
@@ -7,18 +6,17 @@ import {
     type KeyringInboxResult,
     type KeyringPointer,
     type KeyringRefusalCode,
-    type KeyringShareMode,
     type KeyringTypeResult,
     type SealedBox,
     type SignedKeyringGrant,
 } from "@intentic/sandbox-contract/schemas/keyring";
 import type { SandboxKeyring } from "@intentic/sandbox-contract/schemas/secrets";
 import { grantNonce, keyFingerprint, seal, signGrant, unseal } from "@intentic/sandbox-contract/keyring-seal";
-import type { ContractRouterClient } from "@orpc/contract";
 import { z } from "zod";
 import { opt } from "../../opt.js";
-import type { SandboxKeyringKeys } from "./keyring-keys.js";
-import type { HeardKeyring, KeyringBook, KeyringCopies, ReleasedDeviceValues } from "./keyring-stores.js";
+import type { HeardKeyring } from "./keyring-stores.js";
+import type { KeyringClient, DevicePointer, KeyringComputer, KeyringPasswordsCalls, KeyringLink, KeyringLinkRunner, KeyringLinkDeps } from "./keyring-link-types.js";
+export type { KeyringLogger, KeyringClient, KeyringDevices, DevicePointer, KeyringComputer, KeyringLink, KeyringLinkRunner, KeyringLinkDeps } from "./keyring-link-types.js";
 
 // The sandbox's side of the keyrings on the owner's computers (schemas/keyring.ts, _devices/keyring): the POINTERS each
 // keyring shares with this sandbox, and every question that spends one, each carried by a grant this sandbox signs and
@@ -33,113 +31,11 @@ import type { HeardKeyring, KeyringBook, KeyringCopies, ReleasedDeviceValues } f
 
 // What a log line carries beside its sentence: the computer, the secret's name, the error, how many items a delivery
 // took. Never a value or a grant.
-export interface KeyringLogFields {
-    readonly err?: unknown;
-    readonly machine?: string;
-    readonly secret?: string;
-    readonly accepted?: number;
-    readonly sent?: number;
-}
-
-// Where the link says what went wrong.
-export interface KeyringLogger {
-    readonly warn: (fields: KeyringLogFields, message: string) => void;
-}
-
 // The keyring's own code on an error the machine raised for it: a procedure with no refusal in its answer (copies, the
 // sync ones) fails with SERVICE_UNAVAILABLE carrying the keyring's code, `locked` or `no-keyring`. That is the keyring's
 // state, said again at every read, not news for the log.
 const KeyringErrorSchema = z.object({ code: z.literal("SERVICE_UNAVAILABLE"), data: z.object({ code: KeyringRefusalCodeSchema }) });
 export const keyringCodeOf = (error: Error): KeyringRefusalCode | undefined => KeyringErrorSchema.safeParse(error).data?.data.code;
-
-export type KeyringClient = Pick<
-    ContractRouterClient<typeof deviceContract>,
-    "keyringShares" | "keyringRelease" | "keyringType" | "keyringInbox" | "keyringCopies"
->;
-
-// The owner's computers as the link reaches them, read at each call: the hub is composed after the secrets slice.
-export interface KeyringDevices {
-    // Connections holding a socket now whose agent advertises a keyring (DEVICE_FEATURE_KEYRING).
-    readonly ready: () => readonly string[];
-    // The client for one of those; undefined for any other.
-    readonly client: (machine: string) => KeyringClient | undefined;
-}
-
-export interface DevicePointer {
-    readonly machine: string;
-    readonly pointer: KeyringPointer;
-    readonly online: boolean;
-    readonly locked: boolean | undefined;
-}
-
-export interface KeyringLink {
-    // This sandbox's own public address, as the owner's computers dial it: what every grant names and every share is for.
-    readonly sandboxUrl: () => Promise<string>;
-    // Every computer with a keyring this sandbox has heard or reaches now, as GET /secrets/keyrings answers it.
-    readonly keyrings: () => Promise<readonly SandboxKeyring[]>;
-    // Every entry each keyring shares here, from memory, an offline computer's included as offline.
-    readonly pointers: () => Promise<readonly DevicePointer[]>;
-    // The entry of that name, from the computer that answers now if several share one.
-    readonly pointer: (name: string) => Promise<DevicePointer | undefined>;
-    // The keys pinned for a computer's keyring; undefined before it was heard, while it reports others without having
-    // reconnected, or while it is not set up.
-    readonly deviceKeys: (machine: string) => Promise<KeyringDeviceKeys | undefined>;
-    // One value for one use in one lane, asked of that computer's keyring under a fresh grant and opened here; kept
-    // after only to mask (never to answer another use), and refused with the keyring's own code and words.
-    readonly release: (args: {
-        readonly machine: string;
-        readonly secret: string;
-        readonly lane: "shell" | "code" | "browser" | "desktop";
-        readonly detail: string;
-        readonly conversationId?: string;
-        readonly signal?: AbortSignal;
-    }) => Promise<{ readonly ok: true; readonly value: string; readonly asked: boolean } | { readonly ok: false; readonly code: KeyringRefusalCode; readonly refusal: string }>;
-    // Typing into the focused window or phone app on `machine`: its keyring's own entry, a sandbox-held `value` sealed to
-    // that keyring, or with `relayFrom` an entry another computer's keyring holds, sealed by that one straight to this
-    // one under the typing grant's nonce, so the value never opens in the sandbox.
-    readonly type: (args: {
-        readonly machine: string;
-        readonly secret: string;
-        readonly target: Extract<KeyringGrantTarget, { kind: "window" | "android" }>;
-        readonly value?: string;
-        readonly relayFrom?: string;
-        readonly purpose: "agent" | "owner";
-        readonly detail: string;
-        readonly conversationId?: string;
-        readonly signal?: AbortSignal;
-    }) => Promise<KeyringTypeResult>;
-    // A value sent to that computer's keyring to keep, sealed to its inbox key; taken in at its next unlock.
-    readonly inbox: (args: {
-        readonly machine: string;
-        readonly name: string;
-        readonly value: string;
-        readonly mode: KeyringShareMode;
-        readonly kind: "password" | "text";
-        readonly programs: string[];
-        readonly hosts: string[];
-    }) => Promise<KeyringInboxResult>;
-    // Reads one keyring's shares and copies now, or every connected one's.
-    readonly refresh: (machine?: string) => Promise<void>;
-}
-
-// The link as the daemon runs it: the API above, and the watcher's word that a computer just connected.
-export interface KeyringLinkRunner extends KeyringLink {
-    readonly arrived: (machine: string) => Promise<void>;
-}
-
-export interface KeyringLinkDeps {
-    readonly devices: () => KeyringDevices;
-    // The address the owner's computers paired with (the config's public URL); empty before the tunnel exists.
-    readonly publicUrl: () => string;
-    readonly keys: Pick<SandboxKeyringKeys, "pairs">;
-    readonly book: KeyringBook;
-    readonly copies: KeyringCopies;
-    readonly released: Pick<ReleasedDeviceValues, "add">;
-    // A keyring's sync key and the computers it is paired with, as last heard (keyring-sync.ts).
-    readonly syncOf: (machine: string) => { readonly key: string; readonly peers: readonly string[] } | undefined;
-    readonly logger: KeyringLogger;
-    readonly now?: () => number;
-}
 
 type Refused = { readonly ok: false; readonly code: KeyringRefusalCode; readonly refusal: string };
 const refused = (code: KeyringRefusalCode, refusal: string): Refused => ({ ok: false, code, refusal });
@@ -180,6 +76,9 @@ interface LinkState {
     readonly reconnected: Set<string>;
     // Keyrings installed and answering but not set up yet: no vault, so no keys, and nothing can be sealed to them.
     readonly notSetUp: Set<string>;
+    // When a person last answered a question this sandbox asked on each computer, in this process.
+    readonly answeredAt: Map<string, number>;
+    readonly refreshed: Set<(machine: string) => void>;
 }
 
 // What a call nobody answered says: the transport's error is logged, and carries no value, but a sentence the agent
@@ -328,7 +227,10 @@ const refreshOne = async (state: LinkState, machine: string): Promise<void> => {
     const previous = book.get(machine);
     const { keyring } = shares;
     const pinned = pin(state, machine, previous, keyring?.keys);
-    const kept = keyring === undefined ? previous?.keyring : { version: keyring.version, locked: keyring.locked, pendingInbox: keyring.pendingInbox };
+    const kept =
+        keyring === undefined
+            ? previous?.keyring
+            : { version: keyring.version, locked: keyring.locked, pendingInbox: keyring.pendingInbox, ...opt("remember", keyring.remember) };
     const heard: HeardKeyring = {
         pointers: keyring === undefined ? (previous?.pointers ?? []) : shares.pointers,
         ...opt("keyring", kept),
@@ -342,6 +244,9 @@ const refreshOne = async (state: LinkState, machine: string): Promise<void> => {
     await state.deps.book.set(machine, heard);
     if (keyring !== undefined) {
         await refreshCopies(state, machine, client, heard.pointers);
+    }
+    for (const listener of state.refreshed) {
+        listener(machine);
     }
 };
 
@@ -364,6 +269,7 @@ const keyringsOf = async (state: LinkState): Promise<readonly SandboxKeyring[]> 
             machine,
             online,
             ...opt("locked", online ? heard?.keyring?.locked : undefined),
+            ...opt("setUp", online ? heard?.pinned !== undefined && !state.mismatched.has(machine) && !state.notSetUp.has(machine) : undefined),
             ...opt("version", heard?.keyring?.version),
             ...opt("pendingInbox", online ? heard?.keyring?.pendingInbox : undefined),
             shared: heard?.pointers.length ?? 0,
@@ -424,6 +330,9 @@ const releaseOne = async (state: LinkState, { machine, secret, lane, detail, con
     const answer = await client.keyringRelease(grant.grant, { signal: deadline(ASKING_TIMEOUT_MS, signal) }).catch(unanswered(state, machine, "a release"));
     if (!answer.ok) {
         return refused(answer.code, answer.refusal);
+    }
+    if (answer.asked) {
+        state.answeredAt.set(machine, state.now());
     }
     let value: string;
     try {
@@ -513,6 +422,52 @@ const inboxOne = async (state: LinkState, { machine, name, value, mode, kind, pr
     return answer;
 };
 
+const computersOf = async (state: LinkState): Promise<readonly KeyringComputer[]> => {
+    const ready = new Set(state.deps.devices().ready());
+    const computers = await Promise.all(
+        [...(await state.memory())].map(async ([machine, heard]): Promise<KeyringComputer> => {
+            const online = ready.has(machine) && state.answering.has(machine);
+            const keys = await deviceKeysOf(state, machine);
+            return {
+                machine,
+                online,
+                setUp: online && keys !== undefined,
+                locked: online ? heard.keyring?.locked : undefined,
+                remember: heard.keyring?.remember,
+                inbox: keys?.inbox,
+                activeAt: state.answeredAt.get(machine) ?? heard.heardAt,
+            };
+        }),
+    );
+    return computers.toSorted((left, right) => Number(right.online) - Number(left.online) || right.activeAt - left.activeAt);
+};
+
+// A relayed Passwords call: the computer's refusal when it is not connected or does not answer, never a throw.
+const relay = async <T>(state: LinkState, machine: string, what: string, call: (client: KeyringClient) => Promise<T>): Promise<T | Refused> => {
+    const client = state.deps.devices().client(machine);
+    if (client === undefined) {
+        return refused("unavailable", offline(machine));
+    }
+    return call(client).catch(unanswered(state, machine, what));
+};
+
+const passwordsCalls = (state: LinkState): KeyringPasswordsCalls => ({
+    capture: (machine, item) => relay(state, machine, "a capture", (client) => client.keyringCapture(item, { signal: AbortSignal.timeout(READING_TIMEOUT_MS) })),
+    need: async (machine, need, signal) => {
+        const answer = await relay(state, machine, "a need", (client) => client.keyringNeed(need, { signal: deadline(ASKING_TIMEOUT_MS, signal) }));
+        if (answer.ok) {
+            if (answer.asked) {
+                state.answeredAt.set(machine, state.now());
+            }
+            // Shared now: read at once, so the pointer resolves on the very next use.
+            await refreshOne(state, machine);
+        }
+        return answer;
+    },
+    phonePair: (machine, keys, signal) => relay(state, machine, "a phone pairing", (client) => client.keyringPhonePair(keys, { signal: deadline(ASKING_TIMEOUT_MS, signal) })),
+    phoneFill: (machine, fill, signal) => relay(state, machine, "a phone fill", (client) => client.keyringPhoneFill(fill, { signal: deadline(ASKING_TIMEOUT_MS, signal) })),
+});
+
 // One choice among the computers sharing a name: one that answers now first, then the most recently changed entry.
 const preferred = (left: DevicePointer, right: DevicePointer): number =>
     Number(right.online) - Number(left.online) || right.pointer.updatedAt - left.pointer.updatedAt;
@@ -537,6 +492,8 @@ export const createKeyringLink = (deps: KeyringLinkDeps): KeyringLinkRunner => {
         mismatched: new Set(),
         reconnected: new Set(),
         notSetUp: new Set(),
+        answeredAt: new Map(),
+        refreshed: new Set(),
     };
     const refresh = async (machine?: string): Promise<void> => {
         await Promise.all((machine === undefined ? deps.devices().ready() : [machine]).map((target) => refreshOne(state, target)));
@@ -555,6 +512,12 @@ export const createKeyringLink = (deps: KeyringLinkDeps): KeyringLinkRunner => {
         type: (args) => typeOne(state, args),
         inbox: (args) => inboxOne(state, args),
         refresh,
+        computers: () => computersOf(state),
+        passwords: passwordsCalls(state),
+        onRefreshed: (listener) => {
+            state.refreshed.add(listener);
+            return () => void state.refreshed.delete(listener);
+        },
         arrived: async (machine) => {
             state.reconnected.add(machine);
             await refreshOne(state, machine);

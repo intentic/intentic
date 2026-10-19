@@ -9,13 +9,13 @@ import { HelperLink, remotePassphrasePrompt, remoteTypist } from "./remote.js";
 
 const PASSPHRASE = "correct horse battery staple";
 
-const open = async (port: number): Promise<LineSocket> => {
-    const socket = connect({ host: "127.0.0.1", port });
+const open = async (port: number | undefined): Promise<LineSocket> => {
+    const socket = connect({ host: "127.0.0.1", port: port ?? 0 });
     await new Promise<void>((resolve) => socket.once("connect", resolve));
     return new LineSocket(socket);
 };
 
-describe("the hardened service's door", () => {
+describe("the protected service's door", () => {
     test("answers a request that brings the token, and nothing that does not", async () => {
         const token = randomBytes(32).toString("base64url");
         const h = keyringHarness([]);

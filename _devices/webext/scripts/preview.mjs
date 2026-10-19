@@ -25,6 +25,7 @@ const working = {
     offered: undefined,
     paused: false,
     settings: { openOnAsk: true },
+    passwords: { kind: "on", version: "0.0.0.1" },
     log: [
         { at: now - 8_000, tool: "click", detail: "Clicked e14", ok: true },
         { at: now - 21_000, tool: "fill", detail: "Typed 86 characters into e9", ok: true },

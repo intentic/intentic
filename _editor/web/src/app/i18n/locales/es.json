@@ -3849,7 +3849,8 @@
             "secrets": "Tus secretos",
             "sessionOrSigningKeys": "Claves de sesión o firma",
             "showMoreAccounts": "Mostrar {collapsedCredentialCount} cuentas más",
-            "onYourComputers": "En tus ordenadores"
+            "onYourComputers": "En tus ordenadores",
+            "openInPasswords": "Abrir en Contraseñas"
         },
         "sandboxStorageCard": {
             "changedTodayOrInUse": "Cambiado hoy o en uso",

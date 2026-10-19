@@ -31,9 +31,9 @@ export function useNarrow(element: Readonly<Ref<HTMLElement | undefined>>, at: n
         element,
         (el) => {
             unobserve();
-            // No element, or no ResizeObserver (a component-test DOM): nothing measures, so the unmeasured default
-            // stands.
-            if (el === undefined || typeof ResizeObserver === `undefined`) {
+            // No element (Vue sets a template ref to null once its element unmounts), or no ResizeObserver (a
+            // component-test DOM): nothing measures, so the unmeasured default stands.
+            if (!(el instanceof Element) || typeof ResizeObserver === `undefined`) {
                 return;
             }
             observer = new ResizeObserver(([entry]) => {

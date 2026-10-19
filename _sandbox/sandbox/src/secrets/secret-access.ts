@@ -67,7 +67,7 @@ const unknownRefusal = (unknown: readonly string[], known: readonly string[]): R
     return {
         refusal: `no stored secret named ${unknown.map((name) => `"${name}"`).join(", ")}: ${
             known.length === 0 ? "nothing is stored yet" : `stored names: ${known.join(", ")}`
-        }. If it is a different name above, use that; if the task needs one nobody has stored, ask for it with ${ask}, which puts a card with a masked field in front of the owner and answers once it is stored.`,
+        }. If it is a different name above, use that; if the task needs one nobody has stored, ask for it with ${ask}, which puts a card with a masked field in front of the owner and answers once it is stored; a password for a place whose name you do not know is \`secrets want --site <host> --why "…"\`.`,
     };
 };
 

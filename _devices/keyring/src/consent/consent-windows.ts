@@ -1,11 +1,11 @@
 import { z } from "zod";
-import type { HelloDriver, HelloResult, PassphrasePrompt } from "./consent.js";
+import type { ChoicePrompt, HelloDriver, HelloResult, PassphrasePrompt, ValuePrompt } from "./consent.js";
 import { runPowerShell, WINRT_AWAIT } from "../powershell.js";
 import type { Runner } from "../run.js";
 
 // Windows Hello and the passphrase dialog on Windows, through Windows PowerShell 5.1 (powershell.ts): KeyCredentialManager
 // to create the keyring's credential and sign with it (RSA in the TPM, released by a Hello gesture), UserConsentVerifier
-// for a plain yes while unlocked, and a WinForms password box.
+// for a plain yes while unlocked, a WinForms password box, and the Passwords app's type-once box and choice dialog.
 
 // Long enough for a person to walk back to the computer; no longer than a grant lives.
 const PROMPT_TIMEOUT_MS = 125_000;
@@ -68,6 +68,122 @@ namespace IntenticKeyring {
       return result == DialogResult.OK ? box.Text : null;
     }
   }
+
+  // The type-once box: a value (hidden) and, when asked for, a user name, with a "Remember it" tick. Answers null on
+  // Cancel, else the three joined by NUL (user, remember, value), which none of them holds.
+  public static class ValueBox {
+    public static string Ask(string title, string message, bool remember, bool askUser, string user, int seconds) {
+      Application.EnableVisualStyles();
+      Form form = new Form();
+      form.Text = title;
+      form.FormBorderStyle = FormBorderStyle.FixedDialog;
+      form.MinimizeBox = false;
+      form.MaximizeBox = false;
+      form.TopMost = true;
+      form.StartPosition = FormStartPosition.CenterScreen;
+      form.AutoSize = true;
+      form.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+      form.Padding = new Padding(16);
+      FlowLayoutPanel panel = new FlowLayoutPanel();
+      panel.FlowDirection = FlowDirection.TopDown;
+      panel.AutoSize = true;
+      Label body = new Label();
+      body.Text = message;
+      body.AutoSize = true;
+      body.MaximumSize = new Size(480, 0);
+      panel.Controls.Add(body);
+      TextBox userBox = new TextBox();
+      userBox.Width = 320;
+      userBox.Text = user == null ? "" : user;
+      if (askUser) {
+        Label userLabel = new Label();
+        userLabel.Text = "User name:";
+        userLabel.AutoSize = true;
+        panel.Controls.Add(userLabel);
+        panel.Controls.Add(userBox);
+      }
+      Label valueLabel = new Label();
+      valueLabel.Text = "Password:";
+      valueLabel.AutoSize = true;
+      TextBox box = new TextBox();
+      box.UseSystemPasswordChar = true;
+      box.Width = 320;
+      CheckBox keep = new CheckBox();
+      keep.Text = "Remember it";
+      keep.Checked = remember;
+      keep.AutoSize = true;
+      FlowLayoutPanel buttons = new FlowLayoutPanel();
+      buttons.AutoSize = true;
+      Button ok = new Button();
+      ok.Text = "OK";
+      ok.DialogResult = DialogResult.OK;
+      Button cancel = new Button();
+      cancel.Text = "Cancel";
+      cancel.DialogResult = DialogResult.Cancel;
+      buttons.Controls.Add(ok);
+      buttons.Controls.Add(cancel);
+      panel.Controls.Add(valueLabel);
+      panel.Controls.Add(box);
+      panel.Controls.Add(keep);
+      panel.Controls.Add(buttons);
+      form.Controls.Add(panel);
+      form.AcceptButton = ok;
+      form.CancelButton = cancel;
+      System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
+      timer.Interval = seconds * 1000;
+      timer.Tick += delegate(object sender, EventArgs e) { form.DialogResult = DialogResult.Cancel; form.Close(); };
+      form.Shown += delegate(object sender, EventArgs e) { form.Activate(); if (askUser && userBox.Text == "") userBox.Focus(); else box.Focus(); timer.Start(); };
+      DialogResult result = form.ShowDialog();
+      timer.Stop();
+      if (result != DialogResult.OK || box.Text == "") return null;
+      return userBox.Text + "\0" + (keep.Checked ? "1" : "0") + "\0" + box.Text;
+    }
+  }
+
+  // A few buttons, one per answer, in the order given. Answers the chosen one's index, or -1 on Cancel or time out.
+  public static class Choice {
+    public static int Ask(string title, string message, string[] labels, int seconds) {
+      Application.EnableVisualStyles();
+      Form form = new Form();
+      form.Text = title;
+      form.FormBorderStyle = FormBorderStyle.FixedDialog;
+      form.MinimizeBox = false;
+      form.MaximizeBox = false;
+      form.TopMost = true;
+      form.StartPosition = FormStartPosition.CenterScreen;
+      form.AutoSize = true;
+      form.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+      form.Padding = new Padding(16);
+      FlowLayoutPanel panel = new FlowLayoutPanel();
+      panel.FlowDirection = FlowDirection.TopDown;
+      panel.AutoSize = true;
+      Label body = new Label();
+      body.Text = message;
+      body.AutoSize = true;
+      body.MaximumSize = new Size(480, 0);
+      panel.Controls.Add(body);
+      FlowLayoutPanel buttons = new FlowLayoutPanel();
+      buttons.AutoSize = true;
+      int chosen = -1;
+      for (int i = 0; i < labels.Length; i++) {
+        Button button = new Button();
+        button.Text = labels[i];
+        button.AutoSize = true;
+        int index = i;
+        button.Click += delegate(object sender, EventArgs e) { chosen = index; form.Close(); };
+        buttons.Controls.Add(button);
+      }
+      panel.Controls.Add(buttons);
+      form.Controls.Add(panel);
+      System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
+      timer.Interval = seconds * 1000;
+      timer.Tick += delegate(object sender, EventArgs e) { chosen = -1; form.Close(); };
+      form.Shown += delegate(object sender, EventArgs e) { form.Activate(); timer.Start(); };
+      form.ShowDialog();
+      timer.Stop();
+      return chosen;
+    }
+  }
 }
 `;
 
@@ -108,7 +224,7 @@ try {
       $made = Await ([Windows.Security.Credentials.KeyCredentialManager]::RequestCreateAsync($KeyringInput.credential, [Windows.Security.Credentials.KeyCredentialCreationOption]::ReplaceExisting)) ([Windows.Security.Credentials.KeyCredentialRetrievalResult])
       if ([string]$made.Status -ne 'Success') { Answer @{ ok = $false; status = [string]$made.Status } } else {
         $answer = SignWith $made.Credential
-        # X.509 SubjectPublicKeyInfo, which hardened mode's service reads with node:crypto to check later signatures.
+        # X.509 SubjectPublicKeyInfo, which the protected service reads with node:crypto to check later signatures.
         $answer.publicKey = [Convert]::ToBase64String($buffers::ToArray($made.Credential.RetrievePublicKey([Windows.Security.Cryptography.Core.CryptographicPublicKeyBlobType]::X509SubjectPublicKeyInfo)))
         Answer $answer
       }
@@ -126,6 +242,24 @@ const PASSPHRASE_SCRIPT = `${PREAMBLE}
 try {
   $typed = [IntenticKeyring.Passphrase]::Ask($KeyringInput.title, $KeyringInput.message, [int]$KeyringInput.seconds)
   if ($typed -eq $null) { Answer @{ ok = $false; cancelled = $true } } else { Answer @{ ok = $true; passphrase = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($typed)) } }
+} catch {
+  Answer @{ ok = $false; error = $_.Exception.Message }
+}
+`;
+
+const VALUE_SCRIPT = `${PREAMBLE}
+try {
+  $typed = [IntenticKeyring.ValueBox]::Ask($KeyringInput.title, $KeyringInput.message, $KeyringInput.remember -eq '1', $KeyringInput.askUser -eq '1', $KeyringInput.user, [int]$KeyringInput.seconds)
+  if ($typed -eq $null) { Answer @{ ok = $false; cancelled = $true } } else { Answer @{ ok = $true; passphrase = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($typed)) } }
+} catch {
+  Answer @{ ok = $false; error = $_.Exception.Message }
+}
+`;
+
+const CHOICE_SCRIPT = `${PREAMBLE}
+try {
+  $index = [IntenticKeyring.Choice]::Ask($KeyringInput.title, $KeyringInput.message, [string[]]($KeyringInput.labels -split "\n"), [int]$KeyringInput.seconds)
+  if ($index -lt 0) { Answer @{ ok = $false; cancelled = $true } } else { Answer @{ ok = $true; status = [string]$index } }
 } catch {
   Answer @{ ok = $false; error = $_.Exception.Message }
 }
@@ -215,4 +349,50 @@ export const windowsPassphrasePrompt =
             return typed === undefined ? { kind: "unavailable", reason: "the passphrase dialog answered with nothing" } : { kind: "answered", passphrase: typed.toString("utf8") };
         }
         return ran.answer.cancelled === true ? { kind: "cancelled" } : { kind: "unavailable", reason: ran.answer.error ?? "the passphrase dialog failed" };
+    };
+
+const dialogSeconds = String(Math.floor(PROMPT_TIMEOUT_MS / 1000) - 5);
+
+// The type-once box (consent.ts ValuePrompt): the value comes back base64 inside the helper's JSON, never on a command
+// line, together with the user name and the Remember tick.
+export const windowsValuePrompt =
+    (runner: Runner): ValuePrompt =>
+    async (notice) => {
+        const input = {
+            title: notice.title,
+            message: notice.message,
+            remember: notice.remember ? "1" : "0",
+            askUser: notice.username === undefined ? "0" : "1",
+            user: notice.username?.value ?? "",
+            seconds: dialogSeconds,
+        };
+        const ran = await runPowerShell(runner, { script: VALUE_SCRIPT, input, timeoutMs: PROMPT_TIMEOUT_MS }, AnswerSchema);
+        if (!ran.ok) {
+            return { kind: "unavailable", reason: ran.reason };
+        }
+        if (!ran.answer.ok) {
+            return ran.answer.cancelled === true ? { kind: "cancelled" } : { kind: "unavailable", reason: ran.answer.error ?? "the box failed" };
+        }
+        const [user = "", remember = "0", ...rest] = (base64(ran.answer.passphrase)?.toString("utf8") ?? "").split("\0");
+        const value = rest.join("\0");
+        if (value === "") {
+            return { kind: "cancelled" };
+        }
+        return user === "" ? { kind: "answered", value, remember: remember === "1" } : { kind: "answered", value, remember: remember === "1", username: user };
+    };
+
+// The choice dialog (consent.ts ChoicePrompt): one button per answer.
+export const windowsChoicePrompt =
+    (runner: Runner): ChoicePrompt =>
+    async (notice) => {
+        const input = { title: notice.title, message: notice.message, labels: notice.choices.map((choice) => choice.label.replace(/\n/gu, " ")).join("\n"), seconds: dialogSeconds };
+        const ran = await runPowerShell(runner, { script: CHOICE_SCRIPT, input, timeoutMs: PROMPT_TIMEOUT_MS }, AnswerSchema);
+        if (!ran.ok) {
+            return { kind: "unavailable", reason: ran.reason };
+        }
+        const chosen = ran.answer.ok ? notice.choices[Number(ran.answer.status)] : undefined;
+        if (chosen !== undefined) {
+            return { kind: "chosen", id: chosen.id };
+        }
+        return ran.answer.cancelled === true || ran.answer.ok ? { kind: "cancelled" } : { kind: "unavailable", reason: ran.answer.error ?? "the dialog failed" };
     };

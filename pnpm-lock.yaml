@@ -1312,6 +1312,9 @@ importers:
       '@intentic/entry-css':
         specifier: workspace:*
         version: link:../../_shared/entry-css
+      '@intentic/ext-passwords':
+        specifier: workspace:*
+        version: link:../../_extensions/passwords
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../../_shared/sandbox-contract
@@ -1333,6 +1336,9 @@ importers:
       vue:
         specifier: 'catalog:'
         version: 3.5.43(typescript@6.0.3)
+      vue-router:
+        specifier: 'catalog:'
+        version: 5.3.1(@vue/compiler-sfc@3.5.43)(esbuild@0.28.2)(rolldown@1.2.11)(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.43(typescript@6.0.3))
     devDependencies:
       '@dagrejs/dagre':
         specifier: 'catalog:'
@@ -1554,6 +1560,9 @@ importers:
       '@intentic/ext-onlyoffice':
         specifier: workspace:*
         version: link:../../_extensions/onlyoffice
+      '@intentic/ext-passwords':
+        specifier: workspace:*
+        version: link:../../_extensions/passwords
       '@intentic/ext-pipelines':
         specifier: workspace:*
         version: link:../../_extensions/pipelines
@@ -2107,6 +2116,43 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
+      vue:
+        specifier: 'catalog:'
+        version: 3.5.43(typescript@6.0.3)
+      vue-tsc:
+        specifier: 'catalog:'
+        version: 3.3.12(typescript@6.0.3)
+
+  _extensions/passwords:
+    dependencies:
+      '@intentic/extension-api':
+        specifier: workspace:*
+        version: link:../../_shared/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_shared/extension-manifest
+      '@intentic/extension-ui':
+        specifier: workspace:*
+        version: link:../../_shared/extension-ui
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-contract
+    devDependencies:
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../../_tools/testing
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.2
+      primevue:
+        specifier: 'catalog:'
+        version: 4.5.5(patch_hash=df5c12d98e45d34b51bc87bbe7cb90dc7f3960744e435acdba0ea9c474c89a68)(vue@3.5.43(typescript@6.0.3))
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
       vue:
         specifier: 'catalog:'
         version: 3.5.43(typescript@6.0.3)

@@ -110,12 +110,11 @@ it("keeps it in the sandbox, with no choice offered, while no computer's keyring
     done();
 });
 
-it("keeps it on the computer picked, asking each time by default", async () => {
+it("keeps it on the computer by default once a keyring answers, asking each time", async () => {
     keyrings.value = [{ machine: `rog`, online: true, locked: false, shared: 0 }];
     const { el, typeValue, press, done } = mount();
-    // The sandbox stays the default: the choice is offered, not made.
-    expect(el.querySelector(`button[role="tab"][aria-selected="true"]`)?.textContent?.trim()).toBe(`Keep it in the sandbox`);
-    await press(`Keep it on my computer`);
+    // The owner's computer is the default home while its keyring answers; the sandbox is one press away.
+    expect(el.querySelector(`button[role="tab"][aria-selected="true"]`)?.textContent?.trim()).toBe(`Keep it on my computer`);
     expect(el.textContent).toContain(`Each use asks you on rog first, with Windows Hello or the keyring's passphrase.`);
     expect(el.textContent).toContain(`Kept in the keyring on rog as VPN_PASSWORD.`);
     await typeValue(`hunter2`);
@@ -123,6 +122,17 @@ it("keeps it on the computer picked, asking each time by default", async () => {
     expect(provideSecret.mutateAsync).toHaveBeenCalledWith({ id: `need-1`, value: `hunter2`, keepOn: { device: `rog`, mode: `each-use` } });
     // Unlocked, it is taken in at once: nothing to say after.
     expect(say).not.toHaveBeenCalled();
+    done();
+});
+
+it("keeps it in the sandbox when the person picks that, whatever keyrings come and go", async () => {
+    keyrings.value = [{ machine: `rog`, online: true, locked: false, shared: 0 }];
+    const { typeValue, press, done } = mount();
+    await press(`Keep it in the sandbox`);
+    keyrings.value = [...keyrings.value, { machine: `omen`, online: true, locked: false, shared: 0 }];
+    await typeValue(`hunter2`);
+    await press(`Save`);
+    expect(provideSecret.mutateAsync).toHaveBeenCalledWith({ id: `need-1`, value: `hunter2`, keepOn: undefined });
     done();
 });
 

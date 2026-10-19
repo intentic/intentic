@@ -26,13 +26,15 @@
     "dependencies": {
         "@intentic/base": "workspace:*",
         "@intentic/entry-css": "workspace:*",
+        "@intentic/ext-passwords": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/ui": "workspace:*",
         "@tauri-apps/api": "catalog:",
         "@tauri-apps/plugin-dialog": "catalog:",
         "primevue": "catalog:",
         "tslib": "catalog:",
-        "vue": "catalog:"
+        "vue": "catalog:",
+        "vue-router": "catalog:"
     },
     "devDependencies": {
         "@dagrejs/dagre": "catalog:",

@@ -1,13 +1,19 @@
 import type {
+    KeyringCaptureResult,
     KeyringCopies as KeyringCopiesAnswer,
     KeyringDeviceKeys,
     KeyringInboxItem,
+    KeyringNeedResult,
+    KeyringPhoneFillResult,
+    KeyringPhoneKeys,
+    KeyringPhonePairResult,
     KeyringPointer,
     KeyringShares,
     KeyringSyncItem,
     KeyringSyncState,
     KeyringTypeInput,
     SignedKeyringGrant,
+    SignedKeyringPhoneFill,
 } from "@intentic/sandbox-contract/schemas/keyring";
 import { newSealKeyPair, newSignKeyPair, type KeyringKeyPair } from "@intentic/sandbox-contract/keyring-seal";
 import type { SandboxKeyringKeys, SandboxKeyringPairs } from "./keyring-keys.js";
@@ -77,6 +83,10 @@ export interface FakeKeyring {
     release: (grant: SignedKeyringGrant) => Promise<Awaited<ReturnType<KeyringClient["keyringRelease"]>>>;
     type: (input: KeyringTypeInput) => Promise<Awaited<ReturnType<KeyringClient["keyringType"]>>>;
     inbox: (item: KeyringInboxItem) => Promise<Awaited<ReturnType<KeyringClient["keyringInbox"]>>>;
+    capture: (item: Parameters<KeyringClient["keyringCapture"]>[0]) => Promise<KeyringCaptureResult>;
+    need: (need: Parameters<KeyringClient["keyringNeed"]>[0]) => Promise<KeyringNeedResult>;
+    phonePair: (phone: KeyringPhoneKeys) => Promise<KeyringPhonePairResult>;
+    phoneFill: (fill: SignedKeyringPhoneFill) => Promise<KeyringPhoneFillResult>;
     copies: () => KeyringCopiesAnswer;
     outbox: KeyringSyncItem[];
     peers: KeyringSyncState["peers"];
@@ -95,6 +105,10 @@ export const fakeKeyring = (pointers: readonly KeyringPointer[] = []): FakeKeyri
         release: async () => ({ ok: false, code: "declined", refusal: "the person said no" }),
         type: async () => ({ ok: true, program: "FortiClient.exe", field: "password", asked: false }),
         inbox: async () => ({ ok: true, pending: true }),
+        capture: async () => ({ ok: true, outcome: "saved", name: "CAPTURED", title: "captured" }),
+        need: async () => ({ ok: false, code: "unknown", refusal: "nothing here fits" }),
+        phonePair: async () => ({ ok: true, fingerprint: "AB12" }),
+        phoneFill: async () => ({ ok: false, code: "declined", refusal: "the person said no" }),
         copies: () => ({ copies: [] }),
         outbox: [],
         peers: [],
@@ -114,6 +128,22 @@ export const fakeKeyring = (pointers: readonly KeyringPointer[] = []): FakeKeyri
             keyringInbox: async (item) => {
                 calls.push({ procedure: "keyringInbox", input: item });
                 return fake.inbox(item);
+            },
+            keyringCapture: async (item) => {
+                calls.push({ procedure: "keyringCapture", input: item });
+                return fake.capture(item);
+            },
+            keyringNeed: async (need) => {
+                calls.push({ procedure: "keyringNeed", input: need });
+                return fake.need(need);
+            },
+            keyringPhonePair: async (phone) => {
+                calls.push({ procedure: "keyringPhonePair", input: phone });
+                return fake.phonePair(phone);
+            },
+            keyringPhoneFill: async (fill) => {
+                calls.push({ procedure: "keyringPhoneFill", input: fill });
+                return fake.phoneFill(fill);
             },
             keyringCopies: async () => {
                 calls.push({ procedure: "keyringCopies", input: undefined });

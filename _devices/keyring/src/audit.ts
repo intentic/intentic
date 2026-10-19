@@ -1,4 +1,5 @@
-import { appendFile, chmod, mkdir } from "node:fs/promises";
+import { appendFile, chmod, mkdir, readFile } from "node:fs/promises";
+import { isMissing } from "@intentic/base/errors";
 import { serialLock } from "@intentic/base/async";
 import { rotateIfLarge } from "@intentic/local-agent";
 
@@ -11,7 +12,8 @@ import { rotateIfLarge } from "@intentic/local-agent";
 export interface AuditRecord {
     readonly op: string;
     // "granted" handed out or typed a value, "refused" did not, "done" changed the vault, "pending" kept it for later.
-    readonly outcome: "granted" | "refused" | "done" | "pending";
+    // A capture's own outcome otherwise: "saved", "updated", "unchanged" or "skipped".
+    readonly outcome: "granted" | "refused" | "done" | "pending" | "saved" | "updated" | "unchanged" | "skipped";
     readonly code?: string | undefined;
     readonly secret?: string | undefined;
     readonly sandbox?: string | undefined;
@@ -24,11 +26,15 @@ export interface AuditRecord {
     readonly reason?: string | undefined;
 }
 
-export type Audit = (record: AuditRecord) => Promise<void>;
+export interface Audit {
+    (record: AuditRecord): Promise<void>;
+    // The record's lines as written, oldest first, for the Passwords app's Activity; absent where nothing is kept.
+    readonly lines?: () => Promise<readonly string[]>;
+}
 
 export const fileAudit = (path: string, dir: string, now: () => number = Date.now): Audit => {
     const queue = serialLock();
-    return async (record) =>
+    const write = async (record: AuditRecord): Promise<void> =>
         await queue(async () => {
             await mkdir(dir, { recursive: true, mode: 0o700 });
             await rotateIfLarge(path);
@@ -36,6 +42,17 @@ export const fileAudit = (path: string, dir: string, now: () => number = Date.no
             // appendFile's mode applies only to a file it creates; one rolled in by hand keeps whatever it had.
             await chmod(path, 0o600);
         });
+    const lines = async (): Promise<readonly string[]> => {
+        try {
+            return (await readFile(path, "utf8")).split("\n").filter((line) => line.trim() !== "");
+        } catch (error) {
+            if (isMissing(error)) {
+                return [];
+            }
+            throw error;
+        }
+    };
+    return Object.assign(write, { lines });
 };
 
 // For a caller that keeps no record (a test that asserts on decisions some other way).

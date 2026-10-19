@@ -1,3 +1,5 @@
+import type { KeyringOrigin } from "@intentic/sandbox-contract/schemas/keyring";
+
 // What an askpass prompt asks for, read from the words ssh, sudo and git print, and which entry's `askpass` matchers
 // (protocol.ts AskpassMatcherSchema) answer it. Pure: the prompt is the program's own text, passed on intentic-askpass's
 // command line, so it is read as data and never trusted for more than picking an entry; the person's yes is what
@@ -90,4 +92,41 @@ export const askpassMatch = (question: AskpassQuestion, matchers: readonly strin
         }
     }
     return undefined;
+};
+
+// Where an askpass prompt is, as the Passwords app speaks of it (keyring-origins.ts): what a value typed once into the
+// keyring's box for it is saved under. A git prompt that names its user (`https://user@host`) gives the account.
+export interface AskpassPlace {
+    readonly origin: KeyringOrigin;
+    readonly username?: string | undefined;
+}
+
+const gitUser = (prompt: string): string | undefined => {
+    const url = /'(?<url>[^']+)'/u.exec(prompt)?.groups?.["url"];
+    try {
+        const user = url === undefined ? "" : decodeURIComponent(new URL(url).username);
+        return user === "" ? undefined : user;
+    } catch {
+        // allow(silent-catch): a prompt naming no URL names no account, which the box then asks for
+        return undefined;
+    }
+};
+
+export const askpassPlace = (question: AskpassQuestion, prompt: string): AskpassPlace => {
+    const matcher = question.matchers[0] ?? `prompt:${question.prompt}`;
+    const colon = matcher.indexOf(":");
+    const kind = colon === -1 ? matcher : matcher.slice(0, colon);
+    const rest = colon === -1 ? "" : matcher.slice(colon + 1);
+    switch (kind) {
+        case "ssh":
+            return { origin: { kind: "ssh", target: rest }, username: rest.split("@")[0] };
+        case "ssh-key":
+            return { origin: { kind: "ssh-key", path: rest } };
+        case "sudo":
+            return rest === "" ? { origin: { kind: "sudo" } } : { origin: { kind: "sudo", user: rest }, username: rest };
+        case "git":
+            return { origin: { kind: "git", url: rest }, username: gitUser(prompt) };
+        default:
+            return { origin: { kind: "prompt", text: (question.prompt === "" ? "Password:" : question.prompt).slice(0, 300) } };
+    }
 };

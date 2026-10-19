@@ -5,6 +5,7 @@ import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { useKeyrings } from "../../capabilities/connect/secrets/useKeyrings";
+import OpenInPasswords from "./OpenInPasswords.vue";
 
 // The keyrings on the owner's computers this sandbox reaches, one row each: whether it answers and is unlocked, how many
 // of its entries are shared here, what waits for its next unlock, and whom it is paired with. Pairing two makes them
@@ -93,6 +94,7 @@ const doPair = async (): Promise<void> => {
 <template>
     <RowGroup data-setting="secrets-keyrings" :label="t(`sandbox.keyrings.title`)" :count="keyrings.length">
         <template #actions>
+            <OpenInPasswords />
             <Button v-if="canPair && !pairing" size="small" tier="boring" :label="t(`sandbox.keyrings.pair`)" @click="openPair">
                 <template #icon><Icon name="link" /></template>
             </Button>

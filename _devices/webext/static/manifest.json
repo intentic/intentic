@@ -7,6 +7,7 @@
     "homepage_url": "https://intentic.dev/docs/your-browser",
     "permissions": ["storage", "scripting", "alarms", "cookies", "activeTab", "favicon"],
     "optional_host_permissions": ["*://*/*"],
+    "optional_permissions": ["nativeMessaging"],
     "background": {
         "service_worker": "background.js",
         "type": "module"

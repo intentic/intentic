@@ -114,6 +114,17 @@ test("the tool list says which tools only read and which can lose something", as
     ]);
 });
 
+test("all-sites access for Passwords does not widen what the agent may read", async () => {
+    install({
+        tabs: [{ id: 7, windowId: 1, active: true, url: "https://private.example/inbox" }],
+        origins: ["https://*/*", "http://*/*", "https://private.example/*"],
+    });
+    const result = await call("snapshot");
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain("private.example");
+    expect(result.text).toContain("ask_access");
+});
+
 test("a site nobody granted refuses by name and points at the one thing that helps", async () => {
     const result = await call("snapshot");
     expect(result.isError).toBe(true);
@@ -161,6 +172,7 @@ test("the sandbox's own origin is not listed as a site to work on", async () => 
         tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }],
         origins: ["https://github.com/*", "https://sandbox-1.example.dev/*"],
     });
+    await store.setMode("https://github.com/*", "read");
     await store.setSandbox({ url: "https://sandbox-1.example.dev", token: "t" });
     const result = await call("describe");
     expect(result.text).toContain("github.com — read only");
@@ -169,6 +181,7 @@ test("the sandbox's own origin is not listed as a site to work on", async () => 
 
 test("describe tells the agent which sites it may work on before it tries one", async () => {
     install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: ["https://github.com/*"] });
+    await store.setMode("https://github.com/*", "read");
     const result = await call("describe");
     expect(result.isError).toBe(false);
     expect(result.text).toContain("github.com — read only");
@@ -204,6 +217,7 @@ test("a notification is not answered, and a malformed message does not throw", a
 // page-permission check doesn't imply it: the tab is readable but the pixels aren't.
 test("a switch that is off refuses by name, even on a site that is allowed", async () => {
     install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: ["https://github.com/*"] });
+    await store.setMode("https://github.com/*", "act");
     await store.setScopes({ read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" });
     const result = await call("screenshot");
     expect(result.isError).toBe(true);
@@ -214,6 +228,7 @@ test("a switch that is off refuses by name, even on a site that is allowed", asy
 // read as the defaults, a switch the owner turned off would come back on.
 test("a stored grant that no longer parses refuses every switch rather than falling back to the defaults", async () => {
     install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: ["https://github.com/*"] });
+    await store.setMode("https://github.com/*", "read");
     await chrome.storage.local.set({ scopes: { read: "off", act: "off", screenshot: "off", cookies: "off", confirm: "sometimes" } });
     expect(await store.scopes()).toEqual({ read: "off", act: "off", screenshot: "off", cookies: "off", confirm: "always" });
     const result = await call("snapshot");
@@ -223,6 +238,7 @@ test("a stored grant that no longer parses refuses every switch rather than fall
 
 test("a stored pause that is not a boolean holds as paused, and nothing stored is running", async () => {
     install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: ["https://github.com/*"] });
+    await store.setMode("https://github.com/*", "read");
     expect(await store.paused()).toBe(false);
     await chrome.storage.local.set({ paused: "yes" });
     expect(await store.paused()).toBe(true);
@@ -233,6 +249,7 @@ test("a stored pause that is not a boolean holds as paused, and nothing stored i
 
 test("handing a session over is refused outright while its switch is off", async () => {
     install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: ["https://github.com/*"] });
+    await store.setMode("https://github.com/*", "act");
     await store.setScopes({ read: "on", act: "on", screenshot: "on", cookies: "off", confirm: "sensitive" });
     const result = await call("connect_site", { account: "gh" });
     expect(result.isError).toBe(true);

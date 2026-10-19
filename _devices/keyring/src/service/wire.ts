@@ -20,3 +20,24 @@ export const TypedPassphraseSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("cancelled") }),
     z.object({ kind: z.literal("unavailable"), reason: z.string() }),
 ]);
+
+export const AvailableSchema = z.object({ available: z.boolean() }).strict();
+
+export const EnrolledSchema = z.discriminatedUnion("ok", [
+    z.object({ ok: z.literal(true), signature: z.string(), publicKey: z.string() }),
+    z.object({ ok: z.literal(false), cancelled: z.boolean(), reason: z.string() }),
+]);
+
+// The choice dialog's answer (consent.ts ChoiceAnswer), as it crosses the door.
+export const ChosenSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("chosen"), id: z.string().max(64) }),
+    z.object({ kind: z.literal("cancelled") }),
+    z.object({ kind: z.literal("unavailable"), reason: z.string() }),
+]);
+
+// The type-once box's answer (consent.ts ValueAnswer), as it crosses the door.
+export const TypedValueSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("answered"), value: z.string(), remember: z.boolean(), username: z.string().optional() }),
+    z.object({ kind: z.literal("cancelled") }),
+    z.object({ kind: z.literal("unavailable"), reason: z.string() }),
+]);

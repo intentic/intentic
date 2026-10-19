@@ -16,7 +16,18 @@ Every release tag builds the extension and submits it to the Chrome Web Store fr
    from the dashboard. Until all five exist, the publish step logs a warning and skips.
 
 Before releasing a version that adds a manifest permission, update the item's **Privacy practices** tab in the
-Developer Dashboard with the matching justification from [STORE-LISTING.md](STORE-LISTING.md). Uploading the package
+Developer Dashboard with the matching justification from [STORE-LISTING.md](STORE-LISTING.md). Passwords adds
+**optional** `nativeMessaging` and uses the existing optional host permission for `<all_urls>` when the person
+turns remembering on; justify them as:
+
+- **nativeMessaging:** Talks only to the Intentic desktop app's local native host so passwords the person saves in
+  this browser are sealed on their own computer and filled only after they confirm there (Windows Hello / system
+  consent). No other native hosts, no remote servers.
+- **Host permission (all sites, optional):** Used only after an explicit "Turn on" for Passwords, to inject capture
+  and fill UI on pages where the person signs in. Separate from the agent's per-site grants; does not widen what
+  the sandbox may read or click.
+
+Uploading the package
 through the API does not fill those fields. The store can accept the upload and then reject `:publish` with HTTP 400,
 "Your submission does not meet the requirements to be published in the store." Check every dashboard tab for incomplete
 fields before retrying; the API response does not name the missing field.

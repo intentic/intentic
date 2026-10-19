@@ -73,7 +73,7 @@ export type TerminalPlan = { "plan": "session", name: string, createIn?: string,
 /**
  * Everything netd sends Node.
  */
-export type ToNode = { "kind": "ask", id: number, question: Question, } | { "kind": "answer", id: number, answer: NetdAnswer, } | { "kind": "refused", id: number, message: string, } | { "kind": "tunnel", connected: boolean, reason?: string, refused?: TunnelRefusal, };
+export type ToNode = { "kind": "ask", id: number, question: Question, } | { "kind": "answer", id: number, answer: NetdAnswer, } | { "kind": "refused", id: number, message: string, } | { "kind": "tunnel", connected: boolean, reason?: string, refused?: TunnelRefusal, } | { "kind": "hiddenLine", session: string, prompt: string, value: string, };
 
 /**
  * The ingress tunnel's door, the reachability grant it presents there, and the daemon's transfer routes it announces

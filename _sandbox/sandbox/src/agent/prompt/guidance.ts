@@ -369,7 +369,10 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "password prompt on one of the owner's computers, focus the field with that place's own tools and call " +
             "`mcp__secrets__type_secret` with `where` naming the place (its description lists the ones this turn reaches). A name that does not exist fails the command and lists " +
             'the names that do; when the task needs one nobody has stored, `secrets ask NAME --why "…"` puts a masked ' +
-            "field for it in front of the owner. In files you write, keep the reference, never a raw value, and never ask " +
+            "field for it in front of the owner. A password for a place, when you do not know its name, is asked for by " +
+            '`secrets want --site <host>` (or `--program`, `--ssh`, `--git`) `--why "…"`: the owner\'s Passwords finds the ' +
+            "one that fits, asks them, and the command prints the name to reference (exit 3: their answer is awaited). " +
+            "In files you write, keep the reference, never a raw value, and never ask " +
             "the user to paste one into chat. " +
             "Some names, and some connected accounts, are gated to a named approver. Using one raises a card in the " +
             "chat for those people and the turn waits; a refusal names who can release it, so carry on without it and " +

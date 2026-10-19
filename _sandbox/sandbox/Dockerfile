@@ -510,6 +510,7 @@ COPY _extensions/prawo/intentic-extension.json /opt/extensions/prawo/
 COPY _extensions/activity/intentic-extension.json /opt/extensions/activity/
 COPY _extensions/approvals/intentic-extension.json /opt/extensions/approvals/
 COPY _extensions/automations/intentic-extension.json /opt/extensions/automations/
+COPY _extensions/passwords/intentic-extension.json /opt/extensions/passwords/
 COPY _extensions/git-history/intentic-extension.json /opt/extensions/git-history/
 COPY _extensions/pipelines/intentic-extension.json /opt/extensions/pipelines/
 COPY _extensions/preview/intentic-extension.json /opt/extensions/preview/

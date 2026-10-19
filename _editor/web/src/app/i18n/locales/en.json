@@ -7802,7 +7802,8 @@
             "nameCharacters": "Letters, digits and underscores; must not start with a digit.",
             "nameTaken": "{name} already exists here. Saving replaces its value.",
             "couldntPushToCi": "Could not push secrets to CI.",
-            "onYourComputers": "On your computers"
+            "onYourComputers": "On your computers",
+            "openInPasswords": "Open in Passwords"
         },
         "sandboxSwitcher": {
             "alsoDelete": "Also delete it from",

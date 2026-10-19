@@ -698,6 +698,12 @@ pub enum Link {
     FirstTask(FirstTaskLink),
     /// See [`RepairLink`]: Repair opened on this computer.
     Repair(RepairLink),
+    /// `intentic://passwords[?entry=NAME]`: the Passwords app on this computer, at one password when named (the hosted
+    /// editor's "Manage on this computer"). It opens a view and changes nothing, so it is heard from anywhere; a name out
+    /// of a keyring name's shape is dropped and the app opens on its list.
+    Passwords {
+        entry: Option<String>,
+    },
     /// `intentic://sandbox-wakes`: the workspace asked the platform to wake its sandbox, which may be asleep on this
     /// computer (sandbox_wakes.rs). App-window only, and it carries nothing: `ic` starts only what the platform says
     /// was asked for.
@@ -969,6 +975,9 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             Some(Link::FirstTask(FirstTaskLink { id, failed }))
         }
         "first-task" => None,
+        "passwords" => Some(Link::Passwords {
+            entry: get("entry").filter(|name| crate::keyring::valid_name(name).is_ok()),
+        }),
         "repair" => Some(Link::Repair(RepairLink {
             slug: get("slug").filter(|slug| is_slug(slug)),
             from: get("from").filter(|from| {
@@ -996,6 +1005,29 @@ fn switch(value: Option<String>) -> Option<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The hosted editor's "Manage on this computer": the app on Passwords, at the password named when its name is one.
+    #[test]
+    fn a_passwords_link_opens_the_app_on_one_password() {
+        assert_eq!(
+            parse_link("intentic://passwords?entry=GITHUB_COM", Source::External),
+            Some(Link::Passwords {
+                entry: Some("GITHUB_COM".to_string())
+            })
+        );
+        assert_eq!(
+            parse_link("intentic://passwords", Source::External),
+            Some(Link::Passwords { entry: None })
+        );
+        // A name no keyring entry could have is dropped, never carried into the route.
+        assert_eq!(
+            parse_link(
+                "intentic://passwords?entry=..%2Fdevice%3Fx%3D1",
+                Source::External
+            ),
+            Some(Link::Passwords { entry: None })
+        );
+    }
 
     #[test]
     fn external_shell_links_only_navigate() {

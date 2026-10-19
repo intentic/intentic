@@ -67,16 +67,22 @@ android {
 
 // The wire examples the sandbox and this app both test against; the unit tests read them from here.
 val goldenWire: File = rootProject.projectDir.resolve("../../_shared/sandbox-contract/golden/phone-wire.json").canonicalFile
+val goldenSeal: File = rootProject.projectDir.resolve("../../_shared/sandbox-contract/golden/keyring-seal.json").canonicalFile
 
 tasks.withType<Test>().configureEach {
     systemProperty("intentic.golden.phoneWire", goldenWire.path)
+    systemProperty("intentic.golden.keyringSeal", goldenSeal.path)
 }
 
 dependencies {
     implementation("androidx.core:core:1.19.1")
     implementation("androidx.appcompat:appcompat:1.8.0")
     implementation("androidx.activity:activity:1.13.0")
+    // BiometricPrompt with a CryptoObject, to unlock the presence key for one signature per fill.
+    implementation("androidx.biometric:biometric:1.1.0")
     implementation("com.squareup.okhttp3:okhttp:5.5.0")
+    // X25519 for Passwords sealing on API 26–30; the platform exposes XDH only from API 31.
+    implementation("org.bouncycastle:bcprov-jdk18on:1.79")
 
     // Wear OS. One APK serves phones and watches: on a watch it shows a round screen, a tile that pauses the agent and an
     // ongoing-activity chip on the watch face; on a phone it sends a watch's pairing code on to the watch beside it.

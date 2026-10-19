@@ -156,5 +156,10 @@ test("a keyring's refusal is the one JSON line, with its code, and exit 1", asyn
 
 test("status says the binary is not installed here but a keyring answers, set up, with askpass not pointed at it", async () => {
     const { out } = await cli("status", "--json");
-    expect(JSON.parse(out)).toEqual({ ok: true, installed: false, running: true, setUp: true, state: STATE, askpass: { installed: false }, hardened: false });
+    const answer = JSON.parse(out);
+    expect(answer).toMatchObject({ ok: true, installed: false, running: true, setUp: true, state: STATE, askpass: { installed: false } });
+    // What setup needs here is read off this computer; a keyring that unlocks without Hello says so.
+    expect(answer.support).toMatchObject({ hello: false, platform: process.platform === "win32" ? "windows" : process.platform === "darwin" ? "darwin" : "linux" });
+    expect([true, false]).toContain(answer.support.canSetUp);
+    expect(answer).not.toHaveProperty("hardened");
 });

@@ -1,78 +1,16 @@
 import type { WebExtGrant, WebExtScopes } from "@intentic/sandbox-contract/webext";
 import { describeCall } from "../background/activity.js";
-import type { PopupCommand, PopupState } from "../background/messages.js";
+import type { PopupState } from "../background/messages.js";
 import { originPattern, sandboxOwnOrigin, siteOf } from "../background/policy.js";
 import type { ActivityEntry, PendingAccess } from "../background/store.js";
+import { button, byId, h, icon, type IconName, say, send, show } from "./dom.js";
+import { renderPasswords } from "./passwords-section.js";
 
 // Answers, in order: is the agent waiting on me, is it connected, what can it touch, what has it done, how do I stop
 // it. Every permission widening happens here, not in the worker: chrome.permissions.request needs a user gesture,
 // which only the popup has, so nothing the sandbox says can add to the grant list on its own. That is also why each
 // click handler below calls `chrome.permissions.request` before its first await: an await in front of it spends the
 // gesture, and Chrome then refuses without asking.
-
-const send = async <T>(command: PopupCommand): Promise<T> => (await chrome.runtime.sendMessage(command)) as T;
-
-const byId = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
-
-const h = <K extends keyof HTMLElementTagNameMap>(
-    tag: K,
-    props: { class?: string; text?: string; title?: string } = {},
-    ...children: (Node | string)[]
-): HTMLElementTagNameMap[K] => {
-    const node = document.createElement(tag);
-    if (props.class !== undefined) {
-        node.className = props.class;
-    }
-    if (props.text !== undefined) {
-        node.textContent = props.text;
-    }
-    if (props.title !== undefined) {
-        node.title = props.title;
-    }
-    node.append(...children);
-    return node;
-};
-
-// Stroke icons on a 16-unit grid; `fill` for the one solid shape.
-const ICONS = {
-    pause: { d: "M5.5 3.5v9M10.5 3.5v9" },
-    play: { d: "M5 3.4 12.4 8 5 12.6z", fill: true },
-    remove: { d: "M4.5 4.5l7 7M11.5 4.5l-7 7" },
-    paused: { d: "M8 1.8a6.2 6.2 0 1 0 0 12.4A6.2 6.2 0 1 0 8 1.8zM6.4 5.6v4.8M9.6 5.6v4.8" },
-    offline: { d: "M8 1.8a6.2 6.2 0 1 0 0 12.4A6.2 6.2 0 1 0 8 1.8zM3.6 3.6l8.8 8.8" },
-    info: { d: "M8 1.8a6.2 6.2 0 1 0 0 12.4A6.2 6.2 0 1 0 8 1.8zM8 7.3v4M8 4.8v.1" },
-    done: { d: "M3 8.5 6.5 12 13 4.5" },
-    failed: { d: "M4 4l8 8M12 4l-8 8" },
-} as const;
-
-const icon = (name: keyof typeof ICONS): SVGSVGElement => {
-    const spec: { d: string; fill?: boolean } = ICONS[name];
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("viewBox", "0 0 16 16");
-    svg.setAttribute("aria-hidden", "true");
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", spec.d);
-    path.setAttribute("fill", spec.fill === true ? "currentColor" : "none");
-    path.setAttribute("stroke", "currentColor");
-    path.setAttribute("stroke-width", "1.7");
-    path.setAttribute("stroke-linecap", "round");
-    path.setAttribute("stroke-linejoin", "round");
-    svg.append(path);
-    return svg;
-};
-
-const button = (
-    label: string,
-    weight: "primary" | "plain" | "quiet",
-    onClick: (event: MouseEvent) => void,
-    size: "regular" | "small" = "regular",
-): HTMLButtonElement => {
-    const node = h("button", { class: ["btn", weight === "plain" ? "" : weight, size === "small" ? "small" : ""].filter(Boolean).join(" ") });
-    node.type = "button";
-    node.append(label);
-    node.addEventListener("click", onClick);
-    return node;
-};
 
 const modeLabel = (mode: WebExtGrant["mode"]): string => (mode === "act" ? "read and act" : "read only");
 
@@ -120,16 +58,6 @@ const favicon = (origin: string): HTMLElement => {
     });
     image.src = chrome.runtime.getURL(`/_favicon/?pageUrl=${encodeURIComponent(origin.replace(/\/\*$/, "/"))}&size=32`);
     return box;
-};
-
-const show = (node: HTMLElement, visible: boolean): void => {
-    node.hidden = !visible;
-};
-
-// A message under a form or card, cleared by the next attempt.
-const say = (node: HTMLElement, message: string | undefined): void => {
-    node.textContent = message ?? "";
-    show(node, message !== undefined);
 };
 
 // Asks Chrome first, then records the mode; the mode is only saved once Chrome's own dialog says yes.
@@ -256,7 +184,7 @@ const offerCard = (offered: NonNullable<PopupState["offered"]>): HTMLElement => 
 };
 
 // A line with its icon in the icon column: the header already says the state, this says what it means for you.
-const notice = (kind: "paused" | "offline" | "info", glyph: keyof typeof ICONS, title: string, body: string): HTMLElement =>
+const notice = (kind: "paused" | "offline" | "info", glyph: IconName, title: string, body: string): HTMLElement =>
     h("div", { class: `note ${kind}` }, icon(glyph), h("p", {}, h("strong", { text: title }), ` ${body}`));
 
 const renderAlerts = (state: PopupState): void => {
@@ -488,6 +416,7 @@ const draw = async (): Promise<void> => {
         renderHeader(state);
         renderAlerts(state);
         renderWelcome(state);
+        renderPasswords(state, refresh);
         renderSites(state, here);
         renderActivity(state);
         renderFooter(state);

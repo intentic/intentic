@@ -73,7 +73,7 @@ test("a name only a keyring holds is a known name; one nobody holds is still ref
     const refused = await resolveCommandSecrets("echo {{secret:VPN_PASSWORD}} {{secret:NOBODY_HAS_IT}}", secrets);
     expect(refused).toEqual({
         refusal:
-            'no stored secret named "NOBODY_HAS_IT": stored names: GITHUB_TOKEN, VPN_PASSWORD. If it is a different name above, use that; if the task needs one nobody has stored, ask for it with `secrets ask NOBODY_HAS_IT --why "…"`, which puts a card with a masked field in front of the owner and answers once it is stored.',
+            'no stored secret named "NOBODY_HAS_IT": stored names: GITHUB_TOKEN, VPN_PASSWORD. If it is a different name above, use that; if the task needs one nobody has stored, ask for it with `secrets ask NOBODY_HAS_IT --why "…"`, which puts a card with a masked field in front of the owner and answers once it is stored; a password for a place whose name you do not know is `secrets want --site <host> --why "…"`.',
     });
     expect(recorded.steps).toEqual([]);
 });

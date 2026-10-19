@@ -7381,7 +7381,8 @@
             "nameCharacters": "Litery, cyfry i podkreślenia; nie może zaczynać się od cyfry.",
             "nameTaken": "{name} już tu istnieje. Zapisanie zastąpi jego wartość.",
             "couldntPushToCi": "Nie udało się wypchnąć sekretów do CI.",
-            "onYourComputers": "Na twoich komputerach"
+            "onYourComputers": "Na twoich komputerach",
+            "openInPasswords": "Otwórz w Hasłach"
         },
         "sandboxStorageCard": {
             "historyLow": "Na dysku historii pozostało {free} wolnego miejsca, poniżej progu {floor} wymaganego dla nowych rozmów. Zwolnij tutaj miejsce, a następnie wyślij ponownie.",

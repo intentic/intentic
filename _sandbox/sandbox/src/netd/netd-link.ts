@@ -35,11 +35,17 @@ export type NetdAsks = Exclude<Question, { readonly question: "ping" }>;
 // older netd sends `connected` alone.
 export type TunnelReport = Extract<ToNode, { readonly kind: "tunnel" }>;
 
+// netd's report of a password typed at a hidden prompt: the session, the question it answered and the value, once.
+export type HiddenLineReport = Extract<ToNode, { readonly kind: "hiddenLine" }>;
+
 export interface NetdLinkOptions {
     readonly path: string;
     // Answers netd's questions; a throw goes back as a refusal carrying its message.
     readonly answer: (question: NetdAsks) => Promise<Answer>;
     readonly onTunnel: (connected: boolean, report: TunnelReport) => void;
+    // A line the person typed with echo off in one of the editor's terminals (terminal-capture.ts takes it from here).
+    // Absent: such a line is dropped where it lands.
+    readonly onHiddenLine?: (line: HiddenLineReport) => void;
     readonly onClose: () => void;
     // What went wrong on the link that is not a question's own refusal: a frame that would not parse (skipped, the rest
     // still read), a length past the cap or a socket error (the link is then dropped, and `onClose` follows).
@@ -88,6 +94,18 @@ interface Waiting {
     readonly timer: NodeJS.Timeout;
 }
 
+// Each checkout's change count, asked of netd: null for every one when it does not answer.
+const syncOver =
+    (ask: (question: NetdQuestion) => Promise<NetdAnswer>) =>
+    async (dirs: readonly string[]): Promise<(number | null)[]> => {
+        try {
+            const answer = await ask({ question: "sync", dirs: [...dirs] });
+            return answer.generations;
+        } catch {
+            return dirs.map(() => null);
+        }
+    };
+
 export const connectNetd = async (options: NetdLinkOptions): Promise<NetdLink> => {
     const socket = await new Promise<Socket>((resolve, reject) => {
         const dialed = connect(options.path);
@@ -123,19 +141,15 @@ export const connectNetd = async (options: NetdLinkOptions): Promise<NetdLink> =
             waiting.set(id, { settle: (answer) => (answer instanceof Error ? reject(answer) : resolve(answer)), timer });
             tell({ kind: "ask", id, question });
         });
-    const sync = async (dirs: readonly string[]): Promise<(number | null)[]> => {
-        try {
-            const answer = await ask({ question: "sync", dirs: [...dirs] });
-            return answer.generations;
-        } catch {
-            return dirs.map(() => null);
-        }
-    };
+    const sync = syncOver(ask);
     const receive = (message: ToNode): void => {
         switch (message.kind) {
             case "tunnel":
                 tunnel = message.connected;
                 options.onTunnel(message.connected, message);
+                return;
+            case "hiddenLine":
+                options.onHiddenLine?.(message);
                 return;
             case "answer":
                 settle(message.id, message.answer);

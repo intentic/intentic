@@ -201,6 +201,8 @@ const AREA_ICONS: Readonly<Record<string, IconName>> = {
     usage: `usage`,
     environment: `box`,
     secrets: `key`,
+    // The desktop app's Passwords and the hosted editor's: the owner's own vault, a key like the sandbox's secrets.
+    passwords: `key`,
     models: `sparkles`,
     agent: `robot`,
     extensions: `extensions`,

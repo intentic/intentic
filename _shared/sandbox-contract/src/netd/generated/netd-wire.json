@@ -874,6 +874,31 @@
           "connected"
         ],
         "type": "object"
+      },
+      {
+        "description": "A line the person typed with echo off in one of the editor's own terminal sessions (`web-…`), after a\npassword-ish question: told once, on Enter, for the daemon to hand Passwords if the owner turned remembering on\nfor sandbox terminals (2026-10-19). Never logged on either side; netd keeps nothing of it after sending.",
+        "properties": {
+          "kind": {
+            "const": "hiddenLine",
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "session": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "session",
+          "prompt",
+          "value"
+        ],
+        "type": "object"
       }
     ],
     "title": "ToNode"

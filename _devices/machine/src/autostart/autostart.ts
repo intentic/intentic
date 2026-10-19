@@ -22,28 +22,21 @@ export const MACHINE_AUTOSTART: AutostartSpec = {
 };
 
 // The keyring's own entry (keyring/service.ts): a process of its own beside this agent, started at login and kept running
-// by the same mechanisms, under names of its own so neither entry replaces the other. `serve` holds the vault and answers
-// its pipe.
+// by the same mechanisms, under names of its own so neither entry replaces the other. Since 2026-10-19 what starts is
+// the session helper (`session`): the vault is held by Passwords' protected service (a LOCAL SERVICE task on Windows, a
+// systemd system unit on Linux), and the helper shows its prompts, does its typing and answers the user's pipe. A login
+// entry left from before ran `serve`; registering this one replaces it, since both carry the same names.
 const keyringLog = keyringPaths().log;
 
 export const KEYRING_AUTOSTART: AutostartSpec = {
     id: "keyring",
     windowsRunValue: "IntenticKeyring",
-    desktopName: "Intentic Keyring",
-    desktopComment: "The password vault on this computer: types and hands over secrets for your intentic sandboxes, at your word",
+    desktopName: "Intentic Passwords",
+    desktopComment: "Passwords on this computer: its prompts and typing on this desktop, for the protected service that holds the vault",
     logPath: keyringLog,
     launchAgent: { label: "dev.intentic.keyring" },
-    detachedArgs: ["serve"],
-    foregroundArgs: ["serve"],
-    failureNote: (reason) =>
-        `Couldn't register the keyring to start at login (${reason}); it runs until this computer restarts, and \`intentic-machine keyring setup\` starts it again. Its log is ${keyringLog}.`,
-};
-
-// The same entry once hardened (Windows, `intentic-machine keyring harden`): the vault is the IntenticKeyring service's,
-// and what starts at sign-in is the session helper that shows its prompts and does its typing on this desktop.
-export const KEYRING_SESSION_AUTOSTART: AutostartSpec = {
-    ...KEYRING_AUTOSTART,
-    desktopComment: "The intentic keyring's prompts and typing on this desktop, for the IntenticKeyring service that holds the vault",
     detachedArgs: ["session"],
     foregroundArgs: ["session"],
+    failureNote: (reason) =>
+        `Couldn't register Passwords to start at login (${reason}); it runs until this computer restarts, and \`intentic-machine keyring setup\` starts it again. Its log is ${keyringLog}.`,
 };

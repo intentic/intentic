@@ -225,6 +225,8 @@ impl Harness {
                     ToNode::Refused { id, message } => {
                         panic!("netd refused question {id}: {message}")
                     }
+                    // A password typed at a hidden prompt: no test here types one.
+                    ToNode::HiddenLine { .. } => {}
                 }
             }
         });

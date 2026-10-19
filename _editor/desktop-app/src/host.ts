@@ -27,10 +27,11 @@ import { machineFolderOf, machineSandbox, machineVerbs, startMachineSandbox } fr
 import { followOnScreen } from "./onScreen";
 import { folderOf, machineOf, machineStateOf, projectPathOf } from "./device/projectBuild";
 import { useDevice } from "./device/useDevice";
+import { followPasswords, passwordsBadge } from "./passwords/passwordsState";
 
 // THE APP'S HALF OF A LOCAL WINDOW'S SHELL (the web's app/environments/localHost.ts): what the editor asks of this
 // computer, answered by the app's own commands, the account the workspace signed in with (account.ts), and the view the
-// app adds to the rail, This device. Installed on the
+// app adds to the rail, This device and Passwords. Installed on the
 // window by the local face's bootstrap (local/main.ts) before the editor's modules run, so the router finds the view
 // when it builds its routes.
 //
@@ -62,6 +63,20 @@ const DEVICE_VIEW: LocalView = {
     title: () => t(`desktop.device.title`),
     load: () => import(`./device/DeviceView.vue`),
     badge,
+};
+
+/** Passwords: this computer's vault, its requests and its settings, the app @intentic/ext-passwords/app mounts. */
+const PASSWORDS_VIEW: LocalView = {
+    path: `passwords`,
+    section: `passwords`,
+    title: () => t(`desktop.passwords.title`),
+    // The app's words are mounted first, as the extension host would mount them, so its first paint is in words.
+    load: async () => {
+        const { registerPasswordsMessages } = await import(`@intentic/ext-passwords/app`);
+        await registerPasswordsMessages();
+        return import(`./passwords/PasswordsPage.vue`);
+    },
+    badge: passwordsBadge,
 };
 
 /* A FOLDER'S WAY TO AN AGENT: this computer's own sandbox, which the app makes after sign-in and keeps (the app's
@@ -118,7 +133,7 @@ const PROJECT: LocalProjectHost = {
 
 export const nativeHost = (): LocalHost => ({
     native: true,
-    views: [DEVICE_VIEW],
+    views: [DEVICE_VIEW, PASSWORDS_VIEW],
     facts: async () => {
         const facts = await homeFacts();
         return { accountSeen: facts.accountSeen, homeFolder: facts.homeFolder };
@@ -158,6 +173,8 @@ export const installHost = (face: LocalFace): void => {
     void startReading(face.home === true);
     // Every window follows this computer's own sandbox: its card is in each of them while it is not ready.
     void startMachineSandbox();
+    // And what Passwords' tile says: requests waiting, passwords just saved.
+    followPasswords();
 };
 
 // The window's reading of the machine, started once; a failure is the console's, since the page draws what it has.

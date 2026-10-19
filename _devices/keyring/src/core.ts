@@ -12,11 +12,17 @@ import {
 } from "@intentic/sandbox-contract/schemas/keyring";
 import { keyFingerprint, newSealKeyPair, seal, unseal } from "@intentic/sandbox-contract/keyring-seal";
 import type { z } from "zod";
-import { askpassMatch, parseAskpassPrompt } from "./askpass/askpass.js";
-import type { Audit, AuditRecord } from "./audit.js";
-import type { BackendReader } from "./backends.js";
-import type { Consent, ConsentAnswer, VaultOpener } from "./consent/consent.js";
+import { type Answer, type KeyringDeps, NOT_SET_UP, type Opened, type OpenRequest, type PendingParts, refuse, type ValueRead, type VaultAccess } from "./passwords/access.js";
+import { AppOps } from "./passwords/app-ops.js";
+import { Askpass } from "./askpass/answer.js";
+import type { AuditRecord } from "./audit.js";
+import { Captures, seenIn } from "./passwords/capture.js";
+import type { ConsentAnswer, VaultOpener } from "./consent/consent.js";
+import { DEFAULT_SETTINGS, entryInfoOf, healthOf, liveEntries, usedEntry, withEntry } from "./passwords/entries.js";
+import { Fills } from "./passwords/fills.js";
 import { type KeysFile, pinOf, samePin } from "./keys.js";
+import { Needs } from "./passwords/needs.js";
+import { Phones } from "./passwords/phone.js";
 import {
     acceptGrant,
     applyPatch,
@@ -25,7 +31,6 @@ import {
     MINUTE_MS,
     modeNeedsPerson,
     NonceBook,
-    rememberedFresh,
     releaseTargetOf,
     sandboxKey,
     shareWith,
@@ -35,7 +40,7 @@ import {
     wideningOf,
 } from "./policy.js";
 import type { EntryInfo, EntryRules, KeyringRequest, KeyringResponse, Refusal, ShareInfo } from "./protocol.js";
-import type { Place, Seen, Typist } from "./typing/typist.js";
+import type { Place, Seen } from "./typing/typist.js";
 import {
     emptyOpenPart,
     helloChallenge,
@@ -46,7 +51,6 @@ import {
     PENDING_INBOX_MAX,
     PENDING_SYNC_MAX,
     type SandboxPin,
-    type ScryptCost,
     SCRYPT_COST,
     sealDocument,
     type SealedCopy,
@@ -72,55 +76,42 @@ import {
 // - The open part and keys.json can be rewritten by any process of this user, so they are never trusted to grant
 //   anything: a decision that lets a value go is always checked again against the inner document once it is open.
 
-export interface KeyringDeps {
-    readonly vault: {
-        readonly read: () => Promise<VaultFile | undefined>;
-        readonly write: (file: VaultFile) => Promise<void>;
-    };
-    readonly keys: {
-        readonly read: () => Promise<KeysFile>;
-        readonly write: (keys: KeysFile) => Promise<void>;
-    };
-    readonly consent: Consent;
-    readonly typist: Typist;
-    readonly backends: BackendReader;
-    // A sandbox's public keys, fetched from its own address (GET /keyring/keys): never from whoever asked for the share.
-    readonly fetchKeys: (sandbox: string) => Promise<KeyringSandboxKeys>;
-    readonly audit: Audit;
-    readonly now: () => number;
-    readonly sleep: (ms: number) => Promise<void>;
-    readonly version: string;
-    // The Windows Hello credential's name for this user.
-    readonly helloCredential: string;
-    readonly scrypt?: ScryptCost;
-}
+export type { KeyringDeps } from "./passwords/access.js";
 
 type Op = KeyringRequest["op"];
 type RequestOf<K extends Op> = Extract<KeyringRequest, { op: K }>;
-type Answer<K extends Op> = Promise<KeyringResponse<K>>;
 
 // The ops intentic-machine relays for a sandbox, as against the ones this computer's own programs send.
-const RELAYED_OPS = ["shares", "release", "type", "inbox", "copies", "sync-state", "sync-pair", "sync-outbox", "sync-deliver"] as const;
+const RELAYED_OPS = ["shares", "release", "type", "inbox", "copies", "sync-state", "sync-pair", "sync-outbox", "sync-deliver", "capture", "need", "phone-pair", "phone-fill"] as const;
 type RelayedOp = (typeof RELAYED_OPS)[number];
 type RelayedRequest = RequestOf<RelayedOp>;
-type LocalRequest = Exclude<KeyringRequest, RelayedRequest>;
+// The Passwords app's ops from this computer's own programs (the app, the native host, the session helper).
+const APP_OPS = [
+    "capture-batch",
+    "undo-capture",
+    "seen",
+    "reveal",
+    "copy",
+    "history",
+    "restore",
+    "settings",
+    "set-settings",
+    "activity",
+    "fill-window",
+    "fill-value",
+    "candidates",
+    "needs",
+    "answer-need",
+] as const;
+type AppOp = (typeof APP_OPS)[number];
+type AppRequest = RequestOf<AppOp>;
+type LocalRequest = Exclude<KeyringRequest, RelayedRequest | AppRequest>;
 const RELAYED = new Set<Op>(RELAYED_OPS);
+const APP = new Set<Op>(APP_OPS);
 const isRelayed = (request: KeyringRequest): request is RelayedRequest => RELAYED.has(request.op);
+const isApp = (request: KeyringRequest): request is AppRequest => APP.has(request.op);
 
-const refuse = (code: Refusal["code"], refusal: string): Refusal => ({ ok: false, code, refusal });
 const fromConsent = (answer: Extract<ConsentAnswer, { ok: false }>): Refusal => refuse(answer.code, answer.reason);
-const NOT_SET_UP = "The keyring on this computer is not set up yet: `intentic-machine keyring setup` sets it up.";
-
-// The value an entry's typing or release sees: a kept value, or one read from its password manager.
-type ValueRead = { readonly ok: true; readonly value: string } | Refusal;
-
-// The inner document, opened for one op, and what the person was shown and said.
-interface Opened {
-    readonly doc: VaultDocument;
-    readonly key: Buffer;
-    readonly asked: boolean;
-    readonly how: string | undefined;
-}
 
 interface Merged {
     readonly doc: VaultDocument;
@@ -135,14 +126,6 @@ const FOCUS_SETTLE_MS = 400;
 // A sync item carries one entry, without its shares: each computer shares its own entries with its own sandboxes.
 const SyncEntrySchema = StoredEntrySchema.omit({ shares: true, revision: true });
 type SyncEntry = z.infer<typeof SyncEntrySchema>;
-
-const entryInfoOf = (entry: StoredEntry): EntryInfo => {
-    const info: EntryInfo = { name: entry.name, ...entry.rules, source: entry.source, shares: entry.shares, createdAt: entry.createdAt, updatedAt: entry.updatedAt };
-    if (entry.backend !== undefined) {
-        info.backend = entry.backend;
-    }
-    return info;
-};
 
 const syncEntryOf = (entry: StoredEntry): SyncEntry => {
     const sent: SyncEntry = { name: entry.name, rules: entry.rules, source: entry.source, createdAt: entry.createdAt, updatedAt: entry.updatedAt };
@@ -179,19 +162,43 @@ const rulesWords = (rules: EntryRules): string => {
     return `${programs}; ${field}`;
 };
 
-const withEntry = (doc: VaultDocument, entry: StoredEntry): VaultDocument => ({ ...doc, entries: { ...doc.entries, [entry.name]: entry } });
-
 export class Keyring {
     #file: VaultFile | undefined;
     #keys: KeysFile | undefined;
     #unlocked: { key: Buffer; doc: VaultDocument; until: number } | undefined;
     readonly #nonces = new NonceBook();
-    // askpass answers given, by matcher, for entries that remember them.
-    readonly #remembered = new Map<string, number>();
     readonly #lock = serialLock();
     #loaded = false;
+    // The Passwords app's ops, each in a file of its own, reaching the vault through #access alone.
+    readonly #access: VaultAccess;
+    readonly #captures: Captures;
+    readonly #appOps: AppOps;
+    readonly #fills: Fills;
+    readonly #needs: Needs;
+    readonly #phones: Phones;
+    readonly #askpass: Askpass;
 
-    constructor(private readonly deps: KeyringDeps) {}
+    constructor(private readonly deps: KeyringDeps) {
+        this.#access = {
+            deps,
+            file: () => this.#file,
+            keys: async () => await this.#load(),
+            held: () => this.#held(),
+            open: async (file, request) => await this.#open(file, request),
+            commit: async (opened, pending) => await this.#commit(opened, pending),
+            writeOpen: async (open) => await this.#writeOpen(open),
+            record: async (record) => await this.#record(record),
+            valueOf: async (doc, entry) => await this.#valueOf(doc, entry),
+            fetchKeys: async (sandbox) => await this.#fetchKeys(sandbox),
+            typeInto: async (place, seen, value, asked) => await this.#typeInto(place, seen, value, asked),
+        };
+        this.#captures = new Captures(this.#access);
+        this.#appOps = new AppOps(this.#access);
+        this.#fills = new Fills(this.#access, this.#captures);
+        this.#needs = new Needs(this.#access);
+        this.#phones = new Phones(this.#access);
+        this.#askpass = new Askpass(this.#access, this.#captures);
+    }
 
     // ---- files and the vault's state ----
 
@@ -214,7 +221,7 @@ export class Keyring {
     #forget(): void {
         this.#unlocked?.key.fill(0);
         this.#unlocked = undefined;
-        this.#remembered.clear();
+        this.#askpass.forget();
         this.deps.backends.forget();
     }
 
@@ -227,26 +234,48 @@ export class Keyring {
     }
 
     // Asks the person when `person` says to or the vault is locked, and opens the inner document with what the answer gave.
-    async #open(file: VaultFile, request: { title: string; message: string; person: boolean }): Promise<Opened | Refusal> {
+    // Offered choices, the person picks one in the keyring's own dialog first, and the verified yes then names it.
+    async #open(file: VaultFile, request: OpenRequest): Promise<Opened | Refusal> {
         const held = this.#held();
         if (held !== undefined && !request.person) {
             return { doc: held.doc, key: held.key, asked: false, how: undefined };
         }
-        const answer = await this.deps.consent.ask({ title: request.title, message: request.message, unlock: held === undefined, opener: this.#opener(file) });
+        const picked = await this.#choose(request);
+        if (!picked.ok) {
+            return picked;
+        }
+        const chosen = picked.choice;
+        const label = request.choices?.find((choice) => choice.id === chosen)?.label;
+        const message = label === undefined ? request.message : `${request.message} You chose: ${label}.`;
+        const answer = await this.deps.consent.ask({ title: request.title, message, unlock: held === undefined, opener: this.#opener(file) });
         if (!answer.ok) {
             return fromConsent(answer);
         }
         if (held !== undefined) {
-            return { doc: held.doc, key: held.key, asked: true, how: answer.how };
+            return { doc: held.doc, key: held.key, asked: true, how: answer.how, choice: chosen };
         }
         if (answer.vaultKey === undefined) {
-            return refuse("locked", "The keyring could not be opened with that answer: unlock it with its passphrase.");
+            return refuse("locked", "Passwords could not be opened with that answer: unlock it with its recovery key.");
         }
         try {
-            return { doc: openDocument(answer.vaultKey, file.sealed), key: answer.vaultKey, asked: true, how: answer.how };
+            return { doc: openDocument(answer.vaultKey, file.sealed), key: answer.vaultKey, asked: true, how: answer.how, choice: chosen };
         } catch (error) {
             return refuse("unavailable", error instanceof Error ? error.message : "The vault could not be opened.");
         }
+    }
+
+    // The choice a request offers, by its id: the dialog's answer, or the first choice where no dialog can be shown.
+    async #choose(request: OpenRequest): Promise<{ readonly ok: true; readonly choice: string | undefined } | Refusal> {
+        const choices = request.choices;
+        const choose = this.deps.consent.choose;
+        if (choices === undefined || choices.length === 0 || choose === undefined) {
+            return { ok: true, choice: choices?.[0]?.id };
+        }
+        const picked = await choose({ title: request.title, message: request.message, choices });
+        if (picked.kind === "cancelled") {
+            return refuse("declined", "The person at the computer said no.");
+        }
+        return { ok: true, choice: picked.kind === "chosen" ? picked.id : choices[0]?.id };
     }
 
     // The copies kept in sandboxes, sealed afresh to each one's key whenever the document changes.
@@ -266,7 +295,7 @@ export class Keyring {
 
     // Writes a changed document: the sealed part, the open part rebuilt from it, and the pins keys.json carries for
     // checking a grant while locked.
-    async #commit(opened: { doc: VaultDocument; key: Buffer }, pending?: Pick<OpenPart, "pendingInbox" | "pendingSync">): Promise<void> {
+    async #commit(opened: { doc: VaultDocument; key: Buffer }, pending?: PendingParts): Promise<void> {
         const file = this.#file;
         if (file === undefined) {
             throw new Error("committing a vault that was never set up");
@@ -282,6 +311,7 @@ export class Keyring {
             pendingInbox: pending?.pendingInbox ?? file.open.pendingInbox,
             pendingSync: pending?.pendingSync ?? file.open.pendingSync,
         };
+        this.#openExtras(open, doc, file.open, pending);
         const next: VaultFile = { ...file, sealed: sealDocument(opened.key, doc), open };
         await this.deps.vault.write(next);
         this.#file = next;
@@ -290,6 +320,29 @@ export class Keyring {
         await this.deps.keys.write(this.#keys);
         if (this.#unlocked !== undefined) {
             this.#unlocked = { ...this.#unlocked, doc };
+        }
+    }
+
+    // The Passwords app's parts of the open part: the settings and phones as the inner document has them, and what waits.
+    #openExtras(open: OpenPart, doc: VaultDocument, before: OpenPart, pending: PendingParts | undefined): void {
+        if (doc.settings !== undefined) {
+            open.settings = doc.settings;
+        }
+        const phones = Object.entries(doc.phones ?? {}).map(([device, pin]) => ({ device, label: pin.keys.label, pairedAt: pin.pairedAt }));
+        if (phones.length > 0) {
+            open.phones = phones;
+        }
+        const captures = pending?.pendingCaptures ?? before.pendingCaptures;
+        if (captures !== undefined && captures.length > 0) {
+            open.pendingCaptures = captures;
+        }
+        const needs = pending?.pendingNeeds ?? before.pendingNeeds;
+        if (needs !== undefined && needs.length > 0) {
+            open.pendingNeeds = needs;
+        }
+        const seen = pending?.pendingSeen ?? before.pendingSeen;
+        if (seen !== undefined && seen.length > 0) {
+            open.pendingSeen = seen;
         }
     }
 
@@ -336,7 +389,10 @@ export class Keyring {
 
     async handle(request: KeyringRequest): Promise<KeyringResponse<Op>> {
         await this.#load();
-        return isRelayed(request) ? await this.#relayed(request) : await this.#local(request);
+        if (isRelayed(request)) {
+            return await this.#relayed(request);
+        }
+        return isApp(request) ? await this.#app(request) : await this.#local(request);
     }
 
     // What this computer's own programs ask: its CLI, the desktop app, intentic-askpass.
@@ -367,9 +423,49 @@ export class Keyring {
             case "backend":
                 return await this.#lock(async () => await this.backend(request.config));
             case "askpass":
-                return await this.askpass(request.prompt, request.parent);
+                return await this.#askpass.askpass(request.prompt, request.parent);
+            case "git-credential":
+                return await this.#lock(async () => await this.#askpass.gitCredential(request.action, request.url, request.username));
             case "consent-upgrade":
                 return await this.consentUpgrade(request.version);
+        }
+    }
+
+    // The Passwords app's own ops on this computer (2026-10-19): its list's companions, its settings, its fills.
+    async #app(request: AppRequest): Promise<KeyringResponse<Op>> {
+        switch (request.op) {
+            case "capture-batch":
+                return await this.#lock(async () => await this.#captures.batch(request.items, request.from));
+            case "undo-capture":
+                return await this.#lock(async () => await this.#captures.undo(request.name, request.at));
+            case "seen":
+                return await this.#lock(async () => await this.#captures.seen(request.names));
+            case "reveal":
+                return await this.#appOps.reveal(request.name, request.version);
+            case "copy":
+                return await this.#appOps.copy(request.name, request.field, request.clearAfterSeconds);
+            case "history":
+                return await this.#appOps.history(request.name);
+            case "restore":
+                return await this.#lock(async () => await this.#appOps.restore(request.name, request.version));
+            case "settings": {
+                const phones = this.#file?.open.phones;
+                return phones === undefined ? { ok: true, settings: this.#appOps.settings() } : { ok: true, settings: this.#appOps.settings(), phones };
+            }
+            case "set-settings":
+                return await this.#lock(async () => await this.#appOps.setSettings(request.patch));
+            case "activity":
+                return await this.#appOps.activity(request.name, request.limit);
+            case "fill-window":
+                return await this.#lock(async () => await this.#fills.fillWindow(request.name));
+            case "fill-value":
+                return await this.#lock(async () => await this.#appOps.fillValue(request.origin, request.name));
+            case "candidates":
+                return this.#appOps.candidates(request.origin);
+            case "needs":
+                return this.#needs.needs();
+            case "answer-need":
+                return await this.#lock(async () => await this.#needs.answerNeed(request.id, request.answer, request.name, request.sealed, request.at));
         }
     }
 
@@ -394,6 +490,15 @@ export class Keyring {
                 return await this.#lock(async () => await this.syncOutbox());
             case "sync-deliver":
                 return await this.#lock(async () => await this.syncDeliver(request.deliver.items));
+            case "capture":
+                return await this.#lock(async () => await this.#captures.capture(request.item, request.sandbox));
+            // Not under the lock: a need may wait minutes on a person, and the vault's other ops must not wait with it.
+            case "need":
+                return await this.#needs.need(request.sandbox, request.need);
+            case "phone-pair":
+                return await this.#lock(async () => await this.#phones.pair(request.sandbox, request.phone));
+            case "phone-fill":
+                return await this.#lock(async () => await this.#phones.fill(request.sandbox, request.fill));
         }
     }
 
@@ -410,7 +515,11 @@ export class Keyring {
             locked: held === undefined,
             unlock: helloReady ? ["hello", "passphrase"] : ["passphrase"],
             pendingInbox: file?.open.pendingInbox.length ?? 0,
+            pendingCaptures: file?.open.pendingCaptures?.length ?? 0,
         };
+        if (file !== undefined) {
+            state.remember = (held === undefined ? file.open.settings : held.doc.settings)?.remember ?? DEFAULT_SETTINGS.remember;
+        }
         if (this.#unlocked !== undefined && held !== undefined) {
             state.unlockedUntil = this.#unlocked.until;
         }
@@ -453,10 +562,12 @@ export class Keyring {
             return refuse("locked", NOT_SET_UP);
         }
         const pending = file.open.pendingInbox;
+        const captured = file.open.pendingCaptures?.length ?? 0;
         const waiting = pending.length === 0 ? "" : ` Waiting to be taken in: ${pending.map((item) => `${item.item.name} from ${hostOf(item.item.sandbox)}`).join(", ")}.`;
+        const saving = captured === 0 ? "" : ` And save ${String(captured)} new ${captured === 1 ? "password" : "passwords"}.`;
         const opened = await this.#open(file, {
             title: "Unlock the Intentic keyring",
-            message: `For ${String(minutes)} minutes, entries shared "while you're here" go to their sandboxes without asking.${waiting}`,
+            message: `For ${String(minutes)} minutes, entries shared "while you're here" go to their sandboxes without asking.${waiting}${saving}`,
             person: true,
         });
         if ("ok" in opened) {
@@ -473,7 +584,9 @@ export class Keyring {
     // What arrived while locked: inbox items (named in the unlock prompt, so its yes takes them in) and sync items.
     async #takeInPending(opened: { doc: VaultDocument; key: Buffer }): Promise<void> {
         const file = this.#file;
-        if (file === undefined || (file.open.pendingInbox.length === 0 && file.open.pendingSync.length === 0)) {
+        const captures = file?.open.pendingCaptures ?? [];
+        const seen = file?.open.pendingSeen ?? [];
+        if (file === undefined || (file.open.pendingInbox.length === 0 && file.open.pendingSync.length === 0 && captures.length === 0 && seen.length === 0)) {
             return;
         }
         let doc = opened.doc;
@@ -486,13 +599,27 @@ export class Keyring {
             }
         }
         doc = this.#mergeSync(doc, file.open.pendingSync).doc;
-        await this.#commit({ doc, key: opened.key }, { pendingInbox: [], pendingSync: [] });
+        doc = seenIn(this.#captures.takeIn(doc, captures), new Set(seen));
+        await this.#commit({ doc, key: opened.key }, { pendingInbox: [], pendingSync: [], pendingCaptures: [], pendingSeen: [] });
     }
 
     list(): KeyringResponse<"list"> {
         const held = this.#held();
         const open = this.#file?.open;
-        const entries = held === undefined ? (open?.entries ?? []) : Object.values(held.doc.entries).filter((entry) => entry.deleted !== true).map(entryInfoOf);
+        if (held === undefined) {
+            return { ok: true, entries: open?.entries ?? [], backends: open?.backends ?? [] };
+        }
+        // Worked out here, from the values, while they are in memory anyway; only the verdict leaves.
+        const live = liveEntries(held.doc);
+        const health = healthOf(live);
+        const entries = live.map((entry) => {
+            const info = entryInfoOf(entry);
+            const verdict = health.get(entry.name);
+            if (verdict !== undefined) {
+                info.health = verdict;
+            }
+            return info;
+        });
         return { ok: true, entries, backends: open?.backends ?? [] };
     }
 
@@ -752,6 +879,7 @@ export class Keyring {
             target.target.kind === "relay"
                 ? seal(target.target.sealTo, value.value, { kind: "type", sandbox: grant.sandbox, secret: grant.secret, nonce: grant.nonce })
                 : seal(pin.seal, value.value, { kind: "release", sandbox: grant.sandbox, secret: grant.secret, nonce: grant.nonce });
+        await this.#markUsed(granted.opened, granted.entry);
         await this.#record({
             op: "release",
             outcome: "granted",
@@ -843,7 +971,19 @@ export class Keyring {
             return refuse("guard", onFile.verdict === "refuse" ? onFile.reason : "The entry on file differs from what this use was judged against: the sandbox asks again.");
         }
         const value = await this.#valueOf(granted.opened.doc, granted.entry);
-        return value.ok ? await this.#typeInto(place, seen, value.value, granted.opened.asked) : value;
+        if (!value.ok) {
+            return value;
+        }
+        const typed = await this.#typeInto(place, seen, value.value, granted.opened.asked);
+        if (typed.ok) {
+            await this.#markUsed(granted.opened, granted.entry);
+        }
+        return typed;
+    }
+
+    // An entry handed out or typed: when, for the app's "last used", and proof that a captured value works.
+    async #markUsed(opened: Opened, entry: StoredEntry): Promise<void> {
+        await this.#commit({ doc: withEntry(opened.doc, usedEntry(entry, this.deps.now())), key: opened.key });
     }
 
     // Types after looking again when a prompt took the keyboard for a moment: the window the person said yes to must be
@@ -1038,43 +1178,6 @@ export class Keyring {
     }
 
     // ---- this computer's own programs ----
-
-    async askpass(prompt: string, parent: string | undefined): Answer<"askpass"> {
-        const file = this.#file;
-        if (file === undefined) {
-            return refuse("locked", NOT_SET_UP);
-        }
-        const question = parseAskpassPrompt(prompt);
-        const shown = file.open.entries.find((entry) => askpassMatch(question, entry.askpass) !== undefined);
-        const matcher = shown === undefined ? undefined : askpassMatch(question, shown.askpass);
-        if (shown === undefined || matcher === undefined) {
-            return refuse("unknown", `No keyring entry answers "${question.prompt}": \`intentic-machine keyring edit NAME --askpass ${question.matchers[0] ?? "prompt:…"}\` adds one.`);
-        }
-        if (question.wants === "username") {
-            return shown.username === undefined ? refuse("unknown", `${shown.name} has no user name to answer with.`) : { ok: true, value: shown.username };
-        }
-        const now = this.deps.now();
-        const remembered = this.#held() !== undefined && rememberedFresh(this.#remembered.get(matcher), shown.askpassRememberMinutes, now);
-        const asker = parent ?? "A program";
-        const opened = await this.#open(file, { title: `Answer ${asker}'s prompt?`, message: `${asker} asks: "${question.prompt}". The keyring answers with ${shown.name}.`, person: !remembered });
-        if ("ok" in opened) {
-            await this.#record({ op: "askpass", outcome: "refused", code: opened.code, secret: shown.name, target: matcher });
-            return opened;
-        }
-        const entry = opened.doc.entries[shown.name];
-        if (entry === undefined || entry.deleted === true || askpassMatch(question, entry.rules.askpass) === undefined) {
-            return refuse("unknown", `No keyring entry answers "${question.prompt}".`);
-        }
-        const value = await this.#valueOf(opened.doc, entry);
-        if (!value.ok) {
-            return value;
-        }
-        if (entry.rules.askpassRememberMinutes > 0) {
-            this.#remembered.set(matcher, now);
-        }
-        await this.#record({ op: "askpass", outcome: "granted", secret: entry.name, target: matcher, asked: opened.asked, program: parent });
-        return { ok: true, value: value.value };
-    }
 
     async consentUpgrade(version: string): Answer<"consent-upgrade"> {
         const file = this.#file;

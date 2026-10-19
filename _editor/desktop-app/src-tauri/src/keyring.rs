@@ -1,16 +1,17 @@
-//! THE KEYRING ON THIS COMPUTER (2026-10-16): This device's Passwords group, through `intentic-machine keyring`.
+//! THE KEYRING ON THIS COMPUTER (2026-10-16): the Passwords view (src/passwords), through `intentic-machine keyring`.
 //!
 //! The vault itself is `intentic-keyring`, a process of its own beside the machine agent (_devices/keyring); this app
 //! never opens it. Every verb here runs the machine agent's `keyring` command with `--json`, the same producer the
 //! terminal uses, and hands its one line of JSON to the webview, which has the schema; restating it in Rust would be one
 //! more thing to keep in lockstep (the same reason `machine_report` passes the agent's status through raw).
 //!
-//! A SECRET NEVER GOES ON A COMMAND LINE. A value being added and the recovery passphrase of a new vault are written to
-//! the child's standard input and the pipe closed, never put in argv, where any process of this user could read it,
-//! never in an error, never in a log. The argument builders below are pure and tested to prove it: they are not handed
-//! the value at all. What reaches stdin is held in a [`Secret`], which zeroes its bytes when it is dropped.
+//! A SECRET NEVER GOES ON A COMMAND LINE. Everything the Passwords app sends for `keyring app <op>` (a value being saved,
+//! a row of an import, a value typed once for an agent's request) is one JSON object written to the child's standard
+//! input and the pipe closed, never put in argv, where any process of this user could read it, never in an error, never
+//! in a log. The argument builders below are pure and tested to prove it: they are not handed the input at all. What
+//! reaches stdin is held in a [`Secret`], which zeroes its bytes when it is dropped.
 //!
-//! Every change on the vault makes the keyring ask the person at this computer (Windows Hello, or its passphrase), so a
+//! Every change on the vault makes the keyring ask the person at this computer (Windows Hello, or polkit on Linux), so a
 //! call can wait on a person for as long as the keyring gives them: two minutes, and a little more here.
 
 use std::io::{Read, Write};
@@ -18,8 +19,6 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-
-use serde::Deserialize;
 
 use crate::scripts::{self, Host};
 
@@ -76,29 +75,6 @@ impl std::fmt::Debug for Secret {
     }
 }
 
-/// What the Add password form sends. The value is not in here: it travels on its own, to stdin.
-#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct NewEntry {
-    pub name: String,
-    /// `password` or `text`; absent is the keyring's own default.
-    #[serde(default)]
-    pub kind: Option<String>,
-    #[serde(default)]
-    pub programs: Vec<String>,
-    #[serde(default)]
-    pub packages: Vec<String>,
-    #[serde(default)]
-    pub hosts: Vec<String>,
-    #[serde(default)]
-    pub any_field: bool,
-    #[serde(default)]
-    pub username: Option<String>,
-    /// Write over an entry of that name rather than be refused.
-    #[serde(default)]
-    pub replace: bool,
-}
-
 /// A keyring entry's name, as `{{secret:NAME}}` carries it: a letter or underscore, then letters, digits, `_`, `.` or
 /// `-`, 128 at most (sandbox-contract `KEYRING_NAME_RE`). Checked here because it rides argv, where a name like
 /// `--replace` would be read as a flag.
@@ -127,72 +103,10 @@ fn valid_word(what: &str, value: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn push_list(
-    args: &mut Vec<String>,
-    flag: &str,
-    what: &str,
-    values: &[String],
-) -> Result<(), String> {
-    for value in values {
-        valid_word(what, value)?;
-        args.push(flag.to_string());
-        args.push(value.trim().to_string());
-    }
-    Ok(())
-}
-
-/// `keyring add NAME --stdin …`: the value is read from stdin, so it is no argument here. Pure.
-pub fn add_args(entry: &NewEntry) -> Result<Vec<String>, String> {
-    valid_name(&entry.name)?;
-    let mut args = vec![
-        "keyring".to_string(),
-        "add".to_string(),
-        entry.name.clone(),
-        "--stdin".to_string(),
-    ];
-    if let Some(kind) = &entry.kind {
-        match kind.as_str() {
-            "password" | "text" => {
-                args.push("--kind".to_string());
-                args.push(kind.clone());
-            }
-            other => {
-                return Err(format!(
-                    "\"{other}\" is not a kind of entry: password or text."
-                ))
-            }
-        }
-    }
-    push_list(&mut args, "--program", "program", &entry.programs)?;
-    push_list(&mut args, "--package", "package", &entry.packages)?;
-    push_list(&mut args, "--host", "host", &entry.hosts)?;
-    if entry.any_field {
-        args.push("--any-field".to_string());
-    }
-    if let Some(username) = entry
-        .username
-        .as_deref()
-        .filter(|name| !name.trim().is_empty())
-    {
-        valid_word("username", username)?;
-        args.push("--username".to_string());
-        args.push(username.trim().to_string());
-    }
-    if entry.replace {
-        args.push("--replace".to_string());
-    }
-    args.push("--json".to_string());
-    Ok(args)
-}
-
-/// `keyring setup --passphrase-stdin`: the recovery passphrase is read from stdin. `hello` off asks the keyring to set
-/// up without Windows Hello, the passphrase alone unlocking it. Pure.
+/// `keyring setup [--no-hello]`: installs the protected service (one administrator prompt), enrols Windows Hello unless
+/// `hello` is off, and answers with the recovery key it made, once. Nothing is fed: there is no passphrase to choose. Pure.
 pub fn setup_args(hello: bool) -> Vec<String> {
-    let mut args = vec![
-        "keyring".to_string(),
-        "setup".to_string(),
-        "--passphrase-stdin".to_string(),
-    ];
+    let mut args = vec!["keyring".to_string(), "setup".to_string()];
     if !hello {
         args.push("--no-hello".to_string());
     }
@@ -257,7 +171,7 @@ pub fn unlock_args(minutes: Option<u32>) -> Vec<String> {
     args
 }
 
-/// A verb that takes nothing but `--json`: `status`, `list`, `lock`, `upgrade`, `harden`. Pure.
+/// A verb that takes nothing but `--json`: `status`, `list`, `lock`. Pure.
 pub fn plain_args(verb: &str) -> Vec<String> {
     vec![
         "keyring".to_string(),
@@ -266,19 +180,65 @@ pub fn plain_args(verb: &str) -> Vec<String> {
     ]
 }
 
-/// `keyring askpass install|uninstall|status`. Pure.
-pub fn askpass_args(action: &str) -> Result<Vec<String>, String> {
-    if !matches!(action, "install" | "uninstall" | "status") {
-        return Err(format!(
-            "\"{action}\" is not an askpass action: install, uninstall or status."
-        ));
-    }
+/// The Passwords app's verbs (`keyring app <op>`), each with how long it may take: one that may wait on the person at
+/// this computer (Show, Copy, a restore, a setting, an answer to an agent, an import, a source set up, a save) gets the
+/// consent limit, every other one is a read. Anything not on this list is refused before a process starts.
+pub const APP_OPS: &[(&str, bool)] = &[
+    ("reveal", true),
+    ("copy", true),
+    ("history", false),
+    ("restore", true),
+    ("undo", false),
+    ("seen", false),
+    ("settings", false),
+    ("set-settings", true),
+    ("activity", false),
+    ("needs", false),
+    ("answer-need", true),
+    ("save", true),
+    ("edit", true),
+    ("import", true),
+    ("sources", false),
+    ("setup-source", true),
+];
+
+/// How long `op` may run, or why it is no op at all.
+pub fn app_limit(op: &str) -> Result<Duration, String> {
+    APP_OPS
+        .iter()
+        .find(|(known, _)| *known == op)
+        .map(|(_, asks)| if *asks { CONSENT_LIMIT } else { READ_LIMIT })
+        .ok_or_else(|| format!("\"{op}\" is not something Passwords can ask of this computer."))
+}
+
+/// `keyring app <op> --json`: the op's input is read from stdin, so it is no argument here. Pure.
+pub fn app_args(op: &str) -> Result<Vec<String>, String> {
+    app_limit(op)?;
     Ok(vec![
         "keyring".to_string(),
-        "askpass".to_string(),
-        action.to_string(),
+        "app".to_string(),
+        op.to_string(),
         "--json".to_string(),
     ])
+}
+
+/// Where `intentic://passwords[?entry=NAME]` takes the main window: the Passwords view, at the password named. The name
+/// has been held to a keyring name's shape by the link (setup_link.rs), so it needs no escaping beyond the query's. Pure.
+pub fn passwords_route(entry: Option<&str>) -> String {
+    match entry {
+        Some(name) => {
+            let query = url::form_urlencoded::Serializer::new(String::new())
+                .append_pair("item", name)
+                .finish();
+            format!("/passwords?{query}")
+        }
+        None => "/passwords".to_string(),
+    }
+}
+
+/// The hosted editor's "Manage on this computer": the main window in front, on Passwords.
+pub fn on_link(app: &tauri::AppHandle, entry: Option<&str>) {
+    crate::windows::show_home_route(app, &passwords_route(entry));
 }
 
 /// What one run printed, and how it ended.
@@ -454,18 +414,19 @@ pub async fn keyring_list() -> CommandResult<String> {
     blocking(|| run_present(plain_args("list"), None, READ_LIMIT)).await
 }
 
-/// A new vault, its recovery passphrase on stdin.
+/// A new protected vault: one administrator prompt, Windows Hello, and the recovery key in the answer, shown once.
 #[tauri::command]
-pub async fn keyring_setup(passphrase: String, hello: bool) -> CommandResult<String> {
-    let secret = Secret::from(passphrase);
-    blocking(move || run_present(setup_args(hello), Some(secret), CONSENT_LIMIT)).await
+pub async fn keyring_setup(hello: bool) -> CommandResult<String> {
+    blocking(move || run_present(setup_args(hello), None, CONSENT_LIMIT)).await
 }
 
-/// One entry added, its value on stdin.
+/// One of the Passwords app's verbs, its input as one JSON object on stdin.
 #[tauri::command]
-pub async fn keyring_add(entry: NewEntry, value: String) -> CommandResult<String> {
-    let secret = Secret::from(value);
-    blocking(move || run_present(add_args(&entry)?, Some(secret), CONSENT_LIMIT)).await
+pub async fn keyring_app(op: String, input: serde_json::Value) -> CommandResult<String> {
+    let limit = app_limit(&op)?;
+    let args = app_args(&op)?;
+    let secret = Secret::from(input.to_string());
+    blocking(move || run_present(args, Some(secret), limit)).await
 }
 
 #[tauri::command]
@@ -493,108 +454,54 @@ pub async fn keyring_lock() -> CommandResult<String> {
     blocking(|| run_present(plain_args("lock"), None, READ_LIMIT)).await
 }
 
-/// `keyring askpass install|uninstall|status`: whether ssh, sudo and git ask the keyring for their passwords.
-#[tauri::command]
-pub async fn keyring_askpass(action: String) -> CommandResult<String> {
-    blocking(move || run_present(askpass_args(&action)?, None, CONSENT_LIMIT)).await
-}
-
-/// `keyring harden` (Windows): moves the vault under its own Windows service, one UAC prompt.
-#[tauri::command]
-pub async fn keyring_harden() -> CommandResult<String> {
-    blocking(|| run_present(plain_args("harden"), None, CONSENT_LIMIT)).await
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     const VALUE: &str = "hunter2-correct-horse";
 
-    fn entry() -> NewEntry {
-        NewEntry {
-            name: "VPN_PASSWORD".to_string(),
-            kind: Some("password".to_string()),
-            programs: vec!["FortiClient.exe".to_string()],
-            packages: vec!["com.fortinet.forticlient".to_string()],
-            hosts: vec!["vpn.example.com".to_string()],
-            any_field: true,
-            username: Some("ann".to_string()),
-            replace: true,
-        }
-    }
-
-    /// The value is read from stdin: the builder is never handed it, and nothing it builds could carry it.
+    /// Whatever an op is sent rides stdin: the builder is never handed it, and nothing it builds could carry it.
     #[test]
-    fn an_added_value_never_reaches_the_command_line() {
-        let args = add_args(&entry()).expect("a valid entry");
-        assert_eq!(
-            args,
-            [
-                "keyring",
-                "add",
-                "VPN_PASSWORD",
-                "--stdin",
-                "--kind",
-                "password",
-                "--program",
-                "FortiClient.exe",
-                "--package",
-                "com.fortinet.forticlient",
-                "--host",
-                "vpn.example.com",
-                "--any-field",
-                "--username",
-                "ann",
-                "--replace",
-                "--json"
-            ]
-        );
+    fn an_apps_input_never_reaches_the_command_line() {
+        let args = app_args("save").expect("a known op");
+        assert_eq!(args, ["keyring", "app", "save", "--json"]);
         assert!(args.iter().all(|arg| !arg.contains(VALUE)));
-        // A setup's passphrase goes the same way.
-        assert_eq!(
-            setup_args(true),
-            ["keyring", "setup", "--passphrase-stdin", "--json"]
-        );
+        // A setup is fed nothing: the recovery key is made by the keyring and comes back in its answer.
+        assert_eq!(setup_args(true), ["keyring", "setup", "--json"]);
         assert_eq!(
             setup_args(false),
-            [
-                "keyring",
-                "setup",
-                "--passphrase-stdin",
-                "--no-hello",
-                "--json"
-            ]
+            ["keyring", "setup", "--no-hello", "--json"]
         );
     }
 
-    /// Argv has no shell to escape, but the agent's parser reads a leading dash as a flag: a name or list value that
-    /// starts with one is refused rather than becoming `--replace`.
+    /// Only the app's own verbs run, each with its limit: the ones that may wait on a person get the consent limit.
     #[test]
-    fn nothing_from_the_form_can_become_a_flag() {
-        assert!(add_args(&NewEntry {
-            name: "--replace".to_string(),
-            ..entry()
-        })
-        .is_err());
-        assert!(add_args(&NewEntry {
-            programs: vec!["--any-field".to_string()],
-            ..entry()
-        })
-        .is_err());
-        assert!(add_args(&NewEntry {
-            hosts: vec!["vpn.example.com\n--replace".to_string()],
-            ..entry()
-        })
-        .is_err());
-        assert!(add_args(&NewEntry {
-            kind: Some("secret".to_string()),
-            ..entry()
-        })
-        .is_err());
+    fn only_the_apps_own_verbs_run() {
+        for op in ["--json", "harden", "add", "", "reveal --all", "../x"] {
+            assert!(app_args(op).is_err(), "{op}");
+        }
+        assert_eq!(app_limit("reveal"), Ok(CONSENT_LIMIT));
+        assert_eq!(app_limit("import"), Ok(CONSENT_LIMIT));
+        assert_eq!(app_limit("activity"), Ok(READ_LIMIT));
+        assert_eq!(app_limit("needs"), Ok(READ_LIMIT));
+    }
+
+    #[test]
+    fn a_link_to_one_password_lands_on_it() {
+        assert_eq!(passwords_route(None), "/passwords");
+        assert_eq!(
+            passwords_route(Some("GITHUB_COM")),
+            "/passwords?item=GITHUB_COM"
+        );
+    }
+
+    /// Argv has no shell to escape, but the agent's parser reads a leading dash as a flag: a name or sandbox that
+    /// starts with one is refused rather than becoming one.
+    #[test]
+    fn nothing_from_the_app_can_become_a_flag() {
+        assert!(share_args("--replace", "https://ann.intentic.dev", "copy").is_err());
         assert!(share_args("VPN_PASSWORD", "--mode", "copy").is_err());
         assert!(share_args("VPN_PASSWORD", "https://ann.intentic.dev", "always").is_err());
-        assert!(askpass_args("--json").is_err());
         assert_eq!(
             share_args("VPN_PASSWORD", " https://ann.intentic.dev ", "each-use").expect("valid"),
             [

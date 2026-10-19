@@ -9,3 +9,5 @@ export * from "../protocol/doors/webext-protocol.js";
 export * from "../schemas/webext.js";
 export * from "../schemas/loopback-catch.js";
 export * from "../schemas/peer-enrollment.js";
+// What the extension says to `intentic-keyring native-host` (the Passwords app's browser capture and fill).
+export * from "../schemas/keyring-native.js";

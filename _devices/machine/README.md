@@ -870,16 +870,28 @@ version, file time) and the `IC_*`/`INTENTIC_*` variables in the agent's environ
 
 ### The keyring
 
-[intentic-keyring](../keyring) is a process of its own beside this agent (2026-10-16): the agent installs it, keeps
-it running and relays to it, and holds no vault key and no value. `intentic-machine keyring setup` puts the
-`intentic-keyring` asset of this agent's own release into `bin/` (checked against the release's signed `SHA256SUMS`, as
-the launcher is; a from-source agent copies `_devices/keyring/dist-bin`'s build instead), makes `intentic-askpass` a
-hard link beside it, registers a login entry of its own (`keyring`, `IntenticKeyring` on Windows, running
-`intentic-keyring serve`), starts it, and sets up the vault with a passphrase typed twice without echo (or once on
-stdin with `--passphrase-stdin`), plus Windows Hello where there is one unless `--no-hello`. Nothing in the agent's
-own upgrade, its `bin/` sweep or its rollback touches the keyring's files: it moves to a new release only through
-`keyring upgrade`, which downloads and checks the new binary, asks the running keyring (which asks the person), and only
-then swaps it, keeping `.previous` and putting it back if the new one does not answer.
+[intentic-keyring](../keyring), the vault behind Passwords, is a process of its own beside this agent (2026-10-16):
+the agent installs it, keeps it running and relays to it, and holds no vault key and no value. Since 2026-10-19 it has
+one mode, the protected service: the vault is held by a system account of its own (`LOCAL SERVICE` from a startup task
+on Windows, the `intentic-keyring` user from the systemd unit `intentic-keyring@<uid>` on Linux), and what starts at
+sign-in is its session helper. `intentic-machine keyring setup` puts the `intentic-keyring` asset of this agent's own
+release into `bin/` (checked against the release's signed `SHA256SUMS`, as the launcher is; a from-source agent copies
+`_devices/keyring/dist-bin`'s build instead), makes `intentic-askpass` a hard link beside it, asks for an
+administrator's yes once (UAC on Windows, `pkexec` on Linux) to run `intentic-keyring service install`, registers the
+helper's login entry (`keyring`, `IntenticKeyring` on Windows, running `intentic-keyring session`), starts it, and sets
+up the vault: it generates a recovery key (six groups of five Crockford base32 characters, 150 bits), sends it as the
+setup op's `passphrase`, and prints it once; it is never stored. Windows Hello is enrolled through the helper unless
+`--no-hello`; on Linux the daily unlock is a polkit yes. Without the administrator's yes setup stops with `declined`
+and "Passwords needs an administrator's approval once…", having changed nothing; on macOS, or a Linux without
+systemd, polkit or setfacl, it stops with `unavailable` before installing anything. A computer still on the per-user
+keyring from before (`intentic-keyring serve`, retired) is moved by `setup` or `upgrade`: the old keyring is stopped,
+`service install` carries `~/.intentic/keyring/vault.json` and its files into the service's folder, and the login entry
+becomes the helper's. Its old passphrase still opens it where the recovery key would.
+
+Nothing in the agent's own upgrade, its `bin/` sweep or its rollback touches the keyring's files: it moves to a new
+release only through `keyring upgrade`, which downloads and checks the new binary, asks the running keyring (which asks
+the person), and only then swaps it, keeping `.previous` and putting it back if the new one does not answer; the new
+binary's `service install` then runs as an administrator, so the service's own copy follows.
 
 - **Relayed for the sandbox** ([`keyring/relay.ts`](src/keyring/relay.ts)): the contract's `keyring*` procedures go
   to the keyring's pipe and back, with the sandbox named from the link the call came in on (`shares`, `copies`) and an
@@ -891,12 +903,9 @@ then swaps it, keeping `.previous` and putting it back if the new one does not a
   1.5 s, the answer kept for 30 s ([`keyring/feature.ts`](src/keyring/feature.ts)).
 - **Marked**: what `run_command` and `app_start` start carries `INTENTIC_AGENT_COMMAND=1`, for the keyring's record
   and prompts. A hint, not a boundary: the agent's command can unset it.
-- **Hardened** (Windows, `keyring harden`): the plain keyring is stopped and its login entry removed first, so the
-  vault the service takes is the last one written; then one UAC prompt runs `intentic-keyring service install`, which
-  moves the vault under the startup task that runs the keyring as `LOCAL SERVICE` (the keyring's README says how), and
-  the login entry becomes `intentic-keyring session`. Hardened mode is read from the marker the install writes for this
-  user (`%ProgramData%\Intentic\Keyring\<SID>.hardened`). `keyring upgrade` on a hardened keyring also runs the new
-  binary's `service install`, elevated, so the service's own copy follows.
+- **Installed** is read from the marker `service install` writes for this user, which every user may read:
+  `%ProgramData%\Intentic\Keyring\<SID>.hardened` on Windows (named from when the service was an optional "hardened
+  mode"), `/var/lib/intentic-keyring/<uid>.installed` on Linux ([`keyring/service.ts`](src/keyring/service.ts)).
 - `status` and `doctor` show one keyring row (not installed, not running, not set up, locked or unlocked), and
   `status --json` and `doctor --json` carry it as `keyring: { installed, running, setUp, locked?, unlockedUntil?, version? }`.
 
@@ -907,8 +916,8 @@ it reaches the pipe.
 
 | Command | Success output |
 |---|---|
-| `keyring setup [--passphrase-stdin] [--no-hello]` | `{ "ok": true, "path", "askpass": { "installed", "path"? }, "autostart", "setUp": true, "alreadySetUp", "state"? }` |
-| `keyring status` | `{ "ok": true, "installed", "running", "setUp", "state"?, "askpass": { "installed", "path"? }, "hardened" }` |
+| `keyring setup [--no-hello]` | `{ "ok": true, "path", "askpass": { "installed", "path"? }, "autostart", "setUp": true, "alreadySetUp", "recoveryKey"?, "state"? }` (`recoveryKey` only when this run made the vault) |
+| `keyring status` | `{ "ok": true, "installed", "running", "setUp", "state"?, "askpass": { "installed", "path"? }, "support": { "canSetUp", "why"?, "hello", "platform" } }` |
 | `keyring unlock [--minutes N]` / `keyring lock` | `{ "ok": true, "unlockedUntil" }` / `{ "ok": true }` |
 | `keyring list` | `{ "ok": true, "entries": [EntryInfo], "backends" }` |
 | `keyring add NAME [--stdin] [rules] [--backend B --ref R [--field F] [--attribute A]] [--replace]` | `{ "ok": true, "name" }` |
@@ -920,8 +929,7 @@ it reaches the pipe.
 | `keyring askpass install\|uninstall\|status` | `{ "ok": true, "installed", "path"?, "variables", "file"?, "profile"? }` |
 | `keyring sync status` | `{ "ok": true, "sync": { "key", "peers", "revision" } }` |
 | `keyring upgrade` | `{ "ok": true, "upgraded", "from", "to" }` |
-| `keyring harden` (Windows) | `{ "ok": true, "service": "IntenticKeyring", "autostart" }` |
-| `keyring uninstall` | `{ "ok": true, "removed", "vault", "hardened" }` |
+| `keyring uninstall` | `{ "ok": true, "removed", "vault", "service" }` |
 
 The rule flags are `--kind password|text`, `--program P`, `--package P`, `--host H`, `--askpass M` (each repeatable;
 on `edit` a list flag replaces the whole list, and a lone `""` empties it), `--username U`, `--remember-minutes N`, and
@@ -929,7 +937,8 @@ on `edit` a list flag replaces the whole list, and a lone `""` empties it), `--u
 value. `askpass install` sets `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE=prefer`, `SUDO_ASKPASS` and `GIT_ASKPASS` for the
 user: through `[Environment]::SetEnvironmentVariable` on Windows, and on Linux and macOS in
 `~/.config/environment.d/intentic-askpass.conf`, printing the `export` lines a shell profile needs. `keyring
-uninstall` keeps the vault in `~/.intentic/keyring`.
+uninstall` removes the service (an administrator's yes) and puts the vault back in `~/.intentic/keyring`, where it
+stays; set up again, the same recovery key opens it.
 
 ### Uninstall
 
@@ -952,7 +961,7 @@ person who runs it alone, and either way it never downloads anything.
   5. Windows' start before sign-in is removed (Windows asks for permission), and the resident agent is stopped with its
      login entry whatever it still served.
   6. The agent's Mutagen daemon is stopped and the ssh include removed, in case the sync step stopped early.
-  7. The keyring goes with askpass (`keyring uninstall`). A hardened keyring needs an administrator's yes. If it is
+  7. The keyring goes with askpass (`keyring uninstall`). Its protected service needs an administrator's yes. If it is
      declined, the service stays, and so do `bin/` and the PATH entry, so the purge can be run again to finish it.
   8. What the agents before this one left goes: the `intentic-host` and `intentic-sync-mirror` login entries,
      `~/.intentic/host` and `~/.intentic/sync`, their `~/.local/bin` links, and the `intentic-link-watch` timer.

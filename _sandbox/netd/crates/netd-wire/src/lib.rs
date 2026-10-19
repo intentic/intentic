@@ -377,6 +377,14 @@ pub enum ToNode {
         #[ts(optional)]
         refused: Option<TunnelRefusal>,
     },
+    /// A line the person typed with echo off in one of the editor's own terminal sessions (`web-…`), after a
+    /// password-ish question: told once, on Enter, for the daemon to hand Passwords if the owner turned remembering on
+    /// for sandbox terminals (2026-10-19). Never logged on either side; netd keeps nothing of it after sending.
+    HiddenLine {
+        session: String,
+        prompt: String,
+        value: String,
+    },
 }
 
 impl ToNode {

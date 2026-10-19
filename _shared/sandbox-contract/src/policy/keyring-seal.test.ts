@@ -1,5 +1,24 @@
-import type { KeyringGrant } from "../schemas/keyring.js";
-import { grantNonce, keyFingerprint, newSealKeyPair, newSignKeyPair, seal, signGrant, unseal, verifyGrant } from "./keyring-seal.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { packageRoot } from "@intentic/constants/node";
+import type { KeyringGrant, SealedBox } from "../schemas/keyring.js";
+import { SealedBoxSchema } from "../schemas/keyring.js";
+import { grantNonce, keyFingerprint, newSealKeyPair, newSignKeyPair, seal, sealWithEphemeral, signGrant, unseal, verifyGrant, type SealPurpose } from "./keyring-seal.js";
+
+const goldenPath = join(packageRoot(import.meta.url), "golden", "keyring-seal.json");
+const golden = JSON.parse(readFileSync(goldenPath, "utf8")) as {
+    recipient: { publicKey: string; privateKey: string };
+    phone: { publicKey: string; privateKey: string };
+    vectors: Array<{
+        name: string;
+        plaintext: string;
+        purpose: SealPurpose;
+        ephemeral: { publicKey: string; privateKey: string };
+        iv: string;
+        box: SealedBox;
+    }>;
+    unseal: { phonePlaintext: string; phonePurpose: SealPurpose };
+};
 
 const SANDBOX = "https://a1b2c3d4e5f6.intentic.dev";
 
@@ -90,4 +109,20 @@ describe("grants", () => {
 
 test("fingerprints read in groups of four", () => {
     expect(keyFingerprint(newSealKeyPair().publicKey)).toMatch(/^[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$/u);
+});
+
+describe("golden vectors (shared with the Android app)", () => {
+    test.each(golden.vectors)("$name seals to the golden box", ({ name, plaintext, purpose, ephemeral, iv, box }) => {
+        const recipient = name === "phone" ? golden.phone.publicKey : golden.recipient.publicKey;
+        const rebuilt = sealWithEphemeral(recipient, plaintext, purpose, ephemeral, Buffer.from(iv, "base64url"));
+        expect(rebuilt).toEqual(SealedBoxSchema.parse(box));
+    });
+
+    test("the phone opens the golden phone box", () => {
+        const phoneVector = golden.vectors.find((vector) => vector.name === "phone");
+        if (phoneVector === undefined) {
+            throw new Error("the golden file has no phone vector");
+        }
+        expect(unseal(golden.phone, phoneVector.box, phoneVector.purpose)).toBe(golden.unseal.phonePlaintext);
+    });
 });

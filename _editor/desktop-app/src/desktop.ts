@@ -1,7 +1,6 @@
 import { parseJsonOr } from "@intentic/base/json";
 import type { ResourcesForm } from "@intentic/ui";
 import type { DeviceReport, DeviceSandbox } from "@intentic/sandbox-contract/schemas/devices";
-import type { KeyringShareMode, KeyringSource, KeyringState } from "@intentic/sandbox-contract/schemas/keyring";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { LocalFirstTask, LocalFound } from "@intentic/web/local-host";
@@ -316,112 +315,6 @@ export const deviceStatus = async (): Promise<DeviceStatus | undefined> => {
 // Stop and start this device's agent loop — the two commands this window used to print for someone to type on the
 // computer it is running on. Resolves with whatever the agent itself said.
 export const deviceAgentRestart = (): Promise<string> => invoke(`machine_restart`);
-// THE KEYRING ON THIS COMPUTER (src-tauri/src/keyring.rs): `intentic-machine keyring … --json`, whose one line of JSON
-// is parsed here, as the agent's status is above. A refusal (`{"ok":false,…}`) is thrown as a KeyringRefusal carrying the
-// keyring's own sentence. A value or a passphrase goes to Rust as an argument of the call and from there to the agent's
-// standard input, never its command line.
-export interface KeyringStatus {
-    readonly installed: boolean;
-    readonly running: boolean;
-    readonly setUp: boolean;
-    /** Present once the vault is set up and the keyring answers. */
-    readonly state?: KeyringState;
-    readonly askpass: { readonly installed: boolean; readonly path?: string };
-    /** Whether the vault is under the keyring's own Windows account already (hardened mode). Absent from older agents. */
-    readonly hardened?: boolean;
-}
-export interface KeyringShare {
-    /** The sandbox, by its address or link id. */
-    readonly sandbox: string;
-    readonly machine: string;
-    readonly mode: KeyringShareMode;
-    readonly sharedAt: number;
-}
-export interface KeyringEntry {
-    readonly name: string;
-    readonly kind: `password` | `text`;
-    readonly programs: readonly string[];
-    readonly packages: readonly string[];
-    readonly hosts: readonly string[];
-    readonly anyField: boolean;
-    readonly username?: string;
-    readonly askpass: readonly string[];
-    readonly askpassRememberMinutes?: number;
-    readonly note?: string;
-    readonly source: KeyringSource;
-    readonly shares: readonly KeyringShare[];
-    readonly createdAt: number;
-    readonly updatedAt: number;
-}
-/** What the Add password form sends beside the value, as keyring.rs `NewEntry` reads it. */
-export interface NewKeyringEntry {
-    readonly name: string;
-    readonly kind: `password` | `text`;
-    readonly programs: readonly string[];
-    readonly packages: readonly string[];
-    readonly hosts: readonly string[];
-    readonly anyField: boolean;
-    readonly username?: string;
-    readonly replace?: boolean;
-}
-/** The keyring said no, in its own words; `code` says which no (`locked`, `declined`, `agent-too-old`, …). */
-export class KeyringRefusal extends Error {
-    constructor(
-        readonly code: string,
-        message: string,
-    ) {
-        super(message);
-        this.name = `KeyringRefusal`;
-    }
-}
-interface KeyringLine {
-    readonly ok: boolean;
-    readonly code?: string;
-    readonly refusal?: string;
-}
-const keyringAnswer = <T extends object>(raw: string): T => {
-    // SAFETY: keyring.rs hands over the agent's own `--json` line, which always carries `ok` (a refusal its `code` and
-    // `refusal`), and an `ok` line is the verb's own answer, shaped as the agent's keyring command documents it.
-    const line = JSON.parse(raw) as KeyringLine & T;
-    if (!line.ok) {
-        throw new KeyringRefusal(line.code ?? `refused`, line.refusal ?? `The keyring said no.`);
-    }
-    return line;
-};
-/** Undefined when this computer has no machine agent at all. */
-export const keyringStatus = async (): Promise<KeyringStatus | undefined> => {
-    const raw = await invoke<string | null>(`keyring_status`);
-    return raw === null ? undefined : keyringAnswer<KeyringStatus>(raw);
-};
-export const keyringList = async (): Promise<readonly KeyringEntry[]> =>
-    keyringAnswer<{ entries: readonly KeyringEntry[] }>(await invoke<string>(`keyring_list`)).entries;
-export const keyringSetup = async (passphrase: string, hello: boolean): Promise<void> => {
-    keyringAnswer<KeyringLine>(await invoke<string>(`keyring_setup`, { passphrase, hello }));
-};
-export const keyringAdd = async (entry: NewKeyringEntry, value: string): Promise<void> => {
-    keyringAnswer<KeyringLine>(await invoke<string>(`keyring_add`, { entry, value }));
-};
-export const keyringRemove = async (name: string): Promise<void> => {
-    keyringAnswer<KeyringLine>(await invoke<string>(`keyring_remove`, { name }));
-};
-export const keyringShare = async (name: string, sandbox: string, mode: KeyringShareMode): Promise<void> => {
-    keyringAnswer<KeyringLine>(await invoke<string>(`keyring_share`, { name, sandbox, mode }));
-};
-export const keyringUnshare = async (name: string, sandbox: string): Promise<void> => {
-    keyringAnswer<KeyringLine>(await invoke<string>(`keyring_unshare`, { name, sandbox }));
-};
-export const keyringUnlock = async (minutes?: number): Promise<void> => {
-    keyringAnswer<KeyringLine>(await invoke<string>(`keyring_unlock`, { minutes: minutes ?? null }));
-};
-export const keyringLock = async (): Promise<void> => {
-    keyringAnswer<KeyringLine>(await invoke<string>(`keyring_lock`));
-};
-export const keyringAskpass = async (action: `install` | `uninstall`): Promise<void> => {
-    keyringAnswer<KeyringLine>(await invoke<string>(`keyring_askpass`, { action }));
-};
-export const keyringHarden = async (): Promise<void> => {
-    keyringAnswer<KeyringLine>(await invoke<string>(`keyring_harden`));
-};
 // The workspace in the main window's place, at its root or a path under it: how This device reaches the workspace's
 // Devices tab for the same machine, and how a finished setup hands back.
 export const workspaceOpen = (path?: string): Promise<void> => invoke(`workspace_open`, { path: path ?? null });

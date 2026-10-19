@@ -26,6 +26,7 @@ import {
     SecretRevealSchema,
     SecretSetSchema,
 } from "../schemas/secrets.js";
+import { SandboxNeedsSchema, SandboxPasswordsActivitySchema, SandboxPasswordsSchema, SecretWantResultSchema, SecretWantSchema } from "../schemas/sandbox-passwords.js";
 import { OkSchema } from "../schemas/shared.js";
 
 // Credentials are the operating tier's, reads included: maintainer is the highest revokable grant, and no token's.
@@ -207,6 +208,44 @@ export const secretsContract = {
         .meta({ panel: false })
         .input(SandboxKeyringPairSchema)
         .output(SandboxKeyringPairResultSchema),
+    // An agent's need, by place rather than by name (schemas/sandbox-passwords.ts): the owner's keyrings match it and ask.
+    want: secretRoute
+        .route({
+            method: "POST",
+            path: "/secrets/want",
+            summary: "Ask the owner's computers for a credential by where it is used",
+            description:
+                "Asks each of the owner's computers with Passwords set up, most recently used first, for a credential that works at the place named (a site, a program, an ssh target, a git host). The person there is asked whether this sandbox may use it, and on what terms. Answers the name a reference uses once allowed, or that the answer is awaited in Passwords. Never a value.",
+        })
+        // The `secrets want` CLI and type_secret by place, on the agent token: it asks a person, and hands no value back.
+        .meta({ agent: true })
+        .input(SecretWantSchema)
+        .output(SecretWantResultSchema),
+    passwords: secretRoute
+        .route({
+            method: "GET",
+            path: "/secrets/passwords",
+            summary: "The passwords this sandbox may use",
+            description:
+                "Every entry the keyrings on the owner's computers share with this sandbox, where each works and how this sandbox may use it, and each computer's Passwords state. Names and places only, never values.",
+        })
+        .output(SandboxPasswordsSchema),
+    passwordNeeds: secretRoute
+        .route({
+            method: "GET",
+            path: "/secrets/passwords/needs",
+            summary: "Credentials this sandbox asked for that wait for an answer",
+            description: "The needs this sandbox raised (`secrets want`) that the owner has not answered yet, and on which computer each waits.",
+        })
+        .output(SandboxNeedsSchema),
+    passwordActivity: secretRoute
+        .route({
+            method: "GET",
+            path: "/secrets/passwords/activity",
+            summary: "This sandbox's uses of the owner's passwords",
+            description: "Each time this sandbox used a password one of the owner's keyrings keeps, newest first, from its own use ledger. Never a value.",
+        })
+        .output(SandboxPasswordsActivitySchema),
     // The credential gateway's say over one connection: how its credential reaches the agent, and what it may do there.
     policy: secretRoute
         .route({

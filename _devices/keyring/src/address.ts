@@ -24,7 +24,7 @@ export interface KeyringPaths {
 }
 
 // A short hash of this user's name: in the pipe's name, and in the Windows Hello credential's.
-export const userTag = (): string => createHash("sha256").update(userInfo().username.toLowerCase()).digest("hex").slice(0, 12);
+const userTag = (): string => createHash("sha256").update(userInfo().username.toLowerCase()).digest("hex").slice(0, 12);
 
 export const keyringAddress = (dir: string, platform: NodeJS.Platform = process.platform): string =>
     platform === "win32" ? `\\\\.\\pipe\\intentic-keyring-${userTag()}` : join(dir, "keyring.sock");

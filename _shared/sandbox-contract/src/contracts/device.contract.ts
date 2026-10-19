@@ -9,9 +9,16 @@ import { OkSchema } from "../schemas/shared.js";
 import { ProjectDeliveryResultSchema, ProjectDeliverySchema } from "../schemas/project-delivery.js";
 import { DialLoopbackSchema, StageArtifactResultSchema, StageArtifactSchema } from "../schemas/device-artifacts.js";
 import {
+    KeyringCaptureItemSchema,
+    KeyringCaptureResultSchema,
     KeyringCopiesSchema,
     KeyringInboxItemSchema,
     KeyringInboxResultSchema,
+    KeyringNeedResultSchema,
+    KeyringNeedSchema,
+    KeyringPhoneFillResultSchema,
+    KeyringPhoneKeysSchema,
+    KeyringPhonePairResultSchema,
     KeyringReleaseResultSchema,
     KeyringSharesSchema,
     KeyringSyncDeliverResultSchema,
@@ -23,6 +30,7 @@ import {
     KeyringTypeInputSchema,
     KeyringTypeResultSchema,
     SignedKeyringGrantSchema,
+    SignedKeyringPhoneFillSchema,
 } from "../schemas/keyring.js";
 
 // What a connected device can be asked, over the socket it opened; the machine is the oRPC server, the daemon the
@@ -76,4 +84,12 @@ export const deviceContract = {
     keyringSyncPair: oc.input(KeyringSyncPairSchema).output(KeyringSyncPairResultSchema),
     keyringSyncOutbox: oc.output(KeyringSyncOutboxSchema),
     keyringSyncDeliver: oc.input(KeyringSyncDeliverSchema).output(KeyringSyncDeliverResultSchema),
+    // The Passwords app (2026-10-19). A credential seen in this sandbox (a terminal prompt the person typed into) or on
+    // the owner's phone, sealed to the keyring's inbox key: kept when remembering is on for its source.
+    keyringCapture: oc.input(KeyringCaptureItemSchema).output(KeyringCaptureResultSchema),
+    // An agent's need, by where the credential is to be used: the keyring matches, asks the person, and shares.
+    keyringNeed: oc.input(KeyringNeedSchema).output(KeyringNeedResultSchema),
+    // The owner's phone, paired with this computer's keyring and filling its autofill, carried by this sandbox.
+    keyringPhonePair: oc.input(KeyringPhoneKeysSchema).output(KeyringPhonePairResultSchema),
+    keyringPhoneFill: oc.input(SignedKeyringPhoneFillSchema).output(KeyringPhoneFillResultSchema),
 };

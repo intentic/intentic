@@ -19,10 +19,13 @@ export interface AgentHome {
 // Bun fixes os.homedir() at startup; only the environment follows a HOME set later, which is how a test redirects it.
 export const homeDir = (): string => (process.platform === "win32" ? process.env["USERPROFILE"] : process.env["HOME"]) || homedir();
 
-export const agentHome = (name: string): AgentHome => {
-    const dir = join(homeDir(), ".intentic", name);
+/** `<home>/.intentic/<name>` for the account whose home that is: an installer running as root on a user's behalf. */
+export const agentHomeIn = (userHomeDir: string, name: string): AgentHome => {
+    const dir = join(userHomeDir, ".intentic", name);
     return { dir, configPath: join(dir, "config.json") };
 };
+
+export const agentHome = (name: string): AgentHome => agentHomeIn(homeDir(), name);
 
 // 0700 on the directory and 0600 on the file, re-applied on every write since neither mode tightens what already exists.
 export const writeSecretFile = async (path: string, dir: string, contents: string): Promise<void> => {

@@ -8,16 +8,16 @@ import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
 import { sandboxHeld } from "./device-secrets.js";
 import { KeyringPairRefused } from "./keyring-sync.js";
+import { createPasswordRoutes, type PasswordRoutesDeps } from "./passwords.routes.js";
 import { DETAIL_MAX } from "../secret-uses.js";
 
 // The owner's own doors to the keyrings on their computers: Type into… (one secret typed into whatever has focus on one
 // of them, after a countdown), the list of keyrings this sandbox reaches, and pairing two of them. Each is the owner's
-// alone, never the agent's: a typing goes wherever the cursor is, which only a person at that computer can aim.
+// alone, never the agent's: a typing goes wherever the cursor is, which only a person at that computer can aim. Beside
+// them, Passwords' own (passwords.routes.ts): an agent's need, and the hosted view's reads.
 
-export type DeviceSecretRoutesDeps = Pick<
-    Services,
-    "auth" | "deviceSecrets" | "keyringLink" | "keyringSync" | "logger" | "programGuardFor" | "secretRegistry" | "secretUses"
->;
+export type DeviceSecretRoutesDeps = PasswordRoutesDeps &
+    Pick<Services, "auth" | "deviceSecrets" | "keyringLink" | "keyringSync" | "logger" | "programGuardFor" | "secretRegistry" | "secretUses">;
 
 // How a keyring's refusal reads over HTTP: a person's no or a guard is forbidden, a busy or locked keyring a conflict to
 // retry, a keyring nobody can reach unavailable.
@@ -33,6 +33,7 @@ const STATUS = {
     guard: "FORBIDDEN",
     unavailable: "SERVICE_UNAVAILABLE",
     busy: "CONFLICT",
+    pending: "CONFLICT",
 } as const satisfies Readonly<Record<KeyringRefusalCode, string>>;
 
 export const createDeviceSecretRoutes = (services: DeviceSecretRoutesDeps) => {
@@ -69,6 +70,7 @@ export const createDeviceSecretRoutes = (services: DeviceSecretRoutesDeps) => {
         });
     };
     return {
+        ...createPasswordRoutes(services),
         typeInto: i.typeInto.handler(async ({ input, context, signal }) => {
             noteAudit({ target: input.key });
             await ensureOwner(services, context.headers);

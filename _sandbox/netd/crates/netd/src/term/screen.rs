@@ -10,7 +10,7 @@ pub const PANE_STATE_FORMAT: &str = concat!(
 );
 
 /// Where the client stands: `$3 %7 @2`, read back by `location`.
-pub const LOCATION_FORMAT: &str = "#{session_id} #{pane_id} #{window_id}";
+pub const LOCATION_FORMAT: &str = "#{session_id} #{pane_id} #{window_id} #{pane_tty}";
 
 const STATE_FIELDS: usize = 21;
 
@@ -80,6 +80,8 @@ pub struct PaneLocation {
     pub session: String,
     pub pane: String,
     pub window: String,
+    /// The pane's terminal, `/dev/pts/3`, where it said one (hidden.rs asks it whether echo is off).
+    pub tty: Option<String>,
 }
 
 fn is_id(value: &str, sigil: char) -> bool {
@@ -92,10 +94,15 @@ fn is_id(value: &str, sigil: char) -> bool {
 pub fn location(line: &str) -> Option<PaneLocation> {
     let mut fields = line.trim().split(' ');
     let (session, pane, window) = (fields.next()?, fields.next()?, fields.next()?);
+    let tty = fields
+        .next()
+        .filter(|tty| tty.starts_with("/dev/"))
+        .map(str::to_owned);
     (is_id(session, '$') && is_id(pane, '%') && is_id(window, '@')).then(|| PaneLocation {
         session: session.to_owned(),
         pane: pane.to_owned(),
         window: window.to_owned(),
+        tty,
     })
 }
 
@@ -236,8 +243,15 @@ mod tests {
             Some(PaneLocation {
                 session: "$3".into(),
                 pane: "%7".into(),
-                window: "@2".into()
+                window: "@2".into(),
+                tty: None,
             })
+        );
+        assert_eq!(
+            location("$3 %7 @2 /dev/pts/4")
+                .and_then(|at| at.tty)
+                .as_deref(),
+            Some("/dev/pts/4")
         );
         assert_eq!(location(""), None);
         assert_eq!(location("can't find window: @9"), None);

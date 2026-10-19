@@ -9,6 +9,7 @@ import { turnRunOf } from "../conversations/actor/conversation-holdings.js";
 import { createExtensionMcpEndpoint, createExtensionToolsEndpoint } from "../extensions/backend/extension-mcp.js";
 import { HOST_PEER, hostPeerRoutes } from "../hosts/host-peer.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
+import { createPhonePasswordsRoutes } from "../phones/phone-passwords.routes.js";
 import { createPhoneWakeRoute, PHONE_PEER, phonePeerRoutes } from "../phones/phone-peer.js";
 import { RUNNER_PEER, runnerPeerRoutes } from "../runners/runner-peer.js";
 import { WEBEXT_PEER, webextPeerRoutes } from "../webext/webext-peer.js";
@@ -40,6 +41,8 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
         ...peerRouteTable(PHONE_PEER, phoneRoutes),
         // The editor hands over the push-relay channel it registered for a phone, which is what lets a call wake it.
         "POST /system/phones/{id}/wake": createPhoneWakeRoute(services),
+        // The phone's autofill, saving to and filling from the owner's keyrings, on its own enrollment token.
+        ...createPhonePasswordsRoutes({ phones: services.phones, link: services.keyringLink, pairings: services.phonePairings }),
         ...peerRouteTable(RUNNER_PEER, runnerPeerRoutes(services)),
         // Every MCP server a turn mounted in this daemon, behind one door: its browser routers, the machines and browsers
         // it was granted (their peer bridges), and its extension cards' endpoints on the backend host.

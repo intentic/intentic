@@ -34,6 +34,7 @@
         "@intentic/ext-git-history": "workspace:*",
         "@intentic/ext-onlyoffice": "workspace:*",
         "@intentic/ext-pipelines": "workspace:*",
+        "@intentic/ext-passwords": "workspace:*",
         "@intentic/ext-preview": "workspace:*",
         "@intentic/ext-repo-apps": "workspace:*",
         "@intentic/ext-viewers": "workspace:*",

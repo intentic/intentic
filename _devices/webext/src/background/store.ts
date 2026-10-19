@@ -20,6 +20,8 @@ const KEY_DECLINED = "declined";
 const KEY_SETTINGS = "settings";
 const KEY_PROMPTED = "prompted";
 const KEY_APPROVAL = "approval";
+const KEY_PASSWORDS = "passwordsOn";
+const KEY_NEVER_SAVE = "passwordsNeverHosts";
 
 const KeptApprovalSchema = object({ tabId: number(), url: string(), what: string(), at: number() });
 
@@ -172,6 +174,15 @@ export const store = {
     // reaches. One at a time: it is for the retry of the action that just failed, not a stock of answers.
     keepApproval: async (approval: KeptApproval): Promise<void> => await chrome.storage.local.set({ [KEY_APPROVAL]: approval }),
     // Spends the kept yes if it answers `wanted`; one that doesn't is left for its own retry until it expires.
+    passwordsEnabled: async (): Promise<boolean> =>
+        await read(KEY_PASSWORDS, false, (raw) => (typeof raw === "boolean" ? raw : undefined)),
+    setPasswordsEnabled: async (on: boolean): Promise<void> =>
+        on ? await chrome.storage.local.set({ [KEY_PASSWORDS]: true }) : await chrome.storage.local.remove([KEY_PASSWORDS]),
+
+    neverSaveHosts: async (): Promise<string[]> =>
+        await read<string[]>(KEY_NEVER_SAVE, [], (raw) => (Array.isArray(raw) ? raw.filter((h) => typeof h === "string") : undefined)),
+    setNeverSaveHosts: async (hosts: string[]): Promise<void> => await chrome.storage.local.set({ [KEY_NEVER_SAVE]: hosts }),
+
     takeApproval: async (wanted: Omit<KeptApproval, "at">, now: number): Promise<boolean> => {
         const kept = await read<KeptApproval | undefined>(KEY_APPROVAL, undefined, (raw) => {
             const parsed = KeptApprovalSchema.safeParse(raw);

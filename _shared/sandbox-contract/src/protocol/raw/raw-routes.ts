@@ -204,6 +204,11 @@ export const RAW_ROUTES = {
     "GET /system/phones/connect": { auth: "door", beforeBoot: true, control: "never" },
     // The editor hands over the push-relay channel it registered for a phone, so the sandbox can wake it.
     "POST /system/phones/{id}/wake": { control: "never" },
+    // The phone as Android's autofill service (schemas/phone-passwords.ts): each checks the phone's enrollment token itself.
+    "GET /system/phones/passwords/keyrings": { auth: "door", control: "never" },
+    "POST /system/phones/passwords/pair": { auth: "door", control: "never" },
+    "POST /system/phones/passwords/capture": { auth: "door", control: "never" },
+    "POST /system/phones/passwords/fill": { auth: "door", control: "never" },
     "POST /system/runners/pair": { control: "never" },
     "POST /system/runners/enroll": { auth: "door", control: "never" },
     "GET /system/runners": { control: "never" },

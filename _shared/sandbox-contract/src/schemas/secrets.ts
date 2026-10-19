@@ -257,6 +257,10 @@ export const SandboxKeyringSchema = z.object({
     machine: z.string().describe("The computer, by its device card."),
     online: z.boolean().describe("Whether it answers now."),
     locked: z.boolean().optional().describe("Whether its keyring is locked, as last heard. Absent while offline."),
+    setUp: z
+        .boolean()
+        .optional()
+        .describe("Whether its keyring answers with a vault this sandbox trusts, so a value can be kept there. Absent while offline, and from a daemon older than 2026-10-19."),
     version: z.string().optional().describe("The keyring's release, as last heard."),
     pendingInbox: z.number().int().nonnegative().optional().describe("Values sent to be kept there that wait for its next unlock."),
     shared: z.number().int().nonnegative().describe("How many of its entries are shared with this sandbox."),

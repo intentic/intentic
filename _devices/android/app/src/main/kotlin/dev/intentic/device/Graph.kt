@@ -20,6 +20,7 @@ import dev.intentic.device.platform.KeystoreKey
 import dev.intentic.device.platform.Notifier
 import dev.intentic.device.platform.SafFiles
 import dev.intentic.device.platform.ScreenSession
+import dev.intentic.device.passwords.PasswordsHub
 import dev.intentic.device.policy.Gate
 import dev.intentic.device.policy.ScopeStore
 import dev.intentic.device.protocol.JsonRpcPeer
@@ -103,6 +104,8 @@ object Graph {
     val watch: Boolean get() = form == Form.WATCH
     lateinit var link: LinkController
         private set
+    lateinit var passwords: PasswordsHub
+        private set
 
     fun init(application: Application) {
         app = application
@@ -110,6 +113,7 @@ object Graph {
         val kv = PrefsKeyValue(application.getSharedPreferences("intentic_device", Context.MODE_PRIVATE))
         settings = Settings(kv)
         pairings = PairingStore(kv, AesGcmBox { KeystoreKey.get() })
+        passwords = PasswordsHub.boxFrom(kv) { KeystoreKey.get() }
         scopes = ScopeStore(kv)
         folders = FolderStore(kv)
         allowList = AppAllowList(kv)

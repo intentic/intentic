@@ -1,9 +1,12 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../engines/claude-sdk.js";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
+import type { KeyringOrigin } from "@intentic/sandbox-contract/schemas/keyring";
 import { z } from "zod";
 import { opt } from "../../opt.js";
+import type { SecretWantResult } from "@intentic/sandbox-contract/schemas/sandbox-passwords";
 import type { DesktopTypist } from "../../desktop/desktop-secret-typing.js";
+import type { NeedRequest } from "../../secrets/device/keyring-needs.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import { secretReference } from "../../secrets/secret-registry.js";
 import type { SecretTickets } from "../../webext/secret-tickets.js";
@@ -45,6 +48,8 @@ export interface SecretsToolsDeps {
     // The owner's own browsers this turn has mounted (webext cards), and the ticket door their extension redeems at.
     readonly ownBrowsers?: readonly string[];
     readonly tickets?: Pick<SecretTickets, "typeIn">;
+    // An agent's need by place (keyring-needs.ts): how `for` finds the entry to type when no name is given.
+    readonly needs?: (need: NeedRequest) => Promise<SecretWantResult>;
     readonly conversationId?: string;
     readonly signal?: AbortSignal;
 }
@@ -63,10 +68,20 @@ const placesOf = (deps: SecretsToolsDeps): readonly string[] => [
 const descriptionOf = (deps: SecretsToolsDeps): string =>
     "Type a stored secret where it is needed: the FOCUSED field or window of the place you name. You never see the value, and nothing you can read " +
     "afterwards shows it: put the cursor in the field with that place's own tools first, then call this with the secret's name (the same name " +
-    "`{{secret:name}}` masking shows you). What comes back is where it went (the program or site, whether the field was a password field, whether " +
+    "`{{secret:name}}` masking shows you), or, when you do not know its name, with `for` naming the site or program it is for: the owner's " +
+    "Passwords finds the one that fits and asks them first (a page's own host is used over the site you give). What comes back is where it went (the program or site, whether the field was a password field, whether " +
     "a person was asked). Typing on one of the owner's computers is done by the keyring there, which checks the window against the secret's list " +
     "of programs and may ask the person at that computer. Only user-kept secrets are typeable; an account's own password stays with " +
     `type_credential. Places this turn reaches: ${placesOf(deps).join("; ")}.`;
+
+const hostOfPage = (url: string): string | undefined => {
+    try {
+        return new URL(url).host || undefined;
+    } catch {
+        // allow(silent-catch): a page with no address to read a host from
+        return undefined;
+    }
+};
 
 // A sandbox browser's page: the one place the value is typed from this process, through the page's own keyboard.
 const typeOnPage = async (deps: SecretsToolsDeps, secret: TypeableSecret, browser: string | undefined) => {
@@ -81,13 +96,7 @@ const typeOnPage = async (deps: SecretsToolsDeps, secret: TypeableSecret, browse
     if (!(await focusedEditable(page))) {
         return fail("no text field is focused on the page: browser_click the field first, then call this again");
     }
-    const host = ((): string => {
-        try {
-            return new URL(page.url()).host;
-        } catch {
-            return "the current page";
-        }
-    })();
+    const host = hostOfPage(page.url()) ?? "the current page";
     // Approval gate before the keystrokes, since a typed value can't be undone; asked with the host as destination,
     // which a host-limited secret's list is checked against.
     const released = await deps.secrets.release([secret.name], "browser", host, { kind: "page", url: page.url(), tool: TYPE_SECRET_TOOL });
@@ -106,7 +115,8 @@ const typeOnPage = async (deps: SecretsToolsDeps, secret: TypeableSecret, browse
 };
 
 interface TypeInput {
-    readonly name: string;
+    readonly name?: string | undefined;
+    readonly for?: { readonly site: string } | { readonly program: string } | undefined;
     readonly where?: string | undefined;
     readonly browser?: string | undefined;
     readonly phone?: string | undefined;
@@ -154,16 +164,61 @@ const typeAt = async (deps: SecretsToolsDeps, secret: TypeableSecret, input: Typ
     return fail(`"${where}" is not a place this turn can type into. It is one of: ${places.length === 0 ? "nowhere: this turn reaches no browser, desktop or computer" : places.join("; ")}`);
 };
 
+// Where `for` points, the page's own host first: the place being typed into is the one the person is asked about.
+const wantedOrigin = (deps: SecretsToolsDeps, input: TypeInput, where: string): KeyringOrigin | undefined => {
+    const owner = where === PAGE ? deps.accounts[input.browser ?? "web"] : undefined;
+    const url = owner === undefined ? undefined : browserAccountPage(owner)?.url();
+    const pageHost = url === undefined ? undefined : hostOfPage(url);
+    if (pageHost !== undefined) {
+        return { kind: "site", host: pageHost };
+    }
+    const wanted = input.for;
+    if (wanted === undefined) {
+        return undefined;
+    }
+    return "site" in wanted ? { kind: "site", host: wanted.site } : { kind: "program", program: wanted.program };
+};
+
+// The name to type: the one given, or the entry the owner's Passwords allowed for the place `for` names.
+const nameFor = async (deps: SecretsToolsDeps, input: TypeInput, where: string): Promise<{ readonly name: string } | { readonly refusal: string }> => {
+    if (input.name !== undefined) {
+        return { name: input.name };
+    }
+    const origin = input.for === undefined ? undefined : wantedOrigin(deps, input, where);
+    if (origin === undefined || deps.needs === undefined) {
+        return { refusal: "name the secret, or say with `for` which site or program it is for" };
+    }
+    const wanted = await deps.needs({
+        origin,
+        detail: input.why ?? `sign in to ${origin.kind === "site" ? origin.host : origin.kind === "program" ? origin.program : "it"}`,
+        ...opt("conversationId", deps.conversationId),
+        ...opt("signal", deps.signal),
+    });
+    if (wanted.state === "allowed") {
+        return { name: wanted.name };
+    }
+    return {
+        refusal:
+            wanted.state === "pending"
+                ? `Not typed: ${wanted.message}. Carry on with what does not need it, and call this again once they have answered.`
+                : `Not typed: ${wanted.message}`,
+    };
+};
+
 const typeSecret = async (deps: SecretsToolsDeps, input: TypeInput) => {
     const where = input.where ?? PAGE;
+    const named = await nameFor(deps, input, where);
+    if ("refusal" in named) {
+        return fail(named.refusal);
+    }
     let secret;
     try {
-        secret = await resolveTypeable(deps.secrets, deps.keyrings, input.name);
+        secret = await resolveTypeable(deps.secrets, deps.keyrings, named.name);
     } catch {
         return fail("the secret store could not be read: try again");
     }
     if (secret === undefined) {
-        return fail(notTypeable(input.name));
+        return fail(notTypeable(named.name));
     }
     const devices = deps.devices ?? [];
     if (input.phone !== undefined && !devices.includes(where)) {
@@ -181,7 +236,14 @@ export const secretsServer = (deps: SecretsToolsDeps): McpSdkServerConfigWithIns
                 "type_secret",
                 descriptionOf(deps),
                 {
-                    name: z.string().describe("The stored secret's name, e.g. GRAFANA_ADMIN_PASSWORD"),
+                    name: z.string().optional().describe("The stored secret's name, e.g. GRAFANA_ADMIN_PASSWORD. Leave it out to give `for` instead"),
+                    for: z
+                        .union([
+                            z.object({ site: z.string().min(1).max(253).describe("The site's host, github.com") }).strict(),
+                            z.object({ program: z.string().min(1).max(260).describe("The program on the owner's computer, FortiClient.exe") }).strict(),
+                        ])
+                        .optional()
+                        .describe("Instead of a name: the site or program the password is for, which the owner's Passwords matches and asks them about"),
                     where: z.string().optional().describe(`Where to type it; "${PAGE}" when left out. One of the places listed in this tool's description.`),
                     browser: z.string().optional().describe('With where "page": which browser holds the page, "web" (the default) or a browser account\'s capability id'),
                     phone: z.string().optional().describe("With where naming a computer: the adb serial of a phone attached to it, to type into the app in front there"),

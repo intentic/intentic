@@ -6,6 +6,9 @@ export { keyringAddress, keyringPaths, KEYRING_HOME, type KeyringPaths } from ".
 export { askKeyring, KeyringUnavailable, type KeyringClientOptions } from "./client.js";
 export { sealForKeyring } from "./seal.js";
 export * from "./protocol.js";
-export { hardenedPaths, isHardened, type HardenedPaths } from "./service/paths.js";
-export { currentSid } from "./service/sid.js";
+export { windowsServicePaths, windowsServiceInstalled, type WindowsServicePaths } from "./service/windows/paths-windows.js";
+export { linuxServicePaths, linuxServiceInstalled, type LinuxServicePaths } from "./service/linux/paths-linux.js";
+export { currentSid } from "./service/windows/sid-windows.js";
+export { helloHere, NOT_ON_MAC, serviceInstalledHere, servicePlatform, serviceUserId, type ServicePlatform } from "./service/user.js";
+export { asRecoveryKey, newRecoveryKey } from "./service/recovery.js";
 export { realRunner } from "./run.js";

@@ -22,6 +22,7 @@ const setup = async (keyrings: Readonly<Record<string, FakeKeyring>>, options: {
         logger: unstubbed<DeviceSecretRoutesDeps["logger"]>("logger", { warn: () => {} }),
         deviceSecrets: slice.deviceSecrets,
         keyringLink: slice.keyringLink,
+        keyringNeeds: slice.keyringNeeds,
         keyringSync: slice.keyringSync,
         programGuardFor: slice.programGuardFor,
         secretRegistry: slice.secretRegistry,
@@ -105,8 +106,8 @@ test("the keyrings are listed from what each last said, and two are paired with 
     const { routes } = await setup({ rog, omen });
     expect(await call(routes.keyrings, undefined, { context: owner })).toEqual({
         keyrings: [
-            { machine: "omen", online: true, locked: false, version: "1.0.0", pendingInbox: 0, shared: 0 },
-            { machine: "rog", online: true, locked: false, version: "1.0.0", pendingInbox: 0, shared: 1 },
+            { machine: "omen", online: true, locked: false, version: "1.0.0", pendingInbox: 0, setUp: true, shared: 0 },
+            { machine: "rog", online: true, locked: false, version: "1.0.0", pendingInbox: 0, setUp: true, shared: 1 },
         ],
     });
     expect(await call(routes.keyringPair, { a: "rog", b: "omen" }, { context: owner })).toEqual({

@@ -1,5 +1,5 @@
 import { plural } from "@intentic/base/format";
-import { askKeyring, type EntryInfo, type KeyringClientOptions, keyringPaths, KeyringUnavailable, sealForKeyring } from "@intentic/keyring";
+import { askKeyring, type EntryInfo, type KeyringClientOptions, keyringPaths, KeyringUnavailable, newRecoveryKey, sealForKeyring } from "@intentic/keyring";
 import type { AutostartKind, Item, Ui } from "@intentic/local-agent";
 import { civilDayIn, localZone } from "@intentic/sandbox-contract/time/zone";
 import type { KeyringShareMode, KeyringState, SealedBox } from "@intentic/sandbox-contract/schemas/keyring";
@@ -24,14 +24,17 @@ import {
     unshareTarget,
 } from "./flags.js";
 import { readConfirmed, readStdin } from "./secret-input.js";
-import { type AskpassAnswer, clock, keyringLine, keyringStatusLine, readAskpassAnswer, readKeyringStatus } from "./keyring-status.js";
-import { hardenKeyring, installKeyring, keyringState, startKeyring, uninstallKeyring, upgradeKeyring } from "./service.js";
+import { type AskpassAnswer, clock, keyringLine, keyringStatusLine, readAskpassAnswer, readKeyringStatus, supportOf } from "./keyring-status.js";
+import { ensureService, installKeyring, keyringState, uninstallKeyring, upgradeKeyring } from "./service.js";
+import { appCommands } from "./app-commands.js";
+import { uninstallGitHelper } from "./git-helper.js";
+import { uninstallNativeHost } from "./native-host-install.js";
 
 /* `intentic-machine keyring …`: intentic-keyring on this computer, set up, kept and asked from a terminal, and from the
    desktop app, which runs these with --json (answer.ts). A value or a passphrase is never an argument: it is typed with
    echo off, or piped on stdin with --stdin, and a value is sealed to the vault's inbox key before it reaches the pipe, so
-   whatever holds the pipe holds ciphertext. The keyring itself asks the person (Windows Hello, its passphrase) before
-   anything here changes the vault. */
+   whatever holds the pipe holds ciphertext. The keyring itself asks the person (Windows Hello, polkit, or its recovery
+   key) before anything here changes the vault. */
 
 // The keyring's pipe, read at each call rather than at load: HOME is what names it, and a test moves HOME.
 const pipe = (): KeyringClientOptions => ({ address: keyringPaths().address });
@@ -77,23 +80,8 @@ const sealedValue = async (ui: Ui, name: string, from: "stdin" | "terminal", wha
 // ---- setup ----
 
 interface SetupFlags extends JsonFlags {
-    readonly passphraseStdin: boolean;
     readonly hello: boolean;
 }
-
-// The passphrase the keyring is set up with: its own rule is ten characters at least, said here before it is sent.
-const PASSPHRASE_MIN = 10;
-
-const choosePassphrase = async (ui: Ui, fromStdin: boolean): Promise<string> => {
-    if (!fromStdin) {
-        ui.note(`Choose the keyring's passphrase: ${PASSPHRASE_MIN} characters or more. It opens the vault where Windows Hello cannot, and nothing can recover it.`);
-    }
-    const passphrase = fromStdin ? await readStdin() : await prompted(ui, async () => await readConfirmed("Passphrase"));
-    if (passphrase.length < PASSPHRASE_MIN) {
-        throw new KeyringCliError("usage", `The passphrase is shorter than ${PASSPHRASE_MIN} characters: choose a longer one.`);
-    }
-    return passphrase;
-};
 
 interface SetupAnswer {
     readonly ok: true;
@@ -102,15 +90,16 @@ interface SetupAnswer {
     readonly autostart: AutostartKind;
     readonly setUp: true;
     readonly alreadySetUp: boolean;
+    // Only when this run made the vault: shown once, never stored, the way in when Hello or polkit cannot answer.
+    readonly recoveryKey?: string;
     readonly state?: KeyringState;
 }
 
 const setup = buildCommand<SetupFlags>({
-    docs: { brief: "Install the keyring beside this agent, start it at login, and set up its vault" },
+    docs: { brief: "Install Passwords' protected service (an administrator's yes, once), start it at login, and set up its vault" },
     parameters: {
         flags: {
-            passphraseStdin: { kind: "boolean", brief: "Read the passphrase once from stdin instead of twice from the terminal", default: false },
-            hello: { kind: "boolean", brief: "Also unlock with Windows Hello where this computer has it (--no-hello: the passphrase alone)", default: true },
+            hello: { kind: "boolean", brief: "Unlock with Windows Hello where this computer has it (--no-hello: the recovery key alone)", default: true },
             json,
         },
     },
@@ -118,10 +107,14 @@ const setup = buildCommand<SetupFlags>({
         await keyringAnswer<SetupAnswer>(
             this,
             flags.json,
-            { doing: "Setting up the keyring", failed: "The keyring was not set up." },
+            { doing: "Setting up Passwords", failed: "Passwords was not set up." },
             async (ui) => {
+                const support = supportOf(process.platform);
+                if (!support.canSetUp) {
+                    throw new KeyringCliError("unavailable", support.why ?? "Passwords cannot be set up on this computer.");
+                }
                 const installed = await installKeyring(MACHINE_VERSION, ui.note);
-                const started = await startKeyring(ui.note);
+                const started = await ensureService(ui.note);
                 if (!started.state.ok) {
                     return started.state;
                 }
@@ -129,18 +122,23 @@ const setup = buildCommand<SetupFlags>({
                 if (started.state.setUp) {
                     return { ...base, alreadySetUp: true, askpass: await readAskpassAnswer(), state: started.state.state };
                 }
-                const passphrase = await choosePassphrase(ui, flags.passphraseStdin);
-                const done = await askKeyring(pipe(), { op: "setup", passphrase, hello: flags.hello && process.platform === "win32" });
+                // The recovery key rides the setup op's `passphrase` field, which the vault wraps exactly as it did one.
+                const recoveryKey = newRecoveryKey();
+                const done = await askKeyring(pipe(), { op: "setup", passphrase: recoveryKey, hello: flags.hello && process.platform === "win32" });
                 if (!done.ok) {
                     return done;
                 }
                 const after = await keyringState();
                 const state = after instanceof KeyringUnavailable || !after.ok ? undefined : after.state;
-                const answer: SetupAnswer = { ...base, alreadySetUp: false, askpass: await readAskpassAnswer() };
+                const answer: SetupAnswer = { ...base, alreadySetUp: false, askpass: await readAskpassAnswer(), recoveryKey };
                 return state === undefined ? answer : { ...answer, state };
             },
             (result, ui) => {
-                ui.done(result.alreadySetUp ? `The keyring was set up already, and is running from ${result.path}.` : `Set up the keyring at ${result.path}; it starts at every sign-in.`);
+                if (result.recoveryKey !== undefined) {
+                    ui.note(`Your recovery key: ${result.recoveryKey}`);
+                    ui.note("Write it down and keep it somewhere safe. It is shown only now, and it is the only way into your passwords if this computer's sign-in check is ever reset.");
+                }
+                ui.done(result.alreadySetUp ? `Passwords was set up already, and is running from ${result.path}.` : `Set up Passwords at ${result.path}; it starts at every sign-in.`);
                 ui.later([
                     ["keep a password in it", "intentic-machine keyring add NAME"],
                     ...(result.askpass.installed ? [] : ([["let ssh, sudo and git ask it", "intentic-machine keyring askpass install"]] as const)),
@@ -527,7 +525,7 @@ const syncStatus = buildCommand<JsonFlags>({
     },
 });
 
-// ---- upgrade, harden, uninstall ----
+// ---- upgrade, uninstall ----
 
 const upgrade = buildCommand<JsonFlags>({
     docs: { brief: "Move the keyring to this agent's release, once the running keyring has asked you" },
@@ -543,20 +541,6 @@ const upgrade = buildCommand<JsonFlags>({
     },
 });
 
-const harden = buildCommand<JsonFlags>({
-    docs: { brief: "Windows: move the vault under a service of its own, out of reach of your user's processes (one UAC prompt)" },
-    parameters: { flags: { json } },
-    async func(this: CommandContext, flags: JsonFlags) {
-        await keyringAnswer(
-            this,
-            flags.json,
-            { doing: "Hardening the keyring", failed: "The keyring was not hardened." },
-            async (ui) => ({ ok: true as const, ...(await hardenKeyring(ui.note)) }),
-            (result, ui) => ui.done(`The vault is held by the ${result.service} service now; its helper starts at every sign-in.`),
-        );
-    },
-});
-
 const uninstall = buildCommand<JsonFlags>({
     docs: { brief: "Remove the keyring from this computer, keeping its vault" },
     parameters: { flags: { json } },
@@ -566,12 +550,14 @@ const uninstall = buildCommand<JsonFlags>({
             flags.json,
             { doing: "Removing the keyring", failed: "The keyring was not removed." },
             async (ui) => {
-                // ssh, sudo and git must not be left asking a program that is gone.
+                // ssh, sudo and git must not be left asking a program that is gone, nor a browser starting one.
                 await uninstallAskpass();
+                await uninstallGitHelper();
+                await uninstallNativeHost();
                 return { ok: true as const, ...(await uninstallKeyring(ui.note)) };
             },
             (result, ui) => {
-                ui.note(`The vault stays in ${result.vault}${result.hardened ? " (hardened: under %ProgramData%\\Intentic\\Keyring)" : ""}: set the keyring up again and the same passphrase opens it.`);
+                ui.note(`The vault stays in ${result.vault}: set Passwords up again and the same recovery key opens it.`);
                 ui.done("Removed the keyring from this computer.");
             },
         );
@@ -595,7 +581,8 @@ export const keyringCommands = {
         docs: { brief: "Let ssh, sudo and git ask the keyring for passwords" },
     }),
     sync: buildRouteMap({ routes: { status: syncStatus }, docs: { brief: "The keyring's sync with your other computers" } }),
+    // The Passwords app's verbs (app-commands.ts), what the desktop app calls with one JSON object on stdin.
+    app: appCommands,
     upgrade,
-    harden,
     uninstall,
 };

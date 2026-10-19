@@ -82,15 +82,28 @@ export const KeyringSandboxKeysSchema = z.object({
 });
 export type KeyringSandboxKeys = z.infer<typeof KeyringSandboxKeysSchema>;
 
+// The one-time "let Intentic remember the passwords you type", per source. All off until the person turns them on;
+// each switches off on its own. Imports, an agent's `secrets ask` and adding by hand are deliberate acts and need none.
+export const KeyringRememberSchema = z.object({
+    browser: z.boolean().describe("Sign-ins in a browser with the Intentic extension."),
+    terminal: z.boolean().describe("ssh, sudo and git prompts on this computer, and git's credential helper."),
+    apps: z.boolean().describe("Password fields in programs on this computer, typed once into the keyring's own box."),
+    phone: z.boolean().describe("The paired phone's autofill."),
+    sandbox: z.boolean().describe("Prompts that hide what is typed, in a sandbox terminal the person types into."),
+});
+export type KeyringRemember = z.infer<typeof KeyringRememberSchema>;
+
 export const KeyringStateSchema = z.object({
     version: z.string().describe("The keyring's own release."),
     locked: z.boolean().describe("Whether the vault is locked. Locked, `while-here` entries ask like `each-use` ones."),
     unlockedUntil: z.number().optional().describe("When the current unlock ends, in milliseconds. Absent while locked."),
     unlock: z
-        .array(z.enum(["hello", "passphrase"]))
-        .describe("How a person unlocks it here: Windows Hello, or the keyring's passphrase."),
+        .array(z.enum(["hello", "passphrase", "polkit"]))
+        .describe("How a person unlocks it here: Windows Hello, the keyring's passphrase (its recovery key), or polkit's own check on Linux."),
     keys: KeyringDeviceKeysSchema.optional().describe("Absent until the keyring is set up: there is no vault, so no inbox to seal a value to."),
     pendingInbox: z.number().int().nonnegative().describe("Values sent to be kept that wait for the next unlock."),
+    pendingCaptures: z.number().int().nonnegative().optional().describe("Credentials seen in use while locked, kept sealed until the next unlock. Absent from a keyring older than 2026-10-19."),
+    remember: KeyringRememberSchema.optional().describe("Which sources the person let the keyring remember passwords from, so a collector knows whether to send one. Absent before setup and from an older keyring."),
 });
 export type KeyringState = z.infer<typeof KeyringStateSchema>;
 
@@ -173,9 +186,9 @@ export const SealedBoxSchema = z
 export type SealedBox = z.infer<typeof SealedBoxSchema>;
 
 export const KeyringRefusalCodeSchema = z
-    .enum(["no-keyring", "locked", "declined", "unknown", "not-shared", "bad-grant", "expired", "replayed", "guard", "unavailable", "busy"])
+    .enum(["no-keyring", "locked", "declined", "unknown", "not-shared", "bad-grant", "expired", "replayed", "guard", "unavailable", "busy", "pending"])
     .describe(
-        "Why: no keyring here; locked with nobody to unlock it; the person said no; no such entry; not shared with this sandbox; a grant that does not verify; one past its time; one already spent; the focused window or field is not one it may go to; its password manager did not answer; another prompt is open.",
+        "Why: no keyring here; locked with nobody to unlock it; the person said no; no such entry; not shared with this sandbox; a grant that does not verify; one past its time; one already spent; the focused window or field is not one it may go to; its password manager did not answer; another prompt is open; nobody has answered yet, and the request waits in the Passwords app.",
     );
 export type KeyringRefusalCode = z.infer<typeof KeyringRefusalCodeSchema>;
 
@@ -275,3 +288,188 @@ export const KeyringSyncPairResultSchema = z.discriminatedUnion("ok", [z.object(
 export const KeyringSyncOutboxSchema = z.object({ items: z.array(KeyringSyncItemSchema) });
 export const KeyringSyncDeliverSchema = z.object({ items: z.array(KeyringSyncItemSchema).max(64) }).strict();
 export const KeyringSyncDeliverResultSchema = z.object({ accepted: z.number().int().nonnegative().describe("How many it took; the rest were not from a paired keyring or did not open.") });
+
+// ---- origins: where a credential is used, and where it was seen ----
+
+// One place a credential belongs to. An entry's rules (programs, packages, hosts, askpass matchers) are the keyring's
+// own record of the same thing; policy/keyring-origins.ts maps one onto the other, so a captured credential gets its
+// rules without anyone typing them and the Passwords app can say "Works on github.com, git https://github.com".
+export const KeyringOriginSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("site"), host: z.string().min(1).max(253).describe("The page's host, `github.com`; never a path.") }).strict(),
+    z
+        .object({
+            kind: z.literal("program"),
+            program: KeyringProgramSchema,
+            label: z.string().max(200).optional().describe("The program's own name for people, `FortiClient VPN`, when the window says it."),
+        })
+        .strict(),
+    z.object({ kind: z.literal("package"), package: KeyringPackageSchema, label: z.string().max(200).optional() }).strict(),
+    z.object({ kind: z.literal("ssh"), target: z.string().min(1).max(300).describe("`user@host`, as ssh's prompt names it.") }).strict(),
+    z.object({ kind: z.literal("ssh-key"), path: z.string().min(1).max(1000) }).strict(),
+    z.object({ kind: z.literal("sudo"), user: z.string().max(64).optional() }).strict(),
+    z.object({ kind: z.literal("git"), url: z.string().min(1).max(500).describe("`https://host`, as git's credential helper or askpass names it.") }).strict(),
+    z
+        .object({
+            kind: z.literal("prompt"),
+            text: z.string().min(1).max(300).describe("The prompt's own words, `Password for npm:`."),
+            command: z.string().max(200).optional().describe("The command that asked, `npm login`, when known."),
+            sandbox: z.string().url().optional().describe("The sandbox whose terminal asked, for a prompt seen there rather than on this computer."),
+        })
+        .strict(),
+]);
+export type KeyringOrigin = z.infer<typeof KeyringOriginSchema>;
+
+// Where a capture came from, for its title line ("saved from Brave") and its record.
+export const KeyringCaptureSourceSchema = z
+    .enum(["browser", "askpass", "git", "app", "phone", "terminal", "import", "agent", "manual"])
+    .describe(
+        "What saw it: the browser extension, an ssh/sudo/git prompt answered through the keyring, git's credential helper, a password field in an app on this computer, the phone's autofill, a sandbox terminal's prompt, an import, an agent's `secrets ask`, or the person adding it by hand.",
+    );
+export type KeyringCaptureSource = z.infer<typeof KeyringCaptureSourceSchema>;
+
+// A credential seen in use, sent to be kept. The value is sealed to the vault's inbox key for `{ kind: "capture" }`
+// (policy/keyring-seal.ts), so whoever carries it (the native-messaging host, the sandbox for a phone or a terminal)
+// holds ciphertext. Taken in without asking once the person turned remembering on for its source: bringing a value IN
+// reveals nothing, and an update keeps the old value in the entry's history, so a capture can be undone.
+export const KEYRING_CAPTURE_BATCH_MAX = 5000;
+export const KeyringCaptureItemSchema = z
+    .object({
+        origin: KeyringOriginSchema,
+        username: z.string().max(256).optional().describe("The account it signs in as, when the form or prompt said. Not a secret."),
+        sealed: SealedBoxSchema,
+        source: KeyringCaptureSourceSchema,
+        via: z.string().min(1).max(200).describe("Who saw it, in words for the title line: `Brave`, `Pixel 8`, `intentic-dev`. Also bound into the seal."),
+        kind: z.enum(["password", "text"]).default("password"),
+        title: z.string().max(200).optional().describe("The site's or app's own name, when it said one; the keyring derives one otherwise."),
+        at: z.number().int().describe("When it was seen, in milliseconds. Also bound into the seal."),
+        failed: z
+            .boolean()
+            .optional()
+            .describe("The last value captured for this origin and user did not work (ssh asked again, git erased it, the form came back): replace it rather than keep it as history."),
+    })
+    .strict();
+export type KeyringCaptureItem = z.infer<typeof KeyringCaptureItemSchema>;
+
+export const KeyringCaptureOutcomeSchema = z
+    .enum(["saved", "updated", "unchanged", "pending", "skipped"])
+    .describe(
+        "A new entry; a new value for an existing one (the old kept in its history); the same value it already had; kept sealed until the next unlock; not kept, because remembering is off for its source or its origin is on the never-save list.",
+    );
+export type KeyringCaptureOutcome = z.infer<typeof KeyringCaptureOutcomeSchema>;
+
+export const KeyringCaptureResultSchema = z.discriminatedUnion("ok", [
+    z.object({
+        ok: z.literal(true),
+        outcome: KeyringCaptureOutcomeSchema,
+        name: KeyringSecretNameSchema.optional().describe("The entry it went to. Absent while pending or skipped."),
+        title: z.string().optional().describe("That entry's title, for the 'Saved github.com' notice."),
+    }),
+    refusal,
+]);
+export type KeyringCaptureResult = z.infer<typeof KeyringCaptureResultSchema>;
+
+// ---- an agent's need: asked for by what it is for, not by name ----
+
+// A sandbox asking for a credential by where it is to be used. The keyring matches its entries by origin and asks the
+// person (with their OS's own check: Windows Hello, polkit, a phone's biometric signature) whether this sandbox may use
+// the one it found, and on what terms. Nothing about entries that do not match, nor about one the person declines,
+// reaches the sandbox. A match nobody answers waits in the Passwords app's Requests, and the sandbox learns of the yes
+// from its next `shares` read.
+export const KeyringNeedSchema = z
+    .object({
+        origin: KeyringOriginSchema,
+        username: z.string().max(256).optional().describe("The account wanted, when the agent knows it."),
+        detail: z.string().min(1).max(300).describe("What it is for, in words for the prompt: `sign in to push the release branch`."),
+        conversation: z.string().max(200).optional(),
+        purpose: z.enum(["agent", "owner"]).default("agent"),
+        typeOnce: z
+            .boolean()
+            .default(false)
+            .describe(
+                "Nothing matched on any of the owner's computers: offer the person here the keyring's type-once box. Without it, a keyring with no match answers `unknown` at once, so the sandbox can ask the next computer without a box opening on each.",
+            ),
+    })
+    .strict();
+export type KeyringNeed = z.infer<typeof KeyringNeedSchema>;
+
+export const KeyringNeedAnswerSchema = z
+    .enum(["once", "while-here", "always", "deny"])
+    .describe("The person's answer: this one use (an `each-use` share), unasked while unlocked, a copy in the sandbox, or no.");
+export type KeyringNeedAnswer = z.infer<typeof KeyringNeedAnswerSchema>;
+
+export const KeyringNeedResultSchema = z.discriminatedUnion("ok", [
+    z.object({
+        ok: z.literal(true),
+        pointer: KeyringPointerSchema.describe("The entry now shared with the asking sandbox, as its next `shares` read will also list it."),
+        asked: z.boolean(),
+        saved: z.boolean().describe("Nothing matched, and the person typed it once into the keyring's own box: a new entry, kept here and shared."),
+    }),
+    refusal,
+]);
+export type KeyringNeedResult = z.infer<typeof KeyringNeedResultSchema>;
+
+// A need that waits for an answer, as the Passwords app lists it.
+export const KeyringPendingNeedSchema = z.object({
+    id: z.string().regex(KEYRING_NONCE_RE),
+    sandbox: z.string().url(),
+    need: KeyringNeedSchema,
+    matches: z.array(KeyringSecretNameSchema).describe("The entries that fit, best first. Empty: none yet, the app offers to type one once."),
+    at: z.number().int(),
+});
+export type KeyringPendingNeed = z.infer<typeof KeyringPendingNeedSchema>;
+
+// ---- the owner's phone as a place to save and fill ----
+
+// A phone paired with the keyring holds two keys made in its Android Keystore: `seal` (X25519, kept in software, which
+// Android's Keystore cannot do natively) that a value released for autofill is sealed to, and `presence` (ECDSA P-256,
+// `setUserAuthenticationRequired`, so it signs only after the person's fingerprint, face or screen lock). A signature by
+// `presence` over a fill request is the person's yes, checked by the keyring against the key it pinned at pairing, the
+// way a Windows Hello signature is. Pairing is carried by a sandbox both are linked to, with both fingerprints shown.
+export const KeyringPhoneKeysSchema = z
+    .object({
+        device: z.string().min(1).max(128).describe("The phone, by its device card."),
+        label: z.string().min(1).max(200).describe("The phone's name for people, `Pixel 8`."),
+        seal: KeyringPublicKeySchema,
+        presence: z.string().min(1).max(512).describe("The presence key, X.509 SubjectPublicKeyInfo DER, base64."),
+    })
+    .strict();
+export type KeyringPhoneKeys = z.infer<typeof KeyringPhoneKeysSchema>;
+
+export const KeyringPhonePairResultSchema = z.discriminatedUnion("ok", [
+    z.object({ ok: z.literal(true), fingerprint: z.string().describe("The keyring's own fingerprint, for the phone to show beside its own.") }),
+    refusal,
+]);
+export type KeyringPhonePairResult = z.infer<typeof KeyringPhonePairResultSchema>;
+
+export const KeyringPhoneFillSchema = z
+    .object({
+        v: z.literal(1),
+        device: z.string().min(1).max(128),
+        origin: KeyringOriginSchema.describe("Where the phone is filling: a `package`, or a `site` for a browser on the phone."),
+        username: z.string().max(256).optional(),
+        nonce: z.string().regex(KEYRING_NONCE_RE),
+        issuedAt: z.number().int(),
+        expiresAt: z.number().int(),
+    })
+    .strict();
+export type KeyringPhoneFill = z.infer<typeof KeyringPhoneFillSchema>;
+
+export const SignedKeyringPhoneFillSchema = z
+    .object({
+        payload: z.string().min(1).max(4096).describe("The fill request's JSON, base64url."),
+        sig: z.string().min(1).max(256).describe("The presence key's ECDSA P-256 signature (DER) over the payload, base64url."),
+    })
+    .strict();
+export type SignedKeyringPhoneFill = z.infer<typeof SignedKeyringPhoneFillSchema>;
+
+export const KeyringPhoneFillResultSchema = z.discriminatedUnion("ok", [
+    z.object({
+        ok: z.literal(true),
+        username: z.string().max(256).optional(),
+        sealed: SealedBoxSchema.describe("The value, sealed to the phone's `seal` key for `{ kind: \"phone\" }`."),
+        name: KeyringSecretNameSchema,
+        title: z.string(),
+    }),
+    refusal,
+]);
+export type KeyringPhoneFillResult = z.infer<typeof KeyringPhoneFillResultSchema>;

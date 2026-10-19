@@ -4,7 +4,10 @@ import { isMissing } from "@intentic/base/errors";
 import { writeSecretFile } from "@intentic/local-agent";
 import {
     KEYRING_KEY_RE,
+    KeyringCaptureItemSchema,
     KeyringInboxItemSchema,
+    KeyringPendingNeedSchema,
+    KeyringPhoneKeysSchema,
     KeyringPublicKeySchema,
     KeyringSecretNameSchema,
     KeyringSourceSchema,
@@ -13,7 +16,7 @@ import {
     SealedBoxSchema,
 } from "@intentic/sandbox-contract/schemas/keyring";
 import { z } from "zod";
-import { BackendConfigSchema, BackendRefSchema, EntryInfoSchema, EntryRulesSchema, ShareInfoSchema } from "./protocol.js";
+import { BackendConfigSchema, BackendRefSchema, CapturedInfoSchema, EntryInfoSchema, EntryRulesSchema, KeyringSettingsSchema, ShareInfoSchema } from "./protocol.js";
 
 // THE VAULT FILE, `vault.json`. One random 32-byte vault key seals the inner document (every entry with its value, the
 // inbox and sync private keys, the sandboxes' keys as they were pinned, the paired keyrings, the password managers'
@@ -83,6 +86,13 @@ export const KeyPairSchema = z.object({ publicKey: z.string().regex(KEYRING_KEY_
 export const SandboxPinSchema = z.object({ sign: KeyringPublicKeySchema, seal: KeyringPublicKeySchema, fetchedAt: z.number() }).strict();
 export type SandboxPin = z.infer<typeof SandboxPinSchema>;
 
+// An earlier value of an entry, kept when a capture or a restore replaced it, so a capture can be undone and the app can
+// put an old password back.
+export const HistoryItemSchema = z.object({ value: z.string(), at: z.number(), captured: CapturedInfoSchema.optional() }).strict();
+export type HistoryItem = z.infer<typeof HistoryItemSchema>;
+// How many earlier values an entry keeps; past it the oldest goes.
+export const HISTORY_MAX = 5;
+
 export const StoredEntrySchema = z
     .object({
         name: KeyringSecretNameSchema,
@@ -98,9 +108,27 @@ export const StoredEntrySchema = z
         revision: z.number().int().nonnegative(),
         // Removed: kept as a name and a time so a paired keyring learns of the removal instead of sending it back.
         deleted: z.boolean().optional(),
+        // The Passwords app's fields (2026-10-19), absent from an entry an older keyring wrote.
+        captured: CapturedInfoSchema.optional(),
+        fresh: z.boolean().optional(),
+        unverified: z.boolean().optional(),
+        // The program it went to said it did not work (git's `erase`): the next capture replaces it outright.
+        failed: z.boolean().optional(),
+        lastUsedAt: z.number().optional(),
+        history: z.array(HistoryItemSchema).max(HISTORY_MAX).optional(),
     })
     .strict();
 export type StoredEntry = z.infer<typeof StoredEntrySchema>;
+
+// What one capture did, kept ten minutes so the notice's Undo can take it back: the entry as it was before, or none
+// when the capture made it.
+export const UndoRecordSchema = z.object({ name: KeyringSecretNameSchema, at: z.number(), doneAt: z.number(), before: StoredEntrySchema.optional() }).strict();
+export type UndoRecord = z.infer<typeof UndoRecordSchema>;
+export const UNDO_MAX = 50;
+
+// A paired phone (phone.ts): its keys as the person saw them fingerprinted at pairing, and the sandbox that carried it.
+export const PhonePinSchema = z.object({ keys: KeyringPhoneKeysSchema, sandbox: z.string(), pairedAt: z.number() }).strict();
+export type PhonePin = z.infer<typeof PhonePinSchema>;
 
 export const VaultDocumentSchema = z
     .object({
@@ -115,6 +143,10 @@ export const VaultDocumentSchema = z
         pins: z.record(z.string(), SandboxPinSchema),
         // The vault revision each paired keyring was last sent, by its sync key: a change past it is sent next time.
         syncSent: z.record(KeyringPublicKeySchema, z.number().int().min(-1)).optional(),
+        // The Passwords app's settings, its capture undo records and its paired phones, absent from an older vault.
+        settings: KeyringSettingsSchema.optional(),
+        undo: z.array(UndoRecordSchema).max(UNDO_MAX).optional(),
+        phones: z.record(z.string(), PhonePinSchema).optional(),
     })
     .strict();
 export type VaultDocument = z.infer<typeof VaultDocumentSchema>;
@@ -129,6 +161,13 @@ export type PendingInbox = z.infer<typeof PendingInboxSchema>;
 export const PENDING_INBOX_MAX = 32;
 export const PENDING_SYNC_MAX = 128;
 
+// A credential seen while locked, kept sealed to the inbox key until the next unlock takes it in.
+// `deliberate`: the person ticked Remember in the keyring's own box, so no remember switch is needed to keep it.
+export const PendingCaptureSchema = z.object({ item: KeyringCaptureItemSchema, receivedAt: z.number(), sandbox: z.string().optional(), deliberate: z.boolean().optional() }).strict();
+export type PendingCapture = z.infer<typeof PendingCaptureSchema>;
+export const PENDING_CAPTURES_MAX = 500;
+export const PENDING_NEEDS_MAX = 100;
+
 export const OpenPartSchema = z
     .object({
         entries: z.array(EntryInfoSchema),
@@ -138,6 +177,14 @@ export const OpenPartSchema = z
         copies: z.record(z.string(), z.array(CopySchema)),
         pendingInbox: z.array(PendingInboxSchema).max(PENDING_INBOX_MAX),
         pendingSync: z.array(KeyringSyncItemSchema).max(PENDING_SYNC_MAX),
+        // The Passwords app's (2026-10-19): the settings as the inner document holds them, so `state` can say whether
+        // remembering is on while locked (never trusted to let anything in: the inner copy decides at take-in), what was
+        // captured and asked for while locked, entries looked at while locked, and the paired phones by name.
+        settings: KeyringSettingsSchema.optional(),
+        pendingCaptures: z.array(PendingCaptureSchema).max(PENDING_CAPTURES_MAX).optional(),
+        pendingNeeds: z.array(KeyringPendingNeedSchema).max(PENDING_NEEDS_MAX).optional(),
+        pendingSeen: z.array(KeyringSecretNameSchema).max(5000).optional(),
+        phones: z.array(z.object({ device: z.string(), label: z.string(), pairedAt: z.number() }).strict()).optional(),
     })
     .strict();
 export type OpenPart = z.infer<typeof OpenPartSchema>;

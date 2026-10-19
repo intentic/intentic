@@ -17,6 +17,15 @@ import { HostsListSchema } from "../../schemas/hosts.js";
 import { VoicesViewSchema } from "../../schemas/voice.js";
 import { MemberEmailSchema, MemberGrantSchema, MemberSelfSchema, MembersListSchema, MembersRosterSchema } from "../../schemas/members.js";
 import { PhonesListSchema, PhoneWakeRegistrationSchema } from "../../schemas/phone.js";
+import {
+    PhoneKeyringsResultSchema,
+    PhonePasswordsCaptureResultSchema,
+    PhonePasswordsCaptureSchema,
+    PhonePasswordsFillResultSchema,
+    PhonePasswordsFillSchema,
+    PhonePasswordsPairResultSchema,
+    PhonePasswordsPairSchema,
+} from "../../schemas/phone-passwords.js";
 import { OkSchema } from "../../schemas/shared.js";
 import { EnrollCodeAnswerSchema, EnrollCodeRequestSchema, PeerPairingAnswerSchema, SyncPairAnswerSchema, SyncPairRequestSchema } from "../../schemas/short-codes.js";
 import { SpeechStatusSchema, SpeechTranscriptSchema, SpeechWakeClaimSchema, SpeechWakeGrantSchema } from "../../schemas/speech.js";
@@ -133,6 +142,10 @@ export const RAW_JSON_ROUTES = {
     "POST /system/phones/pair": { output: PeerPairingAnswerSchema },
     "DELETE /system/phones/{id}": { output: OkSchema },
     "POST /system/phones/{id}/wake": { input: PhoneWakeRegistrationSchema, output: OkSchema },
+    "GET /system/phones/passwords/keyrings": { output: PhoneKeyringsResultSchema },
+    "POST /system/phones/passwords/pair": { input: PhonePasswordsPairSchema, output: PhonePasswordsPairResultSchema },
+    "POST /system/phones/passwords/capture": { input: PhonePasswordsCaptureSchema, output: PhonePasswordsCaptureResultSchema },
+    "POST /system/phones/passwords/fill": { input: PhonePasswordsFillSchema, output: PhonePasswordsFillResultSchema },
     "GET /system/runners": { output: RunnersListSchema },
     "DELETE /system/runners/{id}": { output: OkSchema },
     "POST /system/runners/{id}/definition/sync": { output: RunnerDefinitionAppliedSchema },

@@ -61,6 +61,7 @@ import { conversationGrantsDocument } from "../personas/conversation-grants.js";
 import { ownerGrantsDocument } from "../personas/owner-grants.js";
 import { personasDocument } from "../personas/personas-store.js";
 import { safetyCardLinesStep } from "../personas/safety-card-lines.js";
+import { phonePairingsDocument } from "../phones/phone-pairings.js";
 import { phoneWakeDocument } from "../phones/phone-wake.js";
 import { bundleManifestDocument } from "../portability/bundle-arrival.js";
 import { privacyLedgerDocument } from "../privacy/privacy-ledger.js";
@@ -75,6 +76,7 @@ import { autostartDocument } from "../scaffold/autostart.js";
 import { credentialGatesDocument } from "../secrets/credential-gates.js";
 import { credentialReleasesDocument } from "../secrets/credential-grants.js";
 import { sandboxKeyringKeysDocument } from "../secrets/device/keyring-keys.js";
+import { keyringNeedsDocument } from "../secrets/device/keyring-needs.js";
 import { keyringCopiesDocument, keyringDevicesDocument } from "../secrets/device/keyring-stores.js";
 import { keyringSyncMailboxDocument } from "../secrets/device/keyring-sync.js";
 import { secretHostGuardsDocument } from "../secrets/guards/host-guards.js";
@@ -191,6 +193,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     conversationGrantsDocument,
     ownerGrantsDocument,
     personasDocument,
+    phonePairingsDocument,
     phoneWakeDocument,
     bundleManifestDocument,
     privacyLedgerDocument,
@@ -205,6 +208,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     credentialGatesDocument,
     credentialReleasesDocument,
     sandboxKeyringKeysDocument,
+    keyringNeedsDocument,
     keyringCopiesDocument,
     keyringDevicesDocument,
     keyringSyncMailboxDocument,

@@ -33,6 +33,11 @@ flowchart LR
   other site, and `describe` advertises `loopback-catch` only then.
 - Chrome kills an idle MV3 worker, so the worker holds no state: everything lives in `chrome.storage.local`, and an
   alarm redials a dropped link.
+- **Passwords (optional):** a separate "Turn on" in the popup asks once for `nativeMessaging` and all-site access.
+  That grant is only for remembering and filling passwords via the desktop app's native host (`dev.intentic.keyring`);
+  the agent still needs its own per-site allow in the list below. While on, a content script captures sign-ins on
+  submit (never in incognito, never one-time codes or card fields), shows a short "Saved … · Undo" toast, and offers
+  fill after you confirm on the computer. Values never go to a sandbox automatically.
 - `scripts/size-budget.mjs` fails a build whose bundles outgrow their ceilings; import zod by name and the contract
   through `@intentic/sandbox-contract/webext`. [PUBLISHING.md](PUBLISHING.md) covers the store release.
 
@@ -43,6 +48,9 @@ flowchart LR
 - [src/background/mcp.ts](src/background/mcp.ts) — the tool surface the sandbox calls.
 - [src/page/driver.ts](src/page/driver.ts) — what runs inside a tab: snapshot, click, fill, banner.
 - [src/popup/popup.ts](src/popup/popup.ts) — the popup, where every permission is granted; `preview` renders its states.
+- [src/background/native.ts](src/background/native.ts) — the one native-messaging port to Passwords on this computer, requests correlated by id.
+- [src/background/passwords.ts](src/background/passwords.ts) — registers the passwords content script and routes capture/fill.
+- [src/content/password-capture.ts](src/content/password-capture.ts) — capture, toast, and fill UI injected on sites while Passwords is on.
 - [static/manifest.json](static/manifest.json) — permissions, the content script, the minimum Chrome.
 
 ## Commands

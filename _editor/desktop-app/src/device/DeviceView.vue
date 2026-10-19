@@ -34,7 +34,6 @@ import SecurityCard from "./intenticOs/screen/SecurityCard.vue";
 import ThisComputer from "./intenticOs/ThisComputer.vue";
 import { followOnScreen, onScreen } from "../onScreen";
 import PcSetupCard from "./pcSetup/PcSetupCard.vue";
-import PasswordsGroup from "./keyring/PasswordsGroup.vue";
 import UninstallSection from "./uninstall/UninstallSection.vue";
 import { pcCardShown } from "./pcSetup/livePcCard";
 import { DEVICES_PATH, DOCKER_DOCS, REFRESH_EVERY_MS, useDevice } from "./useDevice";
@@ -626,8 +625,6 @@ onMounted(() => {
                     <p v-else class="text-xs text-muted">{{ agentRestartOutcome }}</p>
                 </template>
             </DeviceAgentGroup>
-            <!-- The keyring beside the agent that relays for it: passwords kept on this computer rather than in a sandbox. -->
-            <PasswordsGroup v-if="agentPanel" :windows="info?.os === `windows`" :links="status?.device.links ?? []" />
             <!-- This computer's other environments with an agent of their own (a WSL distro's), which keep the sandboxes set up there. -->
             <p v-if="agentsElsewhere.length > 0" class="flex items-start gap-2.5 text-xs text-subtle">
                 <Icon name="server" class="mt-0.5 shrink-0" />

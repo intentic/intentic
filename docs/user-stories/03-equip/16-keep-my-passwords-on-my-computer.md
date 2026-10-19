@@ -1,44 +1,56 @@
 # Keep my passwords on my own computer
 
-As someone whose agent works on my own computers as well as in the sandbox, I want my personal passwords (the VPN,
-SSH and sudo, a router's admin page, the program that has no browser) to stay in a keyring on my computer, typed where
-they belong and handed to the sandbox only for a use I allow, so that giving the agent hands on my machine does not mean
-giving it my passwords, and none of them sit in a sandbox that runs other people's code all day.
+As someone whose agent works on my own computers as well as in the sandbox, I want my personal passwords to stay on my
+computer and be saved as I use them, then handed to an agent only for a use I allow. These are the VPN, SSH and sudo, a
+router's admin page, the sites I sign in to, and the program that has no browser. Giving the agent hands on my machine
+should not mean giving it my passwords, and none of them should sit in a sandbox that runs other people's code all day.
 
-The keyring is a program of its own beside intentic-machine (`intentic-machine keyring setup`), unlocked with Windows
-Hello where the computer has it and with a passphrase I choose everywhere. Each entry says what it is (a password, or
-text), which programs it may be typed into without asking (`FortiClient.exe`, `mstsc.exe`), which Android apps and
-sites, and which sandboxes it is shared with, each on its own terms: **ask me each time**, **while I'm here** (unasked
-while the keyring is unlocked, for as long as I unlocked it), or **keep a copy in the sandbox** (it then works with my
-computer off, and is an ordinary sandbox secret from there on).
+**Passwords** is an app of its own, with its own tile on the editor's rail. On my computer, in the desktop app, it is the
+whole password manager. Its list has search, kinds (websites, apps, terminal, phone, notes), "Agents can use" by sandbox,
+and Attention (Just saved, Requests, Weak or reused). Each password shows its user, its value behind a Show or Copy that
+asks me first, where it works, which agents may use it and how, what it was used for, and its earlier values. In the
+hosted editor the same app shows what that sandbox may use, the requests it is waiting on and what it used, with "Manage
+on this computer".
 
-In the sandbox an entry I shared is a row on the Secrets view under "On your computers", and the agent spends it like
-any other: `{{secret:VPN_FORTI}}` in a command, or `type_secret` aimed at a window on my computer, my phone, the
-sandbox's desktop or a page in my own browser. The sandbox never stores the value. It signs a grant for that one use,
-the keyring checks the grant against the key it fetched from the sandbox's own address when I shared the entry, asks me
-when the entry's terms say to, and either types the value into the focused window itself, after checking which program
-has the focus and whether the field is a password field, or hands it back sealed to that sandbox alone. My other
-programs, the agent's own commands on my computer among them, reach the keyring's pipe but cannot sign a grant, and
-everything else they could ask it for needs me at the computer.
+Turning it on is one button. Windows asks once for an administrator's approval (Linux asks through pkexec), because the
+vault is held by a service under a system account. No program I run, the agent's commands included, can read it. I
+unlock with Windows Hello (polkit on Linux), and every yes is checked by the OS, not by a dialog a program could click
+through. I get a recovery key once, to keep somewhere safe. There is one way this works, not a normal mode and a
+hardened one.
 
-`ssh`, `sudo` and `git` ask the keyring too, through intentic-askpass (`intentic-machine keyring askpass install`): the
-prompt they show is matched to an entry, I confirm, and the answer goes to the program that asked and nowhere else.
+Then I am asked once to let Intentic remember the passwords I type, source by source:
 
-An entry may instead name where its value is read: 1Password, Bitwarden or KeePassXC, read at each use. Two of my
-computers' keyrings can be paired, at my yes on each with both fingerprints shown, and then keep one set of entries,
-sealed between them and carried by a sandbox that cannot open what it carries. On Windows, hardened mode (one
-administrator prompt) moves the vault under an account of its own, so no program I run can read it.
+- **Browsers.** The Intentic extension saves a sign-in when I submit it, and fills it back after my Windows Hello yes.
+- **Terminals on my computer.** For an ssh, sudo or git prompt nothing answers yet, Passwords' own box asks me once,
+  answers the program and keeps it. git's credential helper saves a sign-in that worked.
+- **Apps.** A small "Save with Intentic" chip on a program's password field lets me type it once into Passwords' box,
+  which types it into the program and keeps it. Nothing reads keys I type elsewhere.
+- **My phone.** The Intentic Device app is Android's autofill service, paired with my computer once.
+- **Sandbox terminals.** A password I type at a hidden prompt in a sandbox terminal is kept on my computer.
+
+Saving is quiet: a notice says "Saved github.com · Undo · View". A changed password keeps its old value in its history,
+and a failed one is replaced. Adding by hand and importing from a browser, 1Password, Bitwarden or KeePassXC are there
+for what was never typed.
+
+An agent asks by need, not by name: `secrets want --site github.com`, or `type_secret` aimed at a page or window. My
+computer finds what fits and asks me, naming the sandbox, the place, the account and what it is for: **Allow once**,
+**While I'm here**, **Always** (a copy kept in the sandbox, so it works with my computer off) or **Deny**. If I am not
+there, the request waits under Requests. The agent then spends it like any other secret, `{{secret:GITHUB_COM}}` in a
+command, without ever seeing it.
 
 ## Acceptance criteria
 
-- [ ] `intentic-machine keyring setup` installs and starts the keyring and sets up its vault with a passphrase, plus Windows Hello where the computer has it; the vault's values never leave it unencrypted
-- [ ] An entry can be added from the terminal or the desktop app without its value ever appearing on a command line, and adding, widening or removing one asks the person at the computer
-- [ ] An entry is shared with a sandbox in one of three modes, and the sandbox's Secrets view lists it under "On your computers" with the computer, the mode and whether that computer answers, never with the value
-- [ ] A `{{secret:NAME}}` naming a shared entry is resolved after the sandbox's own gates pass, by a release the keyring answers sealed to that sandbox alone; a value is never reused for a second use
-- [ ] `ask me each time` asks the person at the computer for every use; `while I'm here` goes unasked while the keyring is unlocked and asks once it locks; a copy works with the computer off
-- [ ] Typing into a window on the computer checks the focused program against the entry's list and, for a password, that the field is a password field; anything else asks, and focus that moves while the person answers stops the typing
-- [ ] A grant is the sandbox's own (verified against keys fetched from its address), names one secret and one use, answers once and expires within two minutes
-- [ ] ssh, sudo and git prompts are answered through intentic-askpass from the entry whose matcher fits, asking each time unless the entry says to remember an answer for some minutes
-- [ ] Values released into the sandbox are masked in everything the agent reads and in the terminal output the filter keeps
-- [ ] Two computers' keyrings can be paired with both fingerprints shown on each, and then keep one set of entries through a sandbox that carries only ciphertext
-- [ ] On Windows, hardened mode moves the vault where no program of the user can read it, and the keyring still answers the same pipe
+- [ ] Passwords is its own rail app in the desktop app and in the hosted editor. This device no longer holds a passwords group
+- [ ] Turning it on installs the protected service with one administrator prompt, enrols Windows Hello (polkit on Linux) and shows a recovery key once. There is no per-user or "hardened" mode, and setup on macOS or without administrator rights says why it cannot
+- [ ] A value shown, copied, filled or released leaves the vault only after the OS-verified yes of the person at the computer, a sandbox's signed grant under its share's terms, or a paired phone's biometric signature
+- [ ] One consent turns on remembering per source (browser, terminal, apps, phone, sandbox), each switchable later. Saving then asks nothing, and shows a notice with Undo
+- [ ] A new capture is titled, named (`GITHUB_COM`) and placed (site, program, ssh target) from where it was seen. A changed one keeps its old value in history, a failed one is replaced, a one-time code is never kept, and a never-save place is skipped
+- [ ] Captures arriving while locked wait sealed and are taken in at the next unlock
+- [ ] An unmatched ssh/sudo/git prompt opens Passwords' type-once box, and git's credential helper stores and answers https sign-ins
+- [ ] The browser extension captures sign-ins on submit and fills only entries that serve that site, after a yes
+- [ ] A password field in a program on the computer offers "Save/Fill with Intentic", typed through Passwords' own box
+- [ ] The Android app saves as the autofill service and fills after the person's biometric, its signature checked against the key pinned at pairing
+- [ ] A password typed at a hidden prompt in an editor terminal of the sandbox is kept on the computer that remembers from sandboxes
+- [ ] `secrets want` asks the owner's computers by place, and the answer (Allow once / While I'm here / Always / Deny) shares it on those terms. An unanswered request waits under Requests, and nothing about entries that do not match reaches the sandbox
+- [ ] Values released into the sandbox are masked in everything the agent reads
+- [ ] Two computers' Passwords can be paired with both fingerprints shown on each, and then keep one set of entries through a sandbox that carries only ciphertext

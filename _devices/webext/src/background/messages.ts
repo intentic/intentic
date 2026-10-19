@@ -1,4 +1,5 @@
 import type { WebExtGrant, WebExtScopes } from "@intentic/sandbox-contract/webext";
+import type { PasswordsUiStatus } from "./passwords.js";
 import type { ActivityEntry, PairedSandbox, PendingAccess, Settings } from "./store.js";
 
 // What the popup and service worker say to each other, typed on both sides since `chrome.runtime.sendMessage` is
@@ -25,7 +26,8 @@ export type PopupCommand =
     // The sandbox's own page offered a pairing (content/pair-bridge.ts); parked, not redeemed.
     | { readonly type: "offer"; readonly code: string }
     // The person turned a parked pairing down, which is also what clears the badge it lit.
-    | { readonly type: "dismiss-offer" };
+    | { readonly type: "dismiss-offer" }
+    | { readonly type: "passwords-enable" };
 
 export interface PopupState {
     readonly sandbox: PairedSandbox | undefined;
@@ -38,4 +40,5 @@ export interface PopupState {
     readonly paused: boolean;
     readonly log: readonly ActivityEntry[];
     readonly settings: Settings;
+    readonly passwords: PasswordsUiStatus;
 }

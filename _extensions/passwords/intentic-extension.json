@@ -1,0 +1,21 @@
+{
+    "$schema": "https://intentic.dev/intentic-extension.schema.json",
+    "publisher": "intentic",
+    "name": "passwords",
+    "version": "1.0.0",
+    "category": "work",
+    "icon": "key",
+    "engines": { "intentic": "^2.28.0" },
+    "permissions": {
+        "sandbox": [
+            "GET /secrets/inventory",
+            "GET /secrets/keyrings",
+            "GET /secrets/passwords",
+            "GET /secrets/passwords/needs",
+            "GET /secrets/passwords/activity"
+        ]
+    },
+    "contributes": {
+        "views": [{ "id": "passwords", "label": "Passwords", "surface": "rail", "badge": true }]
+    }
+}

@@ -8,12 +8,14 @@ import { join } from "node:path";
 // Raise a number here only with the reason the bundle legitimately grew; the headroom is deliberate, not spare.
 
 const BUDGETS = {
-    // 165 kB today: zod's runtime, @orpc's client/server, the page driver and the tools.
+    // ~200 kB today: zod's runtime, @orpc's client/server, the page driver, the tools and Passwords' native port.
     "background.js": 260_000,
     // Injected into every intentic.dev page, so it stays two constants and a listener. 374 bytes today.
     "pair-bridge.js": 4_000,
     // The popup's own script; it holds no schema surface.
     "popup.js": 20_000,
+    // Injected on all sites while Passwords is on: capture, fill UI, and toast only (no zod).
+    "passwords.js": 18_000,
 };
 
 const dist = join(import.meta.dirname, "..", "dist");
@@ -29,7 +31,7 @@ for (const [file, budget] of Object.entries(BUDGETS)) {
 
 // An unexpected file in dist/ is uploaded to the store as-is: a stray source map or scratch file ships to users.
 // `fonts/` and `faces.css` are the app's own face for the popup (Public Sans, ~45 kB), from _tools/scripts/fonts.mjs.
-const EXPECTED = new Set(["background.js", "pair-bridge.js", "popup.js", "popup.html", "faces.css", "fonts", "manifest.json", "icons"]);
+const EXPECTED = new Set(["background.js", "pair-bridge.js", "passwords.js", "popup.js", "popup.html", "faces.css", "fonts", "manifest.json", "icons"]);
 const strays = readdirSync(dist).filter((entry) => !EXPECTED.has(entry));
 
 if (over.length > 0 || strays.length > 0) {

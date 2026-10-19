@@ -72,7 +72,12 @@ What the daemon does around you:
   asked of that computer, which may ask the person there, so an offline or locked computer is a refusal to report, not
   to work around. Typing into a window goes unasked only into a program on the secret's list (`secrets programs` reads
   and narrows it; widening is the owner's). For a secret the task needs on the owner's machine, `secrets ask` lets the
-  owner keep it there ("Keep it on my computer").
+  owner keep it there ("Keep it on my computer"), the card's first choice once one of their computers has Passwords
+  set up. A password for a PLACE whose name you do not know is asked for by need: `secrets want --site github.com`
+  (or `--program FortiClient.exe`, `--ssh user@host`, `--git https://host`, with `--user` when you know the account)
+  `--why "…"`. Passwords on the owner's computers finds the entry that fits and asks the person; the command prints
+  the NAME to reference, exits 3 while the answer waits in Passwords there, and 1 on a no.
+  `mcp__secrets__type_secret` takes `for: {site}` or `for: {program}` instead of a name to do the same at typing time.
 - **Needs** are what a conversation has asked people for: a connection, a secret, a grant, a release, a tool
   for the image. Each is a card in its chat, pinned above the composer and listed under **Needs you**; it
   outlives the turn that raised it, and its answer continues the conversation by itself. `needs` lists this

@@ -2,7 +2,7 @@ import type { KeyringGrant, KeyringGrantTarget } from "@intentic/sandbox-contrac
 import { grantNonce, type KeyringKeyPair, newSealKeyPair, newSignKeyPair, signGrant } from "@intentic/sandbox-contract/keyring-seal";
 import { noAudit, type AuditRecord } from "./audit.js";
 import { BackendReader } from "./backends.js";
-import type { Consent, ConsentRequest } from "./consent/consent.js";
+import type { ChoiceNotice, Consent, ConsentRequest, ValueAnswer, ValueNotice } from "./consent/consent.js";
 import { Keyring } from "./core.js";
 import type { KeysFile } from "./keys.js";
 import type { EntryRules } from "./protocol.js";
@@ -18,26 +18,53 @@ export const TEST_PASSPHRASE = "correct horse battery staple";
 // scrypt at its floor, so a test's unlock takes milliseconds instead of half a second.
 export const TEST_SCRYPT = { N: 2 ** 10, r: 8, p: 1 } as const;
 
-export type Reply = "yes" | "no";
+// "away": nobody answers, as a prompt that stays open past its time would end.
+export type Reply = "yes" | "no" | "away";
 
 export interface FakePerson {
     readonly consent: Consent;
     readonly asked: ConsentRequest[];
     // Queued answers, first one first; when empty the person says yes.
     readonly replies: Reply[];
+    // Queued picks in the choice dialog (an agent's need); when empty, the first choice offered.
+    readonly choices: string[];
+    // Queued answers of the type-once box; when empty, the box is closed.
+    readonly typed: ValueAnswer[];
+    readonly boxes: ValueNotice[];
+    readonly dialogs: ChoiceNotice[];
 }
 
 export const fakePerson = (passphrase: string = TEST_PASSPHRASE): FakePerson => {
     const asked: ConsentRequest[] = [];
     const replies: Reply[] = [];
+    const choices: string[] = [];
+    const typed: ValueAnswer[] = [];
+    const boxes: ValueNotice[] = [];
+    const dialogs: ChoiceNotice[] = [];
     return {
         asked,
         replies,
+        choices,
+        typed,
+        boxes,
+        dialogs,
         consent: {
             hello: undefined,
+            choose: (notice) => {
+                dialogs.push(notice);
+                return Promise.resolve({ kind: "chosen", id: choices.shift() ?? notice.choices[0]?.id ?? "" });
+            },
+            askValue: (notice) => {
+                boxes.push(notice);
+                return Promise.resolve(typed.shift() ?? { kind: "cancelled" });
+            },
             ask: async (request) => {
                 asked.push(request);
-                if ((replies.shift() ?? "yes") === "no") {
+                const reply = replies.shift() ?? "yes";
+                if (reply === "away") {
+                    return { ok: false, code: "busy", reason: "Nobody answered at the computer." };
+                }
+                if (reply === "no") {
                     return { ok: false, code: "declined", reason: "The person at the computer said no." };
                 }
                 if (!request.unlock) {

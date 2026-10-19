@@ -33,7 +33,11 @@ export const targetTab = async (need: "read" | "act", tabId?: number): Promise<T
     ]);
     const pattern = originPattern(tab.url);
     // tab.url is undefined when permission is missing (Chrome's design); treat that as ungranted, not a bug.
-    const granted = pattern === undefined ? false : await chrome.permissions.contains({ origins: [pattern] });
+    // Passwords may hold `<all_urls>` without listing every site in `modes`; the agent still needs an explicit allow
+    // per origin, filed when the person picks Read or Read & act in the popup.
+    const onAgentList = pattern !== undefined && pattern in modes;
+    const granted =
+        pattern !== undefined && onAgentList && (await chrome.permissions.contains({ origins: [pattern] }));
     const verdict = decide({
         url: tab.url,
         granted,
@@ -54,10 +58,27 @@ export const targetTab = async (need: "read" | "act", tabId?: number): Promise<T
 // so a permission revoked in browser settings is reflected immediately. The paired sandbox's own origin is held for
 // the connection, not as a site to work on (policy.ts refuses it), so it is not listed as one: shown as a site, it
 // invited a "remove" that cut the link.
+// Passwords' all-sites grant (`<all_urls>`, `*://*/*`) is for capture and fill, never a site the agent was given.
+const wildcard = (origin: string): boolean => origin.includes("://*") || origin === "<all_urls>";
+
 export const currentGrants = async (): Promise<WebExtGrant[]> => {
     const [permissions, modes, sandbox] = await Promise.all([chrome.permissions.getAll(), store.modes(), store.sandbox()]);
     const own = sandboxOwnOrigin(sandbox?.url);
     return (permissions.origins ?? [])
-        .filter((origin) => origin.startsWith("http") && origin !== own)
+        .filter((origin) => origin.startsWith("http") && origin !== own && origin in modes && !wildcard(origin))
         .map((origin) => ({ origin, mode: modes[origin] ?? "read" }));
+};
+
+// A site granted before every grant filed its mode was read as "read only" by the reading above until 2026-10-19, when a
+// filed mode became what makes a site the agent's (so Passwords' all-sites grant could not stand in for one). Filed as
+// "read" on the update, so the agent keeps exactly what the person gave it. Wildcards and the sandbox's own origin are
+// skipped, so running it again after Passwords is on changes nothing.
+export const fileUnmodedGrants = async (): Promise<void> => {
+    const [permissions, modes, sandbox] = await Promise.all([chrome.permissions.getAll(), store.modes(), store.sandbox()]);
+    const own = sandboxOwnOrigin(sandbox?.url);
+    for (const origin of permissions.origins ?? []) {
+        if (origin.startsWith("http") && origin !== own && !wildcard(origin) && !(origin in modes)) {
+            await store.setMode(origin, "read");
+        }
+    }
 };

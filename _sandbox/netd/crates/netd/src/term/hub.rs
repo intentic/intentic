@@ -15,6 +15,7 @@ use tokio::process::{Child, ChildStderr, ChildStdin, Command as Process};
 use tokio::sync::{Notify, mpsc};
 
 use super::control::{Event, Parser};
+use super::hidden::{self, HiddenTap, WEB_SESSION_PREFIX};
 use super::screen::{self, PaneLocation};
 
 /// tmux keeps 100k lines a pane; all of it on every attach would be tens of MB.
@@ -245,11 +246,15 @@ struct Handle {
     commands: mpsc::UnboundedSender<Command>,
 }
 
+/// Where a hub hands a line typed with echo off (hidden.rs): netd's control socket to Node, in netd itself.
+pub type Teller = Arc<dyn Fn(netd_wire::ToNode) + Send + Sync>;
+
 /// Every session's hub, by session name.
 pub struct Hubs {
     tmux: Tmux,
     hubs: Mutex<HashMap<String, Handle>>,
     next: AtomicU64,
+    teller: Option<Teller>,
 }
 
 /// One socket's seat at a hub; dropping it leaves.
@@ -340,10 +345,16 @@ impl Drop for Viewer {
 
 impl Hubs {
     pub fn new(tmux: Tmux) -> Arc<Self> {
+        Self::telling(tmux, None)
+    }
+
+    /// Hubs that tell Node of a line the person typed with echo off in one of the editor's sessions.
+    pub fn telling(tmux: Tmux, teller: Option<Teller>) -> Arc<Self> {
         Arc::new(Self {
             tmux,
             hubs: Mutex::new(HashMap::new()),
             next: AtomicU64::new(1),
+            teller,
         })
     }
 
@@ -396,6 +407,12 @@ impl Hubs {
         mut queue: mpsc::UnboundedReceiver<Command>,
     ) {
         let mut hub = Hub::default();
+        // Only the editor's own sessions, where the person types, and only where Node can be told.
+        if session.starts_with(WEB_SESSION_PREFIX) {
+            if let Some(teller) = &self.teller {
+                hub.hidden = Some((session.clone(), HiddenTap::default(), teller.clone()));
+            }
+        }
         let ended = match self.tmux.control(&argv) {
             Ok(child) => self.serve(&mut hub, child, &session, id, &mut queue).await,
             Err(error) => Some((1, format!("could not start tmux: {error}"))),
@@ -572,9 +589,26 @@ struct Hub {
     queued: Vec<Vec<u8>>,
     attach_error: Option<String>,
     out: Vec<u8>,
+    // A `web-` session's watch for a password typed at a hidden prompt, with its name and where it is told.
+    hidden: Option<(String, HiddenTap, Teller)>,
 }
 
 impl Hub {
+    // Input on its way to the pane, shown to the session's watch first: a line it saw typed with echo off is told.
+    fn watch_input(&mut self, bytes: &[u8]) {
+        let tty = self.location.as_ref().and_then(|at| at.tty.clone());
+        let Some((session, tap, teller)) = self.hidden.as_mut() else {
+            return;
+        };
+        if let Some(entered) = tap.input(bytes, || tty.as_deref().is_some_and(hidden::echo_off)) {
+            teller(netd_wire::ToNode::HiddenLine {
+                session: session.clone(),
+                prompt: entered.prompt,
+                value: entered.value,
+            });
+        }
+    }
+
     fn ask(&mut self, command: &str, expect: Expect) {
         self.out.extend_from_slice(command.as_bytes());
         self.out.push(b'\n');
@@ -663,7 +697,10 @@ impl Hub {
             }
             Command::Input(bytes) if bytes.is_empty() => {}
             Command::Input(bytes) => match self.location.as_ref().map(|at| at.pane.clone()) {
-                Some(pane) => self.send_keys(&pane, &bytes),
+                Some(pane) => {
+                    self.watch_input(&bytes);
+                    self.send_keys(&pane, &bytes);
+                }
                 None if self.queued.len() < QUEUED_INPUT_MAX => self.queued.push(bytes),
                 None => {}
             },
@@ -687,6 +724,9 @@ impl Hub {
         match event {
             Event::Output { pane, bytes } => {
                 if self.location.as_ref().is_some_and(|at| at.pane == pane) {
+                    if let Some((_, tap, _)) = self.hidden.as_mut() {
+                        tap.output(&bytes);
+                    }
                     for outbox in self.viewers.values() {
                         outbox.output(&bytes);
                     }
