@@ -2,7 +2,7 @@ import type { ViewBadge } from "@intentic/extension-api";
 import type { PushQuestion, StandingVerdict } from "./usePushFlow";
 import { t } from "@intentic/ui/i18n";
 
-// What a push in flight says on the rail's Workspace tile and the phone's Review tab, from one place so the
+// What a push in flight says on the Workspace tile of either rail, the desktop's and the phone's, from one place so the
 // two can't drift. Outranks the tile's standing counts, since this is happening now (or a decision owed), not
 // a static fact about the tree. A glyph, never a count: the amount lives in the tooltip.
 export const pushBadge = (running: boolean, question: PushQuestion | undefined, held?: StandingVerdict): ViewBadge | undefined => {

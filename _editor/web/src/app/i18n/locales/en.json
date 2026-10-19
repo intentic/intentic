@@ -10716,11 +10716,6 @@
             "away": " · away",
             "phone": "This phone"
         },
-        "mobileTabBar": {
-            "toReview": "{count} to review",
-            "waitingAnswer": "Waiting for your answer",
-            "workingOnLast": "Working on your last message"
-        },
         "notificationSources": {
             "allow": "Allow",
             "alreadyUpToDate": "Already up to date",
@@ -10855,8 +10850,7 @@
             "windowsOpen": "{count} window open | {count} windows open"
         },
         "shellMobile": {
-            "back": "Back",
-            "backToMenu": "Back to Menu"
+            "back": "Back"
         },
         "sidePanel": {
             "agentCopy": "{title}'s copy",

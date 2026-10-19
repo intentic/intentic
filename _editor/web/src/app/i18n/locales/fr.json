@@ -5512,10 +5512,6 @@
             "away": " · absent",
             "phone": "Ce téléphone"
         },
-        "mobileTabBar": {
-            "toReview": "{count} à revoir",
-            "waitingAnswer": "En attente de votre réponse"
-        },
         "notificationSources": {
             "allow": "Autoriser",
             "alreadyUpToDate": "Déjà à jour",

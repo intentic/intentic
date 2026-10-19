@@ -4,14 +4,12 @@ import TourMark from "../features/tour/TourMark.vue";
 import type { MarkStep } from "../features/tour/tourMarks";
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract/state/starter";
-import { AnchoredOverlay, browserOwnsClick, ui, ContextMenu, type IconName, type Tip, type TipTone, type TooltipValue } from "@intentic/ui";
+import { AnchoredOverlay, browserOwnsClick, ui, ContextMenu, type Tip, type TipTone, type TooltipValue } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { isNavigationFailure, NavigationFailureType, RouterView, useRoute, useRouter } from "vue-router";
 import { useWallpaperedRoute } from "../skins/useWallpaper";
 import { askForAttention } from "../models/fleet/board/attentionOutside";
-import { agentsBadge, agentsScopeNote } from "../models/fleet/board/agentsTile";
-import { useCapabilities } from "../models/capabilities/useCapabilities";
 import { useRole } from "../client/sandbox/useRole";
 import { useTerminalPanel } from "../models/terminal/useTerminalPanel";
 import { useTerminalFloating } from "../features/terminal/terminalFloating";
@@ -26,19 +24,7 @@ import { GO_TO } from "../workbench/commands/categories";
 import { useNavigationCommands } from "./commands/useNavigationCommands";
 import { useProjectCommands } from "./commands/useProjectCommands";
 import { commandShortcut, registerCommand } from "../workbench/commands/useCommands";
-import {
-    type ActiveExtension,
-    activationBadge,
-    sectionReachable,
-    detectActivations,
-    extensionPath,
-    railBands,
-    railRank,
-    onRail,
-    railPolicy,
-    onRailOnlyByVisit,
-    DEVICES_VIEW_ID,
-} from "../workbench/views/registry";
+import { railBands, railRank, onRail, railPolicy, onRailOnlyByVisit } from "../workbench/views/registry";
 import ViewBadgeChip from "../workbench/views/ViewBadgeChip.vue";
 import { useVocabulary } from "../workbench/views/vocabulary";
 import { chatOnRail, lastSectionPath, toggleChatFloating, toggleChatHome } from "../models/conversations/panel/chatPanelLayout";
@@ -55,14 +41,6 @@ import { presenceOthers } from "../workbench/presence/usePresence";
 import { usePanels } from "../models/extensions/usePanels";
 import { appTargetId } from "../models/preview/previewModel";
 import { openPreviewOnFirstVisit } from "../workbench/browsers/browsersSurface";
-import { outgoingMark, outgoingSummary } from "../models/workspace/push/outgoingWork";
-import { useChanges } from "../models/changes/useChanges";
-import { pushBadge } from "../features/workspace/push/pushBadge";
-import { usePushFlow } from "../features/workspace/push/usePushFlow";
-import { useSyncHealth } from "../models/sandbox/devices/useDevices";
-import { devicesWorking } from "../features/sandbox/devices/runners/deviceWork";
-import { DEVICES_PATH } from "../models/sandbox/devices/deviceLinks";
-import { extensionsLoaded } from "../extension-host/loader";
 import AccountPanel from "./AccountPanel.vue";
 import GettingStartedRing from "../features/gettingStarted/GettingStartedRing.vue";
 import ChatQuickBar from "../features/chat/panel/ChatQuickBar.vue";
@@ -72,6 +50,7 @@ import { registerCoreSideViews } from "./side/coreSideViews";
 import { setSplit, sideDocked } from "../workbench/side/sideTabs";
 import { besideChat, besideFills, sideColumnShown, sideShown } from "./side/sideLayout";
 import { type RailTile, useRailMemory } from "./rail/railMemory";
+import { type SectionTile, tileLabel, tileParts, useSectionTiles } from "./rail/sectionTiles";
 import { useRailPins } from "./rail/railPins";
 import { popChatOutAt, useChatTileDrag } from "./rail/chatTileDrag";
 import ChatTileDragLayer from "./rail/ChatTileDragLayer.vue";
@@ -84,22 +63,9 @@ import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 import SandboxSwitcher from "../features/sandbox/gates/SandboxSwitcher.vue";
 import { useT } from "@intentic/ui/i18n";
 
-// RailTile supplies id, route, label and icon: RAIL_GROUPS ranks the id; repository tiles render initials without an icon.
+// The tiles themselves, and every badge on them, are rail/sectionTiles.ts's, shared with the phone's rail.
 const t = useT();
 
-interface SectionTile extends RailTile {
-    // Same shape core sections and extensions both fill, so the rail renders one badge element.
-    readonly badge?: ViewBadge;
-    // A standing fact about the tile (not news); today only the Agents tile's cross-sandbox scope uses it.
-    readonly note?: { readonly icon: IconName; readonly text: string };
-    // Set on a held tile for a tile not yet loaded: dim, inert, never badged (railMemory.ts).
-    readonly ghost?: boolean;
-}
-
-// One tile tooltip combines badge, running work and standing facts; nested badge tooltips would overlap it.
-const tileParts = (tile: SectionTile): string[] =>
-    [tile.badge?.tooltip, tile.badge?.running, tile.note?.text].flatMap((part) => (part === undefined || part === `` ? [] : [part]));
-const tileLabel = (tile: SectionTile): string => [tile.label, ...tileParts(tile)].join(` · `);
 // The hover: the name alone, or the name as a card's headline over what the tile is carrying. A warning or danger badge
 // lends the headline its dot, since that tone marks a standing state rather than a count.
 const badgeTone = (tone: ViewBadge[`tone`]): TipTone | undefined => (tone === `warning` ? `warning` : tone === `danger` ? `danger` : undefined);
@@ -116,22 +82,16 @@ const tileTip = (tile: SectionTile, extra?: string): TooltipValue => {
 // was opened beside), laid out as a three-column grid (the side panel's width via --side-width, set by its drag handle).
 // Shared lifecycle (liveness, presence, plan) lives in WorkspaceShell, which picks this or ShellMobile.
 
-const { panels, settled: panelsSettled } = usePanels();
-const { capabilities, settled: capabilitiesSettled } = useCapabilities();
-// Devices is ship-tier only: the hub withholds the section below maintainer, where the daemon refuses what it is for.
-const { canShip, isGuest } = useRole();
-// Uncommitted changes badge the Workspace tile, so the count is visible from any section.
-const changes = useChanges();
-// A push started and left behind also surfaces: the tile is its only presence outside the panel.
-const pushFlow = usePushFlow();
-// Agents' badge (agentsTile.ts) covers whichever sandboxes the board reads; also used by the phone tab bar.
+const { panels } = usePanels();
+// A guest has no More door and no + (see the rail's foot below).
+const { isGuest } = useRole();
 const layout = useLayout();
 const { iconRailSize } = useIconRailSize();
 // When chat floats, this column collapses everywhere else; the panel itself mounts above the router.
 const { floats: chatFloats } = useChatFloating();
 const route = useRoute();
 const router = useRouter();
-// The audience's words for the core tiles that have maker names (Files); Chat and Agents keep theirs.
+// The audience's words: the maker's + names a new agent rather than a capability.
 const words = useVocabulary();
 // A reader who does not write code meets the rail's + as the start of a conversation, which is what they came to do;
 // connecting Docker, SSH or a wallet is an owner's errand, kept one press further in, under the overflow.
@@ -139,30 +99,6 @@ const { maker } = useAudience();
 
 // Prefix match, not active-class: a splat/optional param (workspace/:path) drops it once one is set.
 const isNavActive = (to: string): boolean => route.path === to || route.path.startsWith(`${to}/`);
-
-// Mirrors the panel's own priority: uncommitted count (size matters) before an outgoing push (a glyph,
-// since size doesn't); a push in flight comes first, being this tile's only sign of it.
-const workspaceBadge = computed<ViewBadge | undefined>(() => {
-    // Orthogonal to whatever the badge SAYS: a running mark is drawn beside the tile, so a land rides whichever badge
-    // wins below and stands alone when none does — the count is still 0 until the patch is in the tree.
-    const landing: Pick<ViewBadge, `running`> = changes.landing.value === undefined ? {} : { running: changes.landing.value };
-    const push = pushBadge(pushFlow.running.value, pushFlow.question.value, pushFlow.held.value);
-    if (push !== undefined) {
-        return { ...push, ...landing };
-    }
-    if (changes.count.value > 0) {
-        return {
-            count: changes.count.value,
-            tooltip: words.value.pendingChanges(changes.count.value),
-            ...landing,
-        };
-    }
-    const work = changes.outgoing.value;
-    if (work === undefined) {
-        return changes.landing.value === undefined ? undefined : landing;
-    }
-    return { mark: outgoingMark(work), tooltip: outgoingSummary(work), ...landing };
-});
 
 // On the rail only while chat is docked and not floated, except briefly after popping out from /chat itself.
 const chatTileSeated = computed(() => chatOnRail.value && (!chatFloats.value || route.name === `chat`));
@@ -180,86 +116,13 @@ watch(
     { immediate: true },
 );
 
-// THE MACHINES THIS SANDBOX REACHES, tiled like This computer in a local window (the same glyph and the same corners):
-// a place to go, the count of ports another of your sandboxes took, and the turning mark while one of them is being
-// worked on. A signal tile (registry.ts): kept by a pin, and on the rail by itself while it badges, since an agent
-// update outlives the page that pressed it by a minute or more (devices/runners/deviceWork.ts).
-const { heldPorts } = useSyncHealth();
-const devicesBadge = (held: number, running: string | undefined): ViewBadge | undefined => {
-    if (held === 0) {
-        return running === undefined ? undefined : { running };
-    }
-    const count: ViewBadge = { count: held, tone: `info`, tooltip: t(`shell.shellDesktop.portsTaken`, { count: held }, held) };
-    return running === undefined ? count : { ...count, running };
-};
-const devicesTile = computed<SectionTile>(() => {
-    const tile: SectionTile = { id: DEVICES_VIEW_ID, to: DEVICES_PATH, label: t(`sandbox.words.devicesSection`), icon: `desktop` };
-    const badge = devicesBadge(heldPorts.value.length, devicesWorking());
-    return badge === undefined ? tile : { ...tile, badge };
-});
-
-// The always-present tiles; extension tiles are added separately below,
-// one per activation. The rest of sandbox management lives behind the switcher chip, not a rail tile.
-const fixedTiles = computed<readonly SectionTile[]>(() => [
-    // Heads the Work band's permanent tiles, below Projects when that is tiled; unbadged, since the Agents tile below carries the debt (see chatTileSeated).
-    ...(chatTileSeated.value
-        ? [
-              {
-                  id: `chat`,
-                  to: `/chat`,
-                  label: t(`shared.chat`),
-                  icon: `comments` as IconName,
-              },
-          ]
-        : []),
-    {
-        id: `agents`,
-        to: `/agents`,
-        label: words.value.agents,
-        // RailIcon draws by section identity; these generic names remain the fallback vocabulary.
-        icon: `robot`,
-        // Both come from agentsTile.ts, shared with the phone tab bar; the note names the scope when it's wide.
-        ...(agentsBadge.value === undefined ? {} : { badge: agentsBadge.value }),
-        ...(agentsScopeNote.value === undefined ? {} : { note: { icon: `boxes` as IconName, text: agentsScopeNote.value } }),
-    },
-    {
-        id: `workspace`,
-        to: `/workspace`,
-        label: words.value.workspace,
-        icon: `file-tree`,
-        ...(workspaceBadge.value === undefined ? {} : { badge: workspaceBadge.value }),
-    },
-    ...(canShip.value ? [devicesTile.value] : []),
-]);
-// RailIcon selects bespoke glyphs by view id and validates extension fallbacks before drawing them.
-const extensionTile = (active: ActiveExtension): SectionTile => {
-    const { extension, activation } = active;
-    const badge = activationBadge(active);
-    return {
-        id: extension.id,
-        to: extensionPath(extension, activation),
-        label: activation.title,
-        ...(activation.icon === undefined ? {} : { icon: activation.icon as IconName }),
-        ...(activation.monogram === undefined ? {} : { monogram: activation.monogram }),
-        ...(badge === undefined ? {} : { badge }),
-    };
-};
-// Every nav tile, on the rail or not, in one run ranked by RAIL_GROUPS (core sections, then one tile per
-// extension activation); the on the rail and More lists both come from this run, so a section is never in neither (only the one you are visiting is in both).
-const tiles = computed<readonly SectionTile[]>(() =>
-    [
-        ...fixedTiles.value,
-        ...detectActivations(panels.value, capabilities.value)
-            // Only rail-surface extensions get a tile; per-repo panels open from the Workspace tree instead.
-            .filter(({ extension }) => extension.surface === `rail`)
-            .map(extensionTile),
-    ]
-        // Before the rail and before More: a section this reader cannot open belongs in neither list.
-        .filter((tile) => sectionReachable(tile.to))
-        .toSorted((left, right) => railRank(left.id) - railRank(right.id)),
+// Every nav tile, on the rail or not, in one run ranked by RAIL_GROUPS (sectionTiles.ts, shared with the phone's rail),
+// headed by the docked chat's tile while it has one; the on the rail and More lists both come from this run, so a
+// section is never in neither (only the one you are visiting is in both).
+const { tiles, settled: railSettled } = useSectionTiles(() =>
+    // Heads the Work band's permanent tiles, below Projects when that is tiled; unbadged, since the Agents tile carries the debt (see chatTileSeated).
+    chatTileSeated.value ? [{ id: `chat`, to: `/chat`, label: t(`shared.chat`), icon: `comments` }] : [],
 );
-// True once extensions, panels, and capabilities have all loaded; before that a missing tile is only late.
-const railSettled = computed(() => extensionsLoaded.value && panelsSettled.value && capabilitiesSettled.value);
 
 // onRail (registry.ts) holds the rule; this only supplies the live facts: pinned and active.
 const pins = useRailPins();

@@ -13,7 +13,7 @@ import {
 } from "vue-router";
 import { asyncView } from "../components/asyncView";
 import { conversationRedirect, linkedConversation } from "./conversationLink";
-import { mobileChatPath } from "../lib/routes/tabRoots";
+import { mobileChatPath } from "../lib/routes/phoneScreens";
 import SplitViewOutline from "../components/SplitViewOutline.vue";
 import { restorePersistedQueries } from "../lib/queryPersistence";
 import { restoreImprints } from "../lib/skeletonPersistence";
@@ -177,11 +177,11 @@ export const openInPage = async (path: string): Promise<void> => {
     await router.push(settled === true ? path : settled);
 };
 
-// Menu and Terminal are full-screen tabs only on the mobile shell; the desktop shell docks the terminal and puts the
+// Menu and Terminal are full-screen pages only on the mobile shell, opened from its rail; the desktop shell docks the terminal and puts the
 // menu's contents on the rail, so a desktop hit lands on the workspace instead.
 const mobileOnly = (): boolean | RouteLocationRaw => (useDevice().mobile.value ? true : `/workspace`);
 
-// /chat on a phone is the Chat tab: the active conversation's own screen. The store is imported at the press, not
+// /chat on a phone is the active conversation's own screen. The store is imported at the press, not
 // at module load, so the router does not pull the chat's whole graph into every first paint.
 const chatEntry = async (): Promise<boolean | RouteLocationRaw> => {
     if (!useDevice().mobile.value) {
@@ -293,7 +293,7 @@ const routes: RouteRecordRaw[] = [
                 redirect: () => (useRole().isGuest.value ? `/chat` : useDevice().mobile.value ? `/agents` : `/workspace`),
             },
             // Full-screen chat: the rail-docked chat's own surface, expanded. A route rather than a layout switch, so
-            // the rail, back button and reload already know how to enter and leave it. On a phone, the Chat tab.
+            // the rail, back button and reload already know how to enter and leave it. On a phone, the conversation's own screen.
             {
                 path: `chat`,
                 name: `chat`,

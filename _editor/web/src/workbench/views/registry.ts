@@ -90,7 +90,7 @@ export interface RailGroup {
 const always = (id: string): RailItem => ({ id, policy: `always` });
 const signal = (id: string): RailItem => ({ id, policy: `signal` });
 
-export const WORKSPACE_VIEW_ID = `workspace`;
+const WORKSPACE_VIEW_ID = `workspace`;
 // The Sandbox hub's Devices section, tiled by the shell itself (ShellDesktop.vue) rather than by a view.
 export const DEVICES_VIEW_ID = `devices`;
 // The sandbox's own desktop, watched and taken over by the owner. Not a band's tile: a live surface, drawn by the shell
@@ -150,7 +150,7 @@ export const guestRailGroups = (): readonly RailGroup[] => [
 ];
 
 // Whether this reader can open a tile at all, asked of every list of sections the shell draws: the rail's tiles, its
-// More menu, the phone's menu and tab bar. A guest is fenced to a handful of paths (lib/routes/guestPaths.ts) and a tile
+// More menu, the phone's rail. A guest is fenced to a handful of paths (lib/routes/guestPaths.ts) and a tile
 // outside them answers a press by bouncing to the chat, which reads as a broken tile rather than as a boundary —
 // so the offer is withdrawn instead. Keyed on the destination, not the id, so a section added later is covered by the
 // fence it will actually meet.
@@ -185,13 +185,6 @@ export const onRailOnlyByVisit = (
     tile: { readonly id: string; readonly badge?: ViewBadge | undefined },
     context: { readonly pinned: boolean; readonly active: boolean },
 ): boolean => context.active && !onRail(tile, { pinned: context.pinned, active: false });
-
-// What the mobile tab bar already promotes, so the mobile menu doesn't list it again. View ids, the same
-// key RAIL_GROUPS and detectActivations use, not package ids. The home tile is not among them: on a phone the file
-// tree and the Project page live on the Menu, and Chat takes the tile. Approvals is: with that pack on the Review tab
-// opens its queue and wears its badge (shell/mobileTabs.ts), so a Menu row would be the same place twice.
-export const APPROVALS_VIEW_ID = `approvals`;
-export const tabBarIds = (): readonly string[] => [`chat`, `agents`, APPROVALS_VIEW_ID];
 
 const railOrder = (): readonly string[] => activeGroups().flatMap((group) => group.items.map((item) => item.id));
 

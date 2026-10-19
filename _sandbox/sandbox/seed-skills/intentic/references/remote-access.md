@@ -11,8 +11,10 @@ owner's own computer answers only while that computer and its container are runn
 
 ## On a phone
 
-- Below 768 px wide the app switches to a phone layout: full-screen views under a bottom tab bar, **Chat**,
-  **Agents**, **Review** (not shown to guests) and **Menu**.
+- Below 768 px wide the app switches to a phone layout with no tab bar. Home is the **Agents** board, with a rail of
+  icons down its left: the sandbox's logo at the top opens the **Menu** (switch sandbox, what it needs, account),
+  then every section, **Terminal**, **Sandbox**, **Settings**, and **+** to add a capability. A chat opens
+  full-screen from its card on the board; every screen has a back arrow to the board.
 - The app ships a web manifest (standalone display, with **Chat** and **Agents** shortcuts), so the browser's own
   Add to Home Screen / Install app puts it on the Home Screen as an app. There is no install button inside the app.
 - Push notifications on iPhone need that Home Screen install first. The phone's Menu says **Add to your Home

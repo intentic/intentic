@@ -5,40 +5,40 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import { useWallpaperedRoute } from "../skins/useWallpaper";
-import MobileTabBar from "./MobileTabBar.vue";
-import { useTabRoots } from "./mobileTabs";
-import { onTabRoot } from "../lib/routes/tabRoots";
+import MobileRail from "./MobileRail.vue";
+import { ownsWayBack, PHONE_HOME } from "../lib/routes/phoneScreens";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 import { useEdgeBack } from "./edgeBack";
 import { useKeybindings } from "../workbench/commands/useKeybindings";
 
-// Mobile chrome: full-screen views over a bottom tab bar. h-dvh tracks the browser's UI chrome; the
-// bar yields to the on-screen keyboard. No rail, chat column, or docked terminal: chat and terminal are
-// full-screen routes, and the rail's tiles live on /menu.
+// Mobile chrome: two screens and the places between them. The board (/agents) is home, with the rail down its left
+// (MobileRail.vue) holding every other place; a conversation (/agents/:id) is the board's drill-down, back by its own
+// arrow. Everything else is a full-screen page the rail opened, with the way back drawn at its top. h-dvh tracks the
+// browser's UI chrome. No tab bar, chat column, or docked terminal: chat and terminal are full-screen routes.
 
 const t = useT();
 const { keyboardOpen } = useDevice();
 
-// Undefined on a tab root or its own drill-down (mobileTabs.ts): those already carry their own back arrow.
-// Otherwise steps back when history.state.back shows one exists, else falls back to Menu.
 const route = useRoute();
 const router = useRouter();
-const tabRoots = useTabRoots();
+// The board itself, where the rail is drawn. Not its drill-downs: a conversation keeps the whole width of the screen.
+const onBoard = computed(() => route.path === PHONE_HOME);
 
+// Undefined on the board and a conversation under it: the board is home, and a conversation's screen carries its own
+// arrow. Otherwise steps back when history.state.back shows one exists, else falls back to the board.
 const back = computed<PageBack | undefined>(() => {
-    const panel = route.query[`panel`];
-    if (onTabRoot({ path: route.path, panel: typeof panel === `string` ? panel : undefined }, tabRoots.value)) {
+    if (ownsWayBack(route.path)) {
         return undefined;
     }
     const stepped = typeof router.options.history.state[`back`] === `string`;
     return {
-        label: stepped ? t(`shell.shellMobile.back`) : t(`shell.shellMobile.backToMenu`),
+        label: stepped ? t(`shell.shellMobile.back`) : t(`agents.agentDetail.backToAgents`),
         go: () => {
             if (stepped) {
                 router.back();
                 return;
             }
-            void router.push(`/menu`);
+            void router.push(PHONE_HOME);
         },
     };
 });
@@ -70,7 +70,13 @@ useKeybindings();
 </script>
 
 <template>
-    <div class="flex h-dvh flex-col overflow-hidden bg-canvas text-content" style="overscroll-behavior: none">
+    <!-- The foot of the screen keeps clear of the home indicator: a chat's composer
+         and the board's floating press both sit there. Not while the keyboard is up, which covers that strip. -->
+    <div
+        class="flex h-dvh flex-col overflow-hidden bg-canvas text-content"
+        :class="{ 'pb-[env(safe-area-inset-bottom)]': !keyboardOpen }"
+        style="overscroll-behavior: none"
+    >
         <main id="main-content" ref="surface" tabindex="-1" class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <!-- What an edge swipe uncovers (edgeBack.ts): the place a release goes back to, darker while the page still
                  covers most of it, and the arrow that fills once letting go would go there. Hidden unless a swipe is on. -->
@@ -80,15 +86,18 @@ useKeybindings();
                     <Icon name="arrow-left" class="text-base" />
                 </span>
             </div>
-            <div ref="page" class="relative flex min-h-0 min-w-0 flex-1 flex-col bg-canvas">
-                <SandboxGate>
-                    <div class="min-h-0 flex-1 overflow-auto" :class="{ 'wallpaper-surface': wallpapered }" style="overscroll-behavior: contain">
-                        <RouterView />
-                    </div>
-                </SandboxGate>
+            <div ref="page" class="relative flex min-h-0 min-w-0 flex-1 bg-canvas">
+                <!-- Outside the gate, as the desktop's rail is: a sandbox that stopped answering still has a way to another. -->
+                <MobileRail v-if="onBoard" />
+                <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                    <SandboxGate>
+                        <div class="min-h-0 flex-1 overflow-auto" :class="{ 'wallpaper-surface': wallpapered }" style="overscroll-behavior: contain">
+                            <RouterView />
+                        </div>
+                    </SandboxGate>
+                </div>
             </div>
         </main>
-        <MobileTabBar v-show="!keyboardOpen" />
     </div>
 </template>
 

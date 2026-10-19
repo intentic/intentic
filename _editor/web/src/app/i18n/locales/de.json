@@ -5557,10 +5557,6 @@
             "away": " · weg",
             "phone": "Dieses Telefon"
         },
-        "mobileTabBar": {
-            "toReview": "{count} zu prüfen",
-            "waitingAnswer": "Wartet auf Ihre Antwort"
-        },
         "notificationSources": {
             "allow": "Erlauben",
             "alreadyUpToDate": "Schon aktuell",

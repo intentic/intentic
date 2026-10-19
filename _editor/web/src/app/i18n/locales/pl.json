@@ -10226,11 +10226,6 @@
             "away": " · nieobecny",
             "phone": "Ten telefon"
         },
-        "mobileTabBar": {
-            "toReview": "{count} do przejrzenia",
-            "waitingAnswer": "Czeka na Twoją odpowiedź",
-            "workingOnLast": "Pracuje nad Twoją ostatnią wiadomością"
-        },
         "notificationSources": {
             "allow": "Zezwól",
             "alreadyUpToDate": "Już aktualne",
@@ -10407,8 +10402,7 @@
             "workingTooltip": "Agenci pracują"
         },
         "shellMobile": {
-            "back": "Wstecz",
-            "backToMenu": "Wróć do menu"
+            "back": "Wstecz"
         },
         "commandCategories": {
             "goTo": "Przejdź do",

@@ -9,7 +9,7 @@ import { acrossAttention, listNames, readingAcross, watchRemoteSeen } from "../f
 import { useAgents } from "../useAgents";
 import { attentionOutsideProject, trackScopeInputs } from "./attentionOutside";
 
-// What the agents tile shows, wherever it is drawn (rail tile, phone tab): the Attention lane's count follows the
+// What the agents tile shows, wherever it is drawn (the desktop rail's tile, the phone rail's): the Attention lane's count follows the
 // board's sandbox scope, and the cross-sandbox sum exists only while the reader has opted into it.
 
 // Attention cards and automation wakes held at the door, everywhere the board is currently reading.

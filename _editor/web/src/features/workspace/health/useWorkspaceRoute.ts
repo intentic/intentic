@@ -47,7 +47,7 @@ export function useWorkspaceRoute(): void {
     };
 
     // Reconcile once at mount: a deep link wins; otherwise the singleton's open file is asserted into the URL.
-    // Not on a phone, where the URL is the state: a bare /workspace there is the list or the Review tab's Changes
+    // Not on a phone, where the URL is the state: a bare /workspace there is the list or its Changes
     // panel, and a file tab restored from storage on a cold load would put the viewer over whichever was asked for.
     const { mobile } = useDevice();
     if (urlPath.value !== ``) {

@@ -24,7 +24,7 @@ import { agentWork, assignAgent, landRequestWork, requestLandAgent, startAgent }
 import { useOperation } from "../../../workbench/operations/operations";
 import { presenceOthers } from "../../../workbench/presence/usePresence";
 import { identityHue } from "../../../lib/identityHue";
-import { mobileChatPath } from "../../../lib/routes/tabRoots";
+import { mobileChatPath } from "../../../lib/routes/phoneScreens";
 import { afterPaint } from "../../../lib/afterPaint";
 import { whenIdle } from "../../../lib/whenIdle";
 import ChatSwitcherSheet from "../../chat/tabs/ChatSwitcherSheet.vue";
@@ -161,8 +161,8 @@ const bindLocalConversation = (id: string, previousId: string | undefined): void
     if (id === `` || (id === previousId && conversation.value !== undefined && (mobile.value || reviewable.value))) {
         return;
     }
-    // The tab is already in front (a phone's board opened it as it walked here, cardSelection.ts, or the Chat tab points
-    // at the chat that was): re-revealing it is a second pass over the tab list and the pane layout, inside the
+    // The tab is already in front (a phone's board opened it as it walked here, cardSelection.ts, or /chat pointed at
+    // the chat that was): re-revealing it is a second pass over the tab list and the pane layout, inside the
     // navigation the reader is waiting on. Arriving still stamps the read marker, which is all that open() adds.
     if (mobile.value && id !== previousId && activeChat.value.conversationId === id && conversation.value !== undefined) {
         if (fleetAgent.value !== undefined) {
@@ -471,14 +471,20 @@ const confirmHandOver = async (): Promise<void> => {
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <!-- A @container: the header thins against its own width (the workspace pane's), not the window's. -->
-        <div class="view-header @container flex items-center gap-2.5 border-b border-line px-3.5 py-1">
+        <!-- On a phone it is the screen's whole chrome, sized for a thumb: 56px tall, every press in it a 40-44px target
+             you can see, rather than a 28px glyph whose larger target is invisible (`touch-target`). -->
+        <div
+            class="view-header @container flex items-center border-b border-line"
+            :class="mobile ? `h-14 gap-1 pl-1 pr-2` : `gap-2.5 px-3.5 py-1`"
+        >
             <!-- The board is a place, so the way back is a link: hoverable, copyable, openable in its own tab. -->
             <RouterLink
                 to="/agents"
-                class="touch-target flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                class="touch-target flex shrink-0 items-center justify-center text-muted transition-colors hover:bg-overlay hover:text-content active:bg-overlay"
+                :class="mobile ? `h-11 w-11 rounded-full` : `h-7 w-7 rounded-md`"
                 :aria-label="t(`agents.agentDetail.backToAgents`)"
             >
-                <Icon name="arrow-left" class="text-sm" />
+                <Icon name="arrow-left" :class="mobile ? `text-lg` : `text-sm`" />
             </RouterLink>
             <input
                 v-if="edit.editing"
@@ -495,20 +501,20 @@ const confirmHandOver = async (): Promise<void> => {
             <template v-else>
                 <!-- Nobody has named this agent yet: a bar in the title's own place, and no rename over a missing name. -->
                 <!-- One bar, not a remembered title: the last agent's name says nothing about how long this one's is. -->
-                <span v-if="unnamed" class="flex min-w-0 flex-1 items-center" aria-hidden="true">
+                <span v-if="unnamed" class="flex min-w-0 flex-1 items-center" :class="{ 'px-1.5': mobile }" aria-hidden="true">
                     <span class="skeleton block h-3 w-40 max-w-full"></span>
                 </span>
                 <!-- On a phone the title is the switcher's handle: the chats sheet opens from it, chevron and all. -->
                 <button
                     v-else-if="mobile"
                     type="button"
-                    class="flex h-9 min-w-0 flex-1 items-center gap-1 rounded-md text-left active:bg-overlay"
+                    class="flex h-11 min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1.5 text-left active:bg-overlay"
                     :aria-expanded="switcherOpen"
                     @click="switcherOpen = true"
                 >
-                    <span class="min-w-0 truncate text-xs font-medium text-content">{{ title }}</span>
+                    <span class="min-w-0 truncate text-sm font-semibold text-content">{{ title }}</span>
                     <span class="sr-only">{{ t(`agents.agentDetail.switchChat`) }}</span>
-                    <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" aria-hidden="true" />
+                    <Icon name="chevron-down" class="shrink-0 text-xs text-subtle" aria-hidden="true" />
                 </button>
                 <span v-else class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{
                     title
@@ -540,7 +546,7 @@ const confirmHandOver = async (): Promise<void> => {
                 :class="status.class"
                 :aria-label="status.label"
             >
-                <Icon :name="status.icon" :spin="status.spin" class="text-2xs" />
+                <Icon :name="status.icon" :spin="status.spin" :class="mobile ? `text-sm` : `text-2xs`" />
                 <span :class="mobile ? `hidden @md:inline` : ``">{{ status.label }}</span>
             </span>
             <!-- Its place, held: the status arrives with the roster entry, and a header that grows one on arrival jumps. -->
@@ -586,13 +592,13 @@ const confirmHandOver = async (): Promise<void> => {
                     v-if="sessionMenuShown"
                     ref="menuAnchor"
                     type="button"
-                    :class="ui.iconButton({ size: `md` })"
+                    :class="ui.iconButton({ size: mobile ? `xl` : `md`, round: mobile })"
                     :aria-expanded="menuOpen"
                     @click="menuOpen = !menuOpen"
                     v-tooltip.bottom="t(`agents.agentDetail.sessionActions`)"
                     :aria-label="t(`agents.agentDetail.sessionActions`)"
                 >
-                    <Icon name="bars" class="text-xs" />
+                    <Icon name="bars" :class="mobile ? `text-base` : `text-xs`" />
                 </button>
             </template>
             <!-- The one press that costs a window switch, and says so: everything else here reads or settles work in place. -->

@@ -5581,10 +5581,6 @@
             "away": " · ausente",
             "phone": "Este teléfono"
         },
-        "mobileTabBar": {
-            "toReview": "{count} por revisar",
-            "waitingAnswer": "Esperando tu respuesta"
-        },
         "notificationSources": {
             "allow": "Permitir",
             "alreadyUpToDate": "Ya está al día",

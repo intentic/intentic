@@ -1,7 +1,7 @@
 import type { RepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
 import { t } from "@intentic/ui/i18n";
 
-// Remote-state layer under the Changes panel, rail tile, sidebar tab, and mobile Review tab. Exists because the
+// Remote-state layer under the Changes panel, rail tile, and sidebar tab. Exists because the
 // review count excludes unpushed work, so "nothing to review" isn't "nothing to do", especially when agents
 // commit unseen. Pure functions in their own module, since useChanges also pulls in the chat singleton and query
 // client.

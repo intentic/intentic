@@ -1,7 +1,7 @@
 import { pushBadge } from "./pushBadge";
 import type { PushQuestion, StandingVerdict } from "./usePushFlow";
 
-// What the rail's Workspace tile and the phone's Review tab say about a push, from anywhere in the app.
+// What the rails' Workspace tile says about a push, from anywhere in the app.
 
 const QUESTION: PushQuestion = { title: `Push failed`, command: `git push origin main`, detail: `was refused by this repository's pre-push hook.` };
 const HELD: StandingVerdict = {

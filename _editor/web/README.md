@@ -61,7 +61,7 @@ flowchart LR
 - **A first run.** The agents board is always its three lanes, even empty: a first run draws the first agent's
   dashed slot in Active, where its card will arrive, and says in each empty lane what will land there
   (`features/agents/board/view/firstScreen.ts`). A maintainer's first run also carries a getting-started checklist,
-  opened from a ring at the foot of the rail or from the top of the phone's Menu tab: bring work in, start an agent,
+  opened from a ring at the foot of the rail (the phone's rail too) or from the top of the phone's Menu page: bring work in, start an agent,
   connect your own models, land its work. A step is done when the sandbox's own data says so, never by pressing Next
   (`features/gettingStarted/useGettingStarted.ts`). The sandbox keeps only what each member chose (put away, steps
   passed over), per member, under `settings.gettingStarted`. One beacon at a time points at the next press, from the
@@ -233,7 +233,7 @@ flowchart LR
   (`installDesktopOpener`), and `openInPage` (`router/index.ts`) selects the sandbox the path names and routes there.
 - **Routes.** `/login` and `/setup` sit outside the shell. Everything else lives under `/` in
   `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup`, which renders `ShellDesktop.vue` (rail, side
-  panel, terminal and status bar) or `ShellMobile.vue` (tab bar, full-screen views). A link naming a sandbox (`/?sandbox=<id>`, the
+  panel, terminal and status bar) or `ShellMobile.vue` (the board with a rail beside it, full-screen views). A link naming a sandbox (`/?sandbox=<id>`, the
   desktop app's, for a synced folder or a sandbox picked on a local window's place chip) opens the shell on it if the
   account lists it, and otherwise says that sandbox is not on the account any more; the id leaves the address either
   way (`router/sandboxArrival.ts`). A desktop window on a local folder builds another table instead: `/` is
@@ -241,9 +241,14 @@ flowchart LR
   `settings/:tab?`, the same Settings hub, open while there is an account. There it leaves out Notifications (a
   sandbox's), and Data hands deleting the account to the workspace, which knows every sandbox it must leave first. The
   routes are kept in the hash (`files/local#/device`), since the app serves that page at one address only.
-- **On a phone.** `ShellMobile.vue` shows one screen at a time. The Sandbox and Settings hubs open on an index of
+- **On a phone.** `ShellMobile.vue` shows one screen at a time, and has no tab bar. Home is the agents board, with
+  the desktop's rail down its left (`shell/MobileRail.vue`, its tiles and badges from `shell/rail/sectionTiles.ts`):
+  the sandbox's logo on top opens the Menu page (what the sandbox needs, switching sandboxes, who is here, the
+  account), then every section, the terminal, the Sandbox and Settings hubs, and the + that adds a capability. A
+  conversation opens over the whole screen from its card and goes back by its own arrow; every other page gets the
+  shell's back arrow, which falls back to the board (`lib/routes/phoneScreens.ts`). The Sandbox and Settings hubs open on an index of
   their sections, grouped as the desktop rail groups them, and each section is a page with a way back to that
-  index (`workbench/hub/hubDrill.ts`). The Menu tab uses the same grouped rows (`shell/MenuRow.vue`). A card's or row's
+  index (`workbench/hub/hubDrill.ts`). The Menu page uses the same grouped rows (`shell/MenuRow.vue`). A card's or row's
   own buttons fold behind one ⋯ that opens a sheet (`OverflowActions`). A screen's one create button floats over its
   corner (`FloatingAction`): New agent on the board, upload in the file tree. The review's Land button sits under the
   Changes tab instead of in the header. _2026-09-29: an index page, not a strip of section chips wrapping above

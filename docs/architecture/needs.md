@@ -54,7 +54,7 @@ There is no one inbox. Each wait badges the rail tile of the place it is answere
 | --- | --- | --- |
 | an open need, or a turn parked on a person (a plan, a question, a permission, a setup, a release, a hand-off) | the Agents tile, and the agent's own card on the board | in the card, in place or in the chat |
 | a held automation wake with no countdown | the Agents tile; a card on the board | Start it or Drop it on that card, or in Approvals |
-| a proposal, a failure or a hook set in the Approvals queue | the Approvals tile, and the phone's Review tab while that pack is on ([`owed.ts`](../../_extensions/approvals/src/owed.ts)) | on the Approvals page |
+| a proposal, a failure or a hook set in the Approvals queue | the Approvals tile, on the desktop's rail and the phone's ([`owed.ts`](../../_extensions/approvals/src/owed.ts)) | on the Approvals page |
 | an extension written in the workspace waiting for its yes | the sandbox chip ([`sandboxAttention.ts`](../../_editor/web/src/features/sandbox/overview/sandboxAttention.ts)) | on the Extensions tab, where its powers are read in full |
 
 - Standing conditions of the sandbox (no backup, no AI account) stay on the sandbox chip too: they are health, not asks.

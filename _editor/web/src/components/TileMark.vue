@@ -2,7 +2,7 @@
 import Icon from "@intentic/ui/icon";
 import type { IconName } from "@intentic/ui/icons";
 
-/* The bare corner mark: work in flight, or a standing note. Shared by the rail and the phone tab bar. */
+/* The bare corner mark: work in flight, or a standing note. Shared by the desktop rail and the phone's. */
 
 const { name, spin = false } = defineProps<{ name: IconName; spin?: boolean }>();
 </script>

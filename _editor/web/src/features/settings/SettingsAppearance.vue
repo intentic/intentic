@@ -239,7 +239,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                     ><SegmentedControl :model-value="textSize" :options="textSizeOptions" @update:model-value="setTextSize"
                 /></template>
             </Row>
-            <!-- A phone has no rail to size: its sections are the tab bar and the Menu page. -->
+            <!-- A phone's rail has one size, a finger's (MobileRail.vue), so there is nothing here to set. -->
             <Row v-if="!mobile" data-setting="icon-rail" icon="sliders-h" :title="t(`settings.appearance.look.iconRail`)" class="md:min-h-14">
                 <template #control>
                     <SegmentedControl

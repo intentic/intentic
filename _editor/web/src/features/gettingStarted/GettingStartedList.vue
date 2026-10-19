@@ -1,5 +1,5 @@
 <!-- The getting-started checklist itself: where a first run stands, one row per step, the next one ready to press. The
-     same list on the rail's popover and on a phone's Menu tab. A row is done when the sandbox says so (steps.ts), so a
+     same list on the rail's popover and on a phone's Menu page. A row is done when the sandbox says so (steps.ts), so a
      row's press goes where the step is done rather than ticking it. -->
 <script setup lang="ts">
 import { Button, Icon, type IconName, Row, RowGroup, SegmentRing, ui } from "@intentic/ui";

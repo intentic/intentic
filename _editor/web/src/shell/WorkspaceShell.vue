@@ -12,14 +12,14 @@ import { parseTabKey } from "../workbench/browsers/browsersPaths";
 import { revealSideView } from "../workbench/side/sideViews";
 import { prefetchViewsAtIdle } from "./prefetch/prefetch";
 import { useChat } from "../models/conversations/run/useChat";
-import { mobileChatPath } from "../lib/routes/tabRoots";
+import { mobileChatPath } from "../lib/routes/phoneScreens";
 import { useGuestFence } from "./guestFence";
 import SkipToContent from "./SkipToContent.vue";
 import { markBoot } from "../app/perf/boot";
 import { loadShellDesktop, loadShellMobile } from "./shellChunks";
 
 // Persistent post-login chrome, split by form factor: ShellDesktop (rail, side panel, terminal) under a
-// pointer, ShellMobile (tab bar, full-screen views) below 768px. State lives in module composables, so
+// pointer, ShellMobile (a rail on the board, full-screen views) below 768px. State lives in module composables, so
 // the breakpoint swap doesn't restart it; liveness and the panels mount above the router (WorkspaceRuntime.vue).
 
 const ShellDesktop = defineAsyncComponent(() => loadChunk(loadShellDesktop));
