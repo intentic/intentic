@@ -758,46 +758,43 @@ export const pauseRunningSessions = (mutagen: string, pairing: Pairing): readonl
     return runProcessSync(mutagen, ["sync", "pause", ...running], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true }).status === 0 ? running : undefined;
 };
 
+// A RESUME IS ONE CALL PER SESSION, AWAITED, AND READ BACK (2026-10-19, README "File sync holds still"). One call over
+// several stops at the first session that cannot connect (just after a swap, the usual case), a blocking one starves the
+// transport it connects through (exec.ts), and Mutagen unpauses a session before it connects, so only a listing says
+// whether the resume took. Answers whether none of the names is paused now; false when the listing got no answer.
+export const resumeSessions = async (mutagen: string, names: readonly string[]): Promise<boolean> => {
+    for (const name of names) {
+        // one session per call, so one that cannot connect does not stop the next one's resume
+        await runProcess(mutagen, ["sync", "resume", name], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
+    }
+    const after = names.length === 0 ? [] : listSessions(mutagen, names);
+    return after !== undefined && !after.some((session) => session.paused === true);
+};
+
 // Resumes the named sessions that still exist: the counterpart of `pauseRunningSessions`.
-export const resumeNamedSessions = (mutagen: string, names: readonly string[]): boolean => {
-    if (names.length === 0) {
-        return true;
-    }
-    const held = existingSyncSessions(mutagen, names);
-    if (held === undefined) {
-        return false;
-    }
-    return held.length === 0 || runProcessSync(mutagen, ["sync", "resume", ...held], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true }).status === 0;
+export const resumeNamedSessions = async (mutagen: string, names: readonly string[]): Promise<boolean> => {
+    const held = names.length === 0 ? [] : existingSyncSessions(mutagen, names);
+    return held !== undefined && (await resumeSessions(mutagen, held));
 };
 
 // Lifts the pause a swap of the sandbox put on its file sync. Every session the pairing has: that pause paused them all.
-// Not while the drive holding its folder is short of room (low-disk.ts), whose own lifting resumes it.
-export const resumeSwapPausedSync = (mutagen: string, pairing: Pairing): boolean => {
-    if (pairing.fileSyncLowDisk !== undefined) {
-        return false;
-    }
-    const names = existingSyncSessions(mutagen, syncSessionNames(pairing));
-    if (names === undefined || names.length === 0) {
-        return false;
-    }
-    return runProcessSync(mutagen, ["sync", "resume", ...names], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true }).status === 0;
+// Not while the drive holding its folder is short of room (low-disk.ts): it is tried again once the drive has room.
+export const resumeSwapPausedSync = async (mutagen: string, pairing: Pairing): Promise<boolean> => {
+    const names = pairing.fileSyncLowDisk === undefined ? existingSyncSessions(mutagen, syncSessionNames(pairing)) : undefined;
+    return names !== undefined && (await resumeSessions(mutagen, names));
 };
 
-export const resumeAutoPausedSync = (mutagen: string, pairing: Pairing): boolean => {
+export const resumeAutoPausedSync = async (mutagen: string, pairing: Pairing): Promise<boolean> => {
     if (pairing.mode !== "sync" || pairing.fileSyncAutoPaused !== true || pairing.fileSyncLowDisk !== undefined) {
         return false;
     }
     const names = existingSyncSessions(mutagen, syncSessionNames(pairing));
-    if (names === undefined || names.length === 0) {
-        return false;
-    }
-    const result = runProcessSync(mutagen, ["sync", "resume", ...names], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
-    return result.status === 0;
+    return names !== undefined && names.length > 0 && (await resumeSessions(mutagen, names));
 };
 
 // Lifts a pause the watcher made for a reason of its own (config.ts `fileSyncPausedFor`), once that reason ended. The
 // same as the swap's: that pause paused every session the pairing has.
-export const resumeWatcherPausedSync = (mutagen: string, pairing: Pairing): boolean => resumeSwapPausedSync(mutagen, pairing);
+export const resumeWatcherPausedSync = async (mutagen: string, pairing: Pairing): Promise<boolean> => await resumeSwapPausedSync(mutagen, pairing);
 
 // Whether a live session joins the same two folders the spec does, in the same direction. Which endpoint should hold
 // what follows the spec's direction; a backup with reversed ends must never read as "close enough" — it would upload

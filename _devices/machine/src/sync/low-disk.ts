@@ -81,21 +81,18 @@ export interface LowDiskSeams {
     readonly read: (dir: string) => Promise<DiskReading | undefined>;
     // Pauses the running sessions and answers which (undefined: Mutagen did not answer).
     readonly pause: (pairing: Pairing) => readonly string[] | undefined;
-    readonly resume: (names: readonly string[]) => void;
+    // Each answers whether the resume took (mutagen.ts `resumeSessions`).
+    readonly resume: (names: readonly string[]) => Promise<boolean>;
     // Every session of the pairing, for a record from before the pause kept its own list.
-    readonly resumeAll: (pairing: Pairing) => void;
+    readonly resumeAll: (pairing: Pairing) => Promise<boolean>;
     readonly record: (key: string, pause: LowDiskPause | undefined) => Promise<void>;
 }
 
 const mutagenSeams = (mutagen: string): LowDiskSeams => ({
     read: readDisk,
     pause: (pairing) => pauseRunningSessions(mutagen, pairing),
-    resume: (names) => {
-        resumeNamedSessions(mutagen, names);
-    },
-    resumeAll: (pairing) => {
-        resumeWatcherPausedSync(mutagen, pairing);
-    },
+    resume: async (names) => await resumeNamedSessions(mutagen, names),
+    resumeAll: async (pairing) => await resumeWatcherPausedSync(mutagen, pairing),
     record: setFileSyncLowDisk,
 });
 
@@ -117,15 +114,16 @@ const guardOne = async (seams: LowDiskSeams, pairing: Pairing & { readonly local
         return true;
     }
     if (step === "resume" && reading !== undefined) {
-        await seams.record(key, undefined);
         const lifted = { ...pairing, fileSyncLowDisk: undefined };
-        if (!otherwiseHeld(lifted)) {
-            if (held?.paused === undefined) {
-                seams.resumeAll(lifted);
-            } else {
-                seams.resume(held.paused);
-            }
+        // Another pause still holding the pairing resumes it when that pause lifts. Otherwise this one resumes what it
+        // paused, and (2026-10-19) keeps its record until Mutagen took that, so a resume that did not is tried again
+        // next pass rather than leaving the sync paused with no record to lift.
+        const resumed = otherwiseHeld(lifted) || (held?.paused === undefined ? await seams.resumeAll(lifted) : await seams.resume(held.paused));
+        if (!resumed) {
+            say(`  ${key}: the drive holding ${pairing.localDir} has room again, but Mutagen did not take the resume of its file sync; trying again.`);
+            return true;
         }
+        await seams.record(key, undefined);
         say(`  ${key}: the drive holding ${pairing.localDir} has ${gigabytes(reading.freeBytes)} free again; file sync and the git bridge carry on.`);
         return false;
     }

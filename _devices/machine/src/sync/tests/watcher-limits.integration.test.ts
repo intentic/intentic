@@ -117,18 +117,21 @@ describe("guardDisks", () => {
     const total = 500 * GIB; // floor 10 GiB
     const base: Pairing = { sandboxUrl: "https://s.example.dev", sandboxId: "s", mode: "sync", localDir: "/home/me/intentic/s" };
     // A drive that reads `free`, and a Mutagen whose `running` sessions a pause takes; what each seam was asked is kept.
-    const seamsFor = (free: number, running: readonly string[]) => {
+    // `takes` is whether Mutagen takes a resume.
+    const seamsFor = (free: number, running: readonly string[], takes = true) => {
         const records: (LowDiskPause | undefined)[] = [];
         const resumed: string[][] = [];
         let resumedAll = 0;
         const seams: LowDiskSeams = {
             read: async () => await Promise.resolve({ freeBytes: free, totalBytes: total }),
             pause: () => running,
-            resume: (names) => {
+            resume: async (names) => {
                 resumed.push([...names]);
+                return await Promise.resolve(takes);
             },
-            resumeAll: () => {
+            resumeAll: async () => {
                 resumedAll += 1;
+                return await Promise.resolve(takes);
             },
             record: async (_key, pause) => {
                 records.push(pause);
@@ -164,6 +167,19 @@ describe("guardDisks", () => {
         const still = seamsFor(9 * GIB, ["intentic-s-state"]);
         await guardDisks("mutagen", [{ ...base, fileSyncLowDisk: held }], 12, () => undefined, still.seams);
         expect(still.records[0]?.paused).toEqual(["intentic-s", "intentic-s-state"]);
+    });
+
+    // (2026-10-19) The record went first and the resume after, whatever it did: one Mutagen did not take left the sync
+    // paused with no record that would ever lift it.
+    it("keeps its record until Mutagen took the resume, and tries it again next pass", async () => {
+        const held: LowDiskPause = { since: 1, freeBytes: 9 * GIB, totalBytes: total, paused: ["intentic-s"] };
+        const refused = seamsFor(20 * GIB, [], false);
+        expect([...(await guardDisks("mutagen", [{ ...base, fileSyncLowDisk: held }], 2, () => undefined, refused.seams))]).toEqual(["s"]);
+        expect(refused.resumed).toEqual([["intentic-s"]]);
+        expect(refused.records).toEqual([]);
+        const taken = seamsFor(20 * GIB, []);
+        expect([...(await guardDisks("mutagen", [{ ...base, fileSyncLowDisk: held }], 3, () => undefined, taken.seams))]).toEqual([]);
+        expect(taken.records).toEqual([undefined]);
     });
 
     it("leaves sessions another pause holds to that pause's own lifting", async () => {

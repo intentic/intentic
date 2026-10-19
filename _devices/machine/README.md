@@ -647,7 +647,12 @@ whose it is.
   id in it (what ic names one from its connect token), so the mapping is exact. Its sessions are paused through the
   cutover and the first quarter hour of probation, and past that while the sandbox does not answer, then resumed; a
   pause somebody made is left alone. Only this environment's records count: a distro syncing a sandbox the Windows side
-  swaps is not paused.
+  swaps is not paused. (2026-10-19) Every resume the agent makes (after a swap, an outage, a gone verdict, a full
+  drive, and `sync resume`) goes one session per call, awaited, and is checked by listing the sessions afterwards
+  ([`sync/mutagen.ts`](src/sync/mutagen.ts) `resumeSessions`). A pause's mark stays until that check passes, and the
+  next pass tries again. Before this, one `mutagen sync resume` over both sessions stopped at the first that could not
+  reach a sandbox still coming up. It also ran blocking, which froze the transport it connects through. Its exit code
+  was taken as the answer, so after a rebuild one session was often left paused with no mark to lift it.
 - (2026-10-15) **Nothing downloaded replaces a binary until the release vouches for it**
   ([`release-verify.ts`](src/release/release-verify.ts)). Before an upgrade runs the new agent (and the Windows launcher
   beside it), before ic is put in place ([`tools/ic-binary.ts`](src/device/tools/ic-binary.ts)), and before setup

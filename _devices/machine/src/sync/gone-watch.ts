@@ -43,17 +43,34 @@ const pauseFor = async (seams: FateSeams, pairing: Pairing, reason: WatcherPause
     return true;
 };
 
-// Lifts the pauses this watcher made for `reasons`, on each pairing that carries one.
-const liftPauses = async (seams: FateSeams, pairings: readonly Pairing[], reasons: readonly WatcherPause[]): Promise<number> => {
+// Lifts the pauses this watcher made for `reasons`, on each pairing that carries one. (2026-10-19) A pairing's marker
+// comes off only once its resume took (mutagen.ts `resumeSessions`): one Mutagen did not take keeps it, and the next
+// call tries again, where clearing it anyway left the sync paused with nothing that would ever lift it. Answers how many
+// were lifted and how many still wait.
+const liftPauses = async (
+    seams: FateSeams,
+    pairings: readonly Pairing[],
+    reasons: readonly WatcherPause[],
+): Promise<{ readonly lifted: number; readonly waiting: number }> => {
     let lifted = 0;
+    let waiting = 0;
     for (const pairing of pairings.filter((held) => held.fileSyncPausedFor !== undefined && reasons.includes(held.fileSyncPausedFor))) {
-        resumeWatcherPausedSync(seams.mutagen, pairing);
+        // one pairing's sessions at a time, as every Mutagen call here
+        if (!(await resumeWatcherPausedSync(seams.mutagen, pairing))) {
+            waiting += 1;
+            continue;
+        }
         // state is a single file; serial keeps the writes ordered
         await setFileSyncPausedFor(pairingKey(pairing), undefined);
         lifted += 1;
     }
-    return lifted;
+    return { lifted, waiting };
 };
+
+// Whether a pairing of the sandbox still carries what a "gone" verdict left on it: the mark, or the pause it caused,
+// which outlives the mark while Mutagen has not taken its resume.
+export const goneLingers = (pairings: readonly Pairing[], sandboxId: string): boolean =>
+    pairings.some((pairing) => pairing.sandboxId === sandboxId && (pairing.goneSince !== undefined || pairing.fileSyncPausedFor === "gone"));
 
 // The sandbox's pairings as they are on disk now, not as a pass read them: two witnesses in one pass (the poll and the
 // report) must find the first one's mark rather than mark it twice.
@@ -87,15 +104,25 @@ export const sandboxSaidGone = async (seams: FateSeams, sandboxId: string, by: G
 
 // THE SANDBOX ANSWERED, so whatever said it was gone was wrong or is over (restored from the trash, set up again under
 // the same address): the mark comes off every pairing of it and the pauses it caused are lifted.
+// A pause the mark caused that Mutagen did not take the resume of stays, and each later answer tries it again.
 export const sandboxAnswered = async (seams: FateSeams, sandboxId: string): Promise<void> => {
     const pairings = await pairingsOf(sandboxId);
     const first = pairings[0];
-    if (first === undefined || !pairings.some((pairing) => pairing.goneSince !== undefined)) {
+    if (first === undefined || !goneLingers(pairings, sandboxId)) {
         return;
     }
-    await setSandboxGone(first.sandboxId, undefined);
-    await liftPauses(seams, pairings, ["gone"]);
-    seams.say(`${first.sandboxId}: answers again, so it is not gone after all; its file sync is resumed and its ports come back with this pass.`);
+    const marked = pairings.some((pairing) => pairing.goneSince !== undefined);
+    if (marked) {
+        await setSandboxGone(first.sandboxId, undefined);
+    }
+    const { lifted, waiting } = await liftPauses(seams, pairings, ["gone"]);
+    if (marked) {
+        seams.say(
+            `${first.sandboxId}: answers again, so it is not gone after all; ${waiting === 0 ? "its file sync is resumed" : "its file sync is resumed as soon as Mutagen takes it"} and its ports come back with this pass.`,
+        );
+    } else if (lifted > 0) {
+        seams.say(`${first.sandboxId}: its file sync, held while it was said to be gone, is resumed.`);
+    }
 };
 
 // The slugs this machine's ic may list a pairing's sandbox under: the two its URL carries (swap-pause.ts), the one ic
@@ -205,7 +232,7 @@ const followContainer = async (
 ): Promise<void> => {
     const { sandboxId, held, docker } = sandbox;
     if (container === "serves") {
-        if ((await liftPauses(seams, held, ["container-missing", "container-trashed"])) > 0) {
+        if ((await liftPauses(seams, held, ["container-missing", "container-trashed"])).lifted > 0) {
             seams.say(`${sandboxId}: ${sandbox.container} runs as this sandbox again; its file sync is resumed.`);
         }
         return;

@@ -14,7 +14,9 @@ const home = process.env["HOME"];
 const { agentHome } = await import("@intentic/local-agent");
 const { readState, upsertPairing } = await import("../config.js");
 const { retireSandbox, sandboxesNamed } = await import("../retire.js");
-const { checkContainers, checkKeptHere, sandboxAnswered, sandboxSaidGone } = await import("../gone-watch.js");
+const { checkContainers, checkKeptHere, goneLingers, sandboxAnswered, sandboxSaidGone } = await import("../gone-watch.js");
+const { resumeSessions } = await import("../mutagen.js");
+const { holdSyncDuringSwaps } = await import("../mirror.js");
 const { distroAnswer, forgetSandbox, forgotInWords } = await import("../forget-command.js");
 const { listingRecordPath } = await import("../project/project-local.js");
 const { restoreDir } = await import("../restore-points.js");
@@ -413,5 +415,163 @@ describe("unbridgeRepos", () => {
             "/w/app: git update-ref -d refs/intentic/bridged/main",
         ]);
         expect(ran.some((line) => line.startsWith("/w/lib:") && line.includes("remove"))).toBe(false);
+    });
+});
+
+// (2026-10-19) A RESUME THE WATCHER MAKES HAS TO TAKE. After a rebuild the owner kept finding a sandbox's file sync
+// paused, the log saying the swap was settled and file sync resumed. Mutagen's `sync resume a b` stops at the first
+// session that cannot connect, which right after a swap is the usual case, and leaves the rest paused; the watcher took
+// its exit code for the answer and dropped its mark either way. Here Mutagen is a shell script that behaves as 0.18.1's
+// does: a resume marks its session unpaused first and fails afterwards when it cannot connect, and one call over several
+// sessions stops at the first that failed.
+const SANDBOX = "sandbox-82789f4106b4-example-com";
+const RESUMING_URL = "https://sandbox-82789f4106b4.example.com";
+const MAIN = `intentic-${SANDBOX}`;
+const STATE = `intentic-${SANDBOX}-state`;
+
+interface StatefulMutagen {
+    readonly path: string;
+    // Every resume and pause it was asked for, one line per call, its sessions after the verb.
+    readonly calls: () => Promise<string[]>;
+    readonly paused: (name: string) => Promise<boolean>;
+    // How the next resumes go: `unreachable` sessions are unpaused and then fail to connect, as against a sandbox still
+    // coming up; `untaken` ones are never reached at all (a daemon that did not answer in time) and stay paused.
+    readonly set: (behaviour: { readonly unreachable?: readonly string[]; readonly untaken?: readonly string[] }) => Promise<void>;
+}
+
+const statefulMutagen = async (sessions: readonly string[], paused: readonly string[] = []): Promise<StatefulMutagen> => {
+    const dir = mkdtempSync(join(tmpdir(), "fake-mutagen-"));
+    const state = join(dir, "state");
+    await mkdir(state);
+    for (const name of sessions) {
+        await writeFile(join(state, name), paused.includes(name) ? "paused" : "running");
+    }
+    await writeFile(join(dir, "unreachable"), "");
+    await writeFile(join(dir, "untaken"), "");
+    const path = join(dir, "mutagen");
+    await writeFile(
+        path,
+        `#!/bin/sh
+S=${state}
+if [ "$2" = "list" ]; then
+  if [ "$4" = "{{json .}}" ]; then
+    out="["; sep=""
+    for f in "$S"/*; do n=$(basename "$f"); p=false; [ "$(cat "$f")" = paused ] && p=true; out="$out$sep{\\"name\\":\\"$n\\",\\"paused\\":$p}"; sep=","; done
+    echo "$out]"
+  else
+    ls "$S" | tr '\\n' ' '; echo
+  fi
+  exit 0
+fi
+verb=$2; shift 2
+echo "$verb $*" >> ${dir}/calls
+for n in "$@"; do
+  if [ "$verb" = pause ]; then echo paused > "$S/$n"; continue; fi
+  grep -qx "$n" ${dir}/untaken && { echo "unable to resume session: timed out" >&2; exit 1; }
+  echo running > "$S/$n"
+  grep -qx "$n" ${dir}/unreachable && { echo "unable to resume session: unable to connect to beta" >&2; exit 1; }
+done
+exit 0
+`,
+        { mode: 0o755 },
+    );
+    return {
+        path,
+        calls: async () => (await readFile(join(dir, "calls"), "utf8").catch(() => "")).split("\n").filter((line) => line !== ""),
+        paused: async (name) => (await readFile(join(state, name), "utf8")).trim() === "paused",
+        set: async ({ unreachable = [], untaken = [] }) => {
+            await writeFile(join(dir, "unreachable"), unreachable.map((name) => `${name}\n`).join(""));
+            await writeFile(join(dir, "untaken"), untaken.map((name) => `${name}\n`).join(""));
+        },
+    };
+};
+
+const pairingNow = async () => (await readState()).pairings.find((pairing) => pairing.sandboxId === SANDBOX);
+
+const pairResuming = async (): Promise<void> => {
+    await upsertPairing({ sandboxUrl: RESUMING_URL, sandboxId: SANDBOX, mode: "sync", syncToken: "ist_x", localDir: join(tmpdir(), "folder") });
+};
+
+describe("resumeSessions", () => {
+    beforeEach(pairResuming);
+
+    it("resumes each session in a call of its own, so one that cannot reach the sandbox leaves the other's resume alone", async () => {
+        const mutagen = await statefulMutagen([MAIN, STATE], [MAIN, STATE]);
+        await mutagen.set({ unreachable: [STATE, MAIN] });
+        expect(await resumeSessions(mutagen.path, [STATE, MAIN])).toBe(true);
+        expect(await mutagen.calls()).toEqual([`resume ${STATE}`, `resume ${MAIN}`]);
+        expect([await mutagen.paused(MAIN), await mutagen.paused(STATE)]).toEqual([false, false]);
+    });
+
+    it("reads the pause back rather than trusting the exit code: a resume Mutagen never took is no resume", async () => {
+        const mutagen = await statefulMutagen([MAIN, STATE], [MAIN, STATE]);
+        await mutagen.set({ untaken: [MAIN] });
+        expect(await resumeSessions(mutagen.path, [MAIN, STATE])).toBe(false);
+        expect(await mutagen.paused(STATE)).toBe(false);
+    });
+});
+
+describe("a swap's resume", () => {
+    beforeEach(pairResuming);
+
+    // The record ic keeps while it swaps the sandbox on this machine, by the slug its hostname gives it.
+    const cutover = async () => await Promise.resolve([{ slug: "sandbox-82789f4106b4", phase: "cutover" }]);
+    const settled = async () => await Promise.resolve([]);
+
+    it("keeps its mark until Mutagen took the resume, and tries again on the next pass", async () => {
+        const mutagen = await statefulMutagen([MAIN, STATE]);
+        const said: string[] = [];
+        const say = (line: string): void => void said.push(line);
+
+        await holdSyncDuringSwaps(mutagen.path, (await readState()).pairings, new Map(), say, cutover);
+        expect((await pairingNow())?.fileSyncSwapPaused).toBe(true);
+        expect([await mutagen.paused(MAIN), await mutagen.paused(STATE)]).toEqual([true, true]);
+
+        // Settled, but Mutagen does not take the resume of the workspace session this pass.
+        await mutagen.set({ untaken: [MAIN] });
+        await holdSyncDuringSwaps(mutagen.path, (await readState()).pairings, new Map(), say, settled);
+        expect((await pairingNow())?.fileSyncSwapPaused).toBe(true);
+        expect(said.at(-1)).toContain("did not take the resume");
+
+        await mutagen.set({});
+        await holdSyncDuringSwaps(mutagen.path, (await readState()).pairings, new Map(), say, settled);
+        expect((await pairingNow())?.fileSyncSwapPaused).toBeUndefined();
+        expect([await mutagen.paused(MAIN), await mutagen.paused(STATE)]).toEqual([false, false]);
+        expect(said.at(-1)).toContain("file sync resumed");
+    });
+
+    it("resumes both sessions when the sandbox is not answering yet as the swap settles", async () => {
+        const mutagen = await statefulMutagen([MAIN, STATE]);
+        await holdSyncDuringSwaps(mutagen.path, (await readState()).pairings, new Map(), () => undefined, cutover);
+        await mutagen.set({ unreachable: [MAIN, STATE] });
+        await holdSyncDuringSwaps(mutagen.path, (await readState()).pairings, new Map(), () => undefined, settled);
+        expect([await mutagen.paused(MAIN), await mutagen.paused(STATE)]).toEqual([false, false]);
+        expect((await pairingNow())?.fileSyncSwapPaused).toBeUndefined();
+    });
+});
+
+describe("a gone sandbox's pause", () => {
+    beforeEach(pairResuming);
+
+    it("outlives the mark while Mutagen has not taken its resume, and the next answer lifts it", async () => {
+        const mutagen = await statefulMutagen([MAIN, STATE]);
+        const said: string[] = [];
+        const fate = { mutagen: mutagen.path, releaseForwards: async () => await Promise.resolve(), say: (line: string) => void said.push(line) };
+        await sandboxSaidGone(fate, SANDBOX, "edge", 1_000);
+        expect((await pairingNow())?.fileSyncPausedFor).toBe("gone");
+
+        await mutagen.set({ untaken: [MAIN] });
+        await sandboxAnswered(fate, SANDBOX);
+        const answered = await pairingNow();
+        expect([answered?.goneSince, answered?.fileSyncPausedFor]).toEqual([undefined, "gone"]);
+        expect(goneLingers((await readState()).pairings, SANDBOX)).toBe(true);
+        expect(said.at(-1)).toContain("as soon as Mutagen takes it");
+
+        await mutagen.set({});
+        await sandboxAnswered(fate, SANDBOX);
+        expect((await pairingNow())?.fileSyncPausedFor).toBeUndefined();
+        expect(goneLingers((await readState()).pairings, SANDBOX)).toBe(false);
+        expect(await mutagen.paused(MAIN)).toBe(false);
+        expect(said.at(-1)).toContain("is resumed");
     });
 });

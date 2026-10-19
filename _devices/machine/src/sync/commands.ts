@@ -42,6 +42,7 @@ import {
     ensureMutagen,
     existingSyncSessions,
     healDerivedConflicts,
+    resumeSessions,
     retireOrphanSessions,
     runMutagen,
     sessionName,
@@ -765,7 +766,19 @@ const fileSyncSwitch = (brief: string, verb: "pause" | "resume") =>
                 );
                 return;
             }
-            runMutagen(mutagen, ["sync", verb, ...plan.names]);
+            if (verb === "pause") {
+                runMutagen(mutagen, ["sync", "pause", ...plan.names]);
+            } else if (!(await resumeSessions(mutagen, plan.names))) {
+                // One session per call, read back after (mutagen.ts `resumeSessions`): a single call over both stopped at
+                // the first that could not reach the sandbox and left the rest paused, while saying it failed.
+                throw new Error(
+                    explain(
+                        "File sync was not resumed.",
+                        "Mutagen still holds some of its sessions paused, or did not answer when asked.",
+                        "run the same command again in a moment.",
+                    ),
+                );
+            }
             if (plan.idle.length > 0) {
                 ui.note(`No file-sync session to ${verb} for ${named(plan.idle)}.`);
             }

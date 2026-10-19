@@ -26,9 +26,10 @@ import { pairingEndpoint } from "./endpoint.js";
 import { runProcess, runProcessSync } from "./exec.js";
 import { candidateBases, createDaemonBases, type DaemonBases, type Dialed, dialedPairings } from "../daemon-base.js";
 import { answeredGone, goneStep, SandboxGoneError } from "./gone.js";
-import { checkContainers, checkKeptHere, type FateSeams, sandboxAnswered, sandboxSaidGone } from "./gone-watch.js";
+import { checkContainers, checkKeptHere, type FateSeams, goneLingers, sandboxAnswered, sandboxSaidGone } from "./gone-watch.js";
 import { retireSandbox } from "./retire.js";
 import { readSwaps } from "../device/sandbox-rounds/ic-swaps.js";
+import type { SwapRecord } from "../device/sandbox-rounds/swap-records.js";
 import { type PublishedPorts, publishedPortsReader } from "./docker-ports.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { guardDisks } from "./low-disk.js";
@@ -917,13 +918,14 @@ const retryPendingSessions = async (
 // File sync held still for every pairing whose sandbox ic is swapping on this machine (swap-pause.ts): paused as the
 // swap begins, resumed once it has held, and the pause kept on disk so an agent restarted mid-swap still lifts it.
 // Answers the pairings held this pass, whose git bridge and heal wait too: both would read a sandbox mid-swap.
-const holdSyncDuringSwaps = async (
+export const holdSyncDuringSwaps = async (
     mutagen: string,
     pairings: readonly Pairing[],
     unreachable: ReadonlyMap<string, Unreachable>,
     say: Log,
+    read: () => Promise<readonly SwapRecord[]> = readSwaps,
 ): Promise<ReadonlySet<string>> => {
-    const records = await readSwaps();
+    const records = await read();
     const now = Date.now();
     const held = new Set<string>();
     for (const pairing of pairings) {
@@ -938,10 +940,15 @@ const holdSyncDuringSwaps = async (
             await setFileSyncSwapPaused(pairingKey(pairing), true);
             say(`  ${pairingKey(pairing)}: its sandbox is being swapped on this machine; file sync is paused until the new version has held.`);
         } else if (step === "resume") {
-            resumeSwapPausedSync(mutagen, pairing);
-            // ditto
-            await setFileSyncSwapPaused(pairingKey(pairing), false);
-            say(`  ${pairingKey(pairing)}: its sandbox's swap is settled; file sync resumed.`);
+            // (2026-10-19) The mark comes off only once the resume took. It used to come off whatever the resume did, so a
+            // resume Mutagen did not take left the sync paused with nothing left to lift it (mutagen.ts `resumeSessions`).
+            if (await resumeSwapPausedSync(mutagen, pairing)) {
+                // ditto
+                await setFileSyncSwapPaused(pairingKey(pairing), false);
+                say(`  ${pairingKey(pairing)}: its sandbox's swap is settled; file sync resumed.`);
+            } else if (pairing.fileSyncLowDisk === undefined) {
+                say(`  ${pairingKey(pairing)}: its sandbox's swap is settled, but Mutagen did not take the resume of its file sync; trying again.`);
+            }
         }
     }
     return held;
@@ -988,8 +995,9 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         rejectedPolls.delete(pairing.sandboxId);
         unreachable.delete(pairing.sandboxId);
         // It answered: whatever said it was gone is withdrawn, from every pairing of it (a folder attached to it keeps
-        // the mark when its projects host was set up again), and the outage clock on disk stops.
-        if (context.pairings.some((held) => held.sandboxId === pairing.sandboxId && held.goneSince !== undefined)) {
+        // the mark when its projects host was set up again), and the outage clock on disk stops. So is a pause the mark
+        // left behind because Mutagen did not take its resume the first time.
+        if (goneLingers(context.pairings, pairing.sandboxId)) {
             await sandboxAnswered(fate, pairing.sandboxId);
         }
         if (context.pairings.some((held) => held.sandboxId === pairing.sandboxId && held.unreachableSince !== undefined)) {
@@ -997,7 +1005,7 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         }
         // Still pending if it was: a replacement put off while the sandbox slept is owed now that it answers. Not while
         // its sandbox is mid-swap, which holds that sync still whoever paused it, nor while its drive is short of room.
-        if (!swapping && !short && resumeAutoPausedSync(mutagen, pairing)) {
+        if (!swapping && !short && (await resumeAutoPausedSync(mutagen, pairing))) {
             await setFileSyncAutoPaused(pairingKey(pairing), false);
             say(`  ${pairingKey(pairing)}: reachable again; resumed its automatically paused file sync`);
         }
@@ -1070,7 +1078,7 @@ const followSandbox = async (context: PassContext, pairing: Pairing): Promise<vo
     const swapping = swapHeld.has(pairing.sandboxId);
     const short = context.diskHeld.has(pairingKey(pairing));
     if (down === undefined) {
-        if (!swapping && !short && resumeAutoPausedSync(mutagen, pairing)) {
+        if (!swapping && !short && (await resumeAutoPausedSync(mutagen, pairing))) {
             await setFileSyncAutoPaused(pairingKey(pairing), false);
             say(`  ${pairingKey(pairing)}: reachable again; resumed its automatically paused file sync`);
         }
