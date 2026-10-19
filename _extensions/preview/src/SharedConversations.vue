@@ -8,7 +8,7 @@ import { t } from "./i18n.js";
 // deep. `sharedAt` marks the freeze point; only Update moves it, so it is the line between what's public and what's
 // still private.
 
-const { shares, error, isLoading, update, remove } = useShares();
+const { shares, error, update, remove } = useShares();
 
 const busy = ref<string>();
 const actionError = ref<string>();
@@ -42,8 +42,8 @@ const when = (at: number): string => {
 </script>
 
 <template>
-    <section v-if="shares.length > 0 || isLoading">
-        <div class="mb-2 flex items-center gap-2">
+    <section v-if="shares.length > 0 || error">
+        <div v-if="shares.length > 0" class="mb-2 flex items-center gap-2">
             <h3 :class="ui.sectionLabel()">{{ t(`sharedConversations.sharedConversations`) }}</h3>
             <InfoHint :label="t(`sharedConversations.sharedConversations`)">
                 <span class="block text-sm font-medium text-content">{{ t(`sharedConversations.chatsYouvePublished`) }}</span>
