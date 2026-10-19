@@ -41,7 +41,7 @@ import { CHECK_CANT_RUN, CHECK_NEEDS_SETUP, CHECK_READY, CHECK_UNKNOWN } from ".
 //
 // This computer's own sandbox (src-tauri/src/machine_sandbox.rs) is as `?sandbox=` says, kept with the machine: on a
 // signed-in machine `creating` (the default) runs its setup through to ready in about half a minute, and `ready`,
-// `docker`, `waiting`, `failed`, `stopped` and `gone` hold it there; a first launch's is signed out.
+// `docker`, `waiting`, `failed`, `stopped`, `asleep` and `gone` hold it there; a first launch's is signed out.
 //
 // "Work on this with an agent" answers as `?project=` says, kept with the machine: `new` (the default) a folder that can
 // have one, `cautions` one that a sync service already holds and that is large, `refused` one inside a folder that has
@@ -224,8 +224,8 @@ const runSetup = async (): Promise<void> => {
 
 /* THIS COMPUTER'S OWN SANDBOX (src-tauri/src/machine_sandbox.rs), and a folder going into it (project.rs). */
 
-type SandboxCase = `creating` | `ready` | `docker` | `waiting` | `failed` | `stopped` | `gone`;
-const SANDBOX_CASES: readonly SandboxCase[] = [`creating`, `ready`, `docker`, `waiting`, `failed`, `stopped`, `gone`];
+type SandboxCase = `creating` | `ready` | `docker` | `waiting` | `failed` | `stopped` | `asleep` | `gone`;
+const SANDBOX_CASES: readonly SandboxCase[] = [`creating`, `ready`, `docker`, `waiting`, `failed`, `stopped`, `asleep`, `gone`];
 const SANDBOX_KEY = `intentic.local.devSandbox`;
 
 const sandboxCaseOf = (): SandboxCase => picked(`sandbox`, SANDBOX_KEY, SANDBOX_CASES, `creating`);
@@ -237,6 +237,7 @@ const STANDING_OF: Readonly<Record<SandboxCase, MachineStanding>> = {
     waiting: { state: `waiting`, for: `consent` },
     failed: { state: `failed`, reason: `the platform refused the setup code (it was already used).` },
     stopped: { state: `stopped` },
+    asleep: { state: `asleep` },
     gone: { state: `gone` },
 };
 
@@ -419,7 +420,7 @@ const projectAttach = async (ask: ProjectAsk): Promise<ProjectAttached> => {
     await changeFolders([...record.folders.filter((folder) => folder.path !== path), { path, name, state: `queued` }]);
     if (record.state === `ready`) {
         void attachWaiting();
-    } else if (record.state === `stopped`) {
+    } else if (record.state === `stopped` || record.state === `asleep`) {
         void startStopped();
     }
     return { kind: `queued`, name };

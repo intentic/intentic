@@ -222,6 +222,7 @@
             "waiting": "attend votre accord",
             "ready": "prêt",
             "stopped": "arrêté",
+            "asleep": "en veille",
             "starting": "démarrage",
             "failed": "non installé",
             "interrupted": "reprend là où il s'était arrêté",
@@ -240,6 +241,7 @@
             "waiting": "Cet ordinateur a besoin de quelques éléments avant de pouvoir faire tourner un sandbox.",
             "ready": "Les dossiers sur lesquels vous travaillez avec un agent y entrent, chacun dans son propre dossier.",
             "stopped": "Il est sur cet ordinateur mais ne tourne pas. Démarrez-le pour travailler sur vos dossiers avec un agent.",
+            "asleep": "Personne ne l'a utilisé depuis un moment, il est donc en veille et n'occupe pas de mémoire. L'ouvrir, ou le bac à sable d'un dossier, le réveille.",
             "starting": "Il était arrêté, alors Intentic le démarre. Vos dossiers y entrent dès qu'il tourne.",
             "failed": "Son installation s'est arrêtée. Le journal indique ce qu'elle était en train de faire.",
             "gone": "Il n'est plus sur cet ordinateur. Réinstallez-le, et vos dossiers y retournent, avec ses fichiers si cet ordinateur les a encore."

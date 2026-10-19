@@ -43,6 +43,7 @@ pub fn tell(window: &WebviewWindow, always: bool) {
     let moved = changed(&TOLD, window.label(), shown);
     if moved && shown {
         crate::badge::window_shown(window);
+        crate::machine_sandbox::reader_returned(window.label());
     }
     if !always && !moved {
         return;

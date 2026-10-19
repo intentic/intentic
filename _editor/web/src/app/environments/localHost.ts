@@ -308,11 +308,11 @@ export type LocalDockerReason = `notInstalled` | `notRunning` | `notAllowed`;
  * Where this computer's own sandbox stands: nobody signed in yet (it is made after sign-in), signed in moments ago in
  * the browser with the account still on its way, Docker in the way (never started for the reader), being made (its
  * setup's running phase, the app's setupPlan.ts ids, and how far), stopped on a question, ready, its container stopped
- * (with why its last start failed, where one did) or being started, its setup failed, picked up after a quit, or gone
- * from the account.
+ * (with why its last start failed, where one did) or being started, asleep (put to sleep for want of use, and woken by
+ * opening it or by a folder on its way in), its setup failed, picked up after a quit, or gone from the account.
  */
 export type LocalMachineState =
-    | { readonly state: `signedOut` | `signedIn` | `ready` | `starting` | `interrupted` | `gone` }
+    | { readonly state: `signedOut` | `signedIn` | `ready` | `asleep` | `starting` | `interrupted` | `gone` }
     | { readonly state: `stopped`; readonly reason?: string }
     | { readonly state: `needsDocker`; readonly reason: LocalDockerReason }
     | { readonly state: `creating`; readonly phase: string | undefined; readonly step: string | undefined; readonly percent: number }

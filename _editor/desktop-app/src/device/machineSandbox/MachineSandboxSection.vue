@@ -83,6 +83,8 @@ const useCloud = (): void => {
             <Icon v-if="underWay" name="spinner" spin class="mt-0.5 shrink-0 text-link" />
             <Icon v-else-if="state === `ready`" name="check-circle" class="mt-0.5 shrink-0 text-success" />
             <Icon v-else-if="state === `signedOut`" name="box" class="mt-0.5 shrink-0 text-subtle" />
+            <!-- Asleep is the sandbox resting, not a fault: opening it wakes it. -->
+            <Icon v-else-if="state === `asleep`" name="moon" class="mt-0.5 shrink-0 text-subtle" />
             <Icon v-else-if="waitsForPc" name="clock" class="mt-0.5 shrink-0 text-subtle" />
             <Icon v-else name="exclamation-circle" class="mt-0.5 shrink-0" :class="state === `failed` || state === `gone` ? `text-danger` : `text-warning`" />
             <div class="min-w-0 flex-1">
@@ -94,7 +96,7 @@ const useCloud = (): void => {
                 <p v-if="detail && state !== `waiting`" class="mt-1 max-w-read-sm text-xs leading-relaxed text-muted">{{ detail }}</p>
                 <p v-else-if="waitsForPc" class="mt-1 max-w-read-sm text-xs leading-relaxed text-muted">{{ t(`desktop.machineSandbox.waitsForPc`) }}</p>
             </div>
-            <Button v-if="state === `ready`" size="small" tier="boring" class="-my-1 shrink-0" :label="t(`desktop.machineSandbox.open`)" @click="open">
+            <Button v-if="state === `ready` || state === `asleep`" size="small" tier="boring" class="-my-1 shrink-0" :label="t(`desktop.machineSandbox.open`)" @click="open">
                 <template #icon><Icon name="arrow-up-right" /></template>
             </Button>
         </header>
@@ -138,7 +140,7 @@ const useCloud = (): void => {
         </div>
 
         <!-- The one thing that moves it on, as the primary press; the log beside a failure. -->
-        <div v-if="!underWay && state !== `ready` && state !== `waiting`" class="flex flex-wrap items-center gap-2">
+        <div v-if="!underWay && state !== `ready` && state !== `asleep` && state !== `waiting`" class="flex flex-wrap items-center gap-2">
             <!-- Not beside the card for this PC, which carries the sign-in itself. -->
             <Button v-if="state === `signedOut` && !pcCardShown" size="small" :label="t(`desktop.machineSandbox.signIn`)" @click="signIn">
                 <template #icon><Icon name="sign-in" /></template>

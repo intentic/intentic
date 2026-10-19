@@ -1080,6 +1080,9 @@ pub fn show_files_window(
                 announce_frame(&window, false);
             }
         }
+        // The reader back on this computer's window: its card is read again from what the sandbox is now, rather than
+        // what it was minutes ago (machine_sandbox.rs `reader_returned`).
+        WindowEvent::Focused(true) => crate::machine_sandbox::reader_returned(&own),
         // The main window's × is the workspace's: a question, and a hide rather than a close (`request_close`), so
         // nothing it holds unsaved is lost, and the tray brings it back as it was.
         WindowEvent::CloseRequested { api, .. } if own == HOME => {

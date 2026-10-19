@@ -103,6 +103,12 @@ pub enum Standing {
     Ready,
     /// The container is here and not running.
     Stopped,
+    /// Put to sleep by this computer's keeper because nobody used it (`ic sandbox sleep`; ic lists it `asleep`). Not a
+    /// stop for the reader: opening a folder's sandbox starts it again (project.rs `open_existing`), and so does a
+    /// folder on its way in ([`wakes_by_itself`]). Read as stopped, every window of this computer asked the reader to
+    /// Start a sandbox that wakes by itself, half an hour after each time they stopped using it, and went on asking after
+    /// the workspace had already woken it (2026-10-19).
+    Asleep,
     /// Its stopped container being started ([`start_container`]): for a folder waiting on it, or the reader's Start.
     Starting,
     /// Making it stopped, and why.
@@ -128,6 +134,7 @@ impl Standing {
                 | Standing::Creating { .. }
                 | Standing::Interrupted
                 | Standing::Starting
+                | Standing::Asleep
         )
     }
 
@@ -150,6 +157,7 @@ impl Standing {
             Standing::Waiting { .. } => "waiting",
             Standing::Ready => "ready",
             Standing::Stopped => "stopped",
+            Standing::Asleep => "asleep",
             Standing::Starting => "starting",
             Standing::Failed { .. } => "failed",
             Standing::Interrupted => "interrupted",
@@ -187,6 +195,10 @@ pub struct Folder {
     /// The first copy's status: paused, or Mutagen's word while it runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
+    /// Its first copy's session has been seen running since it was asked in ([`copy_seen`]). One found paused before
+    /// that was paused before the folder was asked in, so it is a folder synced into the sandbox before.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ran: bool,
 }
 
 /// `machine-sandbox.json`, and what every window is sent.
@@ -471,6 +483,8 @@ pub fn outcome(success: bool, code: Option<i32>, progress: &Progress) -> Standin
 pub enum Container {
     Running,
     Stopped,
+    /// Stopped by the keeper's sleep, and still down.
+    Asleep,
     Missing,
     /// Not asked, or the listing failed.
     Unknown,
@@ -675,10 +689,13 @@ pub fn decide(record: &Record, facts: &Facts) -> Decision {
     match facts.container {
         Container::Running => become_(record, Standing::Ready),
         Container::Stopped if starts_by_itself(record, facts.asked) => Decision::Start,
-        Container::Stopped => become_(record, Standing::Stopped),
+        Container::Asleep if wakes_by_itself(record, facts.asked) => Decision::Start,
+        // Asleep with a start of it that failed is a stop like any other, said with why on the card.
+        Container::Asleep if record.start_error.is_none() => become_(record, Standing::Asleep),
+        Container::Stopped | Container::Asleep => become_(record, Standing::Stopped),
         Container::Missing => become_(record, Standing::Gone),
         Container::Unknown => match record.standing {
-            Standing::Ready | Standing::Stopped => Decision::Keep,
+            Standing::Ready | Standing::Stopped | Standing::Asleep => Decision::Keep,
             _ => become_(record, Standing::Ready),
         },
     }
@@ -695,6 +712,19 @@ pub fn starts_by_itself(record: &Record, asked: Option<Ask>) -> bool {
                 .folders
                 .iter()
                 .any(|folder| folder.state == FolderState::Queued))
+}
+
+/// Whether a sandbox the keeper put to sleep is woken without the reader: for whatever starts a stopped one, and for a
+/// folder whose copy into it is under way, which the sleep cut off (the keeper reads a sandbox nobody is in as unused,
+/// whatever is being copied into it). A copy held still by a pause leaves it asleep: waking it would move nothing, and
+/// the keeper would put it to sleep again half an hour later, over and over. Pure.
+pub fn wakes_by_itself(record: &Record, asked: Option<Ask>) -> bool {
+    starts_by_itself(record, asked)
+        || (record.start_error.is_none()
+            && record.folders.iter().any(|folder| {
+                matches!(folder.state, FolderState::Attaching | FolderState::Copying)
+                    && folder.status.as_deref() != Some(PAUSED)
+            }))
 }
 
 /// What the card says when another environment's agent keeps this computer's sandboxes (`decide`).
@@ -754,6 +784,7 @@ pub fn reset_for(record: &Record, account: &str) -> Record {
                 state: FolderState::Queued,
                 reason: None,
                 status: None,
+                ran: false,
                 ..folder.clone()
             })
             .collect(),
@@ -877,6 +908,7 @@ pub fn enqueue(
             folder.state = FolderState::Queued;
             folder.reason = None;
             folder.status = None;
+            folder.ran = false;
         }
         return folder.name.clone();
     }
@@ -889,6 +921,7 @@ pub fn enqueue(
         state: FolderState::Queued,
         reason: None,
         status: None,
+        ran: false,
     });
     name
 }
@@ -934,14 +967,50 @@ pub fn copy_state(status: &str) -> FolderState {
     }
 }
 
+/// The status a paused session is said with.
+const PAUSED: &str = "paused";
+
 /// Mutagen reports a paused session as disconnected. Keep following its first copy, but tell the window it is
 /// paused so it does not promise progress until the session resumes. The pause wins over a stale watching status.
 fn copy_status(pairing: &serde_json::Value) -> Option<&str> {
     if pairing["paused"].as_bool() == Some(true) {
-        Some("paused")
+        Some(PAUSED)
     } else {
         pairing["mutagenStatus"].as_str()
     }
+}
+
+/// A folder whose first copy is followed, as its pairing's report (`intentic-machine status --json`) finds it; none
+/// while the report says nothing of its session yet. A session seen running is followed to `watching` ([`copy_state`]).
+/// One found paused BEFORE it was ever seen running was paused before the folder was asked in: a session starts running
+/// when the agent makes it, so this is a folder synced into the sandbox before, asked in again (a reinstall of the app,
+/// whose record went with it). It is in. Followed as a copy, it said "Copying … is paused" for good on a sandbox that
+/// had had the folder for days, since nothing lifts a pause the agent no longer knows it made (2026-10-19). A pause
+/// after the copy was seen running is said as one, and so is the drive's own (`lowDisk`), which holds a new session
+/// still from the start. Pure.
+pub fn copy_seen(folder: &Folder, pairing: &serde_json::Value) -> Option<Folder> {
+    let said = copy_status(pairing)?;
+    if said != PAUSED {
+        return Some(Folder {
+            state: copy_state(said),
+            status: Some(said.to_string()),
+            ran: true,
+            ..folder.clone()
+        });
+    }
+    let held_for_room = pairing.get("lowDisk").is_some_and(|low| !low.is_null());
+    if folder.ran || held_for_room {
+        return Some(Folder {
+            state: FolderState::Copying,
+            status: Some(PAUSED.to_string()),
+            ..folder.clone()
+        });
+    }
+    Some(Folder {
+        state: FolderState::Ready,
+        status: None,
+        ..folder.clone()
+    })
 }
 
 /// The sandbox's name on the account, the same on every computer (2026-10-12). The account's switcher names the device
@@ -1041,6 +1110,36 @@ pub fn kick() {
         wake.kicked = true;
     }
     bell.notify_all();
+}
+
+/// The least time between two looks a reader's return asks for ([`reader_returned`]): a reader moving between windows
+/// asks for one each time, and each is an `ic` listing.
+const RETURN_LOOK_GAP: Duration = Duration::from_secs(15);
+/// When a reader's return last asked for a look.
+static RETURN_LOOKED_AT: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// A window of this computer came back to the reader (`label`, focused or back on screen, shown.rs): the record is
+/// looked at again now rather than at the end of the supervisor's rest, which is minutes while it reads ready. Nothing
+/// told it when the sandbox went to sleep or woke: the keeper sleeps it, and the workspace wakes it, without the app, so
+/// a reader back from the workspace was asked to Start a sandbox the workspace had just started (2026-10-19). Other
+/// windows (the workspace's own) carry no card, and ask nothing.
+pub fn reader_returned(label: &str) {
+    if !shows_the_card(label) {
+        return;
+    }
+    {
+        let mut looked = RETURN_LOOKED_AT.lock().unwrap();
+        if looked.is_some_and(|at| at.elapsed() < RETURN_LOOK_GAP) {
+            return;
+        }
+        *looked = Some(Instant::now());
+    }
+    kick();
+}
+
+/// Whether the window `label` is one of this computer's (the main one or a folder's), where the card is drawn. Pure.
+pub fn shows_the_card(label: &str) -> bool {
+    label == crate::windows::HOME || label.starts_with("files-")
 }
 
 fn ask(asked: Ask) {
@@ -1157,10 +1256,9 @@ fn news(before: &Standing, after: &Standing, noticed: Option<&str>) -> Option<St
 
 /// The reader is in a window of this computer (the main one or a folder's), where the card already says it.
 fn reader_here(app: &AppHandle) -> bool {
-    app.webview_windows().iter().any(|(label, window)| {
-        (label == crate::windows::HOME || label.starts_with("files-"))
-            && window.is_focused().unwrap_or(false)
-    })
+    app.webview_windows()
+        .iter()
+        .any(|(label, window)| shows_the_card(label) && window.is_focused().unwrap_or(false))
 }
 
 /// The one folder asked into the sandbox, when there is just one: the folder the reader is waiting on.
@@ -1364,15 +1462,27 @@ fn container_of(app: &AppHandle, slug: &str) -> Container {
         crate::commands::list_script(crate::scripts::Host::current(), crate::commands::VERSION),
     );
     match listing {
-        Ok(rows) => match rows.iter().find(|row| row["slug"].as_str() == Some(slug)) {
-            Some(row) if row["running"].as_bool() == Some(false) => Container::Stopped,
-            Some(_) => Container::Running,
-            None => Container::Missing,
-        },
+        Ok(rows) => container_in(&rows, slug),
         Err(error) => {
             eprintln!("intentic: this computer's sandboxes could not be listed: {error}");
             Container::Unknown
         }
+    }
+}
+
+/// The container `slug`, as a listing (`ic sandbox list --json`) has it: asleep when ic put it to sleep and it is still
+/// down, which every start, restart and recreate ends. Pure.
+pub fn container_in(rows: &[serde_json::Value], slug: &str) -> Container {
+    match rows.iter().find(|row| row["slug"].as_str() == Some(slug)) {
+        Some(row) if row["running"].as_bool() == Some(false) => {
+            if row["asleep"].as_bool() == Some(true) {
+                Container::Asleep
+            } else {
+                Container::Stopped
+            }
+        }
+        Some(_) => Container::Running,
+        None => Container::Missing,
     }
 }
 
@@ -2376,14 +2486,15 @@ fn attach_queued(app: &AppHandle) {
     }
 }
 
-/// Each folder's first copy, as the machine agent reports its pairing: done once Mutagen watches for changes.
+/// Each folder's first copy, as the machine agent reports its pairing: done once Mutagen watches for changes
+/// ([`copy_seen`]).
 fn follow_copies(app: &AppHandle) {
     let record = status(app);
-    let copying: Vec<String> = record
+    let copying: Vec<Folder> = record
         .folders
         .iter()
         .filter(|folder| folder.state == FolderState::Copying)
-        .map(|folder| folder.path.clone())
+        .cloned()
         .collect();
     if copying.is_empty() {
         return;
@@ -2396,15 +2507,25 @@ fn follow_copies(app: &AppHandle) {
             return;
         }
     };
-    for path in copying {
-        let pairings = crate::project::pairings_of(&report, Path::new(&path), cfg!(windows));
+    for folder in copying {
+        let pairings = crate::project::pairings_of(&report, Path::new(&folder.path), cfg!(windows));
         let ours = pairings
             .iter()
             .find(|pairing| pairing["sandboxId"].as_str() == record.sandbox_id.as_deref())
             .or_else(|| pairings.first());
-        if let Some(said) = ours.and_then(|pairing| copy_status(pairing)) {
-            set_folder(app, &path, copy_state(said), None, Some(said.to_string()));
-        }
+        let Some(seen) = ours.and_then(|pairing| copy_seen(&folder, pairing)) else {
+            continue;
+        };
+        update(app, |record| {
+            // Only a folder still copying: one asked in again meanwhile is in line, and its own.
+            if let Some(held) = record
+                .folders
+                .iter_mut()
+                .find(|held| held.path == seen.path && held.state == FolderState::Copying)
+            {
+                *held = seen;
+            }
+        });
     }
 }
 
@@ -2537,6 +2658,7 @@ mod tests {
             state,
             reason: None,
             status: None,
+            ran: false,
         }
     }
 
@@ -2604,6 +2726,7 @@ mod tests {
             state: FolderState::Queued,
             reason: None,
             status: None,
+            ran: false,
         });
         let wire = serde_json::to_value(&held).unwrap();
         assert_eq!(wire["state"], "creating");
@@ -2881,6 +3004,7 @@ mod tests {
                 state: FolderState::Copying,
                 reason: None,
                 status: None,
+                ran: false,
             },
             Folder {
                 path: "/b".into(),
@@ -2888,6 +3012,7 @@ mod tests {
                 state: FolderState::Failed,
                 reason: Some("x".into()),
                 status: None,
+                ran: false,
             },
         ];
         assert_eq!(decide(&held, &other), Decision::Reset);
@@ -2902,7 +3027,8 @@ mod tests {
                 name: "b".into(),
                 state: FolderState::Queued,
                 reason: None,
-                status: None
+                status: None,
+                ran: false,
             }]
         );
     }
@@ -3449,6 +3575,7 @@ mod tests {
             state,
             reason: None,
             status: None,
+            ran: false,
         };
         held.folders = vec![
             folder("/attached", FolderState::Attaching),
@@ -3550,6 +3677,85 @@ mod tests {
                 FolderState::Ready
             );
         }
+    }
+
+    /// A first copy is followed to `watching` once its session is seen running; a session found paused before it ever
+    /// ran was paused before the folder was asked in (a folder synced in before, asked in again), and is in.
+    #[test]
+    fn a_folder_whose_sync_was_paused_before_it_was_asked_in_is_in() {
+        let asked_in = asked("auto-translate", FolderState::Copying);
+        // Nothing of its session yet: nothing changes.
+        assert_eq!(copy_seen(&asked_in, &serde_json::json!({})), None);
+        // Seen running, then done.
+        let running = copy_seen(
+            &asked_in,
+            &serde_json::json!({ "mutagenStatus": "scanning" }),
+        )
+        .unwrap();
+        assert_eq!(
+            (running.state, running.status.as_deref(), running.ran),
+            (FolderState::Copying, Some("scanning"), true)
+        );
+        let done = copy_seen(
+            &running,
+            &serde_json::json!({ "mutagenStatus": "watching" }),
+        )
+        .unwrap();
+        assert_eq!(done.state, FolderState::Ready);
+        // Paused after it was seen running: a copy held still, said as one, and followed on.
+        let held = copy_seen(
+            &running,
+            &serde_json::json!({ "paused": true, "mutagenStatus": "disconnected" }),
+        )
+        .unwrap();
+        assert_eq!(
+            (held.state, held.status.as_deref()),
+            (FolderState::Copying, Some(PAUSED))
+        );
+        // Paused before it was ever seen running: its session predates the ask, so the folder is in already.
+        let synced_before = copy_seen(
+            &asked_in,
+            &serde_json::json!({ "paused": true, "mutagenStatus": "disconnected" }),
+        )
+        .unwrap();
+        assert_eq!(
+            (synced_before.state, synced_before.status),
+            (FolderState::Ready, None)
+        );
+        // Unless the drive holds a new session still from the start: that copy has not happened, and waits for room.
+        let no_room = copy_seen(
+            &asked_in,
+            &serde_json::json!({ "paused": true, "lowDisk": { "since": 1, "freeBytes": 1, "totalBytes": 2 } }),
+        )
+        .unwrap();
+        assert_eq!(no_room.state, FolderState::Copying);
+        // The record written before this field existed reads as never seen running; one seen running says so.
+        let wire = serde_json::to_value(&running).unwrap();
+        assert_eq!(wire["ran"], true);
+        assert!(serde_json::to_value(&asked_in)
+            .unwrap()
+            .get("ran")
+            .is_none());
+        let old: Folder = serde_json::from_value(serde_json::json!({
+            "path": "/a", "name": "a", "state": "copying", "status": "paused"
+        }))
+        .unwrap();
+        assert!(!old.ran);
+        // Asked in again once in, it is followed from the start.
+        let mut record = made(Standing::Ready);
+        record.folders.push(Folder {
+            state: FolderState::Ready,
+            ..running
+        });
+        enqueue(
+            &mut record,
+            "C:\\Users\\me\\auto-translate",
+            "auto-translate",
+            &[],
+            &[],
+        );
+        assert_eq!(record.folders[0].state, FolderState::Queued);
+        assert!(!record.folders[0].ran);
     }
 
     #[test]
@@ -3726,6 +3932,7 @@ mod tests {
             state: FolderState::Queued,
             reason: None,
             status: None,
+            ran: false,
         });
         let found = Adoptable {
             id: "three".into(),
@@ -3843,6 +4050,116 @@ mod tests {
             ),
             Decision::Keep
         );
+    }
+
+    /// ic lists a sandbox its keeper put to sleep as `asleep` while it is down; any other stop is a stop.
+    #[test]
+    fn a_sleeping_container_is_told_from_a_stopped_one() {
+        let rows = vec![
+            serde_json::json!({ "slug": "nap", "running": false, "asleep": true }),
+            serde_json::json!({ "slug": "off", "running": false, "asleep": false }),
+            serde_json::json!({ "slug": "old", "running": false }),
+            serde_json::json!({ "slug": "up", "running": true, "asleep": false }),
+        ];
+        assert_eq!(container_in(&rows, "nap"), Container::Asleep);
+        assert_eq!(container_in(&rows, "off"), Container::Stopped);
+        assert_eq!(container_in(&rows, "old"), Container::Stopped);
+        assert_eq!(container_in(&rows, "up"), Container::Running);
+        assert_eq!(container_in(&rows, "gone"), Container::Missing);
+    }
+
+    /// Asleep is not a stop on the reader: no card asks them to start it, it wakes for a folder on its way in, and a
+    /// copy held still by a pause leaves it asleep rather than waking it every half hour for nothing.
+    #[test]
+    fn a_sleeping_sandbox_is_asleep_and_wakes_for_a_folder_on_its_way() {
+        let asleep = Facts {
+            container: Container::Asleep,
+            ..facts()
+        };
+        // Put to sleep while it read ready, or found so: asleep, and nothing for the reader to answer.
+        assert_eq!(
+            decide(&made(Standing::Ready), &asleep),
+            Decision::Become(Standing::Asleep)
+        );
+        assert_eq!(
+            decide(&made(Standing::Stopped), &asleep),
+            Decision::Become(Standing::Asleep)
+        );
+        assert_eq!(decide(&made(Standing::Asleep), &asleep), Decision::Keep);
+        assert!(!Standing::Asleep.wants_the_reader());
+        // Woken by somebody else (the workspace, `ic sandbox wakes`): ready at the next look.
+        assert_eq!(
+            decide(&made(Standing::Asleep), &facts()),
+            Decision::Become(Standing::Ready)
+        );
+        // A listing that failed keeps it as it was.
+        assert_eq!(
+            decide(
+                &made(Standing::Asleep),
+                &Facts {
+                    container: Container::Unknown,
+                    ..facts()
+                }
+            ),
+            Decision::Keep
+        );
+        // The reader's Start, a folder waiting, and a copy the sleep cut off all wake it.
+        assert_eq!(
+            decide(
+                &made(Standing::Asleep),
+                &Facts {
+                    asked: Some(Ask::Start),
+                    ..asleep.clone()
+                }
+            ),
+            Decision::Start
+        );
+        let mut waiting = made(Standing::Asleep);
+        waiting.folders.push(asked("app", FolderState::Queued));
+        assert_eq!(decide(&waiting, &asleep), Decision::Start);
+        let mut copying = made(Standing::Ready);
+        copying.folders.push(asked("app", FolderState::Copying));
+        assert_eq!(decide(&copying, &asleep), Decision::Start);
+        // A copy held still by a pause moves nothing awake: it stays asleep.
+        copying.folders[0].status = Some(PAUSED.into());
+        assert_eq!(
+            decide(&copying, &asleep),
+            Decision::Become(Standing::Asleep)
+        );
+        // A start of it that failed is a stop said with why, and not tried again by itself.
+        copying.folders[0].status = None;
+        copying.start_error = Some("docker said no".into());
+        assert_eq!(
+            decide(&copying, &asleep),
+            Decision::Become(Standing::Stopped)
+        );
+        // A stop that is not a sleep is the reader's or Docker's: a copy under way does not undo it.
+        let mut stopped = made(Standing::Ready);
+        stopped.folders.push(asked("app", FolderState::Copying));
+        assert_eq!(
+            decide(
+                &stopped,
+                &Facts {
+                    container: Container::Stopped,
+                    ..facts()
+                }
+            ),
+            Decision::Become(Standing::Stopped)
+        );
+        // On the wire it is a word of its own.
+        assert_eq!(
+            serde_json::to_value(made(Standing::Asleep)).unwrap()["state"],
+            "asleep"
+        );
+    }
+
+    /// The card of this computer is read again when the reader comes back to one of its windows, at most every
+    /// [`RETURN_LOOK_GAP`]; the workspace's window carries none.
+    #[test]
+    fn only_this_computers_windows_carry_the_card() {
+        assert!(shows_the_card(crate::windows::HOME));
+        assert!(shows_the_card("files-3"));
+        assert!(!shows_the_card(crate::windows::WORKSPACE));
     }
 
     /// Between the browser's hand-back and the workspace's roster the record reads signed in, for the grace at most.
@@ -3973,6 +4290,7 @@ mod tests {
             state: FolderState::Copying,
             reason: None,
             status: None,
+            ran: false,
         });
         assert_eq!(pause_for(&held), Duration::from_secs(4));
         assert_eq!(

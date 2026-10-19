@@ -222,6 +222,7 @@
             "waiting": "needs your OK",
             "ready": "ready",
             "stopped": "stopped",
+            "asleep": "asleep",
             "starting": "starting",
             "failed": "not set up",
             "interrupted": "picking up where it left off",
@@ -240,6 +241,7 @@
             "waiting": "This computer needs a few things before it can run a sandbox.",
             "ready": "The folders you work on with an agent go into it, each in a folder of its own.",
             "stopped": "It's on this computer and not running. Start it to work on your folders with an agent.",
+            "asleep": "Nobody used it for a while, so it's asleep and holds no memory. Opening it, or a folder's sandbox, wakes it.",
             "starting": "It was stopped, so Intentic is starting it. Your folders go in as soon as it's up.",
             "failed": "Its setup stopped. The log says what it was doing.",
             "gone": "It isn't on this computer any more. Set it up again, and your folders go back into it, with its files if this computer still has them."

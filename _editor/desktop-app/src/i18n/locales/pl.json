@@ -222,6 +222,7 @@
             "waiting": "czeka na Twoją zgodę",
             "ready": "gotowy",
             "stopped": "zatrzymany",
+            "asleep": "śpi",
             "starting": "uruchamianie",
             "failed": "nieskonfigurowany",
             "interrupted": "wznawianie konfiguracji",
@@ -240,6 +241,7 @@
             "waiting": "Ten komputer potrzebuje kilku rzeczy, zanim uruchomi sandbox.",
             "ready": "Foldery, nad którymi pracujesz z agentem, trafiają do niego, każdy do osobnego folderu.",
             "stopped": "Jest na tym komputerze, ale nie działa. Uruchom go, aby pracować nad folderami z agentem.",
+            "asleep": "Nikt z niego przez chwilę nie korzystał, więc śpi i nie zajmuje pamięci. Otwarcie go lub sandboxa folderu go budzi.",
             "starting": "Był zatrzymany, więc Intentic go uruchamia. Twoje foldery trafią do niego, gdy tylko zacznie działać.",
             "failed": "Konfiguracja się zatrzymała. Log pokazuje, co wtedy robiła.",
             "gone": "Nie ma go już na tym komputerze. Skonfiguruj go ponownie, a Twoje foldery do niego wrócą, razem z jego plikami, jeśli ten komputer wciąż je ma."

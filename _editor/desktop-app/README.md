@@ -243,7 +243,8 @@ flowchart LR
   starts only what the platform says somebody asked for. Links that land while one collection runs make one more after
   it. The init script's `sandboxWakes: true` is what tells the page to send it; an older app is sent nothing, and the
   keeper's poll wakes the sandbox as before. _(2026-10-15) Opening the app on a sleeping sandbox waited out that poll
-  on top of the start and the boot._
+  on top of the start and the boot._ Each collection then has this computer's own sandbox looked at again
+  (`machine_sandbox::kick`), so its card stops calling it asleep the moment it is up.
 - **Tray-resident.** The × of either face hides it into the tray, once the first × has asked whether that is what
   closing should do (`close-action.json`, "Keep Intentic in the tray" or "Quit Intentic"). While a folder or document
   window is on screen beside it, a face's × hides that face alone and asks nothing, since the app is not closing
@@ -448,8 +449,19 @@ flowchart LR
   `machine-sandbox.json`, written on every change and sent whole to every window (`desktop://machine-sandbox`, and
   `machine_sandbox_status` for a window that opens later): `signedOut`, `needsDocker` (not installed, not running, or
   turning this account away), `creating`, `waiting` (the yes, restart or sign-out a setup stopped on, exit 3 or 4),
-  `ready`, `stopped`, `failed` (with its log), `interrupted`, and `gone` (its container is not on this computer). It looks again at launch, at every roster the workspace sends, at a sign-in or a sign-out, at a press,
-  every 15 seconds while Docker is awaited, every minute while it is not ready and every five once it is. A quit stops a
+  `ready`, `stopped`, `asleep`, `failed` (with its log), `interrupted`, and `gone` (its container is not on this
+  computer). It looks again at launch, at every roster the workspace sends, at a sign-in or a sign-out, at a press, when
+  a window of this computer comes back to the reader (focused, or shown again; at most every 15 seconds,
+  `reader_returned`), after a wake collection or a folder's own start of it, every 15 seconds while Docker is awaited,
+  every minute while it is not ready and every five once it is.
+
+  _(2026-10-19)_ **Asleep is not stopped.** The machine agent's keeper puts a sandbox nobody used for half an hour to
+  sleep (`ic sandbox sleep`), and `ic sandbox list` says `asleep` for it while it is down. Read as `stopped`, every
+  window of this computer asked the reader to Start it after each such half hour, and went on asking after the
+  workspace had woken it, since nothing told the record of either. Now it is `asleep`, which asks nothing of the reader:
+  opening a folder's sandbox wakes it (`open_existing`), and so does a folder on its way in (`wakes_by_itself`: one in
+  line, or one whose copy the sleep cut off; not one whose copy is paused, which would only be put to sleep again half
+  an hour later). A start of it that failed is a `stopped` with its reason, as any other. A quit stops a
   setup under way with everything it started; the next launch finds the record `creating`, says it was interrupted, and
   runs it again on the same row with its code minted afresh (the platform hands back the live one). The system's
   notification says once that it is ready and once each time it newly needs the reader, and nothing while a window of
@@ -495,7 +507,11 @@ flowchart LR
   `projects.json` with this computer's sandbox, and every window on it hears so (`intentic:sandbox`). The app then
   follows the folder's first copy in `intentic-machine status --json` until the agent's word for its Mutagen session is
   `watching`. A paused session stays followed, with the copy card and folder button saying it is paused instead of
-  showing progress; the card offers the sandbox, where Devices can resume file syncing. Every local window carries a
+  showing progress; the card offers the sandbox, where Devices can resume file syncing. _(2026-10-19)_ Only a session
+  the app has seen running since the folder was asked in (`ran`): one it finds paused before that was paused before the
+  ask, so the folder was synced in before (asked in again after a reinstall took the app's record with it), and it is
+  in (`copy_seen`). Followed as a first copy, such a folder said "Copying … is paused" in every window for good, about a
+  sandbox that had had it for days. A new session the drive holds still (`lowDisk`) is still a copy waiting. Every local window carries a
   card in its corner while this computer's sandbox is not ready, in the
   notification lane (the web's `local/LocalMachineCard.vue`, worded by `local/machineCard.ts`): the house goes up stage
   by stage as the setup's real phases arrive (the plans, the ground and its materials as the image arrives, the walls as

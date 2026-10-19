@@ -12198,6 +12198,7 @@
                 "creating": "Konfiguracja, {percent}%",
                 "interrupted": "Wznawianie od miejsca przerwania",
                 "starting": "Uruchamianie",
+                "asleep": "Śpi. Intentic obudzi go za Ciebie",
                 "stopped": "Zatrzymany. Intentic uruchomi go za Ciebie",
                 "startFailed": "Nie udało się uruchomić",
                 "needsDocker": {
@@ -12257,6 +12258,10 @@
             "starting": "Uruchamianie sandboxa tego komputera",
             "startingDetail": "Był zatrzymany, więc Intentic go uruchamia. Potrwa to do minuty.",
             "startFailed": "Sandbox tego komputera się nie uruchomił",
+            "asleep": "Sandbox tego komputera śpi",
+            "asleepDetail": "Zasnął, gdy nikt z niego nie korzystał, a kopiowanie {name} jest wstrzymane. Uruchom go, aby kontynuować.",
+            "waking": "Budzenie sandboxa tego komputera",
+            "wakingDetail": "Zasnął, gdy nikt z niego nie korzystał. Intentic budzi go, aby skopiować {name}.",
             "gone": "Sandbox tego komputera został usunięty",
             "goneDetail": "Nie ma go już na tym komputerze. Skonfiguruj go ponownie, a Twoje foldery do niego wrócą, razem z jego plikami, jeśli ten komputer wciąż je ma.",
             "folder": {

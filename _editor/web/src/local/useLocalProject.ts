@@ -114,10 +114,11 @@ const watchCard = (): void => {
         return;
     }
     watching = true;
+    // Not on a wake from sleep: that is the sandbox going about its day, which the reader neither asked for nor waits on.
     watch(
         () => machine.value?.state,
         (now, before) => {
-            if (now === `ready` && before !== undefined && before !== `ready`) {
+            if (now === `ready` && before !== undefined && before !== `ready` && before !== `asleep`) {
                 flash(justReady);
             }
         },

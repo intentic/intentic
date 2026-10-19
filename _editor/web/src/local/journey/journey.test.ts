@@ -46,6 +46,7 @@ describe(`a folder's way to an agent`, () => {
 
     it(`says a stopped sandbox is started for the folder, and a start that failed as failed`, () => {
         expect(journeyOf(facts({ state: `stopped` }))[0]).toMatchObject({ state: `todo`, note: `Stopped. Intentic starts it for you` });
+        expect(journeyOf(facts({ state: `asleep` }))[0]).toMatchObject({ state: `todo`, note: `Asleep. Intentic wakes it for you` });
         expect(journeyOf(facts({ state: `starting` }))[0]).toMatchObject({ state: `running`, note: `Starting it` });
         expect(journeyOf(facts({ state: `stopped`, reason: `no` }))[0]).toMatchObject({ state: `failed`, note: `Couldn't start` });
     });

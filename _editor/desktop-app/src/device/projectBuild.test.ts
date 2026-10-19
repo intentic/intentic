@@ -50,7 +50,7 @@ it(`reads every state the app can be in`, () => {
     expect(machineStateOf({ state: `needsDocker`, reason: `notRunning` })).toEqual({ state: `needsDocker`, reason: `notRunning` });
     expect(machineStateOf({ state: `waiting`, for: `restart` })).toEqual({ state: `waiting`, for: `restart` });
     expect(machineStateOf({ state: `failed`, reason: `docker refused` })).toEqual({ state: `failed`, reason: `docker refused` });
-    for (const state of [`signedOut`, `ready`, `stopped`, `interrupted`, `gone`] as const) {
+    for (const state of [`signedOut`, `ready`, `stopped`, `asleep`, `interrupted`, `gone`] as const) {
         expect(machineStateOf({ state })).toEqual({ state });
     }
 });

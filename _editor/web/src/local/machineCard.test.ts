@@ -212,6 +212,34 @@ describe(`the folder's own button`, () => {
         });
     });
 
+    // Asleep is the keeper's doing, not a stop on the reader: no card asks for a Start (2026-10-19, a reader back from a
+    // workspace that had just woken it was asked to start it), and the folder's own button still opens its sandbox,
+    // which wakes it.
+    it(`asks nothing of a sandbox that is only asleep`, () => {
+        const asleep = at({ state: `asleep` });
+        expect(machineCardOf(facts(asleep))).toBeUndefined();
+        expect(machineCardOf(facts(asleep, folderAt(`ready`)))).toBeUndefined();
+        expect(folderButtonOf({ hasSandbox: true, machine: asleep, folder: undefined })).toEqual({ label: `Open this folder's sandbox`, busy: false, press: `open` });
+        // A folder on its way in wakes it by itself (the app's machine_sandbox.rs `wakes_by_itself`): said so, nothing to press.
+        expect(machineCardOf(facts(asleep, folderAt(`copying`)))).toMatchObject({
+            tone: `working`,
+            title: `Waking this computer's sandbox`,
+            actions: [],
+            key: `waking`,
+        });
+        expect(folderButtonOf({ hasSandbox: true, machine: asleep, folder: folderAt(`queued`) })).toEqual({
+            label: `Waiting for this computer's sandbox`,
+            busy: true,
+            press: `card`,
+        });
+        // A copy held still by a pause leaves it asleep: waking it is the reader's press.
+        const held = folderAt(`copying`, { status: `paused` });
+        expect(machineCardOf(facts(asleep, held))).toMatchObject({ tone: `waiting`, title: `This computer's sandbox is asleep`, actions: [`start`], key: `asleep` });
+        expect(folderButtonOf({ hasSandbox: true, machine: asleep, folder: held })).toEqual({ label: `Start`, busy: false, press: `start` });
+        // A folder turned down is said as such, asleep or not.
+        expect(machineCardOf(facts(asleep, folderAt(`failed`, { reason: `no` })))).toMatchObject({ about: `folder`, key: `folder:failed` });
+    });
+
     // The report this came from: a PC waiting for its own setup said "Waiting for this computer's sandbox", and the
     // press unfolded a card that was already open, so the one button in the window did nothing at all.
     it(`is the next step itself, wherever the sandbox is stopped on the reader rather than on itself`, () => {

@@ -4903,6 +4903,7 @@
                 "creating": "Setting up, {percent}%",
                 "interrupted": "Picking up where it left off",
                 "starting": "Starting it",
+                "asleep": "Asleep. Intentic wakes it for you",
                 "stopped": "Stopped. Intentic starts it for you",
                 "startFailed": "Couldn't start",
                 "needsDocker": {
@@ -4962,6 +4963,10 @@
             "starting": "Starting this computer's sandbox",
             "startingDetail": "It was stopped, so Intentic is starting it. This takes up to a minute.",
             "startFailed": "This computer's sandbox didn't start",
+            "asleep": "This computer's sandbox is asleep",
+            "asleepDetail": "It went to sleep while nobody was using it, with copying {name} paused. Start it to carry on.",
+            "waking": "Waking this computer's sandbox",
+            "wakingDetail": "It went to sleep while nobody was using it. Intentic wakes it to copy {name} in.",
             "gone": "This computer's sandbox is gone",
             "goneDetail": "It isn't on this computer any more. Set it up again, and your folders go back into it, with its files if this computer still has them.",
             "folder": {

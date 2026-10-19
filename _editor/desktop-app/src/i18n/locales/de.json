@@ -222,6 +222,7 @@
             "waiting": "braucht Ihr OK",
             "ready": "bereit",
             "stopped": "gestoppt",
+            "asleep": "schläft",
             "starting": "wird gestartet",
             "failed": "nicht eingerichtet",
             "interrupted": "macht dort weiter, wo sie aufgehört hat",
@@ -240,6 +241,7 @@
             "waiting": "Dieser Computer braucht noch ein paar Dinge, bevor er eine Sandbox betreiben kann.",
             "ready": "Die Ordner, an denen Sie mit einem Agenten arbeiten, kommen hinein, jeder in einen eigenen Ordner.",
             "stopped": "Sie ist auf diesem Computer, läuft aber nicht. Starten Sie sie, um mit einem Agenten an Ihren Ordnern zu arbeiten.",
+            "asleep": "Niemand hat sie eine Weile benutzt, also schläft sie und belegt keinen Speicher. Sie zu öffnen, oder die Sandbox eines Ordners, weckt sie.",
             "starting": "Sie war gestoppt, also startet Intentic sie. Ihre Ordner kommen hinein, sobald sie läuft.",
             "failed": "Ihre Einrichtung ist stehen geblieben. Das Protokoll zeigt, woran sie gerade war.",
             "gone": "Sie ist nicht mehr auf diesem Computer. Richten Sie sie erneut ein, dann kommen Ihre Ordner wieder hinein, mit ihren Dateien, falls dieser Computer sie noch hat."

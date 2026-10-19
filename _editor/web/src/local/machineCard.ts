@@ -189,6 +189,32 @@ const powerCard = (machine: LocalMachineSandbox): MachineCard | undefined => {
         : card({ about: `machine`, tone: `failed`, stage: `roof`, title: t(`local.machine.startFailed`), detail: machine.reason, actions: [`start`] }, `startFailed`);
 };
 
+// Asleep: put to sleep by this computer's keeper because nobody used it, which is nothing for the reader to answer.
+// Opening a folder's sandbox wakes it, and so does a folder on its way in (the app's machine_sandbox.rs
+// `wakes_by_itself`), so the card says nothing of it unless this window's folder is on its way: then that it is being
+// woken for it, or, for a copy held still by a pause, which the app leaves asleep, that a press wakes it. Said as
+// stopped, every window asked the reader to Start it half an hour after each time they stopped using it, and went on
+// asking after the workspace had woken it (2026-10-19).
+const asleepCard = (folder: LocalFolderSandbox | undefined): MachineCard | undefined => {
+    if (folder === undefined || folder.state === `ready`) {
+        return undefined;
+    }
+    if (folder.state === `failed`) {
+        return folderCard(folder, false);
+    }
+    const name = folder.name;
+    if (folder.state === `copying` && folder.status === `paused`) {
+        return card(
+            { about: `machine`, tone: `waiting`, stage: `roof`, title: t(`local.machine.asleep`), detail: t(`local.machine.asleepDetail`, { name }), actions: [`start`] },
+            `asleep`,
+        );
+    }
+    return card(
+        { about: `machine`, tone: `working`, stage: `roof`, title: t(`local.machine.waking`), detail: t(`local.machine.wakingDetail`, { name }), actions: [] },
+        `waking`,
+    );
+};
+
 // The setup's own stops: Docker, a question for This computer, a failure.
 const setupStopCard = (machine: LocalMachineSandbox & { readonly state: `needsDocker` | `waiting` | `failed` }): MachineCard => {
     switch (machine.state) {
@@ -264,6 +290,8 @@ const sandboxCard = (machine: LocalMachineSandbox, folder: LocalFolderSandbox | 
         case `stopped`:
         case `starting`:
             return powerCard(machine);
+        case `asleep`:
+            return asleepCard(folder);
         case `gone`:
             return card({ about: `machine`, tone: `failed`, stage: `plan`, title: t(`local.machine.gone`), detail: t(`local.machine.goneDetail`), actions: [`recreate`] }, `gone`);
     }

@@ -38,6 +38,9 @@ pub fn requested() {
             if let Err(error) = crate::scripts::run_ic_quietly(&ARGS, LIMIT) {
                 eprintln!("ic sandbox wakes: {error}");
             }
+            // This computer's own sandbox may be the one started: its record says so now, not at the end of a rest
+            // that is minutes long while it reads asleep or ready (machine_sandbox.rs).
+            crate::machine_sandbox::kick();
         }
         RUNNING.store(false, Ordering::SeqCst);
         // An ask that landed between the loop's last look and the line above.

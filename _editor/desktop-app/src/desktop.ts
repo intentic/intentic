@@ -608,9 +608,10 @@ export const projectAttach = (ask: ProjectAsk): Promise<ProjectAttached> => invo
 export type DockerReason = `notInstalled` | `notRunning` | `notAllowed`;
 
 /** Where it stands (machine_sandbox.rs `Standing`). `signedIn`: a sign-in came back from the browser and the
- * workspace has not said who yet; `starting`: its stopped container being started. */
+ * workspace has not said who yet; `starting`: its stopped container being started; `asleep`: put to sleep by this
+ * computer's keeper for want of use, woken by opening it or by a folder on its way in. */
 export type MachineStanding =
-    | { readonly state: `signedOut` | `signedIn` | `ready` | `stopped` | `starting` | `interrupted` | `gone` }
+    | { readonly state: `signedOut` | `signedIn` | `ready` | `stopped` | `asleep` | `starting` | `interrupted` | `gone` }
     | { readonly state: `needsDocker`; readonly reason: DockerReason }
     | { readonly state: `creating`; readonly phase?: string; readonly step?: string; readonly percent: number }
     | { readonly state: `waiting`; readonly for: SetupWaitingFor }
@@ -625,6 +626,8 @@ export interface MachineFolder {
     readonly reason?: string;
     /** The first copy's status: paused, or Mutagen's word while it runs. */
     readonly status?: string;
+    /** Its first copy's session has been seen running since it was asked in. */
+    readonly ran?: boolean;
 }
 
 /** The whole record (machine_sandbox.rs `Record`), as `machine-sandbox.json` holds it. */

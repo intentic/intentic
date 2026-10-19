@@ -58,6 +58,8 @@ const sandboxStep = (machine: LocalMachineState | undefined): JourneyStep => {
             return step(`sandbox`, title, `running`, t(`local.journey.sandbox.interrupted`));
         case `starting`:
             return step(`sandbox`, title, `running`, t(`local.journey.sandbox.starting`));
+        case `asleep`:
+            return step(`sandbox`, title, `todo`, t(`local.journey.sandbox.asleep`));
         case `stopped`:
             return machine.reason === undefined
                 ? step(`sandbox`, title, `todo`, t(`local.journey.sandbox.stopped`))

@@ -500,10 +500,9 @@ fn open_existing(app: &AppHandle, asked_in: Option<&str>, project: &Project) {
             if let Err(error) = started {
                 eprintln!("could not start {slug}: {error}");
             }
-            // The app's own look had it running: it looks again now rather than in a few minutes.
-            if shown {
-                crate::machine_sandbox::kick();
-            }
+            // Started here, behind the record's back: it looks again now rather than in a few minutes, so every
+            // window stops saying it is stopped or asleep (the app's own look had it running, or not).
+            crate::machine_sandbox::kick();
         }
         if !shown {
             show_project(&app, asked_in.as_deref(), &project);
