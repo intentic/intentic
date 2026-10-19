@@ -106,7 +106,8 @@ export interface DeviceSandboxRow {
     // Until when the version before the last swap stays parked and ready (ms): going back takes seconds until then.
     probationUntil?: number | undefined;
     // What a rollback can go back to, newest first.
-    rollbackTargets?: readonly { readonly image: string; readonly version?: string | undefined }[] | undefined;
+    // `download`: its pinned image is gone, so going back downloads the release its version names.
+    rollbackTargets?: readonly { readonly image: string; readonly version?: string | undefined; readonly download?: boolean | undefined }[] | undefined;
     // The other side of this computer that keeps it (a WSL distro, or Windows), and how a person reads that side: one
     // Docker engine serves both, but only the keeping side runs its updates, backups and repairs.
     keptElsewhere?: string | undefined;

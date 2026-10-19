@@ -44,3 +44,15 @@ it(`tells kept builds that share a version apart by their image, and sends the i
         { version: `1.2.0`, to: `1.2.0` },
     ]);
 });
+
+// A pruned dev build is "downloaded" as 0.0.0, which no registry has, and an older ic listed one such row per pruned pin.
+it(`offers no row that cannot be had, and one row per image`, () => {
+    const pruned = { image: `ghcr.io/intentic/sandbox:0.0.0`, version: `0.0.0`, download: true };
+    expect(rollbackChoices(takesTo, { rollbackTargets: [pruned, pruned, pruned] })).toEqual([]);
+    const release = { image: `ghcr.io/intentic/sandbox:1.2.0`, version: `1.2.0`, download: true };
+    const local = { image: `intentic-sandbox-rollback-s1:c6cc76cfeece`, version: `0.0.0` };
+    expect(rollbackChoices(takesTo, { rollbackTargets: [local, pruned, release, release] })).toEqual([
+        { version: `0.0.0`, to: undefined },
+        { version: `1.2.0`, to: `1.2.0` },
+    ]);
+});

@@ -1,5 +1,6 @@
 import { DEVICE_FEATURE_ROLLBACK_TO, type DeviceFacts, deviceSupports } from "@intentic/sandbox-contract/schemas/hosts";
 import type { DeviceSandboxRow, RollbackChoice } from "@intentic/ui";
+import { DEV_VERSION } from "@intentic/sandbox-contract/state/versions";
 import { versionName } from "../overview/version/updateOutcome";
 
 type Target = NonNullable<DeviceSandboxRow["rollbackTargets"]>[number];
@@ -15,6 +16,15 @@ const imageTag = (image: string): string => {
     return colon === -1 ? leaf : leaf.slice(colon + 1);
 };
 
+// The kept builds a rollback can actually reach, each once. A pruned pin is downloaded by its version, which a dev build's
+// 0.0.0 never is, and several pruned pins of one release are one download: an `ic` from before it said so itself listed
+// each, three rows of "0.0.0" none of which could be had (2026-10-19).
+const reachableTargets = (targets: readonly Target[]): Target[] =>
+    targets.filter(
+        (target, at) =>
+            !(target.download === true && target.version === DEV_VERSION) && targets.findIndex((other) => other.image === target.image) === at,
+    );
+
 /**
  * The versions a row's Roll back can choose between: every image the machine kept for this sandbox, newest first,
  * when the agent the op goes through can go back to one other than the newest (`rollback-to`: an older agent refuses
@@ -27,7 +37,7 @@ export const rollbackChoices = (
     facts: Pick<DeviceFacts, "features"> | undefined,
     sandbox: Pick<DeviceSandboxRow, "rollbackTargets"> | undefined,
 ): RollbackChoice[] => {
-    const targets = sandbox?.rollbackTargets ?? [];
+    const targets = reachableTargets(sandbox?.rollbackTargets ?? []);
     if (targets.length < 2 || !deviceSupports(facts, DEVICE_FEATURE_ROLLBACK_TO)) {
         return [];
     }

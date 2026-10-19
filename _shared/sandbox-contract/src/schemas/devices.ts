@@ -117,9 +117,8 @@ export type DeviceSandbox = z.infer<typeof DeviceSandboxSchema>;
 // One operation on one sandbox, streamed as lines ending in a `result` or `error` frame. `prepare` builds the pending
 // update without touching the container. `set-shape` sets its resources and privileges, now or for the next restart;
 // `forget-shape` drops a shape saved for the next restart. `start`/`restart` apply a saved shape (all through `ic`).
-// `reshape` is the older spelling of `set-shape`, kept one release for pages served by older sandboxes.
-// `runner-up`/`runner-remove` act on a runner (this sandbox's own container), not a person's sandbox; gated by the
-// `sandboxes` switch, not removal, since a runner holds no separate workspace to lose.
+// `reshape` is `set-shape`'s older spelling, kept one release. `runner-up`/`runner-remove` act on a runner (this
+// sandbox's own container); gated by the `sandboxes` switch, not removal, as a runner holds no workspace to lose.
 export const DeviceSandboxOpSchema = z.enum([
     "start",
     "stop",

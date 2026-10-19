@@ -70,6 +70,14 @@ pub fn is_version(value: &str) -> bool {
             .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()))
 }
 
+/// What every build from a checkout says it is: never published, so no registry has an image under it.
+const DEV_VERSION: &str = "0.0.0";
+
+/// A release version the registry publishes an image under: a version, and not the one every dev build says. Pure.
+pub fn is_published(value: &str) -> bool {
+    is_version(value) && value.trim_start_matches('v') != DEV_VERSION
+}
+
 /// The target `ic sandbox rollback --to <to>` moves onto: a kept build when one matches, else the published image of
 /// that release (every release is also tagged by its version, and a published reference is taken as it is), which is
 /// pulled like any update.
@@ -77,7 +85,7 @@ pub fn resolve_to(record: &ChannelRecord, to: &str) -> Result<Pin> {
     if let Some(pin) = find_target(&record.targets(), to) {
         return Ok(pin.clone());
     }
-    if is_version(to) {
+    if is_published(to) {
         let version = to.trim_start_matches('v');
         return Ok(Pin {
             image: format!("{DEFAULT_REGISTRY}:{version}"),
@@ -116,7 +124,8 @@ pub fn resolve_to(record: &ChannelRecord, to: &str) -> Result<Pin> {
 `docker image prune -a` takes the image and leaves the record naming it, and a rollback then "pulled" a tag no registry
 ever had (audit 2026-10, item 19). A pin whose image is gone is reached again through its version, since every release
 is also published under its version tag; a pin that names neither a local image nor a version is no way back at all,
-and is no longer offered as one. */
+and is no longer offered as one. Nor is a dev build's (2026-10-19): it says 0.0.0, which no registry publishes, and
+several pruned ones each offered the same download of it, three menu rows of "0.0.0" none of which could be had. */
 
 /// What a rollback to `pin` would run: the pinned image while this machine holds it, a published reference as it is,
 /// else the release its version names; None when nothing can be had. Pure.
@@ -126,7 +135,7 @@ pub fn reachable(pin: &Pin, on_machine: bool) -> Option<String> {
     }
     pin.version
         .as_deref()
-        .filter(|version| is_version(version))
+        .filter(|version| is_published(version))
         .map(|version| format!("{DEFAULT_REGISTRY}:{}", version.trim_start_matches('v')))
 }
 
@@ -149,19 +158,22 @@ pub fn pinned_environment(
     (has_recipe && target == pin.image && on_machine(image)).then(|| (image.clone(), hash.clone()))
 }
 
-/// The rollback targets that can still be had, newest first, each as what a rollback would run. Pure over `on_machine`.
+/// The rollback targets that can still be had, newest first, each as what a rollback would run, and each once: two
+/// pruned pins of one release are the same download. Pure over `on_machine`.
 pub fn reachable_targets(record: &ChannelRecord, on_machine: &dyn Fn(&str) -> bool) -> Vec<Pin> {
-    record
-        .targets()
-        .into_iter()
-        .filter_map(|pin| {
-            reachable(&pin, on_machine(&pin.image)).map(|image| Pin {
-                image,
-                version: pin.version,
-                ..Pin::default()
-            })
-        })
-        .collect()
+    let mut targets: Vec<Pin> = Vec::new();
+    for pin in record.targets() {
+        if let Some(image) = reachable(&pin, on_machine(&pin.image)) {
+            if !targets.iter().any(|seen| seen.image == image) {
+                targets.push(Pin {
+                    image,
+                    version: pin.version,
+                    ..Pin::default()
+                });
+            }
+        }
+    }
+    targets
 }
 
 /// The listing's `rollbackTargets` (DeviceSandboxSchema): newest first, as JSON, only the ones a rollback can reach.
@@ -476,6 +488,32 @@ mod tests {
             targets_json(&record, &all_here).as_array().map(Vec::len),
             Some(2)
         );
+    }
+
+    #[test]
+    fn pruned_dev_builds_are_no_way_back_and_one_release_is_offered_once() {
+        // Every dev build says 0.0.0, which no registry publishes: pruned, it cannot be downloaded again.
+        let dev = pin("intentic-sandbox-rollback-x:c6cc76cfeece", "0.0.0");
+        assert_eq!(reachable(&dev, false), None);
+        assert_eq!(
+            reachable(&dev, true).as_deref(),
+            Some("intentic-sandbox-rollback-x:c6cc76cfeece")
+        );
+        let record = with_targets(
+            Some(dev),
+            vec![
+                pin("intentic-sandbox-rollback-x:f5eb7476ff5c", "0.0.0"),
+                pin("intentic-sandbox-rollback-x:aaaaaaaaaaaa", "1.2.0"),
+                pin("intentic-sandbox-rollback-x:bbbbbbbbbbbb", "1.2.0"),
+            ],
+        );
+        let gone = |_: &str| false;
+        assert_eq!(
+            targets_json(&record, &gone),
+            json!([{ "image": "ghcr.io/intentic/sandbox:1.2.0", "version": "1.2.0", "download": true }])
+        );
+        assert!(resolve_to(&with_targets(None, vec![]), "0.0.0").is_err());
+        assert!(is_published("1.2.0") && !is_published("0.0.0") && !is_published("v0.0.0"));
     }
 
     fn env_pin(image: &str, version: &str, env: &str) -> Pin {
