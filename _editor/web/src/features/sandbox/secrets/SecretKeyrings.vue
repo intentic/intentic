@@ -92,7 +92,7 @@ const doPair = async (): Promise<void> => {
 </script>
 
 <template>
-    <RowGroup data-setting="secrets-keyrings" :label="t(`sandbox.keyrings.title`)" :count="keyrings.length">
+    <RowGroup data-setting="secrets-keyrings" :label="t(`sandbox.keyrings.title`)">
         <template #actions>
             <OpenInPasswords />
             <Button v-if="canPair && !pairing" size="small" tier="boring" :label="t(`sandbox.keyrings.pair`)" @click="openPair">
