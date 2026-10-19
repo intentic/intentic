@@ -1,0 +1,66 @@
+{
+    "user_id": "*",
+    "account_id": "*",
+    "email": "*",
+    "plan_type": "team",
+    "rate_limit": {
+        "allowed": false,
+        "limit_reached": true,
+        "primary_window": {
+            "used_percent": 100,
+            "limit_window_seconds": 18000,
+            "reset_after_seconds": 3324,
+            "reset_at": 1792418015
+        },
+        "secondary_window": {
+            "used_percent": 73,
+            "limit_window_seconds": 604800,
+            "reset_after_seconds": 463725,
+            "reset_at": 1792878416
+        }
+    },
+    "code_review_rate_limit": null,
+    "additional_rate_limits": null,
+    "model_usage": {
+        "gpt-6-astra": {
+            "available": false,
+            "available_at": "2026-10-19T13:53:36.124774Z",
+            "credits_would_enable": true
+        }
+    },
+    "credits": {
+        "has_credits": false,
+        "unlimited": false,
+        "overage_limit_reached": false,
+        "balance": null,
+        "approx_local_messages": null,
+        "approx_cloud_messages": null
+    },
+    "spend_control": {
+        "reached": false,
+        "individual_limit": null
+    },
+    "rate_limit_reached_type": {
+        "type": "*",
+        "details": null
+    },
+    "rate_limit_upsell": {
+        "banner_type": "*",
+        "title": "You've reached your workspace credit limit",
+        "description": "*",
+        "ctas": [
+            {
+                "action": "notify_owner",
+                "label": "Request credits"
+            }
+        ],
+        "reset_at": 1792418015,
+        "referral": null,
+        "request_url": null
+    },
+    "promo": null,
+    "rate_limit_reset_credits": {
+        "available_count": 2,
+        "applicable_available_count": 2
+    }
+}

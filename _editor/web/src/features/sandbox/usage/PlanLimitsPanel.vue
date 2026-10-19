@@ -28,10 +28,10 @@ import {
     type PlanLimitRow,
     planLimitRows,
     planLimitSummary,
-    poolResetNote,
     remainingFigure,
     usageTone,
 } from "../../../models/providers/usageStatus";
+import { poolResetNote } from "../../../models/providers/usageNotes";
 import { useT } from "@intentic/ui/i18n";
 
 // How much of your plans is left, the section that must scale to a 36-connection fleet rather than one row per

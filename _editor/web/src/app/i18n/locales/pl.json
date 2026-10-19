@@ -4539,11 +4539,14 @@
         },
         "usageRing": {
             "atMostOtherDevices": "≤ oznacza co najwyżej: inne urządzenia na tym koncie czerpią z tych samych pul.",
+            "contradicted": "Tura z {model} przeszła, choć ten odczyt mówił, że limit się wyczerpał, więc odczyt jest dla niego błędny. Odczytuję ponownie.",
             "everyPoolResetFull": "Każda pula została zresetowana: dostępny jest pełny przydział.",
             "heldUntil": "wstrzymane do odnowienia: {pool}",
             "lapsed": "zresetowano {resetsAt}, od tamtej pory nieodczytane",
             "measured": "zmierzono {measuredAt}",
-            "resets": "reset {resetsAt}"
+            "missing": "niezgłaszane od {since}, pokazano ostatnią wartość",
+            "resets": "reset {resetsAt}",
+            "uncovered": "Brak zgłoszonego przydziału dla {models}: nie wiadomo, ile im zostało."
         },
         "vpnConnections": {
             "connecting": "Łączenie {name}",

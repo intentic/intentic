@@ -1,7 +1,10 @@
 import { retryAfterMs } from "@intentic/base/async";
+import type { ModelRef } from "@intentic/sandbox-contract/models/plan-pools";
 import type { UsageWindow, WindowGates } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
 import type { HeadroomSource } from "../../../usage/headroom.js";
+import type { AnswerWatch } from "../../../usage/drift/answer-vocabulary.js";
+import { parseJsonOr } from "@intentic/base/json";
 import { asNumber, asRecord, asString, clampPercent, readFailure, resetFromIso } from "../../../usage/payload.js";
 
 // Reader for native Claude accounts (translator-usage.ts's counterpart): reads the same OAuth endpoint claude.ai and
@@ -134,7 +137,8 @@ export const rateLimitParkMs = (response: Response): number => {
 
 // Best-effort: every failure reads as "no reading" (caller keeps the last one) and says why, and a 429 always carries a
 // stay-away for the sweep to honour.
-export const readClaudeUsage = async (oauthToken: string, fetchFn: typeof fetch, timeoutMs = 10_000): Promise<ClaudeUsageReading> => {
+// `watch` is told each answer (drift/answer-vocabulary.ts), so one that changed what it is made of is noticed.
+export const readClaudeUsage = async (oauthToken: string, fetchFn: typeof fetch, timeoutMs = 10_000, watch?: AnswerWatch): Promise<ClaudeUsageReading> => {
     try {
         const response = await fetchFn(USAGE_ENDPOINT, {
             headers: { Authorization: `Bearer ${oauthToken}`, "anthropic-beta": "oauth-2025-04-20" },
@@ -146,7 +150,9 @@ export const readClaudeUsage = async (oauthToken: string, fetchFn: typeof fetch,
         if (!response.ok) {
             return { windows: [], failure: readFailure(response.status, await response.text()) };
         }
-        return { windows: claudeUsageWindows((await response.json()) as unknown) };
+        const answer = parseJsonOr(await response.text(), null);
+        watch?.observe("claude:oauth/usage", answer);
+        return { windows: claudeUsageWindows(answer) };
     } catch (error) {
         return { windows: [], failure: error instanceof Error && error.name === "TimeoutError" ? "the provider did not answer in time" : "the read failed" };
     }
@@ -162,7 +168,13 @@ const READ_TIMEOUT_MS = 8_000;
 // 60-second freshness that is a read a minute per account, which earns the 429 that freezes the number it asked for.
 const BACKGROUND_FLOOR_MS = 5 * 60_000;
 
-export const claudeHeadroomSource = (store: ClaudeStore, fetchFn: typeof fetch = fetch): HeadroomSource => ({
+// `models` is what an account serves, where the catalog can say: a reading is checked against it (headroom.ts `served`).
+export const claudeHeadroomSource = (
+    store: ClaudeStore,
+    fetchFn: typeof fetch = fetch,
+    models?: (accountId: string) => Promise<readonly ModelRef[]>,
+    watch?: AnswerWatch,
+): HeadroomSource => ({
     targets: async () =>
         (await store.list())
             // Revoked credential can't read anything; asking would only mint a 401 per sweep.
@@ -171,11 +183,14 @@ export const claudeHeadroomSource = (store: ClaudeStore, fetchFn: typeof fetch =
                 key: account.id,
                 provider: "claude",
                 minAgeMs: BACKGROUND_FLOOR_MS,
+                // The endpoint lists every pool the account has on each read.
+                whole: true,
+                served: async () => (models === undefined ? [] : models(account.id)),
                 read: async () => {
                     const token = await ensureFreshToken(store, account.id);
                     return token === undefined
                         ? { windows: [], failure: "the sign-in could not be refreshed" }
-                        : readClaudeUsage(token, fetchFn, READ_TIMEOUT_MS);
+                        : readClaudeUsage(token, fetchFn, READ_TIMEOUT_MS, watch);
                 },
             })),
 });

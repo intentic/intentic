@@ -34,6 +34,7 @@ import { environmentSourcesOf } from "./environment-composers.js";
 import type { EnvironmentSources } from "./seams/environment-sources.js";
 
 import { accountUsageDocument, fileAccountUsageStore } from "./usage/account-usage.js";
+import { fileAnswerWatch, providerAnswersDocument } from "./usage/drift/answer-vocabulary.js";
 import { claudeHeadroomSource } from "./agent/providers/claude/claude-usage.js";
 import { createHeadroomService } from "./usage/headroom.js";
 import { fileUsageParkStore, usageParksDocument } from "./usage/usage-parks.js";
@@ -288,6 +289,7 @@ const infoOf = (config: Config): Services["info"] =>
 const createProviderAreas = (config: Config, logger: Logger, authRoot: string, whole: () => Services) => {
     // Hoisted: the turn stream and the translator client both read and record into this same file.
     const accountUsage = fileAccountUsageStore(join(config.historyRoot, accountUsageDocument.path));
+    const answers = fileAnswerWatch(join(config.historyRoot, providerAnswersDocument.path), logger);
     const cliProxy = createCliProxyClient({
         managementUrl: cliProxyManagementUrl(config),
         token: config.translator.token,
@@ -295,6 +297,7 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
         // The credential store the proxy reads, so the connection list survives a proxy that isn't answering yet.
         authDir: cliProxyAuthDir(authRoot),
         usageStore: accountUsage,
+        answers,
     });
     // OpenCode and the Gemini area reference each other; safe since the model read runs lazily, after returning.
     // oxlint-disable-next-line prefer-const -- The config closure reads this binding before assignment.
@@ -336,7 +339,7 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
         store: accountUsage,
         parks: fileUsageParkStore(join(config.historyRoot, usageParksDocument.path)),
         sources: [
-            claudeHeadroomSource(claude.claudeStore),
+            claudeHeadroomSource(claude.claudeStore, fetch, async (id) => (await claude.claudeModels.models(id)).models, answers),
             cliProxy.headroom,
             cursorHeadroomSource({ cursorStore: cursor.cursorStore, cursorModels: cursor.cursorModels, observedLimits }),
         ],

@@ -26,6 +26,14 @@ const memoryStore = (stored: Record<string, AccountUsage> = {}): { store: Accoun
                 recorded[id] = { ...usage, unread: { ...unread, since: usage.unread?.since ?? unread.since } };
                 return recorded[id];
             },
+            contradict: async (id, contradicted, takenBefore) => {
+                const usage = recorded[id];
+                if (usage === undefined || usage.measuredAt >= takenBefore) {
+                    return undefined;
+                }
+                recorded[id] = { ...usage, contradicted };
+                return recorded[id];
+            },
             clear: async (id) => {
                 delete recorded[id];
             },

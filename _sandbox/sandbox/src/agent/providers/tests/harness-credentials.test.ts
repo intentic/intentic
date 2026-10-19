@@ -175,6 +175,7 @@ const twoAccounts = (refusal: ProviderRefusal | undefined, seats: Record<string,
             }),
             record: async () => {},
             markUnread: async () => undefined,
+            contradict: async () => undefined,
             clear: async () => {},
         },
         providerRefusals: {

@@ -36,6 +36,7 @@ const idleHeadroom = () =>
         park: async () => {},
         record: async () => {},
         clear: async () => {},
+        contradict: async () => false,
         read: async () => ({}),
         onChange: () => () => {},
         start: () => () => {},
@@ -83,7 +84,7 @@ export const providersSliceFake = (context: SliceFakeContext, { usage, cliProxy 
     ({
         usage: unstubbed("usage", { record: async () => {}, rollup: async () => [], turns: async () => [], ...usage }),
         // No usage measured by default, as if the window just reset.
-        accountUsage: { read: async () => ({}), record: async () => {}, markUnread: async () => undefined, clear: async () => {} },
+        accountUsage: { read: async () => ({}), record: async () => {}, markUnread: async () => undefined, contradict: async () => undefined, clear: async () => {} },
         headroom: idleHeadroom(),
         // Nothing refused yet; both writes sit on the turn path, so any turn-running test touches this store.
         providerRefusals: {

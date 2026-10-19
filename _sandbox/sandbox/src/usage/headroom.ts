@@ -1,9 +1,11 @@
 import { SingleFlight, within } from "@intentic/base/async";
-import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AccountUsage, UsageContradiction, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { ModelRef } from "@intentic/sandbox-contract/models/plan-pools";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { Logger } from "pino";
 import type { AccountUsageStore } from "./account-usage.js";
 import type { ParkedRead, UsageParkStore } from "./usage-parks.js";
+import { sweptReadings } from "./drift/continuity.js";
 
 // One headroom service for every provider: readings are triggered by what happened (a turn settling, a refusal, a
 // screen opening, a re-measure press) via `refresh(scope, maxAge)`, not on a timer, with an idle floor (`start`) for a
@@ -30,6 +32,13 @@ export interface HeadroomTarget {
     // This endpoint's own read budget: the shortest interval a background trigger may re-read it at, whatever
     // freshness that trigger asked for. A re-measure someone is watching (`maxAgeMs: 0`) is not held to it.
     readonly minAgeMs?: number;
+    // The reader vouches each reading names every pool the account has: a pool one reading named and the next does not
+    // is the provider's change, kept and marked missing, never dropped. Unset for a source whose pools come and go by
+    // design (observed-limits.ts).
+    readonly whole?: boolean;
+    // The models this account serves, where the source knows them. Each reading is checked against them, so a model no
+    // pool gates is said (`uncovered`) rather than read as covered by whatever pools there are.
+    readonly served?: () => Promise<readonly ModelRef[]>;
 }
 
 export interface HeadroomSource {
@@ -77,6 +86,8 @@ export interface HeadroomService {
     // along since the store key alone doesn't say whose row it is.
     readonly record: (provider: AgentProvider, account: string, usage: AccountUsage) => Promise<void>;
     readonly clear: (provider: AgentProvider, account: string) => Promise<void>;
+    // Marks a reading a turn was answered against (AccountUsageStore.contradict) and announces it; true when marked.
+    readonly contradict: (provider: AgentProvider, account: string, contradiction: UsageContradiction, takenBefore: number) => Promise<boolean>;
     readonly read: AccountUsageStore["read"];
     // Fires on every write, with the account's new snapshot, or undefined when cleared.
     readonly onChange: (listener: (provider: AgentProvider, account: string, usage: AccountUsage | undefined) => void) => () => void;
@@ -93,6 +104,33 @@ const CONCURRENCY = 4;
 // How often one account's one reason for an unread reading may be written while it stands.
 const FAILURE_LOG_EVERY_MS = 60 * 60_000;
 
+type ChangeListener = (provider: AgentProvider, account: string, usage: AccountUsage | undefined) => void;
+
+interface ChangeFeed {
+    readonly announce: ChangeListener;
+    readonly onChange: (listener: ChangeListener) => () => void;
+}
+
+// Who hears of every write; one listener that throws is logged and never stops the others.
+const changeListeners = (logger: Logger): ChangeFeed => {
+    const listeners = new Set<ChangeListener>();
+    return {
+        announce: (provider, account, usage) => {
+            for (const listener of listeners) {
+                try {
+                    listener(provider, account, usage);
+                } catch (error) {
+                    logger.warn({ err: error, account }, "headroom: a change listener threw");
+                }
+            }
+        },
+        onChange: (listener) => {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+        },
+    };
+};
+
 export const createHeadroomService = (deps: {
     readonly store: AccountUsageStore;
     readonly parks: UsageParkStore;
@@ -106,7 +144,7 @@ export const createHeadroomService = (deps: {
     const blockedUntil = new Map<string, ParkedRead>();
     // Read in flight per target, so concurrent triggers share one round-trip.
     const inFlight = new SingleFlight<string, void>();
-    const listeners = new Set<(provider: AgentProvider, account: string, usage: AccountUsage | undefined) => void>();
+    const { announce, onChange } = changeListeners(deps.logger);
 
     // Reads the parks from disk once per process, before the first sweep decides anything: a boot sweep that ran ahead
     // of them would ask the very account the provider is refusing.
@@ -126,21 +164,11 @@ export const createHeadroomService = (deps: {
         await deps.parks.record(account, { provider, until });
     };
 
-    const announce = (provider: AgentProvider, account: string, usage: AccountUsage | undefined): void => {
-        for (const listener of listeners) {
-            try {
-                listener(provider, account, usage);
-            } catch (error) {
-                deps.logger.warn({ err: error, account }, "headroom: a change listener threw");
-            }
-        }
-    };
+    // Announces what the store now holds, which a reading may have added to (drift/continuity.ts).
+    const record = async (provider: AgentProvider, account: string, usage: AccountUsage, whole = false): Promise<void> =>
+        deps.store.record(account, usage, { whole }).then(async () => announce(provider, account, (await deps.store.read())[account] ?? usage));
 
-    const record = async (provider: AgentProvider, account: string, usage: AccountUsage): Promise<void> => {
-        await deps.store.record(account, usage);
-        announce(provider, account, usage);
-    };
-
+    const swept = sweptReadings(deps);
     // Any attempt that did not land a reading, whatever stopped it, stamped on the snapshot it failed to replace. One
     // path for every failure, known or not: a screen that dates readings by age reads this one fact instead of keeping
     // its own list of the ways a number can stop moving, which is the list that went stale each time a provider found a
@@ -202,7 +230,7 @@ export const createHeadroomService = (deps: {
                 // absence nobody was shown would redraw every open window each sweep.
                 if (reading.windows.length > 0) {
                     succeeded(target.key);
-                    await record(target.provider, target.key, { windows: [...reading.windows], measuredAt: Date.now() });
+                    await record(target.provider, target.key, await swept(target, reading.windows), target.whole === true);
                     return;
                 }
                 if (reading.empty === true) {
@@ -297,11 +325,15 @@ export const createHeadroomService = (deps: {
             await Promise.all([deps.store.clear(account), deps.parks.clear(account)]);
             announce(provider, account, undefined);
         },
-        read: deps.store.read,
-        onChange: (listener) => {
-            listeners.add(listener);
-            return () => listeners.delete(listener);
+        contradict: async (provider, account, contradiction, takenBefore) => {
+            const marked = await deps.store.contradict(account, contradiction, takenBefore);
+            if (marked !== undefined) {
+                announce(provider, account, marked);
+            }
+            return marked !== undefined;
         },
+        read: deps.store.read,
+        onChange,
         start: (idleMs = IDLE_MS) => {
             const timer = setInterval(() => void refresh({ maxAgeMs: idleMs }), idleMs);
             // Unref'd like the daemon's other loops: a background refresh must never hold the process open.

@@ -1,0 +1,19 @@
+{
+    "groups": [
+        {
+            "buckets": [
+                {
+                    "bucketId": "3p-weekly",
+                    "displayName": "Weekly Limit Remaining",
+                    "window": "weekly",
+                    "resetTime": "2026-10-24T12:03:10Z",
+                    "description": "*",
+                    "remainingFraction": 0
+                }
+            ],
+            "displayName": "Claude and GPT models",
+            "description": "*"
+        }
+    ],
+    "description": "*"
+}

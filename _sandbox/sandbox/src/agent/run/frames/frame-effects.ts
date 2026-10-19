@@ -14,6 +14,7 @@ import { accountFactsOf } from "../../../usage/serviceability/serviceability.js"
 import { ACCOUNT_WIDE } from "../../../usage/observed-limits.js";
 import { FAN_OUT } from "../../subagents/fan-out-governor.js";
 import { runOutOf } from "../../../usage/run-outs.js";
+import { checkAnswered } from "../../../usage/drift/contradictions.js";
 import { runningOn } from "../turn/turn-pulse.js";
 
 // The writes a turn's frames cause beyond the stream: its activity rows, the refusals its first answer disproves, the
@@ -87,7 +88,7 @@ export const turnActivity =
 // before it is settled, since a request already in flight when a refusal was filed proves nothing about it
 // (frame-reducers.ts). Undefined settles whatever stands, for a caller that cannot say.
 export const providerAnswered = (
-    deps: Pick<Services, "providerRefusals" | "claudeSeats" | "modelCooldowns" | "observedLimits" | "logger">,
+    deps: Pick<Services, "providerRefusals" | "claudeSeats" | "modelCooldowns" | "observedLimits" | "headroom" | "logger">,
     provider: string,
     account: string | undefined,
     model: string | undefined,
@@ -102,6 +103,11 @@ export const providerAnswered = (
     void deps.providerRefusals.clear(provider, account, served, askedAt).catch((error: unknown) => deps.logger.warn({ err: error }, "provider refusal: settle failed"));
     if (served !== undefined) {
         void deps.modelCooldowns.clear(provider, served, askedAt).catch((error: unknown) => deps.logger.warn({ err: error }, "model cooldown: settle failed"));
+    }
+    // The same answer checks the plan-limit readings: one that said this model could not run is wrong (drift/contradictions.ts).
+    const routed = AgentProviderSchema.safeParse(provider);
+    if (served !== undefined && askedAt !== undefined && routed.success) {
+        void checkAnswered(deps, routed.data, account, served, askedAt);
     }
     // Clears the seat mark too, so a re-enabled account rejoins rotation without a reconnect.
     if (account === undefined) {

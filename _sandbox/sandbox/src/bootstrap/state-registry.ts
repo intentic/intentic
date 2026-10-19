@@ -101,6 +101,7 @@ import { updatePolicyDocument } from "../system/updates/update-policy.js";
 import { skippedUpdateDocument } from "../system/updates/update-skip.js";
 import { workspaceIdentityDocument } from "../system/workspace-identity.js";
 import { accountUsageDocument } from "../usage/account-usage.js";
+import { providerAnswersDocument } from "../usage/drift/answer-vocabulary.js";
 import { modelCooldownsDocument } from "../usage/model-cooldowns.js";
 import { modelRefusalsDocument } from "../usage/model-refusals.js";
 import { observedLimitsDocument } from "../usage/observed-limits.js";
@@ -225,6 +226,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     skippedUpdateDocument,
     workspaceIdentityDocument,
     accountUsageDocument,
+    providerAnswersDocument,
     modelCooldownsDocument,
     modelRefusalsDocument,
     observedLimitsDocument,

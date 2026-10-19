@@ -1,9 +1,10 @@
-import { type AccountUsage, AccountUsageSchema, type UsageUnread } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { type AccountUsage, AccountUsageSchema, type UsageContradiction, type UsageUnread } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { bindingWindow, type ModelRef, currentWindows } from "@intentic/sandbox-contract/models/plan-pools";
 import { z } from "zod";
 import { at, pinDefault } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
+import { continueReading } from "./drift/continuity.js";
 
 // Latest plan-limit snapshot per account, any provider, at <historyRoot>/account-usage.json: one shape
 // (`windows`+`measuredAt`) regardless of which reader filled it (Claude's turn stream, or the translator's pull).
@@ -24,11 +25,17 @@ export interface AccountUsageStore {
     // Every account's snapshot, keyed by account; a window already reset is kept as lapsed (currentWindows), and an
     // account with no window still current is absent rather than measured-and-empty.
     readonly read: () => Promise<Record<string, AccountUsage>>;
-    readonly record: (account: string, usage: AccountUsage) => Promise<void>;
+    // `whole`: the reader vouches this reading names every pool the account has, so a pool the last one named and this
+    // one does not is kept, marked missing (reading-continuity.ts), rather than dropped without a word.
+    readonly record: (account: string, usage: AccountUsage, options?: { readonly whole?: boolean }) => Promise<void>;
     // Says a re-read failed on the snapshot it failed to replace, in one write: a read-then-record would put back a
     // reading a turn's stream landed in between. Keeps the first failure's `since` while failures run on. Answers the
     // snapshot as written, or undefined when there is none to mark (nothing on screen for the failure to date).
     readonly markUnread: (account: string, unread: UsageUnread) => Promise<AccountUsage | undefined>;
+    // Says a turn on `contradiction.model` was answered against this reading (AccountUsage.contradicted), in one write,
+    // and only on a reading taken before `takenBefore`, when the answered request went out: a later one is the
+    // provider's later word. Answers the snapshot as written, or undefined when nothing was marked.
+    readonly contradict: (account: string, contradiction: UsageContradiction, takenBefore: number) => Promise<AccountUsage | undefined>;
     readonly clear: (account: string) => Promise<void>;
 }
 
@@ -62,8 +69,8 @@ export const fileAccountUsageStore = (path: string): AccountUsageStore => {
                     .filter(([, usage]) => usage.windows.length > 0),
             );
         },
-        record: async (account, usage) => {
-            await file.update((current) => ({ ...current, [account]: usage }));
+        record: async (account, usage, options) => {
+            await file.update((current) => ({ ...current, [account]: continueReading(current[account], usage, options?.whole === true) }));
         },
         markUnread: async (account, unread) => {
             let marked: AccountUsage | undefined;
@@ -73,6 +80,18 @@ export const fileAccountUsageStore = (path: string): AccountUsageStore => {
                     return current;
                 }
                 marked = { ...usage, unread: { ...unread, since: usage.unread?.since ?? unread.since } };
+                return { ...current, [account]: marked };
+            });
+            return marked === undefined ? undefined : { ...marked, windows: currentWindows(marked, Date.now()) };
+        },
+        contradict: async (account, contradiction, takenBefore) => {
+            let marked: AccountUsage | undefined;
+            await file.update((current) => {
+                const usage = current[account];
+                if (usage === undefined || usage.measuredAt >= takenBefore) {
+                    return current;
+                }
+                marked = { ...usage, contradicted: contradiction };
                 return { ...current, [account]: marked };
             });
             return marked === undefined ? undefined : { ...marked, windows: currentWindows(marked, Date.now()) };

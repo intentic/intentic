@@ -2265,11 +2265,14 @@
         },
         "usageRing": {
             "atMostOtherDevices": "≤ signifie au plus : les autres appareils de ce compte puisent dans les mêmes réserves.",
+            "contradicted": "Un tour avec {model} est passé alors que ce compte était lu comme épuisé : la lecture est fausse pour ce modèle. Nouvelle lecture en cours.",
             "everyPoolResetFull": "Chaque réserve est réinitialisée : la totalité du quota est disponible.",
             "heldUntil": "en attente de la réinitialisation de {pool}",
             "lapsed": "réinitialisé {resetsAt}, pas relu depuis",
             "measured": "mesuré {measuredAt}",
-            "resets": "réinitialisation {resetsAt}"
+            "missing": "plus signalé depuis {since}, dernier chiffre affiché",
+            "resets": "réinitialisation {resetsAt}",
+            "uncovered": "Aucun quota signalé pour {models} : ce qu'il leur reste est inconnu."
         },
         "vpnConnections": {
             "connectCode": "Se connecter avec un code",

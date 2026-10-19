@@ -20,6 +20,7 @@ import type { AccountUsageStore } from "../../usage/account-usage.js";
 import { fleetLimit, type TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import type { HeadroomSource } from "../../usage/headroom.js";
 import { authFileCooling, fetchTranslatorUsage, type TranslatorAuthFile } from "../../usage/translator-usage.js";
+import type { AnswerWatch } from "../../usage/drift/answer-vocabulary.js";
 import { superviseTranslator } from "./translator-supervisor.js";
 import { parseJsonOr } from "@intentic/base/json";
 
@@ -266,6 +267,18 @@ const NO_PROJECT_REASON = "no Antigravity project on this Google account";
 const noProjectSignIn = (email: string | undefined): string =>
     `Google signed in${email === undefined ? "" : ` as ${email}`}, but that account has no Antigravity project, so no turn can run on it. Open antigravity.google.com once with that account to finish Google's setup, then connect it here again.`;
 
+// The models the proxy will route to one credential; empty when it cannot say, which costs a coverage check or a plan
+// listing its models, never the caller's answer.
+const credentialModels = async (fetchFn: typeof fetch, managementUrl: string, headers: Record<string, string>, name: string): Promise<string[]> => {
+    // allow(silent-catch): an unreachable proxy lists no models, the same answer as a credential it serves nothing on.
+    const response = await fetchFn(`${managementUrl}/auth-files/models?name=${encodeURIComponent(name)}`, { headers }).catch(() => undefined);
+    if (response === undefined || !response.ok) {
+        return [];
+    }
+    const body = (await response.json().catch(() => ({}))) as { models?: { id?: unknown }[] };
+    return (body.models ?? []).flatMap((model) => (typeof model.id === "string" && model.id !== "" ? [model.id] : []));
+};
+
 export const createCliProxyClient = (params: {
     managementUrl: string;
     token: string;
@@ -273,6 +286,7 @@ export const createCliProxyClient = (params: {
     authDir: string;
     // Read only: readings are written by the headroom service, which is the one place a failed read is marked.
     usageStore: Pick<AccountUsageStore, "read">;
+    answers?: AnswerWatch;
     fetchFn?: typeof fetch;
     binaryPresent?: () => Promise<boolean>;
     spawnFn?: typeof spawn;
@@ -510,13 +524,13 @@ export const createCliProxyClient = (params: {
 
     // Readings live in the shared account-usage store, like a Claude account's, so a page load reads disk, not
     // upstream. A file needs `auth_index` (the proxy's handle) to count as readable.
-    const readableFiles = (files: readonly TranslatorAuthFile[]): { provider: KeyedProvider; file: TranslatorAuthFile; key: string }[] =>
+    const readableFiles = (files: readonly TranslatorAuthFile[]): { provider: KeyedProvider; file: TranslatorAuthFile; name: string; key: string }[] =>
         KeyedProviderSchema.options
             .filter(reportsPlanLimits)
             .flatMap((provider) =>
                 files.flatMap((file) =>
                     file.provider === CLIPROXY_PROVIDER[provider] && file.name !== undefined && file.auth_index !== undefined
-                        ? [{ provider, file, key: usageKey(provider, file.name) }]
+                        ? [{ provider, file, name: file.name, key: usageKey(provider, file.name) }]
                         : [],
                 ),
             );
@@ -551,6 +565,10 @@ export const createCliProxyClient = (params: {
             readableFiles(await listFiles()).map((entry) => ({
                 key: entry.key,
                 provider: entry.provider,
+                // Each provider's reader names every pool its endpoint publishes, and the proxy knows what this credential
+                // serves: a model the reading covers with no pool is said, never read as covered.
+                whole: true,
+                served: async () => (await credentialModels(fetchFn, managementUrl, auth, entry.name)).map((id) => ({ id })),
                 read: async () => {
                     const read = await fetchTranslatorUsage({
                         fetchFn,
@@ -558,6 +576,7 @@ export const createCliProxyClient = (params: {
                         managementToken: token,
                         provider: entry.provider,
                         file: entry.file,
+                        watch: params.answers,
                     });
                     if (!("usage" in read)) {
                         return { windows: [], failure: read.failure };
@@ -659,18 +678,7 @@ export const createCliProxyClient = (params: {
         },
         planModels: async (provider) => {
             const files = providerFiles(await listFiles(), provider).filter((file) => file.disabled !== true);
-            const lists = await Promise.all(
-                files.map(async (file) => {
-                    const response = await fetchFn(`${managementUrl}/auth-files/models?name=${encodeURIComponent(file.name)}`, { headers: auth }).catch(
-                        () => undefined,
-                    );
-                    if (response === undefined || !response.ok) {
-                        return [];
-                    }
-                    const body = (await response.json().catch(() => ({}))) as { models?: { id?: unknown }[] };
-                    return (body.models ?? []).flatMap((model) => (typeof model.id === "string" && model.id !== "" ? [model.id] : []));
-                }),
-            );
+            const lists = await Promise.all(files.map(async (file) => credentialModels(fetchFn, managementUrl, auth, file.name)));
             return [...new Set(lists.flat())];
         },
         putCompat: async (entries) => {

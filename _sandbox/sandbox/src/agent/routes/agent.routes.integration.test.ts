@@ -977,6 +977,7 @@ describe("a conversation on an account its organisation turned off", () => {
                 read: async () => Object.fromEntries(ready.map((id) => [id, roomy])),
                 record: async () => {},
                 markUnread: async () => undefined,
+                contradict: async () => undefined,
                 clear: async () => {},
             },
             async *agent(request) {
@@ -1071,7 +1072,7 @@ describe("a conversation on an account its organisation turned off", () => {
                 refuse: async (id, reason) => void (seats[id] = { at: Date.now(), reason }),
                 clear: async () => {},
             },
-            accountUsage: { read: async () => ({ "acct-c": roomy }), record: async () => {}, markUnread: async () => undefined, clear: async () => {} },
+            accountUsage: { read: async () => ({ "acct-c": roomy }), record: async () => {}, markUnread: async () => undefined, contradict: async () => undefined, clear: async () => {} },
             async *agent(request) {
                 const token = request.credential?.kind === "claude-oauth" ? request.credential.token : "none";
                 tokens.push(token);

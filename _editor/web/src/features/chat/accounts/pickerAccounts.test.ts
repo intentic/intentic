@@ -24,6 +24,8 @@ const headroom = (percent: number): PlanHeadroom => ({
     unread: undefined,
     pools: [],
     binding: undefined,
+    uncovered: [],
+    contradicted: undefined,
 });
 
 // A row as the picker builds it: its ring, and the verdict the contract's rule gives that reading.

@@ -2264,11 +2264,14 @@
         },
         "usageRing": {
             "atMostOtherDevices": "≤ heißt höchstens: andere Geräte in diesem Konto zahlen aus denselben Töpfen.",
+            "contradicted": "Ein Turn mit {model} ging durch, nachdem dies als aufgebraucht galt, die Messung stimmt dafür also nicht. Wird neu gelesen.",
             "everyPoolResetFull": "Jeder Topf ist zurückgesetzt: das volle Kontingent steht bereit.",
             "heldUntil": "pausiert, bis {pool} zurückgesetzt wird",
             "lapsed": "zurückgesetzt {resetsAt}, seitdem nicht neu gelesen",
             "measured": "gemessen {measuredAt}",
-            "resets": "setzt sich zurück {resetsAt}"
+            "missing": "seit {since} nicht mehr gemeldet, letzter Wert angezeigt",
+            "resets": "setzt sich zurück {resetsAt}",
+            "uncovered": "Kein Kontingent gemeldet für {models}: wie viel bleibt, ist unbekannt."
         },
         "vpnConnections": {
             "connectCode": "Mit Code verbinden",

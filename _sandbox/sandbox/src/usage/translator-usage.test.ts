@@ -419,3 +419,25 @@ test("the per-model view alone is a reading when the summary refuses", async () 
         ["google:models:3p", 100],
     ]);
 });
+
+// Every answer is shown to the answer watch under its endpoint, and Google's two figures for one pool are compared.
+test("each answer reaches the watch, and Google's two sources disagreeing about a pool is said", async () => {
+    const observed: string[] = [];
+    const disagreements: { pool: string; readings: readonly number[] }[] = [];
+    const watch = {
+        observe: (endpoint: string) => void observed.push(endpoint),
+        disagree: (_endpoint: string, pool: string, readings: readonly number[]) => void disagreements.push({ pool, readings }),
+    };
+    const roomyThirdParty = { models: { ...PER_MODEL.models, "claude-opus-4-6-thinking": { quotaInfo: { remainingFraction: 0.6, resetTime: "2026-10-24T12:03:31Z" } } } };
+    await fetchTranslatorUsage({
+        fetchFn: proxiedGoogle({ retrieveUserQuotaSummary: { status: 200, body: SUMMARY_WITHOUT_GEMINI }, fetchAvailableModels: { status: 200, body: roomyThirdParty } }, []),
+        managementUrl: "http://proxy",
+        managementToken: "t",
+        provider: "gemini",
+        file: GOOGLE_FILE,
+        watch,
+    });
+    expect(observed).toEqual(["gemini:retrieveUserQuotaSummary", "gemini:fetchAvailableModels"]);
+    // The summary reads the Claude and GPT pool spent; the per-model view, 40% used.
+    expect(disagreements).toEqual([{ pool: "Claude and GPT models", readings: [100, 40] }]);
+});

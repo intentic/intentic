@@ -56,6 +56,10 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "audit/", portability: "carry" },
     { path: "usage.jsonl", portability: "carry" },
     { path: "account-usage.json", portability: "carry" },
+    // What each provider's usage answers have been made of (their paths, and one redacted sample), so an answer that
+    // changes is noticed. Carried: the provider answers the same wherever the sandbox runs, and a fresh record would
+    // take the next changed answer as the first one.
+    { path: "provider-answers.json", portability: "carry" },
     // Per-account stay-away for a provider's usage endpoint. Carried, not re-earned: earning one costs the very read it
     // holds off, and is answered with a deadline measured from that moment. Entries past their instant are inert.
     { path: "usage-parks.json", portability: "carry" },

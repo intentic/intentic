@@ -4539,11 +4539,14 @@
         },
         "usageRing": {
             "atMostOtherDevices": "≤ means at most: other devices on this account spend the same pools.",
+            "contradicted": "A {model} turn went through after this read as spent, so the reading is wrong for it. Re-reading.",
             "everyPoolResetFull": "Every pool has reset: the full allowance is available.",
             "heldUntil": "on hold until {pool} resets",
             "lapsed": "reset {resetsAt}, not re-read since",
             "measured": "measured {measuredAt}",
-            "resets": "resets {resetsAt}"
+            "missing": "no longer reported since {since}, last figure shown",
+            "resets": "resets {resetsAt}",
+            "uncovered": "No allowance reported for {models}: what they have left is unknown."
         },
         "vpnConnections": {
             "connecting": "Connecting {name}",

@@ -30,12 +30,12 @@ import {
     refusalFor,
     refusalNote,
     remainingPercent,
-    usageDetail,
     usagePercent,
     usageStatusFor,
     usageTone,
     usageWindowLabel,
 } from "./usageStatus";
+import { usageDetail } from "./usageNotes";
 
 const window = (over: Partial<UsageWindow> = {}): UsageWindow => ({ kind: `seven_day`, utilization: 42.4, gates: `all`, ...over });
 const usage = (over: Partial<AccountUsage> = {}): AccountUsage => ({ windows: [window()], measuredAt: 0, ...over });

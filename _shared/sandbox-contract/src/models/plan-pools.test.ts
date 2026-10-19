@@ -8,6 +8,7 @@ import {
     refusalVerdict,
     roomiestAccount,
     scopedWindow,
+    uncoveredModels,
     serviceState,
     serviceStates,
     windowLive,
@@ -339,4 +340,50 @@ test("an account at the line is tried after an unmeasured one and before a spent
     // A move lands only on proven room: two accounts at the line would otherwise hand a refused turn back and forth.
     expect(roomiestAccount([entry("line", atLine), entry("spent", { kind: "spent" })])).toBeUndefined();
     expect(roomiestAccount([entry("line", atLine), entry("low", { kind: "ready", room: 2 })])?.id).toBe("low");
+});
+
+// A reading covers what its pools gate, and nothing more: a model no pool names is unknown, never covered by the rest.
+test("names the served models no pool covers, and none when a pool gates every model", () => {
+    const sliced = usage(window({ kind: "google:3p-weekly", utilization: 100, gates: { models: ["claude", "gpt"] } }));
+    expect(uncoveredModels(sliced.windows, [{ id: "claude-opus-4-6-thinking" }, { id: "gemini-3.8-flash-high" }, { id: "gpt-oss-120b-medium" }])).toEqual([
+        "gemini-3.8-flash-high",
+    ]);
+    expect(uncoveredModels([window({ kind: "five_hour" })], [{ id: "opus" }, { id: "sonnet" }])).toEqual([]);
+    // A pool gated `none` is shown, never a cover.
+    expect(uncoveredModels([window({ kind: "surface:web", gates: "none" })], [{ id: "opus" }])).toEqual(["opus"]);
+});
+
+// 2026-10-19: Google's summary stopped naming the Gemini pool, and every account read spent off its full Claude pool
+// while its Gemini models served.
+test("an account whose only named pools are full, with models no pool covers, is unknown rather than spent", () => {
+    const thirdPartySpent = window({ kind: "google:3p-weekly", utilization: 100, resetsAt: 9_000, gates: { models: ["claude", "gpt"] } });
+    expect(headroomState({ ...usage(thirdPartySpent), uncovered: ["gemini-3.8-flash-high"] })).toEqual({ kind: "unknown" });
+    // Without the gap it is the spent account it always was, and a model the full pool gates is spent either way.
+    expect(headroomState(usage(thirdPartySpent))).toEqual({ kind: "spent", reopensAt: 9_000 });
+    expect(headroomState({ ...usage(thirdPartySpent), uncovered: ["gemini-3.8-flash-high"] }, { id: "claude-opus-4-6-thinking" })).toEqual({
+        kind: "spent",
+        reopensAt: 9_000,
+    });
+    // A full pool gating every model still holds every model, covered or not.
+    expect(headroomState({ ...usage(window({ kind: "seven_day", utilization: 100, resetsAt: 7_000 })), uncovered: ["x"] })).toEqual({
+        kind: "spent",
+        reopensAt: 7_000,
+    });
+});
+
+test("a reading contradicted by an answered turn holds that model's full pools at the line, not spent", () => {
+    const full = usage(window({ kind: "google:gemini-weekly", utilization: 100, resetsAt: 9_000, gates: { models: ["gemini"] } }));
+    const contradicted: AccountUsage = { ...full, contradicted: { at: 1, model: "gemini-3.8-flash-high" } };
+    expect(headroomState(contradicted, { id: "gemini-3.8-flash-high" })).toEqual({ kind: "ready", room: 0 });
+    expect(headroomState(contradicted)).toEqual({ kind: "ready", room: 0 });
+    // Another family's pool is not what the turn proved anything about.
+    const other: AccountUsage = { ...full, contradicted: { at: 1, model: "claude-opus-4-6-thinking" } };
+    expect(headroomState(other, { id: "gemini-3.8-flash-high" })).toEqual({ kind: "spent", reopensAt: 9_000 });
+});
+
+test("a pool the provider stopped reporting is dropped once its window closes, not kept at a floor", () => {
+    const missing = window({ kind: "google:gemini-weekly", utilization: 60, resetsAt: 1_000, missingSince: 500 });
+    const live = window({ kind: "google:3p-weekly", utilization: 20, resetsAt: 9_000 });
+    expect(currentWindows(usage(missing, live), 2_000_000)).toEqual([live]);
+    expect(currentWindows(usage(missing, live), 900_000)).toEqual([missing, live]);
 });

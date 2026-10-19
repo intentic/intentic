@@ -47,6 +47,11 @@ const nameMatches = (name: string, model: ModelRef): boolean => {
 export const gatesModel = (gates: WindowGates, model: ModelRef): boolean =>
     gates === "all" ? true : gates === "none" ? false : gates.models.some((name) => nameMatches(name, model));
 
+// Served models no pool in `windows` gates: what a reading cannot say anything about. A pool gated `none` covers
+// nothing, and one gated `all` covers every model.
+export const uncoveredModels = (windows: readonly UsageWindow[], served: readonly ModelRef[]): string[] =>
+    served.filter((model) => !windows.some((window) => gatesModel(window.gates, model))).map((model) => model.id);
+
 // Pools that gate this model, or, with no model given, every pool that gates anything.
 export const gatingWindows = (usage: AccountUsage | undefined, model?: ModelRef): readonly UsageWindow[] =>
     (usage?.windows ?? []).filter((window) => (model === undefined ? window.gates !== "none" : gatesModel(window.gates, model)));
@@ -160,12 +165,19 @@ const lapsedWindow = (window: UsageWindow, measuredAt: number): UsageWindow => {
 // while the weekly rows stayed, a partial card that reads as complete. The floor of 0 is what dropping it already meant
 // to every verdict (an absent pool binds nothing). A reading with no window still current says nothing about now and
 // answers none, so the account reads as unmeasured. Idempotent: a pool already lapsed stays as it is.
+// A pool the provider stopped reporting (`missingSince`) is dropped instead once its window closes: nothing will read it
+// again, so its floor of 0 would be a pool that is not there.
 export const currentWindows = (usage: AccountUsage, now: number): UsageWindow[] => {
     const live = (window: UsageWindow): boolean => window.lapsedAt === undefined && windowLive(window, usage.measuredAt, now);
     if (!usage.windows.some(live)) {
         return [];
     }
-    return usage.windows.map((window) => (window.lapsedAt !== undefined || live(window) ? window : lapsedWindow(window, usage.measuredAt)));
+    return usage.windows.flatMap((window) => {
+        if (window.lapsedAt !== undefined || live(window)) {
+            return [window];
+        }
+        return window.missingSince === undefined ? [lapsedWindow(window, usage.measuredAt)] : [];
+    });
 };
 
 // Whether an account can serve a turn: the one rule every picker and surface reads (AccountState). The daemon runs it and
@@ -234,6 +246,24 @@ const reopening = (full: readonly UsageWindow[], first: boolean): number | undef
 
 const spent = (reopensAt: number | undefined): AccountState => (reopensAt === undefined ? { kind: "spent" } : { kind: "spent", reopensAt });
 
+// A turn on the model this reading was contradicted for went through while the pool read full: the pool is at the line,
+// not proven empty, exactly as a rounded one is (provenFull).
+const answeredDespite = (usage: AccountUsage | undefined, window: UsageWindow): boolean =>
+    usage?.contradicted !== undefined && gatesModel(window.gates, { id: usage.contradicted.model });
+
+// The pools holding the account shut: for a model, every full pool it spends; with none, the full pools gating every
+// model, else every per-model slice once all of them are full; nothing while one is open.
+const holdingPools = (full: readonly UsageWindow[], open: readonly UsageWindow[], model: ModelRef | undefined): readonly UsageWindow[] => {
+    if (model !== undefined) {
+        return full;
+    }
+    const wholePlan = full.filter((window) => window.gates === "all");
+    if (wholePlan.length > 0) {
+        return wholePlan;
+    }
+    return open.length === 0 ? full : [];
+};
+
 /**
  * The plan-limit half of the verdict, at the contract's one spent line. With a model, the pools that model spends: spent
  * once any is full, else the room the fullest leaves. With none, whether the account can serve SOME turn: spent once a
@@ -241,19 +271,24 @@ const spent = (reopensAt: number | undefined): AccountState => (reopensAt === un
  * models their room, which is then read off the fullest pool still open.
  */
 export const headroomState = (usage: AccountUsage | undefined, model?: ModelRef): AccountState => {
-    const windows = gatingWindows(usage, model);
+    const windows = gatingWindows(usage, model).map((window) => (answeredDespite(usage, window) ? { ...window, rounded: true } : window));
     if (windows.length === 0) {
         return { kind: "unknown" };
     }
     const full = windows.filter(provenFull);
     const open = windows.filter((window) => !provenFull(window));
-    if (model !== undefined || full.some((window) => window.gates === "all") || open.length === 0) {
-        const holding = model !== undefined ? full : full.some((window) => window.gates === "all") ? full.filter((window) => window.gates === "all") : full;
-        if (holding.length > 0) {
-            return spent(reopening(holding, model === undefined && !holding.some((window) => window.gates === "all")));
-        }
+    const holding = holdingPools(full, open, model);
+    if (holding.length === 0) {
+        return { kind: "ready", room: Math.max(0, SPENT_UTILIZATION - Math.max(...open.map((window) => window.utilization))) };
     }
-    return { kind: "ready", room: Math.max(0, SPENT_UTILIZATION - Math.max(...open.map((window) => window.utilization))) };
+    const sliced = model === undefined && !holding.some((window) => window.gates === "all");
+    // Every per-model slice this reading names is full, but it names none for some models the account serves: whether
+    // those can run is unknown, not spent. Reading the account spent on this is how every Google account read out of
+    // allowance while its Gemini models, whose pool the provider had stopped reporting, still served.
+    if (sliced && (usage?.uncovered?.length ?? 0) > 0) {
+        return { kind: "unknown" };
+    }
+    return spent(reopening(holding, sliced));
 };
 
 // A standing limit refusal reads its pool as full, since a polled reading freezes the moment a pool actually empties: the

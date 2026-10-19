@@ -126,6 +126,8 @@ export interface PlanLimitPool {
     readonly rounded?: boolean | undefined;
     // When the window it was last read in closed (UsageWindow.lapsedAt): `percent` is then the floor, not a reading.
     readonly lapsedAt?: number | undefined;
+    // When the provider stopped reporting it (UsageWindow.missingSince): `percent` is the last figure it gave.
+    readonly missingSince?: number | undefined;
 }
 
 // One reading as its pools: named, worst-first, at the provider's precision — the shared basis for every plan-limit display
@@ -139,16 +141,8 @@ const usagePools = (usage: AccountUsage): readonly PlanLimitPool[] =>
         gates: window.gates,
         rounded: window.rounded,
         lapsedAt: window.lapsedAt,
+        missingSince: window.missingSince,
     }));
-
-// The line under a pool saying when it moves: its reset, or, for a pool whose window closed since it was read, that it
-// reset then and has not been read since. Undefined when the plan publishes neither.
-export const poolResetNote = (pool: Pick<PlanLimitPool, `resetsAt` | `lapsedAt`>): string | undefined =>
-    pool.lapsedAt !== undefined
-        ? t(`common.usageRing.lapsed`, { resetsAt: formatReset(pool.lapsedAt) })
-        : pool.resetsAt === undefined
-          ? undefined
-          : t(`common.usageRing.resets`, { resetsAt: formatReset(pool.resetsAt) });
 
 // Short label for a pool's window length (e.g. "5h", "wk"), so a narrow rail can show both allowances instead
 // of a bare percent. The rule lives in the contract (windowPeriod), since the daemon retires a reading with no
@@ -303,6 +297,10 @@ export interface PlanHeadroom {
     readonly pools: readonly PlanLimitPool[];
     // Pool `percent` came from; undefined only when every pool has reset (measured, nothing left to name).
     readonly binding: PlanLimitPool | undefined;
+    // Models this account serves that no pool covers (AccountUsage.uncovered): their room is unknown.
+    readonly uncovered: readonly string[];
+    // The model a turn was answered on after this reading said it was spent (AccountUsage.contradicted).
+    readonly contradicted: string | undefined;
 }
 
 // An account's headroom, projected once: the ring's number and tone, plus the per-pool breakdown for the card
@@ -314,7 +312,17 @@ export const planHeadroom = (usage: AccountUsage | undefined, model?: ModelRef):
     const pools = usagePools(usage);
     const binding = bindingPool(usage, pools, model);
     const percent = binding?.percent ?? 0;
-    return { percent, tone: usageTone(percent), stale: isStale(usage), measuredAt: usage.measuredAt, unread: usage.unread, pools, binding };
+    return {
+        percent,
+        tone: usageTone(percent),
+        stale: isStale(usage),
+        measuredAt: usage.measuredAt,
+        unread: usage.unread,
+        pools,
+        binding,
+        uncovered: usage.uncovered ?? [],
+        contradicted: usage.contradicted?.model,
+    };
 };
 
 // Epoch-seconds reset instant as a short local label: a weekday + time inside the coming week ("Mon 15:20"), the date
@@ -413,19 +421,6 @@ export const meterTint = (percent: number): { color?: string } => {
                 : mixed(`danger`, `warning`, (AMBER_AT - left) / AMBER_AT),
     };
 };
-
-// Same breakdown as one sentence: the ring's accessible name, since a screen reader has no hover to reach the
-// card. Lists every pool (a single number can't say which is binding), reset in parens.
-export const usageDetail = (headroom: PlanHeadroom): string =>
-    [
-        ...headroom.pools.map(
-            (pool) => {
-                const note = poolResetNote(pool);
-                return `${pool.label} ${formatRemaining(pool.percent, headroom.stale)}${note === undefined ? `` : ` (${note})`}`;
-            },
-        ),
-        t(`chat.usageStatus.measured`, { age: formatAge(headroom.measuredAt) }),
-    ].join(` · `);
 
 // Every connection this sandbox holds — a provider's own account and a routed subscription alike — as one row
 // shape, shared with the Agent tab's rings. An account with no reading is still a row, distinct from one with room.

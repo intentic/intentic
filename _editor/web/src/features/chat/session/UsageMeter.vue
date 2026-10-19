@@ -10,10 +10,9 @@ import {
     nestPools,
     type PlanHeadroom,
     type PlanLimitPool,
-    poolResetNote,
-    usageDetail,
     usageTone,
 } from "../../../models/providers/usageStatus";
+import { poolResetNote, usageDetail } from "../../../models/providers/usageNotes";
 import { useT } from "@intentic/ui/i18n";
 
 // Usage meter and breakdown panel, shared by the composer chip, model picker and Agent tab rows. Plan usage is
@@ -213,6 +212,14 @@ onBeforeUnmount(hide);
                         <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`shared.thisSandbox`) }}</span>
                         <span class="text-xs leading-relaxed text-muted">{{ activity }}</span>
                     </div>
+
+                    <!-- What this reading cannot vouch for: models with no pool at all, and a model that served after it read spent. -->
+                    <p v-if="headroom.uncovered.length > 0" class="text-2xs leading-relaxed text-warning">
+                        {{ t(`common.usageRing.uncovered`, { models: headroom.uncovered.join(`, `) }) }}
+                    </p>
+                    <p v-if="headroom.contradicted !== undefined" class="text-2xs leading-relaxed text-warning">
+                        {{ t(`common.usageRing.contradicted`, { model: headroom.contradicted }) }}
+                    </p>
 
                     <!-- Measured, with every pool since reset; distinct from unmeasured, which draws no meter at all. -->
                     <p v-if="headroom.pools.length === 0" class="text-xs text-muted">{{ t(`common.usageRing.everyPoolResetFull`) }}</p>

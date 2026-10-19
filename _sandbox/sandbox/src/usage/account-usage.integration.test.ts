@@ -142,3 +142,17 @@ test("accountLimitReset names the reset of the pool the refused MODEL spends, no
     expect(await accountLimitReset(store, "acct-1", { id: "claude-sonnet-4-6" })).toBe(inAnHour());
     expect(await accountLimitReset(store, "acct-1", { id: "claude-opus-4-6" })).toBe(inAnHour() + 86_400);
 });
+
+// The store is where a whole reading meets the one it replaces, in one write.
+test("a whole reading keeps the pool the last one named and this one does not, marked missing", async () => {
+    const { store } = tempStore();
+    const gemini = window({ kind: "google:gemini-weekly", gates: { models: ["gemini"] } });
+    const thirdParty = window({ kind: "google:3p-weekly", utilization: 100, gates: { models: ["claude", "gpt"] } });
+    await store.record("gemini:a.json", snapshot({ windows: [gemini, thirdParty] }));
+    const measuredAt = Date.now();
+    await store.record("gemini:a.json", snapshot({ windows: [thirdParty], measuredAt }), { whole: true });
+    expect((await store.read())["gemini:a.json"]?.windows).toEqual([thirdParty, { ...gemini, missingSince: Math.floor(measuredAt / 1000) }]);
+    // Without `whole` a reading replaces the snapshot, as a turn's partial one always has.
+    await store.record("gemini:a.json", snapshot({ windows: [thirdParty] }));
+    expect((await store.read())["gemini:a.json"]?.windows).toEqual([thirdParty]);
+});

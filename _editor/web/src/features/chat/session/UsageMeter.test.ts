@@ -22,6 +22,8 @@ const headroom = (over: Partial<PlanHeadroom> = {}): PlanHeadroom => ({
     stale: false,
     measuredAt: Date.now(),
     unread: undefined,
+    uncovered: [],
+    contradicted: undefined,
     pools: [
         { kind: `five_hour`, label: `5-hour session`, percent: 56, resetsAt: RESETS_AT, gates: `all` },
         { kind: `seven_day`, label: `Weekly · all models`, percent: 91, resetsAt: undefined, gates: `all` },
@@ -132,6 +134,16 @@ it(`leaves a sibling lane usable when a lane beside it, not above it, is spent`,
     const panel = await card({ percent: 100, pools: [claude, gemini], binding: claude });
     expect(panel.textContent).not.toContain(`on hold`);
     expect(panel.querySelectorAll(`.ui-meter-fill`)[1]?.classList.contains(`text-success`)).toBe(true);
+});
+
+// What a reading cannot vouch for is said on the card, not left to look like a measured figure: models no pool covers,
+// a pool the provider stopped reporting, and a model that served after the reading said it was spent.
+it(`says which models no pool covers, which pool went unreported, and which model served against the reading`, async () => {
+    const gone: PlanLimitPool = { kind: `google:gemini-weekly`, label: `Gemini models`, percent: 40, resetsAt: RESETS_AT, gates: { models: [`gemini`] }, missingSince: RESETS_AT - 60 };
+    const panel = await card({ pools: [gone], binding: gone, uncovered: [`gemini-3.8-flash-high`], contradicted: `claude-opus-4-6-thinking` });
+    expect(panel.textContent).toContain(`No allowance reported for gemini-3.8-flash-high`);
+    expect(panel.textContent).toContain(`no longer reported since ${formatReset(RESETS_AT - 60)}`);
+    expect(panel.textContent).toContain(`A claude-opus-4-6-thinking turn went through after this read as spent`);
 });
 
 it(`speaks the whole breakdown beside the bars, since a card raised by a pointer never reaches a screen reader`, async () => {

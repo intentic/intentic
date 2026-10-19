@@ -2274,11 +2274,14 @@
         },
         "usageRing": {
             "atMostOtherDevices": "≤ significa como máximo: otros dispositivos de esta cuenta gastan de las mismas bolsas.",
+            "contradicted": "Un turno con {model} se completó después de que esto figurara como agotado, así que la lectura es errónea para ese modelo. Volviendo a leer.",
             "everyPoolResetFull": "Todas las bolsas se han reiniciado: la asignación completa está disponible.",
             "heldUntil": "en pausa hasta que se restablezca {pool}",
             "lapsed": "se reinició {resetsAt}, sin leer desde entonces",
             "measured": "medido {measuredAt}",
-            "resets": "se reinicia {resetsAt}"
+            "missing": "sin informar desde {since}, se muestra la última cifra",
+            "resets": "se reinicia {resetsAt}",
+            "uncovered": "No se informa ninguna asignación para {models}: se desconoce cuánto les queda."
         },
         "vpnConnections": {
             "connectCode": "Conectar con un código",

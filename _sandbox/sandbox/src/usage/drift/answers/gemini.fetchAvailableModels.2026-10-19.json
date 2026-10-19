@@ -1,0 +1,1166 @@
+{
+    "models": {
+        "gemini-3.5-flash-lite": {
+            "displayName": "Gemini 3.5 Flash Lite",
+            "supportsImages": true,
+            "supportsThinking": true,
+            "minThinkingBudget": 128,
+            "recommended": true,
+            "maxTokens": 1048576,
+            "maxOutputTokens": 65535,
+            "quotaInfo": {
+                "remainingFraction": 0.2177544,
+                "resetTime": "2026-10-24T19:26:36Z"
+            },
+            "model": "MODEL_PLACEHOLDER_M198",
+            "apiProvider": "API_PROVIDER_GOOGLE_GEMINI",
+            "modelProvider": "MODEL_PROVIDER_GOOGLE",
+            "supportsVideo": true,
+            "supportedMimeTypes": {
+                "video/videoframe/jpeg2000": true,
+                "text/html": true,
+                "video/audio/s16le": true,
+                "audio/m4a": true,
+                "audio/flac": true,
+                "*": true,
+                "application/msword": true,
+                "text/javascript": true,
+                "application/x-python-code": true,
+                "text/x-python": true,
+                "image/heif": true,
+                "image/jpeg": true,
+                "text/plain": true,
+                "application/rtf": true,
+                "video/jpeg2000": true,
+                "text/markdown": true,
+                "video/mp4": true,
+                "video/text/timestamp": true,
+                "application/vnd.ms-excel": true,
+                "audio/webm;codecs=opus": true,
+                "audio/wave": true,
+                "text/csv": true,
+                "audio/mp3": true,
+                "audio/webm": true,
+                "video/audio/wav": true,
+                "audio/l16": true,
+                "video/webm": true,
+                "image/heic": true,
+                "audio/mpeg": true,
+                "text/rtf": true,
+                "application/pdf": true,
+                "audio/mp4": true,
+                "text/x-python-script": true,
+                "audio/wav": true,
+                "text/x-typescript": true,
+                "text/css": true,
+                "application/x-typescript": true,
+                "image/webp": true,
+                "audio/vnd.wave": true,
+                "application/vnd.ms-powerpoint": true,
+                "image/png": true,
+                "text/xml": true,
+                "audio/ogg": true,
+                "application/json": true,
+                "audio/x-wav": true,
+                "application/x-ipynb+json": true,
+                "application/x-javascript": true,
+                "audio/opus": true,
+                "audio/aac": true
+            },
+            "thinkingLevel": 1,
+            "modelExperiments": {
+                "experiments": {
+                    "retry_model_capacity_exhausted": {
+                        "boolValue": true
+                    },
+                    "*": {
+                        "stringValue": "*"
+                    }
+                }
+            }
+        },
+        "gemini-3.1-flash-lite": {
+            "displayName": "Gemini 3.1 Flash Lite",
+            "supportsImages": true,
+            "supportsThinking": true,
+            "minThinkingBudget": 128,
+            "recommended": true,
+            "maxTokens": 1048576,
+            "maxOutputTokens": 65535,
+            "quotaInfo": {
+                "remainingFraction": 0.2177544,
+                "resetTime": "2026-10-24T19:26:36Z"
+            },
+            "model": "MODEL_PLACEHOLDER_M50",
+            "apiProvider": "API_PROVIDER_GOOGLE_GEMINI",
+            "modelProvider": "MODEL_PROVIDER_GOOGLE",
+            "supportsVideo": true,
+            "supportedMimeTypes": {
+                "audio/wave": true,
+                "audio/wav": true,
+                "text/xml": true,
+                "video/jpeg2000": true,
+                "image/webp": true,
+                "video/audio/s16le": true,
+                "image/jpeg": true,
+                "application/rtf": true,
+                "audio/mp3": true,
+                "audio/x-wav": true,
+                "application/json": true,
+                "*": true,
+                "application/vnd.ms-powerpoint": true,
+                "audio/aac": true,
+                "text/x-python": true,
+                "audio/webm": true,
+                "text/rtf": true,
+                "audio/opus": true,
+                "text/plain": true,
+                "audio/ogg": true,
+                "audio/vnd.wave": true,
+                "audio/l16": true,
+                "audio/webm;codecs=opus": true,
+                "text/html": true,
+                "application/x-typescript": true,
+                "video/mp4": true,
+                "text/javascript": true,
+                "image/heif": true,
+                "text/x-python-script": true,
+                "application/vnd.ms-excel": true,
+                "application/pdf": true,
+                "application/x-javascript": true,
+                "text/x-typescript": true,
+                "video/audio/wav": true,
+                "application/x-ipynb+json": true,
+                "image/png": true,
+                "text/markdown": true,
+                "video/text/timestamp": true,
+                "text/css": true,
+                "image/heic": true,
+                "application/x-python-code": true,
+                "video/videoframe/jpeg2000": true,
+                "text/csv": true,
+                "video/webm": true,
+                "application/msword": true,
+                "audio/mpeg": true,
+                "audio/m4a": true,
+                "audio/flac": true,
+                "audio/mp4": true
+            },
+            "thinkingLevel": 1,
+            "modelExperiments": {
+                "experiments": {
+                    "retry_model_capacity_exhausted": {
+                        "boolValue": true
+                    },
+                    "*": {
+                        "stringValue": "*"
+                    }
+                }
+            }
+        },
+        "gemini-3.8-flash-tiered": {
+            "supportsImages": true,
+            "supportsThinking": true,
+            "thinkingBudget": -1,
+            "minThinkingBudget": 32,
+            "recommended": true,
+            "maxTokens": 1048576,
+            "maxOutputTokens": 65536,
+            "quotaInfo": {
+                "remainingFraction": 0.2177544,
+                "resetTime": "2026-10-24T19:26:36Z"
+            },
+            "model": "MODEL_PLACEHOLDER_M322",
+            "apiProvider": "API_PROVIDER_GOOGLE_GEMINI",
+            "modelProvider": "MODEL_PROVIDER_GOOGLE",
+            "supportsVideo": true,
+            "supportedMimeTypes": {
+                "audio/mpeg": true,
+                "audio/vnd.wave": true,
+                "video/jpeg2000": true,
+                "application/json": true,
+                "application/x-javascript": true,
+                "application/vnd.ms-powerpoint": true,
+                "text/css": true,
+                "audio/flac": true,
+                "image/jpeg": true,
+                "audio/ogg": true,
+                "video/text/timestamp": true,
+                "application/vnd.ms-excel": true,
+                "image/png": true,
+                "application/pdf": true,
+                "video/audio/wav": true,
+                "audio/l16": true,
+                "audio/wav": true,
+                "text/html": true,
+                "audio/aac": true,
+                "video/audio/s16le": true,
+                "application/x-typescript": true,
+                "audio/m4a": true,
+                "text/x-python-script": true,
+                "audio/opus": true,
+                "application/x-python-code": true,
+                "text/csv": true,
+                "text/rtf": true,
+                "image/heic": true,
+                "text/x-python": true,
+                "*": true,
+                "application/rtf": true,
+                "audio/webm;codecs=opus": true,
+                "audio/wave": true,
+                "video/mp4": true,
+                "image/webp": true,
+                "audio/mp3": true,
+                "audio/mp4": true,
+                "text/xml": true,
+                "text/javascript": true,
+                "application/x-ipynb+json": true,
+                "text/x-typescript": true,
+                "video/videoframe/jpeg2000": true,
+                "video/webm": true,
+                "text/plain": true,
+                "text/markdown": true,
+                "audio/x-wav": true,
+                "audio/webm": true,
+                "image/heif": true,
+                "application/msword": true
+            },
+            "modelExperiments": {
+                "experiments": {
+                    "*": {
+                        "stringValue": "*"
+                    },
+                    "retry_model_capacity_exhausted": {
+                        "boolValue": true
+                    },
+                    "task-details-suffix": {
+                        "stringValue": "*"
+                    }
+                }
+            }
+        },
+        "claude-opus-4-6-thinking": {
+            "displayName": "Claude Opus 4.6 (Thinking)",
+            "supportsImages": true,
+            "supportsThinking": true,
+            "thinkingBudget": 1024,
+            "recommended": true,
+            "maxTokens": 250000,
+            "maxOutputTokens": 64000,
+            "quotaInfo": {
+                "resetTime": "2026-10-24T12:03:10Z"
+            },
+            "model": "MODEL_PLACEHOLDER_M26",
+            "apiProvider": "API_PROVIDER_ANTHROPIC_VERTEX",
+            "modelProvider": "MODEL_PROVIDER_ANTHROPIC",
+            "tagTitle": "Notice",
+            "tagDescription": "*",
+            "supportedMimeTypes": {
+                "video/videoframe/jpeg2000": true,
+                "image/heic": true,
+                "image/heif": true,
+                "image/jpeg": true,
+                "image/png": true,
+                "image/webp": true,
+                "video/jpeg2000": true
+            },
+            "modelExperiments": {
+                "experiments": {
+                    "*": {
+                        "stringValue": "*"
+                    },
+                    "retry_model_capacity_exhausted": {
+                        "boolValue": true
+                    }
+                }
+            },
+            "vertexModelId": "*"
+        },
+        "gemini-3.5-flash-low": {
+            "displayName": "Gemini 3.5 Flash (Medium)",
+            "supportsImages": true,
+            "supportsThinking": true,
+            "thinkingBudget": 4000,
+            "minThinkingBudget": 32,
+            "recommended": true,
+            "maxTokens": 1048576,
+            "maxOutputTokens": 65536,
+            "quotaInfo": {
+                "remainingFraction": 0.2177544,
+                "resetTime": "2026-10-24T19:26:36Z"
+            },
+            "model": "MODEL_PLACEHOLDER_M20",
+            "apiProvider": "API_PROVIDER_GOOGLE_GEMINI",
+            "modelProvider": "MODEL_PROVIDER_GOOGLE",
+            "supportsVideo": true,
+            "supportedMimeTypes": {
+                "text/x-python": true,
+                "audio/flac": true,
+                "audio/vnd.wave": true,
+                "audio/wav": true,
+                "audio/opus": true,
+                "text/csv": true,
+                "image/jpeg": true,
+                "text/plain": true,
+                "text/html": true,
+                "application/x-javascript": true,
+                "audio/mp3": true,
+                "video/videoframe/jpeg2000": true,
+                "application/x-ipynb+json": true,
+                "audio/webm": true,
+                "application/x-typescript": true,
+                "text/xml": true,
+                "audio/webm;codecs=opus": true,
+                "image/png": true,
+                "audio/m4a": true,
+                "application/vnd.ms-excel": true,
+                "text/x-typescript": true,
+                "text/javascript": true,
+                "audio/x-wav": true,
+                "text/css": true,
+                "audio/mpeg": true,
+                "application/rtf": true,
+                "*": true,
+                "text/rtf": true,
+                "application/x-python-code": true,
+                "video/jpeg2000": true,
+                "audio/wave": true,
+                "video/webm": true,
+                "application/msword": true,
+                "text/markdown": true,
+                "image/heif": true,
+                "audio/mp4": true,
+                "audio/l16": true,
+                "video/mp4": true,
+                "video/audio/wav": true,
+                "application/json": true,
+                "application/vnd.ms-powerpoint": true,
+                "image/heic": true,
+                "audio/aac": true,
+                "image/webp": true,
+                "text/x-python-script": true,
+                "application/pdf": true,
+                "video/text/timestamp": true,
+                "audio/ogg": true,
+                "video/audio/s16le": true
+            },
+            "modelExperiments": {
+                "experiments": {
+                    "*": {
+                        "stringValue": "*"
+                    }
+                }
+            }
+        },
+        "gpt-oss-120b-medium": {
+            "displayName": "GPT-OSS 120B (Medium)",
+            "supportsThinking": true,
+            "thinkingBudget": 8192,
+            "recommended": true,
+            "maxTokens": 131072,
+            "maxOutputTokens": 32768,
+            "quotaInfo": {
+                "resetTime": "2026-10-24T12:03:10Z"
+            },
+            "model": "*",
+            "apiProvider": "API_PROVIDER_OPENAI_VERTEX",
+            "modelProvider": "MODEL_PROVIDER_OPENAI",
+            "tagTitle": "Notice",
+            "tagDescription": "*",
+            "modelExperiments": {
+                "experiments": {
+                    "*": {
+                        "stringValue": "*"
+                    }
+                }
+            },
+            "vertexModelId": "openai/gpt-oss-120b-maas"
+        },
+        "gemini-3.5-flash-extra-low": {
+            "displayName": "Gemini 3.5 Flash (Low)",
+            "supportsImages": true,
+            "supportsThinking": true,
+            "thinkingBudget": 1000,
+            "minThinkingBudget": 32,
+            "recommended": true,
+            "maxTokens": 1048576,
+            "maxOutputTokens": 65536,
+            "quotaInfo": {
+                "remainingFraction": 0.2177544,
+                "resetTime": "2026-10-24T19:26:36Z"
+            },
+            "model": "MODEL_PLACEHOLDER_M187",
+            "apiProvider": "API_PROVIDER_GOOGLE_GEMINI",
+            "modelProvider": "MODEL_PROVIDER_GOOGLE",
+            "supportsVideo": true,
+            "supportedMimeTypes": {
+                "application/msword": true,
+                "audio/flac": true,
+                "image/webp": true,
+                "audio/webm": true,
+                "audio/mp3": true,
+                "audio/webm;codecs=opus": true,
+                "application/json": true,
+                "*": true,
+                "image/png": true,
+                "audio/ogg": true,
+                "application/x-javascript": true,
+                "application/vnd.ms-excel": true,
+                "application/x-python-code": true,
+                "audio/l16": true,
+                "audio/mpeg": true,
+                "text/javascript": true,
+                "text/x-python": true,
+                "audio/aac": true,
+                "audio/mp4": true,
+                "video/jpeg2000": true,
+                "audio/m4a": true,
+                "audio/x-wav": true,
+                "application/pdf": true,
+                "video/webm": true,
+                "audio/opus": true,
+                "text/x-python-script": true,
+                "video/text/timestamp": true,
+                "text/plain": true,
+                "audio/wave": true,
+                "application/rtf": true,
+                "text/xml": true,
+                "text/markdown": true,
+                "text/css": true,
+                "text/html": true,
+                "video/mp4": true,
+                "video/audio/s16le": true,
+                "video/videoframe/jpeg2000": true,
+                "application/x-ipynb+json": true,
+                "image/heif": true,
+                "application/x-typescript": true,
+                "text/rtf": true,
+                "text/x-typescript": true,
+                "video/audio/wav": true,
+                "image/heic": true,
+                "application/vnd.ms-powerpoint": true,
+                "audio/vnd.wave": true,
+                "image/jpeg": true,
+                "text/csv": true,
+                "audio/wav": true
+            },
+            "modelExperiments": {
+                "experiments": {
+                    "*": {
+                        "stringValue": "*"
+                    }
+                }
+            }
+        },
+        "gemini-2.5-flash": {
+            "displayName": "Gemini 3.5 Flash Lite",
+            "supportsImages": true,
+            "supportsThinking": true,
+            "minThinkingBudget": 128,
+            "recommended": true,
+            "maxTokens": 1048576,
+            "maxOutputTokens": 65535,
+            "quotaInfo": {
+                "remainingFraction": 0.2177544,
+                "resetTime": "2026-10-24T19:26:36Z"
+            },
+            "model": "MODEL_GOOGLE_GEMINI_2_5_FLASH",
+            "apiProvider": "API_PROVIDER_GOOGLE_GEMINI",
+            "modelProvider": "MODEL_PROVIDER_GOOGLE",
+            "supportsVideo": true,
+            "supportedMimeTypes": {
+                "audio/wav": true,
+                "audio/aac": true,
+                "application/rtf": true,
+                "image/heic": true,
+                "video/text/timestamp": true,
+                "video/mp4": true,
+                "text/javascript": true,
+                "image/jpeg": true,
+                "audio/opus": true,
+                "application/msword": true,
+                "image/heif": true,
+                "audio/mpeg": true,
+                "*": true,
+                "audio/flac": true,
+                "audio/webm": true,
+                "image/png": true,
+                "text/x-python-script": true,
+                "video/audio/s16le": true,
+                "text/rtf": true,
+                "application/x-typescript": true,
+                "image/webp": true,
+                "audio/x-wav": true,
+                "text/plain": true,
+                "application/pdf": true,
+                "application/x-python-code": true,
+                "audio/wave": true,
+                "application/x-javascript": true,
+                "audio/l16": true,
+                "application/vnd.ms-excel": true,
+                "text/x-python": true,
+                "application/json": true,
+                "audio/vnd.wave": true,
+                "text/markdown": true,
+                "text/css": true,
+                "audio/mp3": true,
+                "video/videoframe/jpeg2000": true,
+                "video/webm": true,
+                "audio/mp4": true,
+                "audio/webm;codecs=opus": true,
+                "audio/m4a": true,
+                "text/xml": true,
+                "video/audio/wav": true,
+                "application/x-ipynb+json": true,
+                "video/jpeg2000": true,
+                "text/csv": true,
+                "text/x-typescript": true,
+                "text/html": true,
+                "audio/ogg": true,
+                "application/vnd.ms-powerpoint": true
+            },
+            "thinkingLevel": 1,
+            "modelExperiments": {
+                "experiments": {
+                    "*": {
+                        "stringValue": "*"
+                    },
+                    "retry_model_capacity_exhausted": {
+                        "boolValue": true
+                    }
+                }
+            }
+        },
+        "gemini-2.5-flash-thinking": {
+            "displayName": "Gemini 3.5 Flash Lite",
+            "supportsImages": true,
+            "supportsThinking": true,
+            "minThinkingBudget": 128,
+            "recommended": true,
+            "maxTokens": 1048576,
+            "maxOutputTokens": 65535,
+            "quotaInfo": {
+                "remainingFraction": 0.2177544,
+                "resetTime": "2026-10-24T19:26:36Z"
+            },
+            "model": "*",
+            "apiProvider": "API_PROVIDER_GOOGLE_GEMINI",
+            "modelProvider": "MODEL_PROVIDER_GOOGLE",
+            "supportsVideo": true,
+            "supportedMimeTypes": {
+                "application/rtf": true,
+                "video/mp4": true,
+                "image/heic": true,
+                "audio/wav": true,
+                "application/vnd.ms-excel": true,
+                "audio/l16": true,
+                "application/json": true,
+                "audio/opus": true,
+                "application/pdf": true,
+                "image/heif": true,
+                "audio/ogg": true,
+                "text/javascript": true,
+                "image/webp": true,
+                "video/audio/wav": true,
+                "*": true,
+                "image/png": true,
+                "text/css": true,
+                "application/vnd.ms-powerpoint": true,
+                "audio/webm": true,
+                "audio/mpeg": true,
+                "text/html": true,
+                "audio/aac": true,
+                "video/jpeg2000": true,
+                "audio/wave": true,
+                "application/x-ipynb+json": true,
+                "text/x-typescript": true,
+                "text/plain": true,
+                "audio/flac": true,
+                "audio/mp3": true,
+                "audio/x-wav": true,
+                "application/x-python-code": true,
+                "application/msword": true,
+                "audio/mp4": true,
+                "image/jpeg": true,
+                "text/rtf": true,
+                "text/csv": true,
+                "audio/m4a": true,
+                "audio/vnd.wave": true,
+                "application/x-javascript": true,
+                "video/videoframe/jpeg2000": true,
+                "text/xml": true,
+                "video/text/timestamp": true,
+                "video/audio/s16le": true,
+                "text/markdown": true,
+                "text/x-python-script": true,
+                "text/x-python": true,
+                "video/webm": true,
+                "audio/webm;codecs=opus": true,
+                "application/x-typescript": true
+            },
+            "thinkingLevel": 1,
+            "modelExperiments": {
+                "experiments": {
+                    "retry_model_capacity_exhausted": {
+                        "boolValue": true
+                    },
+                    "*": {
+                        "stringValue": "*"
+                    }
+                }
+            }
+        },
+        "gemini-2.5-pro": {
+            "displayName": "Gemini 2.5 Pro",
+            "supportsImages": true,
+            "supportsThinking": true,
+            "thinkingBudget": 1024,
+            "minThinkingBudget": 128,
+            "recommended": true,
+            "maxTokens": 1048576,
+            "maxOutputTokens": 65535,
+            "quotaInfo": {
+                "remainingFraction": 0.2177544,
+                "resetTime": "2026-10-24T19:26:36Z"
+            },
+            "model": "MODEL_GOOGLE_GEMINI_2_5_PRO",
+            "apiProvider": "API_PROVIDER_GOOGLE_GEMINI",
+            "modelProvider": "MODEL_PROVIDER_GOOGLE",
+            "supportedMimeTypes": {
+                "application/vnd.ms-excel": true,
+                "image/heic": true,
+                "video/jpeg2000": true,
+                "text/css": true,
+                "audio/opus": true,
+                "video/webm": true,
+                "video/audio/s16le": true,
+                "audio/ogg": true,
+                "video/text/timestamp": true,
+                "audio/x-wav": true,
+                "text/markdown": true,
+                "audio/mpeg": true,
+                "audio/webm": true,
+                "audio/mp4": true,
+                "image/heif": true,
+                "audio/m4a": true,
+                "application/x-ipynb+json": true,
+                "image/png": true,
+                "audio/aac": true,
+                "application/x-javascript": true,
+                "audio/l16": true,
+                "video/mp4": true,
+                "text/plain": true,
+                "*": true,
+                "audio/vnd.wave": true,
+                "image/jpeg": true,
+                "text/rtf": true,
+                "application/rtf": true,
+                "image/webp": true,
+                "video/audio/wav": true,
+                "text/html": true,
+                "audio/webm;codecs=opus": true,
+                "text/x-typescript": true,
+                "audio/mp3": true,
+                "text/javascript": true,
+                "application/msword": true,
+                "audio/flac": true,
+                "application/vnd.ms-powerpoint": true,
+                "text/x-python": true,
+                "text/csv": true,
+                "application/x-typescript": true,
+                "application/pdf": true,
+                "video/videoframe/jpeg2000": true,
+                "application/json": true,
+                "audio/wave": true,
+                "application/x-python-code": true,
+                "audio/wav": true,
+                "text/x-python-script": true,
+                "text/xml": true
+            },
+            "*": true,
+            "modelExperiments": {
+                "experiments": {
+                    "*": {
+                        "stringValue": "*"
+                    }
+                }
+            }
+        },
+        "gemini-2.5-flash-lite": {
+            "displayName": "Gemini 3.5 Flash Lite",
+            "supportsImages": true,
+            "supportsThinking": true,
+            "minThinkingBudget": 128,
+            "recommended": true,
+            "maxTokens": 1048576,
+            "maxOutputTokens": 65535,
+            "quotaInfo": {
+                "remainingFraction": 0.2177544,
+                "resetTime": "2026-10-24T19:26:36Z"
+            },
+            "model": "*",
+            "apiProvider": "API_PROVIDER_GOOGLE_GEMINI",
+            "modelProvider": "MODEL_PROVIDER_GOOGLE",
+            "supportsVideo": true,
+            "supportedMimeTypes": {
+                "text/markdown": true,
+                "application/x-typescript": true,
+                "application/vnd.ms-powerpoint": true,
+                "text/csv": true,
+                "video/audio/wav": true,
+                "image/heif": true,
+                "video/text/timestamp": true,
+                "audio/m4a": true,
+                "audio/x-wav": true,
+                "video/mp4": true,
+                "video/jpeg2000": true,
+                "text/x-python-script": true,
+                "audio/flac": true,
+                "image/jpeg": true,
+                "audio/vnd.wave": true,
+                "*": true,
+                "audio/ogg": true,
+                "application/rtf": true,
+                "audio/webm": true,
+                "application/vnd.ms-excel": true,
+                "text/x-typescript": true,
+                "audio/opus": true,
+                "application/x-ipynb+json": true,
+                "audio/l16": true,
+                "audio/wav": true,
+                "application/msword": true,
+                "audio/aac": true,
+                "application/x-python-code": true,
+                "text/rtf": true,
+                "application/x-javascript": true,
+                "application/pdf": true,
+                "audio/mp3": true,
+                "audio/webm;codecs=opus": true,
+                "image/heic": true,
+                "video/webm": true,
+                "audio/mp4": true,
+                "audio/mpeg": true,
+                "text/css": true,
+                "text/xml": true,
+                "video/videoframe/jpeg2000": true,
+                "application/json": true,
+                "text/plain": true,
+                "text/x-python": true,
+                "image/png": true,
+                "image/webp": true,
+                "text/javascript": true,
+                "audio/wave": true,
+                "text/html": true,
+                "video/audio/s16le": true
+            },
+            "thinkingLevel": 1,
+            "modelExperiments": {
+                "experiments": {
+                    "*": {
+                        "stringValue": "*"
+                    },
+                    "retry_model_capacity_exhausted": {
+                        "boolValue": true
+                    }
+                }
+            }
+        },
+        "gemini-3-flash-agent": {
+            "displayName": "Gemini 3.5 Flash (High)",
+            "supportsImages": true,
+            "supportsThinking": true,
+            "thinkingBudget": -1,
+            "minThinkingBudget": 32,
+            "recommended": true,
+            "maxTokens": 1048576,
+            "maxOutputTokens": 65536,
+            "quotaInfo": {
+                "remainingFraction": 0.2177544,
+                "resetTime": "2026-10-24T19:26:36Z"
+            },
+            "model": "MODEL_PLACEHOLDER_M84",
+            "apiProvider": "API_PROVIDER_GOOGLE_GEMINI",
+            "modelProvider": "MODEL_PROVIDER_GOOGLE",
+            "supportsVideo": true,
+            "supportedMimeTypes": {
+                "video/audio/s16le": true,
+                "image/webp": true,
+                "application/pdf": true,
+                "audio/webm;codecs=opus": true,
+                "*": true,
+                "video/mp4": true,
+                "audio/flac": true,
+                "text/x-python": true,
+                "video/jpeg2000": true,
+                "audio/m4a": true,
+                "application/x-javascript": true,
+                "text/css": true,
+                "application/x-ipynb+json": true,
+                "audio/l16": true,
+                "audio/x-wav": true,
+                "application/x-typescript": true,
+                "text/x-python-script": true,
+                "audio/ogg": true,
+                "image/png": true,
+                "text/x-typescript": true,
+                "text/rtf": true,
+                "application/x-python-code": true,
+                "audio/mp3": true,
+                "video/audio/wav": true,
+                "audio/webm": true,
+                "application/vnd.ms-excel": true,
+                "image/jpeg": true,
+                "audio/mpeg": true,
+                "audio/wave": true,
+                "text/xml": true,
+                "text/csv": true,
+                "audio/aac": true,
+                "video/webm": true,
+                "application/msword": true,
+                "application/rtf": true,
+                "application/json": true,
+                "audio/wav": true,
+                "text/markdown": true,
+                "text/plain": true,
+                "application/vnd.ms-powerpoint": true,
+                "image/heif": true,
+                "text/html": true,
+                "text/javascript": true,
+                "image/heic": true,
+                "audio/opus": true,
+                "video/videoframe/jpeg2000": true,
+                "audio/mp4": true,
+                "video/text/timestamp": true,
+                "audio/vnd.wave": true
+            },
+            "modelExperiments": {
+                "experiments": {
+                    "*": {
+                        "stringValue": "*"
+                    }
+                }
+            }
+        },
+        "gemini-3-flash": {
+            "displayName": "Gemini 3 Flash",
+            "supportsImages": true,
+            "supportsThinking": true,
+            "thinkingBudget": -1,
+            "minThinkingBudget": 128,
+            "recommended": true,
+            "maxTokens": 1048576,
+            "maxOutputTokens": 65536,
+            "quotaInfo": {
+                "remainingFraction": 0.2177544,
+                "resetTime": "2026-10-24T19:26:36Z"
+            },
+            "model": "MODEL_PLACEHOLDER_M18",
+            "apiProvider": "API_PROVIDER_GOOGLE_GEMINI",
+            "modelProvider": "MODEL_PROVIDER_GOOGLE",
+            "supportsVideo": true,
+            "supportedMimeTypes": {
+                "image/jpeg": true,
+                "text/csv": true,
+                "text/plain": true,
+                "video/text/timestamp": true,
+                "image/webp": true,
+                "video/audio/wav": true,
+                "text/x-typescript": true,
+                "audio/mp3": true,
+                "text/x-python-script": true,
+                "text/css": true,
+                "image/heif": true,
+                "audio/mp4": true,
+                "video/jpeg2000": true,
+                "audio/webm": true,
+                "application/msword": true,
+                "text/xml": true,
+                "application/vnd.ms-powerpoint": true,
+                "application/x-javascript": true,
+                "text/rtf": true,
+                "audio/x-wav": true,
+                "video/webm": true,
+                "audio/mpeg": true,
+                "text/javascript": true,
+                "application/rtf": true,
+                "video/mp4": true,
+                "application/pdf": true,
+                "application/x-ipynb+json": true,
+                "image/heic": true,
+                "audio/webm;codecs=opus": true,
+                "text/x-python": true,
+                "audio/wave": true,
+                "*": true,
+                "audio/wav": true,
+                "application/json": true,
+                "audio/m4a": true,
+                "audio/ogg": true,
+                "application/x-typescript": true,
+                "text/html": true,
+                "audio/flac": true,
+                "audio/opus": true,
+                "application/vnd.ms-excel": true,
+                "image/png": true,
+                "text/markdown": true,
+                "audio/aac": true,
+                "audio/vnd.wave": true,
+                "audio/l16": true,
+                "video/audio/s16le": true,
+                "video/videoframe/jpeg2000": true,
+                "application/x-python-code": true
+            },
+            "modelExperiments": {
+                "experiments": {
+                    "*": {
+                        "stringValue": "*"
+                    }
+                }
+            }
+        },
+        "chat_23310": {
+            "maxTokens": 32768,
+            "quotaInfo": {
+                "remainingFraction": 1
+            },
+            "model": "MODEL_CHAT_23310",
+            "apiProvider": "API_PROVIDER_INTERNAL",
+            "modelProvider": "MODEL_PROVIDER_GOOGLE",
+            "supportsCumulativeContext": true,
+            "supportsEstimateTokenCounter": true,
+            "isInternal": true,
+            "promptTemplaterType": "PROMPT_TEMPLATER_TYPE_CHATML",
+            "toolFormatterType": "TOOL_FORMATTER_TYPE_XML",
+            "requiresLeadInGeneration": true
+        },
+        "gemini-3.1-flash-image": {
+            "displayName": "Gemini 3.1 Flash Image",
+            "supportsImages": true,
+            "maxTokens": 65536,
+            "maxOutputTokens": 65536,
+            "quotaInfo": {
+                "remainingFraction": 0.2177544,
+                "resetTime": "2026-10-24T19:26:36Z"
+            },
+            "model": "MODEL_PLACEHOLDER_M21",
+            "apiProvider": "API_PROVIDER_GOOGLE_GEMINI",
+            "modelProvider": "MODEL_PROVIDER_GOOGLE",
+            "supportedMimeTypes": {
+                "text/xml": true,
+                "text/plain": true,
+                "text/x-typescript": true,
+                "video/text/timestamp": true,
+                "application/x-javascript": true,
+                "text/javascript": true,
+                "text/markdown": true,
+                "video/videoframe/jpeg2000": true,
+                "text/css": true,
+                "text/x-python": true,
+                "image/webp": true,
+                "application/json": true,
+                "image/heif": true,
+                "application/x-typescript": true,
+                "image/heic": true,
+                "text/rtf": true,
+                "text/x-python-script": true,
+                "video/jpeg2000": true,
+                "application/rtf": true,
+                "text/csv": true,
+                "image/png": true,
+                "image/jpeg": true,
+                "application/x-ipynb+json": true,
+                "text/html": true,
+                "application/x-python-code": true
+            }
+        },
+        "tab_jump_flash_lite_preview": {
+            "maxTokens": 16384,
+            "maxOutputTokens": 4096,
+            "quotaInfo": {
+                "remainingFraction": 1
+            },
+            "model": "MODEL_PLACEHOLDER_M28",
+            "apiProvider": "API_PROVIDER_GOOGLE_GEMINI",
+            "modelProvider": "MODEL_PROVIDER_GOOGLE",
+            "supportsCumulativeContext": true,
+            "tabJumpPrintLineRange": true,
+            "supportsEstimateTokenCounter": true,
+            "addCursorToFindReplaceTarget": true,
+            "toolFormatterType": "TOOL_FORMATTER_TYPE_XML",
+            "requiresLeadInGeneration": true,
+            "requiresNoXmlToolExamples": true
+        },
+        "chat_20706": {
+            "maxTokens": 16384,
+            "quotaInfo": {
+                "remainingFraction": 1
+            },
+            "model": "MODEL_CHAT_20706",
+            "apiProvider": "API_PROVIDER_INTERNAL",
+            "modelProvider": "MODEL_PROVIDER_GOOGLE",
+            "supportsCumulativeContext": true,
+            "tabJumpPrintLineRange": true,
+            "supportsEstimateTokenCounter": true,
+            "isInternal": true,
+            "addCursorToFindReplaceTarget": true,
+            "promptTemplaterType": "PROMPT_TEMPLATER_TYPE_CHATML",
+            "toolFormatterType": "TOOL_FORMATTER_TYPE_XML",
+            "requiresLeadInGeneration": true
+        },
+        "tab_flash_lite_preview": {
+            "maxTokens": 16384,
+            "maxOutputTokens": 4096,
+            "quotaInfo": {
+                "remainingFraction": 1
+            },
+            "model": "MODEL_PLACEHOLDER_M19",
+            "apiProvider": "API_PROVIDER_GOOGLE_GEMINI",
+            "modelProvider": "MODEL_PROVIDER_GOOGLE",
+            "supportsCumulativeContext": true,
+            "supportsEstimateTokenCounter": true,
+            "toolFormatterType": "TOOL_FORMATTER_TYPE_XML",
+            "requiresLeadInGeneration": true
+        },
+        "claude-sonnet-4-6": {
+            "displayName": "Claude Sonnet 4.6 (Thinking)",
+            "supportsImages": true,
+            "supportsThinking": true,
+            "thinkingBudget": 1024,
+            "recommended": true,
+            "maxTokens": 250000,
+            "maxOutputTokens": 64000,
+            "quotaInfo": {
+                "resetTime": "2026-10-24T12:03:10Z"
+            },
+            "model": "MODEL_PLACEHOLDER_M35",
+            "apiProvider": "API_PROVIDER_ANTHROPIC_VERTEX",
+            "modelProvider": "MODEL_PROVIDER_ANTHROPIC",
+            "tagTitle": "Notice",
+            "tagDescription": "*",
+            "supportedMimeTypes": {
+                "image/heic": true,
+                "image/heif": true,
+                "image/jpeg": true,
+                "image/png": true,
+                "image/webp": true,
+                "video/jpeg2000": true,
+                "video/videoframe/jpeg2000": true
+            },
+            "modelExperiments": {
+                "experiments": {
+                    "*": {
+                        "stringValue": "*"
+                    },
+                    "retry_model_capacity_exhausted": {
+                        "boolValue": true
+                    }
+                }
+            },
+            "vertexModelId": "*"
+        }
+    },
+    "defaultAgentModelId": "claude-sonnet-4-6",
+    "agentModelSorts": [
+        {
+            "displayName": "Recommended",
+            "groups": [
+                {
+                    "modelIds": [
+                        "claude-sonnet-4-6",
+                        "claude-opus-4-6-thinking",
+                        "gpt-oss-120b-medium"
+                    ]
+                }
+            ]
+        }
+    ],
+    "commandModelIds": [
+        "gemini-3-flash"
+    ],
+    "tabModelIds": [
+        "chat_20706",
+        "chat_23310"
+    ],
+    "imageGenerationModelIds": [
+        "gemini-3.1-flash-image"
+    ],
+    "mqueryModelIds": [
+        "gemini-3.5-flash-lite"
+    ],
+    "webSearchModelIds": [
+        "gemini-3.5-flash-lite"
+    ],
+    "commitMessageModelIds": [
+        "gemini-3.5-flash-lite"
+    ],
+    "audioTranscriptionModelIds": [
+        "models/proactive-observer-v10"
+    ],
+    "experimentIds": [
+        106826239,
+        106828853,
+        106827293,
+        106826316,
+        106828852,
+        106827294,
+        106805068,
+        106805056,
+        106805062,
+        106828854,
+        106140402,
+        106815069,
+        106805272,
+        105979552,
+        105979574,
+        106015331,
+        106568772,
+        106123599,
+        105842106,
+        106100625,
+        106754391,
+        106143956,
+        105856899,
+        106064030,
+        106544525,
+        106021688,
+        105887299,
+        106428370,
+        106640126,
+        106793266,
+        106798730,
+        106833630,
+        106380926,
+        106281951,
+        106264532,
+        106032303,
+        106228452,
+        106121609,
+        106793059,
+        106848320,
+        105979531,
+        105979553,
+        106015328,
+        106568390,
+        106123597,
+        105842103,
+        106100654,
+        106064028,
+        105906495,
+        106640124,
+        106032301,
+        106121604,
+        106793057,
+        106805066,
+        106805060
+    ],
+    "tieredModelIds": {
+        "flashLite": [
+            "gemini-3.5-flash-lite"
+        ],
+        "flash": [
+            "gemini-3.8-flash-tiered"
+        ],
+        "pro": [
+            "gemini-3.8-flash-tiered"
+        ]
+    }
+}

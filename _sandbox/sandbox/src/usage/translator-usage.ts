@@ -3,7 +3,8 @@ import type { KeyedProvider } from "@intentic/sandbox-contract/schemas/providers
 import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
 import { GOOGLE_FAMILIES, GoogleModelsSchema, googleGates, googleModelsUsage, sameGates } from "./google/model-pools.js";
 import { asNumber, asRecord, asString, clampPercent, readFailure, resetFromIso } from "./payload.js";
-import { parseJsonOr } from "@intentic/base/json";
+import { type JsonValue, parseJsonOr } from "@intentic/base/json";
+import type { AnswerWatch } from "./drift/answer-vocabulary.js";
 
 // Reader for the routed subscriptions (counterpart to claude-usage.ts); returns an AccountUsage only, storage and
 // merging live elsewhere.
@@ -369,7 +370,8 @@ const GOOGLE_HOSTS = [
 
 // A proxied call's answer, or why there is none: the upstream's own refusal where it gave one. Kept rather than folded
 // into `undefined`, since a read that fails the same way on every sweep is a number that silently stops moving.
-type ApiAnswer = { readonly payload: unknown } | { readonly failure: string };
+type ApiAnswer = { readonly payload: JsonValue } | { readonly failure: string };
+const NOT_JSON = Symbol("not JSON");
 
 const apiCall = async (params: {
     readonly fetchFn: typeof fetch;
@@ -381,6 +383,9 @@ const apiCall = async (params: {
     readonly header: Record<string, string>;
     readonly data?: string;
     readonly signal: AbortSignal;
+    // What this answer is filed under for the answer watch (drift/answer-vocabulary.ts), e.g. `kimi:usages`.
+    readonly endpoint: string;
+    readonly watch?: AnswerWatch | undefined;
 }): Promise<ApiAnswer> => {
     const response = await params.fetchFn(`${params.managementUrl}/api-call`, {
         method: "POST",
@@ -402,11 +407,12 @@ const apiCall = async (params: {
     if (status < 200 || status >= 300 || result.body === undefined) {
         return { failure: readFailure(status, result.body) };
     }
-    try {
-        return { payload: JSON.parse(result.body) as unknown };
-    } catch {
+    const payload = parseJsonOr(result.body, NOT_JSON);
+    if (payload === NOT_JSON) {
         return { failure: "the provider answered something that is not JSON" };
     }
+    params.watch?.observe(params.endpoint, payload);
+    return { payload };
 };
 
 /** One quota read: the reading, or the provider's reason there is none. */
@@ -431,6 +437,7 @@ interface GoogleRead {
     readonly project: string;
     readonly signal: AbortSignal;
     readonly measuredAt: number;
+    readonly watch?: AnswerWatch | undefined;
 }
 
 // One Google read across its hosts. The first refusal is the one kept: every host is the same service, and the first is
@@ -441,6 +448,7 @@ const googleRead = async (read: GoogleRead, method: "retrieveUserQuotaSummary" |
         const answer = await apiCall({
             ...read,
             url: `${host}:${method}`,
+            endpoint: `gemini:${method}`,
             method: "POST",
             header: {
                 Authorization: "Bearer $TOKEN$",
@@ -464,6 +472,20 @@ const googleRead = async (read: GoogleRead, method: "retrieveUserQuotaSummary" |
     return refused ?? { failure: NO_POOLS };
 };
 
+// Points apart two of Google's own figures for one pool may be and still be the same reading taken moments apart.
+const SOURCES_AGREE_WITHIN = 10;
+
+// Where the summary and the per-model view both name a family's pool, they are two readings of one allowance: a gap
+// between them means one is being read wrong, or one of them changed what it reports.
+const compareSources = (summary: readonly UsageWindow[], perModel: readonly UsageWindow[], watch: AnswerWatch | undefined): void => {
+    for (const pool of perModel) {
+        const named = summary.find((window) => window.gates !== "all" && window.gates !== "none" && sameGates(window.gates, pool.gates));
+        if (named !== undefined && Math.abs(named.utilization - pool.utilization) > SOURCES_AGREE_WITHIN) {
+            watch?.disagree("gemini:quota-sources", pool.label ?? pool.kind, [named.utilization, pool.utilization]);
+        }
+    }
+};
+
 // The quota summary names each family's pool. A family it leaves out (Gemini, on every account since October 2026) is
 // read off the per-model view instead; without it the account showed only its spent Claude and GPT pool, which read as
 // the whole account spent while Gemini still had room.
@@ -475,7 +497,9 @@ const readGoogleUsage = async (read: GoogleRead): Promise<TranslatorUsageRead> =
         return summary;
     }
     const models = await googleRead(read, "fetchAvailableModels");
-    const filled = "usage" in models ? models.usage.windows.filter((window) => !covered(window.gates)) : [];
+    const perModel = "usage" in models ? models.usage.windows : [];
+    compareSources(named, perModel, read.watch);
+    const filled = perModel.filter((window) => !covered(window.gates));
     return filled.length === 0 ? summary : { usage: { windows: [...named, ...filled], measuredAt: read.measuredAt } };
 };
 
@@ -491,6 +515,7 @@ export const fetchTranslatorUsage = async (params: {
     readonly managementToken: string;
     readonly provider: KeyedProvider;
     readonly file: TranslatorAuthFile;
+    readonly watch?: AnswerWatch | undefined;
 }): Promise<TranslatorUsageRead> => {
     // A provider `reportsPlanLimits` rejects never enters the refresh path (readableFiles); said anyway, not assumed.
     const authIndex = asString(params.file.auth_index);
@@ -506,6 +531,7 @@ export const fetchTranslatorUsage = async (params: {
                 ...params,
                 authIndex,
                 url: CODEX_USAGE_URL,
+                endpoint: "codex:wham/usage",
                 method: "GET",
                 header: {
                     Authorization: "Bearer $TOKEN$",
@@ -523,6 +549,7 @@ export const fetchTranslatorUsage = async (params: {
                 ...params,
                 authIndex,
                 url: KIMI_USAGE_URL,
+                endpoint: "kimi:usages",
                 method: "GET",
                 header: { Authorization: "Bearer $TOKEN$", Accept: "application/json" },
                 signal,

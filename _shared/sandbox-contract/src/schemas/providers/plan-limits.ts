@@ -36,6 +36,12 @@ export const UsageWindowSchema = z.object({
         .describe(
             "When the window this pool was last read in closed, in epoch seconds, while nothing has read the pool since. Its `utilization` is then 0, the floor every new window starts from, not a measurement, and `resetsAt` is absent because the next reset is unknown.",
         ),
+    missingSince: z
+        .number()
+        .optional()
+        .describe(
+            "When the provider stopped reporting this pool, in epoch seconds: a later reading of the account named every other pool but not this one. Its figure is the last one read, still a valid floor until its window closes, and the pool is dropped once it has.",
+        ),
 });
 export type UsageWindow = z.infer<typeof UsageWindowSchema>;
 // A failed re-read, whatever the cause: a 429 park, a 403 asking for verification, a 5xx, a timeout. Recorded as the fact
@@ -50,6 +56,12 @@ export const UsageUnreadSchema = z.object({
         ),
 });
 export type UsageUnread = z.infer<typeof UsageUnreadSchema>;
+// A turn answered against a reading that said its model could not run: the provider's own word that the reading is wrong.
+export const UsageContradictionSchema = z.object({
+    at: z.number().describe("When the turn was answered, in milliseconds."),
+    model: z.string().describe("The model the answered turn ran on."),
+});
+export type UsageContradiction = z.infer<typeof UsageContradictionSchema>;
 // Every window kept, not just the binding one, since which pool binds changes between turns. Utilization only climbs
 // within a window, so a stale reading is still a valid floor. `measuredAt` is epoch ms — windows are seconds.
 export const AccountUsageSchema = z.object({
@@ -58,6 +70,16 @@ export const AccountUsageSchema = z.object({
     unread: UsageUnreadSchema.optional().describe(
         "Present while re-reading this account keeps failing: these windows are the last reading that succeeded, and `measuredAt` will not move until a read succeeds again.",
     ),
+    uncovered: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "Models this account serves that no pool in this reading gates, by id: the provider published no allowance for them, so their room is unknown, never assumed spent. Absent when every model is covered or the account's models are not known.",
+        ),
+    contradicted: UsageContradictionSchema.optional()
+        .describe(
+            "A turn on `model` was answered after this reading said every pool it spends was empty, so the reading is wrong about that model: those pools read as at the line, not spent, until a new reading replaces this one.",
+        ),
 });
 export type AccountUsage = z.infer<typeof AccountUsageSchema>;
 // Who has to act for a blocked account, which is the only thing a surface chooses its instruction by: the reason is the

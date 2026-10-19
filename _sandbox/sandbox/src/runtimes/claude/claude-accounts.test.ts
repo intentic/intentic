@@ -47,7 +47,7 @@ const door = (
                     return false;
                 },
             },
-            accountUsage: { read: async () => ({}), record: async () => {}, markUnread: async () => undefined, clear: async () => {} },
+            accountUsage: { read: async () => ({}), record: async () => {}, markUnread: async () => undefined, contradict: async () => undefined, clear: async () => {} },
             claudeSeats: {
                 read: async () => Object.fromEntries(seats),
                 refuse: async (id, reason) => {
@@ -67,6 +67,7 @@ const door = (
                 park: async () => {},
                 record: async () => {},
                 clear: async () => {},
+                contradict: async () => false,
                 read: async () => ({}),
                 onChange: () => () => {},
                 start: () => () => {},
