@@ -12,9 +12,11 @@ owner's own computer answers only while that computer and its container are runn
 ## On a phone
 
 - Below 768 px wide the app switches to a phone layout with no tab bar. Home is the **Agents** board, with a rail of
-  icons down its left: the sandbox's logo at the top opens the **Menu** (switch sandbox, what it needs, account),
-  then every section, **Terminal**, **Sandbox**, **Settings**, and **+** to add a capability. A chat opens
-  full-screen from its card on the board; every screen has a back arrow to the board.
+  icons down its left: the sandbox's logo at the top opens the **Menu** (switch sandbox, what it needs, who is
+  here), then every section, **Terminal**, **Sandbox** and **+** to add a capability, and at the foot the avatar
+  (Settings, sign out). The board shows only the lanes with something in them. A chat opens full-screen from its
+  card on the board; every screen has a back arrow to the board. Geek metrics and the usage readouts under the
+  composer are desktop-only.
 - The app ships a web manifest (standalone display, with **Chat** and **Agents** shortcuts), so the browser's own
   Add to Home Screen / Install app puts it on the Home Screen as an app. There is no install button inside the app.
 - Push notifications on iPhone need that Home Screen install first. The phone's Menu says **Add to your Home

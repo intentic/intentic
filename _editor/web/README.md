@@ -243,8 +243,12 @@ flowchart LR
   routes are kept in the hash (`files/local#/device`), since the app serves that page at one address only.
 - **On a phone.** `ShellMobile.vue` shows one screen at a time, and has no tab bar. Home is the agents board, with
   the desktop's rail down its left (`shell/MobileRail.vue`, its tiles and badges from `shell/rail/sectionTiles.ts`):
-  the sandbox's logo on top opens the Menu page (what the sandbox needs, switching sandboxes, who is here, the
-  account), then every section, the terminal, the Sandbox and Settings hubs, and the + that adds a capability. A
+  the sandbox's logo on top opens the Menu page (what the sandbox needs, switching sandboxes, who is here), then every
+  section, the terminal, the Sandbox hub and the + that adds a capability, at a finger's size (`phoneRailFrame` in
+  `shell/rail/railFrame.ts`), and at the foot the desktop's own avatar control (`shell/AccountPanel.vue`: Settings,
+  Discord, sign out). The board there draws only the lanes with something in them
+  (`features/agents/board/view/phoneLanes.ts`), and none of the geek metrics. Under the chat's composer only the
+  refusal and running jobs stand; the cache, context and allowance readouts are the desktop's. A
   conversation opens over the whole screen from its card and goes back by its own arrow; every other page gets the
   shell's back arrow, which falls back to the board (`lib/routes/phoneScreens.ts`). The Sandbox and Settings hubs open on an index of
   their sections, grouped as the desktop rail groups them, and each section is a page with a way back to that
@@ -366,7 +370,7 @@ One word per idea on screen and in code. The retired spellings are refused by
 | slot | An empty element a mounted surface publishes for a panel to teleport into (`workbench/window/panelSlots.ts`) |
 | pin | A Browsers tab that is the reader's own rather than a web page of one of the open windows: a live app, the desktop, a window on it (`workbench/browsers/browsersSurface.ts`) |
 | docked | A panel living in the main window, as opposed to floating in a window of its own (`floating.ts`) |
-| status bar | The line at the foot of the desktop window: the runtime chips (`shell/status-bar/`) and, opted in, the geek metrics' segment, which opens its panel above the bar (`features/agents/status-bar/`). On a phone, the metrics alone at the Agents board's foot |
+| status bar | The line at the foot of the desktop window: the runtime chips (`shell/status-bar/`) and, opted in, the geek metrics' segment, which opens its panel above the bar (`features/agents/status-bar/`). A phone has none, and draws no geek metrics |
 | subagent | Any agent another agent started: in-process by its runtime's own Agent tool, or spawned by the sandbox as a conversation of its own. Drawn one way wherever it shows, on the card of the call that started it (`features/chat/tools/subagentCard.ts`) and in its parent card's tray; how it was started changes only what else it offers, such as its own conversation. Not "child agent" |
 | tray | The rows hung under a board card, and under a card in the chat's list (`features/chat/tabs/chatTrays.ts`), for every subagent it started: the ones it spawned, which are conversations of their own, and the ones its runtime ran in-process, from the roster (`models/fleet/subagentRoster.ts`). Open only under the card the reader is on, a card whose subagent is on screen, and every card while a filter is on, folding open and shut with what stands below sliding to make room, on the compositor (`features/agents/board/view/foldMotion.ts`); every other card counts its subagents on itself instead (`parts/fleet/ChildCount.vue`) and keeps only a subagent asking the reader in sight. Open, asks and working ones in sight, stopped ones one row per thing they stopped on, settled ones folded behind a count (`models/fleet/board/childFold.ts`). A row shows its subagent in the chat: a spawned one's own chat, an in-process one's transcript in its parent's column (`models/conversations/panel/subagentView.ts`) |
 | quick bar | The parked chat's pill that opens into a scratch pad: the composer alone, open while the reader is in it (`ChatQuickBar.vue`). Open, a header names the chat and its last words and leads to /chat; it draws no transcript |

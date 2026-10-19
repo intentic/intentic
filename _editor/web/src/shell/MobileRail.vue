@@ -23,8 +23,9 @@ import { presenceOthers } from "../workbench/presence/usePresence";
 import { railBands } from "../workbench/views/registry";
 import ViewBadgeChip from "../workbench/views/ViewBadgeChip.vue";
 import { RUNNING_MARK_CLASS } from "../workbench/views/viewBadge";
+import AccountPanel from "./AccountPanel.vue";
 import RailIcon from "./rail/RailIcon.vue";
-import { railFrame } from "./rail/railFrame";
+import { phoneRailFrame } from "./rail/railFrame";
 import { type SectionTile, tileLabel, useSectionTiles } from "./rail/sectionTiles";
 
 // THE PHONE'S RAIL, down the left of its board the way a chat app keeps its servers beside its channels: every place the
@@ -33,7 +34,8 @@ import { type SectionTile, tileLabel, useSectionTiles } from "./rail/sectionTile
 // only on the board, so a chat or a section keeps the full width of the screen and leaves by its back arrow.
 //
 // Top to foot, as on the desktop: the sandbox (its logo opens the Menu page, where sandboxes are switched and what the
-// sandbox needs is listed), who else is here, the sections in their bands, the box's own pages, and the +. No tooltips:
+// sandbox needs is listed), who else is here, the sections in their bands, the box's own pages, the +, and at the very
+// foot the account's avatar (AccountPanel.vue, the desktop's own control). No tooltips:
 // a finger raises none, so each tile's accessible name carries what its corner marks say (tileLabel).
 
 const t = useT();
@@ -46,11 +48,10 @@ const { tiles } = useSectionTiles();
 const sectionBands = computed(() => railBands(tiles.value, (tile) => tile.id));
 
 // The box rather than the work, as the desktop keeps it under its sandbox switcher: the terminal (ship tier, since a PTY
-// is the whole sandbox, and not in plain words), the sandbox's own pages, and the settings.
+// is the whole sandbox, and not in plain words) and the sandbox's own pages. Settings is the avatar's, as on the desktop.
 const boxTiles = computed<readonly SectionTile[]>(() => [
     ...(canShip.value && !maker.value ? [{ id: `terminal`, to: `/terminal`, label: t(`shared.terminal`), icon: `code` } as const] : []),
     { id: `sandbox`, to: sandboxHubPath(isGuest.value), label: t(`shared.sandboxHub`), icon: `box` },
-    { id: `settings`, to: `/settings`, label: t(`shared.settings`), icon: `cog` },
 ]);
 
 // Which getting-started marks a tile carries, as on the desktop rail: the page each step is done on.
@@ -83,8 +84,8 @@ const sandboxLabel = computed(() =>
         .join(` · `),
 );
 
-// The rail's measures at their roomier size: a 44px tile is the finger's target, whatever the desktop rail is set to.
-const frame = railFrame(`comfortable`);
+// The rail's measures at a finger's size, whatever the desktop rail is set to (railFrame.ts).
+const frame = phoneRailFrame();
 </script>
 
 <template>
@@ -178,5 +179,7 @@ const frame = railFrame(`comfortable`);
         >
             <RailIcon section="capabilities" class="icon-rail-glyph" />
         </RouterLink>
+        <!-- The account, at the foot as on the desktop (its own `mt-auto`): who is signed in, Settings, sign out. -->
+        <AccountPanel />
     </nav>
 </template>

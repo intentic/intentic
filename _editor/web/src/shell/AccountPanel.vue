@@ -4,7 +4,7 @@ import { useGettingStarted } from "../features/gettingStarted/useGettingStarted"
 import CommunityInvite from "../features/community/CommunityInvite.vue";
 import { useCommunityInvite } from "../features/community/useCommunityInvite";
 import type { Disposable } from "@intentic/extension-api";
-import { AnchoredOverlay, Avatar, browserOwnsClick, Notice, StatusBadge, useHoverMenu, vAction } from "@intentic/ui";
+import { AnchoredOverlay, Avatar, browserOwnsClick, Notice, StatusBadge, useDevice, useHoverMenu, vAction } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { ACCOUNT } from "../workbench/commands/categories";
@@ -20,6 +20,8 @@ import { useT } from "@intentic/ui/i18n";
 // same kind of thing, an identity with a short menu under it, so they answer the pointer the same way. The sandbox switcher lives above; theme lives on /settings. The same control at
 // the foot of a desktop window on a folder of this computer (local/LocalShell.vue), drawn and pressed the same: there the
 // account is the one the app reaches for the window (useAccount.ts), and Settings opens in that window.
+// And at the foot of the phone's rail (MobileRail.vue), where a press is the only way in and its rows grow to a finger's
+// height (`pointer-coarse:`).
 
 const t = useT();
 
@@ -35,7 +37,9 @@ const { planBadge } = useHostedPlan();
 const onSettings = computed(() => route.path === `/settings` || route.path.startsWith(`/settings/`));
 
 // The community invitation (features/community): a quiet dot here while an ask waits unseen in this menu, never more.
+// Said to analytics as the phone's when this is the phone rail's avatar (MobileRail.vue), so the two stay comparable.
 const invite = useCommunityInvite();
+const { mobile } = useDevice();
 const accountHint = computed(() => (invite.dot.value ? t(`community.dot`) : t(`shell.words.account`)));
 
 // AnchoredOverlay, not PrimeVue's Popover: shares the one overlay that measures against its anchor's window.
@@ -133,7 +137,7 @@ onUnmounted(() => {
 // The plain row is a link like the note's Join: the reader found their own way in, which answers the ask too.
 const communityPressed = (): void => {
     open.value = false;
-    invite.answer(`menu`, `joined`);
+    invite.answer(mobile.value ? `phone-menu` : `menu`, `joined`);
 };
 </script>
 
@@ -208,14 +212,14 @@ const communityPressed = (): void => {
             <div class="my-1 border-t border-line-subtle"></div>
 
             <!-- The community ask, on the visit it is first seen on and only after the reader has been round the loop. -->
-            <CommunityInvite v-if="invite.note.value" place="menu-note" class="m-1 mb-2" />
+            <CommunityInvite v-if="invite.note.value" :place="mobile ? `phone-note` : `menu-note`" class="m-1 mb-2" />
 
             <!-- Only while it is put away and still a first run: the way back to a checklist the rail no longer shows. -->
             <button
                 v-if="tour.reopenable.value"
                 type="button"
                 data-menu-row
-                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5"
+                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5 pointer-coarse:py-2.5 pointer-coarse:text-sm"
                 @click="reopenTour"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="circle" class="text-base text-muted" /></span>
@@ -225,7 +229,7 @@ const communityPressed = (): void => {
                 to="/settings"
                 data-menu-row
                 :data-current="onSettings || undefined"
-                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"
+                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5 pointer-coarse:py-2.5 pointer-coarse:text-sm"
                 @click="dismiss"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="cog" class="text-base text-muted" /></span>
@@ -237,7 +241,7 @@ const communityPressed = (): void => {
                 rel="noopener"
                 data-menu-row
                 data-test="community-row"
-                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"
+                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5 pointer-coarse:py-2.5 pointer-coarse:text-sm"
                 @click="communityPressed"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="discord" class="text-base text-muted" /></span>
@@ -247,7 +251,7 @@ const communityPressed = (): void => {
             <button
                 type="button"
                 data-menu-row
-                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5"
+                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5 pointer-coarse:py-2.5 pointer-coarse:text-sm"
                 v-action="logout"
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="sign-out" class="text-base text-muted" /></span>

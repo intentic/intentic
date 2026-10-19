@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { SandboxSummary } from "@intentic/api-contract";
-import { Avatar, PageHeader, Row, RowGroup, SandboxLogo, vAction } from "@intentic/ui";
+import { Avatar, PageHeader, Row, RowGroup, SandboxLogo } from "@intentic/ui";
 import { computed, onMounted } from "vue";
-import { useAuth } from "../client/auth/useAuth";
 import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttention";
 import { useRebuildOffer } from "../features/sandbox/environment/rebuild/useRebuildOffer";
 import { identityHue } from "../lib/identityHue";
@@ -14,30 +13,25 @@ import { placementOf, type SandboxPlacement } from "../features/sandbox/overview
 import { useSandboxPlacement } from "../features/sandbox/overview/useSandboxPlacement";
 import { useSandboxAvailability } from "../features/sandbox/overview/useSandboxAvailability";
 import { useWorkspaceTree } from "../models/workspace/tree/useWorkspaceTree";
-import { leaveAfterSignOut } from "../app/environments/afterSignOut";
 import { usePushNotifications } from "../workbench/push/usePushNotifications";
 import { pushMenuRow } from "./pushMenuRow";
 import MenuRow from "./MenuRow.vue";
 import GettingStartedList from "../features/gettingStarted/GettingStartedList.vue";
 import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
-import CommunityInvite from "../features/community/CommunityInvite.vue";
-import { useCommunityInvite } from "../features/community/useCommunityInvite";
 import { useT } from "@intentic/ui/i18n";
 
-// The phone's Menu: what the desktop rail's sandbox switcher and account popover hold, as one page — what the sandbox
-// needs, sandbox switching, the presence roster, account actions. Opened from the sandbox's logo atop the phone's rail
-// (MobileRail.vue), which holds every section itself, so none is listed here twice. Same state singletons, different
-// presentation.
+// The phone's Menu: what the desktop rail's sandbox switcher holds, as one page — what the sandbox needs, sandbox
+// switching, the presence roster. Opened from the sandbox's logo atop the phone's rail (MobileRail.vue), which holds
+// every section itself and the account at its foot (AccountPanel.vue, as on the desktop), so neither is listed here
+// twice. Same state singletons, different presentation.
 
 const t = useT();
 const tour = useGettingStarted();
-const invite = useCommunityInvite();
 
 const sandbox = useSandbox();
 const { hasSnapshot } = useWorkspaceTree();
 const availability = useSandboxAvailability(hasSnapshot);
 const availabilityVisual = computed(() => sandboxAvailabilityVisual(availability.value));
-const { user, signOut } = useAuth();
 // What the rail's sandbox tile badges, one row per item, so the badge that brought the reader here is answered first.
 const { needs: sandboxAttention, notes: sandboxNotes } = useSandboxAttention();
 // "Rebuild needed" carries its own press where one press is the whole errand (useRebuildOffer); the row still links to
@@ -68,11 +62,6 @@ const placementFor = (option: SandboxSummary): SandboxPlacement =>
 
 // A place, so a link; switching sandboxes re-points the daemon, so that stays a button.
 const resumeSetup = (id: string) => ({ path: `/setup`, query: { sandbox: id } });
-
-const logout = async (): Promise<void> => {
-    await signOut();
-    leaveAfterSignOut();
-};
 </script>
 
 <template>
@@ -165,18 +154,6 @@ const logout = async (): Promise<void> => {
                         <Avatar :size="mark" :name="member.name ?? member.email" :src="member.picture" :hue="identityHue(member.email)" :idle="member.idle" />
                     </template>
                 </Row>
-            </RowGroup>
-
-            <!-- The community ask, as the desktop account menu has it: once, after the loop, on the visit it is first seen. -->
-            <CommunityInvite v-if="invite.note.value" place="phone-note" />
-            <!-- Account: identity and the actions the desktop avatar popover holds. -->
-            <RowGroup :label="t(`shell.words.account`)" class="pb-4">
-                <MenuRow v-if="tour.reopenable.value" icon="circle" :title="t(`gettingStarted.panel.show`)" plain @press="tour.show()" />
-                <Row lead="face" :title="user?.email" :description="user?.name ?? undefined">
-                    <template #lead="{ mark }"><Avatar :size="mark" :src="user?.image" /></template>
-                </Row>
-                <MenuRow icon="discord" :title="t(`community.row`)" data-test="community-row" @press="invite.open(`phone-menu`)" />
-                <MenuRow v-action="logout" icon="sign-out" :title="t(`shell.words.signOut`)" />
             </RowGroup>
         </div>
     </div>

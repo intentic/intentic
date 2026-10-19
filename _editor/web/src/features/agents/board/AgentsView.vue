@@ -14,7 +14,7 @@ import {
     ui,
     useDevice,
 } from "@intentic/ui";
-import { computed, inject, onMounted, provide, ref } from "vue";
+import { computed, onMounted, provide, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { usePanels } from "../../../models/extensions/usePanels";
@@ -51,14 +51,13 @@ import { tourVisible } from "../../tour/tourState";
 import { markHinted } from "../../tour/tourMarks";
 import ChildRows from "../../../parts/fleet/ChildRows.vue";
 import { CHILD_ROWS } from "../../../models/fleet/board/childRows";
-import StatusBar from "../status-bar/StatusBar.vue";
-import { LIVE_METRICS_KEY, useLiveMetrics } from "../../../models/sandbox/liveMetrics";
 import HeldWakeCard from "./cards/HeldWakeCard.vue";
 import AttentionElsewhere from "./cards/AttentionElsewhere.vue";
 import WorkflowRunCard from "./cards/WorkflowRunCard.vue";
 import { useArchiveDoor } from "./view/archiveDoor";
 import { useBoardCommands } from "./view/boardCommands";
 import { laneHeads, useBoardLanes } from "./view/boardLanes";
+import { usePhoneLanes } from "./view/phoneLanes";
 import { useAttentionAsk } from "./view/attentionAsk";
 import { useBoardPresses } from "./view/boardPresses";
 import { followAcross, useBoardScope } from "../../../models/fleet/board/boardScope";
@@ -82,12 +81,8 @@ const router = useRouter();
 const { mobile, coarse } = useDevice();
 const agents = useAgents();
 const { archived, archiveLoading, archiveFailure, archive, restore, notice, dismissNotice } = agents;
-// The desktop shell reads the geek metrics for its status bar and hands them down. A phone has no shell bar, so there the
-// board reads its own and draws its own bar at its foot (liveMetrics.ts). Either way the cards take theirs from here.
-const shellMetrics = inject(LIVE_METRICS_KEY, undefined);
-const liveMetrics = shellMetrics ?? useLiveMetrics();
-const ownStatusBar = shellMetrics === undefined;
-provide(LIVE_METRICS_KEY, liveMetrics);
+// The geek metrics are the desktop's: its shell reads them for its status bar and hands them down to the cards
+// (liveMetrics.ts). A phone reads none, whatever Settings says: its board has no foot to spare from the floating New agent.
 const drag = useAgentDrag();
 const { dragged, dragging, draggedId, over, action, accepts, ghostStyle, pendingResolve, confirmResolve, cancelResolve } = drag;
 const { resolveNow, pressLand, pendingLand, confirmLand, cancelLand, unwatchNow } = drag;
@@ -274,6 +269,8 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
 const LANES_OF_OWN_WORK = [`attention`, `active`, `finished`] as const;
 const ownWork = computed(() => LANES_OF_OWN_WORK.some((lane) => cardsFor(lane).length > 0 || runsFor(lane).length > 0));
 const exampleShown = computed(() => tourVisible.value && !view.value.archive && !filtering.value && !ownWork.value);
+// A phone draws only the lanes with something in them (phoneLanes.ts).
+const { drawnLanes, bareLane, saysEmpty } = usePhoneLanes({ mobile, heads: LANES, view, lanes, scope, dragging, filtering, exampleShown });
 
 // Being here is what the getting-started board moment asks for: once the reader has seen the board, it stops pointing.
 onMounted(() => markHinted(`board`, `visited`));
@@ -368,7 +365,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 :class="[laneGrid, noMatches ? '' : paired ? 'min-h-full' : 'h-full', mobile ? 'pb-24' : '']"
             >
                 <section
-                    v-for="lane in LANES"
+                    v-for="lane in drawnLanes"
                     :key="lane.key"
                     :data-lane="lane.key"
                     :data-reveal-column="narrow ? undefined : ``"
@@ -499,15 +496,10 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                         <FirstAgentSlot :starters="starters" />
                     </div>
                     <!-- An emptied lane keeps its header rather than collapsing: three columns shrinking to one mid-keystroke would jump the whole board under the cursor. -->
-                    <p
-                        v-else-if="
-                            cardsFor(lane.key).length === 0 && runsFor(lane.key).length === 0 && !(lane.key === 'attention' && scopedHeld.length > 0)
-                        "
-                        class="px-1 pb-3 text-2xs text-subtle"
-                    >
+                    <p v-else-if="saysEmpty(lane.key)" class="px-1 pb-3 text-2xs text-subtle">
                         {{ filtering ? t(`agents.agentsView.noMatchesInLane`) : first ? lane.first : lane.empty }}
                     </p>
-                    <div v-else class="relative flex flex-col gap-4.5 pb-2.5">
+                    <div v-else-if="!bareLane(lane.key)" class="relative flex flex-col gap-4.5 pb-2.5">
                         <!-- Skips a card whose inputs haven't changed: the roster ticks about once a second per running turn. -->
                         <Transition
                             v-for="agent in cardsFor(lane.key)"
@@ -679,9 +671,6 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 </section>
             </div>
         </div>
-        <!-- Where no shell bar carries them (a phone), the opt-in geek metrics (Settings ▸ Appearance) at the board's foot;
-             their panel docks above it and stays until the reader closes it. -->
-        <StatusBar v-if="ownStatusBar" :metrics="liveMetrics" />
         <!-- Discard is destructive and has no lane of its own, so it only exists while a card is actually being dragged. -->
         <div
             v-if="dragging"

@@ -470,13 +470,9 @@ const confirmHandOver = async (): Promise<void> => {
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <!-- A @container: the header thins against its own width (the workspace pane's), not the window's. -->
-        <!-- On a phone it is the screen's whole chrome, sized for a thumb: 56px tall, every press in it a 40-44px target
-             you can see, rather than a 28px glyph whose larger target is invisible (`touch-target`). -->
-        <div
-            class="view-header @container flex items-center border-b border-line"
-            :class="mobile ? `h-14 gap-1 pl-1 pr-2` : `gap-2.5 px-3.5 py-1`"
-        >
+        <!-- A @container: the header thins against its own width (the workspace pane's), not the window's. On a phone it is
+             the screen's whole chrome, sized for a thumb: 56px tall, every press in it a 40-44px target you can see. -->
+        <div class="view-header @container flex items-center border-b border-line" :class="mobile ? `h-14 gap-1 pl-1 pr-2` : `gap-2.5 px-3.5 py-1`">
             <!-- The board is a place, so the way back is a link: hoverable, copyable, openable in its own tab. -->
             <RouterLink
                 to="/agents"
@@ -516,9 +512,7 @@ const confirmHandOver = async (): Promise<void> => {
                     <span class="sr-only">{{ t(`agents.agentDetail.switchChat`) }}</span>
                     <Icon name="chevron-down" class="shrink-0 text-xs text-subtle" aria-hidden="true" />
                 </button>
-                <span v-else class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{
-                    title
-                }}</span>
+                <span v-else class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ title }}</span>
             </template>
             <!-- Which sandbox this agent is in, not decoration: every number below (diff, file count, what Land applies) is about a workspace on another machine. -->
             <span

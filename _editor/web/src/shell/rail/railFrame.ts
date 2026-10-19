@@ -20,3 +20,17 @@ export const railFrame = (size: IconRailSize) => {
         "--icon-rail-mark-size": rail(`0.625rem`),
     };
 };
+
+// THE PHONE'S RAIL (MobileRail.vue): the same column at a finger's size rather than a pointer's. The width stays the
+// comfortable desktop rail's, and the tiles take the room its padding held: 52px plates with 6px either side, glyphs
+// 28px, since on a phone the icon is the whole label (no tooltip ever opens) and has to read at a glance.
+export const phoneRailFrame = () => ({
+    "--icon-rail-width": rail(`4rem`),
+    "--icon-rail-tile-size": rail(`3.25rem`),
+    "--icon-rail-account-size": rail(`2.75rem`),
+    "--icon-rail-divider-width": rail(`2.25rem`),
+    "--icon-rail-gap": rail(`0.25rem`),
+    "--icon-rail-padding": rail(`0.5rem`),
+    "--icon-rail-glyph-size": rail(`1.75rem`),
+    "--icon-rail-mark-size": rail(`0.6875rem`),
+});

@@ -106,7 +106,8 @@ export const SETTINGS_CARDS: readonly SettingEntry[] = [
         slug: `appearance`,
         title: () => t(`settings.appearance.statusBar.group`),
         terms: () => [t(`settings.appearance.statusBar.liveMetrics`), t(`settings.search.statusBar`)],
-        shown: (reader) => !reader.maker,
+        // A phone has no status bar and draws no gauges (SettingsAppearance.vue).
+        shown: (reader) => !reader.maker && !reader.phone,
     },
 
     // Notifications: the desktop app's own notices, then what a phone or a browser is sent, then what the tab or the

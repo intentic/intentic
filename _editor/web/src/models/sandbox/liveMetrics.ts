@@ -19,11 +19,11 @@ export const showLiveMetrics: Ref<boolean> = definePreference<boolean>({
 // cost what one does.
 export const LIVE_METRICS_POLL_MS = 3_000;
 
-// Provided by the desktop shell (and by the board where no shell provides it), so a card never starts a read of its own.
+// Provided by the desktop shell, so a card never starts a read of its own. A phone provides nothing: its cards draw no
+// share and nothing is measured for it (features/agents/board/AgentsView.vue).
 export const LIVE_METRICS_KEY: InjectionKey<ComputedRef<SandboxMetrics | undefined>> = Symbol(`liveMetrics`);
 
-// Called once per window: by the desktop shell for its status bar, or on a phone by the board, whose leaving drops the
-// only observer and stops the polling. A hidden tab is never polled. A refused read (a guest, an older daemon) stops
+// Called once per window, by the desktop shell for its status bar. A hidden tab is never polled. A refused read (a guest, an older daemon) stops
 // asking until the reader comes back to it.
 export function useLiveMetrics(): ComputedRef<SandboxMetrics | undefined> {
     const { query } = useSandboxQuery({

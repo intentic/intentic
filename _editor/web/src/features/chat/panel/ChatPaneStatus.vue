@@ -165,14 +165,15 @@ const usageChip = computed(() => {
             <span class="truncate">{{ block }}</span>
         </span>
         <span v-else-if="!mobile" class="@max-md:hidden min-w-0 flex-1 truncate">{{ hint }}</span>
-        <!-- ONE LINE, EVERY READOUT WHOLE: on a phone each one used to break inside itself ("1 job / running")
-             and the row stood two lines tall. There the readouts a tap explains keep only their mark (the cache opens its
-             panel, the meter its page). -->
+        <!-- ONE LINE, EVERY READOUT WHOLE. On a phone only what is happening now stands here: the refusal on the left and
+             the jobs a chat left running. The standing instruments (cache, context, allowance) are the desktop's: under a
+             phone's composer they held a whole row for a glance nobody takes there, and each has its own door on the phone
+             (the session menu keeps the chat warm, Sandbox ▸ Usage says the allowance). -->
         <div class="ml-auto flex shrink-0 items-center gap-3 whitespace-nowrap">
             <!-- What this chat left running past its turns; first, since it is the one readout here that ends on its own. -->
             <ChatJobsReadout />
             <!-- How long answering stays cheap, and the one press that keeps it so while the chat sits idle. -->
-            <template v-if="cacheChip !== undefined && card !== undefined && !maker">
+            <template v-if="cacheChip !== undefined && card !== undefined && !maker && !mobile">
                 <button
                     ref="cacheTrigger"
                     type="button"
@@ -183,24 +184,24 @@ const usageChip = computed(() => {
                     @click="cacheOpen = !cacheOpen"
                 >
                     <Icon :name="cacheChip.icon" class="text-2xs" />
-                    <span v-if="!mobile" class="tabular-nums @max-xs:hidden">{{ cacheChip.text }}</span>
+                    <span class="tabular-nums @max-xs:hidden">{{ cacheChip.text }}</span>
                 </button>
                 <ResponsiveOverlay v-model="cacheOpen" :anchor="cacheTrigger" cross="end" :header="t(`agents.keepWarm.title`)" panel-class="w-80">
                     <KeepWarmPanel :agent="card" @done="cacheOpen = false" />
                 </ResponsiveOverlay>
             </template>
-            <span v-if="contextRing && !maker" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
+            <span v-if="contextRing && !maker && !mobile" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
                 <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-accent'" />
                 <span class="@max-xs:hidden">{{ contextRing.label }}</span>
             </span>
             <!-- The chip answers "am I about to get rate-limited": hover opens the pool-by-pool card, a click goes to the cost. -->
             <RouterLink
-                v-if="usageChip && !isGuest"
+                v-if="usageChip && !isGuest && !mobile"
                 to="/sandbox/usage"
                 class="touch-target inline-flex cursor-pointer items-center transition-colors hover:text-content"
             >
                 <UsageMeter :headroom="usageChip.headroom"
-                    ><span v-if="!mobile" class="@max-xs:hidden">{{ usageChip.label }}</span></UsageMeter
+                    ><span class="@max-xs:hidden">{{ usageChip.label }}</span></UsageMeter
                 >
             </RouterLink>
         </div>

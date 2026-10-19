@@ -347,8 +347,9 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         </RowGroup>
 
         <!-- The status bar's CPU, memory and disk gauges, and each card's share; off means the sandbox measures nothing for
-             them, not that they are hidden. The bar itself is always there on a desktop, carrying what the sandbox runs. -->
-        <RowGroup v-if="!maker" data-setting="status-bar" :label="t(`settings.appearance.statusBar.group`)">
+             them, not that they are hidden. The bar itself is always there on a desktop, carrying what the sandbox runs. A
+             phone has no status bar and draws no gauges, so it offers no switch for them. -->
+        <RowGroup v-if="!maker && !mobile" data-setting="status-bar" :label="t(`settings.appearance.statusBar.group`)">
             <Row
                 as="label"
                 icon="cpu"

@@ -286,7 +286,7 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
   paths. Cards carry titles, reactions and a tint for the kind of work, never tags. With geek metrics
   on (Settings ▸ Appearance), the status bar carries the sandbox's CPU, memory and disk, and opens a
   panel with every figure, memory by kind of process, and memory and CPU by session; each card shows its own
-  conversation's.
+  conversation's. Desktop only: a phone shows no geek metrics.
 - **Status bar** (the foot of the desktop window): what the sandbox is running, not places. The terminal's toggle
   (Ctrl+`, developers only), then chips that are there only while live: the live app while something answers,
   the agents' open browsers (amber while one asks for help), the sandbox's desktop while a window is open, a port
