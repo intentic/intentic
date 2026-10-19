@@ -495,6 +495,7 @@ const BRIEF: FieldNotes = {
     text: "## Field notes for this sandbox\n\nThe box has 16 GiB.",
     chars: 52,
     revision: "rev-1",
+    unlisted: [],
     ranksSent: 1,
     ranksTotal: 1,
     writtenAt: 0,

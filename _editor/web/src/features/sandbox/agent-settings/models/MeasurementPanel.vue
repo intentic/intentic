@@ -12,7 +12,8 @@ import { formatCompact, formatCount, formatDayMonth, formatFixed, formatPercent 
 // reading found it. The statistics behind a row (its likely range, the samples it stands on) are a hover away.
 // A row with no answer yet shows no averages: two figures side by side read as a result whatever colour they are, and on
 // 16 conversations against 19 one long session moved a mean from 36 to 84. It says how far along it is instead. When a
-// restarted comparison has no answer at all yet, the last one that did stands under it, with its dates.
+// comparison restarts, the last one that answered stands under it, with its dates, until the new one finds a change or
+// stands on as many samples: "No clear difference" on 58 first turns had replaced a 47% drop measured on 1,068.
 // The comparison share closes the block because it configures the method, not the setting.
 
 const t = useT();
@@ -157,11 +158,15 @@ const lineOf = (row: ResultRow, unit: ResultTable["unit"]): Line => {
 
 const lines = computed<Line[]>(() => (table?.rows ?? []).map((row) => lineOf(row, table?.unit ?? `turns`)));
 
-// The earlier comparison only while nothing in this one has answered: once one row has, this one speaks for itself.
+// The earlier comparison until this one outweighs it: a change found, or as many samples behind it. A thinner "no clear
+// difference" is not an answer to set against a fuller one.
+const outweighs = (current: ResultTable, previous: NonNullable<ResultTable["previous"]>): boolean =>
+    lines.value.some((line) => line.settled) || current.on + current.off >= previous.on + previous.off;
+
 const entries = computed<Entry[]>(() => {
     const current = lines.value.map((line): Entry => ({ kind: `line`, line }));
     const previous = table?.previous;
-    if (previous === undefined || !lines.value.every((line) => line.early)) {
+    if (table === undefined || previous === undefined || outweighs(table, previous)) {
         return current;
     }
     const heading: Entry = {
@@ -252,6 +257,9 @@ const anyEarly = computed<boolean>(() => lines.value.some((line) => line.early))
         <p v-if="table?.minimum !== undefined && anyEarly" class="text-2xs text-subtle">
             {{ t(`sandbox.measurementPanel.resultsAppearAt`, { minimum: table.minimum }) }}
         </p>
+
+        <!-- What a setting can say about its table that is not a row of it, such as whether its treatment was taken up. -->
+        <slot name="note" />
 
         <!-- The holdout as the sentence it is: a label naming it as a setting, then the box, then `note`. Unfilled,
              unlike a form's fields, so the one input in a block of figures does not read as the loudest figure. -->

@@ -36,6 +36,20 @@ test("orientation is counted up to the first file, and listings are counted apar
     expect(reading).toMatchObject({ calls: 5, searchCalls: 4, openingSearches: 2, openingListings: 1 });
 });
 
+// The search teaching's uptake: iq and rg are both searches, so only this tells a turn that took the teaching from one
+// that did not.
+test("searches that ran iq are counted apart, wherever iq sits in a compound line", () => {
+    const reading = readingOf([
+        call("Bash", { target: `cd /repo && iq "where is the cache" --budget 1500` }),
+        call("Bash", { target: "rg needle" }),
+        call("Bash", { target: "rg a; /usr/local/bin/iq b" }),
+        call("Grep", { target: "needle" }),
+        // A pipe filters output: `iq` named after one is not a search that ran iq.
+        call("Bash", { target: "git log | grep iq" }),
+    ]);
+    expect(reading).toMatchObject({ searchCalls: 4, iqSearches: 2 });
+});
+
 test("a turn that goes straight to work has no orientation at all", () => {
     expect(readingOf([call("Read", { paths: ["src/a.ts"] }), call("Edit", { paths: ["src/a.ts"] })])).toMatchObject({
         searchCalls: 0,
@@ -84,6 +98,7 @@ test("a subagent's calls are counted but read nothing", () => {
     expect({ ...metrics.reading(["src/right.ts"]), calls: metrics.calls() }).toStrictEqual({
         calls: 6,
         searchCalls: 1,
+        iqSearches: 0,
         openingSearches: 1,
         openingListings: 0,
         failedCalls: 0,

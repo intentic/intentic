@@ -4928,6 +4928,7 @@
             "brief": "Notatka",
             "briefReach": "Pierwsze {sent} z {total} sekcji · znaków: {chars}",
             "briefUnreadable": "Notatka jest na miejscu, ale nie da się jej wysłać: {why}",
+            "briefUnlisted": "Poza listą priorytetów, więc nigdy niewysyłane: {sections}",
             "characters": "znaków",
             "codeSearch": "Wyszukiwanie kodu",
             "fieldNotes": "Notatki z terenu",
@@ -4949,6 +4950,7 @@
             "useIqSearchCli": "Używaj CLI wyszukiwania iq zamiast grep/find/glob.",
             "whatSessionsLearned": "To, czego sesje tutaj musiały nauczyć się na własnej skórze, uszeregowane i przepisywane co miesiąc, dołączane do każdej tury.",
             "withIq": "Z iq",
+            "iqUptake": "Wyszukiwania przez iq: {on} z nim, {off} bez niego.",
             "withMap": "Z mapą",
             "withNotes": "Z notatkami"
         },

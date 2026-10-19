@@ -145,6 +145,11 @@ export const isSearchCall = (call: { readonly category: ToolKind; readonly targe
     return commandHeads(call.target).some((head) => SEARCH_COMMANDS.has(head));
 };
 
+// Whether a search ran iq, the workspace's own search CLI. Both it and rg are searches above, so this is the only way to
+// tell whether the search teaching changed what a turn reached for.
+export const isIqSearch = (call: { readonly category: ToolKind; readonly target?: string | undefined }): boolean =>
+    call.category === "execute" && call.target !== undefined && commandHeads(call.target).includes("iq");
+
 // Programs that list a directory, as opposed to searching inside one; a subset of SEARCH_COMMANDS.
 const LISTING_COMMANDS = new Set(["ls", "tree"]);
 

@@ -113,11 +113,32 @@ test("narrowing the budget sheds whole sections from the bottom rank up, and nev
     expect([...reached].toSorted((left, right) => left - right)).toEqual([0, 1, 2, 3]);
 });
 
-test("one file is one treatment: the revision tracks the file, not the budget", async () => {
+test("one file is one treatment: the revision tracks what the file can send, not the budget", async () => {
     const file = await scaffold(FILE);
     expect(fieldNotes({ file, budget: 10_000 })?.revision).toBe(fieldNotes({ file, budget: 600 })?.revision);
     const moved = await scaffold(FILE.replace(`He names routes`, `He names routes and packages`));
     expect(fieldNotes({ file: moved, budget: 10_000 })?.revision).not.toBe(fieldNotes({ file, budget: 10_000 })?.revision);
+    // Reordering the ranks changes which sections a limit keeps, so it is a new treatment too.
+    const reranked = await scaffold(FILE.replace(`  1,ground,`, `  4,ground,`));
+    expect(fieldNotes({ file: reranked, budget: 10_000 })?.revision).not.toBe(fieldNotes({ file, budget: 10_000 })?.revision);
+});
+
+// The 2026-10-12 split: a block appended without a rank reached no turn, yet restarted the comparison and was announced
+// as sent by "every section … is below".
+test("a block the index does not rank is named, never sent, and leaves the revision alone", async () => {
+    const file = await scaffold(FILE);
+    const orphaned = await scaffold(`${FILE}debugging:\n  do: start with agents show\n`);
+    const notes = fieldNotes({ file: orphaned, budget: 10_000 });
+    expect(notes?.unlisted).toEqual([`debugging`]);
+    expect(notes?.text).not.toContain(`start with agents show`);
+    expect(notes?.text).not.toContain(`every section of`);
+    expect(notes?.text).toContain(`debugging has no rank and is not sent either`);
+    expect(notes?.revision).toBe(fieldNotes({ file, budget: 10_000 })?.revision);
+    expect(fieldNotes({ file, budget: 10_000 })?.unlisted).toEqual([]);
+    // Shed sections and the unranked block are named in one line.
+    const tight = fieldNotes({ file: orphaned, budget: 100 })?.text ?? ``;
+    expect(tight).toContain(`are NOT below`);
+    expect(tight).toContain(`debugging has no rank`);
 });
 
 test("no file is silence; a file with no usable index is a complaint and nothing sent", async () => {

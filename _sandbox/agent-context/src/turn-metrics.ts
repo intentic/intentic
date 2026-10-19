@@ -1,4 +1,4 @@
-import { isFileWorkCall, isRootListing, isSearchCall, searchPrecedesFileWork, type ToolKind } from "./tool-calls.js";
+import { isFileWorkCall, isIqSearch, isRootListing, isSearchCall, searchPrecedesFileWork, type ToolKind } from "./tool-calls.js";
 
 // What one turn did before its first edit, read off its tool calls in order. Order matters and three of the four readings
 // share state (has work started, which paths seen), so they are kept in one ledger rather than four independent counters.
@@ -27,6 +27,8 @@ export interface ToolCallFacts {
 export interface TurnMetricsReading {
     // Every call that went looking for code: dedicated search tools and CLI searches alike.
     readonly searchCalls: number;
+    // Of those, the ones that ran iq: whether the search teaching was taken up at all.
+    readonly iqSearches: number;
     // Of those, the ones before the turn first opened or changed a file.
     readonly openingSearches: number;
     // Shallow directory listings among openingSearches, the part of orientation the project map addresses.
@@ -58,6 +60,7 @@ export const createTurnMetrics = (root: string): TurnMetrics => {
     // The turn's own agent's calls, the position every reading is taken at.
     let own = 0;
     let searchCalls = 0;
+    let iqSearches = 0;
     let openingSearches = 0;
     let openingListings = 0;
     let reachedTheWork = false;
@@ -89,6 +92,7 @@ export const createTurnMetrics = (root: string): TurnMetrics => {
             const searched = isSearchCall(call);
             if (searched) {
                 searchCalls += 1;
+                iqSearches += Number(isIqSearch(call));
             }
             if (searched && !reachedTheWork && searchPrecedesFileWork(call)) {
                 openingSearches += 1;
@@ -113,6 +117,7 @@ export const createTurnMetrics = (root: string): TurnMetrics => {
             const reached = edited.map((path) => firstTouch.get(path)).filter((at) => at !== undefined);
             return {
                 searchCalls,
+                iqSearches,
                 openingSearches,
                 openingListings,
                 failedCalls: failed.size,

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { FIELD_NOTES_FILE } from "@intentic/constants";
 import { formatCount, Notice, Row, RowGroup, RowNote } from "@intentic/ui";
-import { formatDayMonth } from "@intentic/ui/format";
+import { formatDayMonth, formatPercent } from "@intentic/ui/format";
 import { RouterLink } from "vue-router";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
@@ -24,6 +24,14 @@ const { savings } = useSavings({});
 // Session state: the holdout flips whole conversations, never individual turns.
 const iqSearchHoldoutPercent = computed<number>(() => asPercent(settings.value?.iqSearchHoldout));
 const searchTable = computed<ResultTable | undefined>(() => tableOf(savings.value?.search));
+// Whether agents taught iq reach for it at all: a teaching nobody takes up cannot move the rows above, and only this says
+// which of the two a "no clear difference" is.
+const iqUptake = computed<string | undefined>(() => {
+    const uptake = savings.value?.search?.uptake;
+    return uptake === undefined
+        ? undefined
+        : t(`sandbox.agentCodeSearch.iqUptake`, { on: formatPercent(uptake.on * 100), off: formatPercent(uptake.off * 100) });
+});
 
 // Same holdout behaviour as the search teaching above: flips whole conversations, read on their opening turn.
 const mapHoldoutPercent = computed<number>(() => asPercent(settings.value?.workspaceMapHoldout));
@@ -73,7 +81,11 @@ const notesSchedule = computed<string>(() => {
                     :on-label="t(`sandbox.agentCodeSearch.withIq`)"
                     :off-label="t(`sandbox.measurementPanel.without`)"
                     @commit="(iqSearchHoldout: number) => patch({ iqSearchHoldout })"
-                />
+                >
+                    <template v-if="iqUptake !== undefined" #note>
+                        <p class="text-xs text-muted">{{ iqUptake }}</p>
+                    </template>
+                </MeasurementPanel>
             </template>
         </Row>
 
@@ -132,6 +144,10 @@ const notesSchedule = computed<string>(() => {
                                 <RouterLink :to="`/workspace/${FIELD_NOTES_FILE}`" class="text-link hover:underline">{{
                                     t(`sandbox.agentCodeSearch.openTheBrief`)
                                 }}</RouterLink>
+                                <!-- A block the file's priority table does not rank reaches no conversation at any limit. -->
+                                <span v-if="notes.unlisted !== undefined" class="basis-full text-warning">
+                                    {{ t(`sandbox.agentCodeSearch.briefUnlisted`, { sections: notes.unlisted.join(`, `) }) }}
+                                </span>
                             </template>
                         </dd>
 

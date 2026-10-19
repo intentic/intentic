@@ -74,6 +74,8 @@ export const UsageTurnSchema = z.object({
     iqSearchCohort: z.string().optional(),
     // Every tool call that searched, including CLI searches like `iq q`; absent means unmeasured, not zero.
     searchCalls: z.number().optional(),
+    // Of searchCalls, the ones that ran iq: the search teaching's uptake. Absent on rows written before 2026-10-19.
+    iqSearches: z.number().optional(),
     // Search calls before the first file touch; absent as searchCalls; a turn touching nothing counts them all.
     openingSearches: z.number().optional(),
     // Directory listings (ls, tree, LS tool) before the turn's first file touch, same window as openingSearches.

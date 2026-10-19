@@ -40,6 +40,9 @@ export interface ResultRow {
 export interface EarlierResult {
     readonly from: number;
     readonly to: number;
+    /** How many samples each group held, the most any of its rows stood on: what a restarted comparison must match. */
+    readonly on: number;
+    readonly off: number;
     readonly rows: readonly ResultRow[];
 }
 
@@ -117,5 +120,14 @@ export const tableOf = (experiment: TurnExperiment | undefined): ResultTable | u
     if (previous === undefined || previous.metrics.length === 0) {
         return table;
     }
-    return { ...table, previous: { from: previous.from, to: previous.to, rows: previous.metrics.map((reading) => rowOf(reading, undefined)) } };
+    return {
+        ...table,
+        previous: {
+            from: previous.from,
+            to: previous.to,
+            on: Math.max(...previous.metrics.map((reading) => reading.on.turns)),
+            off: Math.max(...previous.metrics.map((reading) => reading.off.turns)),
+            rows: previous.metrics.map((reading) => rowOf(reading, undefined)),
+        },
+    };
 };

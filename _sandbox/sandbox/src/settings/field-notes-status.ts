@@ -7,6 +7,7 @@ import { fieldNotes } from "@intentic/agent-context/field-notes";
 import { FIELD_NOTES_FILE } from "@intentic/constants";
 import { FIELD_NOTES_AUTOMATION_ID } from "../automations/catalog.js";
 import type { Services } from "../composition.js";
+import { opt } from "../opt.js";
 
 // What the agent-settings row can say about the brief. Two independent facts that read as one: the FILE (is there a
 // brief, how much of it this budget reaches) and the AUTOMATION (is anything going to rewrite it). Both are needed,
@@ -50,6 +51,7 @@ export const fieldNotesStatus = async (services: FieldNotesDeps): Promise<FieldN
         ...(brief === undefined
             ? {}
             : { writtenAt: brief.writtenAt, ranksSent: brief.ranksSent, ranksTotal: brief.ranksTotal, chars: brief.chars }),
+        ...opt("unlisted", brief === undefined || brief.unlisted.length === 0 ? undefined : [...brief.unlisted]),
         automation: automation === undefined ? "missing" : automation.enabled ? "enabled" : "disabled",
         ...(scheduled === undefined ? {} : { nextRunAt: scheduled }),
         ...(unreadable === undefined ? {} : { unreadable }),

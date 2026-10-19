@@ -289,6 +289,51 @@ test("a monthly rewrite is a new treatment: only the latest revision's turns are
     expect(notes?.metrics[0].on.turns).toBe(MIN_ARM_TURNS);
 });
 
+// Codex counts about twelve failed calls a turn to Claude Code's two: pooled, a comparison reads the two loops' mix.
+test("a comparison is read within the loop that ran most of its conversations", async () => {
+    const claude = notesArms("rev1", 1, 3);
+    const codex = notesArms("rev1", 12, 12, 5).map((row) => ({ ...row, conversationId: `codex-${row.conversationId}`, provider: "codex", runtime: "codex" }));
+    const { notes } = await readTurnExperiments(storeOf([...claude, ...codex]), {});
+    expect(notes?.metrics[0].on).toEqual({ turns: MIN_ARM_TURNS, mean: 1 });
+    expect(notes?.metrics[0].off).toEqual({ turns: MIN_ARM_TURNS, mean: 3 });
+});
+
+test("a row from before the loop was recorded is placed by its provider and harness", async () => {
+    // Rows of 2026-10-12 and earlier carry no `runtime`; Claude on its own loop is Claude Code, as a recorded one says.
+    const old = notesArms("rev1", 1, 3, 20);
+    const recent = notesArms("rev1", 1, 3, 20).map((row) => ({ ...row, conversationId: `recent-${row.conversationId}`, runtime: "claude-code" }));
+    expect((await readTurnExperiments(storeOf([...old, ...recent]), {})).notes?.metrics[0].on.turns).toBe(40);
+});
+
+const uptakeArms = (count: number, onIq: number): UsageTurn[] => [
+    ...Array.from({ length: count }, (_, index) =>
+        turn({ conversationId: `on-${index}`, iqSearchArm: true, iqSearchCohort: "teach", searchCalls: 10, iqSearches: onIq }),
+    ),
+    ...Array.from({ length: count }, (_, index) =>
+        turn({ conversationId: `off-${index}`, iqSearchArm: false, iqSearchCohort: "teach", searchCalls: 10, iqSearches: 0 }),
+    ),
+];
+
+test("the search reading says what share of each group's searches ran iq, once the taught group has enough turns", async () => {
+    expect((await readTurnExperiments(storeOf(uptakeArms(MIN_ARM_TURNS, 2)), {})).search?.uptake).toEqual({ on: 0.2, off: 0, turns: MIN_ARM_TURNS });
+    expect((await readTurnExperiments(storeOf(uptakeArms(MIN_ARM_TURNS - 1, 2)), {})).search?.uptake).toBeUndefined();
+    // Rows from before the count was recorded say nothing either way.
+    const unrecorded = uptakeArms(MIN_ARM_TURNS, 2).map(({ iqSearches: _, ...row }) => row);
+    expect((await readTurnExperiments(storeOf(unrecorded), {})).search?.uptake).toBeUndefined();
+});
+
+test("one brief under three hashes is one treatment, its turns pooled under the current name", async () => {
+    const rows = [
+        ...notesArms("8ce12338", 1, 3, 10),
+        ...notesArms("3b657c47", 1, 3, 10).map((row) => ({ ...row, at: 2 })),
+        ...notesArms("2eba3285", 1, 3, 10).map((row) => ({ ...row, at: 3 })),
+    ];
+    const { notes } = await readTurnExperiments(storeOf(rows), {});
+    expect(notes?.cohort).toBe("2eba3285");
+    expect(notes?.metrics[0].on.turns).toBe(30);
+    expect(notes?.previous).toBeUndefined();
+});
+
 const toolArms = (on: number, off: number, onPrompt: number, offPrompt: number): UsageTurn[] => [
     ...Array.from({ length: on }, (_, index) =>
         turn({ conversationId: `on-${index}`, toolSearchArm: true, openingCacheReadTokens: onPrompt - 1000, openingCacheCreationTokens: 1000, failedCalls: 1 }),

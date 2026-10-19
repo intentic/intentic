@@ -38,9 +38,13 @@ export interface FieldNotes {
     // The note as the model reads it, header included.
     readonly text: string;
     readonly chars: number;
-    // Content hash of the WHOLE file, not of what was sent: it identifies the treatment revision, and two budgets over
-    // one file are the same notes, differently truncated.
+    // Content hash of everything the file can send (`meta` and every ranked section, in rank order), not of what this
+    // budget sent: two budgets over one file are the same notes, differently truncated. Not of the whole file either: a
+    // block outside the index reaches no turn, and hashing it restarted the comparison over an edit nobody received
+    // (2026-10-12, a `debugging` block added without a rank).
     readonly revision: string;
+    // Top-level blocks the index does not rank, so no budget ever sends them; named so the settings row can say so.
+    readonly unlisted: readonly string[];
     readonly ranksSent: number;
     readonly ranksTotal: number;
     // Epoch ms the file was last written, for the settings row's "rewritten 3 weeks ago".
@@ -127,6 +131,22 @@ export interface FieldNotesInput {
     readonly onUnreadable?: (why: string) => void;
 }
 
+// What is NOT in the note, named. Without it a turn cannot tell "this sandbox has no such trap" from "that section did not
+// fit", and the first reading is the dangerous one. An unranked block is named too, or "every section is below" would be
+// false about it; the line for a file with neither is the one every brief has always carried, byte for byte.
+const disclosureOf = (path: string, sent: number, dropped: readonly Section[], unlisted: readonly string[]): string => {
+    const unranked =
+        unlisted.length === 0 ? "" : `${unlisted.join(", ")} ${unlisted.length === 1 ? "has no rank and is" : "have no rank and are"} not sent either; `;
+    if (dropped.length === 0) {
+        return unlisted.length === 0
+            ? `# every section of ${path} is below.`
+            : `# every ranked section of ${path} is below; ${unranked}read the file itself if a turn needs ${unlisted.length === 1 ? "it" : "them"}.`;
+    }
+    return `# ranks ${sent + 1}-${sent + dropped.length} of ${path} are NOT below (${dropped
+        .map((section) => section.id)
+        .join(", ")}); ${unranked}read the file itself if a turn needs them.`;
+};
+
 // Absent file ⇒ undefined and silence: that is the ordinary state before the automation has run once. A file that
 // exists but cannot be indexed ⇒ undefined and a complaint, since nothing downstream can tell the two apart.
 export const fieldNotes = ({ file: path, budget, onUnreadable, title = FIELD_NOTES_NOTE_TITLE }: FieldNotesInput): FieldNotes | undefined => {
@@ -154,25 +174,24 @@ export const fieldNotes = ({ file: path, budget, onUnreadable, title = FIELD_NOT
         const text = blocks.get(id);
         return text === undefined ? [] : [{ id, rank, text }];
     });
+    const listed = new Set<string>([...ALWAYS, "priority", ...index.map(({ id }) => id)]);
+    const unlisted = [...blocks.keys()].filter((key) => !listed.has(key));
     // The header and the disclosure line are the note's own overhead and come out of the budget, so the number in the
     // setting is what the turn actually pays.
     const header = `## ${title}`;
     const spent = header.length + head.reduce((sum, block) => sum + block.length + 1, 0);
     const kept = withinBudget(ranked, spent, budget);
     const dropped = ranked.filter((section) => !kept.includes(section));
-    // What is NOT here, named. Without it a turn cannot tell "this sandbox has no such trap" from "that section did not
-    // fit", and the first reading is the dangerous one.
-    const disclosure =
-        dropped.length === 0
-            ? `# every section of ${path} is below.`
-            : `# ranks ${kept.length + 1}-${ranked.length} of ${path} are NOT below (${dropped
-                  .map((section) => section.id)
-                  .join(", ")}); read the file itself if a turn needs them.`;
+    const disclosure = disclosureOf(path, kept.length, dropped, unlisted);
     const text = [header, "", disclosure, ...head, ...kept.map((section) => section.text)].join("\n");
     return {
         text,
         chars: text.length,
-        revision: createHash("sha256").update(file.text).digest("hex").slice(0, 8),
+        revision: createHash("sha256")
+            .update([...head, ...ranked.map((section) => section.text)].join("\n"))
+            .digest("hex")
+            .slice(0, 8),
+        unlisted,
         ranksSent: kept.length,
         ranksTotal: ranked.length,
         writtenAt: file.writtenAt,

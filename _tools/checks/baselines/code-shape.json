@@ -3291,7 +3291,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/schemas/settings.ts": {
-        "count": 870,
+        "count": 762,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/state/workspace-state.ts": {

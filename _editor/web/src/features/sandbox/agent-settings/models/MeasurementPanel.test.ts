@@ -123,6 +123,26 @@ it(`says a prompt's size compactly in thousands of tokens`, () => {
     expect(rows).toContain(`Prompt tokens per request | 31.3K | 83.3K | ↓ 63% fewer`);
 });
 
+// The map after its 10-13 restart: 58 first turns against 59 said "no clear difference" and hid a 45% drop on 766.
+it(`keeps the earlier comparison under a thinner "no clear difference"`, () => {
+    const unclear: TurnExperiment = {
+        ...RESTARTED,
+        metrics: [{ metric: `openedWithListing`, on: { turns: 58, mean: 0.21 }, off: { turns: 59, mean: 0.32 }, marginPct: 49.6 }],
+    };
+    const rows = rowText(mount(unclear));
+    expect(rows).toContain(`First turns that listed directories | 21% | 32% | No clear difference`);
+    expect(rows).toContain(`Last result, Sep 13 – Oct 6`);
+    expect(rows).toContain(`First turns that listed directories | 17% | 31% | ↓ 45% fewer`);
+});
+
+it(`drops the earlier comparison once the current one stands on as many samples`, () => {
+    const unclear: TurnExperiment = {
+        ...RESTARTED,
+        metrics: [{ metric: `openedWithListing`, on: { turns: 600, mean: 0.21 }, off: { turns: 166, mean: 0.24 }, marginPct: 30 }],
+    };
+    expect(mount(unclear).textContent).not.toContain(`Last result`);
+});
+
 it(`drops the earlier comparison once the current one has an answer of its own`, () => {
     const host = mount({ ...SETTLED, previous: RESTARTED.previous });
     expect(host.textContent).not.toContain(`Last result`);

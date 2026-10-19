@@ -5399,6 +5399,7 @@
             "brief": "Brief",
             "briefReach": "Top {sent} of {total} sections · {chars} characters",
             "briefUnreadable": "The brief is there but cannot be sent: {why}",
+            "briefUnlisted": "Not in the priority list, so never sent: {sections}",
             "characters": "characters",
             "codeSearch": "Code search",
             "fieldNotes": "Field notes",
@@ -5420,6 +5421,7 @@
             "useIqSearchCli": "Use iq search CLI instead of grep/find/glob.",
             "whatSessionsLearned": "What sessions here had to learn the hard way, ranked and rewritten monthly, carried into every turn.",
             "withIq": "With iq",
+            "iqUptake": "Searches that went through iq: {on} with it, {off} without.",
             "withMap": "With map",
             "withNotes": "With notes"
         },

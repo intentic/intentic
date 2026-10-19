@@ -245,7 +245,7 @@ describe("a turn's frames", () => {
             frames.note(event);
         }
         expect(frames.metrics.calls()).toBe(2);
-        expect(frames.metrics.reading([])).toStrictEqual({ searchCalls: 1, openingSearches: 1, openingListings: 1, failedCalls: 1 });
+        expect(frames.metrics.reading([])).toStrictEqual({ searchCalls: 1, iqSearches: 0, openingSearches: 1, openingListings: 1, failedCalls: 1 });
     });
 
     test("take the last classification's hold, which a later answer then rides out", () => {
