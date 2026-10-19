@@ -5,7 +5,7 @@ import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/work
 import BringProjectButton from "../explorer/BringProjectButton.vue";
 import { ContextMenu, formatCount, SearchBar, SegmentedControl, SkeletonSnapshot, useHoverIntent, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, inject, nextTick, ref, shallowRef, watch } from "vue";
 import { localFace } from "../../../app/environments/local";
 import { variableRows } from "../../../lib/windowing/rowWindow";
 import { useRowWindow } from "../../../lib/windowing/useRowWindow";
@@ -21,7 +21,8 @@ import { withProvisionalEntries } from "../../../models/workspace/files/provisio
 import { workspaceDir } from "../../../app/workspaceScope";
 import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import { type GridKey, isGridKey, moveInGrid } from "./homeGrid";
-import { bandOfIndex, homeLayout } from "./homeLayout";
+import { bandOfIndex, homeLayout, type HomeProbed } from "./homeLayout";
+import { useHomeGallery } from "./useHomeGallery";
 import { dateLine } from "./homeDates";
 import { type HomeArrange, homeGroups, homeOrder, labelsShown } from "./homeOrder";
 import { contentMatches, nameMatches, RESULTS_CAP } from "./homeResults";
@@ -29,6 +30,9 @@ import { HOME_DIR_ACTIONS, HOME_SEARCH, useHome } from "../../../models/workspac
 import { useHomeActions } from "./useHomeActions";
 import HomeCover from "./HomeCover.vue";
 import HomeCoverPicker from "./HomeCoverPicker.vue";
+import HomeGallerySwitch from "./HomeGallerySwitch.vue";
+import HomeGalleryTile from "./HomeGalleryTile.vue";
+import HomeProbe from "./HomeProbe.vue";
 import HomeQuickLook from "./HomeQuickLook.vue";
 import HomeTile from "./HomeTile.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -136,46 +140,22 @@ const arrangeOptions = computed(() => [
 // all of them, and each one held an IntersectionObserver of its own.
 const home = ref<HTMLElement>();
 const scroller = ref<HTMLElement>();
-const probeGrid = ref<HTMLElement>();
-const probeTile = ref<HTMLElement>();
-const probeLabel = ref<HTMLElement>();
+// What the home measures off its probe (HomeProbe.vue), so the column count and band heights stay the stylesheet's.
+const probed = ref<HomeProbed>({ columns: 1, tileHeight: 1, labelHeight: 0, width: 0, galleryPad: 0, galleryGap: 0, galleryCaption: 0 });
 
-// Measured off a hidden probe wearing the real classes, never computed from numbers written down here: the template's
-// `auto-fill` track and the tile's height are the CSS's to say, and a copy of them here would drift the first time
-// someone restyled a tile.
-const probed = ref({ columns: 1, tileHeight: 1, labelHeight: 0 });
-const measure = (): void => {
-    const grid = probeGrid.value;
-    const tile = probeTile.value;
-    if (grid === undefined || tile === undefined) {
-        return;
-    }
-    const style = getComputedStyle(grid);
-    // The gap rides in the band height: bands are placed at an offset, so nothing else would space them apart.
-    const gap = Number.parseFloat(style.rowGap) || 0;
-    const next = {
-        columns: style.gridTemplateColumns.split(` `).filter((track) => track !== ``).length,
-        tileHeight: tile.offsetHeight + gap,
-        labelHeight: probeLabel.value?.offsetHeight ?? 0,
-    };
-    const was = probed.value;
-    // A pane drag fires this every frame, and a new object would re-lay the whole folder out even when nothing moved.
-    if (next.columns === was.columns && next.tileHeight === was.tileHeight && next.labelHeight === was.labelHeight) {
-        return;
-    }
-    probed.value = next;
-};
-let probeSize: ResizeObserver | undefined;
-onMounted(() => {
-    probeSize = new ResizeObserver(measure);
-    if (probeGrid.value !== undefined) {
-        probeSize.observe(probeGrid.value);
-    }
-    measure();
-});
-onBeforeUnmount(() => probeSize?.disconnect());
-
-const gridLayout = computed(() => homeLayout(groups.value, showLabels.value, probed.value));
+// A folder of pictures drawn as the pictures, in justified rows, where it is on (useHomeGallery.ts).
+const {
+    offered: galleryOffered,
+    on: galleryOn,
+    toggle: toggleGallery,
+    resize: resizeGallery,
+    gallery,
+} = useHomeGallery(
+    () => homeDir.value,
+    () => listed.value,
+    () => probed.value,
+);
+const gridLayout = computed(() => homeLayout(groups.value, showLabels.value, probed.value, gallery.value));
 // A band is a whole row of tiles, so the list default of eight would keep two screens of hidden tiles mounted.
 const bands = useRowWindow(scroller, () => variableRows(gridLayout.value.heights), { overscan: 2 });
 // What to draw, each band carrying where it sits: they are placed, not stacked, so the ones left out cost no height.
@@ -449,6 +429,11 @@ const onKeydown = (event: KeyboardEvent): void => {
         void moveSelection(event.key);
         return;
     }
+    if (galleryOn.value && (event.key === `+` || event.key === `=` || event.key === `-`) && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+        resizeGallery(event.key === `-` ? -1 : 1);
+        return;
+    }
     if (typesIntoFilter(event)) {
         event.preventDefault();
         query.value += event.key;
@@ -502,12 +487,15 @@ const onBackgroundMenu = (event: MouseEvent): void => {
              up a level or two. -->
         <nav class="z-10 flex shrink-0 items-center gap-1 bg-canvas px-5 pt-4 pb-2 text-xs" :aria-label="t(`workspace.homeView.folderPath`)">
             <template v-for="(crumb, index) in crumbs" :key="crumb.path">
-                <Icon v-if="index > 0" name="chevron-right" class="text-[0.55rem] text-subtle" aria-hidden="true" />
-                <span v-if="index === crumbs.length - 1" class="font-medium text-content" aria-current="location">{{ crumb.label }}</span>
+                <!-- One line however deep: a crumb above the folder gives way to an ellipsis rather than wrapping, so the
+                     bar's controls keep their room; the folder itself stays whole. -->
+                <Icon v-if="index > 0" name="chevron-right" class="shrink-0 text-[0.55rem] text-subtle" aria-hidden="true" />
+                <span v-if="index === crumbs.length - 1" class="max-w-64 shrink-0 truncate font-medium text-content" aria-current="location">{{ crumb.label }}</span>
                 <button
                     v-else
                     type="button"
-                    class="-mx-1 rounded px-1 text-muted transition-colors hover:text-content"
+                    class="-mx-1 min-w-6 truncate rounded px-1 text-muted transition-colors hover:text-content"
+                    v-tooltip.bottom.overflow="crumb.label"
                     :class="{ 'ui-row-select-drop': dropLit(crumb.path) }"
                     :data-drop-dir="noDrops(crumb.path) ? undefined : crumb.path"
                     @click="go(crumb.path, 'back')"
@@ -525,15 +513,18 @@ const onBackgroundMenu = (event: MouseEvent): void => {
             </span>
             <!-- How the tiles are grouped, then the sidebar's query; under a cover there are no tiles for either, and the chip
                  naming the cover stands in their place. -->
-            <div v-if="!covering" class="ml-auto flex items-center gap-2 pl-4">
+            <div v-if="!covering" class="ml-auto flex min-w-0 shrink-[0.4] items-center gap-2 pl-4">
                 <!-- Kind | Date, in words on the bar where a reader looks for how the folder is laid out, never only in a menu. -->
                 <SegmentedControl
                     v-model="arrange"
                     :options="arrangeOptions"
                     size="xs"
                     :aria-label="t(`workspace.homeView.groupFiles`)"
+                    class="shrink-0"
                     @click.stop
                 />
+                <!-- The gallery, offered only where the folder has a picture to draw. -->
+                <HomeGallerySwitch v-if="galleryOffered" class="shrink-0" :on="galleryOn" @toggle="toggleGallery" />
                 <!-- The sidebar's query, here too; the placeholder names the scope the sidebar set, since it may be closed. The
                      wrapper keeps a press on the field's box from reaching the tiles' own click and context menu. -->
                 <span v-if="search !== undefined" class="contents" @click.stop @contextmenu.stop>
@@ -570,18 +561,8 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                 closeLook();
             "
         >
-            <!-- The measure: one tile and one label wearing the real classes, laid out but not painted. Outside the
-                 Transition, so a folder change cannot swap the element out from under the observer, and the column count
-                 and band heights stay the stylesheet's to decide rather than constants kept in the script. -->
-            <div class="pointer-events-none invisible absolute inset-x-0 top-0 px-4" aria-hidden="true">
-                <div ref="probeGrid" class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5">
-                    <div class="flex w-full flex-col items-center gap-1.5 rounded-lg px-2 pt-3 pb-2 text-center" ref="probeTile">
-                        <span class="flex h-14 w-full items-center justify-center"></span>
-                        <span class="h-[2.75em] w-full text-xs leading-snug"></span>
-                    </div>
-                </div>
-                <h3 ref="probeLabel" class="px-2 pt-3 pb-1 text-2xs text-muted">&nbsp;</h3>
-            </div>
+            <!-- The measure, outside the Transition, so a folder change cannot swap it out from under its observer. -->
+            <HomeProbe v-model="probed" />
 
             <!-- Keyed on the folder: a change slides the old tiles out and the new ones in, a step in the direction travelled. -->
             <Transition
@@ -656,18 +637,26 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                                 >
                                     {{ band.label }}
                                 </h3>
+                                <!-- A row of tiles, or a gallery row, where each picture is as wide as its shape at the row's height. -->
                                 <div
                                     v-else
                                     role="group"
                                     :aria-label="groups.find((group) => band.key.startsWith(`${group.key}#`))?.label"
-                                    class="absolute inset-x-0 grid gap-0.5"
-                                    :style="{ top: `${top}px`, gridTemplateColumns: `repeat(${gridLayout.columns}, minmax(0, 1fr))` }"
+                                    class="absolute inset-x-0"
+                                    :class="band.kind === 'gallery' ? 'flex gap-1' : 'grid gap-0.5'"
+                                    :style="
+                                        band.kind === 'gallery'
+                                            ? { top: `${top}px` }
+                                            : { top: `${top}px`, gridTemplateColumns: `repeat(${gridLayout.columns}, minmax(0, 1fr))` }
+                                    "
                                 >
-                                    <HomeTile
+                                    <component
+                                        :is="band.kind === 'gallery' ? HomeGalleryTile : HomeTile"
                                         v-for="(entry, column) in band.entries"
                                         :key="entry.path"
                                         v-model:draft="draft"
                                         :entry="entry"
+                                        v-bind="band.kind === 'gallery' ? { width: band.widths[column] ?? 0, height: band.height } : {}"
                                         :where="lineOf(entry)"
                                         :aria-setsize="gridLayout.count"
                                         :aria-posinset="band.start + column + 1"

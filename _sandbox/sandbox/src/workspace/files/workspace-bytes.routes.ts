@@ -12,7 +12,7 @@ import { type ZipEntry, zipChunks, zipLength } from "./download/workspace-zip.js
 import { Readable } from "node:stream";
 import { webStream } from "@intentic/base/web-stream";
 import { MAX_UPLOAD_BYTES, UploadTooLargeError } from "./workspace-files-upload.js";
-import { isRendition, thumbnailable, workspaceThumbnail } from "./workspace-thumbnail.js";
+import { isRendition, isVideo, thumbnailable, videoToolsPresent, workspaceThumbnail } from "./workspace-thumbnail.js";
 import { insideArchive, scopedTarget } from "../layout/workspace-scope.js";
 import { fenceOpens, refuseFenced } from "../layout/workspace-fence.js";
 import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
@@ -156,10 +156,11 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
         return c.body(file.body(), 200, { ...headers, "Content-Length": String(file.size) });
     },
 
-    // GET /workspace/thumb: a picture re-encoded for how it is drawn (`size`: tile, strip or view), never the original. The
-    // guest asks for one per visible picture, so answering with the file (what /workspace/raw does) moved a gigabyte for a
-    // folder of screenshots and seconds per picture on a slow link. Not an error route: a file with nothing to draw
-    // answers 404 and the guest keeps the glyph it was already showing.
+    // GET /workspace/thumb: a picture re-encoded for how it is drawn (`size`: tile, gallery, strip or view), never the
+    // original, and a video as the frame its tile shows. The guest asks for one per visible picture, so answering with
+    // the file (what /workspace/raw does) moved a gigabyte for a folder of screenshots and seconds per picture on a slow
+    // link. Not an error route: a file with nothing to draw answers 404 and the guest keeps the glyph it was already
+    // showing.
     thumb: async (c: Context<AppEnv>): Promise<Response> => {
         const path = c.req.query("path");
         if (path === undefined) {
@@ -174,7 +175,8 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
         if ("error" in scoped) {
             return c.json({ error: scoped.error }, scoped.status);
         }
-        if (!thumbnailable(scoped.target)) {
+        // A video is drawn from one frame of it where ffmpeg is here to cut one; without it the guest seeks a player.
+        if (!thumbnailable(scoped.target) && !(isVideo(scoped.target) && (await videoToolsPresent()))) {
             return c.json({ error: "not a picture this can draw" }, 415);
         }
         // The reader says what it decodes; a reader that names no AVIF gets WebP, which every engine draws.

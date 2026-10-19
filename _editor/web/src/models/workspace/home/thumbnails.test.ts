@@ -12,6 +12,9 @@ const refusal = (status: number): SandboxHttpError => new SandboxHttpError(statu
 
 jest.mock("../../../client/sandbox/sandboxClient", () => ({ sandboxBlob: (path: string, init?: RequestInit) => blob(path, init) }));
 jest.mock("../../../client/endpoint/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
+// A video the daemon cannot cut a frame of is handed to a player, which streams it on a ticket.
+const mediaTicket = jest.fn(async () => ({ ticket: `t-1`, expiresAt: 0 }));
+jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: { workspace: { mediaTicket } } }));
 
 type Pictures = typeof import("./thumbnails");
 // Fresh per case: the caches and the AVIF answer live for a page, and each case is its own page.
@@ -136,4 +139,44 @@ it(`downloads the original under its own name`, async () => {
     }
     expect(asked()).toEqual([{ route: `/workspace/raw?${query({ path: SHOT })}`, accept: null }]);
     expect(clicked).toEqual([{ href: `blob:picture`, download: `after.png` }]);
+});
+
+describe(`what a home tile draws`, () => {
+    const film = { name: `warcry.mp4`, path: `public/warcry.mp4`, type: `file` as const, size: 30_000_000 };
+    const shot = { name: `after.png`, path: REPO_SHOT, type: `file` as const, size: 180_000 };
+
+    it(`draws a video as the frame the daemon cut, never asking for the video itself`, async () => {
+        const { tileArt } = await load();
+        expect(await tileArt(film, `video`, `gallery`)).toEqual({ url: `blob:picture`, as: `picture` });
+        expect(asked()).toEqual([{ route: `/workspace/thumb?${query({ path: film.path, size: `gallery` })}`, accept: `image/webp` }]);
+        expect(mediaTicket).not.toHaveBeenCalled();
+    });
+
+    it.each([400, 415])(`hands a video to a player where the daemon answers %i for its frame`, async (status) => {
+        const { tileArt } = await load();
+        blob.mockRejectedValue(refusal(status));
+        const art = await tileArt(film, `video`, `tile`);
+        expect(art.as).toBe(`video`);
+        expect(art.url).toContain(`/workspace/media?`);
+        // Never the raw route, which would move the whole film to draw a tile.
+        expect(asked().map(({ route }) => route.split(`?`)[0])).toEqual([`/workspace/thumb`]);
+    });
+
+    it(`falls back to the grid tile's picture where a sandbox does not know the gallery's size`, async () => {
+        const { tileArt } = await load();
+        blob.mockImplementation(async (route) => {
+            if (route.includes(`size=gallery`)) {
+                throw refusal(400);
+            }
+            return new Blob([`x`]);
+        });
+        expect(await tileArt(shot, `picture`, `gallery`)).toEqual({ url: `blob:picture`, as: `picture` });
+        expect(asked().map(({ route }) => new URLSearchParams(route.split(`?`)[1]).get(`size`))).toEqual([`gallery`, `tile`]);
+    });
+
+    it(`asks once for a burst of tiles wanting one picture`, async () => {
+        const { tileArt } = await load();
+        await Promise.all([tileArt(shot, `picture`), tileArt(shot, `picture`), tileArt(shot, `picture`)]);
+        expect(blob).toHaveBeenCalledTimes(1);
+    });
 });

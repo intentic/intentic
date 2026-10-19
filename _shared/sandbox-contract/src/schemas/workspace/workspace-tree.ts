@@ -143,6 +143,31 @@ export const WorkspaceMediaTicketSchema = z.object({
     ticket: z.string().describe("Hand this to the streaming route in the query string. It buys exactly the one file it was minted for."),
     expiresAt: z.number().describe("When it stops working, in milliseconds, so a player can tell a dead ticket from a dead file."),
 });
+// The box each picture or video is drawn in, asked of a folder's worth at once: a gallery lays its rows out from every
+// picture's shape before any of them has loaded, so a row never reflows under the reader as its pictures arrive.
+export const WORKSPACE_DIMENSIONS_MAX = 500;
+export const WorkspaceDimensionsQuerySchema = WorkspaceScopeSchema.extend({
+    paths: z
+        .array(z.string().min(1))
+        .min(1)
+        .max(WORKSPACE_DIMENSIONS_MAX)
+        .describe("The pictures and videos to measure, as workspace paths. Anything else, or anything unreadable, is left out of the answer."),
+});
+export const WorkspaceDimensionSchema = z.object({
+    path: z.string().describe("The path as it was asked for."),
+    width: z.number().describe("Width in pixels, as the picture is shown: a phone photo's or a phone video's rotation is already applied."),
+    height: z.number().describe("Height in pixels, as the picture is shown."),
+    duration: z.number().optional().describe("A video's running time in seconds, where its container says."),
+});
+export type WorkspaceDimension = z.infer<typeof WorkspaceDimensionSchema>;
+export const WorkspaceDimensionsSchema = z.object({
+    items: z
+        .array(WorkspaceDimensionSchema)
+        .describe(
+            "One entry per path that could be measured. A path missing here is not a picture this could read, which is an answer, not an error.",
+        ),
+});
+export type WorkspaceDimensions = z.infer<typeof WorkspaceDimensionsSchema>;
 // Credential for GET /workspace/download, which the browser navigates to so its own download manager streams the archive
 // to disk. The ticket carries the whole selection, resolved when minted, so however many entries it names the URL stays
 // short.

@@ -539,6 +539,29 @@ test("a media ticket opens only the path it was minted for, and /workspace/media
     }
 });
 
+// A gallery asks for a folder's boxes in one call; a path that is no picture, escapes, or is gone is left out of the
+// answer rather than failing everybody else's.
+test("workspace.dimensions measures a folder's pictures and leaves out what it cannot", async () => {
+    const root = await mkdtemp(join(tmpdir(), "dimensions-"));
+    await mkdir(join(root, "shots"));
+    await writeFile(
+        join(root, "shots", "wide.png"),
+        await sharp({ create: { width: 640, height: 360, channels: 3, background: "#123" } })
+            .png()
+            .toBuffer(),
+    );
+    await writeFile(join(root, "shots", "notes.md"), "# notes");
+    const app = createApp(services({ workspace: workspacePaths(root) }));
+    try {
+        const { items } = await clientFor(app).workspace.dimensions({
+            paths: ["shots/wide.png", "shots/notes.md", "shots/gone.png", "../../etc/shadow.png"],
+        });
+        expect(items).toEqual([{ path: "shots/wide.png", width: 640, height: 360 }]);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
 // A media or download ticket lives for hours, longer than the access of the person who minted it may: each names its
 // minter, so removing that person (members.routes.ts) or signing every browser out ends it.
 test("a media or download ticket names who minted it, and revoking that person ends both", async () => {

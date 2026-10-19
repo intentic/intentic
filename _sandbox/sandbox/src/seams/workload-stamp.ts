@@ -40,6 +40,8 @@ export const DETACHED_KINDS = [
     "probe",
     "js-run",
     "python-check",
+    // ffprobe and ffmpeg reading a workspace video for its tile (workspace/files/workspace-video.ts).
+    "media-probe",
     "backend-host",
 ] as const;
 export type DetachedKind = (typeof DETACHED_KINDS)[number];

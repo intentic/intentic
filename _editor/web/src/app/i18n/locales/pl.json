@@ -11283,6 +11283,9 @@
             "nothingInYet": "Nic jeszcze w środku.",
             "nothingInside": "Nic w środku."
         },
+        "homeGallery": {
+            "video": "Wideo"
+        },
         "homeTile": {
             "newName": "Nowa nazwa"
         },
@@ -11302,7 +11305,11 @@
             "byKind": "Rodzaj",
             "byDate": "Data",
             "byKindHint": "Grupuj pliki według tego, czym są",
-            "byDateHint": "Grupuj pliki według daty ostatniej zmiany, od najnowszych"
+            "byDateHint": "Grupuj pliki według daty ostatniej zmiany, od najnowszych",
+            "gallery": "Galeria",
+            "galleryOnHint": "Pokaż obrazy",
+            "galleryOffHint": "Pokaż kafelki",
+            "gallerySize": "Rozmiar obrazów"
         },
         "htmlPreview": {
             "failed": "Nie udało się przygotować tej strony do podglądu.",

@@ -25,6 +25,8 @@ import {
     WorkspaceDerivedQuerySchema,
     WorkspaceDerivedSchema,
     WorkspaceDeletedSchema,
+    WorkspaceDimensionsQuerySchema,
+    WorkspaceDimensionsSchema,
     WorkspaceDirSchema,
     WorkspaceExtractSchema,
     WorkspaceRestoredSchema,
@@ -110,6 +112,20 @@ export const workspaceContract = {
         .meta({ floor: "viewer", guest: true })
         .input(WorkspaceDerivedQuerySchema)
         .output(WorkspaceDerivedSchema),
+    // A folder's pictures measured at once, so a gallery lays out its rows before the pictures themselves arrive. A body,
+    // not a query: the paths are a folder's worth.
+    dimensions: procedure
+        .route({
+            method: "POST",
+            path: "/workspace/dimensions",
+            summary: "Measure pictures and videos",
+            description:
+                "The width and height each picture or video is shown at, and a video's running time, for a list of workspace files. Only the files' headers are read, so a folder's worth costs little; a gallery uses it to lay out its rows before any picture has loaded. A file that is not a picture, or cannot be read, is simply left out.",
+        })
+        // Measuring is reading a file's header, and the answer is a few numbers per file.
+        .meta({ floor: "viewer", guest: true })
+        .input(WorkspaceDimensionsQuerySchema)
+        .output(WorkspaceDimensionsSchema),
     // Mints the ticket GET /workspace/media (a plain Hono byte-range route, no oRPC shape) requires to stream.
     mediaTicket: procedure
         .route({

@@ -2,7 +2,12 @@ import type { AgentChanges, AgentRepoChanges, GitChanges, RepoChanges } from "@i
 import type { FileDiff } from "@intentic/sandbox-contract/schemas/history";
 import type { LandConflict, LandResult } from "@intentic/sandbox-contract/schemas/agents";
 import type { SessionSummary } from "@intentic/sandbox-contract/schemas/sessions";
-import type { WorkspaceChildren, WorkspaceResolve, WorkspaceTree } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
+import type {
+    WorkspaceChildren,
+    WorkspaceDimensions,
+    WorkspaceResolve,
+    WorkspaceTree,
+} from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import type { WorkspaceSearchGroup, WorkspaceSearchResult, WorkspaceSearchSpan } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { includeMatcher } from "@intentic/sandbox-contract/policy/search-globs";
@@ -786,6 +791,29 @@ export const fileBody = (path: string): string | undefined => {
     const entry = FILES.get(path) ?? archiveMember(path);
     return entry === undefined ? undefined : typeof entry === `number` ? unrecordedBody(path) : entry;
 };
+
+// POST /workspace/dimensions: the box each picture is drawn in. This fixture's pictures are SVG markup, so the box is the
+// one the markup names, its width and height or else its viewBox; anything else is left out, as the daemon leaves out a
+// file it cannot read, and the gallery measures it once it has loaded.
+const svgBox = (body: string): { readonly width: number; readonly height: number } | undefined => {
+    const tag = /<svg\b[^>]*>/u.exec(body)?.[0];
+    if (tag === undefined) {
+        return undefined;
+    }
+    const attribute = (name: string): number => Number(new RegExp(`\\s${name}="([\\d.]+)`, `u`).exec(tag)?.[1] ?? Number.NaN);
+    const [, , boxWidth, boxHeight] = (/viewBox="([^"]+)"/u.exec(tag)?.[1] ?? ``).split(/[\s,]+/u).map(Number);
+    const width = attribute(`width`) || boxWidth;
+    const height = attribute(`height`) || boxHeight;
+    return width !== undefined && height !== undefined && width > 0 && height > 0 ? { width, height } : undefined;
+};
+
+export const pictureDimensions = (paths: readonly string[]): WorkspaceDimensions => ({
+    items: paths.flatMap((path) => {
+        const body = path.endsWith(`.svg`) ? fileBody(path) : undefined;
+        const box = body === undefined ? undefined : svgBox(body);
+        return box === undefined ? [] : [{ path, ...box }];
+    }),
+});
 
 // GET /workspace/resolve: what a file mention means here, by the daemon's own rule (as written, then shorter tails,
 // shallowest first, the rest named as others). A mention nothing matches offers its namesakes elsewhere; the daemon also

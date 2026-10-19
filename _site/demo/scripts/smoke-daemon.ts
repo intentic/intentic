@@ -261,6 +261,7 @@ const samplesOf = (
             tree: {},
             children: { path: `web` },
             file: { path: `web/src/lib/checkout.ts` },
+            dimensions: { paths: [`web/public/logo.svg`] },
             resolve: { path: `lib/checkout.ts` },
             delete: { path: `web/smoke.txt` },
             restore: { trashed: `smoke` },

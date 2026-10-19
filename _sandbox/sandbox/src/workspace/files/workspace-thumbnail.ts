@@ -1,18 +1,19 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { SingleFlight } from "@intentic/base/async";
 import { writeFileAtomic } from "@intentic/base/fs";
 import sharp, { type ResizeOptions } from "sharp";
 import { statePath } from "../../state-paths.js";
+import { isVideo, videoPoster } from "./media/workspace-video.js";
 
 // A picture re-encoded for the way it is drawn, rather than moved as the file it is. Reading originals moved a gigabyte
 // for a folder of screenshots and took seconds per picture on a slow link. Rendered once per version and kept on disk,
 // so the second look costs a read.
 
-// How a picture is drawn: `tile` whole inside a folder tile, `strip` as the top of the page in a chat strip's 16:10
-// box, `view` at its own size in the viewer and a tool card.
-export type Rendition = "tile" | "strip" | "view";
+// How a picture is drawn: `tile` whole inside a folder tile, `gallery` as one picture of a gallery row, `strip` as the
+// top of the page in a chat strip's 16:10 box, `view` at its own size in the viewer and a tool card.
+export type Rendition = "tile" | "gallery" | "strip" | "view";
 
 export type PictureType = "image/webp" | "image/avif";
 
@@ -26,6 +27,9 @@ interface Spec {
 const SPECS: Record<Rendition, Spec> = {
     // Twice the tile's own box, so a HiDPI screen still draws a sharp one.
     tile: { resize: { width: 256, height: 256, fit: "inside", withoutEnlargement: true }, webpQuality: 72, avif: false },
+    // Twice the tallest gallery row, so a HiDPI screen still draws it sharp; a row sets the height, so the width is only a
+    // cap for a panorama.
+    gallery: { resize: { width: 1440, height: 480, fit: "inside", withoutEnlargement: true }, webpQuality: 74, avif: false },
     // Twice the strip tile on the widest reading column, cut from the top: a full-page capture shrunk whole is a sliver.
     strip: { resize: { width: 480, height: 300, fit: "cover", position: "top" }, webpQuality: 75, avif: false },
     // Its own size, capped where WebP stops encoding (16383 px) and wider than any viewer draws a screenshot.
@@ -45,6 +49,9 @@ const SOURCES: ReadonlySet<string> = new Set([".png", ".jpg", ".jpeg", ".webp", 
 
 export const thumbnailable = (path: string): boolean => SOURCES.has(extname(path).toLowerCase());
 
+// A video is drawn from one frame of it (workspace-video.ts), only where ffmpeg is there to cut it; the route asks that.
+export { isVideo, videoToolsPresent } from "./media/workspace-video.js";
+
 const cacheDir = (root: string): string => statePath(root, ".intentic/local/cache/", "thumbnails");
 
 const EXTENSIONS: Record<PictureType, string> = { "image/webp": "webp", "image/avif": "avif" };
@@ -57,30 +64,36 @@ const keyOf = (target: string, size: number, mtimeMs: number, rendition: Renditi
 // Renders in flight, keyed by cache file, so a screenful of tiles landing on one picture decodes it once.
 const rendering = new SingleFlight<string, Buffer | undefined>();
 
+// At most `count` of a kind of work at once. A released slot passes straight to the longest waiter, so `busy` never
+// drops while anyone is queued for it.
+const slots = (count: number) => {
+    let busy = 0;
+    const queued: (() => void)[] = [];
+    return async <T>(work: () => Promise<T>): Promise<T> => {
+        if (busy < count) {
+            busy += 1;
+        } else {
+            await new Promise<void>((resolve) => queued.push(resolve));
+        }
+        try {
+            return await work();
+        } finally {
+            const next = queued.shift();
+            if (next === undefined) {
+                busy -= 1;
+            } else {
+                next();
+            }
+        }
+    };
+};
+
 // Renders running at once. Each holds one of libuv's four threads for its whole decode and encode, and those threads
 // serve every file read the daemon makes, so an unbounded burst of pictures stalls unrelated requests behind it.
-const RENDER_SLOTS = 2;
-let busy = 0;
-const queued: (() => void)[] = [];
-
-// A released slot passes straight to the longest waiter, so `busy` never drops while anyone is queued for it.
-const inSlot = async <T>(work: () => Promise<T>): Promise<T> => {
-    if (busy < RENDER_SLOTS) {
-        busy += 1;
-    } else {
-        await new Promise<void>((resolve) => queued.push(resolve));
-    }
-    try {
-        return await work();
-    } finally {
-        const next = queued.shift();
-        if (next === undefined) {
-            busy -= 1;
-        } else {
-            next();
-        }
-    }
-};
+const inSlot = slots(2);
+// Videos having their frame cut at once: each is an ffmpeg process decoding a moment of 1080p, which a folder of
+// recordings scrolled through would otherwise start by the dozen. Apart from the pictures', so they never wait on it.
+const inVideoSlot = slots(2);
 
 // Renders since the last count. The check is deliberately rare: counting the directory is the only cost this cache has
 // that scales with what is in it.
@@ -102,9 +115,25 @@ const sweep = async (dir: string): Promise<void> => {
     }
 };
 
-const encode = (target: string, rendition: Rendition, type: PictureType): Promise<Buffer | undefined> => {
+// A picture is decoded from its file; a video from the frame its tile shows, cut first. A video ffmpeg cannot read has
+// no frame, and the tile keeps its glyph.
+const sourceOf = async (target: string, scratch: string): Promise<string | Buffer | undefined> => {
+    if (!isVideo(target)) {
+        return target;
+    }
+    // The frame is written through the cache's own directory, which a first render has yet to make.
+    await mkdir(scratch, { recursive: true });
+    return inVideoSlot(() => videoPoster(target, scratch));
+};
+
+const encode = async (target: string, scratch: string, rendition: Rendition, type: PictureType): Promise<Buffer | undefined> => {
     const spec = SPECS[rendition];
-    const pipeline = sharp(target, { failOn: "none", animated: false })
+    // allow(silent-catch): a cache directory that cannot be made is no picture to draw, the answer encode gives below too
+    const source = await sourceOf(target, scratch).catch(() => undefined);
+    if (source === undefined) {
+        return undefined;
+    }
+    const pipeline = sharp(source, { failOn: "none", animated: false })
         // Honours the EXIF orientation a phone photo carries, which the tile would otherwise draw on its side.
         .rotate()
         .resize(spec.resize);
@@ -114,11 +143,11 @@ const encode = (target: string, rendition: Rendition, type: PictureType): Promis
 };
 
 const render = async (target: string, file: string, rendition: Rendition, type: PictureType): Promise<Buffer | undefined> => {
-    const bytes = await encode(target, rendition, type);
+    const dir = join(file, "..");
+    const bytes = await encode(target, dir, rendition, type);
     if (bytes === undefined) {
         return undefined;
     }
-    const dir = join(file, "..");
     // Replaced whole, so two tabs asking at once never read a half-written file. A write that fails costs the next look
     // a render, never this one its picture: the bytes are already in hand.
     // allow(silent-catch): a cache is allowed to forget, see sweep
@@ -153,7 +182,8 @@ const renditionOf = async (root: string, target: string, rendition: Rendition, t
  */
 export const workspaceThumbnail = async (root: string, target: string, rendition: Rendition = "tile", readsAvif = false): Promise<WorkspaceThumbnail | undefined> => {
     const info = await stat(target).catch(() => undefined);
-    if (info === undefined || !info.isFile() || info.size === 0 || info.size > MAX_SOURCE_BYTES) {
+    // A video is never decoded whole: ffmpeg seeks to the frame it cuts, so its size is no measure of the work.
+    if (info === undefined || !info.isFile() || info.size === 0 || (info.size > MAX_SOURCE_BYTES && !isVideo(target))) {
         return undefined;
     }
     if (readsAvif && SPECS[rendition].avif) {

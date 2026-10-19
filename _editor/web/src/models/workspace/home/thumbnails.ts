@@ -7,9 +7,10 @@ import { mediaUrl } from "../files/mediaUrl";
 import { workspaceAgent } from "../../../app/workspaceScope";
 import { quickLookPlan } from "./quickLookContent";
 
-// A workspace file at the size it is drawn: a daemon rendition (`tile`, `strip`, `view`) or its own bytes (`original`).
+// A workspace file at the size it is drawn: a daemon rendition (`tile`, `gallery`, `strip`, `view`) or its own bytes
+// (`original`).
 
-export type PictureSize = "tile" | "strip" | "view" | "original";
+export type PictureSize = "tile" | "gallery" | "strip" | "view" | "original";
 
 // `url` undefined is the daemon's final answer that nothing can be drawn there; the whole Picture undefined is still on its way.
 export interface Picture {
@@ -143,36 +144,64 @@ export const thumbnailKind = (entry: WorkspaceTreeEntry): ThumbnailKind | undefi
     return kind === `picture` || kind === `video` ? kind : undefined;
 };
 
-// Held URLs; each is a few kilobytes, and scrolling back up a long folder should find its tiles already there.
+// The box a tile is drawn in: a grid tile's, or a gallery row's, which stands several times taller.
+export type TileSize = "tile" | "gallery";
+
+/** What a tile draws: a picture (a rendition, or a video's frame the daemon cut), or a video to seek into itself. */
+export interface TileArt {
+    readonly url: string;
+    readonly as: "picture" | "video";
+}
+
+// Held answers; each is a few kilobytes, and scrolling back up a long folder should find its tiles already there.
 const CAP = 512;
 // In flight or settled, so a burst of tiles asking for one file makes one request.
-const urls = new Map<string, Promise<string>>();
+const held = new Map<string, Promise<TileArt>>();
 
 // A rewritten file (same path, new size) is a new picture.
-const tileKey = (entry: WorkspaceTreeEntry): string => `${workspaceAgent.value ?? ``}\n${entry.path} ${entry.size ?? 0}`;
+const artKey = (entry: WorkspaceTreeEntry, use: TileSize | "stream"): string =>
+    `${workspaceAgent.value ?? ``}\n${use}\n${entry.path} ${entry.size ?? 0}`;
 
-const fetchTile = async (entry: WorkspaceTreeEntry, kind: ThumbnailKind): Promise<string> => {
-    if (kind === `video`) {
-        return mediaUrl(entry.path);
+// A video's frame as the daemon cut it, or undefined where it cannot: a sandbox without ffmpeg refuses a video as it
+// refuses an SVG (415), and one from before video frames refuses the size (400).
+const posterUrl = async (entry: WorkspaceTreeEntry, size: TileSize): Promise<string | undefined> => {
+    try {
+        return await objectUrl(`/workspace/thumb?${queryOf(workspaceAgent.value, entry.path, size)}`, `image/webp`);
+    } catch (error) {
+        if (refusedWith(error, NOT_RENDERED)) {
+            return undefined;
+        }
+        throw error;
     }
-    const url = await pictureUrl(workspaceAgent.value, entry.path, `tile`);
+};
+
+const fetchArt = async (entry: WorkspaceTreeEntry, kind: ThumbnailKind, size: TileSize): Promise<TileArt> => {
+    if (kind === `video`) {
+        // The frame first: a player seeking into a film that opens on a fade draws a white card.
+        const poster = await posterUrl(entry, size);
+        return poster === undefined ? { url: await mediaUrl(entry.path), as: `video` } : { url: poster, as: `picture` };
+    }
+    // A sandbox from before the gallery's rendition refuses its name; the grid tile's is the next best.
+    const url =
+        (await pictureUrl(workspaceAgent.value, entry.path, size)) ??
+        (size === `tile` ? undefined : await pictureUrl(workspaceAgent.value, entry.path, `tile`));
     if (url === undefined) {
         throw new Error(`Nothing to draw for ${entry.path}.`);
     }
-    return url;
+    return { url, as: `picture` };
 };
 
 const evictOldest = (): void => {
-    if (urls.size <= CAP) {
+    if (held.size <= CAP) {
         return;
     }
-    const [oldest] = urls;
+    const [oldest] = held;
     if (oldest === undefined) {
         return;
     }
-    urls.delete(oldest[0]);
+    held.delete(oldest[0]);
     void oldest[1].then(
-        (url) => {
+        ({ url }) => {
             if (url.startsWith(`blob:`)) {
                 URL.revokeObjectURL(url);
             }
@@ -181,16 +210,26 @@ const evictOldest = (): void => {
     );
 };
 
-export const thumbnailUrl = (entry: WorkspaceTreeEntry, kind: ThumbnailKind): Promise<string> => {
-    const key = tileKey(entry);
-    const pending = urls.get(key);
+const once = (key: string, fetch: () => Promise<TileArt>): Promise<TileArt> => {
+    const pending = held.get(key);
     if (pending !== undefined) {
         return pending;
     }
-    const loading = fetchTile(entry, kind);
-    urls.set(key, loading);
+    const loading = fetch();
+    held.set(key, loading);
     // A failed read is forgotten, so the next look retries rather than failing for the rest of the session.
-    loading.catch(() => urls.delete(key));
+    loading.catch(() => held.delete(key));
     evictOldest();
     return loading;
 };
+
+/** What a home tile draws for an entry at `size`, fetched once per version of the file. */
+export const tileArt = (entry: WorkspaceTreeEntry, kind: ThumbnailKind, size: TileSize = `tile`): Promise<TileArt> =>
+    once(artKey(entry, size), () => fetchArt(entry, kind, size));
+
+/** What the quick look draws: a picture's tile rendition, or a video's own stream, which the card plays. */
+export const thumbnailUrl = async (entry: WorkspaceTreeEntry, kind: ThumbnailKind): Promise<string> =>
+    (kind === `video`
+        ? await once(artKey(entry, `stream`), async () => ({ url: await mediaUrl(entry.path), as: `video` }))
+        : await tileArt(entry, kind)
+    ).url;

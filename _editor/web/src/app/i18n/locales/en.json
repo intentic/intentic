@@ -11601,6 +11601,9 @@
             "nothingInYet": "Nothing in it yet.",
             "nothingInside": "Nothing inside."
         },
+        "homeGallery": {
+            "video": "Video"
+        },
         "homeTile": {
             "newName": "New name"
         },
@@ -11620,7 +11623,11 @@
             "byKind": "Kind",
             "byDate": "Date",
             "byKindHint": "Group files by what they are",
-            "byDateHint": "Group files by when they last changed, newest first"
+            "byDateHint": "Group files by when they last changed, newest first",
+            "gallery": "Gallery",
+            "galleryOnHint": "Show pictures",
+            "galleryOffHint": "Show tiles",
+            "gallerySize": "Picture size"
         },
         "diffSkeleton": {
             "readingFile": "Reading the file…"

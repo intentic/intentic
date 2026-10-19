@@ -179,6 +179,15 @@ test("a burst of renders larger than the slots all complete", async () => {
     expect(drawn.map((picture) => picture?.type)).toEqual(Array.from({ length: 7 }, () => "image/avif"));
 });
 
-test("isRendition names exactly the three sizes the route answers", () => {
-    expect(["tile", "strip", "view", "original", "toString", ""].map(isRendition)).toEqual([true, true, true, false, false, false]);
+test("isRendition names exactly the four sizes the route answers", () => {
+    expect(["tile", "gallery", "strip", "view", "original", "toString", ""].map(isRendition)).toEqual([true, true, true, true, false, false, false]);
+});
+
+test("a gallery picture stands a row's height, twice over for a sharp screen, keeping its shape", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ws-thumb-"));
+    const file = join(root, "shot.png");
+    await writePicture(file, 1600, 1200);
+
+    const drawn = await sharp((await workspaceThumbnail(root, file, "gallery"))!.bytes).metadata();
+    expect([drawn.width, drawn.height]).toEqual([640, 480]);
 });

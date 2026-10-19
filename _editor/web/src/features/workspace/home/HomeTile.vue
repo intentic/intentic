@@ -2,10 +2,10 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { explorerColorClass, type IconName, iconForEntry } from "@intentic/ui";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { focusInput } from "@intentic/ui/inline-rename";
-import { stopWaiting, whenNear } from "../../../models/workspace/home/nearViewport";
-import { thumbnailKind, thumbnailUrl } from "../../../models/workspace/home/thumbnails";
+import { thumbnailKind } from "../../../models/workspace/home/thumbnails";
+import { useTileArt } from "./useTileArt";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -70,73 +70,12 @@ const quiet = computed(() => dimmed || locked || pending);
 // --- The thumbnail: fetched once the tile is near the viewport, never for a folder of four hundred off-screen shots. ---
 const kind = computed(() => (locked || pending ? undefined : thumbnailKind(entry)));
 const art = ref<HTMLElement>();
-const src = ref<string>();
-// Painted, so the swap from glyph to picture can fade rather than pop.
-const shown = ref(false);
-const failed = ref(false);
-let near = false;
-let retried = false;
-
-const load = (): void => {
-    if (kind.value === undefined) {
-        return;
-    }
-    void thumbnailUrl(entry, kind.value).then(
-        (url) => {
-            src.value = url;
-        },
-        () => {
-            failed.value = true;
-        },
-    );
-};
-onMounted(() => {
-    if (kind.value === undefined || art.value === undefined) {
-        return;
-    }
-    whenNear(art.value, () => {
-        near = true;
-        load();
-    });
-});
-// The home windows its tiles, so this runs whenever one scrolls out of reach, not just when the folder closes.
-onBeforeUnmount(() => {
-    if (art.value !== undefined) {
-        stopWaiting(art.value);
-    }
-});
-// A rewritten file (same path, new size) is a new picture.
-watch(
-    () => `${entry.path} ${entry.size ?? 0}`,
-    () => {
-        src.value = undefined;
-        shown.value = false;
-        failed.value = false;
-        retried = false;
-        if (near) {
-            load();
-        }
-    },
+const { src, as, shown, failed, onPicture, onVideoMetadata, onVideoFrame, onError } = useTileArt(
+    () => entry,
+    () => kind.value,
+    `tile`,
+    art,
 );
-// A URL evicted from the shared cache under a tile still on screen breaks its image; one more fetch gets a fresh one,
-// and a second failure means the file itself, so the glyph stands in.
-const onError = (): void => {
-    src.value = undefined;
-    shown.value = false;
-    if (retried) {
-        failed.value = true;
-        return;
-    }
-    retried = true;
-    load();
-};
-// A frame to show: `preload="metadata"` alone may leave the element blank until asked to seek.
-const seekFrame = (event: Event): void => {
-    const video = event.target as HTMLVideoElement;
-    if (video.currentTime === 0) {
-        video.currentTime = 0.01;
-    }
-};
 </script>
 
 <template>
@@ -163,28 +102,35 @@ const seekFrame = (event: Event): void => {
     >
         <!-- One height for every tile, glyph or thumbnail, so names sit on one line across a row. -->
         <span ref="art" class="relative flex h-14 w-full items-center justify-center">
+            <!-- A video's frame is a picture too, cut by the daemon; only a sandbox without ffmpeg hands over the video. -->
             <img
-                v-if="kind === 'picture' && src !== undefined && !failed"
+                v-if="as === 'picture' && src !== undefined && !failed"
                 :src="src"
                 alt=""
                 draggable="false"
                 class="ui-home-move max-h-14 max-w-[6.5rem] rounded-sm object-contain ring-1 ring-line/60"
                 :class="shown ? 'opacity-100' : 'opacity-0'"
-                @load="shown = true"
+                @load="onPicture"
                 @error="onError"
             />
             <video
-                v-else-if="kind === 'video' && src !== undefined && !failed"
+                v-else-if="as === 'video' && src !== undefined && !failed"
                 :src="src"
                 muted
                 playsinline
                 preload="metadata"
                 class="ui-home-move max-h-14 max-w-[6.5rem] rounded-sm object-contain ring-1 ring-line/60"
                 :class="shown ? 'opacity-100' : 'opacity-0'"
-                @loadedmetadata="seekFrame"
-                @loadeddata="shown = true"
+                @loadedmetadata="onVideoMetadata"
+                @seeked="onVideoFrame"
                 @error="onError"
             ></video>
+            <!-- Says a picture is a video before the quick look plays it. -->
+            <span v-if="kind === 'video' && shown" class="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
+                <span class="flex size-5 items-center justify-center rounded-full bg-black/55 text-[0.55rem] text-white ring-1 ring-white/25">
+                    <Icon name="play" class="translate-x-px" />
+                </span>
+            </span>
             <!-- The glyph holds the place until a thumbnail has painted, and stays where none can. -->
             <Icon v-if="!shown" :name="icon" class="text-[2.125rem]" :class="[color, src !== undefined && !failed ? 'absolute' : '']" />
             <!-- A link wears its target's glyph; the small mark says it is one. -->
