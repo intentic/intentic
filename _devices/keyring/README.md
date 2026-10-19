@@ -136,9 +136,7 @@ other value, the vault key and the vault itself stay with the service.
 
 - Without hardened mode, a process of the same user can read the vault key from the keyring's memory while it is
   unlocked, and could trick a person into a Hello tap meant for the keyring; `while-here` is for a computer you are at.
-- Windows Hello's own prompt says only "Making sure it's you": the topmost notice beside it is what names the request.
-  A program that raises a Hello prompt of its own gets the same dialog without the notice.
-- A Windows Hello prompt raised by a process with no window can open behind other windows; the keyring shows a
-  topmost notice naming what is asked while it waits.
+- Windows Hello's own prompt for unlocking says only "Making sure it's you", without naming the request, and one
+  raised by a process with no window can open behind other windows.
 - Typing cannot be taken back: if focus moves between the check and the last character, the keyring stops and says
   where the rest went.
