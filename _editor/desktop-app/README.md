@@ -50,8 +50,11 @@ flowchart LR
   account: at the top the place chip (the folder this window shows, and the account's sandboxes, each opening the
   workspace on itself at `/?sandbox=<id>` and picked from anywhere in the window by Alt+1–9 as in the workspace, or
   the sign-in before an account), then Files (the folder's tree and documents, `/workspace`), then This device
-  (`/device`), and at the foot the sandbox shell's own account control (who is signed in, Settings, Sign out), or the
-  sign-in in the default browser until there is an account. The **first task** the reader writes on This device's card
+  (`/device`), then Passwords (`/passwords`) once this computer has it set up or an agent's request waits on it. Until
+  then Passwords has no tile, so a new owner doesn't meet a password manager, and a quiet "Set up Passwords" card at
+  the foot of This device (`src/passwords/PasswordsOffer.vue`) is the way in. At the foot of the rail is the sandbox
+  shell's own account control (who is signed in, Settings, Sign out), or the sign-in in the default browser until
+  there is an account. The **first task** the reader writes on This device's card
   for this PC (below) is kept in `first-task.json` under the app config dir, announced on `desktop://first-task`,
   attached to this computer's sandbox when it is ready, and opened in the workspace with `?task=`; the workspace answers
   on `intentic://first-task?do=sent|failed&id=…`. "Ask about this" while no sandbox can answer leaves a draft of one

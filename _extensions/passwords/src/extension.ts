@@ -3,10 +3,11 @@ import { sandboxPoll } from "@intentic/extension-api";
 import type { SandboxNeed } from "@intentic/sandbox-contract/schemas/sandbox-passwords";
 import { bindHost, host } from "./host.js";
 import { t } from "./i18n.js";
+import { type PasswordsPresence, presenceOf, UNREAD_PRESENCE } from "./presence.js";
 
-// Binds the host and registers the Passwords rail view. Detection is unconditional: what this sandbox may use, and
-// the way to the desktop app where the vault is kept, are worth a tile before any computer is set up. The tile badges
-// the credentials this sandbox asked for that wait on the owner's answer, which is what brings it onto the rail.
+// Binds the host and registers the Passwords rail view. The tile is there only once Passwords means something on this
+// sandbox (presence.ts): a computer has it set up, a password is shared here, or a request waits. It badges the
+// credentials this sandbox asked for that wait on the owner's answer.
 
 export const passwordNeedsQuery = () => ({
     queryKey: host().sandbox.readKey(`secrets.passwordNeeds`),
@@ -23,16 +24,23 @@ export const passwordActivityQuery = () => ({
     queryFn: () => host().sandbox.rpc.secrets.passwordActivity(),
 });
 
-// Polled while the editor is open: a need is answered on another computer, so nothing here hears it change.
-const passwordsAttention = sandboxPoll<number>({
+// Polled while the editor is open: a need is answered, and a vault set up, on another computer, so nothing here hears
+// either change.
+const passwordsAttention = sandboxPoll<PasswordsPresence>({
     host,
     everyMs: 60_000,
-    initial: () => 0,
-    read: async (api) => (await api.sandbox.fetch({ ...passwordNeedsQuery(), staleTime: 0 })).needs.filter((need) => need.state === `pending`).length,
+    initial: () => UNREAD_PRESENCE,
+    read: async (api, previous) => {
+        const [{ needs }, passwords] = await Promise.all([
+            api.sandbox.fetch({ ...passwordNeedsQuery(), staleTime: 0 }),
+            api.sandbox.fetch({ ...passwordsQuery(), staleTime: 0 }),
+        ]);
+        return presenceOf(previous, passwords, needs.filter((need) => need.state === `pending`).length);
+    },
 });
 
 const needsBadge = (): ViewBadge | undefined => {
-    const count = passwordsAttention.state.value;
+    const count = passwordsAttention.state.value.pending;
     return count > 0 ? { count, tone: `info`, tooltip: t(`hosted.badge`) } : undefined;
 };
 
@@ -44,7 +52,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             id: `passwords`,
             label: t(`extension.passwords`),
             surface: `rail`,
-            detect: () => [{ key: `passwords`, title: t(`extension.passwords`), icon: `key` }],
+            detect: () => (passwordsAttention.state.value.shown === true ? [{ key: `passwords`, title: t(`extension.passwords`), icon: `key` }] : []),
             badge: needsBadge,
             warm: () => [passwordsQuery(), passwordNeedsQuery()],
             view: async () => (await import(`./PasswordsView.vue`)).default,

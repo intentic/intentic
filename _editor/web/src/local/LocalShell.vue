@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ViewBadge } from "@intentic/extension-api";
 import { useT } from "@intentic/ui/i18n";
-import { computed, onMounted, onUnmounted } from "vue";
+import { computed, onMounted, onUnmounted, unref } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import { LOCAL_NAVIGATE_EVENT } from "../app/environments/local";
 import { type LocalView, localHost } from "../app/environments/localHost";
@@ -51,16 +51,17 @@ const viewTile = (view: LocalView): Tile => {
     return badge === undefined ? tile : { ...tile, badge };
 };
 
-// Files first, as the sandbox shell ranks its workspace, then the app's views in the order it gives them; a view the app
-// routes without a tile (Repair, opened from where it is needed) is left off the rail. This PC's own setup is This
-// computer's (the app's view), not a tile of its own: the Agents tile that held it until 2026-10-12 had nothing else.
-const tiles = computed<readonly Tile[]>(() => [
-    { section: `workspace`, to: `/workspace`, label: t(`shared.files`) },
-    ...host.views.filter((view) => view.inRail !== false).map(viewTile),
-]);
-
 // Prefix match, as the sandbox shell's: a file path under /workspace keeps its tile lit.
 const isActive = (to: string): boolean => route.path === to || route.path.startsWith(`${to}/`);
+
+// Files first, as the sandbox shell ranks its workspace, then the app's views in the order it gives them; a view the app
+// routes without a tile (Repair, opened from where it is needed) is left off the rail, and one whose tile comes and goes
+// (Passwords) keeps it while the reader is on it, so the rail never loses the place they stand. This PC's own setup is
+// This computer's (the app's view), not a tile of its own: the Agents tile that held it until 2026-10-12 had nothing else.
+const tiles = computed<readonly Tile[]>(() => [
+    { section: `workspace`, to: `/workspace`, label: t(`shared.files`) },
+    ...host.views.filter((view) => unref(view.inRail) !== false || isActive(`/${view.path}`)).map(viewTile),
+]);
 const tileLabel = (tile: Tile): string => [tile.label, tile.badge?.tooltip, tile.badge?.running].filter((part) => part !== undefined && part !== ``).join(` · `);
 
 // The app showing this window for a reason of its own (a setup handed over, the tray's agent row) names the screen it

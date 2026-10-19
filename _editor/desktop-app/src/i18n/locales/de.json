@@ -726,6 +726,8 @@
         "title": "Passwörter",
         "noAgent": "Auf diesem Computer ist kein Intentic-Agent installiert. Installiere ihn, dann bewahrt Passwörter deine Passwörter hier auf.",
         "notRunning": "Passwörter ist auf diesem Computer installiert, läuft aber nicht. Ein Neustart des Computers startet es wieder.",
-        "oldAgent": "Der Intentic-Agent auf diesem Computer ist zu alt für Passwörter. Aktualisiere ihn und öffne Passwörter dann erneut."
+        "oldAgent": "Der Intentic-Agent auf diesem Computer ist zu alt für Passwörter. Aktualisiere ihn und öffne Passwörter dann erneut.",
+        "offerLead": "Bewahre deine Passwörter auf diesem Computer auf, gespeichert, während du sie eingibst, damit Agenten sie nutzen können, ohne sie je zu sehen.",
+        "offerOpen": "Passwörter einrichten"
     }
 }

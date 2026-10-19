@@ -27,7 +27,7 @@ import { machineFolderOf, machineSandbox, machineVerbs, startMachineSandbox } fr
 import { followOnScreen } from "./onScreen";
 import { folderOf, machineOf, machineStateOf, projectPathOf } from "./device/projectBuild";
 import { useDevice } from "./device/useDevice";
-import { followPasswords, passwordsBadge } from "./passwords/passwordsState";
+import { followPasswords, passwordsBadge, passwordsInRail } from "./passwords/passwordsState";
 
 // THE APP'S HALF OF A LOCAL WINDOW'S SHELL (the web's app/environments/localHost.ts): what the editor asks of this
 // computer, answered by the app's own commands, the account the workspace signed in with (account.ts), and the view the
@@ -77,6 +77,8 @@ const PASSWORDS_VIEW: LocalView = {
         return import(`./passwords/PasswordsPage.vue`);
     },
     badge: passwordsBadge,
+    // Off the rail until this computer has Passwords set up; This device offers the setup until then.
+    inRail: passwordsInRail,
 };
 
 /* A FOLDER'S WAY TO AN AGENT: this computer's own sandbox, which the app makes after sign-in and keeps (the app's

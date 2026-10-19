@@ -727,7 +727,9 @@
         "title": "Hasła",
         "noAgent": "Na tym komputerze nie ma agenta Intentic. Zainstaluj go, a Hasła będą przechowywać tu Twoje hasła.",
         "notRunning": "Hasła są zainstalowane na tym komputerze, ale nie działają. Ponowne uruchomienie komputera włączy je z powrotem.",
-        "oldAgent": "Agent Intentic na tym komputerze jest za stary dla Haseł. Zaktualizuj go, a potem otwórz Hasła ponownie."
+        "oldAgent": "Agent Intentic na tym komputerze jest za stary dla Haseł. Zaktualizuj go, a potem otwórz Hasła ponownie.",
+        "offerLead": "Trzymaj hasła na tym komputerze, zapisywane w trakcie wpisywania, aby agenci mogli z nich korzystać, nigdy ich nie widząc.",
+        "offerOpen": "Skonfiguruj Hasła"
     },
     "uninstall": {
         "sectionTitle": "Usuń Intentic z tego komputera",

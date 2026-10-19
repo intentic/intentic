@@ -726,6 +726,8 @@
         "title": "Mots de passe",
         "noAgent": "Aucun agent Intentic n'est installé sur cet ordinateur. Installez-le, et Mots de passe gardera vos mots de passe ici.",
         "notRunning": "Mots de passe est installé sur cet ordinateur mais ne tourne pas. Redémarrer l'ordinateur le relance.",
-        "oldAgent": "L'agent Intentic de cet ordinateur est trop ancien pour Mots de passe. Mettez-le à jour, puis rouvrez Mots de passe."
+        "oldAgent": "L'agent Intentic de cet ordinateur est trop ancien pour Mots de passe. Mettez-le à jour, puis rouvrez Mots de passe.",
+        "offerLead": "Gardez vos mots de passe sur cet ordinateur, enregistrés au fil de la saisie, pour que les agents puissent s'en servir sans jamais les voir.",
+        "offerOpen": "Configurer Mots de passe"
     }
 }

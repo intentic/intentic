@@ -42,7 +42,7 @@ flowchart LR
 
 ## In the hosted editor
 
-[src/extension.ts](src/extension.ts) registers the `passwords` rail view, which is always there. The view is detected on every sandbox, even before any computer is set up. Its badge counts the credentials this sandbox asked for (`secrets want`) that still wait on the owner's answer. A poll reads that count once a minute, because the answer is given on another computer and nothing here hears it.
+[src/extension.ts](src/extension.ts) registers the `passwords` rail view. A new owner doesn't see it: the tile comes onto the rail once Passwords means something on this sandbox ([src/presence.ts](src/presence.ts)). That is when one of the owner's computers has Passwords set up, a password is shared here, or a request waits. Once shown, it stays for the rest of the session even if that computer goes to sleep. Its badge counts the credentials this sandbox asked for (`secrets want`) that still wait on the owner's answer. A poll reads the requests and the shared list once a minute, because both change on another computer and nothing here hears it. Passwords is set up in the desktop app, which keeps its own tile hidden until then too.
 
 [src/sandboxPort.ts](src/sandboxPort.ts) is the sandbox's `PasswordsPort`. It reads the daemon's three owner-only routes, which the manifest lists in its permissions:
 

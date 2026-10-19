@@ -726,6 +726,8 @@
         "title": "Contraseñas",
         "noAgent": "No hay ningún agente de Intentic en este equipo. Instálalo y Contraseñas guardará tus contraseñas aquí.",
         "notRunning": "Contraseñas está instalado en este equipo, pero no se está ejecutando. Reiniciar el equipo lo vuelve a iniciar.",
-        "oldAgent": "El agente de Intentic de este equipo es demasiado antiguo para Contraseñas. Actualízalo y vuelve a abrir Contraseñas."
+        "oldAgent": "El agente de Intentic de este equipo es demasiado antiguo para Contraseñas. Actualízalo y vuelve a abrir Contraseñas.",
+        "offerLead": "Guarda tus contraseñas en este ordenador, a medida que las escribes, para que los agentes puedan usarlas sin verlas nunca.",
+        "offerOpen": "Configurar Contraseñas"
     }
 }
