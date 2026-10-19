@@ -62,10 +62,10 @@ it(`draws one badge per kind, and a mark only beside the stamp that needs you`, 
 it(`names every stamp in its accessible name, as its card says them`, async () => {
     const el = await mount({ stamps: [SELF, REVIEW, TEST] });
     expect(stampsOf(el).getAttribute(`aria-label`)?.split(`\n`)).toEqual([
-        `Checks on this work`,
-        `Self-check: passed after its last edit`,
+        `Checks`,
+        `Self-check: passed after last edit`,
         `Code review: 1 of 3 findings open`,
-        `Test: done, its report is in its chat · the work changed since`,
+        `Test: done, see its chat · work changed since`,
     ]);
 });
 
@@ -89,9 +89,9 @@ it(`says each stamp in words on a card a staying pointer raises`, async () => {
     await nextTick();
     const words = card()?.textContent ?? ``;
     expect(words).toContain(`pnpm -C api test`);
-    expect(words).toContain(`Changed 2 interface files without looking at the result`);
-    expect(words).toContain(`In a fresh session`);
-    expect(words).toContain(`the work changed since`);
+    expect(words).toContain(`2 UI files changed unseen`);
+    expect(words).toContain(`fresh session`);
+    expect(words).toContain(`work changed since`);
     // A check that ran in a chat of its own opens that chat; the agent's own check ran in this card's.
     expect([...document.querySelectorAll(`[data-stamp-row]`)].map((row) => row.querySelector(`button`) !== null)).toEqual([false, true, true]);
     // The card names each stamp beside its own badge.

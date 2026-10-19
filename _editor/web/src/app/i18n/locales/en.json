@@ -753,11 +753,11 @@
             "close": "Close {title}"
         },
         "stamps": {
-            "heading": "Checks on this work",
+            "heading": "Checks",
             "self": "Self-check",
             "selfState": {
-                "passed": "passed after its last edit",
-                "failed": "its last run failed"
+                "passed": "passed after last edit",
+                "failed": "last run failed"
             },
             "state": {
                 "passed": "no findings",
@@ -765,14 +765,13 @@
                 "findings": "{count} finding open | {count} findings open",
                 "someOpen": "{open} of {count} findings open",
                 "failed": "didn't finish",
-                "running": "running now",
-                "done": "done, its report is in its chat"
+                "running": "running",
+                "done": "done, see its chat"
             },
-            "whereSelf": "Run by the agent itself",
-            "whereFresh": "In a fresh session",
-            "whereOwn": "In the agent's own chat",
-            "stale": "the work changed since",
-            "unviewed": "Changed {count} interface file without looking at the result | Changed {count} interface files without looking at the result",
+            "whereFresh": "fresh session",
+            "whereOwn": "own chat",
+            "stale": "work changed since",
+            "unviewed": "{count} UI file changed unseen | {count} UI files changed unseen",
             "openTitle": "Open chat",
             "again": "Again",
             "againTitle": "Run it again",

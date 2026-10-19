@@ -753,7 +753,7 @@
             "close": "Zamknij {title}"
         },
         "stamps": {
-            "heading": "Kontrole tej pracy",
+            "heading": "Kontrole",
             "self": "Autokontrola",
             "selfState": {
                 "passed": "przeszła po ostatniej zmianie",
@@ -766,13 +766,12 @@
                 "someOpen": "otwarte {open} z {count} uwag",
                 "failed": "nie skończyła się",
                 "running": "trwa",
-                "done": "gotowe, raport jest w jej czacie"
+                "done": "gotowe, zobacz jej czat"
             },
-            "whereSelf": "Uruchomiona przez samego agenta",
-            "whereFresh": "W świeżej sesji",
-            "whereOwn": "We własnym czacie agenta",
+            "whereFresh": "świeża sesja",
+            "whereOwn": "własny czat",
             "stale": "praca zmieniła się od tego czasu",
-            "unviewed": "Zmienił {count} plik interfejsu bez obejrzenia wyniku | Zmienił {count} pliki interfejsu bez obejrzenia wyniku | Zmienił {count} plików interfejsu bez obejrzenia wyniku",
+            "unviewed": "{count} plik UI zmieniony bez podglądu | {count} pliki UI zmienione bez podglądu | {count} plików UI zmienionych bez podglądu",
             "openTitle": "Otwórz czat",
             "again": "Ponów",
             "againTitle": "Uruchom ponownie",

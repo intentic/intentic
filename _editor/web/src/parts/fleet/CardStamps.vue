@@ -7,6 +7,7 @@ import { foldStamps, type Stamp, stampMark, stampTone } from "../../models/fleet
 import { canStartFresh, draftFreshSession } from "../../models/fleet/freshSession";
 import { useAgents } from "../../models/fleet/useAgents";
 import type { FleetAgent } from "../../models/fleet/useAgents-fleet";
+import RuleCommand from "../../components/RuleCommand.vue";
 import StampBadge from "./StampBadge.vue";
 
 // THE CARD'S STAMPS: one badge per check that ran on its work, side by side in its corner (stamps.ts, StampBadge). The
@@ -53,11 +54,11 @@ const stateOf = (stamp: Stamp): string => {
     return t(`agents.stamps.state.${stamp.outcome}`);
 };
 
-// Where it ran: the card's own turn, a fresh session that saw only the work, or the agent's own chat, which had read
-// how the work was made.
-const whereOf = (stamp: Stamp): string => {
+// Where it ran: a fresh session that saw only the work, or the agent's own chat, which had read how the work was made.
+// The agent's own check says nothing here: its name already says who ran it.
+const whereOf = (stamp: Stamp): string | undefined => {
     if (stamp.kind === `self`) {
-        return t(`agents.stamps.whereSelf`);
+        return undefined;
     }
     return stamp.own === true ? t(`agents.stamps.whereOwn`) : t(`agents.stamps.whereFresh`);
 };
@@ -136,33 +137,34 @@ const runAgain = (stamp: Stamp): void => {
         </span>
         <span v-if="fold.folded > 0" class="text-[0.7em] font-medium leading-none text-subtle" aria-hidden="true">+{{ fold.folded }}</span>
         <AnchoredOverlay v-model="open" :anchor="anchor" side="top" cross="end" :restore-focus="false">
-            <div class="flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-0.5 p-1.5 text-left" data-stamps-card @pointerenter="onCardEnter" @pointerleave="onLeave">
-                <p class="px-1.5 pb-0.5 pt-1 text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`agents.stamps.heading`) }}</p>
+            <div class="flex w-72 max-w-[calc(100vw-2rem)] flex-col p-1 text-left" data-stamps-card @pointerenter="onCardEnter" @pointerleave="onLeave">
+                <p class="px-1.5 pb-0.5 pt-0.5 text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`agents.stamps.heading`) }}</p>
                 <div v-for="stamp in stamps" :key="stamp.kind" class="flex items-start gap-1" data-stamp-row :data-stamp-kind="stamp.kind">
                     <component
                         :is="stamp.by === undefined ? `div` : `button`"
                         :type="stamp.by === undefined ? undefined : `button`"
-                        class="flex min-w-0 flex-1 items-start gap-2 rounded-md px-1.5 py-1.5 text-left"
+                        class="flex min-w-0 flex-1 items-start gap-1.5 rounded-md px-1.5 py-1 text-left"
                         :class="stamp.by === undefined ? undefined : `cursor-pointer hover:bg-overlay`"
                         v-tooltip.top="stamp.by === undefined ? undefined : t(`agents.stamps.openTitle`)"
                         @click="openCheck(stamp)"
                     >
-                        <StampBadge :kind="stamp.kind" class="shrink-0 text-lg" :class="stampTone(stamp, false)" />
-                        <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <StampBadge :kind="stamp.kind" class="mt-px shrink-0 text-sm" :class="stampTone(stamp, false)" />
+                        <span class="flex min-w-0 flex-1 flex-col gap-1">
                             <span class="text-xs leading-snug">
                                 <span class="font-medium text-content">{{ kindName(stamp) }}</span>
                                 <span class="text-muted"> · {{ stateOf(stamp) }}</span>
+                                <span v-if="whereOf(stamp)" class="text-subtle"> · {{ whereOf(stamp) }}</span>
+                                <span v-if="stamp.stale" class="text-warning"> · {{ t(`agents.stamps.stale`) }}</span>
                             </span>
-                            <span class="text-2xs leading-relaxed text-muted">
-                                {{ whereOf(stamp) }}<span v-if="stamp.stale" class="text-warning"> · {{ t(`agents.stamps.stale`) }}</span>
-                            </span>
-                            <code
+                            <!-- Clamped to three lines: the card says what ran, the agent's chat holds the rest. -->
+                            <span
                                 v-if="stamp.check"
-                                class="mt-1 break-all rounded-md border border-line bg-canvas px-2 py-1 font-mono text-2xs leading-relaxed text-content"
-                                >{{ stamp.check }}</code
-                            >
-                            <span v-if="unviewedOf(stamp)" class="mt-0.5 flex items-start gap-1.5 text-2xs leading-relaxed text-muted">
-                                <Icon name="eye-slash" class="mt-0.5 shrink-0 text-warning" />{{ unviewedOf(stamp) }}
+                                class="block max-h-[calc(3lh+0.5rem)] overflow-hidden rounded border border-line bg-canvas px-1.5 py-1 text-2xs leading-relaxed"
+                                :title="stamp.check"
+                                ><RuleCommand :command="stamp.check" wrap class="break-all"
+                            /></span>
+                            <span v-if="unviewedOf(stamp)" class="flex items-center gap-1 text-2xs leading-snug text-muted">
+                                <Icon name="eye-slash" class="shrink-0 text-warning" />{{ unviewedOf(stamp) }}
                             </span>
                         </span>
                         <Icon v-if="stamp.by !== undefined" name="chevron-right" class="mt-1 shrink-0 text-2xs text-subtle" />
@@ -170,7 +172,7 @@ const runAgain = (stamp: Stamp): void => {
                     <button
                         v-if="offersAgain(stamp)"
                         type="button"
-                        :class="ui.textButton({ size: `xs` }, `mt-1.5 shrink-0 font-medium`)"
+                        :class="ui.textButton({ size: `xs` }, `mt-1 shrink-0 font-medium`)"
                         v-tooltip.top="{ title: t(`agents.stamps.againTitle`), note: t(`agents.stamps.againNote`) }"
                         data-stamp-again
                         @click="runAgain(stamp)"
