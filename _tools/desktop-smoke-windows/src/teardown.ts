@@ -13,6 +13,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { uninstallSilently } from "./app.js";
 import { CONNECT_TOKEN, PRODUCT_NAME, SANDBOX_HOSTNAME } from "./constants.js";
 import { ENGINE_DISTRO, ENGINE_RUN_VALUE, ENGINE_SANDBOX_HOSTNAME } from "./engine.js";
+import { readEngineIsolation } from "./engine-isolation.js";
 import type { Harness } from "./harness.js";
 import { lockScreenHolds, sandboxContainerName, SANDBOX_CONTAINER_PREFIX } from "./parse.js";
 import { containersPublishing, dismissLockScreen, findInstalledApp, removeContainer, sessionState } from "./probe.js";
@@ -71,6 +72,16 @@ const clearLockScreen = async (harness: Harness): Promise<void> => {
 network (which every distro on this machine, the Linux fleet's included, would otherwise keep until WSL restarts), its
 Run key value, its isolated home, and its sandbox on Docker Desktop. Each step may find nothing. */
 const removeEngine = async (harness: Harness): Promise<void> => {
+    try {
+        const { homeUsers } = await readEngineIsolation(ENGINE_ROOT);
+        if (homeUsers.length > 0) {
+            harness.detail(`preserving the engine tier's home and distro: ${homeUsers.join(`, `)} still mount files there; their original encryption keys must be kept`);
+            return;
+        }
+    } catch (error) {
+        harness.detail(`preserving the engine tier's home and distro because its mounts could not be checked: ${errorMessage(error)}`);
+        return;
+    }
     const listed = await run(`wsl.exe`, [`--list`, `--quiet`], { env: { WSL_UTF8: `1` }, timeoutMs: 30_000 });
     if (listed.stdout.replace(/\0/g, ``).split(/\r?\n/).some((name) => name.trim() === ENGINE_DISTRO)) {
         // Without the script the distro still goes; its rules go when WSL next restarts. A script that is there and

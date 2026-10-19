@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { INGRESS_URL, PLATFORM_URL_UNREACHABLE, SANDBOX_GRANT } from "./constants.js";
 import { ENGINE_CONNECT_TOKEN, ENGINE_SANDBOX_HOSTNAME, engineDockerOf, engineStatusOf, isolatedEnv, moveLines } from "./engine.js";
+import { readEngineIsolation } from "./engine-isolation.js";
 import type { Harness } from "./harness.js";
 import { sandboxContainerName } from "./parse.js";
 import { dockerReachable, sandboxHealth } from "./probe.js";
@@ -52,7 +53,22 @@ const httpStatus = async (url: string): Promise<number | undefined> => {
     }
 };
 
-export const runEngineTier = async (harness: Harness, options: EngineTierOptions): Promise<void> => {
+const engineTierIsolated = async (harness: Harness, move: boolean): Promise<boolean> => {
+    try {
+        const isolation = await readEngineIsolation(ENGINE_ROOT);
+        if (isolation.homeUsers.length > 0 || (move && isolation.unexpected.length > 0)) {
+            harness.fail(`the engine tier needs an isolated Windows test host`,
+                `Other sandboxes: ${isolation.unexpected.join(`, `)}. Containers using its temporary home: ${isolation.homeUsers.join(`, `)}. Preserve their original keys and use a clean test host.`);
+            return false;
+        }
+    } catch (error) {
+        harness.fail(`could not verify the engine tier's isolation`, String(error));
+        return false;
+    }
+    return true;
+};
+
+const engineInputsReady = async (harness: Harness, options: EngineTierOptions): Promise<boolean> => {
     harness.section(`what this tier runs`);
     for (const [what, path] of [
         [`ic.exe`, options.icBin],
@@ -60,10 +76,17 @@ export const runEngineTier = async (harness: Harness, options: EngineTierOptions
     ] as const) {
         if (!existsSync(path)) {
             harness.fail(`no ${what} at ${path}`, `The Windows build job puts both into the artifact this workflow downloads.`);
-            return;
+            return false;
         }
     }
     harness.pass(`ic.exe and the engine's rootfs from this checkout are here`);
+    return engineTierIsolated(harness, options.move);
+};
+
+export const runEngineTier = async (harness: Harness, options: EngineTierOptions): Promise<void> => {
+    if (!await engineInputsReady(harness, options)) {
+        return;
+    }
     rmSync(ENGINE_ROOT, { recursive: true, force: true });
     mkdirSync(ENGINE_ROOT, { recursive: true });
     const env = isolatedEnv(ENGINE_ROOT, options.tarball);

@@ -644,6 +644,7 @@ fn plan(source: &Target, target: &Target, from: Kind, to: Kind, log: &Log) -> Re
                 continue;
             }
         }
+        mounted_key_file(&inspect)?;
         if to == Kind::Intentic && uses_gpu(&inspect, &env) {
             bail!("{slug} uses this device's GPU, which the intentic engine cannot pass through yet. It stays on Docker Desktop, and so does this device: nothing was moved.");
         }
@@ -866,7 +867,7 @@ fn move_one(
     say(slug, "starting", json!({}));
     // The placeholder carries no bind, so the reshape finds no key mounted on it: handed the key the sandbox had as the
     // operator's file, it mounts that one, by the same door it mounts its own (at_rest.rs `Source::Given`).
-    let key = key_file(&sandbox.inspect).filter(|path| path.is_file());
+    let key = mounted_key_file(&sandbox.inspect)?;
     let made = with_key_file(key.as_deref(), || {
         with_engine(target, || {
             crate::sandbox::recreate::run(
@@ -1764,6 +1765,21 @@ fn key_file(inspect: &Value) -> Option<std::path::PathBuf> {
         .map(std::path::PathBuf::from)
 }
 
+/// Refuse a missing mounted key while planning, before stopping any sandbox. Docker's `-v` would otherwise create a
+/// directory at its missing source, and neither that directory nor a newly generated key can read the old stores.
+fn mounted_key_file(inspect: &Value) -> Result<Option<std::path::PathBuf>> {
+    let key = key_file(inspect);
+    if let Some(path) = &key {
+        if !path.is_file() {
+            bail!(
+                "the mounted at-rest key {} is not a file. Restore the original key before moving; no replacement key can read its encrypted credentials.",
+                path.display()
+            );
+        }
+    }
+    Ok(key)
+}
+
 /// Run `work` with `key` as the operator's key file (HOST_FILE_ENV), unless the operator named one on this run, then
 /// take the variable away again.
 fn with_key_file<T>(key: Option<&std::path::Path>, work: impl FnOnce() -> Result<T>) -> Result<T> {
@@ -2156,6 +2172,27 @@ mod tests {
             key_file(&inspect),
             Some(std::path::PathBuf::from(r"D:\keys\current.key"))
         );
+    }
+
+    #[test]
+    fn a_move_refuses_a_missing_or_directory_key_and_keeps_an_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = dir.path().join("key");
+        let inspect = json!({ "Mounts": [{
+            "Type": "bind", "Source": key.to_str().unwrap(),
+            "Destination": sandbox::at_rest::KEY_MOUNT,
+        }] });
+        let refusal = format!(
+            "the mounted at-rest key {} is not a file. Restore the original key before moving; no replacement key can read its encrypted credentials.",
+            key.display()
+        );
+        assert_eq!(mounted_key_file(&inspect).unwrap_err().0, refusal);
+        std::fs::create_dir(&key).unwrap();
+        assert_eq!(mounted_key_file(&inspect).unwrap_err().0, refusal);
+        std::fs::remove_dir(&key).unwrap();
+        std::fs::write(&key, [7u8; 32]).unwrap();
+        assert_eq!(mounted_key_file(&inspect).unwrap(), Some(key));
+        assert_eq!(mounted_key_file(&json!({})).unwrap(), None);
     }
 
     #[test]
